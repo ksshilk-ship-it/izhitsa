@@ -246,15 +246,61 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
     <div class="mt">Оформить продажу</div>
     <div class="ctitle">Добавить изделия</div>
     <div id="saleItemsDisplay" style="margin-bottom:10px"></div>
-    <div style="display:flex;gap:7px;margin-bottom:14px">
-      <input class="fi" id="siNum" placeholder="№" style="width:80px;flex-shrink:0">
-      <input class="fi" id="siName" placeholder="Наименование изделия">
-      <input class="fi" id="siPrice" placeholder="Цена" type="number" inputmode="numeric" style="width:90px;flex-shrink:0">
-      <button onclick="addSaleItem()" style="background:var(--accent);border:none;border-radius:10px;padding:0 12px;font-weight:700;color:#0f0f13;cursor:pointer;font-family:'Unbounded',sans-serif;font-size:12px;flex-shrink:0">＋</button>
+
+    <!-- Auto-lookup by article -->
+    <div style="background:var(--bg);border-radius:12px;padding:10px;margin-bottom:12px">
+      <div style="font-size:11px;color:var(--t2);margin-bottom:8px;font-weight:600">Введите артикул — данные подтянутся автоматически</div>
+      <div style="display:flex;gap:7px;margin-bottom:8px">
+        <div style="position:relative;width:90px;flex-shrink:0">
+          <input class="fi" id="siNum" placeholder="№ арт." oninput="lookupItem(this.value)" style="width:100%">
+        </div>
+        <button onclick="addSaleItem()" style="background:var(--accent);border:none;border-radius:10px;padding:0 14px;font-weight:700;color:#0f0f13;cursor:pointer;font-family:'Unbounded',sans-serif;font-size:12px;flex-shrink:0;white-space:nowrap">＋ Добавить</button>
+      </div>
+      <!-- Lookup result / manual entry -->
+      <div id="siLookupResult" style="display:none;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:6px">
+        <div style="font-size:10px;color:var(--t2);margin-bottom:6px;font-weight:600">ДАННЫЕ ИЗ БАЗЫ — можно исправить если ошибка</div>
+        <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label>
+          <input class="fi" id="siName" placeholder="Название изделия" oninput="checkItemDiff()">
+        </div>
+        <div class="fg" style="margin:0"><label class="fl">Цена (₽)</label>
+          <input class="fi" type="number" id="siPrice" placeholder="0" inputmode="numeric" oninput="checkItemDiff()">
+        </div>
+        <div id="siDiffWarn" style="display:none;margin-top:8px;padding:8px;background:#2e1a1a;border:1px solid var(--exp);border-radius:8px;font-size:11px;color:var(--exp)"></div>
+      </div>
+      <!-- No article — manual -->
+      <div id="siManualBlock" style="display:none">
+        <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label>
+          <input class="fi" id="siNameM" placeholder="Введите название вручную">
+        </div>
+        <div class="fg" style="margin:0"><label class="fl">Цена (₽)</label>
+          <input class="fi" type="number" id="siPriceM" placeholder="0" inputmode="numeric">
+        </div>
+      </div>
     </div>
-    <div class="row2">
-      <div class="fg"><label class="fl">Скидка (₽)</label><input class="fi" type="number" id="saleDiscount" placeholder="0" inputmode="numeric" oninput="calcSaleTotal()"></div>
-      <div class="fg"><label class="fl">Итого к оплате</label><div style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:11px 13px;font-family:'Unbounded',sans-serif;font-size:16px;font-weight:700;color:var(--accent)" id="saleFinal">0₽</div></div>
+    <div class="fg">
+      <label class="fl">Скидка</label>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <button id="discTypePct" onclick="setDiscType('pct')"
+          style="flex:1;padding:8px;border-radius:10px;border:2px solid var(--accent);background:#1e2a14;color:var(--accent);font-family:'Golos Text',sans-serif;font-size:12px;font-weight:700;cursor:pointer">% Процент</button>
+        <button id="discTypeSum" onclick="setDiscType('sum')"
+          style="flex:1;padding:8px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--t2);font-family:'Golos Text',sans-serif;font-size:12px;font-weight:600;cursor:pointer">₽ Сумма</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div style="position:relative;flex:1">
+          <input class="fi" type="number" id="discInput" placeholder="0" inputmode="numeric"
+            oninput="calcDiscountFromInput()" style="padding-right:36px">
+          <span id="discUnit" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--t2);font-weight:700">%</span>
+        </div>
+        <div style="font-size:12px;color:var(--t2);white-space:nowrap">=</div>
+        <input class="fi" type="number" id="saleDiscount" placeholder="0₽" inputmode="numeric"
+          oninput="calcSaleTotal()" style="flex:1;border-color:var(--accent)" title="Итоговая сумма скидки — можно изменить вручную">
+        <span style="font-size:12px;color:var(--t2)">₽</span>
+      </div>
+      <div style="font-size:10px;color:var(--t2);margin-top:4px" id="discHint">Введите % → автоматически посчитается сумма скидки · можно округлить вручную</div>
+    </div>
+    <div style="background:var(--s2);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:13px;color:var(--t2)">К оплате:</span>
+      <span style="font-family:'Unbounded',sans-serif;font-size:20px;font-weight:700;color:var(--accent)" id="saleFinal">0₽</span>
     </div>
     <div class="fg"><label class="fl">Способ оплаты</label>
       <div class="pay-chips">
@@ -506,7 +552,7 @@ function renderJournal() {
     <div class="ji">
       <div class="ji-ic ${e.type}">${e.icon||'📌'}</div>
       <div class="ji-body">
-        <div class="ji-title">${e.label}</div>
+        <div class="ji-title" style="color:${e.hasDiff?'var(--exp)':'inherit'}">${e.label}</div>
         ${e.sub?`<div class="ji-sub">${e.sub}</div>`:''}
         <div class="ji-time">${new Date(e.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div>
       </div>
@@ -515,13 +561,102 @@ function renderJournal() {
 }
 
 // ════════ SALE ════════
+// ── Item lookup from warehouse ──
+let currentLookupItem = null; // item found in base
+
+function lookupItem(num){
+  const lookup = document.getElementById('siLookupResult');
+  const manual = document.getElementById('siManualBlock');
+  const warn   = document.getElementById('siDiffWarn');
+  if(!num.trim()){
+    lookup.style.display='none';
+    manual.style.display='none';
+    currentLookupItem=null;
+    return;
+  }
+  // Search in iz_items
+  const items = JSON.parse(localStorage.getItem('iz_items')||'[]');
+  const found = items.find(i=>String(i.num)===num.trim()&&(i.status==='shop'||i.status==='warehouse'));
+  if(found){
+    currentLookupItem = found;
+    document.getElementById('siName').value = found.name||'';
+    document.getElementById('siPrice').value = found.price||'';
+    lookup.style.display='block';
+    manual.style.display='none';
+    if(warn) warn.style.display='none';
+  } else {
+    // No match — show manual entry
+    currentLookupItem = null;
+    lookup.style.display='none';
+    manual.style.display='block';
+  }
+}
+
+function checkItemDiff(){
+  const warn = document.getElementById('siDiffWarn');
+  if(!warn||!currentLookupItem) return;
+  const enteredName  = (document.getElementById('siName')?.value||'').trim();
+  const enteredPrice = parseFloat(document.getElementById('siPrice')?.value)||0;
+  const baseName  = currentLookupItem.name||'';
+  const basePrice = currentLookupItem.price||0;
+  const nameDiff  = enteredName && enteredName !== baseName;
+  const priceDiff = enteredPrice && enteredPrice !== basePrice;
+  if(nameDiff||priceDiff){
+    let msgs=[];
+    if(nameDiff)  msgs.push(`Название: база «${baseName}» → введено «${enteredName}»`);
+    if(priceDiff) msgs.push(`Цена: база ${fmt(basePrice)} → введено ${fmt(enteredPrice)}`);
+    warn.style.display='block';
+    warn.innerHTML='⚠️ Расхождение с базой:<br>'+msgs.join('<br>');
+  } else {
+    warn.style.display='none';
+  }
+}
+
 function addSaleItem() {
-  const num=document.getElementById('siNum').value.trim();
-  const name=document.getElementById('siName').value.trim();
-  const price=parseFloat(document.getElementById('siPrice').value)||0;
-  if(!name){ showToast('Введите наименование'); return; }
-  saleItems.push({id:uid(),num,name,price});
-  ['siNum','siName','siPrice'].forEach(id=>document.getElementById(id).value='');
+  const num = (document.getElementById('siNum')?.value||'').trim();
+  let name, price, hasDiff=false, diffNote='', baseItem=null;
+
+  const lookup = document.getElementById('siLookupResult');
+  const manual = document.getElementById('siManualBlock');
+
+  if(lookup && lookup.style.display!=='none'){
+    // Used lookup
+    name  = (document.getElementById('siName')?.value||'').trim();
+    price = parseFloat(document.getElementById('siPrice')?.value)||0;
+    if(!name){ showToast('Введите наименование'); return; }
+    if(!price){ showToast('Введите цену'); return; }
+    baseItem = currentLookupItem;
+    if(baseItem){
+      const nameDiff  = name !== (baseItem.name||'');
+      const priceDiff = price !== (baseItem.price||0);
+      if(nameDiff||priceDiff){
+        hasDiff=true;
+        let msgs=[];
+        if(nameDiff)  msgs.push('название изменено');
+        if(priceDiff) msgs.push('цена изменена (база: '+fmt(baseItem.price)+')');
+        diffNote='⚠️ '+msgs.join(', ');
+      }
+    }
+  } else if(manual && manual.style.display!=='none'){
+    // Manual entry — no article in base
+    name  = (document.getElementById('siNameM')?.value||'').trim();
+    price = parseFloat(document.getElementById('siPriceM')?.value)||0;
+    if(!name){ showToast('Введите наименование'); return; }
+    hasDiff = true;
+    diffNote = '⚠️ артикул не найден в базе';
+  } else {
+    showToast('Введите артикул'); return;
+  }
+
+  saleItems.push({id:uid(),num,name,price,hasDiff,diffNote,baseItemId:baseItem?._id||baseItem?.id||''});
+
+  // Reset
+  ['siNum','siName','siPrice','siNameM','siPriceM'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  if(lookup) lookup.style.display='none';
+  if(manual) manual.style.display='none';
+  currentLookupItem=null;
+  const w=document.getElementById('siDiffWarn');if(w)w.style.display='none';
+
   renderSaleItems(); calcSaleTotal();
 }
 
@@ -529,17 +664,79 @@ function renderSaleItems() {
   const c=document.getElementById('saleItemsDisplay');
   if(!saleItems.length){ c.innerHTML='<div style="font-size:12px;color:var(--t2);padding:4px 0">Добавьте товары ↑</div>'; return; }
   c.innerHTML=saleItems.map((it,i)=>`
-    <div class="sir">
-      <div class="sir-num">${it.num||'—'}</div>
-      <div style="flex:1"><div class="sir-name">${it.name}</div><div class="sir-price">${fmt(it.price)}</div></div>
+    <div class="sir" style="border:1px solid ${it.hasDiff?'var(--exp)':'var(--border)'};background:${it.hasDiff?'#2e1a1a':'var(--s2)'}">
+      <div class="sir-num" style="color:${it.hasDiff?'var(--exp)':'var(--t2)'}">${it.num||'—'}</div>
+      <div style="flex:1">
+        <div class="sir-name">${it.name}</div>
+        <div class="sir-price" style="color:${it.hasDiff?'var(--exp)':'var(--accent)'}">${fmt(it.price)}</div>
+        ${it.hasDiff?`<div style="font-size:9px;color:var(--exp);margin-top:2px">${it.diffNote}</div>`:''}
+      </div>
       <button class="sir-del" onclick="saleItems.splice(${i},1);renderSaleItems();calcSaleTotal()">✕</button>
     </div>`).join('');
 }
 
+let discType = 'pct'; // 'pct' or 'sum'
+
+function setDiscType(type){
+  discType = type;
+  const pctBtn = document.getElementById('discTypePct');
+  const sumBtn = document.getElementById('discTypeSum');
+  const unit   = document.getElementById('discUnit');
+  const hint   = document.getElementById('discHint');
+  const inp    = document.getElementById('discInput');
+  if(type==='pct'){
+    pctBtn.style.cssText='flex:1;padding:8px;border-radius:10px;border:2px solid var(--accent);background:#1e2a14;color:var(--accent);font-family:'Golos Text',sans-serif;font-size:12px;font-weight:700;cursor:pointer';
+    sumBtn.style.cssText='flex:1;padding:8px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--t2);font-family:'Golos Text',sans-serif;font-size:12px;font-weight:600;cursor:pointer';
+    if(unit) unit.textContent='%';
+    if(hint) hint.textContent='Введите % → автоматически посчитается сумма скидки · можно округлить вручную';
+    if(inp) inp.placeholder='0';
+  } else {
+    sumBtn.style.cssText='flex:1;padding:8px;border-radius:10px;border:2px solid var(--accent);background:#1e2a14;color:var(--accent);font-family:'Golos Text',sans-serif;font-size:12px;font-weight:700;cursor:pointer';
+    pctBtn.style.cssText='flex:1;padding:8px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--t2);font-family:'Golos Text',sans-serif;font-size:12px;font-weight:600;cursor:pointer';
+    if(unit) unit.textContent='₽';
+    if(hint) hint.textContent='Введите сумму скидки напрямую';
+    if(inp) inp.placeholder='0';
+  }
+  // Clear inputs
+  if(inp) inp.value='';
+  const discEl=document.getElementById('saleDiscount');
+  if(discEl) discEl.value='';
+  calcSaleTotal();
+}
+
+function calcDiscountFromInput(){
+  const total = saleItems.reduce((s,it)=>s+it.price,0);
+  const inp   = parseFloat(document.getElementById('discInput')?.value)||0;
+  const discEl= document.getElementById('saleDiscount');
+  if(!discEl) return;
+  if(discType==='pct'){
+    // Calculate sum from percent, round to integer
+    const discSum = Math.round(total * inp / 100);
+    discEl.value = discSum || '';
+    // Show hint with calculated value
+    const hint = document.getElementById('discHint');
+    if(hint && inp>0) hint.textContent = `${inp}% от ${fmt(total)} = ${fmt(discSum)} · скорректируйте сумму если нужно`;
+  } else {
+    // Direct sum — mirror to discount field
+    discEl.value = inp || '';
+  }
+  calcSaleTotal();
+}
+
 function calcSaleTotal() {
   const total=saleItems.reduce((s,it)=>s+it.price,0);
-  const disc=parseFloat(document.getElementById('saleDiscount').value)||0;
-  document.getElementById('saleFinal').textContent=fmt(Math.max(0,total-disc));
+  const disc=parseFloat(document.getElementById('saleDiscount')?.value)||0;
+  const finalEl=document.getElementById('saleFinal');
+  if(finalEl) finalEl.textContent=fmt(Math.max(0,total-disc));
+  // Show pct in hint if manual sum changed
+  if(discType==='pct'&&total>0&&disc>0){
+    const actualPct=(disc/total*100).toFixed(1);
+    const inp=parseFloat(document.getElementById('discInput')?.value)||0;
+    const hint=document.getElementById('discHint');
+    if(hint&&Math.abs(disc-Math.round(total*inp/100))>0){
+      hint.textContent=`Итоговая скидка: ${fmt(disc)} (${actualPct}% от суммы)`;
+    }
+  }
 }
 
 function setPayM(m,el) {
@@ -559,13 +756,21 @@ function saveSale() {
   else if(payMethod==='mixed'){ cashPart=parseFloat(document.getElementById('mixCash').value)||0; cardPart=parseFloat(document.getElementById('mixCard').value)||0; }
   else cardPart=paid;
   const payL={cash:'💵 Нал',terminal:'💳 Терминал',sbp:'📱 СБП',qr:'🔲 QR',mixed:'➗ Смешанный'}[payMethod];
-  journal.push({ id:uid(),type:'sale',ts:new Date().toISOString(),icon:'💰',label:'Продажа',
-    sub:saleItems.map(i=>`№${i.num||'—'} ${i.name}`).join(', ')+(disc?` · Скидка ${fmt(disc)}`:'')+` · ${payL}`,
+  const hasDiffItems = saleItems.some(i=>i.hasDiff);
+  journal.push({ id:uid(),type:'sale',ts:new Date().toISOString(),
+    icon: hasDiffItems?'⚠️':'💰',
+    label: hasDiffItems?'Продажа ⚠️ (расхождение с базой)':'Продажа',
+    sub:saleItems.map(i=>`№${i.num||'—'} ${i.name}${i.hasDiff?' ⚠️':''}`).join(', ')+(disc?` · Скидка ${fmt(disc)}`:'')+` · ${payL}`,
     items:[...saleItems],totalPrice:total,discount:disc,totalPaid:paid,payMethod,cashPart,cardPart,
+    hasDiff: hasDiffItems,
+    diffItems: saleItems.filter(i=>i.hasDiff).map(i=>({num:i.num,name:i.name,price:i.price,note:i.diffNote})),
     comment:document.getElementById('saleComment').value,
     amount:paid,amtCls:'inc',amtSign:'+',cashEffect:cashPart,goodsEffect:-total });
   saveJournal();
   saleItems=[]; renderSaleItems(); calcSaleTotal();
+  // Reset discount
+  const di=document.getElementById('discInput');if(di)di.value='';
+  setDiscType('pct');
   ['saleDiscount','saleComment','mixCash','mixCard'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('saleFinal').textContent='0₽';
   closeMo('saleMo'); renderAll();
