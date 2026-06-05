@@ -154,6 +154,19 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 .at-row:last-child{border-bottom:none}
 .at-lbl{color:var(--t2)}
 .at-val{font-weight:600}
+.anl-tab{padding:8px 14px;border-radius:20px;border:1px solid var(--border);background:var(--s1);color:var(--t2);font-family:'Golos Text',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .2s}
+.anl-tab.active{background:var(--accent);border-color:var(--accent);color:#0f0f13}
+.profit-bar{height:10px;background:var(--s2);border-radius:6px;overflow:hidden;margin-top:6px}
+.profit-fill{height:100%;border-radius:6px;transition:width .6s}
+.metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.metric{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center}
+.metric-v{font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;margin-bottom:3px}
+.metric-l{font-size:9px;color:var(--t2)}
+.shop-card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px}
+.cost-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
+.cost-row:last-child{border-bottom:none}
+.cost-lbl{color:var(--t2);font-size:12px}
+.cost-val{font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700}
 </style>
 </head>
 <body>
@@ -387,6 +400,34 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
     </div>
   </div>
 
+  <!-- ANALYTICS PAGE -->
+  <div class="page" id="pg-analytics">
+    <div class="stitle">📈 Аналитика и рентабельность</div>
+
+    <!-- Period -->
+    <div class="pchips" id="anlPeriodChips">
+      <div class="pc active" onclick="setAnlPeriod('month',this)">Месяц</div>
+      <div class="pc" onclick="setAnlPeriod('lastmonth',this)">Прош. мес.</div>
+      <div class="pc" onclick="setAnlPeriod('quarter',this)">Квартал</div>
+      <div class="pc" onclick="setAnlPeriod('year',this)">Год</div>
+      <div class="pc" onclick="setAnlPeriod('custom',this)">✏️ Период</div>
+    </div>
+    <div id="anlCustomDates" style="display:none;margin-bottom:10px" class="row2">
+      <div><label class="fl">С даты</label><input class="fi" type="date" id="anlFrom" onchange="renderAnalytics()"></div>
+      <div><label class="fl">По дату</label><input class="fi" type="date" id="anlTo" onchange="renderAnalytics()"></div>
+    </div>
+
+    <!-- Section tabs -->
+    <div style="display:flex;gap:8px;margin-bottom:14px;overflow-x:auto">
+      <button class="anl-tab active" onclick="setAnlTab('shops',this)">🏪 Магазины</button>
+      <button class="anl-tab" onclick="setAnlTab('cost',this)">🪵 Себестоимость</button>
+      <button class="anl-tab" onclick="setAnlTab('breakeven',this)">📊 Точка безубыт.</button>
+    </div>
+
+    <!-- Content -->
+    <div id="anlContent"></div>
+  </div>
+
   <div class="tabs" id="mainTabs"></div>
 </div>
 
@@ -534,8 +575,9 @@ function showPg(name,el){
   if(name==='shops')    renderShops();
   if(name==='prod')     renderProd();
   if(name==='debt')     renderDebtors();
-  if(name==='settings') renderSettings();
-  if(name==='op')       { populateOpSelects(); }
+  if(name==='settings')   renderSettings();
+  if(name==='op')         { populateOpSelects(); }
+  if(name==='analytics')  { renderAnalytics(); }
 }
 
 // ════════ DATE RANGES ════════
@@ -648,32 +690,35 @@ function startApp(){
     renderDash();
   },()=>{});
   setSync(navigator.onLine?'online':'offline');
+  setRangeInputs('anlFrom','anlTo','month');
   renderDash();
 }
 
 function buildTabs(){
   const owner=[
-    {id:'dash',icon:'🏠',label:'Главная'},
-    {id:'op',  icon:'＋',label:'Операция'},
-    {id:'pl',  icon:'📊',label:'P&L'},
-    {id:'shops',icon:'🏪',label:'Магазины'},
-    {id:'prod', icon:'🏭',label:'Мастерская'},
+    {id:'dash',      icon:'🏠',label:'Главная'},
+    {id:'op',        icon:'＋',label:'Операция'},
+    {id:'analytics', icon:'📈',label:'Аналитика'},
+    {id:'shops',     icon:'🏪',label:'Магазины'},
+    {id:'prod',      icon:'🏭',label:'Мастерская'},
   ];
   const accountant=[
-    {id:'dash',icon:'🏠',label:'Главная'},
-    {id:'op',  icon:'＋',label:'Операция'},
-    {id:'pl',  icon:'📊',label:'P&L'},
-    {id:'debt',icon:'👥',label:'Долги'},
-    {id:'settings',icon:'⚙️',label:'Настройки'},
+    {id:'dash',      icon:'🏠',label:'Главная'},
+    {id:'op',        icon:'＋',label:'Операция'},
+    {id:'pl',        icon:'📊',label:'P&L'},
+    {id:'analytics', icon:'📈',label:'Аналитика'},
+    {id:'debt',      icon:'👥',label:'Долги'},
+    {id:'settings',  icon:'⚙️',label:'Настройки'},
   ];
   const admin=[
-    {id:'dash',  icon:'🏠',label:'Главная'},
-    {id:'op',    icon:'＋',label:'Операция'},
-    {id:'pl',    icon:'📊',label:'P&L'},
-    {id:'shops', icon:'🏪',label:'Магазины'},
-    {id:'prod',  icon:'🏭',label:'Мастерская'},
-    {id:'debt',  icon:'👥',label:'Долги'},
-    {id:'settings',icon:'⚙️',label:'Настройки'},
+    {id:'dash',      icon:'🏠',label:'Главная'},
+    {id:'op',        icon:'＋',label:'Операция'},
+    {id:'pl',        icon:'📊',label:'P&L'},
+    {id:'analytics', icon:'📈',label:'Аналитика'},
+    {id:'shops',     icon:'🏪',label:'Магазины'},
+    {id:'prod',      icon:'🏭',label:'Мастерская'},
+    {id:'debt',      icon:'👥',label:'Долги'},
+    {id:'settings',  icon:'⚙️',label:'Настройки'},
   ];
   const tabs=session.role==='admin'?admin:session.role==='owner'?owner:accountant;
   document.getElementById('mainTabs').innerHTML=tabs.map((t,i)=>`
@@ -1182,6 +1227,541 @@ function downloadBackup(){
   showToast('✅ Резервная копия скачана');
 }
 function restoreBackup(input){const file=input.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{try{const backup=JSON.parse(e.target.result);if(!backup.data){document.getElementById('backupStatus').innerHTML='<span style="color:var(--exp)">❌ Неверный формат</span>';return;}if(!confirm('Восстановить из копии от '+backup.createdAt?.split('T')[0]+'?\n\nТекущие данные будут заменены!'))return;let count=0;Object.entries(backup.data).forEach(([k,v])=>{localStorage.setItem(k,JSON.stringify(v));count+=Array.isArray(v)?v.length:0;});document.getElementById('backupStatus').innerHTML=`<span style="color:var(--inc)">✅ Восстановлено ${count} записей</span>`;showToast('✅ Данные восстановлены');setTimeout(()=>location.reload(),1500);}catch(err){document.getElementById('backupStatus').innerHTML='<span style="color:var(--exp)">❌ Ошибка: '+err.message+'</span>';}};reader.readAsText(file);input.value='';}
+
+
+// ════════════════════════════════
+// ANALYTICS & PROFITABILITY
+// ════════════════════════════════
+let anlPeriod = 'month';
+let anlTab = 'shops';
+
+function setAnlPeriod(p, el){
+  anlPeriod = p;
+  document.querySelectorAll('#anlPeriodChips .pc').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  const cd = document.getElementById('anlCustomDates');
+  if(cd) cd.style.display = p==='custom'?'grid':'none';
+  if(p!=='custom') setRangeInputs('anlFrom','anlTo',p);
+  renderAnalytics();
+}
+
+function setAnlTab(tab, el){
+  anlTab = tab;
+  document.querySelectorAll('.anl-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  renderAnalytics();
+}
+
+function renderAnalytics(){
+  const r = anlPeriod==='custom'
+    ? {from:gv('anlFrom'), to:gv('anlTo')}
+    : getRange(anlPeriod);
+
+  if(anlTab==='shops')     renderShopAnalytics(r);
+  else if(anlTab==='cost') renderCostAnalytics(r);
+  else if(anlTab==='breakeven') renderBreakeven(r);
+}
+
+// ─────────────────────────────────
+// 1. SHOP ANALYTICS
+// ─────────────────────────────────
+function renderShopAnalytics(r){
+  const c = document.getElementById('anlContent'); if(!c) return;
+
+  const shops = getD('shops');
+  const allTxs = filterByRange(getTx(),'date',r.from,r.to);
+  const allShifts = filterByRange(shifts,'date',r.from,r.to);
+  const expCats = getD('expCats');
+
+  // Total business metrics
+  const totalRev = allShifts.reduce((s,sh)=>s+(sh.totalRevenue||sh.totalCash||0),0);
+  const totalExp = allTxs.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const totalInc = allTxs.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const grossProfit = totalRev - totalExp;
+
+  let html = `
+    <div class="metric-grid" style="grid-template-columns:1fr 1fr;margin-bottom:14px">
+      <div class="metric" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:var(--accent);grid-column:1/-1">
+        <div class="metric-l">Общая выручка магазинов</div>
+        <div class="metric-v" style="color:var(--accent);font-size:20px">${fmt(totalRev)}</div>
+      </div>
+      <div class="metric"><div class="metric-l">Расходы</div><div class="metric-v" style="color:var(--exp)">−${fmt(totalExp)}</div></div>
+      <div class="metric"><div class="metric-l">Прибыль</div><div class="metric-v" style="color:${grossProfit>=0?'var(--inc)':'var(--exp)'}">${fmt(grossProfit)}</div></div>
+    </div>`;
+
+  // Per shop
+  shops.forEach(shop => {
+    const shopShifts = allShifts.filter(s=>s.shopName===shop.name);
+    const shopTxs = allTxs.filter(t=>t.entityName===shop.name || t.fromAccountName===shop.name || (t.comment||'').includes(shop.name));
+
+    // Revenue from shifts
+    const rev = shopShifts.reduce((s,sh)=>s+(sh.totalRevenue||sh.totalCash||0),0);
+    const cashRev = shopShifts.reduce((s,sh)=>s+(sh.cashRevenue||0),0);
+    const cardRev = shopShifts.reduce((s,sh)=>s+(sh.cardRevenue||0),0);
+    const discounts = shopShifts.reduce((s,sh)=>s+(sh.totalDiscount||0),0);
+
+    // Expenses by category for this shop
+    const expByCategory = {};
+    allTxs.filter(t=>t.type==='expense').forEach(t=>{
+      const cat = expCats.find(c=>c.id===t.categoryId||c.name===t.categoryName);
+      if(!cat) return;
+      // Include if shop-specific or split evenly
+      const catName = cat.name;
+      expByCategory[catName] = (expByCategory[catName]||0) + (t.amount / Math.max(shops.length,1));
+    });
+
+    // Also get shop-specific expenses from shifts (salary, logistics etc)
+    const salaryExp = shopShifts.reduce((s,sh)=>{
+      const j = sh.journal||[];
+      return s + j.filter(e=>e.type==='expense'&&(e.label||'').includes('ЗП')).reduce((ss,e)=>ss+(e.amount||0),0);
+    },0);
+
+    const totalShopExp = Object.values(expByCategory).reduce((a,b)=>a+b,0);
+    const shopProfit = rev - totalShopExp;
+    const margin = rev>0 ? Math.round(shopProfit/rev*100) : 0;
+    const marginColor = margin>30?'var(--inc)':margin>10?'#f0c060':'var(--exp)';
+
+    // Sales stats
+    const allSales = shopShifts.flatMap(sh=>(sh.journal||[]).filter(e=>e.type==='sale'));
+    const avgSale = allSales.length ? Math.round(rev/allSales.length) : 0;
+
+    // By seller
+    const bySeller = {};
+    shopShifts.forEach(sh=>{
+      const seller = sh.sellerName||sh.seller||'—';
+      if(!bySeller[seller]) bySeller[seller]={shifts:0,rev:0};
+      bySeller[seller].shifts++;
+      bySeller[seller].rev += (sh.totalRevenue||sh.totalCash||0);
+    });
+
+    html += `<div class="shop-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+        <div>
+          <div style="font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700">${shop.name}</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:2px">${shopShifts.length} смен · ${allSales.length} продаж</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'Unbounded',sans-serif;font-size:16px;font-weight:700;color:var(--accent)">${fmt(rev)}</div>
+          <div style="font-size:11px;padding:2px 8px;border-radius:6px;background:${margin>30?'#1a2e1e':margin>10?'#2a2414':'#2e1a1a'};color:${marginColor};margin-top:4px;font-weight:700">Маржа: ${margin}%</div>
+        </div>
+      </div>
+
+      <!-- Profit bar -->
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t2);margin-bottom:4px">
+        <span>Выручка</span><span>Расходы</span>
+      </div>
+      <div class="profit-bar">
+        <div class="profit-fill" style="width:${Math.min(100,Math.max(0,margin+50))}%;background:${marginColor}"></div>
+      </div>
+
+      <div style="margin-top:12px">
+        <!-- Revenue breakdown -->
+        <div class="cost-row"><span class="cost-lbl">💵 Нал</span><span class="cost-val" style="color:var(--inc)">+${fmt(cashRev)}</span></div>
+        <div class="cost-row"><span class="cost-lbl">💳 Безнал</span><span class="cost-val" style="color:var(--a2)">+${fmt(cardRev)}</span></div>
+        ${discounts?`<div class="cost-row"><span class="cost-lbl">🏷 Скидки</span><span class="cost-val" style="color:var(--t2)">−${fmt(discounts)}</span></div>`:''}
+        <div class="cost-row"><span class="cost-lbl">📦 Ср. чек</span><span class="cost-val">${fmt(avgSale)}</span></div>
+
+        <!-- Expenses breakdown -->
+        ${Object.entries(expByCategory).length?`
+        <div style="font-size:10px;color:var(--t2);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:10px 0 6px">Расходы (доля магазина)</div>
+        ${Object.entries(expByCategory).sort((a,b)=>b[1]-a[1]).map(([cat,amt])=>`
+          <div class="cost-row">
+            <span class="cost-lbl">${cat}</span>
+            <span class="cost-val" style="color:var(--exp)">−${fmt(amt)}</span>
+          </div>`).join('')}`:''}
+
+        <div class="cost-row" style="margin-top:6px;padding-top:10px;border-top:2px solid var(--border)">
+          <span style="font-weight:700;font-size:13px">Прибыль магазина</span>
+          <span class="cost-val" style="color:${shopProfit>=0?'var(--inc)':'var(--exp)'};font-size:14px">${fmt(shopProfit)}</span>
+        </div>
+      </div>
+
+      <!-- By seller -->
+      ${Object.keys(bySeller).length?`
+      <div style="font-size:10px;color:var(--t2);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:12px 0 6px">По продавцам</div>
+      ${Object.entries(bySeller).map(([name,d])=>`
+        <div class="cost-row">
+          <span class="cost-lbl">👤 ${name} · ${d.shifts} смен</span>
+          <span class="cost-val" style="color:var(--a2)">${fmt(d.rev)}</span>
+        </div>`).join('')}`:''}
+    </div>`;
+  });
+
+  // ── SELLER ANALYTICS SECTION ──
+  html += renderSellerAnalytics(allShifts, r);
+
+  c.innerHTML = html;
+}
+
+function renderSellerAnalytics(allShifts, r){
+  if(!allShifts.length) return '';
+
+  // Collect all sellers across all shops
+  const sellerMap = {};
+  allShifts.forEach(sh => {
+    const name = sh.sellerName || sh.seller || '—';
+    const shop = sh.shopName || '—';
+    const key = name + '|' + shop;
+    if(!sellerMap[key]) sellerMap[key] = {
+      name, shop, shifts:[], sales:[], totalRev:0, totalCash:0,
+      totalCard:0, totalDiscount:0, salaryTotal:0
+    };
+    const d = sellerMap[key];
+    d.shifts.push(sh);
+    d.totalRev += (sh.totalRevenue || sh.totalCash || 0);
+    d.totalCash += (sh.cashRevenue || 0);
+    d.totalCard += (sh.cardRevenue || 0);
+    d.totalDiscount += (sh.totalDiscount || 0);
+    // Collect individual sales from journal
+    const sales = (sh.journal||[]).filter(e=>e.type==='sale');
+    d.sales.push(...sales);
+    // Salary from journal
+    const salary = (sh.journal||[]).filter(e=>e.type==='expense'&&(e.label||'').match(/ЗП|зп|зарплат/i));
+    d.salaryTotal += salary.reduce((s,e)=>s+(e.amount||0),0);
+  });
+
+  // Date range for avg/day calc
+  const days = r.from && r.to
+    ? Math.max(1, Math.round((new Date(r.to) - new Date(r.from))/(1000*60*60*24)))
+    : 30;
+
+  let html = `
+    <div style="margin-top:16px">
+      <div style="font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;margin-bottom:12px">👤 Аналитика по продавцам</div>`;
+
+  // Sort by revenue desc
+  const sellers = Object.values(sellerMap).sort((a,b)=>b.totalRev-a.totalRev);
+  const maxRev = Math.max(...sellers.map(s=>s.totalRev), 1);
+
+  sellers.forEach(d => {
+    const shiftsCount = d.shifts.length;
+    const salesCount = d.sales.length;
+    const avgPerShift = shiftsCount ? Math.round(d.totalRev/shiftsCount) : 0;
+    const avgPerDay = Math.round(d.totalRev/days);
+    const avgCheck = salesCount ? Math.round(d.totalRev/salesCount) : 0;
+    const avgDiscount = salesCount ? Math.round(d.totalDiscount/salesCount) : 0;
+    const discountPct = d.totalRev+d.totalDiscount > 0
+      ? Math.round(d.totalDiscount/(d.totalRev+d.totalDiscount)*100) : 0;
+    const barW = Math.round(d.totalRev/maxRev*100);
+
+    // Sales by payment method
+    const cashSales = d.sales.filter(s=>s.payMethod==='cash').length;
+    const cardSales = d.sales.filter(s=>s.payMethod!=='cash'&&s.payMethod!=='mixed').length;
+    const mixSales  = d.sales.filter(s=>s.payMethod==='mixed').length;
+
+    // Best shift
+    const bestShift = d.shifts.reduce((best,sh)=>{
+      const rev = sh.totalRevenue||sh.totalCash||0;
+      return rev > (best.totalRevenue||best.totalCash||0) ? sh : best;
+    }, d.shifts[0]||{});
+    const bestRev = bestShift.totalRevenue||bestShift.totalCash||0;
+
+    html += `<div class="shop-card" style="margin-bottom:10px">
+      <!-- Header -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div>
+          <div style="font-size:14px;font-weight:700">👤 ${d.name}</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:2px">🏪 ${d.shop} · ${shiftsCount} смен · ${salesCount} продаж</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'Unbounded',sans-serif;font-size:16px;font-weight:700;color:var(--accent)">${fmt(d.totalRev)}</div>
+          <div style="font-size:10px;color:var(--t2);margin-top:2px">за период</div>
+        </div>
+      </div>
+
+      <!-- Revenue bar -->
+      <div class="profit-bar" style="margin-bottom:12px">
+        <div class="profit-fill" style="width:${barW}%;background:var(--accent)"></div>
+      </div>
+
+      <!-- Key metrics grid -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px">
+        <div style="background:var(--s2);border-radius:10px;padding:8px;text-align:center">
+          <div style="font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;color:var(--a2)">${fmt(avgPerShift)}</div>
+          <div style="font-size:9px;color:var(--t2);margin-top:2px">Ср./смена</div>
+        </div>
+        <div style="background:var(--s2);border-radius:10px;padding:8px;text-align:center">
+          <div style="font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;color:var(--a4)">${fmt(avgPerDay)}</div>
+          <div style="font-size:9px;color:var(--t2);margin-top:2px">Ср./день</div>
+        </div>
+        <div style="background:var(--s2);border-radius:10px;padding:8px;text-align:center">
+          <div style="font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;color:var(--a5)">${fmt(avgCheck)}</div>
+          <div style="font-size:9px;color:var(--t2);margin-top:2px">Ср. чек</div>
+        </div>
+      </div>
+
+      <!-- Detailed rows -->
+      <div class="cost-row">
+        <span class="cost-lbl">💵 Нал / 💳 Безнал</span>
+        <span class="cost-val">${fmt(d.totalCash)} / ${fmt(d.totalCard)}</span>
+      </div>
+      <div class="cost-row">
+        <div>
+          <span class="cost-lbl">🏷 Скидки</span>
+          <span style="font-size:10px;color:var(--t3)"> · ${salesCount} продаж, ср. ${fmt(avgDiscount)}/прод.</span>
+        </div>
+        <span class="cost-val" style="color:${discountPct>10?'var(--exp)':'var(--t2)'}">−${fmt(d.totalDiscount)} (${discountPct}%)</span>
+      </div>
+      ${d.salaryTotal>0?`<div class="cost-row">
+        <span class="cost-lbl">💰 ЗП за период</span>
+        <span class="cost-val" style="color:var(--a5)">${fmt(d.salaryTotal)}</span>
+      </div>`:''}
+      ${d.salaryTotal>0&&d.totalRev>0?`<div class="cost-row">
+        <span class="cost-lbl">📊 ЗП / Выручка</span>
+        <span class="cost-val" style="color:${d.salaryTotal/d.totalRev>0.3?'var(--exp)':'var(--inc)'}">${Math.round(d.salaryTotal/d.totalRev*100)}%</span>
+      </div>`:''}
+
+      <!-- Payment method breakdown -->
+      ${salesCount>0?`<div class="cost-row">
+        <span class="cost-lbl">Способы оплаты</span>
+        <span style="font-size:11px;color:var(--t2)">
+          💵${cashSales} 💳${cardSales} ➗${mixSales}
+        </span>
+      </div>`:''}
+
+      <!-- Best shift -->
+      ${bestRev>0?`<div class="cost-row">
+        <span class="cost-lbl">🏆 Лучшая смена</span>
+        <span class="cost-val" style="color:var(--inc)">${fmt(bestRev)} · ${bestShift.date||'—'}</span>
+      </div>`:''}
+    </div>`;
+  });
+
+  // Summary table across all sellers
+  if(sellers.length > 1){
+    const totalAllRev = sellers.reduce((s,d)=>s+d.totalRev,0);
+    html += `<div class="shop-card" style="background:var(--s2)">
+      <div style="font-size:10px;color:var(--t2);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Сводная таблица</div>
+      ${sellers.map(d=>{
+        const pct = totalAllRev>0 ? Math.round(d.totalRev/totalAllRev*100) : 0;
+        return `<div style="margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+            <span>${d.name} <span style="color:var(--t2);font-size:10px">(${d.shop})</span></span>
+            <span style="font-weight:700">${fmt(d.totalRev)} · ${pct}%</span>
+          </div>
+          <div class="profit-bar">
+            <div class="profit-fill" style="width:${pct}%;background:var(--a2)"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+// ─────────────────────────────────
+// 2. COST ANALYTICS (себестоимость)
+// ─────────────────────────────────
+function renderCostAnalytics(r){
+  const c = document.getElementById('anlContent'); if(!c) return;
+
+  const pItems = filterByRange(
+    prodItems.filter(i=>i.status==='received'||i.status==='shipped'),
+    'receivedAt', r.from, r.to
+  );
+  const allTxs = filterByRange(getTx(),'date',r.from,r.to);
+  const expCats = getD('expCats');
+
+  const itemCount = pItems.length || 1;
+  const totalRev = pItems.reduce((s,i)=>s+(i.price||0),0);
+  const avgPrice = Math.round(totalRev/itemCount);
+
+  // Cost components per item
+  const zpPerItem = pItems.reduce((s,i)=>s+(i.zp||0),0) / itemCount;
+
+  // Material costs from transactions
+  const matExp = allTxs.filter(t=>t.type==='expense'&&
+    (t.categoryName||'').toLowerCase().match(/сырьё|материал|древесина|дерево|закуп/))
+    .reduce((s,t)=>s+t.amount,0);
+  const matPerItem = matPerItem2 = matExp / itemCount;
+
+  // Rent & overhead
+  const rentExp = allTxs.filter(t=>t.type==='expense'&&
+    (t.categoryName||'').toLowerCase().match(/аренда|аренд/))
+    .reduce((s,t)=>s+t.amount,0);
+  const rentPerItem = rentExp / itemCount;
+
+  // Other overhead
+  const otherExp = allTxs.filter(t=>t.type==='expense'&&
+    !(t.categoryName||'').toLowerCase().match(/сырьё|материал|древесина|дерево|закуп|аренда|аренд|зарплат|salary/))
+    .reduce((s,t)=>s+t.amount,0);
+  const otherPerItem = otherExp / itemCount;
+
+  // Seller salary per item (from shifts)
+  const allShifts2 = filterByRange(shifts,'date',r.from,r.to);
+  const sellerZP = allShifts2.reduce((s,sh)=>{
+    const j = sh.journal||[];
+    return s + j.filter(e=>e.type==='expense').reduce((ss,e)=>ss+(e.amount||0),0);
+  },0);
+  const sellerZPPerItem = sellerZP / itemCount;
+
+  const totalCostPerItem = zpPerItem + matPerItem + rentPerItem + otherPerItem + sellerZPPerItem;
+  const grossMarginPerItem = avgPrice - totalCostPerItem;
+  const marginPct = avgPrice>0 ? Math.round(grossMarginPerItem/avgPrice*100) : 0;
+  const marginColor = marginPct>40?'var(--inc)':marginPct>20?'#f0c060':'var(--exp)';
+
+  c.innerHTML = `
+    <div class="shop-card" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:var(--accent)">
+      <div style="font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;margin-bottom:12px">Среднее изделие</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div>
+          <div style="font-size:11px;color:var(--t2)">Средняя цена продажи</div>
+          <div style="font-family:'Unbounded',sans-serif;font-size:24px;font-weight:700;color:var(--accent)">${fmt(avgPrice)}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--t2)">Маржа</div>
+          <div style="font-family:'Unbounded',sans-serif;font-size:22px;font-weight:700;color:${marginColor}">${marginPct}%</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--t2)">Анализ по ${itemCount} изделиям за период</div>
+    </div>
+
+    <div class="shop-card">
+      <div style="font-size:10px;color:var(--t2);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Себестоимость на 1 изделие</div>
+
+      ${zpPerItem>0?`<div class="cost-row">
+        <div><div class="cost-lbl">🔨 ЗП мастера</div><div style="font-size:10px;color:var(--t3)">${Math.round(zpPerItem/avgPrice*100)}% от цены</div></div>
+        <span class="cost-val" style="color:var(--exp)">−${fmt(zpPerItem)}</span>
+      </div>`:''}
+
+      ${matPerItem>0?`<div class="cost-row">
+        <div><div class="cost-lbl">🌳 Материалы / сырьё</div><div style="font-size:10px;color:var(--t3)">${Math.round(matPerItem/avgPrice*100)}% от цены</div></div>
+        <span class="cost-val" style="color:var(--exp)">−${fmt(matPerItem)}</span>
+      </div>`:''}
+
+      ${rentPerItem>0?`<div class="cost-row">
+        <div><div class="cost-lbl">🏭 Аренда (доля)</div><div style="font-size:10px;color:var(--t3)">${Math.round(rentPerItem/avgPrice*100)}% от цены</div></div>
+        <span class="cost-val" style="color:var(--exp)">−${fmt(rentPerItem)}</span>
+      </div>`:''}
+
+      ${sellerZPPerItem>0?`<div class="cost-row">
+        <div><div class="cost-lbl">🏪 ЗП продавца (доля)</div><div style="font-size:10px;color:var(--t3)">${Math.round(sellerZPPerItem/avgPrice*100)}% от цены</div></div>
+        <span class="cost-val" style="color:var(--exp)">−${fmt(sellerZPPerItem)}</span>
+      </div>`:''}
+
+      ${otherPerItem>0?`<div class="cost-row">
+        <div><div class="cost-lbl">📦 Прочие расходы (доля)</div><div style="font-size:10px;color:var(--t3)">${Math.round(otherPerItem/avgPrice*100)}% от цены</div></div>
+        <span class="cost-val" style="color:var(--exp)">−${fmt(otherPerItem)}</span>
+      </div>`:''}
+
+      <div class="cost-row" style="margin-top:6px;padding-top:10px;border-top:2px solid var(--border)">
+        <span style="font-weight:700;font-size:13px">Итого себестоимость</span>
+        <span class="cost-val" style="color:var(--exp);font-size:14px">${fmt(totalCostPerItem)}</span>
+      </div>
+      <div class="cost-row">
+        <span style="font-weight:700;font-size:13px;color:${grossMarginPerItem>=0?'var(--inc)':'var(--exp)'}">Прибыль с изделия</span>
+        <span class="cost-val" style="color:${grossMarginPerItem>=0?'var(--inc)':'var(--exp)'};font-size:16px">${fmt(grossMarginPerItem)}</span>
+      </div>
+    </div>
+
+    <!-- Cost structure visual -->
+    <div class="shop-card">
+      <div style="font-size:10px;color:var(--t2);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Структура затрат</div>
+      ${[
+        ['ЗП мастера', zpPerItem, 'var(--a5)'],
+        ['Материалы', matPerItem, 'var(--a4)'],
+        ['Аренда', rentPerItem, 'var(--a2)'],
+        ['ЗП продавца', sellerZPPerItem, 'var(--a3)'],
+        ['Прочее', otherPerItem, 'var(--t2)'],
+      ].filter(([,v])=>v>0).map(([label,val,color])=>`
+        <div style="margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
+            <span style="color:var(--t2)">${label}</span>
+            <span style="font-weight:600">${fmt(val)} <span style="color:var(--t2);font-weight:400">(${totalCostPerItem>0?Math.round(val/totalCostPerItem*100):0}%)</span></span>
+          </div>
+          <div class="profit-bar"><div class="profit-fill" style="width:${totalCostPerItem>0?Math.round(val/totalCostPerItem*100):0}%;background:${color}"></div></div>
+        </div>`).join('')}
+    </div>`;
+}
+
+// ─────────────────────────────────
+// 3. BREAKEVEN ANALYSIS
+// ─────────────────────────────────
+function renderBreakeven(r){
+  const c = document.getElementById('anlContent'); if(!c) return;
+
+  const allTxs = filterByRange(getTx(),'date',r.from,r.to);
+  const pItems = filterByRange(prodItems.filter(i=>i.status==='received'||i.status==='shipped'),'receivedAt',r.from,r.to);
+  const allShifts2 = filterByRange(shifts,'date',r.from,r.to);
+
+  const itemCount = pItems.length || 1;
+  const totalRev = allShifts2.reduce((s,sh)=>s+(sh.totalRevenue||sh.totalCash||0),0);
+  const avgPrice = pItems.length ? Math.round(pItems.reduce((s,i)=>s+(i.price||0),0)/itemCount) : 0;
+
+  // Fixed costs (постоянные — аренда, ФОТ)
+  const fixedExp = allTxs.filter(t=>t.type==='expense'&&
+    (t.categoryName||'').toLowerCase().match(/аренда|зарплата|salary|аренд/))
+    .reduce((s,t)=>s+t.amount,0);
+
+  // Variable costs per item (переменные — материалы, ЗП мастера)
+  const zpTotal = pItems.reduce((s,i)=>s+(i.zp||0),0);
+  const matTotal = allTxs.filter(t=>t.type==='expense'&&
+    (t.categoryName||'').toLowerCase().match(/сырьё|материал|древесина|дерево|закуп/))
+    .reduce((s,t)=>s+t.amount,0);
+  const varCostPerItem = itemCount > 0 ? Math.round((zpTotal+matTotal)/itemCount) : 0;
+
+  // Contribution margin per item
+  const contribMargin = avgPrice - varCostPerItem;
+  const contribPct = avgPrice>0 ? Math.round(contribMargin/avgPrice*100) : 0;
+
+  // Breakeven point
+  const breakevenItems = contribMargin>0 ? Math.ceil(fixedExp/contribMargin) : null;
+  const breakevenRev = breakevenItems ? breakevenItems*avgPrice : null;
+
+  // Current progress
+  const progressPct = breakevenItems ? Math.min(100,Math.round(itemCount/breakevenItems*100)) : 0;
+  const progressColor = progressPct>=100?'var(--inc)':progressPct>=70?'#f0c060':'var(--exp)';
+
+  // Days in period
+  const daysDiff = r.from&&r.to ? Math.max(1,Math.round((new Date(r.to)-new Date(r.from))/(1000*60*60*24))) : 30;
+  const itemsPerDay = (itemCount/daysDiff).toFixed(1);
+  const daysToBreakeven = breakevenItems&&itemCount<breakevenItems ? Math.ceil((breakevenItems-itemCount)/Math.max(0.1,parseFloat(itemsPerDay))) : 0;
+
+  c.innerHTML = `
+    <div class="shop-card" style="background:linear-gradient(135deg,#1a1e2e,#1e1a2e);border-color:var(--a5)">
+      <div style="font-size:10px;color:var(--t2);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Точка безубыточности</div>
+      ${breakevenItems ? `
+      <div style="text-align:center;padding:8px 0">
+        <div style="font-size:12px;color:var(--t2);margin-bottom:6px">Нужно продать изделий</div>
+        <div style="font-family:'Unbounded',sans-serif;font-size:36px;font-weight:900;color:var(--a5)">${breakevenItems}</div>
+        <div style="font-size:12px;color:var(--t2);margin-top:4px">чтобы покрыть постоянные расходы</div>
+        <div style="font-size:13px;font-weight:600;color:var(--a2);margin-top:8px">= ${fmt(breakevenRev)} выручки</div>
+      </div>
+
+      <div style="margin-top:16px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+          <span style="color:var(--t2)">Прогресс за период: ${itemCount} из ${breakevenItems}</span>
+          <span style="font-weight:700;color:${progressColor}">${progressPct}%</span>
+        </div>
+        <div class="profit-bar" style="height:14px">
+          <div class="profit-fill" style="width:${progressPct}%;background:${progressColor}"></div>
+        </div>
+        ${progressPct>=100
+          ? `<div style="text-align:center;margin-top:8px;font-size:13px;color:var(--inc);font-weight:700">✅ Точка безубыточности пройдена!</div>`
+          : `<div style="text-align:center;margin-top:8px;font-size:12px;color:var(--t2)">Осталось: ${breakevenItems-itemCount} изд. · ~${daysToBreakeven} дн. при текущем темпе</div>`
+        }
+      </div>` : `<div class="empty"><div class="ei">📊</div>Недостаточно данных для расчёта</div>`}
+    </div>
+
+    <div class="shop-card">
+      <div style="font-size:10px;color:var(--t2);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Структура расчёта</div>
+      <div class="cost-row"><span class="cost-lbl">Средняя цена изделия</span><span class="cost-val" style="color:var(--accent)">${fmt(avgPrice)}</span></div>
+      <div class="cost-row"><span class="cost-lbl">Переменные затраты / изд. <span style="font-size:10px">(ЗП мастера + материалы)</span></span><span class="cost-val" style="color:var(--exp)">−${fmt(varCostPerItem)}</span></div>
+      <div class="cost-row"><span class="cost-lbl" style="font-weight:700">Маржинальный доход / изд.</span><span class="cost-val" style="color:var(--inc)">${fmt(contribMargin)} (${contribPct}%)</span></div>
+      <div class="cost-row" style="margin-top:6px;padding-top:10px;border-top:2px solid var(--border)"><span class="cost-lbl">Постоянные расходы (период)</span><span class="cost-val" style="color:var(--exp)">−${fmt(fixedExp)}</span></div>
+    </div>
+
+    <div class="shop-card">
+      <div style="font-size:10px;color:var(--t2);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Производительность</div>
+      <div class="cost-row"><span class="cost-lbl">Изделий за период</span><span class="cost-val">${itemCount}</span></div>
+      <div class="cost-row"><span class="cost-lbl">Изделий в день</span><span class="cost-val">${itemsPerDay}</span></div>
+      <div class="cost-row"><span class="cost-lbl">Выручка магазинов</span><span class="cost-val" style="color:var(--accent)">${fmt(totalRev)}</span></div>
+      <div class="cost-row"><span class="cost-lbl">Выручка / изделие</span><span class="cost-val">${fmt(itemCount>0?Math.round(totalRev/itemCount):0)}</span></div>
+    </div>`;
+}
+
 
 // ════════ BOOT ════════
 function init(){
