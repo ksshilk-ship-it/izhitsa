@@ -214,19 +214,43 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
   </div>
 
   <!-- CLOSE PAGE -->
-  <div class="page" id="pg-close">
+  <div class="page" id="pg-close" style="padding-top:12px">
     <div class="stitle">Закрытие смены</div>
-    <div id="closeSummary"></div>
+
+    <!-- STEP 1: Fill in numbers FIRST -->
     <div class="card">
-      <div class="fg"><label class="fl">Остаток нал вечер (факт, пересчитайте)</label>
-        <input class="fi" type="number" id="cashEveInput" placeholder="0" inputmode="numeric" oninput="validateClose()">
+      <div class="ctitle">📝 Заполните перед закрытием</div>
+      <div class="fg"><label class="fl">💵 Остаток нал вечер (пересчитайте фактически)</label>
+        <input class="fi" type="number" id="cashEveInput" placeholder="Введите сумму..." inputmode="numeric"
+          style="font-size:18px;font-weight:700;text-align:center"
+          oninput="validateClose();renderClose()">
       </div>
-      <div class="fg"><label class="fl">Инкассация (если была)</label>
-        <input class="fi" type="number" id="inkassInput" placeholder="0" inputmode="numeric" oninput="validateClose()">
+      <div class="fg"><label class="fl">🏦 Инкассация (если была, иначе 0)</label>
+        <input class="fi" type="number" id="inkassInput" placeholder="0" inputmode="numeric"
+          oninput="validateClose();renderClose()">
       </div>
       <div id="closeValidation"></div>
     </div>
-    <button class="btn red" onclick="closeShift()">🔐 Закрыть смену</button>
+
+    <!-- STEP 2: Summary auto-updates -->
+    <div id="closeSummary"></div>
+
+    <!-- CLOSE BUTTON at bottom -->
+    <!-- Mandatory reason if cash doesn't match -->
+    <div id="cashDiffReasonBlock" style="display:none;margin-bottom:10px">
+      <div style="background:#2e1a1a;border:1px solid var(--exp);border-radius:12px;padding:14px">
+        <div style="font-size:12px;font-weight:700;color:var(--exp);margin-bottom:8px">
+          ⚠️ Объясните причину расхождения — без этого смену не закрыть
+        </div>
+        <textarea id="cashDiffReason" placeholder="Например: недостача, ошибка при пересчёте, выдана сдача из кармана..."
+          oninput="validateClose()"
+          style="width:100%;background:var(--bg);border:1px solid var(--exp);border-radius:8px;padding:10px;color:var(--text);font-family:'Golos Text',sans-serif;font-size:13px;outline:none;min-height:80px;resize:none"></textarea>
+      </div>
+    </div>
+
+    <button class="btn red" id="closeShiftBtn" style="margin-bottom:16px;opacity:.5" disabled onclick="closeShift()">
+      🔐 Закрыть смену
+    </button>
   </div>
 
   <div class="tabs">
@@ -381,6 +405,44 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 <!-- ADMIN -->
 <!-- Управление продавцами — только через izhitsa-admin.html (роль Администратор) -->
 
+<!-- MORNING MODAL — required, cannot skip -->
+<div class="mo open" id="morningMo" style="display:none">
+  <div class="md">
+    <div class="mh"></div>
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:28px;margin-bottom:8px">🌅</div>
+      <div style="font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700" id="morningShopName"></div>
+      <div style="font-size:12px;color:var(--t2);margin-top:4px" id="morningSellerName"></div>
+    </div>
+    <div class="card" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:var(--accent)">
+      <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.5">
+        Пересчитайте наличные в кассе и введите фактический остаток. Без этого открыть смену невозможно.
+      </div>
+      <div class="fg">
+        <label class="fl">💵 Остаток наличных в кассе (₽)</label>
+        <input class="fi" type="number" id="morningCash" placeholder="Введите сумму..." inputmode="numeric"
+          style="font-size:20px;font-weight:700;text-align:center;border-color:var(--accent)"
+          oninput="checkMorningValid()">
+        <div id="morningCashErr" style="color:var(--exp);font-size:12px;margin-top:4px;display:none">
+          ⚠️ Обязательное поле — введите фактический остаток наличных
+        </div>
+      </div>
+      <div id="morningCashHint" style="font-size:11px;color:var(--t2);margin-top:4px;display:none">
+        ✓ Принято
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--t2);margin-bottom:12px;text-align:center">
+      Остаток товара система рассчитывает автоматически на основе предыдущих смен
+    </div>
+    <button class="btn" id="morningConfirmBtn" onclick="confirmMorning()" disabled style="opacity:.4">
+      Открыть смену →
+    </button>
+    <button class="btn sec" style="margin-top:8px" onclick="cancelMorning()">
+      ← Назад (выйти из входа)
+    </button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -395,6 +457,7 @@ const KEYS = {
 
 // ════════ STATE ════════
 let session = null;
+let pendingSession = null;
 let journal = [];
 let saleItems = [];
 let payMethod = 'cash';
@@ -458,6 +521,95 @@ function fbDelSellerById(id) {
   if(window.FB_READY) fbDel('iz_sellers', id);
 }
 
+function openMorningModal(shopName, sellerName){
+  document.getElementById('morningShopName').textContent = '🏪 ' + shopName;
+  document.getElementById('morningSellerName').textContent = '👤 ' + sellerName;
+  document.getElementById('morningCash').value = '';
+  document.getElementById('morningCashErr').style.display = 'none';
+  document.getElementById('morningCashHint').style.display = 'none';
+  document.getElementById('morningConfirmBtn').disabled = true;
+  document.getElementById('morningConfirmBtn').style.opacity = '.4';
+  document.getElementById('morningMo').style.display = 'flex';
+  // Focus cash input
+  setTimeout(()=>document.getElementById('morningCash')?.focus(), 300);
+}
+
+function checkMorningValid(){
+  const val = document.getElementById('morningCash').value;
+  const num = parseFloat(val);
+  const btn = document.getElementById('morningConfirmBtn');
+  const err = document.getElementById('morningCashErr');
+  const hint= document.getElementById('morningCashHint');
+  // Valid: has value >= 0 (0 is allowed — empty till)
+  if(val !== '' && !isNaN(num) && num >= 0){
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    err.style.display = 'none';
+    hint.style.display = 'block';
+    hint.textContent = '✓ ' + fmt(num) + ' — принято';
+    hint.style.color = 'var(--inc)';
+  } else {
+    btn.disabled = true;
+    btn.style.opacity = '.4';
+    hint.style.display = 'none';
+  }
+}
+
+function confirmMorning(){
+  const val = document.getElementById('morningCash').value;
+  const cashM = parseFloat(val);
+  if(val===''||isNaN(cashM)||cashM<0){
+    document.getElementById('morningCashErr').style.display='block';
+    document.getElementById('morningCash').style.borderColor='var(--exp)';
+    return;
+  }
+  // Close modal
+  document.getElementById('morningMo').style.display = 'none';
+  // Start session — goods morning calculated from previous shifts
+  const goodsM = calcGoodsMorning(pendingSession.shopName);
+  session = {
+    ...pendingSession,
+    openedAt: new Date().toISOString(),
+    cashMorning: cashM,
+    goodsMorning: goodsM
+  };
+  pendingSession = null;
+  journal = [{
+    id:uid(), type:'open', ts:new Date().toISOString(),
+    icon:'🔓', label:'Смена открыта',
+    sub:`💵 Нал утро: ${fmt(cashM)} · 📦 Товар (расчётный): ${fmt(goodsM)}`,
+    cashEffect:0, goodsEffect:0
+  }];
+  saveSessionData(); saveJournal();
+  startApp();
+}
+
+function cancelMorning(){
+  document.getElementById('morningMo').style.display = 'none';
+  pendingSession = null;
+}
+
+function calcGoodsMorning(shopName){
+  // Calculate goods balance from previous completed shifts for this shop
+  const allShifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+  const shopShifts = allShifts.filter(s=>s.shopName===shopName).sort((a,b)=>new Date(b.closedAt)-new Date(a.closedAt));
+  if(shopShifts.length===0) return 0;
+  // Take last shift's closing goods balance
+  const last = shopShifts[0];
+  // goodsEvening from last shift if available
+  if(last.shopData){
+    const sd = Object.values(last.shopData).find(d=>d.name===shopName);
+    if(sd?.goods_e) return sd.goods_e;
+  }
+  // Fallback: calculate from journal
+  if(last.journal){
+    let goods = last.goodsMorning||0;
+    (last.journal||[]).forEach(e=>{ goods+=(e.goodsEffect||0); });
+    return Math.max(0, goods);
+  }
+  return last.goodsMorning||0;
+}
+
 function init() {
   // Populate login selects
   const shops = getShops();
@@ -502,11 +654,10 @@ function doLogin() {
   if(seller.pass !== pass){ errEl.style.display='block'; errEl.textContent='Неверный пароль'; return; }
   errEl.style.display='none';
 
-  // Prompt for morning data
-  const cashM  = parseFloat(prompt(`${shopName}\nОстаток наличных утро (пересчитайте фактически):`)||'0');
-  const goodsM = parseFloat(prompt(`${shopName}\nОстаток товара утро (в ₽):`)||'0');
-
-  session = { shopName, sellerName:seller.name, sellerId, openedAt:new Date().toISOString(), cashMorning:cashM, goodsMorning:goodsM };
+  // Show morning cash modal — required before shift opens
+  pendingSession = { shopName, sellerName:seller.name, sellerId };
+  openMorningModal(shopName, seller.name);
+  return; // shift will be started from confirmMorning()
   journal = [{ id:uid(), type:'open', ts:new Date().toISOString(), icon:'🔓', label:'Смена открыта', sub:`Нал утро: ${fmt(cashM)} · Товар: ${fmt(goodsM)}`, cashEffect:0, goodsEffect:0 }];
   saveSessionData(); saveJournal();
   startApp();
@@ -941,6 +1092,12 @@ function acceptInvoice(){
 }
 
 // ════════ CLOSE SHIFT ════════
+function getPrevShiftData(shopName){
+  const allShifts=JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+  const shopShifts=allShifts.filter(s=>s.shopName===shopName).sort((a,b)=>new Date(b.closedAt||b.date)-new Date(a.closedAt||a.date));
+  return shopShifts[0]||null;
+}
+
 function renderClose(){
   const t=calcTotals();
   const sales=journal.filter(e=>e.type==='sale');
@@ -950,6 +1107,9 @@ function renderClose(){
   const disc=sales.reduce((s,e)=>s+(e.discount||0),0);
   const wos=journal.filter(e=>e.type==='writeoff');
   const staffP=journal.filter(e=>e.type==='staff');
+  // Previous shift data
+  const prev=getPrevShiftData(session.shopName);
+  const prevCashEve=prev?.cashEvening||null;
   document.getElementById('closeSummary').innerHTML=`
     <div class="card" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:var(--accent)">
       <div class="ctitle">Итоги смены — ${session.shopName}</div>
@@ -969,13 +1129,41 @@ function validateClose(){
   const t=calcTotals();
   const inkass=parseFloat(document.getElementById('inkassInput').value)||0;
   const cashEve=parseFloat(document.getElementById('cashEveInput').value)||0;
-  const expected=t.cash-inkass;
   const c=document.getElementById('closeValidation');
-  if(!cashEve){ c.innerHTML=''; return; }
+  const reasonBlock=document.getElementById('cashDiffReasonBlock');
+  const closeBtn=document.getElementById('closeShiftBtn');
+
+  if(document.getElementById('cashEveInput').value===''){
+    c.innerHTML='';
+    if(reasonBlock) reasonBlock.style.display='none';
+    if(closeBtn){ closeBtn.disabled=true; closeBtn.style.opacity='.5'; }
+    return;
+  }
+
+  const expected=t.cash-inkass;
   const diff=cashEve-expected;
-  c.innerHTML=Math.abs(diff)<1
-    ?'<div class="al-ok">✅ Касса сходится</div>'
-    :`<div class="al-warn">⚠️ Расхождение: ${diff>0?'+':''}${fmt(diff)}<br><span style="font-size:11px">Ожидалось: ${fmt(expected)} · Факт: ${fmt(cashEve)}</span></div>`;
+  const hasDiff=Math.abs(diff)>=1;
+
+  if(!hasDiff){
+    c.innerHTML='<div class="al-ok">✅ Касса сходится — можно закрывать</div>';
+    if(reasonBlock) reasonBlock.style.display='none';
+    if(closeBtn){ closeBtn.disabled=false; closeBtn.style.opacity='1'; }
+  } else {
+    c.innerHTML=`<div style="background:#2e1a1a;border:2px solid var(--exp);border-radius:10px;padding:12px;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:700;color:var(--exp);margin-bottom:4px">
+        ⛔ Расхождение кассы: ${diff>0?'+':''}${fmt(diff)}
+      </div>
+      <div style="font-size:11px;color:var(--t2)">Расчётный остаток: ${fmt(expected)} · Факт: ${fmt(cashEve)}</div>
+    </div>`;
+    // Show mandatory reason field
+    if(reasonBlock) reasonBlock.style.display='block';
+    // Disable close button until reason entered
+    const reason=document.getElementById('cashDiffReason')?.value?.trim();
+    if(closeBtn){
+      closeBtn.disabled=!reason;
+      closeBtn.style.opacity=reason?'1':'.5';
+    }
+  }
 }
 
 function closeShift(){
@@ -986,14 +1174,45 @@ function closeShift(){
   const diff=cashEve-(t.cash-inkass);
   if(Math.abs(diff)>=1 && !confirm(`Расхождение кассы: ${fmt(Math.abs(diff))}. Закрыть смену?`)) return;
   const sales=journal.filter(e=>e.type==='sale');
+  const sales=journal.filter(e=>e.type==='sale');
   const report={
     id:uid(),source:'shop',shopName:session.shopName,sellerName:session.sellerName,
     date:new Date().toISOString().split('T')[0],openedAt:session.openedAt,closedAt:new Date().toISOString(),
-    cashMorning:session.cashMorning,goodsMorning:session.goodsMorning,cashEvening:cashEve,inkass,cashDiff:diff,
+    cashMorning:session.cashMorning,goodsMorning:session.goodsMorning,cashEvening:cashEve,inkass,
+    cashDiff:diff, cashDiffReason:reason,
+    hasCashDiff:hasDiff,
+    prevCashEvening:prevCashEve,
+    morningDiff:morningDiff,
+    hasMorningDiff:morningDiff>1,
     salesCount:sales.length,totalRevenue:sales.reduce((s,e)=>s+e.totalPaid,0),
     cashRevenue:sales.reduce((s,e)=>s+(e.cashPart||0),0),cardRevenue:sales.reduce((s,e)=>s+(e.cardPart||0),0),
     journal:[...journal]
   };
+  // Save notification for admin if any discrepancy
+  if(hasDiff||morningDiff>1){
+    const alerts=JSON.parse(localStorage.getItem('iz_admin_alerts')||'[]');
+    alerts.unshift({
+      id:uid(),type:'cash_diff',
+      shopName:session.shopName,sellerName:session.sellerName,
+      date:report.date,createdAt:new Date().toISOString(),
+      cashDiff:hasDiff?diff:0,cashDiffReason:reason,
+      morningDiff:morningDiff,prevCashEve:prevCashEve,
+      cashMorning:session.cashMorning,
+      read:false
+    });
+    localStorage.setItem('iz_admin_alerts',JSON.stringify(alerts.slice(0,50)));
+    // Also save to Firebase for real-time notification
+    try{
+      if(typeof db!=='undefined'){
+        db.collection('iz_admin_alerts').add({
+          type:'cash_diff',shopName:session.shopName,sellerName:session.sellerName,
+          date:report.date,cashDiff:hasDiff?diff:0,cashDiffReason:reason,
+          morningDiff:morningDiff,prevCashEve:prevCashEve,cashMorning:session.cashMorning,
+          read:false,createdAt:new Date().toISOString()
+        });
+      }
+    }catch(e){}
+  }
   const shifts=JSON.parse(localStorage.getItem('iz_shifts')||'[]');
   shifts.unshift(report); localStorage.setItem('iz_shifts',JSON.stringify(shifts)); fbSaveShift(report);
   localStorage.removeItem(KEYS.session); localStorage.removeItem(KEYS.journal);
