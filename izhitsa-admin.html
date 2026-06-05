@@ -207,7 +207,12 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
       <div class="pc" onclick="setDashPeriod('week',this)">Неделя</div>
       <div class="pc" onclick="setDashPeriod('quarter',this)">Квартал</div>
       <div class="pc" onclick="setDashPeriod('year',this)">Год</div>
-      <div class="pc" onclick="setDashPeriod('all',this)">Всё время</div>
+      <div class="pc" onclick="setDashPeriod('all',this)">Всё</div>
+      <div class="pc" onclick="setDashPeriod('custom',this)">✏️ Период</div>
+    </div>
+    <div id="dashCustomDates" style="display:none;margin-bottom:10px" class="row2">
+      <div><label class="fl">С даты</label><input class="fi" type="date" id="dashFrom" onchange="renderDash()"></div>
+      <div><label class="fl">По дату</label><input class="fi" type="date" id="dashTo" onchange="renderDash()"></div>
     </div>
     <div id="dashKPI"></div>
     <div class="card"><div class="ctitle">Последние операции</div><div id="dashRecentTx"></div>
@@ -270,6 +275,11 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
       <div class="pc" onclick="setShopPeriod('month',this)">Месяц</div>
       <div class="pc" onclick="setShopPeriod('lastmonth',this)">Прош. мес.</div>
       <div class="pc" onclick="setShopPeriod('year',this)">Год</div>
+      <div class="pc" onclick="setShopPeriod('custom',this)">✏️ Период</div>
+    </div>
+    <div id="shopCustomDates" style="display:none;margin-bottom:10px" class="row2">
+      <div><label class="fl">С даты</label><input class="fi" type="date" id="shopFrom" onchange="renderShops()"></div>
+      <div><label class="fl">По дату</label><input class="fi" type="date" id="shopTo" onchange="renderShops()"></div>
     </div>
     <div id="shopKPI" style="margin-bottom:10px"></div>
     <div class="card"><div class="ctitle">Смены за период</div><div id="shiftsList"></div></div>
@@ -284,6 +294,11 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
       <div class="pc" onclick="setProdPeriod('week',this)">Неделя</div>
       <div class="pc" onclick="setProdPeriod('year',this)">Год</div>
       <div class="pc" onclick="setProdPeriod('all',this)">Всё</div>
+      <div class="pc" onclick="setProdPeriod('custom',this)">✏️ Период</div>
+    </div>
+    <div id="prodCustomDates" style="display:none;margin-bottom:10px" class="row2">
+      <div><label class="fl">С даты</label><input class="fi" type="date" id="prodFrom" onchange="renderProd()"></div>
+      <div><label class="fl">По дату</label><input class="fi" type="date" id="prodTo" onchange="renderProd()"></div>
     </div>
     <div id="prodKPI" style="margin-bottom:10px"></div>
     <div class="card"><div class="ctitle">По мастерам</div><div id="prodByMaster"></div></div>
@@ -293,14 +308,38 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 
   <!-- DEBT (бухгалтер) -->
   <div class="page" id="pg-debt">
-    <div class="stitle">Дебиторка</div>
-    <div class="card" style="text-align:center;background:linear-gradient(135deg,#2a1a22,#221a2a);border-color:var(--a3)">
-      <div class="ctitle">Всего должны нам</div>
-      <div style="font-family:'Unbounded',sans-serif;font-size:22px;font-weight:700;color:var(--a3)" id="totDebt">0₽</div>
+    <div class="stitle">Взаиморасчёты</div>
+
+    <!-- Summary row -->
+    <div class="kpi-grid" style="margin-bottom:10px">
+      <div class="kpi" style="background:linear-gradient(135deg,#2a1a22,#221a2a);border-color:var(--a3)">
+        <div class="kpi-l">Нам должны</div>
+        <div class="kpi-v" style="color:var(--a3)" id="totDebt">0₽</div>
+        <div class="kpi-sub" id="totDebtCnt"></div>
+      </div>
+      <div class="kpi" style="background:linear-gradient(135deg,#2a1e14,#221a14);border-color:var(--exp)">
+        <div class="kpi-l">Мы должны</div>
+        <div class="kpi-v" style="color:var(--exp)" id="totCredit">0₽</div>
+        <div class="kpi-sub" id="totCreditCnt"></div>
+      </div>
     </div>
-    <div class="card"><div class="ctitle">Должники</div><div id="debtorsList"></div>
-      <button class="btn sec" style="margin-top:10px" onclick="openMo('addDebtMo')">＋ Добавить</button>
+
+    <!-- Overdue alert -->
+    <div id="overdueAlert"></div>
+
+    <!-- DEBTORS -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div class="stitle" style="margin:0;font-size:12px">👥 Дебиторка (нам должны)</div>
+      <button class="btn sm" style="background:var(--a3);color:#fff;border:none" onclick="openMo('addDebtMo')">＋</button>
     </div>
+    <div class="card"><div id="debtorsList"></div></div>
+
+    <!-- CREDITORS -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:4px">
+      <div class="stitle" style="margin:0;font-size:12px">🧾 Кредиторка (мы должны)</div>
+      <button class="btn sm" style="background:var(--exp);color:#fff;border:none" onclick="openMo('addCreditMo')">＋</button>
+    </div>
+    <div class="card"><div id="creditorsList"></div></div>
   </div>
 
   <!-- SETTINGS (бухгалтер) -->
@@ -652,9 +691,17 @@ function seedDefaults(){
 }
 
 // ════════ DASHBOARD ════════
-function setDashPeriod(p,el){dashPeriod=p;document.querySelectorAll('#dashPeriodChips .pc').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderDash();}
+function setDashPeriod(p,el){
+  dashPeriod=p;
+  document.querySelectorAll('#dashPeriodChips .pc').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  const cd=document.getElementById('dashCustomDates');
+  if(cd) cd.style.display=p==='custom'?'grid':'none';
+  if(p!=='custom'){ setRangeInputs('dashFrom','dashTo',p); }
+  renderDash();
+}
 function renderDash(){
-  const r=getRange(dashPeriod);
+  const r=dashPeriod==='custom'?{from:gv('dashFrom'),to:gv('dashTo')}:getRange(dashPeriod);
   const txs=getTx();
   // Balances (all time)
   let bank=0,cash=0;
@@ -808,14 +855,22 @@ function renderAllTx(){
 }
 
 // ════════ SHOPS ════════
-function setShopPeriod(p,el){shopPeriod=p;document.querySelectorAll('#pg-shops .pc').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderShops();}
+function setShopPeriod(p,el){
+  shopPeriod=p;
+  document.querySelectorAll('#pg-shops .pc').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  const cd=document.getElementById('shopCustomDates');
+  if(cd) cd.style.display=p==='custom'?'grid':'none';
+  if(p!=='custom'){ setRangeInputs('shopFrom','shopTo',p); }
+  renderShops();
+}
 let activeShop='';
 function renderShops(){
   const shops=getD('shops');
   // Shop selector
   const ss=document.getElementById('shopsSelector');
   if(ss){ss.innerHTML='<div class="pc '+(activeShop===''?'active':'')+'" onclick="activeShop=\'\';renderShops()">Все</div>'+shops.map(s=>`<div class="pc ${activeShop===s.name?'active':''}" onclick="activeShop='${s.name}';renderShops()">${s.name}</div>`).join('');}
-  const r=getRange(shopPeriod);
+  const r=shopPeriod==='custom'?{from:gv('shopFrom'),to:gv('shopTo')}:getRange(shopPeriod);
   let sh=filterByRange(shifts,'date',r.from,r.to);
   if(activeShop)sh=sh.filter(s=>s.shopName===activeShop);
   const totalRev=sh.reduce((s,x)=>s+(x.totalRevenue||x.totalCash||0),0);
@@ -844,27 +899,83 @@ function openShiftDetail(id, shiftObj){
   let s=shiftObj;
   if(typeof s==='string')try{s=JSON.parse(s);}catch(e){s={};}
   document.getElementById('shiftDetailTitle').textContent=(s.shopName||'Магазин')+' · '+(s.date||'');
-  const sales=(s.journal||[]).filter(e=>e.type==='sale');
-  const wos=(s.journal||[]).filter(e=>e.type==='writeoff');
-  const staff=(s.journal||[]).filter(e=>e.type==='staff');
+  const journal=(s.journal||[]);
+  const sales=journal.filter(e=>e.type==='sale');
+  const wos=journal.filter(e=>e.type==='writeoff');
+  const staff=journal.filter(e=>e.type==='staff');
+  const receives=journal.filter(e=>e.type==='receive');
+  const cashSales=sales.reduce((s,e)=>s+(e.cashPart||0),0);
+  const cardSales=sales.reduce((s,e)=>s+(e.cardPart||0),0);
+  const totalDiscount=sales.reduce((s,e)=>s+(e.discount||0),0);
+
   document.getElementById('shiftDetailBody').innerHTML=`
-    <div class="kpi-grid" style="margin-bottom:12px">
-      <div class="kpi"><div class="kpi-l">Выручка</div><div class="kpi-v" style="color:var(--inc)">${fmt(s.totalRevenue||s.totalCash||0)}</div></div>
-      <div class="kpi"><div class="kpi-l">Продаж</div><div class="kpi-v">${sales.length||s.salesCount||0}</div></div>
+    <div class="kpi-grid" style="margin-bottom:10px">
+      <div class="kpi full" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:var(--accent)">
+        <div class="kpi-l">Выручка итого</div>
+        <div class="kpi-v" style="color:var(--accent);font-size:22px">${fmt(s.totalRevenue||s.totalCash||0)}</div>
+        <div style="display:flex;gap:16px;margin-top:5px">
+          <span style="font-size:11px;color:var(--t2)">💵 Нал: ${fmt(cashSales)}</span>
+          <span style="font-size:11px;color:var(--t2)">💳 Безнал: ${fmt(cardSales)}</span>
+          ${totalDiscount?`<span style="font-size:11px;color:var(--t2)">🏷 Скидки: ${fmt(totalDiscount)}</span>`:''}
+        </div>
+      </div>
       <div class="kpi"><div class="kpi-l">Нал утро</div><div class="kpi-v">${fmt(s.cashMorning||0)}</div></div>
       <div class="kpi"><div class="kpi-l">Нал вечер</div><div class="kpi-v">${fmt(s.cashEvening||0)}</div></div>
+      <div class="kpi"><div class="kpi-l">Продаж</div><div class="kpi-v" style="color:var(--a2)">${sales.length||s.salesCount||0}</div></div>
+      <div class="kpi"><div class="kpi-l">Списаний</div><div class="kpi-v" style="color:var(--exp)">${wos.length}</div></div>
     </div>
-    ${s.cashDiff&&Math.abs(s.cashDiff)>0?`<div class="al-warn">⚠️ Расхождение кассы: ${fmt(s.cashDiff)}</div>`:''}
-    ${sales.length?`<div class="ctitle">Продажи</div>${sales.map(e=>`<div class="txi"><div class="txi-ic income">💰</div><div class="txi-info"><div class="txi-desc">${e.sub||''}</div><div class="txi-sub">${new Date(e.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div></div><div class="txi-amt inc">+${fmt(e.totalPaid||e.amount||0)}</div></div>`).join('')}`:''}
-    ${wos.length?`<div class="ctitle" style="margin-top:10px">Списания</div>${wos.map(e=>`<div class="txi"><div class="txi-ic expense">🗑️</div><div class="txi-info"><div class="txi-desc">${e.sub||''}</div></div><div class="txi-amt exp">−${fmt(e.amount||0)}</div></div>`).join('')}`:''}
-    ${staff.length?`<div class="ctitle" style="margin-top:10px">Покупки сотрудников</div>${staff.map(e=>`<div class="txi"><div class="txi-ic transfer">🛒</div><div class="txi-info"><div class="txi-desc">${e.label||''}</div><div class="txi-sub">${e.sub||''}</div></div><div class="txi-amt tr">${fmt(e.amount||0)}</div></div>`).join('')}`:''}`;
+    ${s.cashDiff&&Math.abs(s.cashDiff)>0?`<div class="al-warn">⚠️ Расхождение кассы: ${fmt(Math.abs(s.cashDiff))}</div>`:''}
+
+    ${sales.length?`
+    <div class="ctitle" style="margin-top:4px">💰 Продажи (${sales.length})</div>
+    ${sales.map((e,i)=>{
+      const time=e.ts?new Date(e.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'';
+      const items=(e.items||[]);
+      const payL={cash:'💵 Нал',terminal:'💳 Терминал',sbp:'📱 СБП',qr:'🔲 QR',mixed:'➗ Смешанный'}[e.payMethod]||e.payMethod||'';
+      return`<div style="background:var(--s2);border-radius:10px;padding:10px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+          <div>
+            <div style="font-size:13px;font-weight:700">Продажа #${i+1} · ${time}</div>
+            <div style="font-size:11px;color:var(--t2);margin-top:2px">${payL}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;color:var(--inc)">+${fmt(e.totalPaid||e.amount||0)}</div>
+            ${e.discount?`<div style="font-size:10px;color:var(--t2)">скидка: ${fmt(e.discount)}</div>`:''}
+          </div>
+        </div>
+        ${items.length?`<div style="border-top:1px solid var(--border);padding-top:6px">`+items.map(it=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0"><span style="color:var(--t2)">№${it.num||'—'} ${it.name}</span><span style="font-weight:600">${fmt(it.price||0)}</span></div>`).join('')+`</div>`:
+          e.sub?`<div style="font-size:11px;color:var(--t2);border-top:1px solid var(--border);padding-top:6px">${e.sub}</div>`:''}
+        ${e.comment?`<div style="font-size:11px;color:var(--t2);margin-top:4px">💬 ${e.comment}</div>`:''}
+      </div>`;
+    }).join('')}`:'<div style="font-size:12px;color:var(--t2);padding:8px 0">Продаж не было</div>'}
+
+    ${wos.length?`
+    <div class="ctitle" style="margin-top:4px">🗑️ Списания (${wos.length})</div>
+    ${wos.map(e=>`<div class="txi"><div class="txi-ic expense">🗑️</div><div class="txi-info"><div class="txi-desc">${e.sub||''}</div><div class="txi-sub">${e.ts?new Date(e.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):''}</div></div><div class="txi-amt exp">−${fmt(e.amount||0)}</div></div>`).join('')}`:''}
+
+    ${staff.length?`
+    <div class="ctitle" style="margin-top:4px">🛒 Покупки сотрудников (${staff.length})</div>
+    ${staff.map(e=>`<div class="txi"><div class="txi-ic transfer">🛒</div><div class="txi-info"><div class="txi-desc">${e.label||''}</div><div class="txi-sub">${e.sub||''}</div></div><div class="txi-amt tr">${fmt(e.amount||0)}</div></div>`).join('')}`:''}
+
+    ${receives.length?`
+    <div class="ctitle" style="margin-top:4px">📥 Приёмки накладных</div>
+    ${receives.map(e=>`<div class="txi"><div class="txi-ic income">📥</div><div class="txi-info"><div class="txi-desc">${e.label||''}</div><div class="txi-sub">${e.sub||''}</div></div><div class="txi-amt neu">${fmt(e.amount||0)}</div></div>`).join('')}`:''}
+  `;
   openMo('shiftDetailMo');
 }
 
 // ════════ PRODUCTION ════════
-function setProdPeriod(p,el){prodPeriod=p;document.querySelectorAll('#pg-prod .pc').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderProd();}
+function setProdPeriod(p,el){
+  prodPeriod=p;
+  document.querySelectorAll('#pg-prod .pc').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  const cd=document.getElementById('prodCustomDates');
+  if(cd) cd.style.display=p==='custom'?'grid':'none';
+  if(p!=='custom'){ setRangeInputs('prodFrom','prodTo',p); }
+  renderProd();
+}
 function renderProd(){
-  const r=getRange(prodPeriod);
+  const r=prodPeriod==='custom'?{from:gv('prodFrom'),to:gv('prodTo')}:getRange(prodPeriod);
   const pItems=filterByRange(prodItems.filter(i=>['received','shipped'].includes(i.status)),'receivedAt',r.from,r.to);
   const inWork=prodItems.filter(i=>i.status==='in_work');
   const pending=prodItems.filter(i=>i.status==='delivered');
@@ -905,7 +1016,140 @@ function elapsed(start,end){if(!start)return'—';const ms=(end?new Date(end):ne
 
 // ════════ DEBTORS ════════
 function saveDebtor(){const name=gv('dName'),amount=parseFloat(gv('dAmt'));if(!name||!amount){showToast('Заполните поля');return;}const d=getD('debtors');d.unshift({id:uid(),name,amount,paid:0,date:gv('dDate'),payments:[]});setD('debtors',d);document.getElementById('dName').value='';document.getElementById('dAmt').value='';closeMo('addDebtMo');renderDebtors();showToast('✅ Добавлено');}
-function renderDebtors(){const debtors=getD('debtors');const total=debtors.reduce((s,d)=>s+(d.amount||0)-(d.paid||0),0);document.getElementById('totDebt').textContent=fmt(total);const c=document.getElementById('debtorsList');if(!c)return;if(!debtors.length){c.innerHTML='<div class="empty"><div class="ei">✅</div>Нет должников</div>';return;}c.innerHTML=debtors.map((d,i)=>{const rem=(d.amount||0)-(d.paid||0);return`<div class="dbi"><div class="dav">${d.name.charAt(0)}</div><div style="flex:1"><div style="font-size:13px;font-weight:600">${d.name}</div><div style="font-size:11px;color:var(--t2)">Долг: ${fmt(d.amount)} · Оплачено: ${fmt(d.paid||0)}</div></div><div style="display:flex;align-items:center;gap:6px"><div style="font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700;color:var(--a3)">${fmt(rem)}</div><button class="pay-btn" onclick="openPayDebtor('${d.id}','${d.name}')">Оплата</button><button onclick="delDebtor(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:15px">✕</button></div></div>`;}).join('');}
+
+// ════════════════════════════════
+// CREDITORS (кредиторка — мы должны)
+// ════════════════════════════════
+function getCreditors(){ return JSON.parse(localStorage.getItem('iz_creditors')||'[]'); }
+function saveCreditors(d){ localStorage.setItem('iz_creditors', JSON.stringify(d)); }
+
+let currentCreditorId = null;
+
+function saveCreditor(){
+  const name=gv('crName'), amt=parseFloat(gv('crAmt')), desc=gv('crDesc');
+  if(!name||!amt){ showToast('Заполните имя и сумму'); return; }
+  const crs=getCreditors();
+  crs.unshift({id:uid(),name,amount:amt,paid:0,desc,date:gv('crDate'),due:gv('crDue'),payments:[],createdAt:now()});
+  saveCreditors(crs);
+  ['crName','crAmt','crDesc','crDate','crDue'].forEach(id=>document.getElementById(id).value='');
+  closeMo('addCreditMo'); renderDebtors(); showToast('✅ Добавлено');
+}
+
+function openPayCreditor(id){
+  currentCreditorId=id;
+  const cr=getCreditors().find(c=>c.id===id); if(!cr) return;
+  document.getElementById('payCrTitle').textContent='Оплата: '+cr.name;
+  const rem=(cr.amount||0)-(cr.paid||0);
+  document.getElementById('payCrInfo').innerHTML=`
+    <div style="background:var(--s2);border-radius:10px;padding:10px">
+      <div class="at-row"><span class="at-lbl">Сумма долга</span><span class="at-val" style="color:var(--exp)">${fmt(cr.amount)}</span></div>
+      <div class="at-row"><span class="at-lbl">Уже оплачено</span><span class="at-val" style="color:var(--inc)">${fmt(cr.paid||0)}</span></div>
+      <div class="at-row"><span class="at-lbl">Остаток</span><span class="at-val" style="color:var(--exp);font-size:15px">${fmt(rem)}</span></div>
+      ${cr.due?`<div class="at-row"><span class="at-lbl">Срок оплаты</span><span class="at-val" style="color:${new Date(cr.due)<new Date()?'var(--exp)':'var(--a4)'}">${cr.due}</span></div>`:''}
+    </div>`;
+  document.getElementById('payCrHistory').innerHTML=(cr.payments||[]).length
+    ? '<div class="ctitle" style="margin-top:10px">История оплат</div>'+(cr.payments||[]).slice().reverse().map(p=>`<div class="at-row"><span class="at-lbl">${p.date}${p.comment?' · '+p.comment:''}</span><span class="at-val" style="color:var(--inc)">−${fmt(p.amount)}</span></div>`).join('')
+    : '';
+  document.getElementById('payCrAmt').value=rem;
+  document.getElementById('payCrDate').value=new Date().toISOString().split('T')[0];
+  document.getElementById('payCrComment').value='';
+  openMo('payCreditMo');
+}
+
+function saveCreditorPayment(){
+  const amount=parseFloat(gv('payCrAmt')); if(!amount){ showToast('Введите сумму'); return; }
+  const crs=getCreditors();
+  const cr=crs.find(c=>c.id===currentCreditorId); if(!cr) return;
+  cr.payments=[...(cr.payments||[]),{amount,date:gv('payCrDate'),comment:gv('payCrComment')}];
+  cr.paid=(cr.paid||0)+amount;
+  if(cr.paid>=cr.amount) cr.status='paid';
+  saveCreditors(crs); closeMo('payCreditMo'); renderDebtors(); showToast('✅ Оплата зафиксирована');
+}
+
+function delCreditor(i){
+  if(!confirm('Удалить?')) return;
+  const crs=getCreditors(); crs.splice(i,1); saveCreditors(crs); renderDebtors();
+}
+
+// ════════════════════════════════
+// RENDER DEBTORS + CREDITORS
+// ════════════════════════════════
+
+function renderDebtors(){
+  const debtors=getD('debtors');
+  const creditors=getCreditors();
+  const today=new Date().toISOString().split('T')[0];
+
+  // Debtors summary
+  const debtTotal=debtors.reduce((s,d)=>s+(d.amount||0)-(d.paid||0),0);
+  const debtEl=document.getElementById('totDebt');
+  if(debtEl) debtEl.textContent=fmt(debtTotal);
+  const debtCntEl=document.getElementById('totDebtCnt');
+  if(debtCntEl) debtCntEl.textContent=debtors.length+' должников';
+
+  // Creditors summary
+  const creditTotal=creditors.filter(c=>c.status!=='paid').reduce((s,c)=>s+(c.amount||0)-(c.paid||0),0);
+  const creditEl=document.getElementById('totCredit');
+  if(creditEl) creditEl.textContent=fmt(creditTotal);
+  const creditCntEl=document.getElementById('totCreditCnt');
+  if(creditCntEl) creditCntEl.textContent=creditors.filter(c=>c.status!=='paid').length+' кредиторов';
+
+  // Overdue alert
+  const overdue=creditors.filter(c=>c.status!=='paid'&&c.due&&c.due<today);
+  const oEl=document.getElementById('overdueAlert');
+  if(oEl) oEl.innerHTML=overdue.length
+    ?`<div class="al-warn">⚠️ Просрочено: ${overdue.length} платеж(а) на ${fmt(overdue.reduce((s,c)=>s+(c.amount||0)-(c.paid||0),0))}<br><span style="font-size:11px">${overdue.map(c=>c.name).join(', ')}</span></div>`
+    :'';
+
+  // Render debtors list
+  const dc=document.getElementById('debtorsList');
+  if(dc){
+    if(!debtors.length){dc.innerHTML='<div class="empty"><div class="ei">✅</div>Нет должников</div>';}
+    else dc.innerHTML=debtors.map((d,i)=>{
+      const rem=(d.amount||0)-(d.paid||0);
+      return`<div class="dbi">
+        <div class="dav">${d.name.charAt(0)}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600">${d.name}</div>
+          <div style="font-size:11px;color:var(--t2)">Долг: ${fmt(d.amount)} · Оплачено: ${fmt(d.paid||0)}</div>
+          ${d.date?`<div style="font-size:10px;color:var(--t2)">С ${d.date}</div>`:''}
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700;color:var(--a3)">${fmt(rem)}</div>
+          <button class="pay-btn" onclick="openPayDebtor('${d.id}','${d.name}')">Оплата</button>
+          <button onclick="delDebtor(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:15px">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Render creditors list
+  const cc=document.getElementById('creditorsList');
+  if(cc){
+    const active=creditors.filter(c=>c.status!=='paid');
+    if(!active.length){cc.innerHTML='<div class="empty"><div class="ei">✅</div>Нет долгов</div>';}
+    else cc.innerHTML=active.map((c,i)=>{
+      const rem=(c.amount||0)-(c.paid||0);
+      const overdue=c.due&&c.due<today;
+      const dueSoon=c.due&&!overdue&&(new Date(c.due)-new Date())/(1000*60*60*24)<=7;
+      return`<div class="dbi" style="${overdue?'border-left:3px solid var(--exp);padding-left:8px':''}">
+        <div class="dav" style="background:#2e1a1a;color:var(--exp)">${c.name.charAt(0)}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600">${c.name}</div>
+          <div style="font-size:11px;color:var(--t2)">${c.desc||''}</div>
+          <div style="font-size:10px;margin-top:2px;color:${overdue?'var(--exp)':dueSoon?'var(--a4)':'var(--t2)'}">
+            ${c.due?(overdue?'⚠️ Просрочено! Срок: ':'📅 Срок: ')+c.due:'Срок не указан'}
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700;color:var(--exp)">${fmt(rem)}</div>
+          <button class="pay-btn" style="color:var(--exp);border-color:var(--exp)" onclick="openPayCreditor('${c.id}')">Оплатить</button>
+          <button onclick="delCreditor(${creditors.indexOf(c)})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:15px">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+}
 function delDebtor(i){if(confirm('Удалить?')){const d=getD('debtors');d.splice(i,1);setD('debtors',d);renderDebtors();}}
 function openPayDebtor(id,name){currentDebtorId=id;document.getElementById('payDebtTitle').textContent='Оплата: '+name;document.getElementById('payAmt').value='';const debtor=getD('debtors').find(d=>d.id===id);document.getElementById('payHistory').innerHTML=(debtor?.payments||[]).map(p=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px"><span>${p.date}</span><span style="color:var(--inc)">+${fmt(p.amount)}</span></div>`).join('');openMo('payDebtMo');}
 function savePayment(){const amount=parseFloat(gv('payAmt'));if(!amount){showToast('Введите сумму');return;}const debtors=getD('debtors');const d=debtors.find(x=>x.id===currentDebtorId);if(!d)return;d.payments=[...(d.payments||[]),{amount,date:gv('payDate')}];d.paid=(d.paid||0)+amount;setD('debtors',debtors);closeMo('payDebtMo');renderDebtors();showToast('✅ Оплата внесена');}
@@ -952,5 +1196,32 @@ function init(){
 }
 init();
 </script>
+
+<!-- ADD CREDITOR -->
+<div class="mo" id="addCreditMo">
+  <div class="md"><div class="mh"></div><div class="mt">Добавить кредитора</div>
+    <div class="fg"><label class="fl">Кому должны (имя / компания)</label><input class="fi" id="crName" placeholder="ООО Поставщик"></div>
+    <div class="fg"><label class="fl">Сумма долга (₽)</label><input class="fi" type="number" id="crAmt" inputmode="numeric"></div>
+    <div class="fg"><label class="fl">За что (описание)</label><input class="fi" id="crDesc" placeholder="Аренда, сырьё, услуги..."></div>
+    <div class="fg"><label class="fl">Дата возникновения</label><input class="fi" type="date" id="crDate"></div>
+    <div class="fg"><label class="fl">Срок оплаты (до)</label><input class="fi" type="date" id="crDue"></div>
+    <button class="btn red" onclick="saveCreditor()">Добавить долг</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('addCreditMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- PAY CREDITOR -->
+<div class="mo" id="payCreditMo">
+  <div class="md"><div class="mh"></div><div class="mt" id="payCrTitle">Оплата долга</div>
+    <div id="payCrInfo" style="margin-bottom:12px"></div>
+    <div id="payCrHistory" style="margin-bottom:12px"></div>
+    <div class="fg"><label class="fl">Сумма оплаты (₽)</label><input class="fi" type="number" id="payCrAmt" inputmode="numeric"></div>
+    <div class="fg"><label class="fl">Дата оплаты</label><input class="fi" type="date" id="payCrDate"></div>
+    <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="payCrComment" placeholder="Частичная оплата, аванс..."></div>
+    <button class="btn green" onclick="saveCreditorPayment()">Внести оплату</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('payCreditMo')">Закрыть</button>
+  </div>
+</div>
+
 </body>
 </html>
