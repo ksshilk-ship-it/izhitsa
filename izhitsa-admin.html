@@ -194,6 +194,19 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 <!-- SETTINGS -->
 <div class="page" id="pg-settings">
   <div class="stitle">⚙️ Настройки</div>
+
+  <!-- BACKUP -->
+  <div class="card" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:var(--accent);margin-bottom:12px">
+    <div class="ctitle">💾 Резервная копия</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:12px">Скачайте все данные в файл. Храните в Google Drive или на компьютере. Рекомендуем раз в неделю.</div>
+    <button class="btn" onclick="downloadBackup()" style="margin-bottom:8px">⬇️ Скачать резервную копию</button>
+    <div style="font-size:11px;color:var(--t2);margin-bottom:8px;text-align:center">— или —</div>
+    <label style="width:100%;display:block">
+      <div class="btn sec" style="text-align:center;cursor:pointer">⬆️ Восстановить из файла</div>
+      <input type="file" accept=".json" id="restoreFile" style="display:none" onchange="restoreBackup(this)">
+    </label>
+    <div id="backupStatus" style="font-size:12px;margin-top:8px;text-align:center"></div>
+  </div>
   <div class="card"><div class="ctitle">Счета и кассы</div><div id="setAccounts"></div>
     <div class="add-row"><input class="fi" id="newAcc" placeholder="Название счёта"><select class="fs" id="newAccType" style="width:80px"><option value="bank">💳 Р/С</option><option value="cash">💵 Нал</option></select><button class="add-btn" onclick="addSetting('accounts',{name:v('newAcc'),type:v('newAccType')},'newAcc')">＋</button></div>
   </div>
@@ -329,6 +342,128 @@ function fbSaveSetting(col, data) {
 }
 function fbDelSetting(col, id) {
   if(window.FB_READY) fbDel(col, id);
+}
+
+function downloadBackup() {
+  const btn = document.querySelector('[onclick="downloadBackup()"]');
+  btn.textContent = '⏳ Подготовка...';
+  btn.disabled = true;
+
+  // Collect all data
+  const backup = {
+    version: '1.0',
+    createdAt: new Date().toISOString(),
+    appName: 'Ижица',
+    data: {}
+  };
+
+  const keys = [
+    'iz_transactions', 'iz_debtors',
+    'iz_admin_accounts', 'iz_admin_entities',
+    'iz_admin_expcats', 'iz_admin_inccats',
+    'iz_admin_shops', 'iz_admin_contractors',
+    'iz_sellers', 'iz_invoices', 'iz_shifts',
+    'iz_items', 'iz_prod', 'iz_masters'
+  ];
+
+  keys.forEach(key => {
+    try { backup.data[key] = JSON.parse(localStorage.getItem(key)||'[]'); }
+    catch(e) { backup.data[key] = []; }
+  });
+
+  // Also try to get from Firebase if connected
+  const totalRecords = Object.values(backup.data).reduce((s,arr) => s + (Array.isArray(arr)?arr.length:0), 0);
+
+  const json = JSON.stringify(backup, null, 2);
+  const blob = new Blob([json], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const date = new Date().toISOString().split('T')[0];
+  a.href = url;
+  a.download = `izhitsa-backup-${date}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  btn.textContent = '⬇️ Скачать резервную копию';
+  btn.disabled = false;
+
+  const status = document.getElementById('backupStatus');
+  status.textContent = `✅ Сохранено ${totalRecords} записей · ${date}`;
+  status.style.color = 'var(--inc)';
+
+  showToast(`✅ Резервная копия скачана (${totalRecords} записей)`);
+}
+
+function restoreBackup(input) {
+  const file = input.files[0];
+  if(!file) return;
+
+  const status = document.getElementById('backupStatus');
+  status.textContent = '⏳ Загрузка...';
+  status.style.color = 'var(--a4)';
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const backup = JSON.parse(e.target.result);
+
+      if(!backup.data || !backup.version) {
+        status.textContent = '❌ Неверный формат файла';
+        status.style.color = 'var(--exp)';
+        return;
+      }
+
+      if(!confirm(`Восстановить данные из копии от ${backup.createdAt?.split('T')[0]||'неизвестно'}?\n\nВнимание: текущие данные будут заменены!`)) {
+        status.textContent = '';
+        return;
+      }
+
+      // Restore to localStorage
+      let count = 0;
+      Object.entries(backup.data).forEach(([key, value]) => {
+        localStorage.setItem(key, JSON.stringify(value));
+        count += Array.isArray(value) ? value.length : 0;
+      });
+
+      // Also push to Firebase if connected
+      if(window.FB_READY) {
+        const collections = {
+          'iz_transactions': 'iz_transactions',
+          'iz_admin_accounts': 'iz_admin_accounts',
+          'iz_admin_entities': 'iz_admin_entities',
+          'iz_admin_expcats': 'iz_admin_expcats',
+          'iz_admin_inccats': 'iz_admin_inccats',
+          'iz_admin_shops': 'iz_admin_shops',
+          'iz_admin_contractors': 'iz_admin_contractors',
+          'iz_debtors': 'iz_debtors',
+          'iz_sellers': 'iz_sellers',
+        };
+        Object.entries(collections).forEach(([key, col]) => {
+          const items = backup.data[key]||[];
+          items.forEach(item => {
+            if(item.id || item._id) {
+              fbSet(col, item._id||item.id, item).catch(console.error);
+            }
+          });
+        });
+        status.textContent = `✅ Восстановлено ${count} записей + отправлено в Firebase`;
+      } else {
+        status.textContent = `✅ Восстановлено ${count} записей локально`;
+      }
+      status.style.color = 'var(--inc)';
+
+      // Reload page to show restored data
+      setTimeout(() => location.reload(), 1500);
+
+    } catch(err) {
+      status.textContent = '❌ Ошибка чтения файла: ' + err.message;
+      status.style.color = 'var(--exp)';
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
 }
 
 function init(){
