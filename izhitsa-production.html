@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ижица — Производство">
+<meta name="theme-color" content="#0f0f13">
+<title>Ижица — Производство и Склад</title>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0f0f13;--s1:#1a1a22;--s2:#22222e;--border:#2e2e3e;--accent:#c8f060;--a2:#60c8f0;--a3:#f06090;--a4:#f0a060;--a5:#a060f0;--text:#f0f0f8;--t2:#8888aa;--inc:#60f090;--exp:#f06060;--r:14px;--tabh:62px}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;min-height:100dvh;max-width:480px;margin:0 auto}
+.hdr{padding:12px 16px;display:flex;justify-content:space-between;align-items:center;background:var(--s1);border-bottom:1px solid var(--border)}
+.hdr-logo{font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700;color:var(--a5)}
+.hdr-sub{font-size:11px;color:var(--t2)}
+.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:var(--tabh);background:var(--s1);border-top:1px solid var(--border);display:flex;z-index:100}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--t2);font-size:9px;font-family:'Golos Text',sans-serif;font-weight:500;border:none;background:none}
+.tab.active{color:var(--a5)}
+.ti{font-size:18px;line-height:1}
+.page{display:none;padding:12px 16px;padding-bottom:calc(var(--tabh)+12px)}
+.page.active{display:block;animation:fi .2s ease}
+@keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px}
+.ctitle{font-size:10px;color:var(--t2);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:9px}
+.stitle{font-family:'Unbounded',sans-serif;font-size:13px;font-weight:600;margin-bottom:10px}
+.fg{margin-bottom:12px}
+.fl{font-size:11px;color:var(--t2);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;display:block}
+.fi,.fs{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:11px 13px;color:var(--text);font-family:'Golos Text',sans-serif;font-size:14px;outline:none;-webkit-appearance:none}
+.fi:focus,.fs:focus{border-color:var(--a5)}
+.fi::placeholder{color:var(--t2)}
+.btn{width:100%;padding:13px;background:var(--a5);color:#fff;border:none;border-radius:12px;font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700;cursor:pointer;margin-top:4px}
+.btn.green{background:var(--accent);color:#0f0f13}
+.btn.sec{background:var(--s2);color:var(--t2);border:1px solid var(--border)}
+.btn.red{background:#2e1a1a;color:var(--exp);border:1px solid var(--exp)}
+.btn.sm{padding:8px 12px;font-size:11px;width:auto}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.srow{display:flex;gap:8px;margin-bottom:12px}
+.sc{flex:1;background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center}
+.sc-v{font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700}
+.sc-l{font-size:9px;color:var(--t2);margin-top:2px}
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;align-items:flex-end;justify-content:center}
+.mo.open{display:flex}
+.md{background:var(--s1);border-radius:22px 22px 0 0;width:100%;max-width:480px;max-height:93dvh;overflow-y:auto;padding:18px}
+.mh{width:34px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 14px}
+.mt{font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;margin-bottom:14px}
+.sep{height:1px;background:var(--border);margin:12px 0}
+.li{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.li:last-child{border-bottom:none}
+.li-info{flex:1;min-width:0}
+.li-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li-sub{font-size:10px;color:var(--t2);margin-top:2px}
+.li-val{font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700;flex-shrink:0}
+.av{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--a5),var(--a2));display:flex;align-items:center;justify-content:center;font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;color:#0f0f13;flex-shrink:0}
+.badge{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700}
+.badge.pending{background:#2a1e14;color:var(--a4)}
+.badge.done{background:#1a2e1e;color:var(--inc)}
+.badge.work{background:#2a1a2e;color:var(--a5)}
+.badge.reject{background:#2e1a1a;color:var(--exp)}
+.item-card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;cursor:pointer}
+.item-photo{width:100%;aspect-ratio:1;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:30px;position:relative;overflow:hidden}
+.item-photo img{width:100%;height:100%;object-fit:cover}
+.item-sbadge{position:absolute;top:5px;right:5px;padding:2px 7px;border-radius:5px;font-size:9px;font-weight:700}
+.item-body{padding:9px}
+.item-num{font-size:10px;color:var(--t2)}
+.item-name{font-size:12px;font-weight:700;margin:2px 0}
+.item-wood{font-size:10px;color:var(--a4)}
+.item-price{font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;color:var(--accent);margin-top:3px}
+.items-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.st-warehouse{background:#1e2a14;color:var(--accent)}.st-shop{background:#1a1e2e;color:var(--a2)}.st-sold{background:#2a1e14;color:var(--a4)}.st-production{background:#2a1a2e;color:var(--a5)}
+.frow{display:flex;gap:7px;margin-bottom:12px;overflow-x:auto;-ms-overflow-style:none;scrollbar-width:none}
+.frow::-webkit-scrollbar{display:none}
+.fchip{background:var(--s1);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:11px;white-space:nowrap;cursor:pointer;color:var(--t2);flex-shrink:0}
+.fchip.active{background:var(--accent);border-color:var(--accent);color:#0f0f13;font-weight:700}
+.search-wrap{position:relative;margin-bottom:12px}
+.search-inp{width:100%;background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:10px 14px 10px 36px;color:var(--text);font-family:'Golos Text',sans-serif;font-size:14px;outline:none}
+.search-inp:focus{border-color:var(--a5)}
+.search-ico{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--t2)}
+.inv-ship-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
+.inv-check{width:22px;height:22px;border-radius:6px;border:2px solid var(--border);background:var(--s2);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:12px;color:#0f0f13}
+.inv-check.on{background:var(--accent);border-color:var(--accent)}
+.add-row{display:flex;gap:7px;margin-top:8px}
+.add-row .fi{flex:1}
+.add-btn{background:var(--accent);color:#0f0f13;border:none;border-radius:10px;padding:0 12px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+.empty{text-align:center;padding:24px 0;color:var(--t2);font-size:13px}
+.ei{font-size:30px;margin-bottom:6px}
+.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:9px 16px;font-size:13px;z-index:400;opacity:0;transition:opacity .3s;pointer-events:none;max-width:92%;text-align:center}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+    <span id="syncTxt">Подключение...</span>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:6px;padding:5px 16px;font-size:11px;color:#8888aa;background:#1a1a22;border-bottom:1px solid #2e2e3e">
+    <div id="syncDot" style="width:7px;height:7px;border-radius:50%;background:#8888aa;flex-shrink:0;transition:background .3s"></div>
+    <span id="syncTxt">Подключение к Firebase...</span>
+  </div>
+
+<div class="hdr">
+  <div class="hdr-logo">🏭 Ижица</div>
+  <div class="hdr-sub" id="hdrDate"></div>
+</div>
+
+<!-- PRODUCTION -->
+<div class="page active" id="pg-prod">
+  <div class="srow">
+    <div class="sc"><div class="sc-v" id="pW" style="color:var(--a4)">0</div><div class="sc-l">В работе</div></div>
+    <div class="sc"><div class="sc-v" id="pP" style="color:var(--a5)">0</div><div class="sc-l">На приёмке</div></div>
+    <div class="sc"><div class="sc-v" id="pA" style="color:var(--inc)">0</div><div class="sc-l">Принято (мес.)</div></div>
+  </div>
+  <div class="card"><div class="ctitle">⏳ Ожидают приёмки</div><div id="pendingAccept"></div></div>
+  <div class="stitle">По мастерам</div>
+  <div id="masterCards"></div>
+  <button class="btn" onclick="openMo('addProdMo')">＋ Запустить изделие</button>
+</div>
+
+<!-- WAREHOUSE -->
+<div class="page" id="pg-ware">
+  <div class="search-wrap"><span class="search-ico">🔍</span><input class="search-inp" id="wareSearch" placeholder="Поиск по номеру, названию, породе..." oninput="renderWare()"></div>
+  <div class="frow">
+    <div class="fchip active" onclick="setWF('all',this)">Все</div>
+    <div class="fchip" onclick="setWF('warehouse',this)">🏭 Склад</div>
+    <div class="fchip" onclick="setWF('shop',this)">🏪 Магазин</div>
+    <div class="fchip" onclick="setWF('sold',this)">✅ Продано</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sc-v" id="wW" style="color:var(--accent)">0</div><div class="sc-l">На складе</div></div>
+    <div class="sc"><div class="sc-v" id="wS" style="color:var(--a2)">0</div><div class="sc-l">В магазинах</div></div>
+    <div class="sc"><div class="sc-v" id="wSold" style="color:var(--a4)">0</div><div class="sc-l">Продано</div></div>
+  </div>
+  <div class="items-grid" id="wareGrid"></div>
+  <button class="btn green" style="margin-top:12px" onclick="openMo('addItemMo')">＋ Добавить изделие на склад</button>
+  <button class="btn" style="margin-top:8px" onclick="openMo('shipMo');renderShipItems()">🚚 Отгрузить в магазин</button>
+</div>
+
+<!-- ZP -->
+<div class="page" id="pg-zp">
+  <div class="stitle">Зарплата мастеров</div>
+  <div class="card" style="background:linear-gradient(135deg,#1e1a2e,#1a1e2e);border-color:var(--a5)">
+    <div class="ctitle">Итого к выплате — этот месяц</div>
+    <div style="font-family:'Unbounded',sans-serif;font-size:24px;font-weight:700;color:var(--a5)" id="zpTotal">0₽</div>
+  </div>
+  <div id="zpByMaster"></div>
+</div>
+
+<!-- MASTERS SETTINGS -->
+<div class="page" id="pg-masters">
+  <div class="stitle">Мастера</div>
+  <div id="mastersList"></div>
+  <div class="sep"></div>
+  <div class="fg"><label class="fl">Имя мастера</label><input class="fi" id="newMasterName" placeholder="Иванов Иван"></div>
+  <div class="fg"><label class="fl">Ставка за изделие (₽)</label><input class="fi" type="number" id="newMasterRate" placeholder="500" inputmode="numeric"></div>
+  <button class="btn" onclick="addMaster()">Добавить мастера</button>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showPg('prod',this);renderProd()"><div class="ti">🏭</div><span>Производство</span></button>
+  <button class="tab" onclick="showPg('ware',this);renderWare()"><div class="ti">📦</div><span>Склад</span></button>
+  <button class="tab" onclick="showPg('zp',this);renderZP()"><div class="ti">💰</div><span>ЗП</span></button>
+  <button class="tab" onclick="showPg('masters',this);renderMastersList()"><div class="ti">👤</div><span>Мастера</span></button>
+</div>
+
+<!-- MODALS -->
+<!-- Add prod item -->
+<div class="mo" id="addProdMo">
+  <div class="md"><div class="mh"></div><div class="mt">Запустить в производство</div>
+    <div class="row2">
+      <div class="fg"><label class="fl">Порядковый №</label><input class="fi" id="piNum" placeholder="001"></div>
+      <div class="fg"><label class="fl">Порода дерева</label><input class="fi" id="piWood" placeholder="Дуб"></div>
+    </div>
+    <div class="fg"><label class="fl">Название</label><input class="fi" id="piName" placeholder="Столешница..."></div>
+    <div class="fg"><label class="fl">Мастер</label><select class="fs" id="piMaster"></select></div>
+    <div class="row2">
+      <div class="fg"><label class="fl">Цена розница (₽)</label><input class="fi" type="number" id="piPrice" placeholder="0" inputmode="numeric"></div>
+      <div class="fg"><label class="fl">Дата</label><input class="fi" type="date" id="piDate"></div>
+    </div>
+    <div id="piZP" style="background:linear-gradient(135deg,#1e1a2e,#1a1e2e);border:1px solid var(--a5);border-radius:10px;padding:10px;margin-bottom:12px;text-align:center">
+      <div style="font-size:11px;color:var(--t2)">ЗП мастера</div>
+      <div style="font-family:'Unbounded',sans-serif;font-size:18px;font-weight:700;color:var(--a5)" id="piZPAmt">0₽</div>
+    </div>
+    <button class="btn" onclick="saveProdItem()">Запустить</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('addProdMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- Accept item -->
+<div class="mo" id="acceptMo">
+  <div class="md"><div class="mh"></div><div class="mt" id="acceptTitle">Приёмка изделия</div>
+    <div id="acceptContent"></div>
+    <div class="fg" style="margin-top:12px"><label class="fl">Причина отказа (если брак)</label><input class="fi" id="rejectReason" placeholder="Опишите дефект..."></div>
+    <div class="row2" style="margin-top:8px">
+      <button class="btn red" onclick="doAccept(false)">↩️ Брак</button>
+      <button class="btn green" onclick="doAccept(true)">✅ Принять</button>
+    </div>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('acceptMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- Add item to warehouse -->
+<div class="mo" id="addItemMo">
+  <div class="md"><div class="mh"></div><div class="mt">Добавить изделие на склад</div>
+    <div class="row2">
+      <div class="fg"><label class="fl">Порядковый №</label><input class="fi" id="wiNum" placeholder="001"></div>
+      <div class="fg"><label class="fl">Порода дерева</label><input class="fi" id="wiWood" placeholder="Дуб"></div>
+    </div>
+    <div class="fg"><label class="fl">Название</label><input class="fi" id="wiName" placeholder="Столешница..."></div>
+    <div class="fg"><label class="fl">Мастер</label><select class="fs" id="wiMaster"></select></div>
+    <div class="row2">
+      <div class="fg"><label class="fl">Длина (мм)</label><input class="fi" type="number" id="wiLen" inputmode="numeric"></div>
+      <div class="fg"><label class="fl">Ширина (мм)</label><input class="fi" type="number" id="wiWid" inputmode="numeric"></div>
+    </div>
+    <div class="row2">
+      <div class="fg"><label class="fl">Цена розница (₽)</label><input class="fi" type="number" id="wiPrice" inputmode="numeric"></div>
+      <div class="fg"><label class="fl">Цена опт (₽)</label><input class="fi" type="number" id="wiPriceOpt" inputmode="numeric"></div>
+    </div>
+    <div class="fg"><label class="fl">📷 Фото</label><input class="fi" type="file" accept="image/*" id="wiPhoto" style="padding:8px" onchange="previewPhoto(this)"></div>
+    <div class="fg"><label class="fl">Дата</label><input class="fi" type="date" id="wiDate"></div>
+    <button class="btn green" onclick="saveWareItem()">Добавить на склад</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('addItemMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- Item detail -->
+<div class="mo" id="itemDetailMo">
+  <div class="md" style="padding:0">
+    <div style="width:100%;aspect-ratio:4/3;background:var(--s2);border-radius:22px 22px 0 0;display:flex;align-items:center;justify-content:center;font-size:56px;overflow:hidden" id="itemDetailPhoto">🪵</div>
+    <div style="padding:16px">
+      <div class="mh" style="margin:0 auto 12px"></div>
+      <div id="itemDetailBody"></div>
+      <button class="btn sec" style="margin-top:10px" onclick="closeMo('itemDetailMo')">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shipment -->
+<div class="mo" id="shipMo">
+  <div class="md"><div class="mh"></div><div class="mt">Отгрузка в магазин</div>
+    <div class="fg"><label class="fl">Магазин</label><select class="fs" id="shipDest"></select></div>
+    <div class="fg"><label class="fl">Дата отгрузки</label><input class="fi" type="date" id="shipDate"></div>
+    <div class="fg"><label class="fl">Выберите изделия</label>
+      <div id="shipItemsList" style="background:var(--bg);border-radius:10px;padding:8px;max-height:240px;overflow-y:auto"></div>
+    </div>
+    <button class="btn green" onclick="createShipment()">Отгрузить и создать накладную</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('shipMo')">Отмена</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════ SHARED STORAGE ════════
+function getItems()    { return JSON.parse(localStorage.getItem('iz_items')    || '[]'); }
+function getProdItems(){ return JSON.parse(localStorage.getItem('iz_prod')     || '[]'); }
+function getMasters()  { return JSON.parse(localStorage.getItem('iz_masters')  || '[]'); }
+function getInvoices() { return JSON.parse(localStorage.getItem('iz_invoices') || '[]'); }
+function getShops()    { const s=JSON.parse(localStorage.getItem('iz_admin_shops')||'[]'); return s.length?s.map(x=>x.name):['Дерево','ДР Товар']; }
+function saveItems(d)    { localStorage.setItem('iz_items',    JSON.stringify(d)); }
+function saveProd(d)     { localStorage.setItem('iz_prod',     JSON.stringify(d)); }
+function saveMasters(d)  { localStorage.setItem('iz_masters',  JSON.stringify(d)); }
+function saveInvoices(d) { localStorage.setItem('iz_invoices', JSON.stringify(d)); }
+
+const SL={'warehouse':'На складе','shop':'В магазине','sold':'Продано','production':'Производство'};
+const SC={'warehouse':'st-warehouse','shop':'st-shop','sold':'st-sold','production':'st-production'};
+
+let wareFilter='all';
+let selectedShip=new Set();
+let currentAcceptId=null;
+let photoData=null;
+
+function fmt(n){ return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+'₽'; }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
+function openMo(id){ document.getElementById(id).classList.add('open'); }
+function closeMo(id){ document.getElementById(id).classList.remove('open'); }
+function showPg(name,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('pg-'+name).classList.add('active');
+  el.classList.add('active');
+}
+
+function onFirebaseReady(db) {
+  // Sync items (warehouse)
+  fbListen('iz_items', '_ts', data => {
+    localStorage.setItem('iz_items', JSON.stringify(data));
+    renderWare();
+  });
+  // Sync production items
+  fbListen('iz_prod', '_ts', data => {
+    localStorage.setItem('iz_prod', JSON.stringify(data));
+    renderProd();
+  });
+  // Sync masters
+  fbListen('iz_masters', '_ts', data => {
+    localStorage.setItem('iz_masters', JSON.stringify(data));
+    renderMastersList(); populateMasterSelects();
+  });
+  // Sync invoices (outgoing to shops)
+  fbListen('iz_invoices', '_ts', data => {
+    localStorage.setItem('iz_invoices', JSON.stringify(data));
+  });
+}
+
+function fbSaveItem(item) {
+  if(window.FB_READY) fbAdd('iz_items', item);
+}
+function fbUpdateItem(id, data) {
+  if(window.FB_READY) fbUpd('iz_items', id, data);
+}
+function fbSaveProdItem(item) {
+  if(window.FB_READY) fbAdd('iz_prod', item);
+}
+function fbUpdateProdItem(id, data) {
+  if(window.FB_READY) fbUpd('iz_prod', id, data);
+}
+function fbSaveMaster(m) {
+  if(window.FB_READY) fbAdd('iz_masters', m);
+}
+function fbDelMaster(id) {
+  if(window.FB_READY) fbDel('iz_masters', id);
+}
+function fbSaveInvoice(inv) {
+  if(window.FB_READY) fbAdd('iz_invoices', inv);
+}
+
+function init(){
+  document.getElementById('hdrDate').textContent=new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long'});
+  document.getElementById('piDate').value=new Date().toISOString().split('T')[0];
+  document.getElementById('wiDate').value=new Date().toISOString().split('T')[0];
+  document.getElementById('shipDate').value=new Date().toISOString().split('T')[0];
+  renderShopSelect();
+  populateMasterSelects();
+  renderProd();
+}
+
+function renderShopSelect(){
+  const shops=getShops();
+  ['shipDest'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=shops.map(s=>`<option>${s}</option>`).join(''); });
+}
+
+function populateMasterSelects(){
+  const masters=getMasters();
+  const opts='<option value="">— выбрать —</option>'+masters.map(m=>`<option value="${m.id}">${m.name} (${fmt(m.rate)}/изд.)</option>`).join('');
+  ['piMaster','wiMaster'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=opts; });
+}
+
+// ════════ PRODUCTION ════════
+function renderProd(){
+  const prod=getProdItems();
+  const now=new Date(),m=now.getMonth(),y=now.getFullYear();
+  const inWork=prod.filter(i=>i.status==='inprogress');
+  const pending=prod.filter(i=>i.status==='pending');
+  const accepted=prod.filter(i=>i.status==='accepted'&&i.acceptedDate&&new Date(i.acceptedDate).getMonth()===m&&new Date(i.acceptedDate).getFullYear()===y);
+  document.getElementById('pW').textContent=inWork.length;
+  document.getElementById('pP').textContent=pending.length;
+  document.getElementById('pA').textContent=accepted.length;
+
+  const pa=document.getElementById('pendingAccept');
+  if(!pending.length){ pa.innerHTML='<div style="font-size:12px;color:var(--t2);padding:6px 0">Нет изделий на приёмке</div>'; }
+  else pa.innerHTML=pending.map(item=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--s2);border-radius:10px;margin-bottom:8px">
+      <div style="flex:1"><div style="font-size:13px;font-weight:700">№${item.num} ${item.name}</div>
+      <div style="font-size:11px;color:var(--t2)">👤 ${item.masterName} · 🌳 ${item.wood||'—'}</div></div>
+      <div style="font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700;color:var(--a5)">${fmt(item.zp)}</div>
+      <button onclick="openAccept('${item.id}')" style="background:var(--accent);border:none;border-radius:8px;padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer;color:#0f0f13">Принять</button>
+    </div>`).join('');
+
+  const byM={};
+  inWork.forEach(i=>{ if(!byM[i.masterId])byM[i.masterId]={items:[],name:i.masterName}; byM[i.masterId].items.push(i); });
+  const mc=document.getElementById('masterCards');
+  if(!Object.keys(byM).length){ mc.innerHTML='<div class="empty"><div class="ei">🏭</div>Нет изделий в работе</div>'; return; }
+  mc.innerHTML=Object.entries(byM).map(([mid,d])=>`
+    <div class="card">
+      <div class="ctitle">👤 ${d.name} — ${d.items.length} изд. в работе</div>
+      ${d.items.map(item=>`
+        <div class="li">
+          <div class="li-info"><div class="li-name">№${item.num} ${item.name}</div><div class="li-sub">🌳 ${item.wood||'—'} · ${item.date||''}</div></div>
+          <button onclick="sendToPending('${item.id}')" style="background:var(--s2);border:1px solid var(--a5);border-radius:8px;padding:5px 9px;font-size:11px;color:var(--a5);cursor:pointer;white-space:nowrap">На приёмку →</button>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+function saveProdItem(){
+  const num=document.getElementById('piNum').value.trim();
+  const name=document.getElementById('piName').value.trim();
+  const mid=document.getElementById('piMaster').value;
+  if(!num||!name){ showToast('Заполните номер и название'); return; }
+  if(!mid){ showToast('Выберите мастера'); return; }
+  const master=getMasters().find(m=>m.id===mid);
+  const prod=getProdItems();
+  const newProdItem={ id:uid(),num,name,wood:document.getElementById('piWood').value,masterId:mid,masterName:master?.name||'',zp:master?.rate||0,price:parseFloat(document.getElementById('piPrice').value)||0,date:document.getElementById('piDate').value,status:'inprogress',history:[{action:'Запущено',date:document.getElementById('piDate').value}] };
+  prod.unshift(newProdItem); saveProd(prod); fbSaveProdItem(newProdItem);
+  ['piNum','piName','piWood','piPrice'].forEach(id=>document.getElementById(id).value='');
+  closeMo('addProdMo'); renderProd(); showToast('✅ Запущено в производство');
+}
+
+function sendToPending(id){
+  const prod=getProdItems();
+  const item=prod.find(i=>i.id===id);if(!item)return;
+  item.status='pending'; item.history.push({action:'На приёмке',date:new Date().toISOString().split('T')[0]});
+  saveProd(prod); renderProd(); showToast('📦 Отправлено на приёмку');
+}
+
+function openAccept(id){
+  currentAcceptId=id;
+  const item=getProdItems().find(i=>i.id===id);if(!item)return;
+  document.getElementById('acceptTitle').textContent='Приёмка: №'+item.num;
+  document.getElementById('acceptContent').innerHTML=`
+    <div style="background:var(--s2);border-radius:10px;padding:12px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:8px">${item.name}</div>
+      <div style="font-size:12px;color:var(--t2)">Мастер: ${item.masterName} · Порода: ${item.wood||'—'} · Дата: ${item.date||'—'}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <span style="font-size:12px;color:var(--t2)">ЗП при приёмке:</span>
+        <span style="font-family:'Unbounded',sans-serif;font-size:16px;font-weight:700;color:var(--a5)">${fmt(item.zp)}</span>
+      </div>
+    </div>`;
+  document.getElementById('rejectReason').value='';
+  openMo('acceptMo');
+}
+
+function doAccept(ok){
+  const prod=getProdItems();
+  const item=prod.find(i=>i.id===currentAcceptId);if(!item)return;
+  const date=new Date().toISOString().split('T')[0];
+  if(ok){
+    item.status='accepted'; item.acceptedDate=date; item.zpPaid=item.zp;
+    item.history.push({action:'✅ Принято на склад',date,zp:item.zp});
+    // Auto-add to warehouse
+    const items=getItems();
+    items.unshift({id:uid(),num:item.num,name:item.name,wood:item.wood,masterId:item.masterId,masterName:item.masterName,price:item.price,priceOpt:Math.round(item.price*0.8),status:'warehouse',locationName:'Склад',history:[{action:'Принято с производства',date,color:'var(--accent)'}]});
+    saveItems(items);
+    showToast(`✅ Принято! ЗП ${fmt(item.zp)} начислена ${item.masterName}`);
+  } else {
+    const reason=document.getElementById('rejectReason').value;
+    item.status='rejected'; item.rejectedDate=date; item.rejectReason=reason;
+    item.history.push({action:'↩️ Возврат мастеру',date,reason});
+    showToast('↩️ Возвращено мастеру');
+  }
+  saveProd(prod); closeMo('acceptMo'); renderProd();
+}
+
+// ════════ WAREHOUSE ════════
+function setWF(f,el){ wareFilter=f; document.querySelectorAll('#pg-ware .fchip').forEach(c=>c.classList.remove('active')); el.classList.add('active'); renderWare(); }
+
+function previewPhoto(input){ const f=input.files[0];if(!f)return;const r=new FileReader();r.onload=e=>photoData=e.target.result;r.readAsDataURL(f); }
+
+function saveWareItem(){
+  const num=document.getElementById('wiNum').value.trim();
+  const name=document.getElementById('wiName').value.trim();
+  if(!num||!name){ showToast('Заполните номер и название'); return; }
+  const mid=document.getElementById('wiMaster').value;
+  const master=getMasters().find(m=>m.id===mid);
+  const items=getItems();
+  items.unshift({id:uid(),num,name,wood:document.getElementById('wiWood').value,masterId:mid,masterName:master?.name||'',length:document.getElementById('wiLen').value,width:document.getElementById('wiWid').value,price:parseFloat(document.getElementById('wiPrice').value)||0,priceOpt:parseFloat(document.getElementById('wiPriceOpt').value)||0,date:document.getElementById('wiDate').value,status:'warehouse',locationName:'Склад',photo:photoData,history:[{action:'Добавлено на склад',date:document.getElementById('wiDate').value,color:'var(--accent)'}]});
+  const newItem=items[0]; saveItems(items); photoData=null; fbSaveItem(newItem);
+  ['wiNum','wiName','wiWood','wiLen','wiWid','wiPrice','wiPriceOpt'].forEach(id=>document.getElementById(id).value='');
+  closeMo('addItemMo'); renderWare(); showToast('✅ Изделие добавлено на склад');
+}
+
+function renderWare(){
+  const q=(document.getElementById('wareSearch')?.value||'').toLowerCase();
+  const items=getItems().filter(i=>{
+    if(wareFilter!=='all'&&i.status!==wareFilter)return false;
+    if(q&&!`${i.num} ${i.name} ${i.wood} ${i.masterName}`.toLowerCase().includes(q))return false;
+    return true;
+  });
+  const all=getItems();
+  document.getElementById('wW').textContent=all.filter(i=>i.status==='warehouse').length;
+  document.getElementById('wS').textContent=all.filter(i=>i.status==='shop').length;
+  document.getElementById('wSold').textContent=all.filter(i=>i.status==='sold').length;
+  const g=document.getElementById('wareGrid');
+  if(!items.length){ g.innerHTML='<div class="empty" style="grid-column:1/-1"><div class="ei">📦</div>Нет изделий</div>'; return; }
+  g.innerHTML=items.map(item=>`
+    <div class="item-card" onclick="openItemDetail('${item.id}')">
+      <div class="item-photo">${item.photo?`<img src="${item.photo}">`:'🪵'}<div class="item-sbadge ${SC[item.status]||''}">${SL[item.status]||item.status}</div></div>
+      <div class="item-body"><div class="item-num">№${item.num}</div><div class="item-name">${item.name}</div><div class="item-wood">🌳 ${item.wood||'—'}</div><div class="item-price">${fmt(item.price)}</div><div style="font-size:10px;color:var(--a2)">📍 ${item.locationName||'—'}</div></div>
+    </div>`).join('');
+}
+
+function openItemDetail(id){
+  const item=getItems().find(i=>i.id===id);if(!item)return;
+  document.getElementById('itemDetailPhoto').innerHTML=item.photo?`<img src="${item.photo}" style="width:100%;height:100%;object-fit:cover">`:'🪵';
+  let actions='';
+  if(item.status==='warehouse') actions=`<button class="btn green" onclick="quickMove('${id}','sold');closeMo('itemDetailMo')">✅ Продано</button><button class="btn sec" style="margin-top:6px" onclick="quickMove('${id}','writeoff');closeMo('itemDetailMo')">🗑️ Списать</button>`;
+  else if(item.status==='shop') actions=`<button class="btn green" onclick="quickMove('${id}','sold');closeMo('itemDetailMo')">✅ Продано</button><button class="btn sec" style="margin-top:6px" onclick="quickMove('${id}','warehouse');closeMo('itemDetailMo')">↩️ Вернуть</button>`;
+  document.getElementById('itemDetailBody').innerHTML=`
+    <div style="font-size:11px;color:var(--t2)">№${item.num} · ${item.date||''}</div>
+    <div style="font-family:'Unbounded',sans-serif;font-size:16px;font-weight:700;margin:4px 0 8px">${item.name}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+      ${item.wood?`<span style="padding:3px 9px;border-radius:7px;background:#2a1e14;color:var(--a4);font-size:11px;font-weight:600">🌳 ${item.wood}</span>`:''}
+      ${item.masterName?`<span style="padding:3px 9px;border-radius:7px;background:#1a1e2e;color:var(--a2);font-size:11px;font-weight:600">👤 ${item.masterName}</span>`:''}
+      ${item.length?`<span style="padding:3px 9px;border-radius:7px;background:var(--s2);color:var(--t2);font-size:11px">📐 ${item.length}×${item.width}</span>`:''}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px">
+      <div style="background:var(--s2);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--t2)">Розница</div><div style="font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700;color:var(--accent)">${fmt(item.price)}</div></div>
+      <div style="background:var(--s2);border-radius:10px;padding:10px;text-align:center"><div style="font-size:10px;color:var(--t2)">Опт</div><div style="font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700;color:var(--a2)">${fmt(item.priceOpt)}</div></div>
+    </div>
+    <div style="font-size:12px;font-weight:600;margin-bottom:10px">📍 ${item.locationName||SL[item.status]}</div>
+    ${actions}
+    <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px">
+      ${(item.history||[]).slice().reverse().map(h=>`<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)"><div style="width:7px;height:7px;border-radius:50%;background:${h.color||'var(--t2)'};flex-shrink:0;margin-top:4px"></div><div style="font-size:11px"><div style="font-weight:600">${h.action}</div><div style="color:var(--t2)">${h.date||''}</div></div></div>`).join('')}
+    </div>`;
+  openMo('itemDetailMo');
+}
+
+function quickMove(id,status){
+  const items=getItems();
+  const item=items.find(i=>i.id===id);if(!item)return;
+  const old=item.locationName||SL[item.status];
+  item.status=status; item.locationName=SL[status];
+  item.history=item.history||[];
+  item.history.push({action:status==='sold'?'Продано':status==='warehouse'?'Возврат на склад':'Списано',date:new Date().toISOString().split('T')[0],from:old,to:SL[status],color:status==='sold'?'var(--a4)':status==='warehouse'?'var(--accent)':'var(--exp)'});
+  saveItems(items); renderWare(); showToast('✅ Статус обновлён');
+}
+
+// ════════ SHIPMENT ════════
+function renderShipItems(){
+  const wi=getItems().filter(i=>i.status==='warehouse');
+  const c=document.getElementById('shipItemsList');if(!c)return;
+  if(!wi.length){ c.innerHTML='<div style="font-size:12px;color:var(--t2);padding:8px">Нет изделий на складе</div>'; return; }
+  c.innerHTML=wi.map(item=>`
+    <div class="inv-ship-item">
+      <div style="font-size:11px;color:var(--t2);width:36px">№${item.num}</div>
+      <div style="flex:1;font-size:12px">${item.name}<br><span style="color:var(--t2);font-size:10px">${item.wood||''} · ${fmt(item.price)}</span></div>
+      <div class="inv-check ${selectedShip.has(item.id)?'on':''}" id="ship_${item.id}" onclick="toggleShip('${item.id}',this)">${selectedShip.has(item.id)?'✓':''}</div>
+    </div>`).join('');
+}
+
+function toggleShip(id,el){
+  if(selectedShip.has(id)){ selectedShip.delete(id); el.className='inv-check'; el.textContent=''; }
+  else { selectedShip.add(id); el.className='inv-check on'; el.textContent='✓'; }
+}
+
+function createShipment(){
+  if(!selectedShip.size){ showToast('Выберите изделия'); return; }
+  const destName=document.getElementById('shipDest').value;
+  const date=document.getElementById('shipDate').value;
+  const items=getItems();
+  const invItems=[];
+  selectedShip.forEach(id=>{
+    const item=items.find(i=>i.id===id);if(!item)return;
+    item.status='shop'; item.locationName=destName;
+    item.history=item.history||[];
+    item.history.push({action:`Отгружено в ${destName}`,date,from:'Склад',to:destName,color:'var(--a2)'});
+    invItems.push({id:item.id,num:item.num,name:item.name,wood:item.wood||'',price:item.price,priceOpt:item.priceOpt||0,length:item.length||'',width:item.width||''});
+  });
+  saveItems(items);
+  const invs=getInvoices();
+  const invNum='НАК-'+String(invs.length+1).padStart(3,'0');
+  const newInv={id:uid(),num:invNum,date,destName,items:invItems,status:'pending',createdAt:new Date().toISOString()};
+  invs.unshift(newInv); saveInvoices(invs); fbSaveInvoice(newInv);
+  selectedShip.clear();
+  closeMo('shipMo'); renderWare();
+  showToast(`✅ Накладная ${invNum} отправлена в ${destName}`);
+}
+
+// ════════ ZP ════════
+function renderZP(){
+  const now=new Date(),m=now.getMonth(),y=now.getFullYear();
+  const accepted=getProdItems().filter(i=>i.status==='accepted'&&i.acceptedDate&&new Date(i.acceptedDate).getMonth()===m&&new Date(i.acceptedDate).getFullYear()===y);
+  const total=accepted.reduce((s,i)=>s+i.zp,0);
+  document.getElementById('zpTotal').textContent=fmt(total);
+  const byM={};
+  accepted.forEach(i=>{ if(!byM[i.masterId])byM[i.masterId]={items:[],total:0,name:i.masterName}; byM[i.masterId].items.push(i); byM[i.masterId].total+=i.zp; });
+  const c=document.getElementById('zpByMaster');
+  if(!Object.keys(byM).length){ c.innerHTML='<div class="empty"><div class="ei">💰</div>Нет начислений в этом месяце</div>'; return; }
+  c.innerHTML=Object.entries(byM).map(([mid,d])=>`
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:10px"><div class="av">${d.name.charAt(0)}</div><div><div style="font-size:14px;font-weight:700">${d.name}</div><div style="font-size:11px;color:var(--t2)">${d.items.length} изделий</div></div></div>
+        <div style="text-align:right"><div style="font-family:'Unbounded',sans-serif;font-size:18px;font-weight:700;color:var(--a5)">${fmt(d.total)}</div><div style="font-size:10px;color:var(--t2)">к выплате</div></div>
+      </div>
+      ${d.items.map(i=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px"><span>№${i.num} ${i.name}</span><span style="color:var(--inc);font-weight:600">+${fmt(i.zp)}</span></div>`).join('')}
+      <button onclick="printZP('${mid}')" style="width:100%;margin-top:10px;padding:10px;background:var(--s2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Golos Text',sans-serif;font-size:12px;cursor:pointer">📄 Расчётный лист PDF</button>
+    </div>`).join('');
+}
+
+function printZP(masterId){
+  const now=new Date(),m=now.getMonth(),y=now.getFullYear();
+  const master=getMasters().find(x=>x.id===masterId)||{name:'—',rate:0};
+  const items=getProdItems().filter(i=>i.masterId===masterId&&i.status==='accepted'&&i.acceptedDate&&new Date(i.acceptedDate).getMonth()===m&&new Date(i.acceptedDate).getFullYear()===y);
+  const total=items.reduce((s,i)=>s+i.zp,0);
+  const monthName=now.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>ЗП ${master.name}</title><style>body{font-family:Arial,sans-serif;padding:24px;max-width:600px;margin:0 auto}h1{font-size:18px}table{width:100%;border-collapse:collapse;margin-top:16px}th{background:#f5f5f5;padding:8px;text-align:left;font-size:12px;border:1px solid #ddd}td{padding:8px;font-size:12px;border:1px solid #ddd}.total{font-size:16px;font-weight:bold;margin-top:16px;text-align:right}.sign{margin-top:40px;display:flex;justify-content:space-between}.sb{text-align:center;width:200px;border-top:1px solid #000;padding-top:4px;font-size:11px;color:#666}</style></head><body><h1>Расчётный лист — ${master.name}</h1><div style="color:#666;font-size:13px;margin:4px 0 16px">${monthName} · Ставка: ${Math.round(master.rate).toLocaleString('ru-RU')} ₽/изд.</div><table><tr><th>№</th><th>Арт.</th><th>Изделие</th><th>Порода</th><th>Дата</th><th>ЗП</th></tr>${items.map((i,n)=>`<tr><td>${n+1}</td><td>${i.num}</td><td>${i.name}</td><td>${i.wood||'—'}</td><td>${i.acceptedDate||'—'}</td><td>${Math.round(i.zp).toLocaleString('ru-RU')} ₽</td></tr>`).join('')}</table><div class="total">Итого: ${Math.round(total).toLocaleString('ru-RU')} ₽</div><div class="sign"><div class="sb">Начислил: ___________</div><div class="sb">Получил: ___________</div></div>
+
+
+
+<!-- FIREBASE COMPAT SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
+  authDomain: "izhitsa-6327c.firebaseapp.com",
+  projectId: "izhitsa-6327c",
+  storageBucket: "izhitsa-6327c.firebasestorage.app",
+  messagingSenderId: "1025102190040",
+  appId: "1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db   = firebase.firestore();
+const auth = firebase.auth();
+
+// Offline persistence
+db.enablePersistence().catch(e => console.log('Persist:', e.code));
+
+// Sync status
+window.addEventListener('online',  () => setSync('online'));
+window.addEventListener('offline', () => setSync('offline'));
+
+window.setSync = function(s) {
+  const dot = document.getElementById('syncDot');
+  const txt = document.getElementById('syncTxt');
+  if(!dot||!txt) return;
+  if(s==='online')  { dot.style.background='#60f090'; txt.textContent='🟢 Онлайн — синхронизировано'; }
+  if(s==='offline') { dot.style.background='#f06060'; txt.textContent='🔴 Офлайн — данные сохранятся локально'; }
+  if(s==='sync')    { dot.style.background='#c8f060'; txt.textContent='⟳ Синхронизация...'; }
+};
+
+// Sign in
+auth.signInAnonymously().catch(console.error);
+auth.onAuthStateChanged(user => {
+  if(user) {
+    setSync(navigator.onLine ? 'online' : 'offline');
+    window.FB_READY = true;
+    if(typeof onFirebaseReady === 'function') onFirebaseReady(db);
+  }
+});
+
+// API
+window.fbAdd = (col, data) => db.collection(col).add({...data, _ts: firebase.firestore.FieldValue.serverTimestamp()});
+window.fbSet = (col, id, data) => db.collection(col).doc(id).set({...data, _ts: firebase.firestore.FieldValue.serverTimestamp()});
+window.fbUpd = (col, id, data) => db.collection(col).doc(id).update(data);
+window.fbDel = (col, id) => db.collection(col).doc(id).delete();
+window.fbListen = (col, orderField, cb) => {
+  let q = db.collection(col);
+  if(orderField) q = q.orderBy(orderField, 'desc');
+  return q.onSnapshot(snap => cb(snap.docs.map(d => ({_id:d.id, ...d.data()}))), e => console.error(col, e));
+};
+</script>
+
+</body></html>`;
+  const w=window.open('','_blank');w.document.write(html);w.document.close();w.print();
+}
+
+// ════════ MASTERS ════════
+function renderMastersList(){
+  const c=document.getElementById('mastersList');if(!c)return;
+  const masters=getMasters();
+  if(!masters.length){ c.innerHTML='<div class="empty"><div class="ei">👤</div>Мастеров нет</div>'; return; }
+  c.innerHTML=masters.map((m,i)=>`
+    <div class="li">
+      <div class="av">${m.name.charAt(0)}</div>
+      <div class="li-info"><div class="li-name">${m.name}</div><div class="li-sub">Ставка: ${fmt(m.rate)} / изделие${m.phone?' · '+m.phone:''}</div></div>
+      <button onclick="deleteMaster(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>
+    </div>`).join('');
+}
+
+function addMaster(){
+  const name=document.getElementById('newMasterName').value.trim();
+  const rate=parseFloat(document.getElementById('newMasterRate').value)||0;
+  if(!name){ showToast('Введите имя'); return; }
+  const masters=getMasters();
+  const newMaster={id:uid(),name,rate}; masters.push(newMaster);
+  saveMasters(masters); fbSaveMaster(newMaster);
+  document.getElementById('newMasterName').value='';
+  document.getElementById('newMasterRate').value='';
+  renderMastersList(); populateMasterSelects();
+  showToast('✅ Мастер добавлен');
+}
+
+function deleteMaster(i){
+  if(!confirm('Удалить мастера?'))return;
+  const masters=getMasters(); masters.splice(i,1); saveMasters(masters);
+  renderMastersList(); populateMasterSelects();
+}
+
+// piMaster onchange
+document.addEventListener('change', e=>{ if(e.target.id==='piMaster'){ const m=getMasters().find(x=>x.id===e.target.value); document.getElementById('piZPAmt').textContent=fmt(m?.rate||0); }});
+
+init();
+</script>
+
+
+
+
+<!-- FIREBASE COMPAT SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
+  authDomain: "izhitsa-6327c.firebaseapp.com",
+  projectId: "izhitsa-6327c",
+  storageBucket: "izhitsa-6327c.firebasestorage.app",
+  messagingSenderId: "1025102190040",
+  appId: "1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db   = firebase.firestore();
+const auth = firebase.auth();
+
+// Offline persistence
+db.enablePersistence().catch(e => console.log('Persist:', e.code));
+
+// Sync status
+window.addEventListener('online',  () => setSync('online'));
+window.addEventListener('offline', () => setSync('offline'));
+
+window.setSync = function(s) {
+  const dot = document.getElementById('syncDot');
+  const txt = document.getElementById('syncTxt');
+  if(!dot||!txt) return;
+  if(s==='online')  { dot.style.background='#60f090'; txt.textContent='🟢 Онлайн — синхронизировано'; }
+  if(s==='offline') { dot.style.background='#f06060'; txt.textContent='🔴 Офлайн — данные сохранятся локально'; }
+  if(s==='sync')    { dot.style.background='#c8f060'; txt.textContent='⟳ Синхронизация...'; }
+};
+
+// Sign in
+auth.signInAnonymously().catch(console.error);
+auth.onAuthStateChanged(user => {
+  if(user) {
+    setSync(navigator.onLine ? 'online' : 'offline');
+    window.FB_READY = true;
+    if(typeof onFirebaseReady === 'function') onFirebaseReady(db);
+  }
+});
+
+// API
+window.fbAdd = (col, data) => db.collection(col).add({...data, _ts: firebase.firestore.FieldValue.serverTimestamp()});
+window.fbSet = (col, id, data) => db.collection(col).doc(id).set({...data, _ts: firebase.firestore.FieldValue.serverTimestamp()});
+window.fbUpd = (col, id, data) => db.collection(col).doc(id).update(data);
+window.fbDel = (col, id) => db.collection(col).doc(id).delete();
+window.fbListen = (col, orderField, cb) => {
+  let q = db.collection(col);
+  if(orderField) q = q.orderBy(orderField, 'desc');
+  return q.onSnapshot(snap => cb(snap.docs.map(d => ({_id:d.id, ...d.data()}))), e => console.error(col, e));
+};
+</script>
+
+</body>
+</html>

@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ижица — Магазин">
+<meta name="theme-color" content="#0f0f13">
+<title>Ижица — Магазин</title>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f0f13;--s1:#1a1a22;--s2:#22222e;--border:#2e2e3e;
+  --accent:#c8f060;--a2:#60c8f0;--a3:#f06090;--a4:#f0a060;--a5:#a060f0;
+  --text:#f0f0f8;--t2:#8888aa;--inc:#60f090;--exp:#f06060;
+  --r:14px;--tabh:62px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;min-height:100dvh;max-width:480px;margin:0 auto}
+
+/* LOGIN */
+#loginScreen{display:flex;flex-direction:column;min-height:100dvh;padding:48px 24px 24px;background:var(--bg)}
+.app-logo{font-family:'Unbounded',sans-serif;font-size:26px;font-weight:700;color:var(--accent);margin-bottom:4px}
+.app-sub{font-size:12px;color:var(--t2);margin-bottom:32px}
+.login-card{background:var(--s1);border:1px solid var(--border);border-radius:20px;padding:20px}
+.lc-title{font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;margin-bottom:16px}
+
+/* FORM */
+.fg{margin-bottom:12px}
+.fl{font-size:11px;color:var(--t2);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;display:block}
+.fi,.fs{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:11px 13px;color:var(--text);font-family:'Golos Text',sans-serif;font-size:15px;outline:none;-webkit-appearance:none;transition:border-color .2s}
+.fi:focus,.fs:focus{border-color:var(--accent)}
+.fi::placeholder{color:var(--t2)}
+.btn{width:100%;padding:14px;background:var(--accent);color:#0f0f13;border:none;border-radius:12px;font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;cursor:pointer;margin-top:4px;transition:opacity .2s}
+.btn:disabled{opacity:.5}
+.btn:active{opacity:.8}
+.btn.sec{background:var(--s2);color:var(--t2);border:1px solid var(--border)}
+.btn.red{background:#2e1a1a;color:var(--exp);border:1px solid var(--exp)}
+.btn.blue{background:#1a1e2e;color:var(--a2);border:1px solid var(--a2)}
+.btn.sm{padding:9px 14px;font-size:11px;width:auto}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+
+/* APP */
+#appScreen{display:none;min-height:100dvh}
+.hdr{padding:12px 16px;display:flex;justify-content:space-between;align-items:center;background:var(--s1);border-bottom:1px solid var(--border)}
+.hdr-logo{font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700;color:var(--accent)}
+.hdr-right{display:flex;align-items:center;gap:8px}
+.hdr-info{text-align:right}
+.hdr-shop{font-size:12px;font-weight:700;color:var(--a2)}
+.hdr-seller{font-size:10px;color:var(--t2)}
+.exit-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--t2);cursor:pointer;font-size:11px;padding:5px 9px;font-family:'Golos Text',sans-serif}
+
+/* STATUS BAR */
+.status-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 16px}
+.sb{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center}
+.sb-v{font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700}
+.sb-l{font-size:9px;color:var(--t2);margin-top:2px}
+
+/* TABS */
+.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:var(--tabh);background:var(--s1);border-top:1px solid var(--border);display:flex;z-index:100}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--t2);font-size:9px;font-family:'Golos Text',sans-serif;font-weight:500;border:none;background:none;position:relative}
+.tab.active{color:var(--accent)}
+.ti{font-size:18px;line-height:1}
+.tbadge{position:absolute;top:6px;right:calc(50% - 16px);background:var(--exp);color:#fff;font-size:9px;font-weight:700;border-radius:8px;padding:1px 5px;display:none}
+
+/* PAGES */
+.page{display:none;padding:0 16px;padding-bottom:calc(var(--tabh)+12px)}
+.page.active{display:block;animation:fi .2s ease}
+@keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+/* CARDS */
+.card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px}
+.ctitle{font-size:10px;color:var(--t2);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:9px}
+.stitle{font-family:'Unbounded',sans-serif;font-size:13px;font-weight:600;margin-bottom:10px;margin-top:4px}
+
+/* JOURNAL */
+.ji{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.ji:last-child{border-bottom:none}
+.ji-ic{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.ji-ic.sale{background:#1a2e1e}
+.ji-ic.writeoff{background:#2e1a1a}
+.ji-ic.staff{background:#1a1e2e}
+.ji-ic.receive{background:#1e2a14}
+.ji-ic.open{background:var(--s2)}
+.ji-body{flex:1;min-width:0}
+.ji-title{font-size:13px;font-weight:600}
+.ji-sub{font-size:10px;color:var(--t2);margin-top:2px;line-height:1.4}
+.ji-time{font-size:10px;color:var(--t3);margin-top:2px}
+.ji-amt{font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700;flex-shrink:0;padding-top:2px}
+.ji-amt.inc{color:var(--inc)}.ji-amt.exp{color:var(--exp)}.ji-amt.neu{color:var(--a2)}
+
+/* PAY CHIPS */
+.pay-chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.pc{padding:7px 12px;border-radius:20px;border:1px solid var(--border);background:var(--s2);color:var(--t2);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s}
+.pc.active{border-color:var(--accent);background:#1e2a14;color:var(--accent)}
+
+/* SALE ITEMS */
+.sir{display:flex;align-items:center;gap:8px;padding:8px;background:var(--s2);border-radius:9px;margin-bottom:6px}
+.sir-num{font-size:11px;color:var(--t2);width:36px;flex-shrink:0}
+.sir-name{flex:1;font-size:12px;font-weight:600}
+.sir-price{font-size:11px;color:var(--accent);font-weight:700}
+.sir-del{background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px;padding:2px 4px}
+
+/* MODALS */
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;align-items:flex-end;justify-content:center}
+.mo.open{display:flex}
+.md{background:var(--s1);border-radius:22px 22px 0 0;width:100%;max-width:480px;max-height:93dvh;overflow-y:auto;padding:18px}
+.mh{width:34px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 14px}
+.mt{font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;margin-bottom:14px}
+.sep{height:1px;background:var(--border);margin:12px 0}
+
+/* ALERTS */
+.al-warn{background:#2a1e14;border:1px solid var(--a4);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--a4);margin-bottom:10px}
+.al-ok{background:#1a2e1e;border:1px solid var(--inc);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--inc);margin-bottom:10px}
+.al-info{background:#1a1e2e;border:1px solid var(--a2);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--a2);margin-bottom:10px}
+
+/* INVOICE ROWS */
+.inv-row{padding:10px;margin-bottom:8px;border-radius:10px;border:1px solid var(--border);background:var(--s2);transition:all .2s}
+.inv-row.ok{border-color:var(--inc);background:#1a2e1e22}
+.inv-row.diff{border-color:var(--exp);background:#2e1a1a}
+.check-circle{width:26px;height:26px;border-radius:8px;border:2px solid var(--border);background:var(--s1);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:14px;transition:all .2s}
+.check-circle.checked{background:var(--accent);border-color:var(--accent);color:#0f0f13}
+
+.empty{text-align:center;padding:28px 0;color:var(--t2);font-size:13px}
+.ei{font-size:32px;margin-bottom:7px}
+.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:9px 16px;font-size:13px;z-index:400;opacity:0;transition:opacity .3s;pointer-events:none;max-width:92%;text-align:center}
+.toast.show{opacity:1}
+
+/* CLOSE SHIFT TABLE */
+.cs-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.cs-row:last-child{border-bottom:none}
+.cs-row.tot{font-weight:700;font-size:14px}
+.cs-val{font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700}
+</style>
+</head>
+<body>
+
+<!-- ══ LOGIN ══ -->
+<div id="loginScreen">
+  <div class="app-logo">Ижица</div>
+  <div class="app-sub">Модуль магазина · Смена продавца</div>
+  <div class="login-card">
+    <div class="lc-title">Открыть смену</div>
+    <div class="fg">
+      <label class="fl">Магазин</label>
+      <select class="fs" id="loginShop" onchange="renderLoginSellers()"></select>
+    </div>
+    <div class="fg">
+      <label class="fl">Продавец</label>
+      <select class="fs" id="loginSeller"></select>
+    </div>
+    <div class="fg">
+      <label class="fl">Пароль</label>
+      <input class="fi" type="password" id="loginPass" placeholder="••••" autocomplete="current-password">
+    </div>
+    <div id="loginError" style="color:var(--exp);font-size:12px;margin-bottom:8px;display:none">Неверный пароль</div>
+    <button class="btn" onclick="doLogin()">Открыть смену →</button>
+  </div>
+  <div style="margin-top:16px">
+    <button class="btn sec" onclick="openMo('adminMo')">⚙️ Управление продавцами</button>
+  </div>
+</div>
+
+<!-- ══ APP ══ -->
+<div id="appScreen">
+  <div style="display:flex;align-items:center;gap:6px;padding:5px 16px;font-size:11px;color:#8888aa;background:#1a1a22;border-bottom:1px solid #2e2e3e">
+    <div id="syncDot" style="width:7px;height:7px;border-radius:50%;background:#8888aa;flex-shrink:0;transition:background .3s"></div>
+    <span id="syncTxt">Подключение к Firebase...</span>
+  </div>
+
+      <span id="syncTxt">Подключение...</span>
+  </div>
+
+<div class="hdr">
+    <div class="hdr-logo">Ижица</div>
+    <div class="hdr-right">
+      <div class="hdr-info">
+        <div class="hdr-shop" id="hdrShop"></div>
+        <div class="hdr-seller" id="hdrSeller"></div>
+      </div>
+      <button class="exit-btn" onclick="exitShift()">Выйти</button>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <div class="sb"><div class="sb-v" id="sbCash" style="color:var(--inc)">0₽</div><div class="sb-l">Нал в кассе</div></div>
+    <div class="sb"><div class="sb-v" id="sbRev" style="color:var(--a2)">0₽</div><div class="sb-l">Выручка</div></div>
+    <div class="sb"><div class="sb-v" id="sbGoods" style="color:var(--accent)">0₽</div><div class="sb-l">Товар</div></div>
+  </div>
+
+  <!-- JOURNAL PAGE -->
+  <div class="page active" id="pg-journal">
+    <div id="pendingAlert"></div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn" style="margin:0;flex:2" onclick="openMo('saleMo')">＋ Продажа</button>
+      <button class="btn red" style="margin:0;flex:1" onclick="openMo('woMo')">🗑 Списание</button>
+    </div>
+    <div class="card">
+      <div class="ctitle">Журнал смены</div>
+      <div id="journalList"></div>
+    </div>
+  </div>
+
+  <!-- INVOICES PAGE -->
+  <div class="page" id="pg-invoices">
+    <div class="stitle">Входящие накладные</div>
+    <div id="invoicesList"></div>
+  </div>
+
+  <!-- STAFF PAGE -->
+  <div class="page" id="pg-staff">
+    <div class="stitle">Покупки сотрудников</div>
+    <div class="al-info">Деньги вне кассы — сотрудник платит отдельно за своё изделие.</div>
+    <button class="btn blue" style="margin-bottom:12px" onclick="openMo('staffMo')">＋ Покупка сотрудника</button>
+    <div class="card"><div class="ctitle">За смену</div><div id="staffList"></div></div>
+  </div>
+
+  <!-- CLOSE PAGE -->
+  <div class="page" id="pg-close">
+    <div class="stitle">Закрытие смены</div>
+    <div id="closeSummary"></div>
+    <div class="card">
+      <div class="fg"><label class="fl">Остаток нал вечер (факт, пересчитайте)</label>
+        <input class="fi" type="number" id="cashEveInput" placeholder="0" inputmode="numeric" oninput="validateClose()">
+      </div>
+      <div class="fg"><label class="fl">Инкассация (если была)</label>
+        <input class="fi" type="number" id="inkassInput" placeholder="0" inputmode="numeric" oninput="validateClose()">
+      </div>
+      <div id="closeValidation"></div>
+    </div>
+    <button class="btn red" onclick="closeShift()">🔐 Закрыть смену</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showPg('journal',this)"><div class="ti">📋</div><span>Журнал</span></button>
+    <button class="tab" onclick="showPg('invoices',this);renderInvoices()"><div class="ti">📦</div><span>Накладные</span><div class="tbadge" id="invBadge"></div></button>
+    <button class="tab" onclick="showPg('staff',this);renderStaff()"><div class="ti">🛒</div><span>Покупки</span></button>
+    <button class="tab" onclick="showPg('close',this);renderClose()"><div class="ti">🔐</div><span>Закрыть</span></button>
+  </div>
+</div>
+
+<!-- ══ MODALS ══ -->
+
+<!-- SALE -->
+<div class="mo" id="saleMo">
+  <div class="md">
+    <div class="mh"></div>
+    <div class="mt">Оформить продажу</div>
+    <div class="ctitle">Добавить изделия</div>
+    <div id="saleItemsDisplay" style="margin-bottom:10px"></div>
+    <div style="display:flex;gap:7px;margin-bottom:14px">
+      <input class="fi" id="siNum" placeholder="№" style="width:80px;flex-shrink:0">
+      <input class="fi" id="siName" placeholder="Наименование изделия">
+      <input class="fi" id="siPrice" placeholder="Цена" type="number" inputmode="numeric" style="width:90px;flex-shrink:0">
+      <button onclick="addSaleItem()" style="background:var(--accent);border:none;border-radius:10px;padding:0 12px;font-weight:700;color:#0f0f13;cursor:pointer;font-family:'Unbounded',sans-serif;font-size:12px;flex-shrink:0">＋</button>
+    </div>
+    <div class="row2">
+      <div class="fg"><label class="fl">Скидка (₽)</label><input class="fi" type="number" id="saleDiscount" placeholder="0" inputmode="numeric" oninput="calcSaleTotal()"></div>
+      <div class="fg"><label class="fl">Итого к оплате</label><div style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:11px 13px;font-family:'Unbounded',sans-serif;font-size:16px;font-weight:700;color:var(--accent)" id="saleFinal">0₽</div></div>
+    </div>
+    <div class="fg"><label class="fl">Способ оплаты</label>
+      <div class="pay-chips">
+        <div class="pc active" onclick="setPayM('cash',this)">💵 Нал</div>
+        <div class="pc" onclick="setPayM('terminal',this)">💳 Терминал</div>
+        <div class="pc" onclick="setPayM('sbp',this)">📱 СБП</div>
+        <div class="pc" onclick="setPayM('qr',this)">🔲 QR</div>
+        <div class="pc" onclick="setPayM('mixed',this)">➗ Смешанный</div>
+      </div>
+    </div>
+    <div id="mixedBlock" style="display:none" class="row2">
+      <div class="fg"><label class="fl">Нал (₽)</label><input class="fi" type="number" id="mixCash" placeholder="0" inputmode="numeric"></div>
+      <div class="fg"><label class="fl">Безнал (₽)</label><input class="fi" type="number" id="mixCard" placeholder="0" inputmode="numeric"></div>
+    </div>
+    <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="saleComment" placeholder="Необязательно"></div>
+    <button class="btn" onclick="saveSale()">✅ Зафиксировать продажу</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('saleMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- WRITEOFF -->
+<div class="mo" id="woMo">
+  <div class="md">
+    <div class="mh"></div>
+    <div class="mt">Списание товара</div>
+    <div class="row2">
+      <div class="fg"><label class="fl">Номер</label><input class="fi" id="woNum" placeholder="001"></div>
+      <div class="fg"><label class="fl">Наименование</label><input class="fi" id="woName" placeholder="Столешница..."></div>
+    </div>
+    <div class="fg"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="woAmt" placeholder="0" inputmode="numeric"></div>
+    <div class="fg"><label class="fl">Причина (обязательно)</label><input class="fi" id="woReason" placeholder="Укажите причину..."></div>
+    <button class="btn red" onclick="saveWriteoff()">Списать</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('woMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- STAFF PURCHASE -->
+<div class="mo" id="staffMo">
+  <div class="md">
+    <div class="mh"></div>
+    <div class="mt">Покупка сотрудника</div>
+    <div class="fg"><label class="fl">Сотрудник (ФИО)</label><input class="fi" id="spWho" placeholder="Иванова Мария"></div>
+    <div class="fg"><label class="fl">Изделие</label><input class="fi" id="spItem" placeholder="Наименование / номер"></div>
+    <div class="row2">
+      <div class="fg"><label class="fl">Цена розница (₽)</label><input class="fi" type="number" id="spRetail" placeholder="0" inputmode="numeric"></div>
+      <div class="fg"><label class="fl">К оплате (₽)</label><input class="fi" type="number" id="spPay" placeholder="0" inputmode="numeric"></div>
+    </div>
+    <div class="fg"><label class="fl">Способ оплаты</label>
+      <div class="pay-chips">
+        <div class="pc active" onclick="setStaffPayM('cash',this)">💵 Нал</div>
+        <div class="pc" onclick="setStaffPayM('terminal',this)">💳 Терминал</div>
+        <div class="pc" onclick="setStaffPayM('sbp',this)">📱 СБП</div>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Комментарий / причина</label><input class="fi" id="spComment" placeholder="Для чего покупает..."></div>
+    <button class="btn blue" onclick="saveStaff()">Зафиксировать</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('staffMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- INVOICE ACCEPT -->
+<div class="mo" id="invMo">
+  <div class="md">
+    <div class="mh"></div>
+    <div class="mt" id="invMoTitle">Приёмка накладной</div>
+    <div style="font-size:11px;color:var(--t2);margin-bottom:12px" id="invMoSub"></div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:12px">Измените цену если не совпадает — строка покраснеет. Отметьте ✓ проверенные.</div>
+    <div id="invMoItems" style="max-height:46dvh;overflow-y:auto"></div>
+    <div class="fg" style="margin-top:12px">
+      <label class="fl">Кто принял (подпись)</label>
+      <input class="fi" id="invWho" placeholder="ФИО">
+    </div>
+    <button class="btn" onclick="acceptInvoice()">✅ Принять накладную</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('invMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div class="mo" id="adminMo">
+  <div class="md">
+    <div class="mh"></div>
+    <div class="mt">⚙️ Продавцы</div>
+    <div id="sellersList" style="margin-bottom:14px"></div>
+    <div class="sep"></div>
+    <div class="fg"><label class="fl">Имя</label><input class="fi" id="newSellerName" placeholder="Иванова Мария Ивановна"></div>
+    <div class="fg"><label class="fl">Магазин</label><select class="fs" id="newSellerShop"></select></div>
+    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="newSellerPass" placeholder="Придумайте пароль"></div>
+    <button class="btn" onclick="addSeller()">Добавить продавца</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('adminMo')">Закрыть</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════ SHARED STORAGE KEYS ════════
+const KEYS = {
+  sellers:  'iz_sellers',
+  invoices: 'iz_invoices',
+  shifts:   'iz_shifts',
+  session:  'iz_shop_session',
+  journal:  'iz_shop_journal',
+};
+
+// ════════ STATE ════════
+let session = null;
+let journal = [];
+let saleItems = [];
+let payMethod = 'cash';
+let staffPayMethod = 'cash';
+let currentInvId = null;
+let invCheckState = [];
+
+// ════════ DATA ACCESS ════════
+function getSellers()  { return JSON.parse(localStorage.getItem(KEYS.sellers)  || '[]'); }
+function getInvoices() { return JSON.parse(localStorage.getItem(KEYS.invoices) || '[]'); }
+function saveSellers(d){ localStorage.setItem(KEYS.sellers,  JSON.stringify(d)); }
+function saveInvoices(d){ localStorage.setItem(KEYS.invoices, JSON.stringify(d)); }
+function getShops() {
+  const shops = JSON.parse(localStorage.getItem('iz_admin_shops') || '[]');
+  return shops.length ? shops.map(s=>s.name) : ['Дерево', 'ДР Товар'];
+}
+
+// ════════ UTILS ════════
+function fmt(n){ return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+'₽'; }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
+function openMo(id){ document.getElementById(id).classList.add('open'); }
+function closeMo(id){ document.getElementById(id).classList.remove('open'); }
+function showPg(name,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('pg-'+name).classList.add('active');
+  el.classList.add('active');
+}
+function saveJournal(){ localStorage.setItem(KEYS.journal, JSON.stringify(journal)); }
+function saveSessionData(){ localStorage.setItem(KEYS.session, JSON.stringify(session)); }
+
+// ════════ INIT ════════
+function onFirebaseReady(db) {
+  // Sync invoices (read from warehouse/production)
+  fbListen('iz_invoices', '_ts', data => {
+    localStorage.setItem('iz_invoices', JSON.stringify(data));
+    if(session) { updateInvBadge(); renderPendingAlert(); }
+  });
+  // Sync admin settings (shops list)
+  fbListen('iz_admin_shops', null, data => {
+    localStorage.setItem('iz_admin_shops', JSON.stringify(data));
+  });
+  // Sync sellers
+  fbListen('iz_sellers', '_ts', data => {
+    localStorage.setItem('iz_sellers', JSON.stringify(data));
+    renderLoginSellers();
+  });
+}
+
+function fbSaveInvoiceAccept(inv) {
+  if(window.FB_READY) fbSet('iz_invoices', inv._id||inv.id, inv);
+}
+function fbSaveShift(report) {
+  if(window.FB_READY) fbAdd('iz_shifts', report);
+}
+function fbSaveSeller(s) {
+  if(window.FB_READY) fbAdd('iz_sellers', s);
+}
+function fbDelSellerById(id) {
+  if(window.FB_READY) fbDel('iz_sellers', id);
+}
+
+function init() {
+  // Populate login selects
+  const shops = getShops();
+  const shopSel = document.getElementById('loginShop');
+  shopSel.innerHTML = shops.map(s=>`<option>${s}</option>`).join('');
+  populateAdminShops();
+  renderLoginSellers();
+  renderSellersList();
+
+  // Restore session if exists
+  const saved = JSON.parse(localStorage.getItem(KEYS.session)||'null');
+  if(saved) {
+    session = saved;
+    journal = JSON.parse(localStorage.getItem(KEYS.journal)||'[]');
+    startApp();
+  }
+}
+
+function renderLoginSellers() {
+  const shop = document.getElementById('loginShop').value;
+  const sellers = getSellers().filter(s=>!s.shop||s.shop===shop);
+  document.getElementById('loginSeller').innerHTML = sellers.length
+    ? sellers.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')
+    : '<option value="">— нет продавцов —</option>';
+}
+
+function populateAdminShops() {
+  const shops = getShops();
+  const el = document.getElementById('newSellerShop');
+  if(el) el.innerHTML = shops.map(s=>`<option>${s}</option>`).join('');
+}
+
+// ════════ LOGIN ════════
+function doLogin() {
+  const shopName = document.getElementById('loginShop').value;
+  const sellerId = document.getElementById('loginSeller').value;
+  const pass     = document.getElementById('loginPass').value;
+  const seller   = getSellers().find(s=>s.id===sellerId);
+  const errEl    = document.getElementById('loginError');
+
+  if(!seller){ errEl.style.display='block'; errEl.textContent='Продавец не найден'; return; }
+  if(seller.pass !== pass){ errEl.style.display='block'; errEl.textContent='Неверный пароль'; return; }
+  errEl.style.display='none';
+
+  // Prompt for morning data
+  const cashM  = parseFloat(prompt(`${shopName}\nОстаток наличных утро (пересчитайте фактически):`)||'0');
+  const goodsM = parseFloat(prompt(`${shopName}\nОстаток товара утро (в ₽):`)||'0');
+
+  session = { shopName, sellerName:seller.name, sellerId, openedAt:new Date().toISOString(), cashMorning:cashM, goodsMorning:goodsM };
+  journal = [{ id:uid(), type:'open', ts:new Date().toISOString(), icon:'🔓', label:'Смена открыта', sub:`Нал утро: ${fmt(cashM)} · Товар: ${fmt(goodsM)}`, cashEffect:0, goodsEffect:0 }];
+  saveSessionData(); saveJournal();
+  startApp();
+}
+
+function startApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'block';
+  document.getElementById('hdrShop').textContent = session.shopName;
+  document.getElementById('hdrSeller').textContent = session.sellerName;
+  renderAll();
+  updateInvBadge();
+}
+
+function exitShift() {
+  if(confirm('Выйти? Смена останется открытой.')) {
+    document.getElementById('appScreen').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+  }
+}
+
+// ════════ TOTALS ════════
+function calcTotals() {
+  let cash=session.cashMorning, goods=session.goodsMorning, revenue=0;
+  journal.forEach(e=>{ cash+=(e.cashEffect||0); goods+=(e.goodsEffect||0); if(e.type==='sale') revenue+=(e.totalPaid||0); });
+  return {cash,goods,revenue};
+}
+
+function renderAll() { renderStatusBar(); renderJournal(); updateInvBadge(); renderPendingAlert(); }
+
+function renderStatusBar() {
+  const t=calcTotals();
+  document.getElementById('sbCash').textContent  = fmt(t.cash);
+  document.getElementById('sbRev').textContent   = fmt(t.revenue);
+  document.getElementById('sbGoods').textContent = fmt(t.goods);
+}
+
+// ════════ JOURNAL ════════
+function renderJournal() {
+  const c=document.getElementById('journalList');
+  if(!journal.length){ c.innerHTML='<div class="empty"><div class="ei">📋</div>Начните фиксировать операции</div>'; return; }
+  c.innerHTML=[...journal].reverse().map(e=>`
+    <div class="ji">
+      <div class="ji-ic ${e.type}">${e.icon||'📌'}</div>
+      <div class="ji-body">
+        <div class="ji-title">${e.label}</div>
+        ${e.sub?`<div class="ji-sub">${e.sub}</div>`:''}
+        <div class="ji-time">${new Date(e.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div>
+      </div>
+      ${e.amount?`<div class="ji-amt ${e.amtCls||'neu'}">${e.amtSign||''}${fmt(e.amount)}</div>`:''}
+    </div>`).join('');
+}
+
+// ════════ SALE ════════
+function addSaleItem() {
+  const num=document.getElementById('siNum').value.trim();
+  const name=document.getElementById('siName').value.trim();
+  const price=parseFloat(document.getElementById('siPrice').value)||0;
+  if(!name){ showToast('Введите наименование'); return; }
+  saleItems.push({id:uid(),num,name,price});
+  ['siNum','siName','siPrice'].forEach(id=>document.getElementById(id).value='');
+  renderSaleItems(); calcSaleTotal();
+}
+
+function renderSaleItems() {
+  const c=document.getElementById('saleItemsDisplay');
+  if(!saleItems.length){ c.innerHTML='<div style="font-size:12px;color:var(--t2);padding:4px 0">Добавьте товары ↑</div>'; return; }
+  c.innerHTML=saleItems.map((it,i)=>`
+    <div class="sir">
+      <div class="sir-num">${it.num||'—'}</div>
+      <div style="flex:1"><div class="sir-name">${it.name}</div><div class="sir-price">${fmt(it.price)}</div></div>
+      <button class="sir-del" onclick="saleItems.splice(${i},1);renderSaleItems();calcSaleTotal()">✕</button>
+    </div>`).join('');
+}
+
+function calcSaleTotal() {
+  const total=saleItems.reduce((s,it)=>s+it.price,0);
+  const disc=parseFloat(document.getElementById('saleDiscount').value)||0;
+  document.getElementById('saleFinal').textContent=fmt(Math.max(0,total-disc));
+}
+
+function setPayM(m,el) {
+  payMethod=m;
+  document.querySelectorAll('#saleMo .pc').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('mixedBlock').style.display=m==='mixed'?'grid':'none';
+}
+
+function saveSale() {
+  if(!saleItems.length){ showToast('Добавьте хотя бы один товар'); return; }
+  const total=saleItems.reduce((s,it)=>s+it.price,0);
+  const disc=parseFloat(document.getElementById('saleDiscount').value)||0;
+  const paid=Math.max(0,total-disc);
+  let cashPart=0,cardPart=0;
+  if(payMethod==='cash') cashPart=paid;
+  else if(payMethod==='mixed'){ cashPart=parseFloat(document.getElementById('mixCash').value)||0; cardPart=parseFloat(document.getElementById('mixCard').value)||0; }
+  else cardPart=paid;
+  const payL={cash:'💵 Нал',terminal:'💳 Терминал',sbp:'📱 СБП',qr:'🔲 QR',mixed:'➗ Смешанный'}[payMethod];
+  journal.push({ id:uid(),type:'sale',ts:new Date().toISOString(),icon:'💰',label:'Продажа',
+    sub:saleItems.map(i=>`№${i.num||'—'} ${i.name}`).join(', ')+(disc?` · Скидка ${fmt(disc)}`:'')+` · ${payL}`,
+    items:[...saleItems],totalPrice:total,discount:disc,totalPaid:paid,payMethod,cashPart,cardPart,
+    comment:document.getElementById('saleComment').value,
+    amount:paid,amtCls:'inc',amtSign:'+',cashEffect:cashPart,goodsEffect:-total });
+  saveJournal();
+  saleItems=[]; renderSaleItems(); calcSaleTotal();
+  ['saleDiscount','saleComment','mixCash','mixCard'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('saleFinal').textContent='0₽';
+  closeMo('saleMo'); renderAll();
+  showToast(`✅ Продажа ${fmt(paid)} зафиксирована`);
+}
+
+// ════════ WRITEOFF ════════
+function saveWriteoff() {
+  const reason=document.getElementById('woReason').value.trim();
+  if(!reason){ showToast('Укажите причину'); return; }
+  const amt=parseFloat(document.getElementById('woAmt').value)||0;
+  if(!amt){ showToast('Введите сумму'); return; }
+  const num=document.getElementById('woNum').value.trim();
+  const name=document.getElementById('woName').value.trim();
+  journal.push({ id:uid(),type:'writeoff',ts:new Date().toISOString(),icon:'🗑️',label:'Списание',
+    sub:`${num?'№'+num+' ':''}${name||'Товар'} · ${reason}`,
+    amount:amt,amtCls:'exp',amtSign:'−',cashEffect:0,goodsEffect:-amt });
+  saveJournal();
+  ['woNum','woName','woAmt','woReason'].forEach(id=>document.getElementById(id).value='');
+  closeMo('woMo'); renderAll();
+  showToast('🗑️ Списание зафиксировано');
+}
+
+// ════════ STAFF PURCHASE ════════
+function setStaffPayM(m,el){ staffPayMethod=m; document.querySelectorAll('#staffMo .pc').forEach(p=>p.classList.remove('active')); el.classList.add('active'); }
+
+function saveStaff() {
+  const who=document.getElementById('spWho').value.trim();
+  const item=document.getElementById('spItem').value.trim();
+  const retail=parseFloat(document.getElementById('spRetail').value)||0;
+  const pay=parseFloat(document.getElementById('spPay').value)||0;
+  if(!who||!item||!pay){ showToast('Заполните обязательные поля'); return; }
+  const payL={cash:'💵 Нал',terminal:'💳 Терминал',sbp:'📱 СБП'}[staffPayMethod];
+  journal.push({ id:uid(),type:'staff',ts:new Date().toISOString(),icon:'🛒',label:`Покупка сотр.: ${who}`,
+    sub:`${item} · Розница: ${fmt(retail)} · Оплатил: ${fmt(pay)} ${payL} · ${document.getElementById('spComment').value}`,
+    amount:pay,amtCls:'neu',cashEffect:staffPayMethod==='cash'?pay:0,goodsEffect:-retail });
+  saveJournal();
+  ['spWho','spItem','spRetail','spPay','spComment'].forEach(id=>document.getElementById(id).value='');
+  closeMo('staffMo'); renderAll(); renderStaff();
+  showToast('🛒 Покупка зафиксирована');
+}
+
+function renderStaff() {
+  const c=document.getElementById('staffList');if(!c)return;
+  const items=journal.filter(e=>e.type==='staff');
+  if(!items.length){ c.innerHTML='<div class="empty"><div class="ei">🛒</div>Покупок нет</div>'; return; }
+  c.innerHTML=items.map(e=>`<div class="ji"><div class="ji-ic staff">🛒</div><div class="ji-body"><div class="ji-title">${e.label}</div><div class="ji-sub">${e.sub}</div></div><div class="ji-amt neu">${fmt(e.amount)}</div></div>`).join('');
+}
+
+// ════════ INVOICES ════════
+function updateInvBadge() {
+  const pending=getInvoices().filter(i=>i.destName===session?.shopName&&i.status==='pending');
+  const badge=document.getElementById('invBadge');
+  if(badge){ badge.style.display=pending.length?'block':'none'; badge.textContent=pending.length; }
+}
+
+function renderPendingAlert() {
+  const c=document.getElementById('pendingAlert');if(!c)return;
+  const pending=getInvoices().filter(i=>i.destName===session?.shopName&&i.status==='pending');
+  c.innerHTML=pending.length?`<div class="al-warn">🔔 ${pending.length} накладная ожидает приёмки → перейдите в раздел Накладные</div>`:'';
+}
+
+function renderInvoices() {
+  const c=document.getElementById('invoicesList');if(!c)return;
+  const shopInvs=getInvoices().filter(i=>i.destName===session?.shopName);
+  const pending=shopInvs.filter(i=>i.status==='pending');
+  const done=shopInvs.filter(i=>i.status==='accepted').slice(0,5);
+  let html='';
+  if(!shopInvs.length){ html='<div class="empty"><div class="ei">📦</div>Накладных нет</div>'; }
+  else {
+    if(pending.length){
+      html+='<div class="ctitle" style="margin-bottom:8px">⏳ Ожидают приёмки</div>';
+      html+=pending.map(inv=>`<div class="card" style="border-color:var(--a4)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div><div style="font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;color:var(--a4)">${inv.num}</div>
+          <div style="font-size:11px;color:var(--t2)">📅 ${inv.date} · ${inv.items.length} изд. · ${fmt(inv.items.reduce((s,i)=>s+i.price,0))}</div></div>
+          <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:#2a1e14;color:var(--a4);font-weight:700">⏳</span>
+        </div>
+        <button class="btn" style="margin:0" onclick="openInvoice('${inv.id}')">📋 Открыть и принять</button>
+      </div>`).join('');
+    }
+    if(done.length){
+      html+='<div class="ctitle" style="margin-top:12px;margin-bottom:8px">✅ Принятые</div>';
+      html+=done.map(inv=>`<div class="card">
+        <div style="display:flex;justify-content:space-between">
+          <div><div style="font-weight:700;font-size:13px">${inv.num}</div>
+          <div style="font-size:11px;color:var(--t2)">${inv.acceptedDate||''} · ${inv.acceptedBy||'—'}</div></div>
+          <span style="font-size:10px;padding:3px 8px;border-radius:6px;background:#1a2e1e;color:var(--inc);font-weight:700">✅</span>
+        </div>
+        ${inv.hasDiffs?'<div style="font-size:11px;color:var(--a4);margin-top:6px">⚠️ Есть расхождения</div>':''}
+      </div>`).join('');
+    }
+  }
+  c.innerHTML=html;
+}
+
+function openInvoice(invId) {
+  currentInvId=invId;
+  const inv=getInvoices().find(i=>i.id===invId);if(!inv)return;
+  invCheckState=inv.items.map(it=>({ok:false,factPrice:it.price,note:''}));
+  document.getElementById('invMoTitle').textContent=inv.num;
+  document.getElementById('invMoSub').textContent=`Отгружено ${inv.date} · ${inv.items.length} изд. · ${fmt(inv.items.reduce((s,i)=>s+i.price,0))}`;
+  document.getElementById('invWho').value=session?.sellerName||'';
+  document.getElementById('invMoItems').innerHTML=inv.items.map((item,i)=>`
+    <div class="inv-row" id="invrow${i}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700">№${item.num||'—'} ${item.name}</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:2px">🌳 ${item.wood||'—'} · ${item.length||'—'}×${item.width||'—'} мм</div>
+          <div style="font-size:12px;color:var(--a4);margin-top:2px;font-weight:600">По накладной: ${fmt(item.price)}</div>
+        </div>
+        <div class="check-circle" id="invok${i}" onclick="toggleInvItem(${i})"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:11px;color:var(--t2);white-space:nowrap">Факт цена:</span>
+        <input id="invfact${i}" type="number" value="${item.price}" inputmode="numeric" oninput="checkInvDiff(${i},${item.price})"
+          style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none;text-align:right">
+        <span style="font-size:11px;color:var(--t2)">₽</span>
+      </div>
+      <input id="invnote${i}" placeholder="Комментарий при расхождении..."
+        style="width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t2);font-size:12px;outline:none;display:none">
+    </div>`).join('');
+  openMo('invMo');
+}
+
+function toggleInvItem(i){
+  invCheckState[i].ok=!invCheckState[i].ok;
+  const ok=invCheckState[i].ok;
+  const okEl=document.getElementById('invok'+i);
+  if(okEl){ okEl.textContent=ok?'✓':''; okEl.classList.toggle('checked',ok); }
+  const row=document.getElementById('invrow'+i);
+  if(row&&ok){ row.className='inv-row ok'; }
+}
+
+function checkInvDiff(i,orig){
+  const factEl=document.getElementById('invfact'+i);
+  const noteEl=document.getElementById('invnote'+i);
+  const row=document.getElementById('invrow'+i);
+  if(!factEl)return;
+  const fact=parseFloat(factEl.value)||0;
+  const diff=Math.abs(fact-orig)>0;
+  invCheckState[i].factPrice=fact;
+  if(noteEl)noteEl.style.display=diff?'block':'none';
+  if(row){ row.className='inv-row'+(diff?' diff':''); }
+  if(factEl){ factEl.style.borderColor=diff?'var(--exp)':'var(--border)'; factEl.style.color=diff?'var(--exp)':'var(--text)'; }
+}
+
+function acceptInvoice(){
+  const who=document.getElementById('invWho').value.trim();
+  if(!who){ showToast('Укажите кто принял'); return; }
+  const invs=getInvoices();
+  const inv=invs.find(i=>i.id===currentInvId);if(!inv)return;
+  const inv2=JSON.parse(JSON.stringify(inv));
+  const accepted=inv2.items.map((it,i)=>({
+    ...it,ok:invCheckState[i]?.ok||false,factPrice:invCheckState[i]?.factPrice??it.price,
+    note:document.getElementById('invnote'+i)?.value||'',diff:Math.abs((invCheckState[i]?.factPrice??it.price)-it.price)>0 }));
+  const hasDiffs=accepted.some(a=>a.diff);
+  inv2.status='accepted'; inv2.acceptedBy=who; inv2.acceptedDate=new Date().toISOString().split('T')[0];
+  inv2.acceptedItems=accepted; inv2.hasDiffs=hasDiffs;
+  const idx=invs.findIndex(i=>i.id===currentInvId);
+  invs[idx]=inv2; saveInvoices(invs); fbSaveInvoiceAccept(inv2);
+  const goodsTotal=accepted.reduce((s,a)=>s+a.factPrice,0);
+  journal.push({ id:uid(),type:'receive',ts:new Date().toISOString(),icon:'📥',label:`Приёмка ${inv2.num}`,
+    sub:`${inv2.items.length} изд. · принял: ${who}${hasDiffs?' · ⚠️ расхождения':''}`,
+    amount:goodsTotal,amtCls:'neu',cashEffect:0,goodsEffect:goodsTotal });
+  saveJournal(); closeMo('invMo'); renderAll(); renderInvoices();
+  showToast(hasDiffs?'⚠️ Принято с расхождениями':'✅ Накладная принята');
+}
+
+// ════════ CLOSE SHIFT ════════
+function renderClose(){
+  const t=calcTotals();
+  const sales=journal.filter(e=>e.type==='sale');
+  const cashSales=sales.reduce((s,e)=>s+(e.cashPart||0),0);
+  const cardSales=sales.reduce((s,e)=>s+(e.cardPart||0),0);
+  const totalSales=sales.reduce((s,e)=>s+(e.totalPaid||0),0);
+  const disc=sales.reduce((s,e)=>s+(e.discount||0),0);
+  const wos=journal.filter(e=>e.type==='writeoff');
+  const staffP=journal.filter(e=>e.type==='staff');
+  document.getElementById('closeSummary').innerHTML=`
+    <div class="card" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:var(--accent)">
+      <div class="ctitle">Итоги смены — ${session.shopName}</div>
+      <div class="cs-row"><span>Нал утро</span><span class="cs-val">${fmt(session.cashMorning)}</span></div>
+      <div class="cs-row"><span>Продаж (${sales.length})</span><span class="cs-val" style="color:var(--inc)">+${fmt(totalSales)}</span></div>
+      <div class="cs-row" style="padding-left:12px"><span style="color:var(--t2)">в т.ч. нал</span><span class="cs-val" style="color:var(--inc)">+${fmt(cashSales)}</span></div>
+      <div class="cs-row" style="padding-left:12px"><span style="color:var(--t2)">в т.ч. безнал</span><span class="cs-val" style="color:var(--a2)">+${fmt(cardSales)}</span></div>
+      <div class="cs-row"><span>Скидки</span><span class="cs-val" style="color:var(--t2)">−${fmt(disc)}</span></div>
+      <div class="cs-row"><span>Списания (${wos.length})</span><span class="cs-val" style="color:var(--exp)">−${fmt(wos.reduce((s,e)=>s+e.amount,0))}</span></div>
+      <div class="cs-row"><span>Покупки сотруд. (${staffP.length})</span><span class="cs-val" style="color:var(--t2)">${fmt(staffP.reduce((s,e)=>s+e.amount,0))}</span></div>
+      <div class="cs-row tot"><span>Расчётный нал вечер</span><span class="cs-val" style="color:var(--accent);font-size:16px">${fmt(t.cash)}</span></div>
+    </div>`;
+  validateClose();
+}
+
+function validateClose(){
+  const t=calcTotals();
+  const inkass=parseFloat(document.getElementById('inkassInput').value)||0;
+  const cashEve=parseFloat(document.getElementById('cashEveInput').value)||0;
+  const expected=t.cash-inkass;
+  const c=document.getElementById('closeValidation');
+  if(!cashEve){ c.innerHTML=''; return; }
+  const diff=cashEve-expected;
+  c.innerHTML=Math.abs(diff)<1
+    ?'<div class="al-ok">✅ Касса сходится</div>'
+    :`<div class="al-warn">⚠️ Расхождение: ${diff>0?'+':''}${fmt(diff)}<br><span style="font-size:11px">Ожидалось: ${fmt(expected)} · Факт: ${fmt(cashEve)}</span></div>`;
+}
+
+function closeShift(){
+  const cashEve=parseFloat(document.getElementById('cashEveInput').value)||0;
+  if(!cashEve){ showToast('Введите остаток нал вечер'); return; }
+  const inkass=parseFloat(document.getElementById('inkassInput').value)||0;
+  const t=calcTotals();
+  const diff=cashEve-(t.cash-inkass);
+  if(Math.abs(diff)>=1 && !confirm(`Расхождение кассы: ${fmt(Math.abs(diff))}. Закрыть смену?`)) return;
+  const sales=journal.filter(e=>e.type==='sale');
+  const report={
+    id:uid(),source:'shop',shopName:session.shopName,sellerName:session.sellerName,
+    date:new Date().toISOString().split('T')[0],openedAt:session.openedAt,closedAt:new Date().toISOString(),
+    cashMorning:session.cashMorning,goodsMorning:session.goodsMorning,cashEvening:cashEve,inkass,cashDiff:diff,
+    salesCount:sales.length,totalRevenue:sales.reduce((s,e)=>s+e.totalPaid,0),
+    cashRevenue:sales.reduce((s,e)=>s+(e.cashPart||0),0),cardRevenue:sales.reduce((s,e)=>s+(e.cardPart||0),0),
+    journal:[...journal]
+  };
+  const shifts=JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+  shifts.unshift(report); localStorage.setItem('iz_shifts',JSON.stringify(shifts)); fbSaveShift(report);
+  localStorage.removeItem(KEYS.session); localStorage.removeItem(KEYS.journal);
+  session=null; journal=[];
+  document.getElementById('appScreen').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+  showToast('✅ Смена закрыта');
+}
+
+// ════════ SELLERS ADMIN ════════
+function addSeller(){
+  const name=document.getElementById('newSellerName').value.trim();
+  const shop=document.getElementById('newSellerShop').value;
+  const pass=document.getElementById('newSellerPass').value;
+  if(!name||!pass){ showToast('Заполните имя и пароль'); return; }
+  const sellers=getSellers();
+  const newS={id:uid(),name,shop,pass}; sellers.push(newS);
+  saveSellers(sellers); fbSaveSeller(newS);
+  document.getElementById('newSellerName').value='';
+  document.getElementById('newSellerPass').value='';
+  renderSellersList(); renderLoginSellers();
+  showToast('✅ Продавец добавлен');
+}
+
+function renderSellersList(){
+  const c=document.getElementById('sellersList');if(!c)return;
+  const sellers=getSellers();
+  if(!sellers.length){ c.innerHTML='<div style="font-size:12px;color:var(--t2)">Продавцов нет</div>'; return; }
+  c.innerHTML=sellers.map((s,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1"><div style="font-size:13px;font-weight:600">${s.name}</div><div style="font-size:11px;color:var(--t2)">${s.shop||'Все магазины'}</div></div>
+      <button onclick="deleteSeller(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>
+    </div>`).join('');
+}
+
+function deleteSeller(i){
+  const sellers=getSellers(); sellers.splice(i,1); saveSellers(sellers);
+  renderSellersList(); renderLoginSellers();
+}
+
+init();
+</script>
+
+
+
+
+<!-- FIREBASE COMPAT SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
+  authDomain: "izhitsa-6327c.firebaseapp.com",
+  projectId: "izhitsa-6327c",
+  storageBucket: "izhitsa-6327c.firebasestorage.app",
+  messagingSenderId: "1025102190040",
+  appId: "1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db   = firebase.firestore();
+const auth = firebase.auth();
+
+// Offline persistence
+db.enablePersistence().catch(e => console.log('Persist:', e.code));
+
+// Sync status
+window.addEventListener('online',  () => setSync('online'));
+window.addEventListener('offline', () => setSync('offline'));
+
+window.setSync = function(s) {
+  const dot = document.getElementById('syncDot');
+  const txt = document.getElementById('syncTxt');
+  if(!dot||!txt) return;
+  if(s==='online')  { dot.style.background='#60f090'; txt.textContent='🟢 Онлайн — синхронизировано'; }
+  if(s==='offline') { dot.style.background='#f06060'; txt.textContent='🔴 Офлайн — данные сохранятся локально'; }
+  if(s==='sync')    { dot.style.background='#c8f060'; txt.textContent='⟳ Синхронизация...'; }
+};
+
+// Sign in
+auth.signInAnonymously().catch(console.error);
+auth.onAuthStateChanged(user => {
+  if(user) {
+    setSync(navigator.onLine ? 'online' : 'offline');
+    window.FB_READY = true;
+    if(typeof onFirebaseReady === 'function') onFirebaseReady(db);
+  }
+});
+
+// API
+window.fbAdd = (col, data) => db.collection(col).add({...data, _ts: firebase.firestore.FieldValue.serverTimestamp()});
+window.fbSet = (col, id, data) => db.collection(col).doc(id).set({...data, _ts: firebase.firestore.FieldValue.serverTimestamp()});
+window.fbUpd = (col, id, data) => db.collection(col).doc(id).update(data);
+window.fbDel = (col, id) => db.collection(col).doc(id).delete();
+window.fbListen = (col, orderField, cb) => {
+  let q = db.collection(col);
+  if(orderField) q = q.orderBy(orderField, 'desc');
+  return q.onSnapshot(snap => cb(snap.docs.map(d => ({_id:d.id, ...d.data()}))), e => console.error(col, e));
+};
+</script>
+
+</body>
+</html>
