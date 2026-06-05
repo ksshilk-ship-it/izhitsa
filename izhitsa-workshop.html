@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ижица — Мастерская">
+<meta name="theme-color" content="#0f0f13">
+<title>Ижица — Мастерская</title>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f0f13;--s1:#1a1a22;--s2:#22222e;--border:#2e2e3e;
+  --accent:#c8f060;--a2:#60c8f0;--a3:#f06090;--a4:#f0a060;--a5:#a060f0;--a6:#60f0c8;
+  --text:#f0f0f8;--t2:#8888aa;--inc:#60f090;--exp:#f06060;
+  --r:14px;--tabh:62px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;min-height:100dvh;max-width:480px;margin:0 auto}
+
+/* LOGIN */
+#loginScreen{display:flex;flex-direction:column;min-height:100dvh;padding:48px 24px 24px}
+.app-logo{font-family:'Unbounded',sans-serif;font-size:24px;font-weight:700;color:var(--a5);margin-bottom:4px}
+.app-sub{font-size:12px;color:var(--t2);margin-bottom:32px}
+.login-card{background:var(--s1);border:1px solid var(--border);border-radius:20px;padding:20px}
+.lc-title{font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;margin-bottom:16px}
+.role-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.role-card{background:var(--s2);border:2px solid var(--border);border-radius:12px;padding:14px;text-align:center;cursor:pointer;transition:all .2s}
+.role-card.selected{border-color:var(--a5);background:#1e1a2e}
+.role-card .ri{font-size:24px;margin-bottom:6px}
+.role-card .rn{font-size:12px;font-weight:700;line-height:1.3}
+.role-card .rs{font-size:10px;color:var(--t2);margin-top:3px}
+
+/* FORM */
+.fg{margin-bottom:12px}
+.fl{font-size:11px;color:var(--t2);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;display:block}
+.fi,.fs{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:11px 13px;color:var(--text);font-family:'Golos Text',sans-serif;font-size:14px;outline:none;-webkit-appearance:none;transition:border-color .2s}
+.fi:focus,.fs:focus{border-color:var(--a5)}
+.fi::placeholder{color:var(--t2)}
+.btn{width:100%;padding:13px;background:var(--a5);color:#fff;border:none;border-radius:12px;font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700;cursor:pointer;margin-top:4px;transition:opacity .2s}
+.btn:active{opacity:.8}.btn:disabled{opacity:.5}
+.btn.green{background:var(--accent);color:#0f0f13}
+.btn.sec{background:var(--s2);color:var(--t2);border:1px solid var(--border)}
+.btn.red{background:#2e1a1a;color:var(--exp);border:1px solid var(--exp)}
+.btn.teal{background:#1a2e2a;color:var(--a6);border:1px solid var(--a6)}
+.btn.sm{padding:7px 12px;font-size:11px;width:auto}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+
+/* APP */
+#appScreen{display:none}
+.sync-bar{display:flex;align-items:center;gap:6px;padding:5px 16px;font-size:11px;color:var(--t2);background:var(--s1);border-bottom:1px solid var(--border)}
+.sdot{width:7px;height:7px;border-radius:50%;background:var(--t2);flex-shrink:0;transition:background .3s}
+.hdr{padding:12px 16px;display:flex;justify-content:space-between;align-items:center;background:var(--s1);border-bottom:1px solid var(--border)}
+.hdr-logo{font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;color:var(--a5)}
+.hdr-right{display:flex;align-items:center;gap:8px}
+.hdr-role{font-size:10px;color:var(--t2);background:var(--s2);padding:4px 8px;border-radius:6px}
+.hdr-name{font-size:12px;font-weight:600;color:var(--a2)}
+.exit-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--t2);cursor:pointer;font-size:11px;padding:5px 9px;font-family:'Golos Text',sans-serif}
+
+/* TABS */
+.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:var(--tabh);background:var(--s1);border-top:1px solid var(--border);display:flex;z-index:100}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--t2);font-size:9px;font-family:'Golos Text',sans-serif;font-weight:500;border:none;background:none;position:relative}
+.tab.active{color:var(--a5)}
+.ti{font-size:18px;line-height:1}
+.tbadge{position:absolute;top:5px;right:calc(50% - 16px);background:var(--exp);color:#fff;font-size:9px;font-weight:700;border-radius:8px;padding:1px 5px;min-width:16px;text-align:center;display:none}
+
+/* PAGES */
+.page{display:none;padding:12px 16px;padding-bottom:calc(var(--tabh)+12px)}
+.page.active{display:block;animation:fi .2s ease}
+@keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+/* CARDS */
+.card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px}
+.ctitle{font-size:10px;color:var(--t2);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:9px}
+.stitle{font-family:'Unbounded',sans-serif;font-size:13px;font-weight:600;margin-bottom:10px}
+.srow{display:flex;gap:8px;margin-bottom:12px}
+.sc{flex:1;background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center}
+.sc-v{font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700}
+.sc-l{font-size:9px;color:var(--t2);margin-top:2px}
+
+/* LIST ITEMS */
+.li{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.li:last-child{border-bottom:none}
+.li-ico{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.li-info{flex:1;min-width:0}
+.li-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li-sub{font-size:10px;color:var(--t2);margin-top:2px;line-height:1.5}
+.li-right{flex-shrink:0;text-align:right}
+.li-val{font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700}
+.li-time{font-size:10px;color:var(--t2);margin-top:2px}
+
+/* STATUS BADGES */
+.badge{display:inline-block;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700}
+.b-new{background:#1a1e2e;color:var(--a2)}
+.b-accepted{background:#1e2a14;color:var(--inc)}
+.b-working{background:#2a1e14;color:var(--a4)}
+.b-done{background:#1a2e22;color:var(--a6)}
+.b-delivered{background:#2a1a2e;color:var(--a5)}
+.b-received{background:#1e2a14;color:var(--accent)}
+.b-rejected{background:#2e1a1a;color:var(--exp)}
+.b-shipped{background:#1a1e2e;color:var(--a2)}
+
+/* NOTIFICATION ALERT */
+.notif{display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;margin-bottom:8px;cursor:pointer}
+.notif.new{background:#1a1e2e;border:1px solid var(--a2)}
+.notif.warn{background:#2a1e14;border:1px solid var(--a4)}
+.notif.ok{background:#1a2e14;border:1px solid var(--inc)}
+.notif-ico{font-size:20px;flex-shrink:0}
+.notif-body{flex:1}
+.notif-title{font-size:13px;font-weight:600}
+.notif-sub{font-size:11px;color:var(--t2);margin-top:2px}
+
+/* MODAL */
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:200;align-items:flex-end;justify-content:center}
+.mo.open{display:flex}
+.md{background:var(--s1);border-radius:22px 22px 0 0;width:100%;max-width:480px;max-height:93dvh;overflow-y:auto;padding:18px}
+.mh{width:34px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 14px}
+.mt{font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;margin-bottom:14px}
+.sep{height:1px;background:var(--border);margin:12px 0}
+
+/* TIMER */
+.timer-display{font-family:'Unbounded',sans-serif;font-size:28px;font-weight:700;color:var(--a5);text-align:center;padding:12px 0}
+
+/* ADMIN TABLE */
+.at-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
+.at-row:last-child{border-bottom:none}
+.at-lbl{color:var(--t2)}
+.at-val{font-weight:600}
+
+.empty{text-align:center;padding:24px 0;color:var(--t2);font-size:13px}
+.ei{font-size:30px;margin-bottom:6px}
+.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:9px 16px;font-size:13px;z-index:400;opacity:0;transition:opacity .3s;pointer-events:none;max-width:92%;text-align:center}
+.toast.show{opacity:1}
+.add-row{display:flex;gap:7px;margin-top:8px}
+.add-row .fi{flex:1}
+.add-btn{background:var(--accent);color:#0f0f13;border:none;border-radius:10px;padding:0 12px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+.fchip{background:var(--s1);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:11px;white-space:nowrap;cursor:pointer;color:var(--t2);flex-shrink:0}
+.fchip.active{background:var(--a5);border-color:var(--a5);color:#fff;font-weight:700}
+.bar-wrap{background:var(--s2);border-radius:6px;height:8px;overflow:hidden;margin-top:4px}
+.bar-fill{height:100%;border-radius:6px;transition:width .5s}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="app-logo">🏭 Ижица</div>
+  <div class="app-sub">Модуль мастерской</div>
+  <div class="login-card">
+    <div class="lc-title">Выберите роль и войдите</div>
+    <div class="role-grid">
+      <div class="role-card" onclick="selectRole('zaготовщик',this)">
+        <div class="ri">🪚</div>
+        <div class="rn">Заготовщик</div>
+        <div class="rs">Выдаёт заготовки</div>
+      </div>
+      <div class="role-card" onclick="selectRole('мастер',this)">
+        <div class="ri">🔨</div>
+        <div class="rn">Мастер</div>
+        <div class="rs">Делает изделия</div>
+      </div>
+      <div class="role-card" onclick="selectRole('кладовщик',this)">
+        <div class="ri">📦</div>
+        <div class="rn">Кладовщик</div>
+        <div class="rs">Принимает, отгружает</div>
+      </div>
+      <div class="role-card" onclick="selectRole('управляющий',this)">
+        <div class="ri">👑</div>
+        <div class="rn">Управляющий</div>
+        <div class="rs">Полный доступ</div>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Сотрудник</label><select class="fs" id="loginUser"><option value="">— выберите роль —</option></select></div>
+    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="loginPass" placeholder="••••"></div>
+    <div id="loginErr" style="color:var(--exp);font-size:12px;margin-bottom:8px;display:none">Неверный пароль</div>
+    <button class="btn" onclick="doLogin()">Войти →</button>
+  </div>
+  <div style="margin-top:12px"><button class="btn sec" onclick="openMo('adminSetupMo')">⚙️ Управление сотрудниками</button></div>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+  <div class="sync-bar"><div class="sdot" id="sdot"></div><span id="stxt">Подключение...</span></div>
+  <div class="hdr">
+    <div class="hdr-logo">🏭 Ижица</div>
+    <div class="hdr-right">
+      <div>
+        <div class="hdr-name" id="hdrName"></div>
+        <div class="hdr-role" id="hdrRole"></div>
+      </div>
+      <button class="exit-btn" onclick="doLogout()">Выйти</button>
+    </div>
+  </div>
+
+  <!-- ═══ PAGES ═══ -->
+
+  <!-- DASH -->
+  <div class="page active" id="pg-dash">
+    <div id="dashNotifications"></div>
+    <div id="dashContent"></div>
+  </div>
+
+  <!-- MY WORK (мастер) -->
+  <div class="page" id="pg-mywork">
+    <div class="stitle">Мои изделия</div>
+    <div class="srow">
+      <div class="sc"><div class="sc-v" id="mwNew" style="color:var(--a2)">0</div><div class="sc-l">Новые загот.</div></div>
+      <div class="sc"><div class="sc-v" id="mwWork" style="color:var(--a4)">0</div><div class="sc-l">В работе</div></div>
+      <div class="sc"><div class="sc-v" id="mwDone" style="color:var(--a6)">0</div><div class="sc-l">Готово</div></div>
+    </div>
+    <div class="card"><div class="ctitle">Мои изделия</div><div id="myWorkList"></div></div>
+  </div>
+
+  <!-- BLANKS (заготовщик) -->
+  <div class="page" id="pg-blanks">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="stitle" style="margin:0">Заготовки</div>
+      <button class="btn green" style="width:auto;padding:8px 14px;font-size:11px" onclick="openMo('addBlankMo')">＋ Выдать</button>
+    </div>
+    <div class="card"><div class="ctitle">История выдач</div><div id="blanksList"></div></div>
+  </div>
+
+  <!-- WAREHOUSE (кладовщик) -->
+  <div class="page" id="pg-warehouse">
+    <div id="whNotifications"></div>
+    <div class="srow">
+      <div class="sc"><div class="sc-v" id="whPending" style="color:var(--a4)">0</div><div class="sc-l">Ждут приёмки</div></div>
+      <div class="sc"><div class="sc-v" id="whStock" style="color:var(--accent)">0</div><div class="sc-l">На складе</div></div>
+      <div class="sc"><div class="sc-v" id="whShipped" style="color:var(--a2)">0</div><div class="sc-l">Отгружено</div></div>
+    </div>
+    <div class="card"><div class="ctitle">📥 Ожидают приёмки</div><div id="whPendingList"></div></div>
+    <div class="card"><div class="ctitle">📦 На складе</div><div id="whStockList"></div></div>
+    <button class="btn green" style="margin-top:4px" onclick="openShipmentMo()">🚚 Создать отгрузку</button>
+  </div>
+
+  <!-- ZP (мастер/управляющий) -->
+  <div class="page" id="pg-zp">
+    <div class="stitle">Зарплата</div>
+    <div id="zpContent"></div>
+  </div>
+
+  <!-- ADMIN (управляющий) -->
+  <div class="page" id="pg-admin">
+    <div class="stitle">Управление</div>
+    <div class="card">
+      <div class="ctitle">Все изделия</div>
+      <div id="adminAllItems"></div>
+    </div>
+    <div class="card">
+      <div class="ctitle">ЗП по мастерам (месяц)</div>
+      <div id="adminZP"></div>
+    </div>
+  </div>
+
+  <!-- EXTRA WORKS PAGE -->
+  <div class="page" id="pg-extrawork">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="stitle" style="margin:0">Доп. работы</div>
+      <button class="btn green" style="width:auto;padding:8px 14px;font-size:11px" onclick="openMo('addExtraMo')">＋ Добавить</button>
+    </div>
+    <div class="card"><div class="ctitle">Назначенные работы</div><div id="extraWorkList"></div></div>
+  </div>
+
+  <!-- ZP PAYMENTS PAGE -->
+  <div class="page" id="pg-zpay">
+    <div class="stitle">Выплата ЗП</div>
+    <div id="zpayContent"></div>
+  </div>
+
+  <!-- STATS PAGE -->
+  <div class="page" id="pg-stats">
+    <div class="stitle">Статистика производства</div>
+    <div id="statsFilter" style="display:flex;gap:7px;margin-bottom:10px;overflow-x:auto">
+      <div class="fchip active" onclick="setStatsPeriod('month',this)">Месяц</div>
+      <div class="fchip" onclick="setStatsPeriod('lastmonth',this)">Прош. мес.</div>
+      <div class="fchip" onclick="setStatsPeriod('week',this)">Неделя</div>
+      <div class="fchip" onclick="setStatsPeriod('quarter',this)">Квартал</div>
+      <div class="fchip" onclick="setStatsPeriod('year',this)">Год</div>
+      <div class="fchip" onclick="setStatsPeriod('all',this)">Всё</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div><label class="fl">С даты</label><input class="fi" type="date" id="statsFrom" onchange="renderStats()"></div>
+      <div><label class="fl">По дату</label><input class="fi" type="date" id="statsTo" onchange="renderStats()"></div>
+    </div>
+    <div id="statsContent"></div>
+  </div>
+
+  <div class="tabs" id="mainTabs"></div>
+</div>
+
+<!-- ═══ MODALS ═══ -->
+
+<!-- ADMIN SETUP -->
+<div class="mo" id="adminSetupMo">
+  <div class="md"><div class="mh"></div><div class="mt">⚙️ Сотрудники мастерской</div>
+    <div id="employeeList" style="margin-bottom:14px"></div>
+    <div class="sep"></div>
+    <div class="fg"><label class="fl">Имя сотрудника</label><input class="fi" id="empName" placeholder="Иванов Иван"></div>
+    <div class="fg"><label class="fl">Должность</label>
+      <select class="fs" id="empRole">
+        <option value="заготовщик">🪚 Заготовщик</option>
+        <option value="мастер">🔨 Мастер</option>
+        <option value="кладовщик">📦 Кладовщик</option>
+        <option value="управляющий">👑 Управляющий</option>
+      </select>
+    </div>
+    <div class="fg"><label class="fl">Ставка ЗП (₽/изделие, для мастера)</label><input class="fi" type="number" id="empRate" placeholder="0" inputmode="numeric"></div>
+    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="empPass" placeholder="Придумайте пароль"></div>
+    <button class="btn" onclick="addEmployee()">Добавить сотрудника</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('adminSetupMo')">Закрыть</button>
+  </div>
+</div>
+
+<!-- ADD BLANK -->
+<div class="mo" id="addBlankMo">
+  <div class="md"><div class="mh"></div><div class="mt">Выдать заготовки мастеру</div>
+    <div class="fg"><label class="fl">Мастер</label><select class="fs" id="blankMaster"></select></div>
+    <div class="fg"><label class="fl">Название изделия</label><input class="fi" id="blankName" placeholder="Столешница, подоконник..."></div>
+    <div class="fg"><label class="fl">Порода дерева</label><input class="fi" id="blankWood" placeholder="Дуб, ясень, орех..."></div>
+    <div class="fg"><label class="fl">Количество заготовок</label><input class="fi" type="number" id="blankQty" placeholder="1" inputmode="numeric" value="1"></div>
+    <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="blankComment" placeholder="Размер, особенности..."></div>
+    <div class="fg"><label class="fl">Дата выдачи (по умолчанию — сегодня)</label>
+      <input class="fi" type="date" id="blankDate">
+    </div>
+    <button class="btn green" onclick="addBlank()">Выдать заготовки →</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('addBlankMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- BLANK DETAIL (мастер принимает) -->
+<div class="mo" id="blankDetailMo">
+  <div class="md"><div class="mh"></div><div class="mt" id="bdTitle">Заготовка</div>
+    <div id="bdContent"></div>
+    <div id="bdActions"></div>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('blankDetailMo')">Закрыть</button>
+  </div>
+</div>
+
+<!-- ITEM DETAIL (кладовщик принимает) -->
+<div class="mo" id="itemAcceptMo">
+  <div class="md"><div class="mh"></div><div class="mt" id="iaTitle">Приёмка изделия</div>
+    <div id="iaContent"></div>
+    <div class="fg" style="margin-top:12px"><label class="fl">Название изделия</label><input class="fi" id="iaName"></div>
+    <div class="row2">
+      <div class="fg"><label class="fl">Цена розница (₽)</label><input class="fi" type="number" id="iaPrice" inputmode="numeric"></div>
+      <div class="fg"><label class="fl">Цена опт (₽)</label><input class="fi" type="number" id="iaPriceOpt" inputmode="numeric"></div>
+    </div>
+    <div class="fg"><label class="fl">ЗП мастера (₽)</label><input class="fi" type="number" id="iaZP" inputmode="numeric"></div>
+    <div style="background:var(--s2);border-radius:10px;padding:10px;margin-bottom:12px;font-size:12px;color:var(--t2)">
+      № изделия присваивается автоматически · Дата и время фиксируются автоматически
+    </div>
+    <button class="btn green" onclick="acceptItem()">✅ Принять на склад</button>
+    <button class="btn red" style="margin-top:8px" onclick="rejectItem()">↩️ Вернуть мастеру</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('itemAcceptMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- SHIPMENT -->
+<div class="mo" id="shipmentMo">
+  <div class="md"><div class="mh"></div><div class="mt">Отгрузка в магазин</div>
+    <div class="fg"><label class="fl">Магазин</label><select class="fs" id="shipDest"></select></div>
+    <div class="fg"><label class="fl">Выберите изделия</label>
+      <div id="shipItemsList" style="background:var(--bg);border-radius:10px;padding:8px;max-height:220px;overflow-y:auto"></div>
+    </div>
+    <div style="background:var(--s2);border-radius:10px;padding:10px;margin-bottom:12px;font-size:12px;color:var(--t2)">
+      № накладной присваивается автоматически · Дата и время фиксируются автоматически
+    </div>
+    <button class="btn green" onclick="createShipment()">📦 Создать накладную и отгрузить</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('shipmentMo')">Отмена</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- FIREBASE -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
+  authDomain:"izhitsa-6327c.firebaseapp.com",
+  projectId:"izhitsa-6327c",
+  storageBucket:"izhitsa-6327c.firebasestorage.app",
+  messagingSenderId:"1025102190040",
+  appId:"1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
+});
+const db = firebase.firestore();
+db.enablePersistence().catch(e=>console.log('Persist:',e.code));
+
+window.addEventListener('online', ()=>setSync('online'));
+window.addEventListener('offline', ()=>setSync('offline'));
+function setSync(s){
+  const dot=document.getElementById('sdot'),txt=document.getElementById('stxt');
+  if(!dot||!txt)return;
+  dot.style.background=s==='online'?'#60f090':s==='offline'?'#f06060':'#c8f060';
+  txt.textContent=s==='online'?'Онлайн — синхронизировано':s==='offline'?'Офлайн — данные сохранятся':'Синхронизация...';
+}
+
+// ════════ STATE ════════
+let session = JSON.parse(sessionStorage.getItem('ws_session')||'null');
+let employees = [];
+let blanks = [];
+let items = [];
+let extraWorks = [];
+let shipments = [];
+let zpPayments = [];
+let selectedShipItems = new Set();
+let currentBlankId = null;
+let currentItemId = null;
+let extraWorkCats = JSON.parse(localStorage.getItem('ws_extra_cats')||'["Шлифовка","Покраска","Пропитка","Сборка","Доставка","Прочее"]');
+
+const ROLES = {
+  заготовщик: {tabs:['dash','blanks','extrawork'], label:'🪚 Заготовщик'},
+  мастер:      {tabs:['dash','mywork','zp'], label:'🔨 Мастер'},
+  кладовщик:   {tabs:['dash','warehouse'], label:'📦 Кладовщик'},
+  управляющий: {tabs:['dash','warehouse','zp','zpay','stats','admin'], label:'👑 Управляющий'},
+};
+
+const TAB_CFG = {
+  dash:      {icon:'🏠', label:'Главная', page:'pg-dash'},
+  blanks:    {icon:'🪚', label:'Заготовки', page:'pg-blanks'},
+  extrawork: {icon:'🛠', label:'Доп.работы', page:'pg-extrawork'},
+  mywork:    {icon:'🔨', label:'Моя работа', page:'pg-mywork'},
+  warehouse: {icon:'📦', label:'Склад', page:'pg-warehouse'},
+  zp:        {icon:'💰', label:'ЗП', page:'pg-zp'},
+  zpay:      {icon:'💳', label:'Выплаты', page:'pg-zpay'},
+  stats:     {icon:'📊', label:'Статистика', page:'pg-stats'},
+  admin:     {icon:'👑', label:'Настройки', page:'pg-admin'},
+};
+
+// ════════ UTILS ════════
+function fmt(n){return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+'₽';}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function now(){return new Date().toISOString();}
+function fmtDT(iso){if(!iso)return'';const d=new Date(iso);return d.toLocaleDateString('ru-RU',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}
+function elapsed(start,end){if(!start)return'';const ms=(end?new Date(end):new Date())-new Date(start);const h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);return h>0?h+'ч '+m+'м':m+'м';}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
+function openMo(id){document.getElementById(id).classList.add('open');}
+function closeMo(id){document.getElementById(id).classList.remove('open');}
+function showPg(name,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('pg-'+name).classList.add('active');
+  el?.classList.add('active');
+  if(name==='mywork')    renderMyWork();
+  if(name==='blanks')    renderBlanks();
+  if(name==='warehouse') renderWarehouse();
+  if(name==='zp')        renderZP();
+  if(name==='zpay')      renderZPay();
+  if(name==='stats')     renderStats();
+  if(name==='admin')     renderAdmin();
+  if(name==='extrawork') { renderExtraWorkList(); }
+  if(name==='dash')      renderDash();
+}
+
+// ════════ EMPLOYEES ════════
+function getEmployees(){return JSON.parse(localStorage.getItem('ws_employees')||'[]');}
+function saveEmployees(d){localStorage.setItem('ws_employees',JSON.stringify(d));}
+
+function addEmployee(){
+  const name=document.getElementById('empName').value.trim();
+  const role=document.getElementById('empRole').value;
+  const rate=parseFloat(document.getElementById('empRate').value)||0;
+  const pass=document.getElementById('empPass').value;
+  if(!name||!pass){showToast('Заполните имя и пароль');return;}
+  const emps=getEmployees();
+  emps.push({id:uid(),name,role,rate,pass});
+  saveEmployees(emps);
+  // Also save to Firebase
+  db.collection('ws_employees').add({id:uid(),name,role,rate,createdAt:now()}).catch(console.error);
+  ['empName','empPass','empRate'].forEach(id=>document.getElementById(id).value='');
+  renderEmployeeList();
+  showToast('✅ Сотрудник добавлен');
+}
+
+function renderEmployeeList(){
+  const c=document.getElementById('employeeList');if(!c)return;
+  const emps=getEmployees();
+  if(!emps.length){c.innerHTML='<div style="font-size:12px;color:var(--t2)">Сотрудников нет</div>';return;}
+  const roleIcons={заготовщик:'🪚',мастер:'🔨',кладовщик:'📦',управляющий:'👑'};
+  c.innerHTML=emps.map((e,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+    <div style="font-size:20px">${roleIcons[e.role]||'👤'}</div>
+    <div style="flex:1"><div style="font-size:13px;font-weight:600">${e.name}</div><div style="font-size:11px;color:var(--t2)">${e.role}${e.rate?' · '+fmt(e.rate)+'/изд.':''}</div></div>
+    <button onclick="delEmployee(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>
+  </div>`).join('');
+}
+
+function delEmployee(i){const emps=getEmployees();emps.splice(i,1);saveEmployees(emps);renderEmployeeList();}
+
+function selectRole(role,el){
+  document.querySelectorAll('.role-card').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');
+  const emps=getEmployees().filter(e=>e.role===role);
+  document.getElementById('loginUser').innerHTML=emps.length
+    ?emps.map(e=>`<option value="${e.id}">${e.name}</option>`).join('')
+    :'<option value="">— нет сотрудников —</option>';
+}
+
+// ════════ LOGIN ════════
+function doLogin(){
+  const uid_sel=document.getElementById('loginUser').value;
+  const pass=document.getElementById('loginPass').value;
+  const emp=getEmployees().find(e=>e.id===uid_sel);
+  const errEl=document.getElementById('loginErr');
+  if(!emp){errEl.style.display='block';errEl.textContent='Выберите сотрудника';return;}
+  if(emp.pass!==pass){errEl.style.display='block';errEl.textContent='Неверный пароль';return;}
+  errEl.style.display='none';
+  session={id:emp.id,name:emp.name,role:emp.role,rate:emp.rate||0};
+  sessionStorage.setItem('ws_session',JSON.stringify(session));
+  startApp();
+}
+
+function doLogout(){
+  sessionStorage.removeItem('ws_session');
+  session=null;
+  document.getElementById('appScreen').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+}
+
+function startApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appScreen').style.display='block';
+  document.getElementById('hdrName').textContent=session.name;
+  document.getElementById('hdrRole').textContent={заготовщик:'🪚 Заготовщик',мастер:'🔨 Мастер',кладовщик:'📦 Кладовщик',управляющий:'👑 Управляющий'}[session.role]||session.role;
+  buildTabs();
+  startListeners();
+  renderExtraCatSelect('ewCat');
+  renderExtraCatSelect('editEwCat');
+  // Populate master select for extra work
+  const masters = getEmployees().filter(e=>e.role==='мастер');
+  const ewSel = document.getElementById('ewMaster');
+  if(ewSel) ewSel.innerHTML = masters.map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+  setSync(navigator.onLine?'online':'offline');
+  // Init date defaults
+  const todayStr = new Date().toISOString().split('T')[0];
+  const blankD = document.getElementById('blankDate'); if(blankD) blankD.value = todayStr;
+  const ewD = document.getElementById('ewDate'); if(ewD) ewD.value = todayStr;
+  setStatsDateInputs('month');
+}
+
+function buildTabs(){
+  const tabs=ROLES[session.role]?.tabs||['dash'];
+  document.getElementById('mainTabs').innerHTML=tabs.map(k=>`
+    <button class="tab ${k==='dash'?'active':''}" onclick="showPg('${k}',this)">
+      <div class="ti">${TAB_CFG[k].icon}</div>
+      <span>${TAB_CFG[k].label}</span>
+    </button>`).join('');
+}
+
+// ════════ FIREBASE LISTENERS ════════
+function startListeners(){
+  // Blanks
+  db.collection('ws_blanks').orderBy('createdAt','desc').onSnapshot(snap=>{
+    blanks=snap.docs.map(d=>({_id:d.id,...d.data()}));
+    renderDash(); renderBlanks(); renderMyWork(); updateBadges();
+  },console.error);
+  // Items
+  db.collection('ws_items').orderBy('createdAt','desc').onSnapshot(snap=>{
+    items=snap.docs.map(d=>({_id:d.id,...d.data()}));
+    renderDash(); renderMyWork(); renderWarehouse(); renderZP(); renderAdmin(); updateBadges();
+  },console.error);
+  // Shipments
+  db.collection('ws_shipments').orderBy('createdAt','desc').onSnapshot(snap=>{
+    shipments=snap.docs.map(d=>({_id:d.id,...d.data()}));
+  },console.error);
+  // Extra works
+  db.collection('ws_extra_works').orderBy('createdAt','desc').onSnapshot(snap=>{
+    extraWorks=snap.docs.map(d=>({_id:d.id,...d.data()}));
+    renderExtraWorkList(); renderZPay(); renderStats();
+  },console.error);
+  // Shops from admin
+  db.collection('iz_admin_shops').onSnapshot(snap=>{
+    const shops=snap.docs.map(d=>d.data().name).filter(Boolean);
+    const sel=document.getElementById('shipDest');
+    if(sel) sel.innerHTML=shops.length?shops.map(s=>`<option>${s}</option>`).join(''):'<option>Дерево</option>';
+  },()=>{});
+}
+
+function updateBadges(){
+  // Notification badges
+  const myBlanks=blanks.filter(b=>b.masterId===session.id&&b.status==='new');
+  const pendingItems=items.filter(i=>i.status==='delivered');
+  // Update tab badges if needed
+}
+
+// ════════ DASH ════════
+function renderDash(){
+  const notifs=[];
+  if(session.role==='мастер'){
+    const newBlanks=blanks.filter(b=>b.masterId===session.id&&b.status==='new');
+    if(newBlanks.length) notifs.push({type:'new',icon:'📦',title:`${newBlanks.length} новых заготовок ждут вас`,sub:'Нажмите чтобы принять в работу',action:()=>showPg('mywork',document.querySelector('.tab[onclick*=mywork]'))});
+  }
+  if(session.role==='кладовщик'||session.role==='управляющий'){
+    const delivered=items.filter(i=>i.status==='delivered');
+    if(delivered.length) notifs.push({type:'warn',icon:'🔨',title:`${delivered.length} изделий ждут приёмки`,sub:'Мастера сдали изделия на склад',action:()=>showPg('warehouse',document.querySelector('.tab[onclick*=warehouse]'))});
+  }
+  const nd=document.getElementById('dashNotifications');
+  nd.innerHTML=notifs.map(n=>`<div class="notif ${n.type}" onclick="this._action&&this._action()">
+    <div class="notif-ico">${n.icon}</div>
+    <div class="notif-body"><div class="notif-title">${n.title}</div><div class="notif-sub">${n.sub}</div></div>
+    <div style="color:var(--t2);font-size:18px">›</div>
+  </div>`).join('');
+  // Set action handlers
+  nd.querySelectorAll('.notif').forEach((el,i)=>{ el._action=notifs[i]?.action; });
+
+  const dc=document.getElementById('dashContent');
+  if(session.role==='мастер'){
+    const myItems=items.filter(i=>i.masterId===session.id);
+    const inWork=myItems.filter(i=>i.status==='in_work').length;
+    const done=myItems.filter(i=>['done','delivered','received'].includes(i.status)).length;
+    const zpTotal=myItems.filter(i=>i.zpPaid).reduce((s,i)=>s+(i.zp||0),0);
+    dc.innerHTML=`<div class="srow">
+      <div class="sc"><div class="sc-v" style="color:var(--a4)">${inWork}</div><div class="sc-l">В работе</div></div>
+      <div class="sc"><div class="sc-v" style="color:var(--a6)">${done}</div><div class="sc-l">Сдано</div></div>
+      <div class="sc"><div class="sc-v" style="color:var(--a5)">${fmt(zpTotal)}</div><div class="sc-l">ЗП получено</div></div>
+    </div>`;
+  } else if(session.role==='заготовщик'){
+    const today=blanks.filter(b=>b.createdById===session.id&&b.createdAt?.startsWith(new Date().toISOString().slice(0,10)));
+    dc.innerHTML=`<div class="card"><div class="ctitle">Выдано сегодня</div>
+      ${today.length?today.map(b=>`<div class="li"><div class="li-ico" style="background:#1a1e2e">🪚</div><div class="li-info"><div class="li-name">${b.itemName}</div><div class="li-sub">→ ${b.masterName} · ${b.wood} · ${fmtDT(b.createdAt)}</div></div><span class="badge b-${b.status==='new'?'new':'accepted'}">${b.status==='new'?'⏳ Ожидает':'✅ Принято'}</span></div>`).join(''):'<div class="empty"><div class="ei">🪚</div>Сегодня ничего не выдавали</div>'}
+    </div>`;
+  } else if(session.role==='кладовщик'){
+    const stock=items.filter(i=>i.status==='received').length;
+    const delivered=items.filter(i=>i.status==='delivered').length;
+    dc.innerHTML=`<div class="srow">
+      <div class="sc"><div class="sc-v" style="color:var(--a4)">${delivered}</div><div class="sc-l">На приёмке</div></div>
+      <div class="sc"><div class="sc-v" style="color:var(--accent)">${stock}</div><div class="sc-l">На складе</div></div>
+    </div>`;
+  } else if(session.role==='управляющий'){
+    const inWork=items.filter(i=>i.status==='in_work').length;
+    const delivered=items.filter(i=>i.status==='delivered').length;
+    const stock=items.filter(i=>i.status==='received').length;
+    const zpMonth=calcMonthZP();
+    dc.innerHTML=`<div class="srow">
+      <div class="sc"><div class="sc-v" style="color:var(--a4)">${inWork}</div><div class="sc-l">В работе</div></div>
+      <div class="sc"><div class="sc-v" style="color:var(--a5)">${delivered}</div><div class="sc-l">На приёмке</div></div>
+      <div class="sc"><div class="sc-v" style="color:var(--accent)">${stock}</div><div class="sc-l">На складе</div></div>
+    </div>
+    <div class="card"><div class="ctitle">ЗП к выплате (месяц)</div>
+      <div style="font-family:'Unbounded',sans-serif;font-size:22px;font-weight:700;color:var(--a5)">${fmt(zpMonth)}</div>
+    </div>`;
+  }
+}
+
+// ════════ BLANKS (Заготовщик) ════════
+function renderMasterSelect(){
+  const masters=getEmployees().filter(e=>e.role==='мастер');
+  const opts=masters.length?masters.map(m=>`<option value="${m.id}">${m.name}</option>`).join(''):'<option value="">— нет мастеров —</option>';
+  ['blankMaster','ewMaster'].forEach(id=>{ const s=document.getElementById(id); if(s) s.innerHTML=opts; });
+}
+
+function addBlank(){
+  const masterId=document.getElementById('blankMaster').value;
+  const itemName=document.getElementById('blankName').value.trim();
+  const wood=document.getElementById('blankWood').value.trim();
+  const qty=parseInt(document.getElementById('blankQty').value)||1;
+  const comment=document.getElementById('blankComment').value.trim();
+  if(!masterId||!itemName){showToast('Заполните мастера и изделие');return;}
+  const master=getEmployees().find(e=>e.id===masterId);
+  const blank={
+    id:uid(),itemName,wood,qty,comment,
+    masterId,masterName:master?.name||'',
+    createdById:session.id,createdByName:session.name,
+    status:'new',createdAt:now()
+  };
+  db.collection('ws_blanks').add(blank)
+    .then(()=>{
+      ['blankName','blankWood','blankComment'].forEach(id=>document.getElementById(id).value='');
+      document.getElementById('blankQty').value='1';
+      closeMo('addBlankMo');
+      showToast(`✅ Заготовки переданы мастеру ${master?.name||''}`);
+    }).catch(e=>{ showToast('Ошибка: '+e.message); });
+}
+
+function renderBlanks(){
+  const c=document.getElementById('blanksList');if(!c)return;
+  let list=blanks;
+  if(session.role==='заготовщик') list=blanks.filter(b=>b.createdById===session.id);
+  if(!list.length){c.innerHTML='<div class="empty"><div class="ei">🪚</div>Нет выдач</div>';return;}
+  c.innerHTML=list.slice(0,30).map(b=>`
+    <div class="li">
+      <div class="li-ico" style="background:#1a1e2e">🪚</div>
+      <div class="li-info">
+        <div class="li-name">${b.itemName}${b.qty>1?' ('+b.qty+' шт.)':''}</div>
+        <div class="li-sub">→ ${b.masterName} · 🌳 ${b.wood||'—'} · ${fmtDT(b.createdAt)}</div>
+        ${b.comment?`<div class="li-sub">${b.comment}</div>`:''}
+      </div>
+      <span class="badge ${b.status==='new'?'b-new':b.status==='accepted'?'b-accepted':'b-working'}">${
+        b.status==='new'?'⏳ Ожидает':b.status==='accepted'?'✅ Принято':'🔨 В работе'
+      }</span>
+    </div>`).join('');
+}
+
+// ════════ MY WORK (Мастер) ════════
+function renderMyWork(){
+  const myBlanks=blanks.filter(b=>b.masterId===session.id);
+  const myItems=items.filter(i=>i.masterId===session.id);
+  const newB=myBlanks.filter(b=>b.status==='new').length;
+  const inW=myItems.filter(i=>i.status==='in_work').length;
+  const done=myItems.filter(i=>['done','delivered','received','shipped'].includes(i.status)).length;
+  document.getElementById('mwNew').textContent=newB;
+  document.getElementById('mwWork').textContent=inW;
+  document.getElementById('mwDone').textContent=done;
+
+  const c=document.getElementById('myWorkList');if(!c)return;
+  const allWork=[
+    ...myBlanks.filter(b=>b.status==='new').map(b=>({...b,_type:'blank'})),
+    ...myItems.map(i=>({...i,_type:'item'}))
+  ];
+  if(!allWork.length){c.innerHTML='<div class="empty"><div class="ei">🔨</div>Нет изделий</div>';return;}
+  c.innerHTML=allWork.map(w=>{
+    if(w._type==='blank'){
+      return`<div class="li" onclick="openBlankDetail('${w._id}')">
+        <div class="li-ico" style="background:#1a1e2e">📦</div>
+        <div class="li-info"><div class="li-name">Заготовка: ${w.itemName}</div>
+        <div class="li-sub">🌳 ${w.wood||'—'} · ${w.qty||1} шт. · от ${w.createdByName}</div>
+        <div class="li-sub">Поступила: ${fmtDT(w.createdAt)}</div></div>
+        <span class="badge b-new">⏳ Новая</span>
+      </div>`;
+    } else {
+      const statusMap={in_work:'🔨 В работе',done:'✅ Готово',delivered:'📦 Сдано',received:'✅ Принято',shipped:'🚚 Отгружено'};
+      const badgeMap={in_work:'b-working',done:'b-done',delivered:'b-delivered',received:'b-received',shipped:'b-shipped'};
+      const timeSpent=w.status==='in_work'?elapsed(w.startedAt):elapsed(w.startedAt,w.doneAt);
+      return`<div class="li" onclick="openItemAction('${w._id}')">
+        <div class="li-ico" style="background:#1e2a14">🔨</div>
+        <div class="li-info"><div class="li-name">${w.name||w.itemName}</div>
+        <div class="li-sub">🌳 ${w.wood||'—'} · Начато: ${fmtDT(w.startedAt)}</div>
+        ${timeSpent?`<div class="li-sub">⏱ Время: ${timeSpent}</div>`:''}
+        ${w.zp&&w.zpPaid?`<div class="li-sub" style="color:var(--a5)">💰 ЗП: ${fmt(w.zp)}</div>`:''}
+        </div>
+        <span class="badge ${badgeMap[w.status]||'b-new'}">${statusMap[w.status]||w.status}</span>
+      </div>`;
+    }
+  }).join('');
+}
+
+function openBlankDetail(id){
+  const b=blanks.find(x=>x._id===id);if(!b)return;
+  document.getElementById('bdTitle').textContent='Заготовки от заготовщика';
+  document.getElementById('bdContent').innerHTML=`
+    <div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:15px;font-weight:700;margin-bottom:8px">${b.itemName}</div>
+      <div class="at-row"><span class="at-lbl">Порода дерева</span><span class="at-val">🌳 ${b.wood||'—'}</span></div>
+      <div class="at-row"><span class="at-lbl">Количество</span><span class="at-val">${b.qty||1} шт.</span></div>
+      <div class="at-row"><span class="at-lbl">От заготовщика</span><span class="at-val">${b.createdByName}</span></div>
+      <div class="at-row"><span class="at-lbl">Передано</span><span class="at-val">${fmtDT(b.createdAt)}</span></div>
+      ${b.comment?`<div class="at-row"><span class="at-lbl">Комментарий</span><span class="at-val">${b.comment}</span></div>`:''}
+    </div>`;
+  currentBlankId=id;
+  document.getElementById('bdActions').innerHTML=b.status==='new'?`
+    <div style="font-size:12px;color:var(--t2);margin-bottom:10px;text-align:center">Укажите сколько заготовок фактически забрали:</div>
+    <div class="fg"><label class="fl">Кол-во принято фактически</label><input class="fi" type="number" id="acceptQty" value="${b.qty||1}" inputmode="numeric"></div>
+    <button class="btn green" onclick="acceptBlank()">✅ Принять в работу</button>`:'';
+  openMo('blankDetailMo');
+}
+
+function acceptBlank(){
+  const qty=parseInt(document.getElementById('acceptQty').value)||1;
+  const b=blanks.find(x=>x._id===currentBlankId);if(!b)return;
+  const emp=getEmployees().find(e=>e.id===session.id);
+  // Create work item
+  const item={
+    id:uid(),blankId:currentBlankId,
+    name:b.itemName,itemName:b.itemName,wood:b.wood,qty,
+    masterId:session.id,masterName:session.name,masterRate:emp?.rate||session.rate||0,
+    status:'in_work',
+    createdAt:now(),startedAt:now(),
+  };
+  db.collection('ws_items').add(item)
+    .then(()=>{
+      // Update blank status
+      db.collection('ws_blanks').doc(currentBlankId).update({status:'accepted',acceptedAt:now(),acceptedQty:qty});
+      closeMo('blankDetailMo');
+      showToast('✅ Заготовки приняты в работу! Таймер запущен.');
+    }).catch(e=>showToast('Ошибка: '+e.message));
+}
+
+function openItemAction(id){
+  const item=items.find(i=>i._id===id);if(!item)return;
+  currentItemId=id;
+  const timeSpent=item.status==='in_work'?elapsed(item.startedAt):elapsed(item.startedAt,item.doneAt);
+  document.getElementById('bdTitle').textContent='Изделие: '+item.name;
+  document.getElementById('bdContent').innerHTML=`
+    <div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div class="at-row"><span class="at-lbl">Порода</span><span class="at-val">🌳 ${item.wood||'—'}</span></div>
+      <div class="at-row"><span class="at-lbl">Начато</span><span class="at-val">${fmtDT(item.startedAt)}</span></div>
+      <div class="at-row"><span class="at-lbl">Время работы</span><span class="at-val" id="liveTimer">⏱ ${timeSpent||'—'}</span></div>
+      ${item.zp?`<div class="at-row"><span class="at-lbl">ЗП за изделие</span><span class="at-val" style="color:var(--a5)">${fmt(item.zp)}</span></div>`:''}
+    </div>`;
+  // Live timer
+  if(item.status==='in_work'){
+    setInterval(()=>{const el=document.getElementById('liveTimer');if(el)el.textContent='⏱ '+elapsed(item.startedAt);},30000);
+  }
+  let actions='';
+  if(item.status==='in_work') actions=`<button class="btn teal" onclick="setItemStatus('${id}','done')">✅ Отметить как Готово</button>`;
+  else if(item.status==='done') actions=`<button class="btn green" onclick="setItemStatus('${id}','delivered')">📦 Сдать на склад</button>`;
+  document.getElementById('bdActions').innerHTML=actions;
+  openMo('blankDetailMo');
+}
+
+function setItemStatus(id,status){
+  const updates={status};
+  if(status==='done') updates.doneAt=now();
+  if(status==='delivered') updates.deliveredAt=now();
+  db.collection('ws_items').doc(id).update(updates)
+    .then(()=>{
+      closeMo('blankDetailMo');
+      showToast(status==='done'?'✅ Статус: Готово':'📦 Сдано на склад — ждите приёмки кладовщиком');
+    }).catch(e=>showToast('Ошибка: '+e.message));
+}
+
+// ════════ WAREHOUSE (Кладовщик) ════════
+function renderWarehouse(){
+  const pending=items.filter(i=>i.status==='delivered');
+  const stock=items.filter(i=>i.status==='received');
+  const shipped=items.filter(i=>i.status==='shipped');
+  document.getElementById('whPending').textContent=pending.length;
+  document.getElementById('whStock').textContent=stock.length;
+  document.getElementById('whShipped').textContent=shipped.length;
+
+  const wn=document.getElementById('whNotifications');
+  wn.innerHTML=pending.length?`<div class="notif warn" style="margin-bottom:12px"><div class="notif-ico">🔔</div><div class="notif-body"><div class="notif-title">${pending.length} изделий ждут приёмки</div><div class="notif-sub">Мастера сдали изделия на склад</div></div></div>`:'';
+
+  const pl=document.getElementById('whPendingList');
+  pl.innerHTML=pending.length?pending.map(item=>`
+    <div class="li" onclick="openItemAccept('${item._id}')">
+      <div class="li-ico" style="background:#2a1e14">🔨</div>
+      <div class="li-info">
+        <div class="li-name">${item.name||item.itemName}</div>
+        <div class="li-sub">👤 ${item.masterName} · 🌳 ${item.wood||'—'}</div>
+        <div class="li-sub">Сдано: ${fmtDT(item.deliveredAt)} · Время: ${elapsed(item.startedAt,item.deliveredAt)}</div>
+      </div>
+      <div style="font-size:20px;color:var(--t2)">›</div>
+    </div>`).join(''):'<div style="font-size:12px;color:var(--t2);padding:6px 0">Нет изделий на приёмке</div>';
+
+  const sl=document.getElementById('whStockList');
+  sl.innerHTML=stock.length?stock.map(item=>`
+    <div class="li">
+      <div class="li-ico" style="background:#1e2a14">📦</div>
+      <div class="li-info">
+        <div class="li-name">№${item.itemNum||'—'} ${item.name||item.itemName}</div>
+        <div class="li-sub">🌳 ${item.wood||'—'} · ${fmt(item.price||0)}</div>
+        <div class="li-sub">Принято: ${fmtDT(item.receivedAt)}</div>
+      </div>
+      <span class="badge b-received">${fmt(item.price||0)}</span>
+    </div>`).join(''):'<div style="font-size:12px;color:var(--t2);padding:6px 0">Склад пуст</div>';
+}
+
+function openItemAccept(id){
+  const item=items.find(i=>i._id===id);if(!item)return;
+  currentItemId=id;
+  // Auto next number
+  const allNums=items.filter(i=>i.itemNum).map(i=>parseInt(i.itemNum)||0);
+  const nextNum=allNums.length?Math.max(...allNums)+1:1;
+  document.getElementById('iaTitle').textContent='Приёмка от '+item.masterName;
+  document.getElementById('iaContent').innerHTML=`
+    <div style="background:var(--s2);border-radius:10px;padding:12px;margin-bottom:12px">
+      <div class="at-row"><span class="at-lbl">Изделие</span><span class="at-val">${item.itemName}</span></div>
+      <div class="at-row"><span class="at-lbl">Порода</span><span class="at-val">🌳 ${item.wood||'—'}</span></div>
+      <div class="at-row"><span class="at-lbl">Мастер</span><span class="at-val">${item.masterName}</span></div>
+      <div class="at-row"><span class="at-lbl">Время изготовления</span><span class="at-val">⏱ ${elapsed(item.startedAt,item.deliveredAt)}</span></div>
+      <div class="at-row"><span class="at-lbl">№ изделия</span><span class="at-val" style="color:var(--accent)">будет присвоен №${String(nextNum).padStart(3,'0')}</span></div>
+    </div>`;
+  // Pre-fill master rate
+  const master=getEmployees().find(e=>e.id===item.masterId);
+  const iaDEl = document.getElementById('iaDate'); if(iaDEl) iaDEl.value = new Date().toISOString().split('T')[0];
+  document.getElementById('iaName').value=item.itemName||'';
+  document.getElementById('iaZP').value=master?.rate||item.masterRate||0;
+  document.getElementById('iaPrice').value='';
+  document.getElementById('iaPriceOpt').value='';
+  openMo('itemAcceptMo');
+}
+
+function acceptItem(){
+  const item=items.find(i=>i._id===currentItemId);if(!item)return;
+  const price=parseFloat(document.getElementById('iaPrice').value)||0;
+  const priceOpt=parseFloat(document.getElementById('iaPriceOpt').value)||0;
+  const zp=parseFloat(document.getElementById('iaZP').value)||0;
+  const name=document.getElementById('iaName').value.trim()||item.itemName;
+  if(!price){showToast('Укажите цену');return;}
+  const allNums=items.filter(i=>i.itemNum).map(i=>parseInt(i.itemNum)||0);
+  const nextNum=allNums.length?Math.max(...allNums)+1:1;
+  const itemNum=String(nextNum).padStart(3,'0');
+  const iaDateVal = document.getElementById('iaDate')?.value;
+  const iaTS = iaDateVal ? new Date(iaDateVal).toISOString() : now();
+  db.collection('ws_items').doc(currentItemId).update({
+    status:'received',name,price,priceOpt,zp,zpPaid:true,itemNum,
+    receivedAt:iaTS,receivedById:session.id,receivedByName:session.name
+  }).then(()=>{
+    // Also add to main warehouse
+    db.collection('iz_items').add({
+      id:uid(),num:itemNum,name,wood:item.wood||'',
+      masterId:item.masterId,masterName:item.masterName,
+      price,priceOpt,zp,status:'warehouse',locationName:'Склад',
+      createdAt:now()
+    }).catch(console.error);
+    closeMo('itemAcceptMo');
+    showToast(`✅ №${itemNum} принято! ЗП ${fmt(zp)} начислена ${item.masterName}`);
+  }).catch(e=>showToast('Ошибка: '+e.message));
+}
+
+function rejectItem(){
+  const reason=prompt('Причина возврата мастеру:');
+  if(reason===null)return;
+  db.collection('ws_items').doc(currentItemId).update({
+    status:'in_work',rejectedAt:now(),rejectReason:reason,
+    rejectedById:session.id
+  }).then(()=>{closeMo('itemAcceptMo');showToast('↩️ Возвращено мастеру');})
+  .catch(e=>showToast('Ошибка: '+e.message));
+}
+
+// ════════ SHIPMENT ════════
+function openShipmentMo(){
+  const stock=items.filter(i=>i.status==='received');
+  const c=document.getElementById('shipItemsList');
+  selectedShipItems.clear();
+  c.innerHTML=stock.length?stock.map(item=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--t2);width:36px">№${item.itemNum||'—'}</div>
+      <div style="flex:1;font-size:12px">${item.name||item.itemName}<br><span style="color:var(--t2);font-size:10px">🌳 ${item.wood||'—'} · ${fmt(item.price||0)}</span></div>
+      <div class="inv-check" id="ss_${item._id}" onclick="toggleShipSel('${item._id}',this)" style="width:22px;height:22px;border-radius:6px;border:2px solid var(--border);background:var(--s2);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:12px;color:#0f0f13"></div>
+    </div>`).join(''):'<div style="font-size:12px;color:var(--t2);padding:8px">Нет изделий на складе</div>';
+  openMo('shipmentMo');
+}
+
+function toggleShipSel(id,el){
+  if(selectedShipItems.has(id)){selectedShipItems.delete(id);el.style.background='var(--s2)';el.style.borderColor='var(--border)';el.textContent='';}
+  else{selectedShipItems.add(id);el.style.background='var(--accent)';el.style.borderColor='var(--accent)';el.textContent='✓';}
+}
+
+function createShipment(){
+  if(!selectedShipItems.size){showToast('Выберите изделия');return;}
+  const dest=document.getElementById('shipDest').value;
+  const shipItems=items.filter(i=>selectedShipItems.has(i._id));
+  const allShipNums=shipments.map(s=>parseInt(s.num?.replace('НАК-',''))||0);
+  const nextShipNum=allShipNums.length?Math.max(...allShipNums)+1:1;
+  const shipNum='НАК-'+String(nextShipNum).padStart(3,'0');
+  const shipDoc={
+    num:shipNum,destName:dest,
+    items:shipItems.map(i=>({_id:i._id,itemNum:i.itemNum,name:i.name||i.itemName,wood:i.wood||'',price:i.price||0,priceOpt:i.priceOpt||0,length:i.length||'',width:i.width||''})),
+    createdById:session.id,createdByName:session.name,
+    status:'pending',createdAt:now()
+  };
+  db.collection('ws_shipments').add(shipDoc).then(ref=>{
+    // Update items status
+    const batch=db.batch();
+    shipItems.forEach(i=>{
+      batch.update(db.collection('ws_items').doc(i._id),{status:'shipped',shippedAt:now(),shippedTo:dest,shipmentNum:shipNum});
+    });
+    batch.commit();
+    // Create invoice in main iz_invoices
+    db.collection('iz_invoices').add({
+      id:uid(),num:shipNum,date:new Date().toISOString().split('T')[0],
+      destName:dest,items:shipDoc.items,status:'pending',createdAt:now()
+    }).catch(console.error);
+    selectedShipItems.clear();
+    closeMo('shipmentMo');
+    showToast(`✅ Накладная ${shipNum} создана и отправлена в ${dest}`);
+  }).catch(e=>showToast('Ошибка: '+e.message));
+}
+
+// ════════ ZP ════════
+function calcMonthZP(){
+  const n=new Date(),m=n.getMonth(),y=n.getFullYear();
+  return items.filter(i=>i.zpPaid&&i.receivedAt&&new Date(i.receivedAt).getMonth()===m&&new Date(i.receivedAt).getFullYear()===y).reduce((s,i)=>s+(i.zp||0),0);
+}
+
+function renderZP(){
+  const c=document.getElementById('zpContent');if(!c)return;
+  const n=new Date(),m=n.getMonth(),y=n.getFullYear();
+  let myItems=items.filter(i=>i.receivedAt&&new Date(i.receivedAt).getMonth()===m&&new Date(i.receivedAt).getFullYear()===y);
+  if(session.role==='мастер') myItems=myItems.filter(i=>i.masterId===session.id);
+  const monthName=n.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
+
+  if(session.role==='мастер'){
+    const total=myItems.filter(i=>i.zpPaid).reduce((s,i)=>s+(i.zp||0),0);
+    c.innerHTML=`<div class="card" style="background:linear-gradient(135deg,#1e1a2e,#1a1e2e);border-color:var(--a5)">
+      <div class="ctitle">Моя ЗП — ${monthName}</div>
+      <div style="font-family:'Unbounded',sans-serif;font-size:24px;font-weight:700;color:var(--a5)">${fmt(total)}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:4px">${myItems.filter(i=>i.zpPaid).length} изделий</div>
+    </div>
+    <div class="card"><div class="ctitle">По изделиям</div>
+      ${myItems.filter(i=>i.zpPaid).map(i=>`<div class="at-row"><span class="at-lbl">№${i.itemNum||'—'} ${i.name||i.itemName}<br><span style="font-size:10px">${fmtDT(i.receivedAt)} · ⏱ ${elapsed(i.startedAt,i.receivedAt)}</span></span><span class="at-val" style="color:var(--a5)">+${fmt(i.zp)}</span></div>`).join('')||'<div class="empty" style="padding:12px 0">Нет начислений</div>'}
+    </div>`;
+  } else {
+    // Manager view - grouped by master
+    const byMaster={};
+    myItems.filter(i=>i.zpPaid).forEach(i=>{
+      if(!byMaster[i.masterId])byMaster[i.masterId]={name:i.masterName,items:[],total:0};
+      byMaster[i.masterId].items.push(i);
+      byMaster[i.masterId].total+=(i.zp||0);
+    });
+    const grandTotal=Object.values(byMaster).reduce((s,m)=>s+m.total,0);
+    c.innerHTML=`<div class="card" style="background:linear-gradient(135deg,#1e1a2e,#1a1e2e);border-color:var(--a5)">
+      <div class="ctitle">Итого к выплате — ${monthName}</div>
+      <div style="font-family:'Unbounded',sans-serif;font-size:24px;font-weight:700;color:var(--a5)">${fmt(grandTotal)}</div>
+    </div>`+Object.entries(byMaster).map(([mid,d])=>`
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div><div style="font-size:14px;font-weight:700">${d.name}</div><div style="font-size:11px;color:var(--t2)">${d.items.length} изделий</div></div>
+          <div style="font-family:'Unbounded',sans-serif;font-size:18px;font-weight:700;color:var(--a5)">${fmt(d.total)}</div>
+        </div>
+        ${d.items.map(i=>`<div class="at-row"><span class="at-lbl">№${i.itemNum||'—'} ${i.name||i.itemName}<br><span style="font-size:10px">⏱ ${elapsed(i.startedAt,i.receivedAt)}</span></span><span class="at-val" style="color:var(--inc)">+${fmt(i.zp)}</span></div>`).join('')}
+      </div>`).join('')||'<div class="empty"><div class="ei">💰</div>Нет начислений в этом месяце</div>';
+  }
+}
+
+// ════════ ADMIN ════════
+function renderAdmin(){
+  const ai=document.getElementById('adminAllItems');
+  if(!ai)return;
+  const statusL={in_work:'🔨 В работе',done:'✅ Готово',delivered:'📦 Сдано',received:'На складе',shipped:'🚚 Отгружено'};
+  ai.innerHTML=items.length?items.slice(0,30).map(i=>`
+    <div class="at-row">
+      <span class="at-lbl">${i.name||i.itemName}<br><span style="font-size:10px">👤 ${i.masterName} · ⏱ ${elapsed(i.startedAt,i.receivedAt||undefined)}</span></span>
+      <span class="at-val" style="font-size:11px">${statusL[i.status]||i.status}</span>
+    </div>`).join(''):'<div class="empty"><div class="ei">📋</div>Нет изделий</div>';
+
+  const azp=document.getElementById('adminZP');
+  const n=new Date(),mo=n.getMonth(),y=n.getFullYear();
+  const monthItems=items.filter(i=>i.zpPaid&&i.receivedAt&&new Date(i.receivedAt).getMonth()===mo&&new Date(i.receivedAt).getFullYear()===y);
+  const byM={};
+  monthItems.forEach(i=>{if(!byM[i.masterName])byM[i.masterName]=0;byM[i.masterName]+=(i.zp||0);});
+  azp.innerHTML=Object.entries(byM).length?Object.entries(byM).map(([name,total])=>`
+    <div class="at-row"><span class="at-lbl">${name}</span><span class="at-val" style="color:var(--a5)">${fmt(total)}</span></div>`).join(''):'<div style="font-size:12px;color:var(--t2)">Нет начислений</div>';
+}
+
+
+// ════════════════════════════════
+// EXTRA WORK CATEGORIES
+// ════════════════════════════════
+function saveExtraCats(){ localStorage.setItem('ws_extra_cats', JSON.stringify(extraWorkCats)); }
+
+function addExtraCat(){
+  const name = prompt('Название новой категории работ:');
+  if(!name?.trim()) return;
+  extraWorkCats.push(name.trim());
+  saveExtraCats();
+  renderExtraCatSelect('ewCat');
+  renderExtraCatSelect('editEwCat');
+  showToast('✅ Категория добавлена');
+}
+
+function renderExtraCatSelect(selId){
+  const sel = document.getElementById(selId);
+  if(!sel) return;
+  sel.innerHTML = extraWorkCats.map(c => `<option>${c}</option>`).join('');
+}
+
+// ════════════════════════════════
+// EXTRA WORKS
+// ════════════════════════════════
+function addExtraWork(){
+  const masterId = document.getElementById('ewMaster').value;
+  const cat      = document.getElementById('ewCat').value;
+  const desc     = document.getElementById('ewDesc').value.trim();
+  const zp       = parseFloat(document.getElementById('ewZP').value)||0;
+  if(!masterId||!cat){ showToast('Выберите мастера и вид работы'); return; }
+  const master = getEmployees().find(e=>e.id===masterId);
+  const ewDate = document.getElementById('ewDate')?.value;
+  const ewTS = ewDate ? new Date(ewDate).toISOString() : now();
+  const work = {
+    id:uid(), cat, desc, zp, zpPaid: zp>0,
+    masterId, masterName: master?.name||'',
+    assignedById: session.id, assignedByName: session.name,
+    status: 'pending', createdAt: ewTS
+  };
+  db.collection('ws_extra_works').add(work).then(()=>{
+    ['ewDesc','ewZP'].forEach(id=>document.getElementById(id).value='');
+    closeMo('addExtraMo');
+    showToast(`✅ Работа назначена мастеру ${master?.name||''}`);
+  }).catch(e=>showToast('Ошибка: '+e.message));
+}
+
+function renderExtraWorkList(){
+  const c = document.getElementById('extraWorkList'); if(!c) return;
+  let list = extraWorks;
+  if(session.role==='заготовщик') list = extraWorks.filter(w=>w.assignedById===session.id);
+  if(!list.length){ c.innerHTML='<div class="empty"><div class="ei">🛠</div>Нет доп. работ</div>'; return; }
+  c.innerHTML = list.slice(0,30).map(w=>`
+    <div class="li">
+      <div class="li-ico" style="background:#1a2a1e">🛠</div>
+      <div class="li-info">
+        <div class="li-name">${w.cat}${w.desc?' — '+w.desc:''}</div>
+        <div class="li-sub">→ ${w.masterName} · ${fmtDT(w.createdAt)} · от ${w.assignedByName}</div>
+        ${w.zp?`<div class="li-sub" style="color:var(--a5)">ЗП: ${fmt(w.zp)}</div>`:'<div class="li-sub" style="color:var(--t2)">ЗП не проставлена</div>'}
+      </div>
+      ${session.role==='управляющий'?`<button onclick="openEditExtra('${w._id}')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 8px;color:var(--t2);cursor:pointer;font-size:11px;flex-shrink:0">✏️</button>`:''}
+    </div>`).join('');
+}
+
+let currentExtraId = null;
+function openEditExtra(id){
+  currentExtraId = id;
+  const w = extraWorks.find(x=>x._id===id); if(!w) return;
+  renderExtraCatSelect('editEwCat');
+  document.getElementById('editEwCat').value = w.cat;
+  document.getElementById('editEwDesc').value = w.desc||'';
+  document.getElementById('editEwZP').value = w.zp||0;
+  openMo('editExtraMo');
+}
+
+function saveExtraEdit(){
+  const cat = document.getElementById('editEwCat').value;
+  const desc = document.getElementById('editEwDesc').value.trim();
+  const zp = parseFloat(document.getElementById('editEwZP').value)||0;
+  db.collection('ws_extra_works').doc(currentExtraId).update({cat,desc,zp,zpPaid:zp>0})
+    .then(()=>{ closeMo('editExtraMo'); showToast('✅ Сохранено'); })
+    .catch(e=>showToast('Ошибка: '+e.message));
+}
+
+// ════════════════════════════════
+// ZP PAYMENTS (Выплаты)
+// ════════════════════════════════
+function getZPPayments(){ return JSON.parse(localStorage.getItem('ws_zp_payments')||'[]'); }
+function saveZPPayments(d){ localStorage.setItem('ws_zp_payments', JSON.stringify(d)); }
+function getNextPayDate(masterId){ return localStorage.getItem('ws_next_pay_'+masterId)||''; }
+function saveNextPayDate(masterId, date){ localStorage.setItem('ws_next_pay_'+masterId, date); }
+
+function renderZPay(){
+  const c = document.getElementById('zpayContent'); if(!c) return;
+  const masters = getEmployees().filter(e=>e.role==='мастер');
+  if(!masters.length){ c.innerHTML='<div class="empty"><div class="ei">👤</div>Нет мастеров</div>'; return; }
+  const payments = getZPPayments();
+
+  c.innerHTML = masters.map(m=>{
+    // Earned: all items + extra works with zp
+    const earned = [
+      ...items.filter(i=>i.masterId===m.id && i.zpPaid).reduce((s,i)=>s+(i.zp||0), 0),
+      ...extraWorks.filter(w=>w.masterId===m.id && w.zpPaid).reduce((s,w)=>s+(w.zp||0), 0)
+    ];
+    const totalEarned = items.filter(i=>i.masterId===m.id && i.zpPaid).reduce((s,i)=>s+(i.zp||0),0)
+                      + extraWorks.filter(w=>w.masterId===m.id && w.zpPaid).reduce((s,w)=>s+(w.zp||0),0);
+    const masterPays = payments.filter(p=>p.masterId===m.id);
+    const totalPaid  = masterPays.reduce((s,p)=>s+(p.amount||0), 0);
+    const balance    = totalEarned - totalPaid;
+    const nextDate   = getNextPayDate(m.id);
+    const nextDays   = nextDate ? Math.ceil((new Date(nextDate)-new Date())/(1000*60*60*24)) : null;
+
+    return `<div class="card" style="border-color:${balance>0?'var(--a5)':'var(--border)'}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+        <div>
+          <div style="font-size:15px;font-weight:700">${m.name}</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:2px">🔨 Мастер</div>
+        </div>
+        <button onclick="openZPPay('${m.id}','${m.name}')" class="btn" style="width:auto;padding:7px 14px;font-size:11px;margin:0">💳 Выплатить</button>
+      </div>
+      <div class="at-row"><span class="at-lbl">Заработано всего</span><span class="at-val" style="color:var(--inc)">+${fmt(totalEarned)}</span></div>
+      <div class="at-row"><span class="at-lbl">Выплачено</span><span class="at-val" style="color:var(--t2)">−${fmt(totalPaid)}</span></div>
+      <div class="at-row" style="border-top:2px solid var(--border);padding-top:8px;margin-top:4px">
+        <span class="at-lbl" style="font-weight:700;color:var(--text)">${balance>=0?'Мы должны':'Переплата'}</span>
+        <span class="at-val" style="color:${balance>0?'var(--exp)':'var(--inc)'};font-size:15px">${fmt(Math.abs(balance))}</span>
+      </div>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:11px;color:var(--t2)">Следующая выплата:</span>
+          <span style="font-size:12px;font-weight:600;color:${nextDays!==null&&nextDays<=3?'var(--exp)':'var(--a2)'}">${nextDate?nextDate+(nextDays!==null?' (через '+Math.max(0,nextDays)+' дн.)':''):'не указана'}</span>
+        </div>
+        <input type="date" value="${nextDate}" onchange="saveNextPayDate('${m.id}',this.value);renderZPay()"
+          style="width:100%;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Golos Text',sans-serif;font-size:13px;outline:none">
+      </div>
+      ${masterPays.length?`<div style="margin-top:10px"><div style="font-size:10px;color:var(--t2);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">История выплат</div>
+        ${masterPays.slice().reverse().slice(0,5).map(p=>`<div class="at-row"><span class="at-lbl">${p.date}${p.comment?' · '+p.comment:''}</span><span class="at-val" style="color:var(--inc)">−${fmt(p.amount)}</span></div>`).join('')}
+      </div>`:''}
+    </div>`;
+  }).join('');
+}
+
+let currentZPMasterId = null;
+function openZPPay(masterId, masterName){
+  currentZPMasterId = masterId;
+  document.getElementById('zpPayTitle').textContent = 'Выплата: '+masterName;
+  document.getElementById('zpPayAmt').value = '';
+  document.getElementById('zpPayComment').value = '';
+  const nextDate = getNextPayDate(masterId);
+  // Set next week by default
+  const nd = new Date(); nd.setDate(nd.getDate()+7);
+  document.getElementById('zpNextDate').value = nextDate || nd.toISOString().split('T')[0];
+  const payments = getZPPayments().filter(p=>p.masterId===masterId);
+  document.getElementById('zpPayHistory').innerHTML = payments.length
+    ? '<div style="font-size:10px;color:var(--t2);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">История выплат</div>'
+      + payments.slice().reverse().slice(0,5).map(p=>`<div class="at-row"><span class="at-lbl">${p.date}${p.comment?' · '+p.comment:''}</span><span class="at-val" style="color:var(--inc)">−${fmt(p.amount)}</span></div>`).join('')
+    : '';
+  openMo('zpPayMo');
+}
+
+function saveZPPayment(){
+  const amount = parseFloat(document.getElementById('zpPayAmt').value)||0;
+  if(!amount){ showToast('Введите сумму'); return; }
+  const comment  = document.getElementById('zpPayComment').value;
+  const nextDate = document.getElementById('zpNextDate').value;
+  const payments = getZPPayments();
+  payments.push({
+    id:uid(), masterId:currentZPMasterId,
+    amount, comment,
+    date: new Date().toISOString().split('T')[0],
+    createdAt: now()
+  });
+  saveZPPayments(payments);
+  if(nextDate) saveNextPayDate(currentZPMasterId, nextDate);
+  // Also save to Firebase
+  db.collection('ws_zp_payments').add({masterId:currentZPMasterId,amount,comment,date:new Date().toISOString().split('T')[0],createdAt:now()}).catch(console.error);
+  closeMo('zpPayMo');
+  renderZPay();
+  showToast(`✅ Выплата ${fmt(amount)} зафиксирована`);
+}
+
+// ════════════════════════════════
+// STATISTICS
+// ════════════════════════════════
+let statsPeriod = 'month';
+function setStatsPeriod(p, el){
+  statsPeriod = p;
+  document.querySelectorAll('#statsFilter .fchip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  setStatsDateInputs(p);
+  renderStats();
+}
+
+function getStatsDates(){
+  const from = document.getElementById('statsFrom')?.value;
+  const to   = document.getElementById('statsTo')?.value;
+  return {from, to};
+}
+
+function setStatsDateInputs(preset){
+  const now = new Date();
+  let from, to = new Date().toISOString().split('T')[0];
+  if(preset==='week'){ const d=new Date(); d.setDate(d.getDate()-7); from=d.toISOString().split('T')[0]; }
+  else if(preset==='month'){ from=new Date(now.getFullYear(),now.getMonth(),1).toISOString().split('T')[0]; to=new Date(now.getFullYear(),now.getMonth()+1,0).toISOString().split('T')[0]; }
+  else if(preset==='lastmonth'){ from=new Date(now.getFullYear(),now.getMonth()-1,1).toISOString().split('T')[0]; to=new Date(now.getFullYear(),now.getMonth(),0).toISOString().split('T')[0]; }
+  else if(preset==='quarter'){ const q=Math.floor(now.getMonth()/3); from=new Date(now.getFullYear(),q*3,1).toISOString().split('T')[0]; to=new Date(now.getFullYear(),q*3+3,0).toISOString().split('T')[0]; }
+  else if(preset==='year'){ from=new Date(now.getFullYear(),0,1).toISOString().split('T')[0]; to=new Date(now.getFullYear(),11,31).toISOString().split('T')[0]; }
+  else { from='2020-01-01'; }
+  const sf=document.getElementById('statsFrom'), st=document.getElementById('statsTo');
+  if(sf) sf.value=from; if(st) st.value=to;
+}
+
+function filterByPeriod(arr, dateField){
+  const {from,to} = getStatsDates();
+  return arr.filter(i=>{
+    if(!i[dateField]) return false;
+    const d = i[dateField].split('T')[0];
+    if(from && d < from) return false;
+    if(to   && d > to)   return false;
+    return true;
+  });
+}
+
+function renderStats(){
+  const c = document.getElementById('statsContent'); if(!c) return;
+  const periodItems = filterByPeriod(items.filter(i=>i.status==='received'||i.status==='shipped'), 'receivedAt');
+  const periodExtra = filterByPeriod(extraWorks.filter(w=>w.zpPaid), 'createdAt');
+
+  const totalItems  = periodItems.length;
+  const totalRevenue= periodItems.reduce((s,i)=>s+(i.price||0), 0);
+  const totalZP     = periodItems.reduce((s,i)=>s+(i.zp||0), 0)
+                    + periodExtra.reduce((s,w)=>s+(w.zp||0), 0);
+  const avgTime     = periodItems.filter(i=>i.startedAt&&i.receivedAt).reduce((s,i,_,a)=>{
+    return s+(new Date(i.receivedAt)-new Date(i.startedAt))/a.length;
+  }, 0);
+  const avgH = Math.round(avgTime/3600000);
+
+  // By master
+  const byMaster = {};
+  periodItems.forEach(i=>{
+    if(!byMaster[i.masterName]) byMaster[i.masterName]={count:0,revenue:0,zp:0,times:[]};
+    byMaster[i.masterName].count++;
+    byMaster[i.masterName].revenue+=(i.price||0);
+    byMaster[i.masterName].zp+=(i.zp||0);
+    if(i.startedAt&&i.receivedAt) byMaster[i.masterName].times.push((new Date(i.receivedAt)-new Date(i.startedAt))/3600000);
+  });
+  periodExtra.forEach(w=>{
+    if(!byMaster[w.masterName]) byMaster[w.masterName]={count:0,revenue:0,zp:0,times:[]};
+    byMaster[w.masterName].zp+=(w.zp||0);
+  });
+
+  const maxRevenue = Math.max(...Object.values(byMaster).map(m=>m.revenue),1);
+
+  c.innerHTML = `
+    <!-- KPI -->
+    <div class="srow">
+      <div class="sc"><div class="sc-v" style="color:var(--accent)">${totalItems}</div><div class="sc-l">Изделий</div></div>
+      <div class="sc"><div class="sc-v" style="color:var(--a2)">${avgH||'—'}ч</div><div class="sc-l">Сред. время</div></div>
+      <div class="sc"><div class="sc-v" style="color:var(--a5)">${fmt(totalZP)}</div><div class="sc-l">ЗП итого</div></div>
+    </div>
+    <div class="card" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:var(--accent)">
+      <div class="ctitle">Выручка (розница)</div>
+      <div style="font-family:'Unbounded',sans-serif;font-size:26px;font-weight:700;color:var(--accent)">${fmt(totalRevenue)}</div>
+      <div style="font-size:12px;color:var(--t2);margin-top:4px">${totalItems} изделий · ЗП мастеров: ${fmt(totalZP)}</div>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(200,240,96,.2)">
+        <div style="display:flex;justify-content:space-between;font-size:12px">
+          <span style="color:var(--t2)">Маржа (без ЗП):</span>
+          <span style="font-weight:700;color:var(--inc)">${fmt(totalRevenue-totalZP)}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- By master -->
+    <div class="card">
+      <div class="ctitle">По мастерам</div>
+      ${Object.entries(byMaster).length ? Object.entries(byMaster).sort((a,b)=>b[1].revenue-a[1].revenue).map(([name,d])=>`
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <div>
+              <div style="font-size:13px;font-weight:700">${name}</div>
+              <div style="font-size:10px;color:var(--t2)">${d.count} изд. · ⏱ ${d.times.length?Math.round(d.times.reduce((a,b)=>a+b,0)/d.times.length):0}ч ср. · ЗП: ${fmt(d.zp)}</div>
+            </div>
+            <div style="font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;color:var(--accent)">${fmt(d.revenue)}</div>
+          </div>
+          <div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(d.revenue/maxRevenue*100)}%;background:var(--accent)"></div></div>
+        </div>`).join('') : '<div class="empty" style="padding:12px 0">Нет данных</div>'}
+    </div>
+
+    <!-- Top items -->
+    <div class="card">
+      <div class="ctitle">Топ изделий по выручке</div>
+      ${periodItems.slice().sort((a,b)=>(b.price||0)-(a.price||0)).slice(0,10).map(i=>`
+        <div class="at-row">
+          <span class="at-lbl">№${i.itemNum||'—'} ${i.name||i.itemName}<br><span style="font-size:10px">👤 ${i.masterName} · ⏱ ${elapsed(i.startedAt,i.receivedAt)}</span></span>
+          <span class="at-val" style="color:var(--accent)">${fmt(i.price)}</span>
+        </div>`).join('') || '<div class="empty" style="padding:12px 0">Нет данных</div>'}
+    </div>`;
+}
+
+// ════════ BOOT ════════
+document.addEventListener('DOMContentLoaded', ()=>{
+  renderEmployeeList();
+  if(session) startApp();
+  setSync(navigator.onLine?'online':'offline');
+  // Init date defaults
+  const todayStr = new Date().toISOString().split('T')[0];
+  const blankD = document.getElementById('blankDate'); if(blankD) blankD.value = todayStr;
+  const ewD = document.getElementById('ewDate'); if(ewD) ewD.value = todayStr;
+  setStatsDateInputs('month');
+});
+</script>
+
+<!-- ADD EXTRA WORK MODAL -->
+<div class="mo" id="addExtraMo">
+  <div class="md"><div class="mh"></div><div class="mt">Доп. работа мастеру</div>
+    <div class="fg"><label class="fl">Мастер</label><select class="fs" id="ewMaster"></select></div>
+    <div class="fg"><label class="fl">Вид работы</label>
+      <div style="display:flex;gap:7px">
+        <select class="fs" id="ewCat" style="flex:1"></select>
+        <button onclick="addExtraCat()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--a5);cursor:pointer;font-size:18px;flex-shrink:0">＋</button>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Описание</label><input class="fi" id="ewDesc" placeholder="Подробнее о работе..."></div>
+    <div class="fg"><label class="fl">ЗП за работу (₽) — проставит кладовщик</label><input class="fi" type="number" id="ewZP" placeholder="0" inputmode="numeric"></div>
+    <div class="fg"><label class="fl">Дата (по умолчанию — сегодня)</label>
+      <input class="fi" type="date" id="ewDate">
+    </div>
+    <button class="btn green" onclick="addExtraWork()">Назначить работу</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('addExtraMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- ZP PAYMENT MODAL -->
+<div class="mo" id="zpPayMo">
+  <div class="md"><div class="mh"></div><div class="mt" id="zpPayTitle">Выплата ЗП</div>
+    <div id="zpPayHistory" style="margin-bottom:14px"></div>
+    <div class="sep"></div>
+    <div class="fg"><label class="fl">Сумма выплаты (₽)</label><input class="fi" type="number" id="zpPayAmt" inputmode="numeric" placeholder="0"></div>
+    <div class="fg"><label class="fl">Дата следующей выплаты</label><input class="fi" type="date" id="zpNextDate"></div>
+    <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="zpPayComment" placeholder="Аванс, зарплата за неделю..."></div>
+    <button class="btn" onclick="saveZPPayment()">💳 Зафиксировать выплату</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('zpPayMo')">Закрыть</button>
+  </div>
+</div>
+
+<!-- EDIT EXTRA WORK (manager) -->
+<div class="mo" id="editExtraMo">
+  <div class="md"><div class="mh"></div><div class="mt">Редактировать работу</div>
+    <div class="fg"><label class="fl">Вид работы</label><select class="fs" id="editEwCat"></select></div>
+    <div class="fg"><label class="fl">Описание</label><input class="fi" id="editEwDesc"></div>
+    <div class="fg"><label class="fl">ЗП (₽)</label><input class="fi" type="number" id="editEwZP" inputmode="numeric"></div>
+    <button class="btn" onclick="saveExtraEdit()">Сохранить</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('editExtraMo')">Отмена</button>
+  </div>
+</div>
+
+</body>
+</html>
