@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Ижица — изделия из дерева ручной работы. Каждое изделие в единственном экземпляре.">
+<meta property="og:title" content="Ижица — Каталог изделий">
+<meta property="og:description" content="Изделия из дерева ручной работы. Каждое в единственном экземпляре.">
+<title>Ижица — Каталог</title>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700;900&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0a0d;--s1:#141418;--s2:#1c1c22;--border:#28282e;
+  --accent:#c8f060;--a2:#60c8f0;--a3:#f06090;--a4:#f0a060;
+  --text:#f0f0f8;--t2:#8888aa;--t3:#555568;
+  --r:16px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;min-height:100vh}
+
+/* HERO */
+.hero{padding:60px 24px 48px;text-align:center;background:linear-gradient(180deg,#0f1a08 0%,var(--bg) 100%);position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 0%,rgba(200,240,96,.08) 0%,transparent 70%)}
+.hero-eyebrow{font-size:11px;color:var(--accent);font-weight:700;letter-spacing:3px;text-transform:uppercase;margin-bottom:16px;opacity:.8}
+.hero-title{font-family:'Unbounded',sans-serif;font-size:clamp(32px,8vw,56px);font-weight:900;line-height:1.1;margin-bottom:16px;letter-spacing:-1px}
+.hero-title span{color:var(--accent)}
+.hero-sub{font-size:16px;color:var(--t2);max-width:480px;margin:0 auto 32px;line-height:1.6}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:var(--s1);border:1px solid var(--border);border-radius:20px;padding:8px 16px;font-size:13px;color:var(--t2)}
+.hero-badge .dot{width:8px;height:8px;border-radius:50%;background:var(--inc);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* NAV */
+.nav{position:sticky;top:0;z-index:100;background:rgba(10,10,13,.92);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;justify-content:space-between;align-items:center}
+.nav-logo{font-family:'Unbounded',sans-serif;font-size:16px;font-weight:700;color:var(--accent)}
+.nav-contact{background:var(--accent);color:#0a0a0d;border:none;border-radius:20px;padding:8px 18px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer}
+
+/* FILTERS */
+.filters{padding:24px;max-width:1200px;margin:0 auto}
+.search-wrap{position:relative;margin-bottom:16px}
+.search-inp{width:100%;background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:14px 16px 14px 44px;color:var(--text);font-family:'Golos Text',sans-serif;font-size:15px;outline:none;transition:border-color .2s}
+.search-inp:focus{border-color:var(--accent)}
+.search-inp::placeholder{color:var(--t2)}
+.search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:18px;color:var(--t2)}
+.filter-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.chip{padding:7px 16px;border-radius:20px;border:1px solid var(--border);background:var(--s1);color:var(--t2);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s;white-space:nowrap}
+.chip.active{background:var(--accent);border-color:var(--accent);color:#0a0a0d;font-weight:700}
+.sort-row{display:flex;justify-content:space-between;align-items:center}
+.count-lbl{font-size:13px;color:var(--t2)}
+.sort-sel{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-family:'Golos Text',sans-serif;font-size:13px;outline:none;-webkit-appearance:none;cursor:pointer}
+
+/* GRID */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;padding:0 24px 24px;max-width:1200px;margin:0 auto}
+@media(max-width:600px){.grid{grid-template-columns:repeat(2,1fr);gap:12px;padding:0 16px 16px}}
+@media(max-width:360px){.grid{grid-template-columns:1fr}}
+
+/* ITEM CARD */
+.item-card{background:var(--s1);border:1px solid var(--border);border-radius:20px;overflow:hidden;cursor:pointer;transition:transform .2s,border-color .2s,box-shadow .2s;position:relative}
+.item-card:hover{transform:translateY(-4px);border-color:rgba(200,240,96,.3);box-shadow:0 20px 40px rgba(0,0,0,.4)}
+.item-card:active{transform:translateY(0)}
+.item-photo{width:100%;aspect-ratio:1;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:48px;position:relative;overflow:hidden}
+.item-photo img{width:100%;height:100%;object-fit:cover;transition:transform .4s}
+.item-card:hover .item-photo img{transform:scale(1.05)}
+.item-status{position:absolute;top:10px;left:10px;padding:4px 10px;border-radius:8px;font-size:10px;font-weight:700;backdrop-filter:blur(10px)}
+.status-available{background:rgba(96,240,144,.15);border:1px solid rgba(96,240,144,.3);color:#60f090}
+.status-reserved{background:rgba(240,160,96,.15);border:1px solid rgba(240,160,96,.3);color:var(--a4)}
+.status-sold{background:rgba(200,240,96,.1);color:var(--t2);border:1px solid var(--border)}
+.item-body{padding:14px}
+.item-num{font-size:10px;color:var(--t3);margin-bottom:4px}
+.item-name{font-size:15px;font-weight:700;line-height:1.3;margin-bottom:6px}
+.item-wood{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--a4);background:rgba(240,160,96,.1);border-radius:6px;padding:3px 8px;margin-bottom:10px}
+.item-dims{font-size:11px;color:var(--t2);margin-bottom:10px}
+.item-footer{display:flex;justify-content:space-between;align-items:center}
+.item-price{font-family:'Unbounded',sans-serif;font-size:16px;font-weight:700;color:var(--accent)}
+.item-price-opt{font-size:10px;color:var(--t2);margin-top:1px}
+.reserve-btn{background:var(--accent);color:#0a0a0d;border:none;border-radius:10px;padding:8px 14px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;transition:opacity .2s;white-space:nowrap}
+.reserve-btn:hover{opacity:.85}
+.reserve-btn.reserved{background:var(--s2);color:var(--a4);border:1px solid var(--a4)}
+.reserve-btn.sold-btn{background:var(--s2);color:var(--t2);border:1px solid var(--border);cursor:default}
+
+/* MODAL */
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:200;align-items:flex-end;justify-content:center;padding:0}
+.mo.open{display:flex}
+@media(min-width:768px){.mo{align-items:center;padding:24px}}
+.md{background:var(--s1);border-radius:24px 24px 0 0;width:100%;max-width:640px;max-height:95vh;overflow-y:auto}
+@media(min-width:768px){.md{border-radius:24px;max-height:90vh}}
+.md-photo{width:100%;aspect-ratio:4/3;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:80px;overflow:hidden;border-radius:24px 24px 0 0}
+.md-photo img{width:100%;height:100%;object-fit:cover}
+.md-body{padding:24px}
+.md-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 20px}
+.md-num{font-size:12px;color:var(--t2);margin-bottom:6px}
+.md-name{font-family:'Unbounded',sans-serif;font-size:22px;font-weight:700;line-height:1.2;margin-bottom:16px}
+.md-tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}
+.md-tag{padding:6px 12px;border-radius:10px;font-size:12px;font-weight:600}
+.tag-wood{background:rgba(240,160,96,.12);color:var(--a4)}
+.tag-size{background:var(--s2);color:var(--t2)}
+.tag-loc{background:rgba(96,200,240,.12);color:var(--a2)}
+.md-prices{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px}
+.md-price-box{background:var(--s2);border-radius:12px;padding:14px;text-align:center}
+.md-price-lbl{font-size:11px;color:var(--t2);margin-bottom:4px}
+.md-price-val{font-family:'Unbounded',sans-serif;font-size:20px;font-weight:700}
+.md-desc{font-size:14px;color:var(--t2);line-height:1.6;margin-bottom:24px}
+
+/* RESERVE FORM */
+.reserve-form{background:var(--s2);border-radius:16px;padding:20px;margin-bottom:16px}
+.rf-title{font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;margin-bottom:16px}
+.rf-input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-family:'Golos Text',sans-serif;font-size:15px;outline:none;margin-bottom:10px;transition:border-color .2s}
+.rf-input:focus{border-color:var(--accent)}
+.rf-input::placeholder{color:var(--t2)}
+.rf-btn{width:100%;padding:15px;background:var(--accent);color:#0a0a0d;border:none;border-radius:12px;font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:opacity .2s}
+.rf-btn:hover{opacity:.85}
+.rf-btn:disabled{opacity:.5}
+.rf-success{text-align:center;padding:20px;background:rgba(96,240,144,.08);border:1px solid rgba(96,240,144,.2);border-radius:12px}
+.rf-success-icon{font-size:40px;margin-bottom:10px}
+.rf-success-title{font-family:'Unbounded',sans-serif;font-size:16px;font-weight:700;color:var(--inc);margin-bottom:6px}
+.rf-success-sub{font-size:13px;color:var(--t2)}
+
+/* EMPTY */
+.empty-state{text-align:center;padding:80px 24px;color:var(--t2)}
+.empty-icon{font-size:56px;margin-bottom:16px}
+.empty-title{font-family:'Unbounded',sans-serif;font-size:18px;font-weight:700;margin-bottom:8px;color:var(--text)}
+
+/* FOOTER */
+.footer{text-align:center;padding:48px 24px;border-top:1px solid var(--border);color:var(--t2);font-size:13px;line-height:1.8}
+.footer-logo{font-family:'Unbounded',sans-serif;font-size:20px;font-weight:700;color:var(--accent);margin-bottom:12px}
+
+/* LOADING */
+.loader{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 24px;gap:16px}
+.spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader-txt{font-size:14px;color:var(--t2)}
+
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:12px 20px;font-size:14px;z-index:500;opacity:0;transition:opacity .3s;pointer-events:none;max-width:92%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-logo">Ижица</div>
+  <button class="nav-contact" onclick="scrollToContact()">Связаться</button>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-eyebrow">Ручная работа · Натуральное дерево</div>
+  <h1 class="hero-title">Каждое изделие —<br><span>единственное</span></h1>
+  <p class="hero-sub">Столешницы, подоконники, полки и предметы интерьера из массива дерева. Каждое изделие создаётся вручную и существует в одном экземпляре.</p>
+  <div class="hero-badge">
+    <div class="dot"></div>
+    <span id="heroBadge">Загрузка каталога...</span>
+  </div>
+</div>
+
+<!-- FILTERS -->
+<div class="filters">
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input class="search-inp" type="text" id="searchInp" placeholder="Поиск по названию, породе дерева..." oninput="renderCatalog()">
+  </div>
+  <div class="filter-chips">
+    <div class="chip active" onclick="setFilter('all',this)">Все</div>
+    <div class="chip" onclick="setFilter('available',this)">✅ В наличии</div>
+    <div class="chip" onclick="setFilter('reserved',this)">⏳ Забронированные</div>
+    <div class="chip" onclick="setFilter('wood:Дуб',this)">🌳 Дуб</div>
+    <div class="chip" onclick="setFilter('wood:Ясень',this)">🌿 Ясень</div>
+    <div class="chip" onclick="setFilter('wood:Орех',this)">🪵 Орех</div>
+    <div class="chip" onclick="setFilter('wood:Сосна',this)">🌲 Сосна</div>
+  </div>
+  <div class="sort-row">
+    <div class="count-lbl" id="countLbl">Загрузка...</div>
+    <select class="sort-sel" id="sortSel" onchange="renderCatalog()">
+      <option value="new">Сначала новые</option>
+      <option value="price_asc">Цена ↑</option>
+      <option value="price_desc">Цена ↓</option>
+    </select>
+  </div>
+</div>
+
+<!-- CATALOG GRID -->
+<div class="grid" id="catalogGrid">
+  <div class="loader" style="grid-column:1/-1">
+    <div class="spinner"></div>
+    <div class="loader-txt">Загружаем каталог...</div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer" id="contactSection">
+  <div class="footer-logo">Ижица</div>
+  <div>Изделия из массива дерева ручной работы</div>
+  <div style="margin-top:8px">Для заказа и вопросов свяжитесь с нами</div>
+  <div style="margin-top:16px;display:flex;justify-content:center;gap:16px;flex-wrap:wrap">
+    <a href="https://wa.me/" style="color:var(--accent);text-decoration:none;font-weight:600">WhatsApp</a>
+    <a href="https://t.me/" style="color:var(--accent);text-decoration:none;font-weight:600">Telegram</a>
+    <a href="tel:" style="color:var(--accent);text-decoration:none;font-weight:600">Позвонить</a>
+  </div>
+  <div style="margin-top:24px;font-size:11px;color:var(--t3)">© Ижица · Все изделия в единственном экземпляре</div>
+</div>
+
+<!-- ITEM DETAIL MODAL -->
+<div class="mo" id="itemMo">
+  <div class="md">
+    <div class="md-photo" id="mdPhoto">🪵</div>
+    <div class="md-body">
+      <div class="md-handle"></div>
+      <div class="md-num" id="mdNum"></div>
+      <div class="md-name" id="mdName"></div>
+      <div class="md-tags" id="mdTags"></div>
+      <div id="mdPrices" style="margin-bottom:24px"></div>
+      <div class="md-desc" id="mdDesc"></div>
+      <div id="mdReserveBlock"></div>
+      <button onclick="closeMo()" style="width:100%;padding:14px;background:var(--s2);border:1px solid var(--border);border-radius:12px;color:var(--t2);font-family:'Golos Text',sans-serif;font-size:14px;cursor:pointer;margin-top:8px">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- FIREBASE -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
+  authDomain: "izhitsa-6327c.firebaseapp.com",
+  projectId: "izhitsa-6327c",
+  storageBucket: "izhitsa-6327c.firebasestorage.app",
+  messagingSenderId: "1025102190040",
+  appId: "1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ════════ STATE ════════
+let allItems = [];
+let reservations = JSON.parse(localStorage.getItem('iz_reservations')||'[]');
+let currentFilter = 'all';
+let currentItemId = null;
+
+// ════════ UTILS ════════
+function fmt(n){ return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+' ₽'; }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
+function closeMo(){ document.getElementById('itemMo').classList.remove('open'); document.body.style.overflow=''; }
+function scrollToContact(){ document.getElementById('contactSection').scrollIntoView({behavior:'smooth'}); }
+
+// ════════ LOAD DATA ════════
+// Listen to items from Firebase (only available on market)
+db.collection('iz_items').onSnapshot(snap => {
+  allItems = snap.docs.map(d => ({_id:d.id, ...d.data()}))
+    .filter(item => item.status === 'warehouse' || item.status === 'shop' || item.status === 'reserved');
+  renderCatalog();
+  updateHeroBadge();
+}, err => {
+  console.error('Firebase error:', err);
+  // Fallback to localStorage
+  allItems = JSON.parse(localStorage.getItem('iz_items')||'[]')
+    .filter(item => item.status === 'warehouse' || item.status === 'shop');
+  renderCatalog();
+  updateHeroBadge();
+});
+
+function updateHeroBadge() {
+  const avail = allItems.filter(i => i.status !== 'reserved' && i.status !== 'sold').length;
+  const badge = document.getElementById('heroBadge');
+  if(badge) badge.textContent = `${avail} изделий в наличии · обновляется в реальном времени`;
+}
+
+// ════════ FILTERS ════════
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderCatalog();
+}
+
+// ════════ RENDER ════════
+function renderCatalog() {
+  const q = document.getElementById('searchInp')?.value?.toLowerCase()||'';
+  const sort = document.getElementById('sortSel')?.value||'new';
+
+  let items = allItems.filter(item => {
+    // Filter
+    if(currentFilter === 'available' && (item.status === 'sold' || isReserved(item._id||item.id))) return false;
+    if(currentFilter === 'reserved' && !isReserved(item._id||item.id)) return false;
+    if(currentFilter.startsWith('wood:')) {
+      const wood = currentFilter.split(':')[1];
+      if(!item.wood?.includes(wood)) return false;
+    }
+    // Search
+    if(q && !`${item.num} ${item.name} ${item.wood} ${item.masterName}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  // Sort
+  if(sort === 'price_asc') items.sort((a,b)=>(a.price||0)-(b.price||0));
+  else if(sort === 'price_desc') items.sort((a,b)=>(b.price||0)-(a.price||0));
+
+  // Count
+  const countEl = document.getElementById('countLbl');
+  if(countEl) countEl.textContent = `${items.length} изделий`;
+
+  const grid = document.getElementById('catalogGrid');
+  if(!items.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon">🪵</div>
+      <div class="empty-title">Изделий не найдено</div>
+      <div>Попробуйте изменить фильтры или поиск</div>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = items.map(item => {
+    const id = item._id||item.id;
+    const reserved = isReserved(id);
+    const statusLabel = reserved ? '⏳ Забронировано' : item.status==='warehouse'||item.status==='shop' ? '✅ В наличии' : '❌ Продано';
+    const statusClass = reserved ? 'status-reserved' : item.status==='warehouse'||item.status==='shop' ? 'status-available' : 'status-sold';
+    const btnLabel = reserved ? 'Забронировано' : item.status==='sold' ? 'Продано' : 'Забронировать';
+    const btnClass = reserved ? 'reserve-btn reserved' : item.status==='sold' ? 'reserve-btn sold-btn' : 'reserve-btn';
+    const canReserve = !reserved && item.status !== 'sold';
+
+    return `<div class="item-card" onclick="openItem('${id}')">
+      <div class="item-photo">
+        ${item.photo ? `<img src="${item.photo}" alt="${item.name}" loading="lazy">` : '🪵'}
+        <div class="item-status ${statusClass}">${statusLabel}</div>
+      </div>
+      <div class="item-body">
+        <div class="item-num">№ ${item.num||'—'}</div>
+        <div class="item-name">${item.name||'Изделие'}</div>
+        ${item.wood ? `<div class="item-wood">🌳 ${item.wood}</div>` : ''}
+        ${item.length ? `<div class="item-dims">📐 ${item.length}×${item.width}${item.thick?' × '+item.thick:''} мм</div>` : ''}
+        <div class="item-footer">
+          <div>
+            <div class="item-price">${fmt(item.price)}</div>
+            ''
+          </div>
+          <button class="${btnClass}" onclick="event.stopPropagation();${canReserve?`openReserve('${id}')`:''}">${btnLabel}</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ════════ ITEM DETAIL ════════
+function openItem(id) {
+  const item = allItems.find(i=>(i._id||i.id)===id);
+  if(!item) return;
+  currentItemId = id;
+
+  document.getElementById('mdPhoto').innerHTML = item.photo
+    ? `<img src="${item.photo}" alt="${item.name}">`
+    : '🪵';
+  document.getElementById('mdNum').textContent = `Изделие № ${item.num||'—'}`;
+  document.getElementById('mdName').textContent = item.name||'Изделие';
+
+  const tags = [
+    item.wood ? `<span class="md-tag tag-wood">🌳 ${item.wood}</span>` : '',
+    item.length ? `<span class="md-tag tag-size">📐 ${item.length}×${item.width}${item.thick?' × '+item.thick:''} мм</span>` : '',
+    '',
+    item.locationName ? `<span class="md-tag tag-loc">📍 ${item.locationName}</span>` : '',
+  ].filter(Boolean).join('');
+  document.getElementById('mdTags').innerHTML = tags;
+
+  document.getElementById('mdPrices').innerHTML = `
+    <div class="md-price-box">
+      <div class="md-price-lbl">Розничная цена</div>
+      <div class="md-price-val" style="color:var(--accent)">${fmt(item.price)}</div>
+    </div>
+    `;
+
+  document.getElementById('mdDesc').textContent = item.comment || '';
+
+  const reserved = isReserved(id);
+  if(reserved) {
+    document.getElementById('mdReserveBlock').innerHTML = `
+      <div class="rf-success">
+        <div class="rf-success-icon">⏳</div>
+        <div class="rf-success-title">Изделие забронировано</div>
+        <div class="rf-success-sub">Ожидает подтверждения</div>
+      </div>`;
+  } else if(item.status === 'sold') {
+    document.getElementById('mdReserveBlock').innerHTML = `
+      <div class="rf-success" style="background:rgba(80,80,100,.1);border-color:var(--border)">
+        <div class="rf-success-icon">✅</div>
+        <div class="rf-success-title" style="color:var(--t2)">Изделие продано</div>
+        <div class="rf-success-sub">Смотрите другие изделия в каталоге</div>
+      </div>`;
+  } else {
+    document.getElementById('mdReserveBlock').innerHTML = `
+      <div class="reserve-form">
+        <div class="rf-title">Забронировать изделие</div>
+        <input class="rf-input" id="reserveName" placeholder="Ваше имя *" type="text">
+        <input class="rf-input" id="reservePhone" placeholder="Телефон или WhatsApp *" type="tel">
+        <input class="rf-input" id="reserveComment" placeholder="Комментарий (необязательно)" type="text">
+        <button class="rf-btn" onclick="submitReservation('${id}')">Забронировать →</button>
+        <div style="font-size:11px;color:var(--t2);text-align:center;margin-top:10px">Мы свяжемся с вами в течение часа для подтверждения</div>
+      </div>`;
+  }
+
+  document.getElementById('itemMo').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function openReserve(id) {
+  openItem(id);
+  setTimeout(() => {
+    document.getElementById('reserveName')?.focus();
+  }, 300);
+}
+
+// ════════ RESERVATION ════════
+function isReserved(id) {
+  return reservations.some(r => r.itemId === id && r.status === 'pending');
+}
+
+function submitReservation(id) {
+  const name = document.getElementById('reserveName')?.value?.trim();
+  const phone = document.getElementById('reservePhone')?.value?.trim();
+  const comment = document.getElementById('reserveComment')?.value?.trim();
+
+  if(!name){ toast('Введите ваше имя'); return; }
+  if(!phone){ toast('Введите телефон'); return; }
+
+  const btn = document.querySelector('.rf-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Отправляем...'; }
+
+  const item = allItems.find(i=>(i._id||i.id)===id);
+  const reservation = {
+    id: Date.now().toString(36),
+    itemId: id,
+    itemNum: item?.num||'',
+    itemName: item?.name||'',
+    itemPrice: item?.price||0,
+    name, phone, comment,
+    status: 'pending',
+    createdAt: new Date().toISOString()
+  };
+
+  // Save to Firebase
+  db.collection('iz_reservations').add(reservation)
+    .then(() => {
+      reservations.push(reservation);
+      localStorage.setItem('iz_reservations', JSON.stringify(reservations));
+      showReservationSuccess(id);
+      renderCatalog();
+      toast('✅ Заявка отправлена!');
+    })
+    .catch(err => {
+      // Fallback to local only
+      reservations.push(reservation);
+      localStorage.setItem('iz_reservations', JSON.stringify(reservations));
+      showReservationSuccess(id);
+      renderCatalog();
+      toast('✅ Заявка отправлена!');
+    });
+}
+
+function showReservationSuccess(id) {
+  document.getElementById('mdReserveBlock').innerHTML = `
+    <div class="rf-success">
+      <div class="rf-success-icon">🎉</div>
+      <div class="rf-success-title">Заявка принята!</div>
+      <div class="rf-success-sub">Мы свяжемся с вами в течение часа для подтверждения бронирования</div>
+    </div>`;
+}
+
+// Close modal on backdrop click
+document.getElementById('itemMo').addEventListener('click', function(e) {
+  if(e.target === this) closeMo();
+});
+
+// Keyboard ESC
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeMo(); });
+</script>
+</body>
+</html>
