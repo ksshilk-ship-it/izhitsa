@@ -175,7 +175,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
     <div id="loginErr" style="color:var(--exp);font-size:12px;margin-bottom:8px;display:none">Неверный пароль</div>
     <button class="btn" onclick="doLogin()">Войти →</button>
   </div>
-  <div style="margin-top:12px"><button class="btn sec" onclick="openMo('adminSetupMo')">⚙️ Управление сотрудниками</button></div>
+  <div id="mgmtBtnWrap" style="margin-top:12px;display:none"><button class="btn sec" onclick="openMo('adminSetupMo')">⚙️ Управление сотрудниками</button></div>
 </div>
 
 <!-- APP -->
@@ -490,7 +490,7 @@ function delEmployee(i){const emps=getEmployees();emps.splice(i,1);saveEmployees
 function selectRole(role,el){
   document.querySelectorAll('.role-card').forEach(c=>c.classList.remove('selected'));
   el.classList.add('selected');
-  const emps=getEmployees().filter(e=>e.role===role);
+  const emps=getEmployees().filter(e=>e.role===role&&!e.blocked);
   document.getElementById('loginUser').innerHTML=emps.length
     ?emps.map(e=>`<option value="${e.id}">${e.name}</option>`).join('')
     :'<option value="">— нет сотрудников —</option>';
@@ -503,6 +503,7 @@ function doLogin(){
   const emp=getEmployees().find(e=>e.id===uid_sel);
   const errEl=document.getElementById('loginErr');
   if(!emp){errEl.style.display='block';errEl.textContent='Выберите сотрудника';return;}
+  if(emp.blocked){errEl.style.display='block';errEl.textContent='Аккаунт заблокирован. Обратитесь к администратору.';return;}
   if(emp.pass!==pass){errEl.style.display='block';errEl.textContent='Неверный пароль';return;}
   errEl.style.display='none';
   session={id:emp.id,name:emp.name,role:emp.role,rate:emp.rate||0};

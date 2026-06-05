@@ -156,9 +156,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
     <div id="loginError" style="color:var(--exp);font-size:12px;margin-bottom:8px;display:none">Неверный пароль</div>
     <button class="btn" onclick="doLogin()">Открыть смену →</button>
   </div>
-  <div style="margin-top:16px">
-    <button class="btn sec" onclick="openMo('adminMo')">⚙️ Управление продавцами</button>
-  </div>
+
 </div>
 
 <!-- ══ APP ══ -->
@@ -335,19 +333,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 </div>
 
 <!-- ADMIN -->
-<div class="mo" id="adminMo">
-  <div class="md">
-    <div class="mh"></div>
-    <div class="mt">⚙️ Продавцы</div>
-    <div id="sellersList" style="margin-bottom:14px"></div>
-    <div class="sep"></div>
-    <div class="fg"><label class="fl">Имя</label><input class="fi" id="newSellerName" placeholder="Иванова Мария Ивановна"></div>
-    <div class="fg"><label class="fl">Магазин</label><select class="fs" id="newSellerShop"></select></div>
-    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="newSellerPass" placeholder="Придумайте пароль"></div>
-    <button class="btn" onclick="addSeller()">Добавить продавца</button>
-    <button class="btn sec" style="margin-top:8px" onclick="closeMo('adminMo')">Закрыть</button>
-  </div>
-</div>
+<!-- Управление продавцами — только через izhitsa-admin.html (роль Администратор) -->
 
 <div class="toast" id="toast"></div>
 
@@ -446,7 +432,7 @@ function init() {
 
 function renderLoginSellers() {
   const shop = document.getElementById('loginShop').value;
-  const sellers = getSellers().filter(s=>!s.shop||s.shop===shop);
+  const sellers = getSellers().filter(s=>(!s.shop||s.shop===shop)&&!s.blocked);
   document.getElementById('loginSeller').innerHTML = sellers.length
     ? sellers.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')
     : '<option value="">— нет продавцов —</option>';

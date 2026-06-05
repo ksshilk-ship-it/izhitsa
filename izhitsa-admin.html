@@ -40,6 +40,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 .btn.sec{background:var(--s2);color:var(--t2);border:1px solid var(--border)}
 .btn.red{background:#2e1a1a;color:var(--exp);border:1px solid var(--exp)}
 .btn.purple{background:var(--a5);color:#fff;border:none}
+.btn.purple{background:var(--a5);color:#fff;border:none}
 .btn.sm{padding:8px 14px;font-size:11px;width:auto}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 
@@ -395,9 +396,83 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
       <button class="add-btn" onclick="addSetting('contractors',{name:gv('newCont')},'newCont')">＋</button></div>
     </div>
     <!-- Manage admin users -->
-    <div class="card"><div class="ctitle">Пользователи системы</div><div id="adminUsersList"></div>
+    <div class="card"><div class="ctitle">Пользователи системы (Админ)</div><div id="adminUsersList"></div>
       <button class="btn sec" style="margin-top:10px" onclick="openMo('setupUsersMo')">Управление →</button>
     </div>
+
+    <!-- WORKSHOP EMPLOYEES -->
+    <div class="stitle" style="margin-top:8px">🏭 Мастерская</div>
+    <div class="card">
+      <div class="ctitle">Сотрудники мастерской</div>
+      <div id="wsEmployeesList" style="margin-bottom:10px"></div>
+      <div class="sep"></div>
+      <div class="fg"><label class="fl">Имя сотрудника</label><input class="fi" id="wsEmpName" placeholder="Иванов Иван"></div>
+      <div class="fg"><label class="fl">Должность</label>
+        <select class="fs" id="wsEmpRole">
+          <option value="заготовщик">🪚 Заготовщик</option>
+          <option value="мастер">🔨 Мастер</option>
+          <option value="кладовщик">📦 Кладовщик</option>
+          <option value="управляющий">👑 Управляющий мастерской</option>
+        </select>
+      </div>
+      <div class="fg"><label class="fl">Ставка ЗП (₽/изделие, для мастера)</label>
+        <input class="fi" type="number" id="wsEmpRate" placeholder="0" inputmode="numeric">
+      </div>
+      <div class="fg"><label class="fl">Пароль</label>
+        <input class="fi" type="password" id="wsEmpPass" placeholder="Придумайте пароль">
+      </div>
+      <button class="btn purple" onclick="addWsEmployee()">＋ Добавить сотрудника мастерской</button>
+    </div>
+
+    <!-- SHOP SELLERS -->
+    <div class="stitle" style="margin-top:8px">🏪 Магазины</div>
+    <div class="card">
+      <div class="ctitle">Продавцы магазинов</div>
+      <div id="shopSellersList" style="margin-bottom:10px"></div>
+      <div class="sep"></div>
+      <div class="fg"><label class="fl">Имя продавца</label><input class="fi" id="shopSellerName" placeholder="Иванова Мария"></div>
+      <div class="fg"><label class="fl">Магазин</label><select class="fs" id="shopSellerShop"></select></div>
+      <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="shopSellerPass" placeholder="Придумайте пароль"></div>
+      <button class="btn" onclick="addShopSeller()">＋ Добавить продавца</button>
+    </div>
+
+    <!-- EXPENSE CATEGORIES with SHOP BINDING -->
+    <div class="stitle" style="margin-top:8px">📋 Статьи расходов по магазинам</div>
+    <div class="card">
+      <div class="ctitle">Привязка расходов к магазинам</div>
+      <div id="shopExpCatsList"></div>
+      <div class="sep"></div>
+      <div class="fg"><label class="fl">Статья расхода</label><input class="fi" id="newShopExpC" placeholder="Аренда, ЗП продавца..."></div>
+      <div class="fg"><label class="fl">Магазин</label><select class="fs" id="newShopExpShop"></select></div>
+      <div class="fg"><label class="fl">Бюджет/мес (₽)</label><input class="fi" type="number" id="newShopExpB" placeholder="0" inputmode="numeric"></div>
+      <button class="btn sec" onclick="addShopExpCat()">＋ Добавить статью расхода</button>
+    </div>
+  </div>
+
+  <!-- STAFF MANAGEMENT PAGE -->
+  <div class="page" id="pg-staff">
+    <div class="stitle">👥 Управление сотрудниками</div>
+
+    <!-- SHOP SELLERS -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700">🏪 Продавцы магазинов</div>
+      <button class="btn sm green" onclick="openMo('addSellerMo')">＋ Добавить</button>
+    </div>
+    <div class="card" id="staffShopSellers"></div>
+
+    <!-- WORKSHOP EMPLOYEES -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:8px">
+      <div style="font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700">🏭 Сотрудники мастерской</div>
+      <button class="btn sm" style="background:var(--a5);color:#fff;border:none" onclick="openMo('addWsMo')">＋ Добавить</button>
+    </div>
+    <div class="card" id="staffWsEmployees"></div>
+
+    <!-- ADMIN USERS -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:8px">
+      <div style="font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700">🔐 Пользователи системы</div>
+      <button class="btn sm sec" onclick="openMo('setupUsersMo')">＋ Добавить</button>
+    </div>
+    <div class="card" id="staffAdminUsers"></div>
   </div>
 
   <!-- ANALYTICS PAGE -->
@@ -514,6 +589,46 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
   </div>
 </div>
 
+<!-- ADD SELLER MODAL -->
+<div class="mo" id="addSellerMo">
+  <div class="md"><div class="mh"></div><div class="mt">＋ Добавить продавца</div>
+    <div class="fg"><label class="fl">Имя продавца</label><input class="fi" id="aSellerName" placeholder="Иванова Мария"></div>
+    <div class="fg"><label class="fl">Магазин</label><select class="fs" id="aSellerShop"></select></div>
+    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="aSellerPass" placeholder="Придумайте пароль"></div>
+    <button class="btn" onclick="addSellerFromStaff()">Добавить продавца</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('addSellerMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- ADD WS EMPLOYEE MODAL -->
+<div class="mo" id="addWsMo">
+  <div class="md"><div class="mh"></div><div class="mt">＋ Добавить сотрудника мастерской</div>
+    <div class="fg"><label class="fl">Имя</label><input class="fi" id="aWsName" placeholder="Иванов Иван"></div>
+    <div class="fg"><label class="fl">Должность</label>
+      <select class="fs" id="aWsRole">
+        <option value="заготовщик">🪚 Заготовщик</option>
+        <option value="мастер">🔨 Мастер</option>
+        <option value="кладовщик">📦 Кладовщик</option>
+        <option value="управляющий">👑 Управляющий</option>
+      </select>
+    </div>
+    <div class="fg"><label class="fl">Ставка ЗП (₽/изделие)</label><input class="fi" type="number" id="aWsRate" placeholder="0" inputmode="numeric"></div>
+    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="aWsPass" placeholder="Придумайте пароль"></div>
+    <button class="btn purple" onclick="addWsFromStaff()">Добавить сотрудника</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('addWsMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- BLOCK/DELETE CONFIRM -->
+<div class="mo" id="staffActionMo">
+  <div class="md"><div class="mh"></div>
+    <div class="mt" id="staffActionTitle">Действие с сотрудником</div>
+    <div id="staffActionBody" style="margin-bottom:16px"></div>
+    <button class="btn red" id="staffBlockBtn" onclick="confirmStaffAction()">Подтвердить</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('staffActionMo')">Отмена</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -578,6 +693,7 @@ function showPg(name,el){
   if(name==='settings')   renderSettings();
   if(name==='op')         { populateOpSelects(); }
   if(name==='analytics')  { renderAnalytics(); }
+  if(name==='staff')      { renderStaffPage(); }
 }
 
 // ════════ DATE RANGES ════════
@@ -672,6 +788,20 @@ function startApp(){
   document.getElementById('opDate').value=new Date().toISOString().split('T')[0];
   document.getElementById('dDate').value=new Date().toISOString().split('T')[0];
   document.getElementById('payDate').value=new Date().toISOString().split('T')[0];
+  // Load workshop employees
+  db.collection('ws_employees').onSnapshot(snap=>{
+    if(snap.docs.length){
+      const emps=snap.docs.map(d=>({...d.data(),_id:d.id}));
+      // Merge with local (local has passwords, Firebase doesn't)
+      const local=getWsEmployees();
+      const merged=emps.map(fe=>{
+        const loc=local.find(l=>l.name===fe.name&&l.role===fe.role);
+        return loc?{...fe,...loc}:fe;
+      });
+      if(merged.length>local.length) saveWsEmployees(merged);
+    }
+    if(session.role==='admin') renderWsEmployeesList();
+  },()=>{});
   // Load production data from Firebase
   db.collection('ws_items').orderBy('createdAt','desc').onSnapshot(snap=>{prodItems=snap.docs.map(d=>({_id:d.id,...d.data()}));renderDash();},()=>{});
   db.collection('ws_blanks').orderBy('createdAt','desc').onSnapshot(snap=>{blanks=snap.docs.map(d=>({_id:d.id,...d.data()}));},()=>{});
@@ -701,6 +831,7 @@ function buildTabs(){
     {id:'analytics', icon:'📈',label:'Аналитика'},
     {id:'shops',     icon:'🏪',label:'Магазины'},
     {id:'prod',      icon:'🏭',label:'Мастерская'},
+    {id:'staff',     icon:'👥',label:'Сотрудники'},
   ];
   const accountant=[
     {id:'dash',      icon:'🏠',label:'Главная'},
@@ -717,7 +848,8 @@ function buildTabs(){
     {id:'analytics', icon:'📈',label:'Аналитика'},
     {id:'shops',     icon:'🏪',label:'Магазины'},
     {id:'prod',      icon:'🏭',label:'Мастерская'},
-    {id:'debt',      icon:'👥',label:'Долги'},
+    {id:'staff',     icon:'👥',label:'Сотрудники'},
+    {id:'debt',      icon:'💰',label:'Долги'},
     {id:'settings',  icon:'⚙️',label:'Настройки'},
   ];
   const tabs=session.role==='admin'?admin:session.role==='owner'?owner:accountant;
@@ -1213,6 +1345,13 @@ function renderSettings(){
   document.getElementById('adminUsersList').innerHTML=getAdminUsers().map(u=>`<div style="font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)">${u.name} · <span style="color:var(--t2)">${{admin:'🔐 Администратор',owner:'👑 Владелец',accountant:'📊 Бухгалтер'}[u.role]||u.role}</span></div>`).join('');
 }
 function rSet(cid,key,lf){const c=document.getElementById(cid);if(!c)return;const items=getD(key);if(!items.length){c.innerHTML='<div style="font-size:12px;color:var(--t2);padding:6px 0">Пусто</div>';return;}c.innerHTML=items.map(item=>`<div class="set-item"><div class="set-name">${lf(item)}</div><button class="set-del" onclick="delSetting('${key}','${item.id}')">✕</button></div>`).join('');}
+
+function renderCrossModuleSettings(){
+  renderWsEmployeesList();
+  renderShopSellersList();
+  renderShopExpCatsList();
+  populateSettingsShopSelects();
+}
 
 // ════════ BACKUP ════════
 function downloadBackup(){
@@ -1760,6 +1899,284 @@ function renderBreakeven(r){
       <div class="cost-row"><span class="cost-lbl">Выручка магазинов</span><span class="cost-val" style="color:var(--accent)">${fmt(totalRev)}</span></div>
       <div class="cost-row"><span class="cost-lbl">Выручка / изделие</span><span class="cost-val">${fmt(itemCount>0?Math.round(totalRev/itemCount):0)}</span></div>
     </div>`;
+}
+
+
+
+// ════════════════════════════════
+// CROSS-MODULE MANAGEMENT (from Admin)
+// ════════════════════════════════
+
+// ── Workshop employees ──
+function getWsEmployees(){ return JSON.parse(localStorage.getItem('ws_employees')||'[]'); }
+function saveWsEmployees(d){ localStorage.setItem('ws_employees', JSON.stringify(d)); }
+
+function addWsEmployee(){
+  const name=gv('wsEmpName'), role=gv('wsEmpRole');
+  const rate=parseFloat(gv('wsEmpRate'))||0;
+  const pass=gv('wsEmpPass');
+  if(!name||!pass){ showToast('Заполните имя и пароль'); return; }
+  const emps=getWsEmployees();
+  const newEmp={id:uid(),name,role,rate,pass};
+  emps.push(newEmp);
+  saveWsEmployees(emps);
+  // Also save to Firebase so workshop app sees it
+  db.collection('ws_employees').add({id:newEmp.id,name,role,rate,createdAt:now()}).catch(console.error);
+  ['wsEmpName','wsEmpRate','wsEmpPass'].forEach(id=>document.getElementById(id).value='');
+  renderWsEmployeesList();
+  showToast('✅ Сотрудник мастерской добавлен');
+}
+
+function renderWsEmployeesList(){
+  const c=document.getElementById('wsEmployeesList'); if(!c) return;
+  const emps=getWsEmployees();
+  const roleIcons={заготовщик:'🪚',мастер:'🔨',кладовщик:'📦',управляющий:'👑'};
+  const roleNames={заготовщик:'Заготовщик',мастер:'Мастер',кладовщик:'Кладовщик',управляющий:'Управляющий'};
+  if(!emps.length){ c.innerHTML='<div style="font-size:12px;color:var(--t2)">Нет сотрудников</div>'; return; }
+  c.innerHTML=emps.map((e,i)=>`
+    <div class="set-item">
+      <div class="set-name">
+        <span style="margin-right:6px">${roleIcons[e.role]||'👤'}</span>
+        ${e.name}
+        <span style="font-size:11px;color:var(--t2);margin-left:6px">${roleNames[e.role]||e.role}${e.rate?' · '+fmt(e.rate)+'/изд.':''}</span>
+      </div>
+      <button class="set-del" onclick="delWsEmployee(${i})">✕</button>
+    </div>`).join('');
+}
+
+function delWsEmployee(i){
+  const emps=getWsEmployees(); emps.splice(i,1); saveWsEmployees(emps); renderWsEmployeesList();
+  showToast('Сотрудник удалён');
+}
+
+// ── Shop sellers ──
+function getShopSellers(){ return JSON.parse(localStorage.getItem('iz_sellers')||'[]'); }
+function saveShopSellers(d){ localStorage.setItem('iz_sellers', JSON.stringify(d)); }
+
+function addShopSeller(){
+  const name=gv('shopSellerName'), shop=gv('shopSellerShop'), pass=gv('shopSellerPass');
+  if(!name||!pass){ showToast('Заполните имя и пароль'); return; }
+  const sellers=getShopSellers();
+  sellers.push({id:uid(),name,shop,pass});
+  saveShopSellers(sellers);
+  // Also save to Firebase
+  db.collection('iz_sellers').add({id:uid(),name,shop,createdAt:now()}).catch(console.error);
+  ['shopSellerName','shopSellerPass'].forEach(id=>document.getElementById(id).value='');
+  renderShopSellersList();
+  showToast('✅ Продавец добавлен');
+}
+
+function renderShopSellersList(){
+  const c=document.getElementById('shopSellersList'); if(!c) return;
+  const sellers=getShopSellers();
+  if(!sellers.length){ c.innerHTML='<div style="font-size:12px;color:var(--t2)">Нет продавцов</div>'; return; }
+  c.innerHTML=sellers.map((s,i)=>`
+    <div class="set-item">
+      <div class="set-name">🏪 ${s.name} <span style="font-size:11px;color:var(--t2)">${s.shop||'Все магазины'}</span></div>
+      <button class="set-del" onclick="delShopSeller(${i})">✕</button>
+    </div>`).join('');
+}
+
+function delShopSeller(i){
+  const sellers=getShopSellers(); sellers.splice(i,1); saveShopSellers(sellers); renderShopSellersList();
+  showToast('Продавец удалён');
+}
+
+// ── Shop-bound expense categories ──
+function getShopExpCats(){ return JSON.parse(localStorage.getItem('iz_shop_expcats')||'[]'); }
+function saveShopExpCats(d){ localStorage.setItem('iz_shop_expcats', JSON.stringify(d)); }
+
+function addShopExpCat(){
+  const name=gv('newShopExpC'), shop=gv('newShopExpShop');
+  const budget=parseFloat(gv('newShopExpB'))||0;
+  if(!name||!shop){ showToast('Заполните статью и магазин'); return; }
+  const cats=getShopExpCats();
+  cats.push({id:uid(),name,shop,budget});
+  saveShopExpCats(cats);
+  ['newShopExpC','newShopExpB'].forEach(id=>document.getElementById(id).value='');
+  renderShopExpCatsList();
+  showToast('✅ Статья добавлена');
+}
+
+function renderShopExpCatsList(){
+  const c=document.getElementById('shopExpCatsList'); if(!c) return;
+  const cats=getShopExpCats();
+  if(!cats.length){ c.innerHTML='<div style="font-size:12px;color:var(--t2)">Нет статей</div>'; return; }
+  c.innerHTML=cats.map((cat,i)=>`
+    <div class="set-item">
+      <div class="set-name">${cat.name} <span style="font-size:11px;color:var(--t2)">${cat.shop}${cat.budget?' · бюджет: '+fmt(cat.budget):''}</span></div>
+      <button class="set-del" onclick="delShopExpCat(${i})">✕</button>
+    </div>`).join('');
+}
+
+function delShopExpCat(i){
+  const cats=getShopExpCats(); cats.splice(i,1); saveShopExpCats(cats); renderShopExpCatsList();
+}
+
+// ── Populate shop selectors in settings ──
+function populateSettingsShopSelects(){
+  const shops=getD('shops');
+  const opts=shops.map(s=>`<option>${s.name}</option>`).join('');
+  ['shopSellerShop','newShopExpShop'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.innerHTML=opts;
+  });
+}
+
+
+
+// ════════════════════════════════
+// STAFF MANAGEMENT PAGE
+// ════════════════════════════════
+let staffAction = null; // {type, index, list}
+
+function renderStaffPage(){
+  populateStaffShopSelects();
+  renderStaffSellers();
+  renderStaffWs();
+  renderStaffAdminUsers();
+}
+
+function populateStaffShopSelects(){
+  const shops = getD('shops');
+  const opts = shops.map(s=>`<option>${s.name}</option>`).join('');
+  ['aSellerShop'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=opts; });
+}
+
+// ── Shop sellers ──
+function renderStaffSellers(){
+  const c = document.getElementById('staffShopSellers'); if(!c) return;
+  const sellers = getShopSellers();
+  if(!sellers.length){ c.innerHTML='<div class="empty"><div class="ei">🏪</div>Нет продавцов</div>'; return; }
+  c.innerHTML = sellers.map((s,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="width:32px;height:32px;border-radius:50%;background:${s.blocked?'var(--s2)':'#1a2e1e'};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">${s.blocked?'🚫':'🏪'}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;color:${s.blocked?'var(--t2)':'var(--text)'}">${s.name}${s.blocked?' <span style="font-size:10px;color:var(--exp)">(заблокирован)</span>':''}</div>
+        <div style="font-size:11px;color:var(--t2)">${s.shop||'Все магазины'}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button onclick="openStaffAction('${s.blocked?'unblock':'block'}','seller',${i},'${s.name}')"
+          style="background:${s.blocked?'#1a2e1e':'#2a1e14'};border:1px solid ${s.blocked?'var(--inc)':'var(--a4)'};border-radius:8px;padding:4px 8px;font-size:11px;color:${s.blocked?'var(--inc)':'var(--a4)'};cursor:pointer">
+          ${s.blocked?'Разблок.':'Блок.'}
+        </button>
+        <button onclick="openStaffAction('delete','seller',${i},'${s.name}')"
+          style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 8px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function addSellerFromStaff(){
+  const name=gv('aSellerName'), shop=gv('aSellerShop'), pass=gv('aSellerPass');
+  if(!name||!pass){ showToast('Заполните имя и пароль'); return; }
+  const sellers=getShopSellers();
+  sellers.push({id:uid(),name,shop,pass,blocked:false,createdAt:now(),createdBy:session.name});
+  saveShopSellers(sellers);
+  db.collection('iz_sellers').add({id:uid(),name,shop,createdAt:now()}).catch(console.error);
+  ['aSellerName','aSellerPass'].forEach(id=>document.getElementById(id).value='');
+  closeMo('addSellerMo');
+  renderStaffSellers();
+  showToast(`✅ Продавец ${name} добавлен`);
+}
+
+// ── Workshop employees ──
+function renderStaffWs(){
+  const c = document.getElementById('staffWsEmployees'); if(!c) return;
+  const emps = getWsEmployees();
+  const roleIcons={заготовщик:'🪚',мастер:'🔨',кладовщик:'📦',управляющий:'👑'};
+  if(!emps.length){ c.innerHTML='<div class="empty"><div class="ei">🏭</div>Нет сотрудников</div>'; return; }
+  c.innerHTML = emps.map((e,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="width:32px;height:32px;border-radius:50%;background:${e.blocked?'var(--s2)':'#1e1a2e'};display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">${e.blocked?'🚫':roleIcons[e.role]||'👤'}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;color:${e.blocked?'var(--t2)':'var(--text)'}">${e.name}${e.blocked?' <span style="font-size:10px;color:var(--exp)">(заблокирован)</span>':''}</div>
+        <div style="font-size:11px;color:var(--t2)">${e.role}${e.rate?' · '+fmt(e.rate)+'/изд.':''}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button onclick="openStaffAction('${e.blocked?'unblock':'block'}','ws',${i},'${e.name}')"
+          style="background:${e.blocked?'#1a2e1e':'#2a1e14'};border:1px solid ${e.blocked?'var(--inc)':'var(--a4)'};border-radius:8px;padding:4px 8px;font-size:11px;color:${e.blocked?'var(--inc)':'var(--a4)'};cursor:pointer">
+          ${e.blocked?'Разблок.':'Блок.'}
+        </button>
+        <button onclick="openStaffAction('delete','ws',${i},'${e.name}')"
+          style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 8px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function addWsFromStaff(){
+  const name=gv('aWsName'), role=gv('aWsRole'), rate=parseFloat(gv('aWsRate'))||0, pass=gv('aWsPass');
+  if(!name||!pass){ showToast('Заполните имя и пароль'); return; }
+  const emps=getWsEmployees();
+  const newEmp={id:uid(),name,role,rate,pass,blocked:false,createdAt:now(),createdBy:session.name};
+  emps.push(newEmp);
+  saveWsEmployees(emps);
+  db.collection('ws_employees').add({id:newEmp.id,name,role,rate,createdAt:now()}).catch(console.error);
+  ['aWsName','aWsRate','aWsPass'].forEach(id=>document.getElementById(id).value='');
+  closeMo('addWsMo');
+  renderStaffWs();
+  showToast(`✅ Сотрудник ${name} добавлен`);
+}
+
+// ── Admin users ──
+function renderStaffAdminUsers(){
+  const c = document.getElementById('staffAdminUsers'); if(!c) return;
+  const users = getAdminUsers();
+  const roleL={admin:'🔐 Администратор',owner:'👑 Владелец',accountant:'📊 Бухгалтер'};
+  if(!users.length){ c.innerHTML='<div class="empty"><div class="ei">🔐</div>Нет пользователей</div>'; return; }
+  c.innerHTML = users.map((u,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:20px">${{admin:'🔐',owner:'👑',accountant:'📊'}[u.role]||'👤'}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${u.name}</div>
+        <div style="font-size:11px;color:var(--t2)">${roleL[u.role]||u.role}</div>
+      </div>
+      <button onclick="openStaffAction('delete','admin',${i},'${u.name}')"
+        style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 8px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>
+    </div>`).join('');
+}
+
+// ── Block/Delete actions ──
+function openStaffAction(type, list, index, name){
+  staffAction = {type, list, index, name};
+  const titles = {block:`Заблокировать ${name}?`, unblock:`Разблокировать ${name}?`, delete:`Удалить ${name}?`};
+  const bodies = {
+    block:`<div style="font-size:13px;color:var(--t2)">Сотрудник не сможет войти в систему. Все его данные сохранятся.<br><br>Вы всегда можете разблокировать его обратно.</div>`,
+    unblock:`<div style="font-size:13px;color:var(--t2)">Сотрудник снова сможет войти в систему.</div>`,
+    delete:`<div style="font-size:13px;color:var(--exp)">⚠️ Сотрудник будет удалён безвозвратно.<br>Данные об операциях сохранятся, но войти он больше не сможет.</div>`,
+  };
+  document.getElementById('staffActionTitle').textContent = titles[type]||'';
+  document.getElementById('staffActionBody').innerHTML = bodies[type]||'';
+  const btn = document.getElementById('staffBlockBtn');
+  btn.textContent = {block:'🚫 Заблокировать', unblock:'✅ Разблокировать', delete:'🗑 Удалить'}[type]||'Подтвердить';
+  btn.className = type==='unblock'?'btn green':'btn red';
+  openMo('staffActionMo');
+}
+
+function confirmStaffAction(){
+  if(!staffAction) return;
+  const {type, list, index} = staffAction;
+  if(list==='seller'){
+    const sellers=getShopSellers();
+    if(type==='delete') sellers.splice(index,1);
+    else if(type==='block') sellers[index].blocked=true;
+    else if(type==='unblock') sellers[index].blocked=false;
+    saveShopSellers(sellers);
+    // Update login — blocked sellers can't see themselves in dropdown
+    renderStaffSellers();
+  } else if(list==='ws'){
+    const emps=getWsEmployees();
+    if(type==='delete') emps.splice(index,1);
+    else if(type==='block') emps[index].blocked=true;
+    else if(type==='unblock') emps[index].blocked=false;
+    saveWsEmployees(emps);
+    renderStaffWs();
+  } else if(list==='admin'){
+    if(type==='delete'){
+      const users=getAdminUsers(); users.splice(index,1); saveAdminUsers(users);
+      renderStaffAdminUsers();
+    }
+  }
+  closeMo('staffActionMo');
+  showToast(type==='delete'?'🗑 Удалено':type==='block'?'🚫 Заблокировано':'✅ Разблокировано');
 }
 
 
