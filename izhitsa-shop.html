@@ -138,25 +138,24 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
   <div class="app-logo">Ижица</div>
   <div class="app-sub">Модуль магазина</div>
 
-  <!-- Role selector — simple radio buttons -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-    <label style="background:var(--s1);border:2px solid var(--accent);border-radius:14px;padding:16px;text-align:center;cursor:pointer;display:block" id="roleCardSeller">
-      <input type="radio" name="loginRole" value="seller" checked style="display:none" onchange="onRoleChange(this)">
-      <div style="font-size:26px;margin-bottom:6px">🏪</div>
-      <div style="font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700">Продавец</div>
-      <div style="font-size:10px;color:var(--t2);margin-top:3px">Открыть смену</div>
-    </label>
-    <label style="background:var(--s1);border:2px solid var(--border);border-radius:14px;padding:16px;text-align:center;cursor:pointer;display:block" id="roleCardAdmin">
-      <input type="radio" name="loginRole" value="shopadmin" style="display:none" onchange="onRoleChange(this)">
-      <div style="font-size:26px;margin-bottom:6px">🔐</div>
-      <div style="font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700">Администратор</div>
-      <div style="font-size:10px;color:var(--t2);margin-top:3px">Полный доступ</div>
-    </label>
-  </div>
-
   <div class="login-card">
-    <div class="lc-title" id="loginCardTitle">Открыть смену</div>
-    <div class="fg" id="loginShopFg"><label class="fl">Магазин</label>
+    <!-- Role selector — two visible buttons -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+      <button id="roleCardSeller" type="button"
+        style="background:#1e2a14;border:2px solid var(--accent);border-radius:12px;padding:14px 8px;text-align:center;cursor:pointer;width:100%"
+        onclick="switchRole('seller')">
+        <div style="font-size:24px;margin-bottom:5px">🏪</div>
+        <div style="font-family:'Unbounded',sans-serif;font-size:10px;font-weight:700;color:var(--accent)">Продавец</div>
+      </button>
+      <button id="roleCardAdmin" type="button"
+        style="background:var(--s2);border:2px solid var(--border);border-radius:12px;padding:14px 8px;text-align:center;cursor:pointer;width:100%"
+        onclick="switchRole('shopadmin')">
+        <div style="font-size:24px;margin-bottom:5px">🔐</div>
+        <div style="font-family:'Unbounded',sans-serif;font-size:10px;font-weight:700;color:var(--t2)">Администратор</div>
+      </button>
+    </div>
+
+    <div id="loginShopFg" class="fg"><label class="fl">Магазин</label>
       <select class="fs" id="loginShop" onchange="renderLoginSellers()"></select>
     </div>
     <div class="fg"><label class="fl" id="loginUserLabel">Продавец</label>
@@ -166,7 +165,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
       <input class="fi" type="password" id="loginPass" placeholder="••••">
     </div>
     <div id="loginErr" style="color:var(--exp);font-size:12px;margin-bottom:8px;display:none"></div>
-    <button class="btn" id="loginBtn" onclick="doLogin()">Открыть смену →</button>
+    <button class="btn" id="loginBtn" type="button" onclick="doLogin()">Открыть смену →</button>
   </div>
 </div>
 
@@ -511,38 +510,61 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script>
-function onRoleChange(radio){
-  const role = radio.value;
-  loginRole = role;
-  // Style cards
-  document.getElementById('roleCardSeller').style.borderColor = role==='seller' ? 'var(--accent)' : 'var(--border)';
-  document.getElementById('roleCardAdmin').style.borderColor  = role==='shopadmin' ? 'var(--accent)' : 'var(--border)';
-  document.getElementById('roleCardSeller').style.background = role==='seller' ? '#1e2a14' : 'var(--s1)';
-  document.getElementById('roleCardAdmin').style.background  = role==='shopadmin' ? '#1e2a14' : 'var(--s1)';
+var loginRole = "seller";
 
-  const title=document.getElementById('loginCardTitle');
-  const label=document.getElementById('loginUserLabel');
-  const btn=document.getElementById('loginBtn');
-  const shopFg=document.getElementById('loginShopFg');
-  const selEl=document.getElementById('loginSeller');
+function switchRole(role){
+  try {
+    loginRole = role;
+    var cs = document.getElementById('roleCardSeller');
+    var ca = document.getElementById('roleCardAdmin');
+    var shopFg = document.getElementById('loginShopFg');
+    var selEl = document.getElementById('loginSeller');
+    var btn = document.getElementById('loginBtn');
+    var label = document.getElementById('loginUserLabel');
 
-  if(role==='shopadmin'){
-    if(title) title.textContent='Вход администратора';
-    if(label) label.textContent='Администратор';
-    if(btn){ btn.textContent='Войти →'; btn.style.background='var(--a5)'; btn.style.color='#fff'; }
-    if(shopFg) shopFg.style.display='none';
-    const admins=getShopAdmins();
-    if(selEl) selEl.innerHTML = admins.length
-      ? admins.map(a=>`<option value="${a.id}">${a.name}</option>`).join('')
-      : '<option value="">— добавьте администратора —</option>';
-  } else {
-    if(title) title.textContent='Открыть смену';
-    if(label) label.textContent='Продавец';
-    if(btn){ btn.textContent='Открыть смену →'; btn.style.background='var(--accent)'; btn.style.color='#0f0f13'; }
-    if(shopFg) shopFg.style.display='block';
-    renderLoginSellers();
+    // Reset both
+    if(cs){ cs.style.borderColor='var(--border)'; cs.style.background='var(--s2)'; }
+    if(ca){ ca.style.borderColor='var(--border)'; ca.style.background='var(--s2)'; }
+
+    if(role==='shopadmin'){
+      if(ca){ ca.style.borderColor='var(--a5)'; ca.style.background='#1e1a2e'; }
+      if(label) label.textContent='Администратор';
+      if(btn){ btn.textContent='Войти →'; btn.style.background='var(--a5)'; btn.style.color='#fff'; }
+      if(shopFg) shopFg.style.display='none';
+      // populate admins
+      var admins = JSON.parse(localStorage.getItem('iz_shop_admins') || '[]');
+      if(!admins.length){
+        var defId = 'admin_default';
+        admins = [{id:defId, name:'Администратор', pass:'admin123'}];
+        localStorage.setItem('iz_shop_admins', JSON.stringify(admins));
+      }
+      if(selEl) selEl.innerHTML = admins.map(function(a){
+        return '<option value="'+a.id+'">'+a.name+'</option>';
+      }).join('');
+    } else {
+      if(cs){ cs.style.borderColor='var(--accent)'; cs.style.background='#1e2a14'; }
+      if(label) label.textContent='Продавец';
+      if(btn){ btn.textContent='Открыть смену →'; btn.style.background='var(--accent)'; btn.style.color='#0f0f13'; }
+      if(shopFg) shopFg.style.display='block';
+      // populate sellers
+      var shops = JSON.parse(localStorage.getItem('iz_admin_shops') || '[]');
+      var shopNames = shops.length ? shops.map(function(s){return s.name;}) : ['Дерево','ДР Товар'];
+      var shopSel = document.getElementById('loginShop');
+      if(shopSel && !shopSel.options.length){
+        shopSel.innerHTML = shopNames.map(function(s){return '<option>'+s+'</option>';}).join('');
+      }
+      var shop = shopSel ? shopSel.value : '';
+      var sellers = JSON.parse(localStorage.getItem('iz_sellers') || '[]');
+      sellers = sellers.filter(function(s){ return !s.blocked; });
+      if(selEl) selEl.innerHTML = sellers.length
+        ? sellers.map(function(s){return '<option value="'+s.id+'">'+s.name+'</option>';}).join('')
+        : '<option value="">— нет продавцов —</option>';
+    }
+  } catch(e) {
+    alert('Ошибка: ' + e.message);
   }
 }
+function onRoleChange(){}
 function handleSellerCardClick(){}
 function handleAdminCardClick(){}
 firebase.initializeApp({
@@ -575,7 +597,8 @@ function saveS(){ localStorage.setItem(KEY.session,JSON.stringify(session)); }
 // ════ UTILS ════
 function fmt(n){ return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+'₽'; }
 
-function selectLoginRole(role, el){
+function selectLoginRole(role, el){ switchRole(role);
+function _selectLoginRoleOld(role, el){
   if(!el) return;
   loginRole = role;
 
@@ -660,8 +683,7 @@ function init(){
   const shopSel=document.getElementById('loginShop');
   if(shopSel) shopSel.innerHTML=shops.map(s=>`<option>${s}</option>`).join('');
   // Select seller role by default
-  const sellerCard=document.getElementById('roleCardSeller');
-  if(sellerCard) selectLoginRole('seller', sellerCard);
+  switchRole('seller');
   // Restore session
   const saved=JSON.parse(localStorage.getItem(KEY.session)||'null');
   if(saved){
