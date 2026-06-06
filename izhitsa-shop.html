@@ -575,13 +575,18 @@ function renderAll(){ renderStatusBar(); renderJournal(); updateInvBadge(); rend
 
 // ════ INIT ════
 function init(){
+  ensureDefaultAdmin();
   const shops=getShops();
-  document.getElementById('loginShop').innerHTML=shops.map(s=>`<option>${s}</option>`).join('');
+  const shopSel=document.getElementById('loginShop');
+  if(shopSel) shopSel.innerHTML=shops.map(s=>`<option>${s}</option>`).join('');
   // Select seller role by default
-  selectLoginRole('seller', document.getElementById('roleCardSeller'));
+  const sellerCard=document.getElementById('roleCardSeller');
+  if(sellerCard) selectLoginRole('seller', sellerCard);
+  // Restore session
   const saved=JSON.parse(localStorage.getItem(KEY.session)||'null');
   if(saved){
-    session=saved; journal=JSON.parse(localStorage.getItem(KEY.journal)||'[]');
+    session=saved;
+    journal=JSON.parse(localStorage.getItem(KEY.journal)||'[]');
     if(session.role==='shopadmin'){ startAdminApp(); }
     else { startApp(); }
   }
@@ -1164,32 +1169,39 @@ function getShopAdmins(){ return JSON.parse(localStorage.getItem('iz_shop_admins
 function saveShopAdmins(d){ localStorage.setItem('iz_shop_admins',JSON.stringify(d)); }
 
 function selectLoginRole(role, el){
+  if(!el) return;
   loginRole = role;
-  document.querySelectorAll('#loginScreen [id^=roleCard]').forEach(c=>{
-    c.style.borderColor='var(--border)'; c.style.background='var(--s1)';
-  });
+
+  // Reset both cards
+  const cardSeller = document.getElementById('roleCardSeller');
+  const cardAdmin  = document.getElementById('roleCardAdmin');
+  if(cardSeller){ cardSeller.style.borderColor='var(--border)'; cardSeller.style.background='var(--s1)'; }
+  if(cardAdmin){  cardAdmin.style.borderColor='var(--border)';  cardAdmin.style.background='var(--s1)'; }
+  // Highlight selected
   el.style.borderColor='var(--accent)'; el.style.background='#1e2a14';
 
-  const label=document.getElementById('loginUserLabel');
-  const title=document.getElementById('loginCardTitle');
-  const btn=document.getElementById('loginBtn');
+  const label   = document.getElementById('loginUserLabel');
+  const title   = document.getElementById('loginCardTitle');
+  const btn     = document.getElementById('loginBtn');
+  const shopFg  = document.getElementById('loginShopFg');
 
   if(role==='shopadmin'){
-    // Populate admin list
-    const admins=getShopAdmins();
-    document.getElementById('loginSeller').innerHTML=admins.length
-      ?admins.map(a=>`<option value="${a.id}">${a.name}</option>`).join('')
-      :'<option value="">— нет администраторов —</option>';
-    if(label) label.textContent='Администратор';
-    if(title) title.textContent='Вход администратора';
-    if(btn) btn.textContent='Войти →';
-    if(btn) btn.style.background='var(--a5)';
+    ensureDefaultAdmin();
+    const admins = getShopAdmins();
+    const sel = document.getElementById('loginSeller');
+    if(sel) sel.innerHTML = admins.length
+      ? admins.map(a=>`<option value="${a.id}">${a.name}</option>`).join('')
+      : '<option value="">— нет администраторов —</option>';
+    if(label)  label.textContent  = 'Администратор';
+    if(title)  title.textContent  = 'Вход администратора';
+    if(btn){   btn.textContent    = 'Войти →'; btn.style.background = 'var(--a5)'; btn.style.color='#fff'; }
+    if(shopFg) shopFg.style.display = 'none'; // admin doesn't need to pick shop on login
   } else {
+    if(shopFg) shopFg.style.display = 'block';
     renderLoginSellers();
-    if(label) label.textContent='Продавец';
-    if(title) title.textContent='Открыть смену';
-    if(btn) btn.textContent='Открыть смену →';
-    if(btn) btn.style.background='var(--accent)';
+    if(label)  label.textContent  = 'Продавец';
+    if(title)  title.textContent  = 'Открыть смену';
+    if(btn){   btn.textContent    = 'Открыть смену →'; btn.style.background = 'var(--accent)'; btn.style.color='#0f0f13'; }
   }
 }
 
@@ -1199,8 +1211,9 @@ function doLogin(){
 
   if(loginRole==='shopadmin'){
     const admins=getShopAdmins();
-    const admin=admins.find(a=>a.id===sellerId);
-    if(!admin){ err.style.display='block'; err.textContent='Администратор не найден'; return; }
+    // sellerId may be empty string if no admins — use first admin
+    const admin=admins.find(a=>a.id===sellerId) || admins[0];
+    if(!admin){ err.style.display='block'; err.textContent='Администраторов нет. Добавьте через модуль Admin.'; return; }
     if(admin.pass!==pass){ err.style.display='block'; err.textContent='Неверный пароль'; return; }
     err.style.display='none';
     session={id:admin.id,name:admin.name,role:'shopadmin',shopName:'Все магазины'};
