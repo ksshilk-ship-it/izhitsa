@@ -138,20 +138,20 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
   <div class="app-logo">Ижица</div>
   <div class="app-sub">Модуль магазина</div>
 
-  <!-- Role selector -->
+  <!-- Role selector — simple radio buttons -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-    <div id="roleCardSeller" onclick="selectLoginRole('seller',this)"
-      style="background:var(--s1);border:2px solid var(--accent);border-radius:14px;padding:16px;text-align:center;cursor:pointer">
+    <label style="background:var(--s1);border:2px solid var(--accent);border-radius:14px;padding:16px;text-align:center;cursor:pointer;display:block" id="roleCardSeller">
+      <input type="radio" name="loginRole" value="seller" checked style="display:none" onchange="onRoleChange(this)">
       <div style="font-size:26px;margin-bottom:6px">🏪</div>
       <div style="font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700">Продавец</div>
       <div style="font-size:10px;color:var(--t2);margin-top:3px">Открыть смену</div>
-    </div>
-    <div id="roleCardAdmin" onclick="selectLoginRole('shopadmin',this)"
-      style="background:var(--s1);border:2px solid var(--border);border-radius:14px;padding:16px;text-align:center;cursor:pointer">
+    </label>
+    <label style="background:var(--s1);border:2px solid var(--border);border-radius:14px;padding:16px;text-align:center;cursor:pointer;display:block" id="roleCardAdmin">
+      <input type="radio" name="loginRole" value="shopadmin" style="display:none" onchange="onRoleChange(this)">
       <div style="font-size:26px;margin-bottom:6px">🔐</div>
       <div style="font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700">Администратор</div>
       <div style="font-size:10px;color:var(--t2);margin-top:3px">Полный доступ</div>
-    </div>
+    </label>
   </div>
 
   <div class="login-card">
@@ -511,6 +511,40 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script>
+function onRoleChange(radio){
+  const role = radio.value;
+  loginRole = role;
+  // Style cards
+  document.getElementById('roleCardSeller').style.borderColor = role==='seller' ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('roleCardAdmin').style.borderColor  = role==='shopadmin' ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('roleCardSeller').style.background = role==='seller' ? '#1e2a14' : 'var(--s1)';
+  document.getElementById('roleCardAdmin').style.background  = role==='shopadmin' ? '#1e2a14' : 'var(--s1)';
+
+  const title=document.getElementById('loginCardTitle');
+  const label=document.getElementById('loginUserLabel');
+  const btn=document.getElementById('loginBtn');
+  const shopFg=document.getElementById('loginShopFg');
+  const selEl=document.getElementById('loginSeller');
+
+  if(role==='shopadmin'){
+    if(title) title.textContent='Вход администратора';
+    if(label) label.textContent='Администратор';
+    if(btn){ btn.textContent='Войти →'; btn.style.background='var(--a5)'; btn.style.color='#fff'; }
+    if(shopFg) shopFg.style.display='none';
+    const admins=getShopAdmins();
+    if(selEl) selEl.innerHTML = admins.length
+      ? admins.map(a=>`<option value="${a.id}">${a.name}</option>`).join('')
+      : '<option value="">— добавьте администратора —</option>';
+  } else {
+    if(title) title.textContent='Открыть смену';
+    if(label) label.textContent='Продавец';
+    if(btn){ btn.textContent='Открыть смену →'; btn.style.background='var(--accent)'; btn.style.color='#0f0f13'; }
+    if(shopFg) shopFg.style.display='block';
+    renderLoginSellers();
+  }
+}
+function handleSellerCardClick(){}
+function handleAdminCardClick(){}
 firebase.initializeApp({
   apiKey:"AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
   authDomain:"izhitsa-6327c.firebaseapp.com",
