@@ -540,6 +540,52 @@ function saveS(){ localStorage.setItem(KEY.session,JSON.stringify(session)); }
 
 // ════ UTILS ════
 function fmt(n){ return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+'₽'; }
+
+function selectLoginRole(role, el){
+  if(!el) return;
+  loginRole = role;
+
+  // Reset both cards
+  const cardSeller = document.getElementById('roleCardSeller');
+  const cardAdmin  = document.getElementById('roleCardAdmin');
+  if(cardSeller){ cardSeller.style.borderColor='var(--border)'; cardSeller.style.background='var(--s1)'; }
+  if(cardAdmin){  cardAdmin.style.borderColor='var(--border)';  cardAdmin.style.background='var(--s1)'; }
+  // Highlight selected
+  el.style.borderColor='var(--accent)'; el.style.background='#1e2a14';
+
+  const label   = document.getElementById('loginUserLabel');
+  const title   = document.getElementById('loginCardTitle');
+  const btn     = document.getElementById('loginBtn');
+  const shopFg  = document.getElementById('loginShopFg');
+
+  if(role==='shopadmin'){
+    ensureDefaultAdmin();
+    const admins = getShopAdmins();
+    const sel = document.getElementById('loginSeller');
+    if(sel) sel.innerHTML = admins.length
+      ? admins.map(a=>`<option value="${a.id}">${a.name}</option>`).join('')
+      : '<option value="">— нет администраторов —</option>';
+    if(label)  label.textContent  = 'Администратор';
+    if(title)  title.textContent  = 'Вход администратора';
+    if(btn){   btn.textContent    = 'Войти →'; btn.style.background = 'var(--a5)'; btn.style.color='#fff'; }
+    if(shopFg) shopFg.style.display = 'none'; // admin doesn't need to pick shop on login
+  } else {
+    if(shopFg) shopFg.style.display = 'block';
+    renderLoginSellers();
+    if(label)  label.textContent  = 'Продавец';
+    if(title)  title.textContent  = 'Открыть смену';
+    if(btn){   btn.textContent    = 'Открыть смену →'; btn.style.background = 'var(--accent)'; btn.style.color='#0f0f13'; }
+  }
+}
+
+
+function ensureDefaultAdmin(){
+  const admins=getShopAdmins();
+  if(!admins.length){
+    admins.push({id:uid(),name:'Администратор',pass:'admin123'});
+    saveShopAdmins(admins);
+  }
+}
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function gv(id){ return document.getElementById(id)?.value||''; }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
@@ -1168,43 +1214,6 @@ let blockSellerAction = null;
 function getShopAdmins(){ return JSON.parse(localStorage.getItem('iz_shop_admins')||'[]'); }
 function saveShopAdmins(d){ localStorage.setItem('iz_shop_admins',JSON.stringify(d)); }
 
-function selectLoginRole(role, el){
-  if(!el) return;
-  loginRole = role;
-
-  // Reset both cards
-  const cardSeller = document.getElementById('roleCardSeller');
-  const cardAdmin  = document.getElementById('roleCardAdmin');
-  if(cardSeller){ cardSeller.style.borderColor='var(--border)'; cardSeller.style.background='var(--s1)'; }
-  if(cardAdmin){  cardAdmin.style.borderColor='var(--border)';  cardAdmin.style.background='var(--s1)'; }
-  // Highlight selected
-  el.style.borderColor='var(--accent)'; el.style.background='#1e2a14';
-
-  const label   = document.getElementById('loginUserLabel');
-  const title   = document.getElementById('loginCardTitle');
-  const btn     = document.getElementById('loginBtn');
-  const shopFg  = document.getElementById('loginShopFg');
-
-  if(role==='shopadmin'){
-    ensureDefaultAdmin();
-    const admins = getShopAdmins();
-    const sel = document.getElementById('loginSeller');
-    if(sel) sel.innerHTML = admins.length
-      ? admins.map(a=>`<option value="${a.id}">${a.name}</option>`).join('')
-      : '<option value="">— нет администраторов —</option>';
-    if(label)  label.textContent  = 'Администратор';
-    if(title)  title.textContent  = 'Вход администратора';
-    if(btn){   btn.textContent    = 'Войти →'; btn.style.background = 'var(--a5)'; btn.style.color='#fff'; }
-    if(shopFg) shopFg.style.display = 'none'; // admin doesn't need to pick shop on login
-  } else {
-    if(shopFg) shopFg.style.display = 'block';
-    renderLoginSellers();
-    if(label)  label.textContent  = 'Продавец';
-    if(title)  title.textContent  = 'Открыть смену';
-    if(btn){   btn.textContent    = 'Открыть смену →'; btn.style.background = 'var(--accent)'; btn.style.color='#0f0f13'; }
-  }
-}
-
 function doLogin(){
   const sellerId=gv('loginSeller'), pass=gv('loginPass');
   const err=document.getElementById('loginErr');
@@ -1457,13 +1466,6 @@ function confirmBlockSeller(){
 }
 
 // ── Also need to seed first admin if none ──
-function ensureDefaultAdmin(){
-  const admins=getShopAdmins();
-  if(!admins.length){
-    admins.push({id:uid(),name:'Администратор',pass:'admin123'});
-    saveShopAdmins(admins);
-  }
-}
 
 
 ensureDefaultAdmin();
