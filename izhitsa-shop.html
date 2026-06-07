@@ -1199,7 +1199,7 @@ function confirmMorning(){
       date:new Date().toISOString().split('T')[0],cashMorning:cashM,prevCashEve:prev.cashEvening,morningDiff:cashM-prev.cashEvening});
   }
   journal=[{id:uid(),type:'open',ts:new Date().toISOString(),icon:'🔓',label:'Смена открыта',
-    sub:'💵 Нал утро: '+fmt(cashM)+' · 📦 Товар: '+fmt(goodsM),cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0}];
+    sub:'🌳 Нал: '+fmt(cashM)+' 🛍 Нал ДР: '+fmt(drCashM)+' · 📦 Товар: '+fmt(goodsM),cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0}];
   pendingSession=null; saveS(); saveJ();
   closeMo('morningMo'); startApp();
 }
@@ -1935,6 +1935,9 @@ function renderClose(){
   // Always-visible: Нал утро, Товарный остаток, Итого выручка
   var nm = document.getElementById('closeNalMorn');
   if(nm) nm.textContent = fmt(session.cashMorning||0);
+  // DR cash morning
+  var drNm = document.getElementById('closeDrNalMorn');
+  if(drNm) drNm.textContent = fmt(session.drCashMorning||0);
   var gm = document.getElementById('closeGoodsMorn');
   if(gm) gm.textContent = fmt(session.goodsMorning||0);
   var ge = document.getElementById('closeGoodsEve');
@@ -2142,42 +2145,54 @@ function renderClose(){
     var sep = '<tr><td colspan="2" style="padding:2px 8px"><div style="height:1px;background:#2e2e3e"></div></td></tr>';
     var hdr = function(label, color){ return '<tr><td colspan="2" style="padding:6px 8px 2px;font-size:11px;font-weight:700;color:'+(color||'#8888aa')+';text-transform:uppercase;letter-spacing:.5px">'+label+'</td></tr>'; };
 
+    var drGoodsEve = (session.drGoodsMorning||0)+rcvDr-drSalesArr.reduce(function(a,s){return a+(s.totalPrice||0);},0)-woDr;
+    var drCashMorn = session.drCashMorning||0;
+    var drCashEveEntered = parseFloat(document.getElementById('drCashEveInput')?.value)||0;
+
+    var TH = function(label){ return '<th style="padding:6px 8px;text-align:right;font-size:11px;font-weight:700;color:'+label[1]+';border-bottom:2px solid #2e2e3e">'+label[0]+'</th>'; };
+    var TR = function(label, v1, v2, c1, c2){
+      return '<tr>'+
+        '<td style="padding:5px 8px;font-size:12px;color:#8888aa">'+label+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;font-size:12px;color:'+(c1||'#f0f0f8')+'">'+fmt(v1)+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;font-size:12px;color:'+(c2||'#f0f0f8')+'">'+fmt(v2)+'</td>'+
+      '</tr>';
+    };
+    var TRS = function(label){ return '<tr><td colspan="3" style="padding:4px 8px 2px;font-size:10px;font-weight:700;color:#555568;text-transform:uppercase;letter-spacing:.5px;border-top:1px solid #2e2e3e">'+label+'</td></tr>'; };
+
     sumEl.innerHTML =
       '<div style="background:#1e2a14;border:2px solid #c8f060;border-radius:14px;padding:14px;margin-bottom:16px">' +
       '<div style="font-size:11px;color:#c8f060;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">📊 ИТОГИ СМЕНЫ — '+session.shopName+'</div>'+
       '<table style="width:100%;border-collapse:collapse">'+
-
-      hdr('🌳 Дерево', '#c8f060') +
-      R2c('Продажи', woodRev, woodSales.length, '#60c8f0') +
-      R2('Списание товара', woWood, '#f06060') +
-      R2('Приход товара', rcvWood, '#60f090') +
-      R2('Расходы', totalExpWood, '#f0a060') +
-      sep +
-
-      hdr('🛍 ДР Товар', '#a060f0') +
-      R2c('Продажи', drRev, drSalesArr.length, '#60c8f0') +
-      R2('Списание товара', woDr, '#f06060') +
-      R2('Приход товара', rcvDr, '#60f090') +
-      R2('Расходы', totalExpDr, '#f0a060') +
-      sep +
-
-      hdr('💵 Касса', '#f0a060') +
-      R2('Нал утро', session.cashMorning||0, '#f0f0f8') +
-      (cashEveEntered ? R2('Нал вечер (введено)', cashEveEntered, '#c8f060', true) : '<tr><td style="padding:5px 8px;color:#8888aa;font-size:12px">Нал вечер</td><td style="padding:5px 8px;text-align:right;color:#555568;font-size:12px">не введён</td></tr>') +
-      sep +
-
-      hdr('📦 Товар — 🌳 Дерево', '#c8f060') +
-      R2('Остаток утро', session.goodsMorning||0, '#f0f0f8') +
-      R2('Остаток вечер (расчёт)', t.goods, '#c8f060', true) +
-      sep +
-      hdr('📦 Товар — 🛍 ДР Товар', '#a060f0') +
-      R2('Остаток утро', session.drGoodsMorning||0, '#f0f0f8') +
-      R2('Остаток вечер (расчёт)', (session.drGoodsMorning||0)+rcvDr-drSalesArr.reduce(function(a,s){return a+(s.totalPrice||0);},0)-woDr, '#a060f0', true) +
-      sep +
-
-      hdr('💰 ЗП', '#f0a060') +
-      R2('ЗП взято за смену (факт)', zpFact, '#f0a060', true) +
-
+        '<thead><tr>'+
+          '<th style="padding:6px 8px;text-align:left;font-size:11px;color:#555568;border-bottom:2px solid #2e2e3e"></th>'+
+          '<th style="padding:6px 8px;text-align:right;font-size:11px;font-weight:700;color:#c8f060;border-bottom:2px solid #2e2e3e">🌳 Дерево</th>'+
+          '<th style="padding:6px 8px;text-align:right;font-size:11px;font-weight:700;color:#a060f0;border-bottom:2px solid #2e2e3e">🛍 ДР Товар</th>'+
+        '</tr></thead>'+
+        '<tbody>'+
+        TRS('💰 Продажи') +
+        TR('Выручка', woodRev, drRev, '#60c8f0', '#60c8f0') +
+        TR('Кол-во', woodSales.length, drSalesArr.length, '#f0f0f8', '#f0f0f8') +
+        TRS('📦 Товар') +
+        TR('Остаток утро', session.goodsMorning||0, session.drGoodsMorning||0, '#f0f0f8', '#f0f0f8') +
+        TR('Остаток вечер', t.goods, drGoodsEve, '#c8f060', '#a060f0') +
+        TR('Приход', rcvWood, rcvDr, '#60f090', '#60f090') +
+        TR('Списание', woWood, woDr, '#f06060', '#f06060') +
+        TRS('💵 Касса') +
+        TR('Нал утро', session.cashMorning||0, drCashMorn, '#f0f0f8', '#f0f0f8') +
+        '<tr><td style="padding:5px 8px;font-size:12px;color:#8888aa">Нал вечер</td>'+
+          '<td style="padding:5px 8px;text-align:right;font-size:12px;color:#c8f060">'+(cashEveEntered?fmt(cashEveEntered):'<span style="color:#555568">не введён</span>')+'</td>'+
+          '<td style="padding:5px 8px;text-align:right;font-size:12px;color:#a060f0">'+(drCashEveEntered?fmt(drCashEveEntered):'<span style="color:#555568">не введён</span>')+'</td>'+
+        '</tr>'+
+        TRS('💸 Расходы') +
+        TR('Итого расходы', totalExpWood, totalExpDr, '#f0a060', '#f0a060') +
+        TRS('💰 ЗП') +
+        '<tr><td style="padding:5px 8px;font-size:12px;color:#8888aa">ЗП расчётная</td>'+
+          '<td style="padding:5px 8px;text-align:right;font-size:12px;color:#8888aa" colspan="2">—</td></tr>'+
+        TR('ЗП факт (взято)', zpFact, 0, '#f0a060', '#555568') +
+        TR('Проезд', travel, 0, '#f0a060', '#555568') +
+        '<tr style="border-top:1px solid #2e2e3e"><td style="padding:6px 8px;font-size:12px;font-weight:700">Итого ЗП расчётная</td>'+
+          '<td style="padding:6px 8px;text-align:right;font-size:12px;color:#f0a060;font-weight:700" colspan="2">—</td></tr>'+
+        '</tbody>'+
       '</table></div>';
   }
 }
