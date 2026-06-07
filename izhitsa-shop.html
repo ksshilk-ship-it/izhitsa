@@ -127,6 +127,10 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <input class="fi" type="password" id="loginPass" placeholder="••••">
     </div>
     <div id="loginErr" style="color:#f06060;font-size:12px;margin-bottom:8px;display:none"></div>
+    <button id="previewModeBtn" type="button" onclick="startPreviewMode()"
+      style="display:none;width:100%;padding:12px;background:#1e1a2e;color:#a060f0;border:1px solid #a060f0;border-radius:12px;font-family:Unbounded,sans-serif;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:8px">
+      🔍 Режим просмотра (тест)
+    </button>
     <button id="loginBtn" type="button" onclick="doLogin()"
       style="width:100%;padding:14px;background:#c8f060;color:#0f0f13;border:none;border-radius:12px;font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;cursor:pointer">
       Открыть смену →
@@ -1011,12 +1015,17 @@ function pick(role) {
     var admins = JSON.parse(localStorage.getItem('iz_shop_admins')||'[]');
     if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; localStorage.setItem('iz_shop_admins',JSON.stringify(admins)); }
     if(selEl) selEl.innerHTML = admins.map(function(a){ return '<option value="'+a.id+'">'+a.name+'</option>'; }).join('');
+    // Show preview mode button
+    var prevBtn = document.getElementById('previewModeBtn');
+    if(prevBtn) prevBtn.style.display='block';
   } else {
     if(bs){ bs.style.background='#1e2a14'; bs.style.borderColor='#c8f060'; }
     if(ba){ ba.style.background='#22222e'; ba.style.borderColor='#2e2e3e'; }
     if(shopFg) shopFg.style.display='block';
     if(label) label.textContent='Продавец';
     if(lb){ lb.textContent='Открыть смену →'; lb.style.background='#c8f060'; lb.style.color='#0f0f13'; }
+    var prevBtn = document.getElementById('previewModeBtn');
+    if(prevBtn) prevBtn.style.display='none';
     renderLoginSellers();
   }
 }
@@ -1206,10 +1215,56 @@ function saveAdminAlert(data){
 }
 
 // ════ START APP (seller) ════
+function startPreviewMode(){
+  // Validate admin password first
+  var selEl = document.getElementById('loginSeller');
+  var pass = document.getElementById('loginPass')?.value||'';
+  var admins = JSON.parse(localStorage.getItem('iz_shop_admins')||'[]');
+  var admin = admins.find(function(a){ return a.id===selEl?.value; }) || admins[0];
+  if(!admin || admin.pass !== pass){
+    var err = document.getElementById('loginErr');
+    if(err){ err.style.display='block'; err.textContent='Неверный пароль'; }
+    return;
+  }
+  // Choose shop for preview
+  var shops = getShopNames();
+  var shopName = shops.length ? shops[0] : 'Тест';
+
+  // Start fake session - preview mode, no stats saved
+  session = {
+    shopName: shopName,
+    sellerName: '🔍 ' + admin.name + ' (просмотр)',
+    sellerId: 'preview',
+    openedAt: new Date().toISOString(),
+    cashMorning: 13600,
+    goodsMorning: 1391857,
+    drGoodsMorning: 59860,
+    shopType: 'shop',
+    isPreview: true
+  };
+  journal = [{
+    id:uid(), type:'open', ts:new Date().toISOString(),
+    icon:'🔍', label:'Режим просмотра — данные не сохраняются',
+    sub:'💵 Нал: 13 600₽ · 📦 Товар: 1 391 857₽',
+    cashEffect:0, cardEffect:0, staffEffect:0, goodsEffect:0
+  }];
+  saveS(); saveJ();
+  startApp();
+  // Show preview banner
+  setTimeout(function(){
+    var hdr = document.getElementById('hdrSeller');
+    if(hdr) hdr.style.color = '#a060f0';
+  }, 100);
+}
+
 function startApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
-  document.getElementById('hdrShop').textContent=session.shopName;
+  document.getElementById('hdrShop').textContent=(session.isPreview?'🔍 ':'')+session.shopName;
+  if(session.isPreview){
+    var hdrEl=document.getElementById('hdrShop');
+    if(hdrEl) hdrEl.style.color='#a060f0';
+  }
   document.getElementById('hdrSeller').textContent=session.sellerName;
   buildSellerTabs();
   adaptUIForShopType();
@@ -2166,6 +2221,18 @@ function validateClose(){
   renderClose();
 }
 function closeShift(){
+  if(session && session.isPreview){
+    if(confirm('Режим просмотра — данные не будут сохранены. Выйти?')){
+      localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal);
+      session=null; journal=[];
+      document.getElementById('mainTabs').style.display='none';
+      document.getElementById('appScreen').style.display='none';
+      document.getElementById('loginScreen').style.display='flex';
+      pick('shopadmin');
+    }
+    return;
+  }
+function _closeShiftReal(){
   const cashEveVal=document.getElementById('cashEveInput')?.value||'';
   if(!cashEveVal){showToast('Введите остаток наличных вечер');return;}
   const cashEve=parseFloat(cashEveVal)||0;
@@ -2207,6 +2274,8 @@ function closeShift(){
   document.getElementById('loginScreen').style.display='flex';
   pick('seller');
   showToast('✅ Смена закрыта');
+}
+_closeShiftReal();
 }
 
 // ════ ADMIN FUNCTIONS ════
