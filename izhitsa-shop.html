@@ -1870,22 +1870,23 @@ function renderClose(){
   // 💰 ПРОДАЖИ detail
   var sd = document.getElementById('closeSalesDetail');
   if(sd){
-    var cashSalesByMethod = {};
-    sales.forEach(function(s){ var m=s.payMethod||'cash'; cashSalesByMethod[m]=(cashSalesByMethod[m]||0)+(s.cashPart||0)+(s.cardPart||0); });
     var termAmt = sales.filter(function(s){return s.payMethod==='terminal';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
-    var sbpAmt = sales.filter(function(s){return s.payMethod==='sbp';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
+    var sbpAmt  = sales.filter(function(s){return s.payMethod==='sbp';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
+    var qrAmt   = sales.filter(function(s){return s.payMethod==='qr';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
     var transferAmt = sales.filter(function(s){return s.payMethod==='transfer';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
-    var qrAmt = sales.filter(function(s){return s.payMethod==='qr';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
-    var rsAmt = sales.filter(function(s){return s.payMethod==='rs';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
+    var beznal = termAmt + sbpAmt + qrAmt;
+    var R = function(label,val,color){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">'+label+'</span><span style="color:'+(color||'#f0f0f8')+'">'+fmt(val)+'</span></div>'; };
     sd.innerHTML =
-      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">💵 Нал</span><span style="color:#60f090;font-weight:700">'+fmt(cashSales)+'</span></div>'+
-      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">💳 Терминал</span><span style="color:#60c8f0">'+fmt(termAmt)+'</span></div>'+
-      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">📱 СБП</span><span style="color:#60c8f0">'+fmt(sbpAmt)+'</span></div>'+
-      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">🏦 Перевод</span><span style="color:#60c8f0">'+fmt(transferAmt)+'</span></div>'+
-      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">🔲 QR</span><span style="color:#60c8f0">'+fmt(qrAmt)+'</span></div>'+
-
-      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">🎁 Скидка</span><span style="color:#8888aa">'+fmt(disc)+'</span></div>'+
-      '<div style="display:flex;justify-content:space-between;font-size:14px;padding:7px 0;font-weight:700;margin-top:2px"><span>Итого выручка</span><span style="color:#60c8f0">'+fmt(totalRev)+'</span></div>';
+      R('💵 Нал', cashSales, '#60f090') +
+      R('🏦 Перевод', transferAmt, '#60c8f0') +
+      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">💳 Безнал</span><span style="color:#60c8f0">'+fmt(beznal)+'</span></div>'+
+      '<div style="padding:2px 0 4px 12px;border-bottom:1px solid #2e2e3e">'+
+        '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;color:#555568"><span>Терминал</span><span>'+fmt(termAmt)+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;color:#555568"><span>СБП</span><span>'+fmt(sbpAmt)+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;color:#555568"><span>QR</span><span>'+fmt(qrAmt)+'</span></div>'+
+      '</div>'+
+      R('🎁 Скидка', disc, '#8888aa') +
+      '<div style="display:flex;justify-content:space-between;font-size:14px;padding:7px 0;font-weight:700"><span>Итого выручка</span><span style="color:#60c8f0">'+fmt(totalRev)+'</span></div>';
   }
 
   // 💸 РАСХОДЫ detail
@@ -1965,6 +1966,15 @@ function renderClose(){
   }
 
   // Безнал ДР теперь внутри блока Продажи ДР
+
+  // DR расходы (те же расходы смены, помечены как dr или общие)
+  // DR расходы: инкассация из журнала + оплата поставщику
+  var drInkass = expenses.filter(function(e){return e.expType==='inkass'&&e.goodsType==='dr';}).reduce(function(s,e){return s+e.amount;},0);
+  var drSupplierExp = expenses.filter(function(e){return e.expType==='supplier'&&e.goodsType==='dr';}).reduce(function(s,e){return s+e.amount;},0);
+  var drExpD = document.getElementById('closeDrExpDetail');
+  if(drExpD) drExpD.innerHTML =
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">🏦 Инкассация</span><span style="color:#f0a060;font-weight:700">'+fmt(drInkass)+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">🏭 Оплата поставщику</span><span style="color:#f0a060;font-weight:700">'+fmt(drSupplierExp)+'</span></div>';
 
   // DR покупки сотрудников
   var drStaffP = staffP.filter(function(e){ return e.goodsType==='dr'; });
