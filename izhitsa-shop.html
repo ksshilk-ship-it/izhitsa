@@ -151,10 +151,14 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
   </div>
   <div class="page" id="pg-journal">
     <div id="pendingAlert"></div>
-    <div style="display:flex;gap:7px;margin-bottom:10px">
+    <div style="display:flex;gap:7px;margin-bottom:8px">
       <button class="btn" style="margin:0;flex:1.2;font-size:13px" onclick="openMo('saleMo');resetSaleForm()">＋ Продажа</button>
       <button class="btn red" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openMo('woMo')">🗑 Списание</button>
       <button class="btn blue" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openMo('receiveMo')">📥 Приход</button>
+    </div>
+    <div style="display:flex;gap:7px;margin-bottom:10px">
+      <button class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#2a1e14;border:1px solid #f0a060;color:#f0a060" onclick="openMo('expMo')">💸 Расходы</button>
+      <button class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#1a1e2e;border:1px solid #60c8f0;color:#60c8f0" onclick="openMo('staffMo')">🛒 Покупка сотр.</button>
     </div>
     <div class="card"><div class="ctitle">Журнал смены</div><div id="journalList"></div></div>
   </div>
@@ -169,35 +173,83 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
   </div>
   <div class="page" id="pg-close">
     <div class="stitle">Закрытие смены</div>
-    <div class="card">
-      <div class="ctitle">📝 Заполните перед закрытием</div>
-      <div style="font-size:13px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 НАЛИЧНЫЕ В КАССЕ</div>
-      <div class="fg"><label class="fl">Фактический остаток нал (пересчитайте)</label>
+
+    <!-- КАССА — manual input, расчёт скрыт -->
+    <div style="background:#2e1a14;border:2px solid #f0a060;border-radius:14px;padding:14px;margin-bottom:10px">
+      <div style="font-size:13px;color:#f0a060;font-weight:700;margin-bottom:10px">💵 КАССА</div>
+      <div class="fg">
+        <label class="fl">Остаток наличных вечер — пересчитайте фактически</label>
         <input class="fi" type="number" id="cashEveInput" placeholder="Введите сумму..." inputmode="numeric"
-          style="font-size:18px;font-weight:700;text-align:center" oninput="validateClose();renderClose()">
+          style="font-size:20px;font-weight:700;text-align:center;border-color:#f0a060" oninput="validateClose()">
       </div>
-      <div class="fg"><label class="fl">Инкассация (если была)</label>
-        <input class="fi" type="number" id="inkassInput" placeholder="0" inputmode="numeric" oninput="validateClose();renderClose()">
+      <div id="cashValidation" style="margin-bottom:6px"></div>
+      <div id="cashDiffReasonBlock" style="display:none">
+        <div style="font-size:11px;color:#f06060;font-weight:700;margin-bottom:6px">⚠️ Расхождение! Пересчитайте наличные и введите верную сумму</div>
       </div>
-      <div id="cashValidation" style="margin-bottom:8px"></div>
-      <div id="cashDiffReasonBlock" style="display:none;margin-bottom:10px">
-        <div style="font-size:11px;color:#f06060;font-weight:700;margin-bottom:6px">⚠️ Обязательно объясните причину расхождения</div>
-        <textarea id="cashDiffReason" placeholder="Недостача, ошибка при пересчёте..." oninput="validateClose()"
-          style="width:100%;background:#0f0f13;border:1px solid #f06060;border-radius:8px;padding:10px;color:#f0f0f8;font-family:'Golos Text',sans-serif;font-size:12px;outline:none;min-height:70px;resize:none"></textarea>
-      </div>
-      <div class="sep"></div>
-      <div style="font-size:13px;color:#60c8f0;font-weight:700;margin-bottom:8px">💳 БЕЗНАЛ</div>
-      <div class="fg"><label class="fl">Терминал (факт)</label>
-        <input class="fi" type="number" id="terminalEveInput" placeholder="0" inputmode="numeric" oninput="validateClose();renderClose()">
-      </div>
-      <div id="terminalValidation" style="margin-bottom:8px"></div>
-      <div class="sep"></div>
-      <div style="font-size:13px;color:#a060f0;font-weight:700;margin-bottom:8px">🛒 ПОКУПКИ СОТРУДНИКОВ</div>
-      <div class="fg"><label class="fl">Деньги от сотрудников (факт)</label>
-        <input class="fi" type="number" id="staffEveInput" placeholder="0" inputmode="numeric" oninput="validateClose();renderClose()">
-      </div>
-      <div id="staffValidation" style="margin-bottom:8px"></div>
     </div>
+
+    <!-- AUTO-PULLED DATA FROM JOURNAL -->
+    <div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:14px;padding:14px;margin-bottom:10px">
+      <div style="font-size:13px;color:#8888aa;font-weight:700;margin-bottom:10px">📊 ДАННЫЕ СМЕНЫ (авто)</div>
+
+      <!-- ПРОДАЖИ -->
+      <div onclick="toggleSub('closeS')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 0;border-bottom:1px solid #2e2e3e">
+        <div style="font-size:13px;font-weight:700;color:#60c8f0">💰 Продажи</div>
+        <div id="closeS_arrow" style="color:#60c8f0;font-size:14px">▼</div>
+      </div>
+      <div id="closeS_body" style="padding-top:8px">
+        <div id="closeSalesDetail"></div>
+      </div>
+
+      <!-- РАСХОДЫ -->
+      <div onclick="toggleSub('closeExp')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 0;border-bottom:1px solid #2e2e3e">
+        <div style="font-size:13px;font-weight:700;color:#f0a060">💸 Расходы</div>
+        <div id="closeExp_arrow" style="color:#f0a060;font-size:14px">▼</div>
+      </div>
+      <div id="closeExp_body" style="padding-top:8px">
+        <div id="closeExpDetail"></div>
+      </div>
+
+      <!-- СПИСАНИЯ -->
+      <div onclick="toggleSub('closeWo')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 0;border-bottom:1px solid #2e2e3e">
+        <div style="font-size:13px;font-weight:700;color:#f06060">🗑 Списания</div>
+        <div id="closeWo_arrow" style="color:#f06060;font-size:14px">▼</div>
+      </div>
+      <div id="closeWo_body" style="padding-top:8px">
+        <div id="closeWoDetail"></div>
+      </div>
+
+      <!-- ПРИХОДЫ -->
+      <div onclick="toggleSub('closeRcv')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 0;border-bottom:1px solid #2e2e3e">
+        <div style="font-size:13px;font-weight:700;color:#60f090">📥 Приходы товара</div>
+        <div id="closeRcv_arrow" style="color:#60f090;font-size:14px">▼</div>
+      </div>
+      <div id="closeRcv_body" style="padding-top:8px">
+        <div id="closeRcvDetail"></div>
+      </div>
+
+      <!-- ПОКУПКИ СОТРУДНИКОВ -->
+      <div onclick="toggleSub('closeStaff')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 0">
+        <div style="font-size:13px;font-weight:700;color:#a060f0">🛒 Покупки сотрудников</div>
+        <div id="closeStaff_arrow" style="color:#a060f0;font-size:14px">▼</div>
+      </div>
+      <div id="closeStaff_body" style="padding-top:8px">
+        <div id="closeStaffDetail"></div>
+      </div>
+    </div>
+
+    <!-- ТОВАРНЫЙ ОСТАТОК -->
+    <div style="background:#1e2a14;border:1px solid #c8f060;border-radius:14px;padding:14px;margin-bottom:10px">
+      <div style="font-size:13px;color:#c8f060;font-weight:700;margin-bottom:10px">📦 ТОВАРНЫЙ ОСТАТОК</div>
+      <div id="closeGoodsDetail"></div>
+    </div>
+
+    <!-- БЕЗНАЛ -->
+    <div style="background:#1a1e2e;border:1px solid #60c8f0;border-radius:14px;padding:14px;margin-bottom:10px">
+      <div style="font-size:13px;color:#60c8f0;font-weight:700;margin-bottom:10px">💳 БЕЗНАЛ</div>
+      <div id="closeCardDetail"></div>
+    </div>
+
     <div id="closeSummary"></div>
     <button class="btn red" id="closeShiftBtn" style="margin-bottom:16px;opacity:.5" disabled onclick="closeShift()">🔐 Закрыть смену</button>
   </div>
@@ -768,6 +820,26 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
   </div>
 </div>
 
+<!-- EXPENSES MODAL -->
+<div class="mo" id="expMo">
+  <div class="md"><div class="mh"></div><div class="mt">💸 Расходы смены</div>
+    <div class="al-info" style="margin-bottom:12px">Расходы подтянутся в закрытие смены автоматически</div>
+    <div class="fg">
+      <label class="fl">Тип расхода</label>
+      <div class="pay-chips" id="expTypeChips">
+        <div class="pc active" onclick="setExpType('zp',this)">💰 ЗП</div>
+        <div class="pc" onclick="setExpType('travel',this)">🚌 Проезд</div>
+        <div class="pc" onclick="setExpType('inkass',this)">🏦 Инкассация</div>
+        <div class="pc" onclick="setExpType('other',this)">📝 Прочее</div>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="expAmt" placeholder="0" inputmode="numeric"></div>
+    <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="expComment" placeholder="Необязательно"></div>
+    <button class="btn" style="background:#f0a060;color:#0f0f13;border:none" onclick="saveExpense()">Добавить расход</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('expMo')">Отмена</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1227,29 +1299,160 @@ function acceptInvoice(){
 }
 
 // ════ CLOSE SHIFT ════
+// ── Expense type for expense modal ──
+var expType = 'zp';
+function setExpType(type, el){
+  expType = type;
+  document.querySelectorAll('#expTypeChips .pc').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function saveExpense(){
+  var amt = parseFloat(document.getElementById('expAmt')?.value)||0;
+  if(!amt){showToast('Введите сумму');return;}
+  var comment = document.getElementById('expComment')?.value||'';
+  var labels = {zp:'💰 ЗП',travel:'🚌 Проезд',inkass:'🏦 Инкассация',other:'📝 Прочее'};
+  journal.push({
+    id:uid(), type:'expense', ts:new Date().toISOString(),
+    icon:'💸', label:'Расход: '+labels[expType],
+    sub:fmt(amt)+(comment?' · '+comment:''),
+    expType, amount:amt, comment,
+    amtCls:'exp', amtSign:'−',
+    cashEffect: expType==='inkass' ? -amt : -amt,
+    cardEffect:0, staffEffect:0, goodsEffect:0
+  });
+  saveJ();
+  document.getElementById('expAmt').value='';
+  document.getElementById('expComment').value='';
+  closeMo('expMo');
+  renderAll();
+  showToast('💸 Расход '+fmt(amt)+' записан');
+}
+
+// ── renderClose — pull all data from journal ──
+function renderClose(){
+  const t = calcTotals();
+  const sales = journal.filter(e=>e.type==='sale');
+  const expenses = journal.filter(e=>e.type==='expense');
+  const writeoffs = journal.filter(e=>e.type==='writeoff');
+  const receives = journal.filter(e=>e.type==='receive');
+  const staffP = journal.filter(e=>e.type==='staff');
+
+  const cashSales = sales.reduce((s,e)=>s+(e.cashPart||0),0);
+  const cardSales = sales.reduce((s,e)=>s+(e.cardPart||0),0);
+  const totalSales = sales.reduce((s,e)=>s+(e.totalPaid||0),0);
+  const disc = sales.reduce((s,e)=>s+(e.discount||0),0);
+  const zp = expenses.filter(e=>e.expType==='zp').reduce((s,e)=>s+e.amount,0);
+  const travel = expenses.filter(e=>e.expType==='travel').reduce((s,e)=>s+e.amount,0);
+  const inkass = expenses.filter(e=>e.expType==='inkass').reduce((s,e)=>s+e.amount,0);
+  const other = expenses.filter(e=>e.expType==='other').reduce((s,e)=>s+e.amount,0);
+  const totalWo = writeoffs.reduce((s,e)=>s+(e.amount||0),0);
+  const totalRcv = receives.reduce((s,e)=>s+(e.goodsEffect||0),0);
+  const staffTotal = staffP.reduce((s,e)=>s+e.amount,0);
+
+  // ПРОДАЖИ detail
+  const sd = document.getElementById('closeSalesDetail');
+  if(sd) sd.innerHTML = sales.length ? `
+    <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Нал</span><span style="color:#60f090;font-weight:700">+${fmt(cashSales)}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Безнал</span><span style="color:#60c8f0;font-weight:700">+${fmt(cardSales)}</span></div>
+    ${disc?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Скидки</span><span style="color:#8888aa">−${fmt(disc)}</span></div>`:''}
+    <div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;border-top:1px solid #2e2e3e;font-weight:700;margin-top:4px"><span>Итого выручка</span><span style="color:#60c8f0">${fmt(cashSales+cardSales+disc)}</span></div>
+    ${sales.map(s=>`<div style="font-size:11px;color:#555568;padding:2px 0">· ${s.sub}</div>`).join('')}
+  ` : '<div style="font-size:12px;color:#555568">Продаж нет</div>';
+
+  // РАСХОДЫ detail
+  const ed = document.getElementById('closeExpDetail');
+  if(ed) ed.innerHTML = expenses.length ? `
+    ${zp?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>💰 ЗП</span><span style="color:#f0a060;font-weight:700">−${fmt(zp)}</span></div>`:''}
+    ${travel?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>🚌 Проезд</span><span style="color:#f0a060;font-weight:700">−${fmt(travel)}</span></div>`:''}
+    ${inkass?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>🏦 Инкассация</span><span style="color:#f0a060;font-weight:700">−${fmt(inkass)}</span></div>`:''}
+    ${other?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>📝 Прочее</span><span style="color:#f0a060;font-weight:700">−${fmt(other)}</span></div>`:''}
+    ${expenses.map(e=>`<div style="font-size:11px;color:#555568;padding:2px 0">· ${e.comment||e.label}</div>`).join('')}
+  ` : '<div style="font-size:12px;color:#555568">Расходов нет</div>';
+
+  // СПИСАНИЯ detail
+  const wd = document.getElementById('closeWoDetail');
+  if(wd) wd.innerHTML = writeoffs.length
+    ? writeoffs.map(w=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:#8888aa">${w.sub}</span><span style="color:#f06060">−${fmt(w.amount)}</span></div>`).join('')
+    : '<div style="font-size:12px;color:#555568">Списаний нет</div>';
+
+  // ПРИХОДЫ detail
+  const rd = document.getElementById('closeRcvDetail');
+  if(rd) rd.innerHTML = receives.length
+    ? receives.map(r=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:#8888aa">${r.sub||r.label}</span><span style="color:#60f090">+${fmt(r.goodsEffect||0)}</span></div>`).join('')
+    : '<div style="font-size:12px;color:#555568">Приходов нет</div>';
+
+  // ПОКУПКИ СОТРУДНИКОВ
+  const stD = document.getElementById('closeStaffDetail');
+  if(stD) stD.innerHTML = staffP.length
+    ? staffP.map(s=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:#8888aa">${s.label}</span><span style="color:#a060f0">${fmt(s.amount)}</span></div>`).join('')+
+      `<div style="font-size:13px;font-weight:700;padding:6px 0;border-top:1px solid #2e2e3e;margin-top:4px;display:flex;justify-content:space-between"><span>Итого</span><span style="color:#a060f0">${fmt(staffTotal)}</span></div>`
+    : '<div style="font-size:12px;color:#555568">Нет</div>';
+
+  // ТОВАРНЫЙ ОСТАТОК
+  const gd = document.getElementById('closeGoodsDetail');
+  if(gd) gd.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><div style="font-size:11px;color:#8888aa">Утро</div><div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700">${fmt(session.goodsMorning)}</div></div>
+      <div><div style="font-size:11px;color:#8888aa">Вечер (расчёт)</div><div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700;color:#c8f060">${fmt(t.goods)}</div></div>
+    </div>
+    ${receives.length?`<div style="font-size:12px;color:#8888aa;margin-top:6px">+Приход: ${fmt(totalRcv)}</div>`:''}
+    ${writeoffs.length?`<div style="font-size:12px;color:#8888aa">−Списания: ${fmt(totalWo)}</div>`:''}
+  `;
+
+  // БЕЗНАЛ
+  const cd = document.getElementById('closeCardDetail');
+  if(cd) cd.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:13px;color:#8888aa">Расчётный безнал</span>
+      <span style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#60c8f0">${fmt(t.card)}</span>
+    </div>
+    ${staffTotal?`<div style="font-size:12px;color:#a060f0;margin-top:6px">+ Покупки сотрудников: ${fmt(staffTotal)}</div>`:''}
+  `;
+}
+
 function validateClose(){
-  const t=calcTotals();
-  const inkass=parseFloat(gv('inkassInput'))||0;
-  const cashEveVal=document.getElementById('cashEveInput').value;
-  const cashEve=parseFloat(cashEveVal)||0;
-  const expectedCash=t.cash-inkass;
-  const cv=document.getElementById('cashValidation'), crb=document.getElementById('cashDiffReasonBlock');
-  if(cashEveVal===''){cv.innerHTML='';if(crb)crb.style.display='none';}
-  else {
-    const diff=cashEve-expectedCash, hasDiff=Math.abs(diff)>=1;
-    cv.innerHTML=hasDiff?`<div class="al-err">⛔ Расхождение нала: ${diff>0?'+':''}${fmt(diff)}<br><span style="font-size:10px">Расчётный: ${fmt(expectedCash)} · Факт: ${fmt(cashEve)}</span></div>`:'<div class="al-ok">✅ Нал сходится</div>';
-    if(crb) crb.style.display=hasDiff?'block':'none';
+  // Calculate expected but DO NOT show to seller
+  const t = calcTotals();
+  const expenses = journal.filter(e=>e.type==='expense');
+  const inkassExp = expenses.filter(e=>e.expType==='inkass').reduce((s,e)=>s+e.amount,0);
+  const zpExp = expenses.filter(e=>e.expType==='zp').reduce((s,e)=>s+e.amount,0);
+  const travelExp = expenses.filter(e=>e.expType==='travel').reduce((s,e)=>s+e.amount,0);
+  const otherExp = expenses.filter(e=>e.expType==='other').reduce((s,e)=>s+e.amount,0);
+
+  const cashSales = journal.filter(e=>e.type==='sale').reduce((s,e)=>s+(e.cashPart||0),0);
+  const expectedCash = session.cashMorning + cashSales - inkassExp - zpExp - travelExp - otherExp;
+
+  const cashEveVal = document.getElementById('cashEveInput')?.value||'';
+  const cashEve = parseFloat(cashEveVal)||0;
+  const cv = document.getElementById('cashValidation');
+  const crb = document.getElementById('cashDiffReasonBlock');
+  const btn = document.getElementById('closeShiftBtn');
+
+  if(!cashEveVal){
+    if(cv) cv.innerHTML = '';
+    if(crb) crb.style.display = 'none';
+    if(btn){ btn.disabled=true; btn.style.opacity='.5'; }
+    return;
   }
-  const termVal=document.getElementById('terminalEveInput').value, termEve=parseFloat(termVal)||0;
-  const tv=document.getElementById('terminalValidation');
-  if(termVal!==''&&t.card>0){ const d=termEve-t.card; if(tv) tv.innerHTML=Math.abs(d)>=1?`<div class="al-err">⛔ Расхождение безнала: ${d>0?'+':''}${fmt(d)}</div>`:'<div class="al-ok">✅ Безнал сходится</div>'; }
-  const staffVal=document.getElementById('staffEveInput').value, staffEve=parseFloat(staffVal)||0;
-  const sv=document.getElementById('staffValidation');
-  if(staffVal!==''&&t.staff>0){ const d=staffEve-t.staff; if(sv) sv.innerHTML=Math.abs(d)>=1?`<div class="al-err">⛔ Расхождение сотрудников: ${d>0?'+':''}${fmt(d)}</div>`:'<div class="al-ok">✅ Суммы сходятся</div>'; }
-  const btn=document.getElementById('closeShiftBtn');
-  const cashFilled=cashEveVal!=='';
-  const cashOk=Math.abs(cashEve-(t.cash-inkass))<1||((gv('cashDiffReason')||'').trim().length>0);
-  if(btn){ btn.disabled=!cashFilled||!cashOk; btn.style.opacity=(!cashFilled||!cashOk)?'.5':'1'; }
+
+  const diff = Math.round(cashEve - expectedCash);
+  const hasDiff = Math.abs(diff) >= 1;
+
+  if(hasDiff){
+    // Don't show calculated amount — just say it's wrong
+    if(cv) cv.innerHTML = `<div style="background:#2e1a1a;border:2px solid #f06060;border-radius:12px;padding:14px;text-align:center">
+      <div style="font-size:16px;font-weight:700;color:#f06060;margin-bottom:8px">⛔ Неверный остаток наличных</div>
+      <div style="font-size:13px;color:#f0f0f8">Пересчитайте кассу и введите верную сумму</div>
+    </div>`;
+    if(crb) crb.style.display = 'block';
+    if(btn){ btn.disabled=true; btn.style.opacity='.5'; }
+  } else {
+    if(cv) cv.innerHTML = '<div class="al-ok">✅ Касса сходится</div>';
+    if(crb) crb.style.display = 'none';
+    if(btn){ btn.disabled=false; btn.style.opacity='1'; }
+  }
+  renderClose();
 }
 function renderClose(){
   const t=calcTotals();
@@ -1279,13 +1482,21 @@ function renderClose(){
     </div>`;
 }
 function closeShift(){
-  const cashEveVal=document.getElementById('cashEveInput').value;
-  if(!cashEveVal){showToast('Введите остаток нал вечер');return;}
-  const cashEve=parseFloat(cashEveVal)||0, inkass=parseFloat(gv('inkassInput'))||0;
-  const termEve=parseFloat(gv('terminalEveInput'))||0, staffEve=parseFloat(gv('staffEveInput'))||0;
+  const cashEveVal=document.getElementById('cashEveInput')?.value||'';
+  if(!cashEveVal){showToast('Введите остаток наличных вечер');return;}
+  const cashEve=parseFloat(cashEveVal)||0;
   const t=calcTotals();
-  const cashDiff=cashEve-(t.cash-inkass), reason=(gv('cashDiffReason')||'').trim();
-  if(Math.abs(cashDiff)>=1&&!reason){showToast('⛔ Укажите причину расхождения кассы');return;}
+  const expArr=journal.filter(e=>e.type==='expense');
+  const inkass=expArr.filter(e=>e.expType==='inkass').reduce((s,e)=>s+e.amount,0);
+  const termEve=t.card, staffEve=t.staff;
+  const cashSales=journal.filter(e=>e.type==='sale').reduce((s,e)=>s+(e.cashPart||0),0);
+  const zpExp=expArr.filter(e=>e.expType==='zp').reduce((s,e)=>s+e.amount,0);
+  const travelExp=expArr.filter(e=>e.expType==='travel').reduce((s,e)=>s+e.amount,0);
+  const otherExpAmt=expArr.filter(e=>e.expType==='other').reduce((s,e)=>s+e.amount,0);
+  const expectedCash=session.cashMorning+cashSales-inkass-zpExp-travelExp-otherExpAmt;
+  const cashDiff=Math.round(cashEve-expectedCash);
+  if(Math.abs(cashDiff)>=1){showToast('⛔ Неверный остаток наличных — пересчитайте кассу');return;}
+  const reason='';
   const prev=getPrevShift(session.shopName);
   const morningDiff=prev?.cashEvening!=null?Math.abs(session.cashMorning-prev.cashEvening):0;
   const sales=journal.filter(e=>e.type==='sale');
@@ -1296,7 +1507,7 @@ function closeShift(){
     terminalEvening:termEve,terminalDiff:termEve-t.card,staffEvening:staffEve,staffDiff:staffEve-t.staff,
     morningDiff,prevCashEvening:prev?.cashEvening||null,
     salesCount:sales.length,totalRevenue:sales.reduce((s,e)=>s+e.totalPaid,0),
-    cashRevenue:sales.reduce((s,e)=>s+(e.cashPart||0),0),cardRevenue:sales.reduce((s,e)=>s+(e.cardPart||0),0),
+    cashRevenue:cashSales,cardRevenue:termEve,expenses:expArr,zp:zpExp,travel:travelExp,inkass:inkass,otherExp:otherExpAmt,
     totalDiscount:sales.reduce((s,e)=>s+(e.discount||0),0),journal:[...journal]};
   if(Math.abs(cashDiff)>=1||morningDiff>1){
     saveAdminAlert({type:'cash_diff',shopName:session.shopName,sellerName:session.sellerName,
