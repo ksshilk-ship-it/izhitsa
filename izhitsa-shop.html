@@ -2230,10 +2230,12 @@ function renderClose(){
           }
           zpCalcTotal = zpCalcWood + zpCalcDr + travel;
           var fmt2 = function(n){ return Math.round(n).toLocaleString('ru-RU')+'₽'; };
-          var travelFact = travel; // проезд факт из расходов дерева
+          // Проезд расчётный из настроек администратора
+          var zpSet = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+          var travelCalc = (zpSet[session.shopName] && zpSet[session.shopName].travel) ? zpSet[session.shopName].travel : 0;
+          var travelFact = travel; // проезд факт — реально взято из журнала расходов
           var zpFactTotal = zpFact; // ЗП факт взято
-          var zpCalcNoTravel = zpCalcWood + zpCalcDr; // расчётная без проезда
-          var zpCalcWithTravel = zpCalcTotal; // расчётная с проездом
+          var zpCalcWithTravel = zpCalcWood + zpCalcDr + travelCalc;
           var diff = zpCalcWithTravel - (zpFactTotal + travelFact);
           var diffColor = diff > 0 ? '#f06060' : diff < 0 ? '#60f090' : '#8888aa';
 
@@ -2249,10 +2251,10 @@ function renderClose(){
               '<td style="padding:5px 8px;text-align:right;font-size:12px;color:#c8f060">'+fmt2(zpCalcWood)+'</td>'+
               '<td style="padding:5px 8px;text-align:right;font-size:12px;color:#a060f0">'+fmt2(zpCalcDr)+'</td>'+
             '</tr>',
-            // 2. Проезд расчётный — общий по центру
+            // 2. Проезд расчётный — из настроек администратора
             '<tr>'+
               '<td style="padding:5px 8px;font-size:12px;color:#8888aa">Проезд (расчётный)</td>'+
-              C2(fmt2(travelFact), '#f0a060', false)+
+              C2(fmt2(travelCalc), '#f0a060', false)+
             '</tr>',
             // 3. ЗП факт — общий по центру
             '<tr style="border-top:1px solid #2e2e3e">'+
@@ -3186,6 +3188,11 @@ function renderShopSettings(){
         '<label class="fl">Процент от выручки (%)</label>'+
         '<input class="fi" type="number" id="zp_pct_'+sid+'" value="'+(s.pct||8)+'" inputmode="numeric" step="0.5">'+
       '</div>'+
+      '<div class="fg">'+
+        '<label class="fl">Сумма проезда за смену (₽)</label>'+
+        '<input class="fi" type="number" id="zp_travel_'+sid+'" value="'+(s.travel||0)+'" inputmode="numeric">'+
+        '<div style="font-size:11px;color:#8888aa;margin-top:4px">Включается в итоговую ЗП расчётную</div>'+
+      '</div>'+
       '<div id="zp_highpct_block_'+sid+'" style="'+(s.highThreshold?'':'display:none')+'">'+
         '<div class="fg">'+
           '<label class="fl">Порог для повышенного % (₽)</label>'+
@@ -3219,6 +3226,7 @@ function saveShopSettings(){
       base: parseFloat(document.getElementById('zp_base_'+sid)?.value)||1500,
       threshold: parseFloat(document.getElementById('zp_thresh_'+sid)?.value)||5000,
       pct: parseFloat(document.getElementById('zp_pct_'+sid)?.value)||8,
+      travel: parseFloat(document.getElementById('zp_travel_'+sid)?.value)||0,
       highThreshold: hasHigh ? (parseFloat(document.getElementById('zp_highthresh_'+sid)?.value)||20000) : null,
       highPct: hasHigh ? (parseFloat(document.getElementById('zp_highpct_'+sid)?.value)||10) : null,
     };
