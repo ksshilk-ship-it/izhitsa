@@ -776,6 +776,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
         <div class="pc" onclick="setPayM('transfer',this)">🏦 Перевод</div>
         <div class="pc" onclick="setPayM('qr',this)">🔲 QR</div>
         <div class="pc" onclick="setPayM('mixed',this)">➗ Смешанный</div>
+        <div class="pc" id="pcRS" onclick="setPayM('rs',this)">🏦 РС</div>
       </div>
     </div>
     <div id="mixedBlock" style="display:none" class="row2">
@@ -1206,20 +1207,24 @@ function adaptUIForShopType(){
   var isOnline = shopType==='online';
   var isShop2 = shopType==='shop';
 
-  // Opt: hide Списание, Приход, Расходы, Покупки
+  // Opt: only + Продажа
   ['btnWriteoff','btnReceive','btnExpense','btnStaffPurchase'].forEach(function(id){
     var el=document.getElementById(id);
     if(el) el.style.display = isOpt ? 'none' : '';
   });
-  // Online: hide Списание, Приход, Расходы, Покупки  
+  var btn2 = document.getElementById('journalBtns2');
+  if(btn2) btn2.style.display = isOpt ? 'none' : 'flex';
+  // Online: hide Списание, Приход, Покупки, but keep Расходы visible
   if(isOnline){
     ['btnWriteoff','btnReceive','btnStaffPurchase'].forEach(function(id){
       var el=document.getElementById(id); if(el) el.style.display='none';
     });
+    // Show only Расходы in second row
+    var btn2el=document.getElementById('journalBtns2');
+    if(btn2el) btn2el.style.display='flex';
+    var staffBtn=document.getElementById('btnStaffPurchase');
+    if(staffBtn) staffBtn.style.display='none';
   }
-  // journalBtns2 row - hide if all buttons hidden
-  var btn2 = document.getElementById('journalBtns2');
-  if(btn2) btn2.style.display = isOpt ? 'none' : 'flex';
 
   // Hide close shift sections for opt
   ['closeWo_arrow','closeRcv_arrow','closeExp_arrow','closeStaff_arrow'].forEach(function(id){
@@ -1343,15 +1348,22 @@ function checkItemDiff(){
 // ════ SALE ════
 function resetSaleForm(){
   // Populate transfer/RS selectors from admin accounts
-  var accs = JSON.parse(localStorage.getItem('iz_accounts')||'[]');
+  // Admin stores accounts in 'iz_admin_accounts' with type: 'bank'=РС, 'cash'=нал, others=карты
+  var accs = JSON.parse(localStorage.getItem('iz_admin_accounts')||'[]');
   var transferSel = document.getElementById('transferCardSelect');
   var rsSel = document.getElementById('rsAccountSelect');
-  if(transferSel) transferSel.innerHTML='<option value="">— выберите —</option>'+
-    accs.filter(function(a){return a.type!=='rs'&&a.type!=='bank';})
-    .map(function(a){return '<option>'+a.name+'</option>';}).join('');
-  if(rsSel) rsSel.innerHTML='<option value="">— выберите РС —</option>'+
-    accs.filter(function(a){return a.type==='rs'||a.type==='bank';})
-    .map(function(a){return '<option>'+a.name+'</option>';}).join('');
+  var cardAccs = accs.filter(function(a){ return a.type!=='bank'&&a.type!=='cash'; });
+  var rsAccs = accs.filter(function(a){ return a.type==='bank'; });
+  if(transferSel){
+    transferSel.innerHTML='<option value="">— выберите карту —</option>'+
+      (cardAccs.length ? cardAccs.map(function(a){return '<option value="'+a.name+'">'+a.name+'</option>';}).join('')
+      : '<option disabled>Добавьте карты в настройках Администратора</option>');
+  }
+  if(rsSel){
+    rsSel.innerHTML='<option value="">— выберите РС —</option>'+
+      (rsAccs.length ? rsAccs.map(function(a){return '<option value="'+a.name+'">'+a.name+'</option>';}).join('')
+      : '<option disabled>Добавьте РС в настройках Администратора</option>');
+  }
   var tb=document.getElementById('transferCardBlock'); if(tb)tb.style.display='none';
   var rb=document.getElementById('rsAccountBlock'); if(rb)rb.style.display='none';
   saleItems=[]; renderSaleItems(); calcSaleTotal();
@@ -1512,6 +1524,24 @@ function renderStaff(){
 }
 
 // ════ INVOICES ════
+function createInvoiceFromJournal(){
+  var sales = journal.filter(function(e){ return e.type==='sale'; });
+  if(!sales.length){ showToast('Нет продаж в журнале'); return; }
+  var num = 'НКЛ-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+uid().slice(0,4).toUpperCase();
+  var items = sales.map(function(s){ return {name:s.sub, price:s.amount, num:'', sale:true}; });
+  var inv = {
+    id:uid(), num:num, date:new Date().toISOString().split('T')[0],
+    sourceName:session.shopName, createdBy:session.shopName,
+    sellerName:session.sellerName, status:'pending',
+    items:items, total:sales.reduce(function(s,e){return s+e.amount;},0)
+  };
+  var invs = getInvoices(); invs.unshift(inv);
+  localStorage.setItem('iz_invoices', JSON.stringify(invs));
+  try{ db.collection('iz_invoices').add(inv); }catch(e){}
+  showToast('✅ Накладная '+num+' сформирована');
+  renderInvoices();
+}
+
 function updateInvBadge(){
   const p=getInvoices().filter(i=>i.destName===session?.shopName&&i.status==='pending');
   const b=document.getElementById('invBadge'); if(b){b.style.display=p.length?'block':'none';b.textContent=p.length;}
@@ -1557,29 +1587,41 @@ function renderInvoices(){
   const c=document.getElementById('invoicesList'); if(!c)return;
   var shopType = session.shopType || getShopType(session.shopName||'');
 
-  // For offline/opt: show outgoing invoices (created by this shop/warehouse)
+  // For offline/opt: show outgoing invoices
   if(shopType === 'offline'){
     const all=getInvoices();
     const outgoing=all.filter(i=>i.sourceName===session?.shopName||i.createdBy===session?.shopName);
-    if(!outgoing.length){
-      c.innerHTML='<div class="empty"><div class="ei">📋</div>Исходящих накладных нет</div>'; return;
+    // Also show today's sales as pending invoice draft
+    const todaySales=journal.filter(e=>e.type==='sale');
+    let html='';
+    if(todaySales.length){
+      html+=`<div style="background:#1e2a14;border:1px solid #c8f060;border-radius:12px;padding:12px;margin-bottom:10px">
+        <div style="font-size:12px;color:#c8f060;font-weight:700;margin-bottom:8px">📋 Текущая смена — ${todaySales.length} продаж</div>
+        ${todaySales.map(s=>`<div style="font-size:12px;color:#8888aa;padding:3px 0">· ${s.sub}</div>`).join('')}
+        <button onclick="createInvoiceFromJournal()" style="width:100%;margin-top:10px;padding:10px;background:#c8f060;border:none;border-radius:8px;font-family:Unbounded,sans-serif;font-size:12px;font-weight:700;cursor:pointer;color:#0f0f13">
+          📋 Сформировать накладную
+        </button>
+      </div>`;
     }
-    c.innerHTML=outgoing.map(inv=>`
-      <div class="card" style="border-color:${inv.disputed?'#f06060':inv.status==='accepted'?'#60f090':'#f0a060'}">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <div>
-            <div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700">${inv.num}</div>
-            <div style="font-size:11px;color:#8888aa">📅 ${inv.date} · 📦 ${inv.destName||'—'} · ${inv.items?.length||0} изд.</div>
+    if(outgoing.length){
+      html+=outgoing.map(inv=>`
+        <div class="card" style="border-color:${inv.disputed?'#f06060':inv.status==='accepted'?'#60f090':'#f0a060'}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div>
+              <div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700">${inv.num}</div>
+              <div style="font-size:11px;color:#8888aa">📅 ${inv.date} · 📦 ${inv.destName||'—'} · ${inv.items?.length||0} изд.</div>
+            </div>
+            <span style="font-size:10px;padding:3px 8px;border-radius:6px;font-weight:700;
+              background:${inv.disputed?'#2e1a1a':inv.status==='accepted'?'#1a2e1e':'#2a1e14'};
+              color:${inv.disputed?'#f06060':inv.status==='accepted'?'#60f090':'#f0a060'}">
+              ${inv.disputed?'⚠️ Расхождение':inv.status==='accepted'?'✅ Принята':'⏳ Ожидает'}
+            </span>
           </div>
-          <span style="font-size:10px;padding:3px 8px;border-radius:6px;font-weight:700;
-            background:${inv.disputed?'#2e1a1a':inv.status==='accepted'?'#1a2e1e':'#2a1e14'};
-            color:${inv.disputed?'#f06060':inv.status==='accepted'?'#60f090':'#f0a060'}">
-            ${inv.disputed?'⚠️ Расхождение':inv.status==='accepted'?'✅ Принята':'⏳ Ожидает'}
-          </span>
-        </div>
-        ${inv.items?.slice(0,3).map(it=>`<div style="font-size:12px;color:#8888aa;padding:2px 0">· №${it.num||'—'} ${it.name}</div>`).join('')||''}
-        ${inv.disputed?`<div style="font-size:11px;color:#f06060;margin-top:6px">⚠️ Есть расхождения при приёмке — проверьте</div>`:''}
-      </div>`).join('');
+          ${(inv.items||[]).slice(0,3).map(it=>`<div style="font-size:12px;color:#8888aa;padding:2px 0">· №${it.num||'—'} ${it.name}</div>`).join('')}
+        </div>`).join('');
+    }
+    if(!html) html='<div class="empty"><div class="ei">📋</div>Исходящих накладных нет</div>';
+    c.innerHTML=html;
     return;
   }
 
