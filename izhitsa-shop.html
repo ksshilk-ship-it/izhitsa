@@ -172,7 +172,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
     <div class="card"><div class="ctitle">За смену</div><div id="staffList"></div></div>
   </div>
   <div class="page" id="pg-close">
-    <div class="stitle">Закрытие смены — {{shopName}}</div>
+    <div class="stitle" id="closeShiftTitle">Закрытие смены</div>
 
     <!-- ══ КАССА — всегда видна, ввод вручную ══ -->
     <div style="background:#1e2a14;border-radius:12px;padding:12px;margin-bottom:8px">
@@ -937,7 +937,16 @@ function getShopAdmins(){ return JSON.parse(localStorage.getItem('iz_shop_admins
 function saveShopAdmins(d){ localStorage.setItem('iz_shop_admins',JSON.stringify(d)); }
 function getInvoices(){ return JSON.parse(localStorage.getItem('iz_invoices')||'[]'); }
 function saveInvoices(d){ localStorage.setItem('iz_invoices',JSON.stringify(d)); }
-function getShops(){ const s=JSON.parse(localStorage.getItem('iz_admin_shops')||'[]'); return s.length?s.map(x=>x.name):['Дерево','ДР Товар']; }
+function getShops(){ return JSON.parse(localStorage.getItem('iz_admin_shops')||'[]'); }
+function getShopNames(){ var s=getShops(); return s.length?s.map(x=>x.name):['Дерево','ДР Товар']; }
+function getShopType(name){
+  var shops=getShops();
+  var s=shops.find(function(x){return x.name===name;});
+  return s?s.type||'shop':'shop';
+}
+function isShopType(name){ return getShopType(name)==='shop'; }
+function isOnlineType(name){ return getShopType(name)==='online'; }
+function isOfflineType(name){ return getShopType(name)==='offline'; }
 function saveJ(){ localStorage.setItem(KEY.journal,JSON.stringify(journal)); }
 function saveS(){ localStorage.setItem(KEY.session,JSON.stringify(session)); }
 
@@ -1013,13 +1022,28 @@ function exitShift(){
 
 // ════ MORNING MODAL ════
 function openMorningModal(){
-  document.getElementById('morningShopName').textContent='🏪 '+pendingSession.shopName;
+  var shopName=pendingSession.shopName;
+  var shopType=getShopType(shopName);
+
+  // Non-shop types: skip cash modal, open directly
+  if(shopType!=='shop'){
+    var goodsM=calcGoodsMorning(shopName);
+    session={...pendingSession,openedAt:new Date().toISOString(),cashMorning:0,goodsMorning:goodsM,shopType:shopType};
+    pendingSession=null;
+    journal=[{id:uid(),type:'open',ts:new Date().toISOString(),icon:'🔓',
+      label:'Смена открыта · '+(shopType==='online'?'📱 Онлайн':'🏭 Офлайн'),
+      sub:'📦 Товар: '+fmt(goodsM),cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0}];
+    saveS(); saveJ(); startApp(); return;
+  }
+
+  // Shop type: show morning cash modal
+  document.getElementById('morningShopName').textContent='🏪 '+shopName;
   document.getElementById('morningSellerName').textContent='👤 '+pendingSession.sellerName;
   document.getElementById('morningCash').value='';
   document.getElementById('morningCashHint').style.display='none';
   document.getElementById('morningConfirmBtn').disabled=true;
   document.getElementById('morningConfirmBtn').style.opacity='.4';
-  const prev=getPrevShift(pendingSession.shopName);
+  const prev=getPrevShift(shopName);
   const mc=document.getElementById('morningCompare');
   mc.innerHTML=prev?.cashEvening!=null?`<div class="al-info">📊 Нал вечер прошлой смены: <strong>${fmt(prev.cashEvening)}</strong></div>`:'';
   openMo('morningMo');
@@ -1076,6 +1100,7 @@ function startApp(){
   document.getElementById('hdrShop').textContent=session.shopName;
   document.getElementById('hdrSeller').textContent=session.sellerName;
   buildSellerTabs();
+  adaptUIForShopType();
   db.collection('iz_invoices').onSnapshot(snap=>{
     localStorage.setItem('iz_invoices',JSON.stringify(snap.docs.map(x=>({_id:x.id,...x.data()}))));
     updateInvBadge(); renderPendingAlert();
@@ -1083,6 +1108,64 @@ function startApp(){
   document.getElementById('rcvDate').value=new Date().toISOString().split('T')[0];
   renderAll();
 }
+function adaptUIForShopType(){
+  var shopType = session.shopType || getShopType(session.shopName);
+  var isShop = shopType === 'shop';
+  var isOnline = shopType === 'online';
+  var isOffline = shopType === 'offline';
+
+  // Status bar — hide cash for non-shop
+  var sbCashEl = document.getElementById('sbCash');
+  if(sbCashEl) sbCashEl.closest('.sb').style.display = isShop ? 'block' : 'none';
+
+  // Header indicator
+  var shopEl = document.getElementById('hdrShop');
+  if(shopEl){
+    var icon = isShop?'🏪':isOnline?'📱':'🏭';
+    shopEl.textContent = icon + ' ' + session.shopName;
+  }
+
+  // Update sale modal payment methods for online/offline
+  // For non-shop: add РС option, keep all methods
+  var payChips = document.querySelector('#saleMo .pay-chips');
+  if(payChips && !isShop){
+    // Add РС payment if not already there
+    if(!document.getElementById('pcRS')){
+      var rsChip = document.createElement('div');
+      rsChip.className = 'pc';
+      rsChip.id = 'pcRS';
+      rsChip.textContent = '🏦 РС';
+      rsChip.onclick = function(){ setPayM('rs', this); };
+      payChips.appendChild(rsChip);
+    }
+  }
+
+  // For online/offline: show goods source selector in sale modal
+  if(!isShop){
+    var saleMo = document.getElementById('saleMo');
+    if(saleMo && !document.getElementById('goodsSourceBlock')){
+      var sourceBlock = document.createElement('div');
+      sourceBlock.id = 'goodsSourceBlock';
+      sourceBlock.className = 'fg';
+      var shopNames = getShopNames().filter(function(s){ return getShopType(s)==='shop'; });
+      sourceBlock.innerHTML = '<label class="fl">Откуда списать товар</label>'+
+        '<select class="fs" id="goodsSource">'+
+        shopNames.map(function(s){ return '<option>'+s+'</option>'; }).join('')+
+        '</select>'+
+        '<div style="font-size:11px;color:#8888aa;margin-top:4px">Магазину придёт уведомление убрать товар с прилавка</div>';
+      // Insert before payment methods
+      var payFg = payChips?.closest('.fg');
+      if(payFg) saleMo.querySelector('.md').insertBefore(sourceBlock, payFg);
+    }
+  }
+}
+
+// РС accounts for payment
+function getRSAccounts(){
+  var accounts = JSON.parse(localStorage.getItem('iz_accounts')||'[]');
+  return accounts.filter(function(a){ return a.type==='bank'||a.type==='rs'; });
+}
+
 function buildSellerTabs(){
   const t=document.getElementById('mainTabs'); t.style.display='flex';
   t.innerHTML=`
@@ -1099,7 +1182,7 @@ function startAdminApp(){
   document.getElementById('hdrShop').textContent='🔐 Администратор';
   document.getElementById('hdrSeller').textContent=session.name;
   buildAdminTabs();
-  const shops=getShops();
+  const shops=getShopNames();
   ['psShop','newSShop'].forEach(id=>{
     const el=document.getElementById(id); if(!el) return;
     const isNew=id==='newSShop';
@@ -1227,8 +1310,33 @@ function saveSale(){
     items:[...saleItems],totalPrice:total,discount:disc,totalPaid:paid,payMethod,cashPart,cardPart,
     hasDiff,comment:gv('saleComment'),amount:paid,amtCls:'inc',amtSign:'+',
     cashEffect:cashPart,cardEffect:cardPart,staffEffect:0,goodsEffect:-total});
+  // For online/offline: notify source shop to remove goods from shelf
+  var shopType = session.shopType || getShopType(session.shopName);
+  if(shopType !== 'shop'){
+    var sourceShop = document.getElementById('goodsSource')?.value || '';
+    if(sourceShop){
+      // Save notification for source shop
+      var notif = {
+        id:uid(), type:'online_sale',
+        fromChannel: session.shopName,
+        sellerName: session.sellerName,
+        sourceShop: sourceShop,
+        items: [...saleItems],
+        date: new Date().toISOString().split('T')[0],
+        ts: new Date().toISOString(),
+        read: false
+      };
+      var alerts = JSON.parse(localStorage.getItem('iz_shop_notifications')||'[]');
+      alerts.unshift(notif);
+      localStorage.setItem('iz_shop_notifications', JSON.stringify(alerts.slice(0,100)));
+      try{ db.collection('iz_shop_notifications').add(notif); }catch(e){}
+      // Also subtract from source shop goods
+      var sKey = 'iz_shop_goods_'+sourceShop;
+      // This will be shown as notification to source shop seller
+    }
+  }
   saveJ(); resetSaleForm(); closeMo('saleMo'); renderAll();
-  showToast('✅ Продажа '+fmt(paid)+' зафиксирована');
+  showToast('✅ Продажа '+fmt(paid)+' зафиксирована'+(sourceShop?' · уведомление в '+sourceShop:''));
 }
 
 // ════ WRITEOFF ════
@@ -1281,8 +1389,40 @@ function updateInvBadge(){
 }
 function renderPendingAlert(){
   const c=document.getElementById('pendingAlert'); if(!c)return;
+  let html = '';
+  // Incoming invoices
   const p=getInvoices().filter(i=>i.destName===session?.shopName&&i.status==='pending');
-  c.innerHTML=p.length?`<div class="al-warn">🔔 ${p.length} накладная ожидает приёмки</div>`:'';
+  if(p.length) html+=`<div class="al-warn" style="cursor:pointer" onclick="showPg('invoices',document.querySelectorAll('.tab')[1]);renderInvoices()">🔔 ${p.length} накладная ожидает приёмки</div>`;
+  // Online sale notifications for this shop
+  if(getShopType(session?.shopName)==='shop'){
+    var notifs=JSON.parse(localStorage.getItem('iz_shop_notifications')||'[]')
+      .filter(function(n){ return n.sourceShop===session?.shopName && !n.shopAcked; });
+    if(notifs.length) html+=`<div class="al-warn" style="cursor:pointer" onclick="showOnlineSaleNotifs()">
+      📱 ${notifs.length} онлайн-продажа — нужно убрать товар с прилавка
+    </div>`;
+  }
+  c.innerHTML = html;
+}
+
+function showOnlineSaleNotifs(){
+  var notifs=JSON.parse(localStorage.getItem('iz_shop_notifications')||'[]')
+    .filter(function(n){ return n.sourceShop===session?.shopName && !n.shopAcked; });
+  if(!notifs.length) return;
+  var lines = notifs.map(function(n,i){
+    var itemLines = n.items.map(function(it){ return it.name; }).join(', ');
+    return (i+1)+'. '+n.fromChannel+' ('+n.sellerName+'): '+itemLines;
+  });
+  var msgText = 'Онлайн-продажи. Убрать с прилавка: ' + lines.join('; ') + '. Подтвердить?';
+  if(confirm(msgText)){
+    var all=JSON.parse(localStorage.getItem('iz_shop_notifications')||'[]');
+    notifs.forEach(function(n){
+      var idx=all.findIndex(function(a){return a.id===n.id;});
+      if(idx>=0) all[idx].shopAcked=true;
+    });
+    localStorage.setItem('iz_shop_notifications',JSON.stringify(all));
+    renderPendingAlert();
+    showToast('Подтверждено');
+  }
 }
 function renderInvoices(){
   const c=document.getElementById('invoicesList'); if(!c)return;
@@ -2463,9 +2603,9 @@ function deleteAdmin(idx,name){
 
 // ════ INIT ════
 function init(){
-  const shops=getShops();
+  const shopNames=getShopNames();
   const shopSel=document.getElementById('loginShop');
-  if(shopSel) shopSel.innerHTML=shops.map(s=>`<option>${s}</option>`).join('');
+  if(shopSel) shopSel.innerHTML=shopNames.map(s=>`<option>${s}</option>`).join('');
   // Ensure default admin
   var admins=JSON.parse(localStorage.getItem('iz_shop_admins')||'[]');
   if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; localStorage.setItem('iz_shop_admins',JSON.stringify(admins)); }

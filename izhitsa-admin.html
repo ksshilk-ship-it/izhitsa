@@ -388,8 +388,15 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
       <button class="add-btn" onclick="addSetting('incCats',{name:gv('newIncC')},'newIncC')">＋</button></div>
     </div>
     <div class="card"><div class="ctitle">Точки продаж</div><div id="setShops"></div>
-      <div class="add-row"><input class="fi" id="newShop" placeholder="Название точки">
-      <button class="add-btn" onclick="addSetting('shops',{name:gv('newShop')},'newShop')">＋</button></div>
+      <div class="fg" style="margin-bottom:8px">
+        <select class="fs" id="newShopType" style="margin-bottom:8px">
+          <option value="shop">🏪 Магазин (полная смена, касса)</option>
+          <option value="online">📱 Онлайн (без кассы)</option>
+          <option value="offline">🏭 Офлайн / Опт (без кассы)</option>
+        </select>
+        <input class="fi" id="newShop" placeholder="Название точки продаж">
+      </div>
+      <button class="btn sm" onclick="addSetting('shops',{name:gv('newShop'),type:document.getElementById('newShopType').value},'newShop')">＋ Добавить точку</button>
     </div>
     <div class="card"><div class="ctitle">Контрагенты</div><div id="setContractors"></div>
       <div class="add-row"><input class="fi" id="newCont" placeholder="Поставщик / покупатель">
@@ -447,6 +454,15 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
       <div class="fg"><label class="fl">Бюджет/мес (₽)</label><input class="fi" type="number" id="newShopExpB" placeholder="0" inputmode="numeric"></div>
       <button class="btn sec" onclick="addShopExpCat()">＋ Добавить статью расхода</button>
     </div>
+  </div>
+
+  <!-- ALERTS PAGE -->
+  <div class="page" id="pg-alerts">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="stitle" style="margin:0">🚨 Уведомления о кассе</div>
+      <button onclick="markAllAlertsRead()" class="btn sm sec">Всё прочитано</button>
+    </div>
+    <div id="alertsPageContent"></div>
   </div>
 
   <!-- STAFF MANAGEMENT PAGE -->
@@ -694,6 +710,7 @@ function showPg(name,el){
   if(name==='op')         { populateOpSelects(); }
   if(name==='analytics')  { renderAnalytics(); }
   if(name==='staff')      { renderStaffPage(); }
+  if(name==='alerts')     { renderAdminAlerts(); }
 }
 
 // ════════ DATE RANGES ════════
@@ -788,6 +805,18 @@ function startApp(){
   document.getElementById('opDate').value=new Date().toISOString().split('T')[0];
   document.getElementById('dDate').value=new Date().toISOString().split('T')[0];
   document.getElementById('payDate').value=new Date().toISOString().split('T')[0];
+  // Load admin alerts (cash discrepancies)
+  db.collection('iz_admin_alerts').orderBy('createdAt','desc').limit(50).onSnapshot(snap=>{
+    const alerts = snap.docs.map(d=>({_id:d.id,...d.data()}));
+    // Merge with local
+    const local = JSON.parse(localStorage.getItem('iz_admin_alerts')||'[]');
+    const merged = [...alerts,...local.filter(l=>!alerts.find(a=>a.id===l.id))];
+    localStorage.setItem('iz_admin_alerts', JSON.stringify(merged.slice(0,50)));
+    renderAdminAlerts();
+    renderDash(); // refresh dash alerts badge
+  },()=>{
+    renderAdminAlerts();
+  });
   // Load workshop employees
   db.collection('ws_employees').onSnapshot(snap=>{
     if(snap.docs.length){
@@ -832,6 +861,7 @@ function buildTabs(){
     {id:'shops',     icon:'🏪',label:'Магазины'},
     {id:'prod',      icon:'🏭',label:'Мастерская'},
     {id:'staff',     icon:'👥',label:'Сотрудники'},
+    {id:'alerts',    icon:'🚨',label:'Тревоги'},
   ];
   const accountant=[
     {id:'dash',      icon:'🏠',label:'Главная'},
@@ -849,6 +879,7 @@ function buildTabs(){
     {id:'shops',     icon:'🏪',label:'Магазины'},
     {id:'prod',      icon:'🏭',label:'Мастерская'},
     {id:'staff',     icon:'👥',label:'Сотрудники'},
+    {id:'alerts',    icon:'🚨',label:'Тревоги'},
     {id:'debt',      icon:'💰',label:'Долги'},
     {id:'settings',  icon:'⚙️',label:'Настройки'},
   ];
@@ -919,12 +950,26 @@ function renderDash(){
   const rtx=document.getElementById('dashRecentTx');
   rtx.innerHTML=recent.length?recent.map(t=>{const isI=t.type==='income',isT=t.type==='transfer';return`<div class="txi"><div class="txi-ic ${t.type}">${isT?'⇄':isI?'⬆️':'⬇️'}</div><div class="txi-info"><div class="txi-desc">${t.categoryName||'Перевод'}${t.comment?' · '+t.comment:''}</div><div class="txi-sub">${t.date||''}</div></div><div class="txi-amt ${isT?'tr':isI?'inc':'exp'}">${isI?'+':isT?'⇄':'−'}${fmt(t.amount)}</div></div>`;}).join(''):'<div class="empty"><div class="ei">📋</div>Нет операций</div>';
 
-  // Alerts
-  const alerts=[];
+  // Cash diff alerts from shops
+  const cashAlerts = JSON.parse(localStorage.getItem('iz_admin_alerts')||'[]').filter(a=>!a.read);
   const debtTotal=getD('debtors').reduce((s,d)=>s+(d.amount||0)-(d.paid||0),0);
-  if(debtTotal>0) alerts.push(`👥 Дебиторка: ${fmt(debtTotal)}`);
-  if(pro<0) alerts.push(`📉 Убыток за период: ${fmt(Math.abs(pro))}`);
-  document.getElementById('dashAlerts').innerHTML=alerts.map(a=>`<div class="al-warn">${a}</div>`).join('');
+  let alertsHtml = '';
+  if(cashAlerts.length){
+    alertsHtml += `<div style="background:#2e1a1a;border:2px solid var(--exp);border-radius:12px;padding:12px;margin-bottom:10px;cursor:pointer" onclick="showPg('alerts',document.querySelector('.tab[onclick*=alerts]'))">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:13px;font-weight:700;color:var(--exp)">🚨 ${cashAlerts.length} непрочитанных уведомлений о кассе</div>
+        <div style="font-size:11px;color:var(--t2)">→ Подробнее</div>
+      </div>
+      ${cashAlerts.slice(0,2).map(a=>`<div style="font-size:11px;color:var(--t2);padding:3px 0;border-top:1px solid rgba(255,255,255,.05)">
+        🏪 ${a.shopName} · ${a.sellerName} · ${a.date}
+        ${a.cashDiff?` · Расхождение кассы: ${a.cashDiff>0?'+':''}${fmt(a.cashDiff)}`:''}
+        ${a.morningDiff>1?` · Нал утро ≠ вечер прошлой смены`:''}
+      </div>`).join('')}
+    </div>`;
+  }
+  if(debtTotal>0) alertsHtml += `<div class="al-warn">👥 Дебиторка: ${fmt(debtTotal)}</div>`;
+  if(pro<0) alertsHtml += `<div class="al-warn">📉 Убыток за период: ${fmt(Math.abs(pro))}</div>`;
+  document.getElementById('dashAlerts').innerHTML=alertsHtml;
 
   // Shop block (owner only)
   const sb=document.getElementById('dashShopBlock');
@@ -1339,7 +1384,11 @@ function renderSettings(){
   rSet('setEntities','entities',e=>e.name);
   rSet('setExpCats','expCats',c=>`${c.name} <span style="color:var(--t2);font-size:11px">бюджет: ${fmt(c.budget||0)}</span>`);
   rSet('setIncCats','incCats',c=>c.name);
-  rSet('setShops','shops',s=>s.name);
+  rSet('setShops','shops',function(s){
+    var icons={'shop':'🏪','online':'📱','offline':'🏭'};
+    var names={'shop':'Магазин','online':'Онлайн','offline':'Офлайн'};
+    return (icons[s.type]||'🏪')+' '+s.name+' <span style="color:var(--t2);font-size:11px">'+(names[s.type]||'Магазин')+'</span>';
+  });
   rSet('setContractors','contractors',c=>c.name);
   renderUsersList();
   document.getElementById('adminUsersList').innerHTML=getAdminUsers().map(u=>`<div style="font-size:12px;padding:5px 0;border-bottom:1px solid var(--border)">${u.name} · <span style="color:var(--t2)">${{admin:'🔐 Администратор',owner:'👑 Владелец',accountant:'📊 Бухгалтер'}[u.role]||u.role}</span></div>`).join('');
@@ -2177,6 +2226,69 @@ function confirmStaffAction(){
   }
   closeMo('staffActionMo');
   showToast(type==='delete'?'🗑 Удалено':type==='block'?'🚫 Заблокировано':'✅ Разблокировано');
+}
+
+
+
+// ════════════════════════════════
+// ADMIN ALERTS — cash discrepancies
+// ════════════════════════════════
+function getAdminAlerts(){ return JSON.parse(localStorage.getItem('iz_admin_alerts')||'[]'); }
+function saveAdminAlerts(d){ localStorage.setItem('iz_admin_alerts',JSON.stringify(d)); }
+
+function markAllAlertsRead(){
+  const alerts=getAdminAlerts().map(a=>({...a,read:true}));
+  saveAdminAlerts(alerts);
+  // Mark read in Firebase
+  db.collection('iz_admin_alerts').get().then(snap=>{
+    snap.docs.forEach(d=>d.ref.update({read:true}));
+  }).catch(()=>{});
+  renderAdminAlerts();
+  renderDash();
+  showToast('✅ Все уведомления прочитаны');
+}
+
+function markAlertRead(id){
+  const alerts=getAdminAlerts().map(a=>a.id===id||a._id===id?{...a,read:true}:a);
+  saveAdminAlerts(alerts);
+  db.collection('iz_admin_alerts').doc(id).update({read:true}).catch(()=>{});
+  renderAdminAlerts();
+  renderDash();
+}
+
+function renderAdminAlerts(){
+  const c=document.getElementById('alertsPageContent'); if(!c) return;
+  const alerts=getAdminAlerts();
+  if(!alerts.length){
+    c.innerHTML='<div class="empty"><div class="ei">✅</div>Нет уведомлений</div>';
+    return;
+  }
+  c.innerHTML=alerts.map(a=>`
+    <div style="background:${a.read?'var(--s1)':'#2e1a1a'};border:${a.read?'1px solid var(--border)':'2px solid var(--exp)'};border-radius:12px;padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <div style="font-size:13px;font-weight:700;color:${a.read?'var(--text)':'var(--exp)'}">${a.read?'':'🔴 '}Расхождение кассы</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:2px">🏪 ${a.shopName} · 👤 ${a.sellerName} · 📅 ${a.date}</div>
+        </div>
+        ${!a.read?`<button onclick="markAlertRead('${a._id||a.id}')" style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:4px 8px;font-size:11px;color:var(--t2);cursor:pointer;white-space:nowrap">Прочитано</button>`:''}
+      </div>
+      ${a.cashDiff&&Math.abs(a.cashDiff)>0?`
+      <div style="background:rgba(240,96,96,.1);border-radius:8px;padding:8px;margin-bottom:6px">
+        <div style="font-size:12px;font-weight:700;color:var(--exp)">
+          💵 Расхождение кассы вечер: ${a.cashDiff>0?'+':''}${fmt(a.cashDiff)}
+        </div>
+        ${a.cashDiffReason?`<div style="font-size:11px;color:var(--t2);margin-top:4px">Причина продавца: «${a.cashDiffReason}»</div>`:''}
+      </div>`:''}
+      ${a.morningDiff>1?`
+      <div style="background:rgba(240,160,96,.1);border-radius:8px;padding:8px">
+        <div style="font-size:12px;font-weight:700;color:var(--a4)">
+          🌅 Нал утро не совпадает с вечером прошлой смены
+        </div>
+        <div style="font-size:11px;color:var(--t2);margin-top:4px">
+          Вечер прошлой смены: ${fmt(a.prevCashEve||0)} · Утро этой: ${fmt(a.cashMorning||0)} · Разница: ${fmt(a.morningDiff)}
+        </div>
+      </div>`:''}
+    </div>`).join('');
 }
 
 
