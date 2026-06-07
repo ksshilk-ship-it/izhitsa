@@ -398,6 +398,13 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
       </div>
       <button class="btn sm" onclick="addSetting('shops',{name:gv('newShop'),type:document.getElementById('newShopType').value},'newShop')">＋ Добавить точку</button>
     </div>
+
+    <!-- ЗП Настройки -->
+    <div class="card">
+      <div class="ctitle">💰 Настройки ЗП по магазинам</div>
+      <div id="zpSettingsList"></div>
+      <button class="btn" onclick="saveZpSettings()" style="margin-top:8px">💾 Сохранить настройки ЗП</button>
+    </div>
     <div class="card"><div class="ctitle">Контрагенты</div><div id="setContractors"></div>
       <div class="add-row"><input class="fi" id="newCont" placeholder="Поставщик / покупатель">
       <button class="add-btn" onclick="addSetting('contractors',{name:gv('newCont')},'newCont')">＋</button></div>
@@ -1379,7 +1386,72 @@ function savePayment(){const amount=parseFloat(gv('payAmt'));if(!amount){showToa
 // ════════ SETTINGS ════════
 function addSetting(key,data,clearId){if(!data.name?.trim()){showToast('Введите название');return;}data.id=uid();data.name=data.name.trim();const arr=getD(key);arr.push(data);setD(key,arr);db.collection(SK[key]||key).add(data).catch(console.error);const el=document.getElementById(clearId);if(el)el.value='';const el2=document.getElementById('newExpB');if(el2&&clearId==='newExpC')el2.value='';renderSettings();populateOpSelects();showToast('✅ Добавлено');}
 function delSetting(key,id){const arr=getD(key).filter(i=>i.id!==id);setD(key,arr);renderSettings();populateOpSelects();}
+function getZpSettings(){ return JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}'); }
+function setZpSettings(d){ localStorage.setItem('iz_shop_zp_settings',JSON.stringify(d)); }
+
+function renderZpSettings(){
+  var c=document.getElementById('zpSettingsList'); if(!c) return;
+  var shops=getD('shops');
+  if(!shops.length){ c.innerHTML='<div style="color:#8888aa;font-size:12px">Сначала добавьте точки продаж</div>'; return; }
+  var settings=getZpSettings();
+  c.innerHTML=shops.map(function(shop){
+    var nm=shop.name||shop;
+    var s=settings[nm]||{base:1500,threshold:5000,pct:8,travel:0};
+    var sid=(nm).replace(/[^a-zA-Zа-яА-Я0-9]/g,'_');
+    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">'+
+      '<div style="font-size:13px;font-weight:700;color:#c8f060;margin-bottom:10px">🏪 '+nm+'</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'+
+        '<div><label style="font-size:10px;color:#8888aa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">База ₽</label>'+
+        '<input class="fi" type="number" id="zpa_base_'+sid+'" value="'+(s.base||1500)+'" inputmode="numeric"></div>'+
+        '<div><label style="font-size:10px;color:#8888aa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Проезд ₽</label>'+
+        '<input class="fi" type="number" id="zpa_travel_'+sid+'" value="'+(s.travel||0)+'" inputmode="numeric"></div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'+
+        '<div><label style="font-size:10px;color:#8888aa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Порог ₽</label>'+
+        '<input class="fi" type="number" id="zpa_thresh_'+sid+'" value="'+(s.threshold||5000)+'" inputmode="numeric"></div>'+
+        '<div><label style="font-size:10px;color:#8888aa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">% ставка</label>'+
+        '<input class="fi" type="number" id="zpa_pct_'+sid+'" value="'+(s.pct||8)+'" inputmode="numeric" step="0.5"></div>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+
+        '<input type="checkbox" id="zpa_has_high_'+sid+'" '+(s.highThreshold?'checked':'')+
+        ' onchange="document.getElementById('zpa_high_block_'+sid+'').style.display=this.checked?'grid':'none'"'+
+        ' style="width:16px;height:16px;cursor:pointer">'+
+        '<label for="zpa_has_high_'+sid+'" style="font-size:12px;color:#8888aa;cursor:pointer">Повышенный % при высокой выручке</label>'+
+      '</div>'+
+      '<div id="zpa_high_block_'+sid+'" style="display:'+(s.highThreshold?'grid':'none')+';grid-template-columns:1fr 1fr;gap:8px">'+
+        '<div><label style="font-size:10px;color:#8888aa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Порог выс. ₽</label>'+
+        '<input class="fi" type="number" id="zpa_highthresh_'+sid+'" value="'+(s.highThreshold||20000)+'" inputmode="numeric"></div>'+
+        '<div><label style="font-size:10px;color:#8888aa;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Выс. %</label>'+
+        '<input class="fi" type="number" id="zpa_highpct_'+sid+'" value="'+(s.highPct||10)+'" inputmode="numeric" step="0.5"></div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function saveZpSettings(){
+  var shops=getD('shops');
+  var settings={};
+  shops.forEach(function(shop){
+    var nm=shop.name||shop;
+    var sid=(nm).replace(/[^a-zA-Zа-яА-Я0-9]/g,'_');
+    var hasHigh=document.getElementById('zpa_has_high_'+sid)?.checked;
+    settings[nm]={
+      base:parseFloat(document.getElementById('zpa_base_'+sid)?.value)||1500,
+      threshold:parseFloat(document.getElementById('zpa_thresh_'+sid)?.value)||5000,
+      pct:parseFloat(document.getElementById('zpa_pct_'+sid)?.value)||8,
+      travel:parseFloat(document.getElementById('zpa_travel_'+sid)?.value)||0,
+      highThreshold:hasHigh?(parseFloat(document.getElementById('zpa_highthresh_'+sid)?.value)||20000):null,
+      highPct:hasHigh?(parseFloat(document.getElementById('zpa_highpct_'+sid)?.value)||10):null,
+    };
+  });
+  setZpSettings(settings);
+  // Also sync to Firebase
+  try{ db.collection('iz_admin_settings').doc('zp').set(settings); }catch(e){}
+  showToast('✅ Настройки ЗП сохранены');
+}
+
 function renderSettings(){
+  renderZpSettings();
   rSet('setAccounts','accounts',a=>`${a.type==='cash'?'💵':'💳'} ${a.name}`);
   rSet('setEntities','entities',e=>e.name);
   rSet('setExpCats','expCats',c=>`${c.name} <span style="color:var(--t2);font-size:11px">бюджет: ${fmt(c.budget||0)}</span>`);
