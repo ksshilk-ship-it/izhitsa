@@ -352,6 +352,21 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
         </div>
 
 
+        <div style="background:#2a1e14;border-radius:10px;margin-bottom:5px;overflow:hidden">
+          <div onclick="toggleSub('clDrExp')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:11px 12px">
+            <div style="font-size:13px;font-weight:700;color:#f0a060">💸 Расходы</div>
+            <div id="clDrExp_arrow" style="color:#f0a060">▶</div>
+          </div>
+          <div id="clDrExp_body" style="padding:0 12px 12px;display:none"><div id="closeDrExpDetail"></div></div>
+        </div>
+
+        <div style="background:#1e1a2e;border-radius:10px;margin-bottom:5px;overflow:hidden">
+          <div onclick="toggleSub('clDrStaff')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:11px 12px">
+            <div style="font-size:13px;font-weight:700;color:#a060f0">🛒 Покупки сотрудников</div>
+            <div id="clDrStaff_arrow" style="color:#a060f0">▶</div>
+          </div>
+          <div id="clDrStaff_body" style="padding:0 12px 12px;display:none"><div id="closeDrStaffDetail"></div></div>
+        </div>
 
       </div><!-- end acc_close_dr_body -->
     </div><!-- end acc_close_dr -->
@@ -902,6 +917,15 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 <!-- STAFF -->
 <div class="mo" id="staffMo">
   <div class="md"><div class="mh"></div><div class="mt">Покупка сотрудника</div>
+    <div class="fg">
+      <label class="fl">Тип товара</label>
+      <div style="display:flex;gap:8px;margin-bottom:4px">
+        <button type="button" id="spGoodsDerevo" onclick="setSpGoods('derevo',this)"
+          style="flex:1;padding:8px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">🌳 Дерево</button>
+        <button type="button" id="spGoodsDr" onclick="setSpGoods('dr',this)"
+          style="flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
+      </div>
+    </div>
     <div class="fg"><label class="fl">Сотрудник</label><input class="fi" id="spWho" placeholder="Иванова Мария"></div>
     <div class="fg"><label class="fl">Изделие</label><input class="fi" id="spItem" placeholder="Наименование / артикул"></div>
     <div class="row2">
@@ -1620,6 +1644,18 @@ function saveReceive(){
 }
 
 // ════ STAFF ════
+var spGoodsType = 'derevo';
+function setSpGoods(type, el){
+  spGoodsType = type;
+  var db=document.getElementById('spGoodsDerevo'), dr=document.getElementById('spGoodsDr');
+  if(type==='derevo'){
+    if(db) db.style.cssText='flex:1;padding:8px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer';
+    if(dr) dr.style.cssText='flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer';
+  } else {
+    if(dr) dr.style.cssText='flex:1;padding:8px;border-radius:10px;border:2px solid #a060f0;background:#1e1a2e;color:#a060f0;font-size:12px;font-weight:700;cursor:pointer';
+    if(db) db.style.cssText='flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer';
+  }
+}
 function setStaffPayM(m,el){ staffPayMethod=m; document.querySelectorAll('#staffMo .pc').forEach(p=>p.classList.remove('active')); el.classList.add('active'); }
 function saveStaff(){
   const who=gv('spWho'),item=gv('spItem'),pay=parseFloat(gv('spPay'))||0;
@@ -1629,7 +1665,7 @@ function saveStaff(){
   const isCard=staffPayMethod!=='cash';
   journal.push({id:uid(),type:'staff',ts:new Date().toISOString(),icon:'🛒',label:'Покупка сотр.: '+who,
     sub:item+' · '+fmt(retail)+' · '+fmt(pay)+' '+payL,amount:pay,amtCls:'neu',
-    cashEffect:0,cardEffect:isCard?pay:0,staffEffect:staffPayMethod==='cash'?pay:0,goodsEffect:-retail});
+    goodsType:spGoodsType,cashEffect:0,cardEffect:isCard?pay:0,staffEffect:staffPayMethod==='cash'?pay:0,goodsEffect:-retail});
   saveJ(); ['spWho','spItem','spRetail','spPay','spComment'].forEach(id=>document.getElementById(id).value='');
   closeMo('staffMo'); renderAll(); renderStaff(); showToast('🛒 Покупка зафиксирована');
 }
