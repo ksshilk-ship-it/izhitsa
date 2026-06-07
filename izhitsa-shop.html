@@ -2197,17 +2197,19 @@ function renderClose(){
           // ЗП расчётная by shop
           var zpCalcWood = 0, zpCalcDr = 0, zpCalcTotal = 0;
           var shopN = (session.shopName||'').toLowerCase();
-          if(shopN.indexOf('роза') >= 0 || shopN.indexOf('хутор') >= 0){
+          if(shopN.indexOf('горк') >= 0){
+            // Горки: 2000 база + 8% или 10% в зависимости от выручки
+            var pct = (totalNet >= 20000) ? 0.10 : 0.08;
+            zpCalcWood = 2000 + netWood * pct;
+            zpCalcDr   = netDr * pct;
+          } else {
+            // Роза Хутор и остальные: 1500 база, порог 5000, ставка 8%
             if(totalNet < 5000){
               zpCalcWood = 1500; zpCalcDr = 0;
             } else {
               zpCalcWood = 1500 + netWood * 0.08;
               zpCalcDr   = netDr * 0.08;
             }
-          } else {
-            // Default: 8% of total if > 5000, else 1500
-            if(totalNet < 5000){ zpCalcWood = 1500; zpCalcDr = 0; }
-            else { zpCalcWood = 1500 + netWood * 0.08; zpCalcDr = netDr * 0.08; }
           }
           zpCalcTotal = zpCalcWood + zpCalcDr + travel;
           var fmt2 = function(n){ return Math.round(n).toLocaleString('ru-RU')+'₽'; };
