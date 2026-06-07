@@ -216,13 +216,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
         </div>
       </div>
 
-      <!-- ИТОГО ВЫРУЧКА -->
-      <div style="background:#1a1e2e;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:6px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div style="font-size:12px;color:#8888aa">Итого выручка</div>
-          <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#60c8f0" id="closeTotalRev">0₽</div>
-        </div>
-      </div>
+
 
       <!-- КОЛЛАПСИРУЕМОЕ ДЕРЕВО -->
       <div id="acc_close_wood_body">
@@ -316,13 +310,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
         </div>
       </div>
 
-      <!-- ИТОГО ДР -->
-      <div style="background:#1a1e2e;border:1px solid #a060f0;border-radius:10px;padding:10px;margin-bottom:6px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div style="font-size:12px;color:#8888aa">Итого выручка ДР</div>
-          <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#a060f0" id="closeDrTotalRev">0₽</div>
-        </div>
-      </div>
+
 
       <!-- КОЛЛАПСИРУЕМОЕ ДР -->
       <div id="acc_close_dr_body">
@@ -2082,6 +2070,77 @@ function renderClose(){
   // Update title
   var title = document.getElementById('closeShiftTitle');
   if(title) title.textContent = 'Закрытие смены · ' + (session.shopName||'');
+
+  // ══ ИТОГОВЫЙ БЛОК ══
+  var sumEl = document.getElementById('closeSummary');
+  if(sumEl){
+    // Wood sales (goodsType='derevo' or not set)
+    var woodSales = sales.filter(function(s){ return !s.goodsType||s.goodsType==='derevo'; });
+    var drSalesArr = sales.filter(function(s){ return s.goodsType==='dr'; });
+    var woodRev = woodSales.reduce(function(a,s){return a+(s.cashPart||0)+(s.cardPart||0)+(s.discount||0);},0);
+    var drRev = drSalesArr.reduce(function(a,s){return a+(s.cashPart||0)+(s.cardPart||0)+(s.discount||0);},0);
+
+    // Expenses
+    var zpFact = expenses.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
+    var totalExpWood = expenses.filter(function(e){return !e.goodsType||e.goodsType==='derevo';}).reduce(function(a,e){return a+e.amount;},0);
+    var totalExpDr = expenses.filter(function(e){return e.goodsType==='dr';}).reduce(function(a,e){return a+e.amount;},0);
+
+    // Writeoffs
+    var woWood = writeoffs.filter(function(e){return !e.goodsType||e.goodsType==='derevo';}).reduce(function(a,e){return a+(e.amount||0);},0);
+    var woDr = writeoffs.filter(function(e){return e.goodsType==='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
+
+    // Receives
+    var rcvWood = receives.filter(function(e){return !e.goodsType||e.goodsType==='derevo';}).reduce(function(a,e){return a+(e.goodsEffect||0);},0);
+    var rcvDr = receives.filter(function(e){return e.goodsType==='dr';}).reduce(function(a,e){return a+(e.goodsEffect||0);},0);
+
+    var cashEveEntered = parseFloat(document.getElementById('cashEveInput')?.value)||0;
+
+    var R2 = function(label, val, color, bold){
+      return '<tr><td style="padding:5px 8px;color:#8888aa;font-size:12px">'+label+'</td>'+
+             '<td style="padding:5px 8px;text-align:right;color:'+(color||'#f0f0f8')+';font-size:12px;'+(bold?'font-weight:700':'')+'">'+fmt(val)+'</td></tr>';
+    };
+    var R2c = function(label, val1, val2, color){
+      return '<tr><td style="padding:5px 8px;color:#8888aa;font-size:12px">'+label+'</td>'+
+             '<td style="padding:5px 8px;text-align:right;font-size:12px"><span style="color:'+(color||'#f0f0f8')+'">'+fmt(val1)+'</span>'+
+             (val2!==undefined?'<span style="color:#555568;font-size:10px"> / '+val2+'шт.</span>':'')+'</td></tr>';
+    };
+    var sep = '<tr><td colspan="2" style="padding:2px 8px"><div style="height:1px;background:#2e2e3e"></div></td></tr>';
+    var hdr = function(label, color){ return '<tr><td colspan="2" style="padding:6px 8px 2px;font-size:11px;font-weight:700;color:'+(color||'#8888aa')+';text-transform:uppercase;letter-spacing:.5px">'+label+'</td></tr>'; };
+
+    sumEl.innerHTML =
+      '<div style="background:#1e2a14;border:2px solid #c8f060;border-radius:14px;padding:14px;margin-bottom:16px">' +
+      '<div style="font-size:11px;color:#c8f060;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">📊 ИТОГИ СМЕНЫ — '+session.shopName+'</div>'+
+      '<table style="width:100%;border-collapse:collapse">'+
+
+      hdr('🌳 Дерево', '#c8f060') +
+      R2c('Продажи', woodRev, woodSales.length, '#60c8f0') +
+      R2('Списание товара', woWood, '#f06060') +
+      R2('Приход товара', rcvWood, '#60f090') +
+      R2('Расходы', totalExpWood, '#f0a060') +
+      sep +
+
+      hdr('🛍 ДР Товар', '#a060f0') +
+      R2c('Продажи', drRev, drSalesArr.length, '#60c8f0') +
+      R2('Списание товара', woDr, '#f06060') +
+      R2('Приход товара', rcvDr, '#60f090') +
+      R2('Расходы', totalExpDr, '#f0a060') +
+      sep +
+
+      hdr('💵 Касса', '#f0a060') +
+      R2('Нал утро', session.cashMorning||0, '#f0f0f8') +
+      (cashEveEntered ? R2('Нал вечер (введено)', cashEveEntered, '#c8f060', true) : '<tr><td style="padding:5px 8px;color:#8888aa;font-size:12px">Нал вечер</td><td style="padding:5px 8px;text-align:right;color:#555568;font-size:12px">не введён</td></tr>') +
+      sep +
+
+      hdr('📦 Товар', '#c8f060') +
+      R2('Остаток утро', session.goodsMorning||0, '#f0f0f8') +
+      R2('Остаток вечер (расчёт)', t.goods, '#c8f060', true) +
+      sep +
+
+      hdr('💰 ЗП', '#f0a060') +
+      R2('ЗП взято за смену (факт)', zpFact, '#f0a060', true) +
+
+      '</table></div>';
+  }
 }
 
 
