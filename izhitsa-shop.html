@@ -207,94 +207,98 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <div class="fg"><label class="fl">Продавец</label><select class="fs" id="psSeller"></select></div>
       <div class="fg"><label class="fl">Дата</label><input class="fi" type="date" id="psDate"></div>
 
-      <!-- ДЕРЕВО -->
+      <!-- ══ ДЕРЕВО ══ -->
       <div class="sep"></div>
-      <div style="font-size:13px;font-weight:700;color:#c8f060;margin-bottom:10px">🌳 ДЕРЕВО</div>
+      <div style="font-size:14px;font-weight:700;color:#c8f060;margin-bottom:12px">🌳 ДЕРЕВО</div>
 
-      <div style="font-size:11px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 Наличные</div>
+      <div style="font-size:11px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 КАССА</div>
       <div class="row2">
-        <div class="fg"><label class="fl">Нал утро</label><input class="fi" type="number" id="psCashMorn" placeholder="0" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Нал вечер</label><input class="fi" type="number" id="psCashEve" placeholder="0" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">Нал утро</label><input class="fi" type="number" id="psCashMorn" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
+        <div class="fg"><label class="fl">Нал вечер (факт)</label><input class="fi" type="number" id="psCashEve" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalc()"></div>
       </div>
-      <div class="row2">
-        <div class="fg"><label class="fl">Приход нал</label><input class="fi" type="number" id="psCashIn" placeholder="0" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">ЗП</label><input class="fi" type="number" id="psZP" placeholder="0" inputmode="numeric"></div>
-      </div>
-      <div class="row2">
-        <div class="fg"><label class="fl">Инкассация</label><input class="fi" type="number" id="psInkass" placeholder="0" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Прочие расходы</label><input class="fi" type="number" id="psOtherExp" placeholder="0" inputmode="numeric"></div>
-      </div>
+      <div id="psCashCheck" style="margin-bottom:8px"></div>
 
-      <div style="font-size:11px;color:#60c8f0;font-weight:700;margin-bottom:8px;margin-top:4px">💰 Продажи</div>
+      <div style="font-size:11px;color:#60c8f0;font-weight:700;margin-bottom:8px">💰 ПРОДАЖИ</div>
       <div class="row2">
-        <div class="fg"><label class="fl">Валовая выручка</label><input class="fi" type="number" id="psRevGross" placeholder="0" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">Нал продажи</label><input class="fi" type="number" id="psCashRev" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
         <div class="fg"><label class="fl">Скидка</label><input class="fi" type="number" id="psDiscount" placeholder="0" inputmode="numeric"></div>
-      </div>
-      <div class="row2">
-        <div class="fg"><label class="fl">Нал</label><input class="fi" type="number" id="psCashRev" placeholder="0" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Безнал итого</label><input class="fi" type="number" id="psCardRev" placeholder="0" inputmode="numeric"></div>
       </div>
       <div class="row2">
         <div class="fg"><label class="fl">Терминал</label><input class="fi" type="number" id="psTerminal" placeholder="0" inputmode="numeric"></div>
         <div class="fg"><label class="fl">Перевод</label><input class="fi" type="number" id="psTransfer" placeholder="0" inputmode="numeric"></div>
       </div>
-      <div class="fg"><label class="fl">QR</label><input class="fi" type="number" id="psQR" placeholder="0" inputmode="numeric"></div>
-
-      <div style="font-size:11px;color:#c8f060;font-weight:700;margin-bottom:8px;margin-top:4px">📦 Товар (Дерево)</div>
       <div class="row2">
-        <div class="fg"><label class="fl">Остаток утро</label><input class="fi" type="number" id="psWoodMorn" placeholder="0" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Остаток вечер</label><input class="fi" type="number" id="psWoodEve" placeholder="0" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">QR</label><input class="fi" type="number" id="psQR" placeholder="0" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">ЗП</label><input class="fi" type="number" id="psZP" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
       </div>
       <div class="row2">
-        <div class="fg"><label class="fl">Приход товара</label><input class="fi" type="number" id="psWoodIn" placeholder="0" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Списание товара</label><input class="fi" type="number" id="psWoodOff" placeholder="0" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">Инкассация</label><input class="fi" type="number" id="psInkass" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
+        <div class="fg"><label class="fl">Прочие расходы</label><input class="fi" type="number" id="psOtherExp" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
+      </div>
+      <!-- расчётный нал вечер -->
+      <div id="psCashCalc" style="background:#1e2a14;border:1px solid #c8f060;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px;display:none">
+        <div style="color:#8888aa;margin-bottom:4px">Расчётный нал вечер = утро + продажи нал − ЗП − инкассация − расходы</div>
+        <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#c8f060" id="psCashCalcVal">0₽</div>
       </div>
 
-      <!-- ДР ТОВАР -->
+      <div style="font-size:11px;color:#c8f060;font-weight:700;margin-bottom:8px">📦 ТОВАР (авторасчёт)</div>
+      <div class="fg"><label class="fl">Остаток утро</label><input class="fi" type="number" id="psWoodMorn" placeholder="0" inputmode="numeric" oninput="psCalcGoods()"></div>
+      <div class="row2">
+        <div class="fg"><label class="fl">Приход товара</label><input class="fi" type="number" id="psWoodIn" placeholder="0" inputmode="numeric" oninput="psCalcGoods()"></div>
+        <div class="fg"><label class="fl">Списание</label><input class="fi" type="number" id="psWoodOff" placeholder="0" inputmode="numeric" oninput="psCalcGoods()"></div>
+      </div>
+      <div id="psWoodEveBlock" style="background:#1e2a14;border:1px solid #c8f060;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px;display:none">
+        <div style="color:#8888aa;margin-bottom:4px">Остаток вечер = утро + приход − продажи − списание</div>
+        <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#c8f060" id="psWoodEveVal">0₽</div>
+      </div>
+
+      <!-- ══ ДР ТОВАР ══ -->
       <div class="sep"></div>
-      <div style="font-size:13px;font-weight:700;color:#a060f0;margin-bottom:10px">🛍 ДР ТОВАР</div>
+      <div style="font-size:14px;font-weight:700;color:#a060f0;margin-bottom:12px">🛍 ДР ТОВАР</div>
 
-      <div style="font-size:11px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 Наличные</div>
+      <div style="font-size:11px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 КАССА</div>
       <div class="row2">
-        <div class="fg"><label class="fl">Нал утро</label><input class="fi" type="number" id="psDrCashMorn" placeholder="0" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Нал вечер</label><input class="fi" type="number" id="psDrCashEve" placeholder="0" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">Нал утро</label><input class="fi" type="number" id="psDrCashMorn" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
+        <div class="fg"><label class="fl">Нал вечер (факт)</label><input class="fi" type="number" id="psDrCashEve" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalcDr()"></div>
       </div>
-      <div class="row2">
-        <div class="fg"><label class="fl">Приход нал</label><input class="fi" type="number" id="psDrCashIn" placeholder="0" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Инкассация</label><input class="fi" type="number" id="psDrInkass" placeholder="0" inputmode="numeric"></div>
-      </div>
+      <div id="psDrCashCheck" style="margin-bottom:8px"></div>
 
-      <div style="font-size:11px;color:#60c8f0;font-weight:700;margin-bottom:8px;margin-top:4px">💰 Продажи</div>
+      <div style="font-size:11px;color:#60c8f0;font-weight:700;margin-bottom:8px">💰 ПРОДАЖИ</div>
       <div class="row2">
-        <div class="fg"><label class="fl">Валовая выручка</label><input class="fi" type="number" id="psDrRevGross" placeholder="0" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">Нал продажи</label><input class="fi" type="number" id="psDrCashRev" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
         <div class="fg"><label class="fl">Скидка</label><input class="fi" type="number" id="psDrDiscount" placeholder="0" inputmode="numeric"></div>
-      </div>
-      <div class="row2">
-        <div class="fg"><label class="fl">Нал</label><input class="fi" type="number" id="psDrCashRev" placeholder="0" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Безнал итого</label><input class="fi" type="number" id="psDrCardRev" placeholder="0" inputmode="numeric"></div>
       </div>
       <div class="row2">
         <div class="fg"><label class="fl">Терминал</label><input class="fi" type="number" id="psDrTerminal" placeholder="0" inputmode="numeric"></div>
         <div class="fg"><label class="fl">Перевод</label><input class="fi" type="number" id="psDrTransfer" placeholder="0" inputmode="numeric"></div>
       </div>
-      <div class="fg"><label class="fl">QR</label><input class="fi" type="number" id="psDrQR" placeholder="0" inputmode="numeric"></div>
-
-      <div style="font-size:11px;color:#a060f0;font-weight:700;margin-bottom:8px;margin-top:4px">📦 Товар (ДР Товар)</div>
       <div class="row2">
-        <div class="fg"><label class="fl">Остаток утро</label><input class="fi" type="number" id="psDrMorn" placeholder="0" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Остаток вечер</label><input class="fi" type="number" id="psDrEve" placeholder="0" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">QR</label><input class="fi" type="number" id="psDrQR" placeholder="0" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">Инкассация</label><input class="fi" type="number" id="psDrInkass" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
       </div>
+      <div id="psDrCashCalc" style="background:#1e1a2e;border:1px solid #a060f0;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px;display:none">
+        <div style="color:#8888aa;margin-bottom:4px">Расчётный нал вечер = утро + продажи нал − инкассация</div>
+        <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#a060f0" id="psDrCashCalcVal">0₽</div>
+      </div>
+
+      <div style="font-size:11px;color:#a060f0;font-weight:700;margin-bottom:8px">📦 ТОВАР (авторасчёт)</div>
+      <div class="fg"><label class="fl">Остаток утро</label><input class="fi" type="number" id="psDrMorn" placeholder="0" inputmode="numeric" oninput="psCalcDrGoods()"></div>
       <div class="row2">
-        <div class="fg"><label class="fl">Приход товара</label><input class="fi" type="number" id="psDrIn" placeholder="0" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Списание товара</label><input class="fi" type="number" id="psDrOff" placeholder="0" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">Приход товара</label><input class="fi" type="number" id="psDrIn" placeholder="0" inputmode="numeric" oninput="psCalcDrGoods()"></div>
+        <div class="fg"><label class="fl">Списание</label><input class="fi" type="number" id="psDrOff" placeholder="0" inputmode="numeric" oninput="psCalcDrGoods()"></div>
+      </div>
+      <div id="psDrEveBlock" style="background:#1e1a2e;border:1px solid #a060f0;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px;display:none">
+        <div style="color:#8888aa;margin-bottom:4px">Остаток вечер = утро + приход − продажи − списание</div>
+        <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#a060f0" id="psDrEveVal">0₽</div>
       </div>
 
       <!-- СОТРУДНИКИ -->
       <div class="sep"></div>
-      <div style="font-size:13px;font-weight:700;color:#a060f0;margin-bottom:10px">🛒 ПОКУПКИ СОТРУДНИКОВ</div>
-      <div class="fg"><label class="fl">Остаток нал сотрудники</label><input class="fi" type="number" id="psStaffCash" placeholder="0" inputmode="numeric"></div>
+      <div style="font-size:13px;font-weight:700;color:#a060f0;margin-bottom:8px">🛒 ПОКУПКИ СОТРУДНИКОВ</div>
+      <div class="fg"><label class="fl">Остаток нал (сотрудники)</label><input class="fi" type="number" id="psStaffCash" placeholder="0" inputmode="numeric"></div>
 
       <div class="sep"></div>
+      <div id="psSaveError" style="color:#f06060;font-size:13px;margin-bottom:8px;display:none"></div>
       <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="psComment" placeholder="Причина внесения задним числом..."></div>
       <button class="btn" onclick="savePastShift()">💾 Сохранить смену</button>
     </div>
@@ -1106,8 +1110,27 @@ function saveEditShift(){
 function savePastShift(){
   const shop=gv('psShop'),date=gv('psDate');
   if(!shop||!date){showToast('Заполните магазин и дату');return;}
+  // Validate cash evening
+  var errEl=document.getElementById('psSaveError'); if(errEl)errEl.style.display='none';
+  var cashMorn=parseFloat(gv('psCashMorn'))||0, salesCash=parseFloat(gv('psCashRev'))||0;
+  var zp=parseFloat(gv('psZP'))||0, inkass=parseFloat(gv('psInkass'))||0, other=parseFloat(gv('psOtherExp'))||0;
+  var calcEve=cashMorn+salesCash-zp-inkass-other;
+  var entEve=parseFloat(gv('psCashEve'))||0;
+  if(gv('psCashEve')!==''&&Math.round(Math.abs(entEve-calcEve))>0){
+    if(errEl){errEl.style.display='block';errEl.textContent='⛔ Нал вечер (Дерево) не сходится с расчётным ('+Math.round(calcEve).toLocaleString('ru-RU')+'₽). Пересчитайте.';}
+    return;
+  }
+  var drMorn=parseFloat(gv('psDrCashMorn'))||0, drSales=parseFloat(gv('psDrCashRev'))||0, drInkass=parseFloat(gv('psDrInkass'))||0;
+  var drCalcEve=drMorn+drSales-drInkass, drEntEve=parseFloat(gv('psDrCashEve'))||0;
+  if(gv('psDrCashEve')!==''&&Math.round(Math.abs(drEntEve-drCalcEve))>0){
+    if(errEl){errEl.style.display='block';errEl.textContent='⛔ Нал вечер (ДР Товар) не сходится с расчётным ('+Math.round(drCalcEve).toLocaleString('ru-RU')+'₽). Пересчитайте.';}
+    return;
+  }
   const cashRev=parseFloat(gv('psCashRev'))||0, cardRev=parseFloat(gv('psCardRev'))||0;
   const n=id=>parseFloat(gv(id))||0;
+  // Auto-calculate goods evening
+  var woodEve=n('psWoodMorn')+n('psWoodIn')-(n('psCashRev')+n('psTerminal')+n('psTransfer')+n('psQR'))-n('psWoodOff');
+  var drEve=n('psDrMorn')+n('psDrIn')-(n('psDrCashRev')+n('psDrTerminal')+n('psDrTransfer')+n('psDrQR'))-n('psDrOff');
   const shift={id:uid(),source:'shop',shopName:shop,sellerName:gv('psSeller')||'—',date,
     openedAt:date+'T09:00:00.000Z',closedAt:date+'T21:00:00.000Z',
     // ДЕРЕВО — наличные
@@ -1119,7 +1142,7 @@ function savePastShift(){
     terminal:n('psTerminal'),transfer:n('psTransfer'),qr:n('psQR'),
     totalRevenue:n('psCashRev')+n('psCardRev'),
     // ДЕРЕВО — товар
-    goodsMorning:n('psWoodMorn'),goodsEvening:n('psWoodEve'),
+    goodsMorning:n('psWoodMorn'),goodsEvening:woodEve,
     goodsIncome:n('psWoodIn'),goodsWriteoff:n('psWoodOff'),
     // ДР ТОВАР — наличные
     drCashMorning:n('psDrCashMorn'),drCashEvening:n('psDrCashEve'),
@@ -1130,7 +1153,7 @@ function savePastShift(){
     drTerminal:n('psDrTerminal'),drTransfer:n('psDrTransfer'),drQR:n('psDrQR'),
     drTotalRevenue:n('psDrCashRev')+n('psDrCardRev'),
     // ДР ТОВАР — товар
-    drGoodsMorning:n('psDrMorn'),drGoodsEvening:n('psDrEve'),
+    drGoodsMorning:n('psDrMorn'),drGoodsEvening:drEve,
     drGoodsIncome:n('psDrIn'),drGoodsWriteoff:n('psDrOff'),
     // СОТРУДНИКИ
     staffCash:n('psStaffCash'),
@@ -1138,10 +1161,88 @@ function savePastShift(){
   const shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   shifts.unshift(shift); localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
   try{ db.collection('iz_shifts').add(shift); }catch(e){}
-  ['psCashMorn','psCashEve','psCashIn','psZP','psInkass','psOtherExp','psRevGross','psDiscount','psCashRev','psCardRev','psTerminal','psTransfer','psQR','psWoodMorn','psWoodEve','psWoodIn','psWoodOff','psDrCashMorn','psDrCashEve','psDrCashIn','psDrInkass','psDrRevGross','psDrDiscount','psDrCashRev','psDrCardRev','psDrTerminal','psDrTransfer','psDrQR','psDrMorn','psDrEve','psDrIn','psDrOff','psStaffCash','psComment'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['psCashMorn','psCashEve','psZP','psInkass','psOtherExp','psDiscount','psCashRev','psTerminal','psTransfer','psQR','psWoodMorn','psWoodIn','psWoodOff','psDrCashMorn','psDrCashEve','psDrInkass','psDrDiscount','psDrCashRev','psDrTerminal','psDrTransfer','psDrQR','psDrMorn','psDrIn','psDrOff','psStaffCash','psComment'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['psCashCalc','psWoodEveBlock','psDrCashCalc','psDrEveBlock'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+  ['psCashCheck','psDrCashCheck','psSaveError'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='';});
   showToast('✅ Смена внесена задним числом');
   showPg('history',document.querySelector('.tab')); renderShiftHistory();
 }
+// ════ PAST SHIFT AUTO-CALC ════
+function fmt2(n){ return Math.round(n||0).toLocaleString('ru-RU')+'₽'; }
+
+function psCalc(){
+  var morn = parseFloat(document.getElementById('psCashMorn')?.value)||0;
+  var salesCash = parseFloat(document.getElementById('psCashRev')?.value)||0;
+  var zp = parseFloat(document.getElementById('psZP')?.value)||0;
+  var inkass = parseFloat(document.getElementById('psInkass')?.value)||0;
+  var other = parseFloat(document.getElementById('psOtherExp')?.value)||0;
+  var calculated = morn + salesCash - zp - inkass - other;
+  var block = document.getElementById('psCashCalc');
+  var valEl = document.getElementById('psCashCalcVal');
+  if(morn||salesCash||zp||inkass||other){ block.style.display='block'; valEl.textContent=fmt2(calculated); }
+  else block.style.display='none';
+  // Check vs entered evening
+  var eveEl = document.getElementById('psCashEve');
+  var check = document.getElementById('psCashCheck');
+  if(eveEl&&eveEl.value!==''){
+    var entered = parseFloat(eveEl.value)||0;
+    var diff = Math.round(Math.abs(entered - calculated));
+    check.innerHTML = diff===0
+      ? '<div class="al-ok">✅ Нал вечер сходится</div>'
+      : '<div class="al-err">⛔ Расхождение: '+fmt2(entered-calculated)+'<br><span style="font-size:11px">Расчётный: '+fmt2(calculated)+' · Введено: '+fmt2(entered)+'</span></div>';
+  } else check.innerHTML='';
+  psCalcGoods();
+}
+
+function psCalcGoods(){
+  var morn = parseFloat(document.getElementById('psWoodMorn')?.value)||0;
+  var salesCash = parseFloat(document.getElementById('psCashRev')?.value)||0;
+  var salesCard = (parseFloat(document.getElementById('psTerminal')?.value)||0)+(parseFloat(document.getElementById('psTransfer')?.value)||0)+(parseFloat(document.getElementById('psQR')?.value)||0);
+  var income = parseFloat(document.getElementById('psWoodIn')?.value)||0;
+  var writeoff = parseFloat(document.getElementById('psWoodOff')?.value)||0;
+  var totalSales = salesCash + salesCard;
+  var eve = morn + income - totalSales - writeoff;
+  var block = document.getElementById('psWoodEveBlock');
+  var valEl = document.getElementById('psWoodEveVal');
+  if(morn||income||totalSales||writeoff){ block.style.display='block'; valEl.textContent=fmt2(eve); }
+  else block.style.display='none';
+}
+
+function psCalcDr(){
+  var morn = parseFloat(document.getElementById('psDrCashMorn')?.value)||0;
+  var salesCash = parseFloat(document.getElementById('psDrCashRev')?.value)||0;
+  var inkass = parseFloat(document.getElementById('psDrInkass')?.value)||0;
+  var calculated = morn + salesCash - inkass;
+  var block = document.getElementById('psDrCashCalc');
+  var valEl = document.getElementById('psDrCashCalcVal');
+  if(morn||salesCash||inkass){ block.style.display='block'; valEl.textContent=fmt2(calculated); }
+  else block.style.display='none';
+  var eveEl = document.getElementById('psDrCashEve');
+  var check = document.getElementById('psDrCashCheck');
+  if(eveEl&&eveEl.value!==''){
+    var entered = parseFloat(eveEl.value)||0;
+    var diff = Math.round(Math.abs(entered - calculated));
+    check.innerHTML = diff===0
+      ? '<div class="al-ok">✅ Нал вечер сходится</div>'
+      : '<div class="al-err">⛔ Расхождение: '+fmt2(entered-calculated)+'<br><span style="font-size:11px">Расчётный: '+fmt2(calculated)+' · Введено: '+fmt2(entered)+'</span></div>';
+  } else check.innerHTML='';
+  psCalcDrGoods();
+}
+
+function psCalcDrGoods(){
+  var morn = parseFloat(document.getElementById('psDrMorn')?.value)||0;
+  var salesCash = parseFloat(document.getElementById('psDrCashRev')?.value)||0;
+  var salesCard = (parseFloat(document.getElementById('psDrTerminal')?.value)||0)+(parseFloat(document.getElementById('psDrTransfer')?.value)||0)+(parseFloat(document.getElementById('psDrQR')?.value)||0);
+  var income = parseFloat(document.getElementById('psDrIn')?.value)||0;
+  var writeoff = parseFloat(document.getElementById('psDrOff')?.value)||0;
+  var totalSales = salesCash + salesCard;
+  var eve = morn + income - totalSales - writeoff;
+  var block = document.getElementById('psDrEveBlock');
+  var valEl = document.getElementById('psDrEveVal');
+  if(morn||income||totalSales||writeoff){ block.style.display='block'; valEl.textContent=fmt2(eve); }
+  else block.style.display='none';
+}
+
 function populatePastShiftSellers(){
   const sellers=getSellers(); const el=document.getElementById('psSeller'); if(!el)return;
   el.innerHTML=sellers.map(s=>`<option>${s.name}</option>`).join('');
