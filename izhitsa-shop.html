@@ -172,82 +172,117 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
     <div class="card"><div class="ctitle">За смену</div><div id="staffList"></div></div>
   </div>
   <div class="page" id="pg-close">
-    <div class="stitle">Закрытие смены</div>
+    <div class="stitle">Закрытие смены — {{shopName}}</div>
 
-    <!-- КАССА — manual input, расчёт скрыт -->
-    <div style="background:#2e1a14;border:2px solid #f0a060;border-radius:14px;padding:14px;margin-bottom:10px">
-      <div style="font-size:13px;color:#f0a060;font-weight:700;margin-bottom:10px">💵 КАССА</div>
-      <div class="fg">
-        <label class="fl">Остаток наличных вечер — пересчитайте фактически</label>
-        <input class="fi" type="number" id="cashEveInput" placeholder="Введите сумму..." inputmode="numeric"
-          style="font-size:20px;font-weight:700;text-align:center;border-color:#f0a060" oninput="validateClose()">
+    <!-- ══ КАССА — всегда видна, ввод вручную ══ -->
+    <div style="background:#1e2a14;border-radius:12px;padding:12px;margin-bottom:8px">
+      <div style="font-size:12px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 КАССА</div>
+      <div class="row2" style="margin-bottom:8px">
+        <div>
+          <div style="font-size:11px;color:#8888aa;margin-bottom:4px">Нал утро</div>
+          <div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700" id="closeNalMorn">—</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#f0a060;margin-bottom:4px">Нал вечер (введите)</div>
+          <input class="fi" type="number" id="cashEveInput" placeholder="Пересчитайте..." inputmode="numeric"
+            style="font-size:16px;font-weight:700;text-align:center;border-color:#f0a060;padding:8px" oninput="validateClose()">
+        </div>
       </div>
-      <div id="cashValidation" style="margin-bottom:6px"></div>
+      <div id="cashValidation"></div>
       <div id="cashDiffReasonBlock" style="display:none">
-        <div style="font-size:11px;color:#f06060;font-weight:700;margin-bottom:6px">⚠️ Расхождение! Пересчитайте наличные и введите верную сумму</div>
+        <div style="font-size:12px;color:#f06060;font-weight:700;margin-top:6px">⛔ Неверный остаток. Пересчитайте кассу.</div>
       </div>
     </div>
 
-    <!-- AUTO-PULLED DATA FROM JOURNAL -->
-    <div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:14px;padding:14px;margin-bottom:10px">
-      <div style="font-size:13px;color:#8888aa;font-weight:700;margin-bottom:10px">📊 ДАННЫЕ СМЕНЫ (авто)</div>
-
-      <!-- ПРОДАЖИ -->
-      <div onclick="toggleSub('closeS')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 0;border-bottom:1px solid #2e2e3e">
-        <div style="font-size:13px;font-weight:700;color:#60c8f0">💰 Продажи</div>
-        <div id="closeS_arrow" style="color:#60c8f0;font-size:14px">▼</div>
+    <!-- ══ ТОВАРНЫЙ ОСТАТОК — всегда виден ══ -->
+    <div style="background:#1e2a14;border-radius:12px;padding:12px;margin-bottom:8px">
+      <div style="font-size:12px;color:#c8f060;font-weight:700;margin-bottom:8px">📦 ТОВАРНЫЙ ОСТАТОК</div>
+      <div class="row2">
+        <div>
+          <div style="font-size:11px;color:#8888aa;margin-bottom:4px">Утро</div>
+          <div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700" id="closeGoodsMorn">—</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#c8f060;margin-bottom:4px">Вечер (расчёт)</div>
+          <div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700;color:#c8f060" id="closeGoodsEve">—</div>
+        </div>
       </div>
-      <div id="closeS_body" style="padding-top:8px">
+    </div>
+
+    <!-- ══ ИТОГО ВЫРУЧКА — всегда видна ══ -->
+    <div style="background:#1a1e2e;border:1px solid #60c8f0;border-radius:12px;padding:12px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px;color:#8888aa">Итого выручка (нал + безнал + скидка)</div>
+        <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#60c8f0" id="closeTotalRev">0₽</div>
+      </div>
+    </div>
+
+    <!-- ══ АККОРДЕОНЫ ══ -->
+
+    <!-- ПРОДАЖИ -->
+    <div style="background:#1a1e2e;border-radius:12px;margin-bottom:6px;overflow:hidden">
+      <div onclick="toggleSub('closeS')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:12px">
+        <div style="font-size:13px;font-weight:700;color:#60c8f0">💰 Продажи</div>
+        <div id="closeS_arrow" style="color:#60c8f0">▼</div>
+      </div>
+      <div id="closeS_body" style="padding:0 12px 12px">
         <div id="closeSalesDetail"></div>
       </div>
+    </div>
 
-      <!-- РАСХОДЫ -->
-      <div onclick="toggleSub('closeExp')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 0;border-bottom:1px solid #2e2e3e">
+    <!-- РАСХОДЫ -->
+    <div style="background:#2a1e14;border-radius:12px;margin-bottom:6px;overflow:hidden">
+      <div onclick="toggleSub('closeExp')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:12px">
         <div style="font-size:13px;font-weight:700;color:#f0a060">💸 Расходы</div>
-        <div id="closeExp_arrow" style="color:#f0a060;font-size:14px">▼</div>
+        <div id="closeExp_arrow" style="color:#f0a060">▼</div>
       </div>
-      <div id="closeExp_body" style="padding-top:8px">
+      <div id="closeExp_body" style="padding:0 12px 12px">
         <div id="closeExpDetail"></div>
       </div>
+    </div>
 
-      <!-- СПИСАНИЯ -->
-      <div onclick="toggleSub('closeWo')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 0;border-bottom:1px solid #2e2e3e">
-        <div style="font-size:13px;font-weight:700;color:#f06060">🗑 Списания</div>
-        <div id="closeWo_arrow" style="color:#f06060;font-size:14px">▼</div>
+    <!-- СПИСАНИЕ ТОВАРА -->
+    <div style="background:#2e1a1a;border-radius:12px;margin-bottom:6px;overflow:hidden">
+      <div onclick="toggleSub('closeWo')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:12px">
+        <div style="font-size:13px;font-weight:700;color:#f06060">🗑 Списание товара</div>
+        <div id="closeWo_arrow" style="color:#f06060">▼</div>
       </div>
-      <div id="closeWo_body" style="padding-top:8px">
+      <div id="closeWo_body" style="padding:0 12px 12px">
         <div id="closeWoDetail"></div>
       </div>
+    </div>
 
-      <!-- ПРИХОДЫ -->
-      <div onclick="toggleSub('closeRcv')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 0;border-bottom:1px solid #2e2e3e">
-        <div style="font-size:13px;font-weight:700;color:#60f090">📥 Приходы товара</div>
-        <div id="closeRcv_arrow" style="color:#60f090;font-size:14px">▼</div>
+    <!-- ПРИХОД ТОВАРА -->
+    <div style="background:#1a2e1e;border-radius:12px;margin-bottom:6px;overflow:hidden">
+      <div onclick="toggleSub('closeRcv')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:12px">
+        <div style="font-size:13px;font-weight:700;color:#60f090">📥 Приход товара</div>
+        <div id="closeRcv_arrow" style="color:#60f090">▼</div>
       </div>
-      <div id="closeRcv_body" style="padding-top:8px">
+      <div id="closeRcv_body" style="padding:0 12px 12px">
         <div id="closeRcvDetail"></div>
       </div>
+    </div>
 
-      <!-- ПОКУПКИ СОТРУДНИКОВ -->
-      <div onclick="toggleSub('closeStaff')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 0">
+    <!-- ПОКУПКИ СОТРУДНИКОВ -->
+    <div style="background:#1e1a2e;border-radius:12px;margin-bottom:6px;overflow:hidden">
+      <div onclick="toggleSub('closeStaff')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:12px">
         <div style="font-size:13px;font-weight:700;color:#a060f0">🛒 Покупки сотрудников</div>
-        <div id="closeStaff_arrow" style="color:#a060f0;font-size:14px">▼</div>
+        <div id="closeStaff_arrow" style="color:#a060f0">▼</div>
       </div>
-      <div id="closeStaff_body" style="padding-top:8px">
+      <div id="closeStaff_body" style="padding:0 12px 12px">
         <div id="closeStaffDetail"></div>
       </div>
     </div>
 
-    <!-- ТОВАРНЫЙ ОСТАТОК -->
-    <div style="background:#1e2a14;border:1px solid #c8f060;border-radius:14px;padding:14px;margin-bottom:10px">
-      <div style="font-size:13px;color:#c8f060;font-weight:700;margin-bottom:10px">📦 ТОВАРНЫЙ ОСТАТОК</div>
-      <div id="closeGoodsDetail"></div>
-    </div>
-
     <!-- БЕЗНАЛ -->
-    <div style="background:#1a1e2e;border:1px solid #60c8f0;border-radius:14px;padding:14px;margin-bottom:10px">
-      <div style="font-size:13px;color:#60c8f0;font-weight:700;margin-bottom:10px">💳 БЕЗНАЛ</div>
-      <div id="closeCardDetail"></div>
+    <div style="background:#1a1e2e;border-radius:12px;margin-bottom:10px;overflow:hidden">
+      <div onclick="toggleSub('closeCard')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:12px">
+        <div style="font-size:13px;font-weight:700;color:#60c8f0">💳 Безнал</div>
+        <div id="closeCard_arrow" style="color:#60c8f0">▼</div>
+      </div>
+      <div id="closeCard_body" style="padding:0 12px 12px">
+        <div id="closeCardDetail"></div>
+      </div>
     </div>
 
     <div id="closeSummary"></div>
@@ -1350,6 +1385,16 @@ function renderClose(){
   const totalRcv = receives.reduce((s,e)=>s+(e.goodsEffect||0),0);
   const staffTotal = staffP.reduce((s,e)=>s+e.amount,0);
 
+  // Always-visible blocks
+  const nal_morn = document.getElementById('closeNalMorn');
+  if(nal_morn) nal_morn.textContent = fmt(session.cashMorning);
+  const gm = document.getElementById('closeGoodsMorn');
+  if(gm) gm.textContent = fmt(session.goodsMorning);
+  const ge = document.getElementById('closeGoodsEve');
+  if(ge) ge.textContent = fmt(t.goods);
+  const tr = document.getElementById('closeTotalRev');
+  if(tr) tr.textContent = fmt(cashSales+cardSales+disc);
+
   // ПРОДАЖИ detail
   const sd = document.getElementById('closeSalesDetail');
   if(sd) sd.innerHTML = sales.length ? `
@@ -1389,25 +1434,11 @@ function renderClose(){
       `<div style="font-size:13px;font-weight:700;padding:6px 0;border-top:1px solid #2e2e3e;margin-top:4px;display:flex;justify-content:space-between"><span>Итого</span><span style="color:#a060f0">${fmt(staffTotal)}</span></div>`
     : '<div style="font-size:12px;color:#555568">Нет</div>';
 
-  // ТОВАРНЫЙ ОСТАТОК
-  const gd = document.getElementById('closeGoodsDetail');
-  if(gd) gd.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div><div style="font-size:11px;color:#8888aa">Утро</div><div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700">${fmt(session.goodsMorning)}</div></div>
-      <div><div style="font-size:11px;color:#8888aa">Вечер (расчёт)</div><div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700;color:#c8f060">${fmt(t.goods)}</div></div>
-    </div>
-    ${receives.length?`<div style="font-size:12px;color:#8888aa;margin-top:6px">+Приход: ${fmt(totalRcv)}</div>`:''}
-    ${writeoffs.length?`<div style="font-size:12px;color:#8888aa">−Списания: ${fmt(totalWo)}</div>`:''}
-  `;
-
-  // БЕЗНАЛ
+  // БЕЗНАЛ accordion
   const cd = document.getElementById('closeCardDetail');
   if(cd) cd.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:13px;color:#8888aa">Расчётный безнал</span>
-      <span style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#60c8f0">${fmt(t.card)}</span>
-    </div>
-    ${staffTotal?`<div style="font-size:12px;color:#a060f0;margin-top:6px">+ Покупки сотрудников: ${fmt(staffTotal)}</div>`:''}
+    <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Терминал+СБП+Перевод+QR</span><span style="color:#60c8f0;font-weight:700">${fmt(t.card)}</span></div>
+    ${staffTotal?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Покупки сотрудников</span><span style="color:#a060f0;font-weight:700">${fmt(staffTotal)}</span></div>`:''}
   `;
 }
 
