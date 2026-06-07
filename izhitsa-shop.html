@@ -738,6 +738,13 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <button class="btn" onclick="addSellerAdmin()">＋ Добавить продавца</button>
     </div>
   </div>
+  <!-- SETTINGS PAGE -->
+  <div class="page" id="pg-shopsettings">
+    <div class="stitle">⚙️ Настройки ЗП</div>
+    <div id="shopSettingsList"></div>
+    <button class="btn" style="margin-top:8px" onclick="saveShopSettings()">💾 Сохранить настройки</button>
+  </div>
+
   <div class="tabs" id="mainTabs" style="display:none"></div>
 </div>
 
@@ -1456,6 +1463,7 @@ function buildAdminTabs(){
     <button class="tab" onclick="showPg('history',this);renderShiftHistory()"><div class="ti">📁</div><span>Архив</span></button>
     <button class="tab" onclick="showPg('pastshift',this)"><div class="ti">✏️</div><span>Ввод данных</span></button>
     <button class="tab" onclick="showPg('sellers',this);renderSellersAdmin()"><div class="ti">👥</div><span>Роли</span></button>
+    <button class="tab" onclick="showPg('shopsettings',this);renderShopSettings()"><div class="ti">⚙️</div><span>Настройки</span></button>
     <button class="tab" onclick="exitShift()"><div class="ti">🚪</div><span>Выйти</span></button>`;
 }
 
@@ -2196,20 +2204,29 @@ function renderClose(){
           var totalNet = netWood + netDr;
           // ЗП расчётная by shop
           var zpCalcWood = 0, zpCalcDr = 0, zpCalcTotal = 0;
-          var shopN = (session.shopName||'').toLowerCase();
-          if(shopN.indexOf('горк') >= 0){
-            // Горки: 2000 база + 8% или 10% в зависимости от выручки
-            var pct = (totalNet >= 20000) ? 0.10 : 0.08;
-            zpCalcWood = 2000 + netWood * pct;
-            zpCalcDr   = netDr * pct;
+          // Load settings from admin
+          var zpSettings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+          var s = zpSettings[session.shopName] || null;
+          var base = s ? (s.base||1500) : 1500;
+          var thresh = s ? (s.threshold||5000) : 5000;
+          var pctNorm = s ? ((s.pct||8)/100) : 0.08;
+          var highThresh = s ? s.highThreshold : null;
+          var pctHigh = s ? ((s.highPct||10)/100) : 0.10;
+
+          // Fallback to hardcoded if no settings
+          if(!s){
+            var shopN = (session.shopName||'').toLowerCase();
+            if(shopN.indexOf('горк') >= 0){
+              base=2000; thresh=0; pctNorm=0.08; highThresh=20000; pctHigh=0.10;
+            } else { base=1500; thresh=5000; pctNorm=0.08; }
+          }
+
+          var pct = (highThresh && totalNet >= highThresh) ? pctHigh : pctNorm;
+          if(totalNet < thresh){
+            zpCalcWood = base; zpCalcDr = 0;
           } else {
-            // Роза Хутор и остальные: 1500 база, порог 5000, ставка 8%
-            if(totalNet < 5000){
-              zpCalcWood = 1500; zpCalcDr = 0;
-            } else {
-              zpCalcWood = 1500 + netWood * 0.08;
-              zpCalcDr   = netDr * 0.08;
-            }
+            zpCalcWood = base + netWood * pct;
+            zpCalcDr   = netDr * pct;
           }
           zpCalcTotal = zpCalcWood + zpCalcDr + travel;
           var fmt2 = function(n){ return Math.round(n).toLocaleString('ru-RU')+'₽'; };
@@ -3138,6 +3155,78 @@ function populatePastShiftSellers(){
   const sellers=getSellers(); const el=document.getElementById('psSeller'); if(!el)return;
   el.innerHTML=sellers.map(s=>`<option>${s.name}</option>`).join('');
 }
+// ── Shop ZP Settings ──
+function getShopZpSettings(){
+  return JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+}
+function saveShopZpSettingsData(d){
+  localStorage.setItem('iz_shop_zp_settings', JSON.stringify(d));
+}
+
+function renderShopSettings(){
+  var c = document.getElementById('shopSettingsList'); if(!c) return;
+  var shops = getShopNames();
+  var settings = getShopZpSettings();
+
+  c.innerHTML = shops.map(function(shop){
+    var s = settings[shop] || {base:1500, pct:8, threshold:5000};
+    var sid = shop.replace(/\s/g,'_');
+    return '<div class="card" style="margin-bottom:12px">'+
+      '<div style="font-size:14px;font-weight:700;color:#c8f060;margin-bottom:12px">🏪 '+shop+'</div>'+
+      '<div class="fg">'+
+        '<label class="fl">Базовая ставка за выход (₽)</label>'+
+        '<input class="fi" type="number" id="zp_base_'+sid+'" value="'+(s.base||1500)+'" inputmode="numeric">'+
+      '</div>'+
+      '<div class="fg">'+
+        '<label class="fl">Порог выручки для % (₽)</label>'+
+        '<input class="fi" type="number" id="zp_thresh_'+sid+'" value="'+(s.threshold||5000)+'" inputmode="numeric">'+
+        '<div style="font-size:11px;color:#8888aa;margin-top:4px">Если выручка &lt; порога → только базовая ставка</div>'+
+      '</div>'+
+      '<div class="fg">'+
+        '<label class="fl">Процент от выручки (%)</label>'+
+        '<input class="fi" type="number" id="zp_pct_'+sid+'" value="'+(s.pct||8)+'" inputmode="numeric" step="0.5">'+
+      '</div>'+
+      '<div id="zp_highpct_block_'+sid+'" style="'+(s.highThreshold?'':'display:none')+'">'+
+        '<div class="fg">'+
+          '<label class="fl">Порог для повышенного % (₽)</label>'+
+          '<input class="fi" type="number" id="zp_highthresh_'+sid+'" value="'+(s.highThreshold||20000)+'" inputmode="numeric">'+
+        '</div>'+
+        '<div class="fg">'+
+          '<label class="fl">Повышенный процент (%)</label>'+
+          '<input class="fi" type="number" id="zp_highpct_'+sid+'" value="'+(s.highPct||10)+'" inputmode="numeric" step="0.5">'+
+        '</div>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">'+
+        '<input type="checkbox" id="zp_has_high_'+sid+'" '+(s.highThreshold?'checked':'')+' onchange="toggleHighPct(this.dataset.sid,this.checked)" data-sid="'+sid+'" style="width:18px;height:18px;cursor:pointer">'+
+        '<label for="zp_has_high_'+sid+'" style="font-size:12px;color:#8888aa;cursor:pointer">Есть повышенный % при высокой выручке</label>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function toggleHighPct(sid, show){
+  var block = document.getElementById('zp_highpct_block_'+sid);
+  if(block) block.style.display = show ? 'block' : 'none';
+}
+
+function saveShopSettings(){
+  var shops = getShopNames();
+  var settings = {};
+  shops.forEach(function(shop){
+    var sid = shop.replace(/\s/g,'_');
+    var hasHigh = document.getElementById('zp_has_high_'+sid)?.checked;
+    settings[shop] = {
+      base: parseFloat(document.getElementById('zp_base_'+sid)?.value)||1500,
+      threshold: parseFloat(document.getElementById('zp_thresh_'+sid)?.value)||5000,
+      pct: parseFloat(document.getElementById('zp_pct_'+sid)?.value)||8,
+      highThreshold: hasHigh ? (parseFloat(document.getElementById('zp_highthresh_'+sid)?.value)||20000) : null,
+      highPct: hasHigh ? (parseFloat(document.getElementById('zp_highpct_'+sid)?.value)||10) : null,
+    };
+  });
+  saveShopZpSettingsData(settings);
+  showToast('✅ Настройки ЗП сохранены');
+}
+
 function renderSuppliersAdmin(){
   var c=document.getElementById('suppliersAdminList'); if(!c)return;
   var suppliers=getSupplierslist();
