@@ -1221,6 +1221,8 @@ function startApp(){
   if(jp) jp.classList.add('active');
   var firstTab = document.querySelector('#mainTabs .tab');
   if(firstTab) firstTab.classList.add('active');
+  // Pre-populate close shift data
+  setTimeout(function(){ renderClose(); }, 100);
   db.collection('iz_invoices').onSnapshot(snap=>{
     localStorage.setItem('iz_invoices',JSON.stringify(snap.docs.map(x=>({_id:x.id,...x.data()}))));
     updateInvBadge(); renderPendingAlert();
@@ -1809,6 +1811,7 @@ function saveExpense(){
 
 // ── renderClose — pull all data from journal ──
 function renderClose(){
+  if(!session) return;
   var t = calcTotals();
   var sales = journal.filter(function(e){ return e.type==='sale'; });
   var expenses = journal.filter(function(e){ return e.type==='expense'; });
