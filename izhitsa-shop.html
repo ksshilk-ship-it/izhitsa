@@ -2186,12 +2186,41 @@ function renderClose(){
         TRS('💸 Расходы') +
         TR('Итого расходы', totalExpWood, totalExpDr, '#f0a060', '#f0a060') +
         TRS('💰 ЗП') +
-        '<tr><td style="padding:5px 8px;font-size:12px;color:#8888aa">ЗП расчётная</td>'+
-          '<td style="padding:5px 8px;text-align:right;font-size:12px;color:#8888aa" colspan="2">—</td></tr>'+
-        TR('ЗП факт (взято)', zpFact, 0, '#f0a060', '#555568') +
-        TR('Проезд', travel, 0, '#f0a060', '#555568') +
-        '<tr style="border-top:1px solid #2e2e3e"><td style="padding:6px 8px;font-size:12px;font-weight:700">Итого ЗП расчётная</td>'+
-          '<td style="padding:6px 8px;text-align:right;font-size:12px;color:#f0a060;font-weight:700" colspan="2">—</td></tr>'+
+        (function(){
+          // Discount per block
+          var discWood = woodSales.reduce(function(a,s){return a+(s.discount||0);},0);
+          var discDr   = drSalesArr.reduce(function(a,s){return a+(s.discount||0);},0);
+          // Net revenue (выручка - скидка)
+          var netWood = woodRev - discWood;
+          var netDr   = drRev - discDr;
+          var totalNet = netWood + netDr;
+          // ЗП расчётная by shop
+          var zpCalcWood = 0, zpCalcDr = 0, zpCalcTotal = 0;
+          var shopN = (session.shopName||'').toLowerCase();
+          if(shopN.indexOf('роза') >= 0 || shopN.indexOf('хутор') >= 0){
+            if(totalNet < 5000){
+              zpCalcWood = 1500; zpCalcDr = 0;
+            } else {
+              zpCalcWood = 1500 + netWood * 0.08;
+              zpCalcDr   = netDr * 0.08;
+            }
+          } else {
+            // Default: 8% of total if > 5000, else 1500
+            if(totalNet < 5000){ zpCalcWood = 1500; zpCalcDr = 0; }
+            else { zpCalcWood = 1500 + netWood * 0.08; zpCalcDr = netDr * 0.08; }
+          }
+          zpCalcTotal = zpCalcWood + zpCalcDr + travel;
+          var fmt2 = function(n){ return Math.round(n).toLocaleString('ru-RU')+'₽'; };
+          return '<tr><td style="padding:5px 8px;font-size:12px;color:#8888aa">ЗП расчётная</td>'+
+            '<td style="padding:5px 8px;text-align:right;font-size:12px;color:#c8f060">'+fmt2(zpCalcWood)+'</td>'+
+            '<td style="padding:5px 8px;text-align:right;font-size:12px;color:#a060f0">'+fmt2(zpCalcDr)+'</td></tr>'+
+            '<tr><td style="padding:5px 8px;font-size:12px;color:#8888aa">ЗП факт (взято)</td>'+
+            '<td style="padding:5px 8px;text-align:right;font-size:12px;color:#f0a060" colspan="2">'+fmt(zpFact)+'</td></tr>'+
+            '<tr><td style="padding:5px 8px;font-size:12px;color:#8888aa">Проезд</td>'+
+            '<td style="padding:5px 8px;text-align:right;font-size:12px;color:#f0a060" colspan="2">'+fmt(travel)+'</td></tr>'+
+            '<tr style="border-top:2px solid #2e2e3e"><td style="padding:6px 8px;font-size:13px;font-weight:700">Итого ЗП расчётная</td>'+
+            '<td style="padding:6px 8px;text-align:right;font-size:13px;color:#c8f060;font-weight:700" colspan="2">'+fmt2(zpCalcTotal)+'</td></tr>';
+        })() +
         '</tbody>'+
       '</table></div>';
   }
