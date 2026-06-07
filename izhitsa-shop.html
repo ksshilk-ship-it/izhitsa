@@ -178,7 +178,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
     <div id="acc_close_wood" style="margin-bottom:6px">
       <div onclick="toggleAcc('close_wood')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 0">
         <div style="font-size:15px;font-weight:700;color:#c8f060">🌳 ДЕРЕВО</div>
-        <div style="font-size:18px;color:#c8f060" id="acc_close_wood_arrow">▼</div>
+        <div style="font-size:18px;color:#c8f060" id="acc_close_wood_arrow">▶</div>
       </div>
 
       <!-- КАССА — только для магазинов -->
@@ -201,25 +201,12 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
         </div>
       </div>
 
-      <!-- ТОВАРНЫЙ ОСТАТОК — всегда виден -->
-      <div style="background:#1e2a14;border-radius:10px;padding:12px;margin-bottom:6px">
-        <div style="font-size:12px;color:#c8f060;font-weight:700;margin-bottom:8px">📦 ТОВАРНЫЙ ОСТАТОК</div>
-        <div class="row2">
-          <div>
-            <div style="font-size:11px;color:#8888aa;margin-bottom:4px">Утро</div>
-            <div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700" id="closeGoodsMorn">—</div>
-          </div>
-          <div>
-            <div style="font-size:11px;color:#c8f060;margin-bottom:4px">Вечер (расчёт)</div>
-            <div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700;color:#c8f060" id="closeGoodsEve">—</div>
-          </div>
-        </div>
-      </div>
+
 
 
 
       <!-- КОЛЛАПСИРУЕМОЕ ДЕРЕВО -->
-      <div id="acc_close_wood_body">
+      <div id="acc_close_wood_body" style="display:none">
 
         <!-- Продажи -->
         <div style="background:#1a1e2e;border-radius:10px;margin-bottom:5px;overflow:hidden">
@@ -275,7 +262,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
     <div id="acc_close_dr" style="margin-bottom:10px">
       <div onclick="toggleAcc('close_dr')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 0">
         <div style="font-size:15px;font-weight:700;color:#a060f0">🛍 ДР ТОВАР</div>
-        <div style="font-size:18px;color:#a060f0" id="acc_close_dr_arrow">▼</div>
+        <div style="font-size:18px;color:#a060f0" id="acc_close_dr_arrow">▶</div>
       </div>
 
       <!-- КАССА ДР — только для магазина -->
@@ -295,25 +282,12 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
         <div id="drCashValidation" style="margin-top:6px"></div>
       </div>
 
-      <!-- ТОВАРНЫЙ ОСТАТОК ДР -->
-      <div id="closeDrGoodsBlock" style="background:#1e1a2e;border-radius:10px;padding:12px;margin-bottom:6px">
-        <div style="font-size:12px;color:#a060f0;font-weight:700;margin-bottom:8px">📦 ТОВАРНЫЙ ОСТАТОК</div>
-        <div class="row2">
-          <div>
-            <div style="font-size:11px;color:#8888aa;margin-bottom:4px">Утро</div>
-            <div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700" id="closeDrGoodsMorn">—</div>
-          </div>
-          <div>
-            <div style="font-size:11px;color:#a060f0;margin-bottom:4px">Вечер (расчёт)</div>
-            <div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700;color:#a060f0" id="closeDrGoodsEve">—</div>
-          </div>
-        </div>
-      </div>
+
 
 
 
       <!-- КОЛЛАПСИРУЕМОЕ ДР -->
-      <div id="acc_close_dr_body">
+      <div id="acc_close_dr_body" style="display:none">
 
         <div style="background:#1a1e2e;border-radius:10px;margin-bottom:5px;overflow:hidden">
           <div onclick="toggleSub('clDrS')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:11px 12px">
@@ -2131,9 +2105,13 @@ function renderClose(){
       (cashEveEntered ? R2('Нал вечер (введено)', cashEveEntered, '#c8f060', true) : '<tr><td style="padding:5px 8px;color:#8888aa;font-size:12px">Нал вечер</td><td style="padding:5px 8px;text-align:right;color:#555568;font-size:12px">не введён</td></tr>') +
       sep +
 
-      hdr('📦 Товар', '#c8f060') +
+      hdr('📦 Товар — 🌳 Дерево', '#c8f060') +
       R2('Остаток утро', session.goodsMorning||0, '#f0f0f8') +
       R2('Остаток вечер (расчёт)', t.goods, '#c8f060', true) +
+      sep +
+      hdr('📦 Товар — 🛍 ДР Товар', '#a060f0') +
+      R2('Остаток утро', session.drGoodsMorning||0, '#f0f0f8') +
+      R2('Остаток вечер (расчёт)', (session.drGoodsMorning||0)+rcvDr-drSalesArr.reduce(function(a,s){return a+(s.totalPrice||0);},0)-woDr, '#a060f0', true) +
       sep +
 
       hdr('💰 ЗП', '#f0a060') +
