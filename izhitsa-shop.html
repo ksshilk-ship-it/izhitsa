@@ -64,8 +64,8 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 .sir-name{font-size:13px;font-weight:600}
 .sir-price{font-size:12px;font-weight:700;margin-top:2px}
 .sir-del{background:none;border:none;color:#8888aa;cursor:pointer;font-size:16px;padding:2px 4px;flex-shrink:0}
-.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:200;align-items:flex-end;justify-content:center}
-.mo.open{display:flex}
+.mo{display:none;pointer-events:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:200;align-items:flex-end;justify-content:center}
+.mo.open{display:flex;pointer-events:auto}
 .md{background:#1a1a22;border-radius:22px 22px 0 0;width:100%;max-width:480px;max-height:93dvh;overflow-y:auto;padding:18px}
 .mh{width:34px;height:4px;background:#2e2e3e;border-radius:2px;margin:0 auto 14px}
 .mt{font-family:'Unbounded',sans-serif;font-size:16px;font-weight:700;margin-bottom:14px}
@@ -90,40 +90,47 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 <body>
 
 <!-- LOGIN -->
-<div id="loginScreen">
-  <div class="app-logo">Ижица</div>
-  <div class="app-sub">Модуль магазина</div>
-  <div class="login-card">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
-      <button id="btnSeller" type="button"
-        style="background:#1e2a14;border:2px solid #c8f060;border-radius:12px;padding:14px 8px;color:#fff;cursor:pointer;width:100%"
-        onclick="pick('seller')">
-        <div style="font-size:24px;margin-bottom:5px">🏪</div>
-        <div style="font-size:13px;font-weight:700;color:#c8f060">Продавец</div>
-        <div style="font-size:12px;color:#8888aa;margin-top:2px">Открыть смену</div>
-      </button>
-      <button id="btnAdmin" type="button"
-        style="background:#22222e;border:2px solid #2e2e3e;border-radius:12px;padding:14px 8px;color:#fff;cursor:pointer;width:100%"
-        onclick="pick('shopadmin')">
-        <div style="font-size:24px;margin-bottom:5px">🔐</div>
-        <div style="font-size:13px;font-weight:700;color:#8888aa">Администратор</div>
-        <div style="font-size:12px;color:#8888aa;margin-top:2px">Полный доступ</div>
-      </button>
+<div id="loginScreen" style="display:flex;flex-direction:column;min-height:100dvh;padding:32px 20px 24px;background:#0f0f13">
+  <div style="font-family:Unbounded,sans-serif;font-size:26px;font-weight:700;color:#c8f060;margin-bottom:4px">Ижица</div>
+  <div style="font-size:12px;color:#8888aa;margin-bottom:20px">Модуль магазина</div>
+
+  <!-- ROLE BUTTONS — outside any card, no nesting -->
+  <div style="display:flex;gap:10px;margin-bottom:16px">
+    <div id="btnSeller"
+      style="flex:1;background:#1e2a14;border:2px solid #c8f060;border-radius:14px;padding:16px 8px;text-align:center;cursor:pointer"
+      onclick="pick('seller')">
+      <div style="font-size:26px;margin-bottom:6px;pointer-events:none">🏪</div>
+      <div style="font-family:Unbounded,sans-serif;font-size:11px;font-weight:700;color:#c8f060;pointer-events:none">Продавец</div>
+      <div style="font-size:10px;color:#8888aa;margin-top:3px;pointer-events:none">Открыть смену</div>
     </div>
-    <div id="loginShopFg" class="fg">
-      <label class="fl">Магазин</label>
+    <div id="btnAdmin"
+      style="flex:1;background:#22222e;border:2px solid #2e2e3e;border-radius:14px;padding:16px 8px;text-align:center;cursor:pointer"
+      onclick="pick('shopadmin')">
+      <div style="font-size:26px;margin-bottom:6px;pointer-events:none">🔐</div>
+      <div style="font-family:Unbounded,sans-serif;font-size:11px;font-weight:700;color:#8888aa;pointer-events:none">Администратор</div>
+      <div style="font-size:10px;color:#8888aa;margin-top:3px;pointer-events:none">Полный доступ</div>
+    </div>
+  </div>
+
+  <!-- FORM CARD -->
+  <div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:20px;padding:20px">
+    <div style="margin-bottom:12px" id="loginShopFg">
+      <label style="font-size:11px;color:#8888aa;font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;display:block">Магазин</label>
       <select class="fs" id="loginShop" onchange="renderLoginSellers()"></select>
     </div>
-    <div class="fg">
-      <label class="fl" id="loginUserLabel">Продавец</label>
+    <div style="margin-bottom:12px">
+      <label id="loginUserLabel" style="font-size:11px;color:#8888aa;font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;display:block">Продавец</label>
       <select class="fs" id="loginSeller"></select>
     </div>
-    <div class="fg">
-      <label class="fl">Пароль</label>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;color:#8888aa;font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;display:block">Пароль</label>
       <input class="fi" type="password" id="loginPass" placeholder="••••">
     </div>
     <div id="loginErr" style="color:#f06060;font-size:12px;margin-bottom:8px;display:none"></div>
-    <button class="btn" id="loginBtn" type="button" onclick="doLogin()">Открыть смену →</button>
+    <button id="loginBtn" type="button" onclick="doLogin()"
+      style="width:100%;padding:14px;background:#c8f060;color:#0f0f13;border:none;border-radius:12px;font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;cursor:pointer">
+      Открыть смену →
+    </button>
   </div>
 </div>
 
@@ -142,7 +149,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
     <div class="sb"><div class="sb-v" id="sbStaff" style="color:#a060f0">0₽</div><div class="sb-l">Сотрудники</div></div>
     <div class="sb"><div class="sb-v" id="sbGoods" style="color:#c8f060">0₽</div><div class="sb-l">Товар</div></div>
   </div>
-  <div class="page active" id="pg-journal">
+  <div class="page" id="pg-journal">
     <div id="pendingAlert"></div>
     <div style="display:flex;gap:7px;margin-bottom:10px">
       <button class="btn" style="margin:0;flex:1.2;font-size:13px" onclick="openMo('saleMo');resetSaleForm()">＋ Продажа</button>
@@ -232,7 +239,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <div class="fg"><label class="fl">QR</label><input class="fi" type="number" id="psQR" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
       <!-- Итого выручка авто -->
       <div id="psTotalRevBlock" style="background:#1e2a14;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:10px;display:none">
-        <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Итого выручка = нал + терминал + перевод + QR</div>
+        <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Валовая выручка = нал + терминал + перевод + QR + скидка</div>
         <div style="font-family:Unbounded,sans-serif;font-size:18px;font-weight:700;color:#60c8f0" id="psTotalRevVal">0₽</div>
       </div>
 
@@ -315,7 +322,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       </div>
       <div class="fg"><label class="fl">QR</label><input class="fi" type="number" id="psDrQR" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
       <div id="psDrTotalRevBlock" style="background:#1e1a2e;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:10px;display:none">
-        <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Итого выручка = нал + терминал + перевод + QR</div>
+        <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Валовая выручка = нал + терминал + перевод + QR + скидка</div>
         <div style="font-family:Unbounded,sans-serif;font-size:18px;font-weight:700;color:#60c8f0" id="psDrTotalRevVal">0₽</div>
       </div>
       <div class="fg"><label class="fl">Инкассация</label><input class="fi" type="number" id="psDrInkass" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
@@ -431,7 +438,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <button class="btn" onclick="addSellerAdmin()">＋ Добавить продавца</button>
     </div>
   </div>
-  <div class="tabs" id="mainTabs"></div>
+  <div class="tabs" id="mainTabs" style="display:none"></div>
 </div>
 
 <!-- MORNING MODAL -->
@@ -1231,7 +1238,7 @@ function savePastShift(){
       return;
     }
   }
-  const shop=gv('psShop'),date=gv('psDate');
+  var shop=gv('psShop'),date=gv('psDate');
   if(!shop||!date){showToast('Заполните магазин и дату');return;}
   // Validate cash evening
   var errEl=document.getElementById('psSaveError'); if(errEl)errEl.style.display='none';
@@ -1250,7 +1257,7 @@ function savePastShift(){
     return;
   }
   const cashRev=parseFloat(gv('psCashRev'))||0, cardRev=parseFloat(gv('psCardRev'))||0;
-  const n=id=>parseFloat(gv(id))||0;
+  var n=function(id){return parseFloat(gv(id))||0;};
   // Auto-calc goods evening
   var woodEve=n('psWoodMorn')+psReceives.reduce((s,r)=>s+(r.amt||0),0)-(n('psCashRev')+n('psTerminal')+n('psTransfer')+n('psQR'))-psWriteoffs.reduce((s,w)=>s+(w.amt||0),0);
   var drEve=n('psDrMorn')+psDrReceives.reduce((s,r)=>s+(r.amt||0),0)-(n('psDrCashRev')+n('psDrTerminal')+n('psDrTransfer')+n('psDrQR'))-psDrWriteoffs.reduce((s,w)=>s+(w.amt||0),0);
@@ -1267,7 +1274,7 @@ function savePastShift(){
     discount:n('psDiscount'),cashRevenue:n('psCashRev'),
     terminal:n('psTerminal'),transfer:n('psTransfer'),qr:n('psQR'),
     cardRevenue:n('psTerminal')+n('psTransfer')+n('psQR'),
-    totalRevenue:n('psCashRev')+n('psTerminal')+n('psTransfer')+n('psQR'),
+    totalRevenue:n('psCashRev')+n('psTerminal')+n('psTransfer')+n('psQR')+n('psDiscount'),
     cashRevenueTotal:n('psCashRev'),
     // ДЕРЕВО — товар
     goodsMorning:n('psWoodMorn'),goodsEvening:woodEve,
@@ -1278,7 +1285,7 @@ function savePastShift(){
     drDiscount:n('psDrDiscount'),drCashRevenue:n('psDrCashRev'),
     drTerminal:n('psDrTerminal'),drTransfer:n('psDrTransfer'),drQR:n('psDrQR'),
     drCardRevenue:n('psDrTerminal')+n('psDrTransfer')+n('psDrQR'),
-    drTotalRevenue:n('psDrCashRev')+n('psDrTerminal')+n('psDrTransfer')+n('psDrQR'),
+    drTotalRevenue:n('psDrCashRev')+n('psDrTerminal')+n('psDrTransfer')+n('psDrQR')+n('psDrDiscount'),
     // ДР ТОВАР — товар
     drGoodsMorning:n('psDrMorn'),drGoodsEvening:drEve,
     drGoodsReceives:[...psDrReceives],drGoodsWriteoffs:[...psDrWriteoffs],
@@ -1364,7 +1371,7 @@ function psCalc(){
   var other=parseFloat(gv('psOtherExp'))||0;
 
   // Total revenue
-  var totalRev=salesCash+terminal+transfer+qr; // скидка не вычитается — товар списывается по полной цене
+  var totalRev=salesCash+terminal+transfer+qr+disc; // валовая = нал+безнал+скидка
   var trBlock=document.getElementById('psTotalRevBlock');
   var trVal=document.getElementById('psTotalRevVal');
   if(salesCash||terminal||transfer||qr){trBlock.style.display='block';trVal.textContent=fmt2(totalRev);}
@@ -1408,7 +1415,7 @@ function psCalcDr(){
   var qr=parseFloat(gv('psDrQR'))||0;
   var disc=parseFloat(gv('psDrDiscount'))||0;
   var inkass=parseFloat(gv('psDrInkass'))||0;
-  var totalRev=salesCash+terminal+transfer+qr; // скидка не вычитается — товар списывается по полной цене
+  var totalRev=salesCash+terminal+transfer+qr+disc; // валовая = нал+безнал+скидка
   var trBlock=document.getElementById('psDrTotalRevBlock'), trVal=document.getElementById('psDrTotalRevVal');
   if(salesCash||terminal||transfer||qr){trBlock.style.display='block';trVal.textContent=fmt2(totalRev);}
   else trBlock.style.display='none';
@@ -1653,7 +1660,8 @@ function init(){
   // Ensure default admin
   var admins=JSON.parse(localStorage.getItem('iz_shop_admins')||'[]');
   if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; localStorage.setItem('iz_shop_admins',JSON.stringify(admins)); }
-  renderLoginSellers();
+  // Init role selection — seller by default
+  pick('seller');
   const saved=JSON.parse(localStorage.getItem(KEY.session)||'null');
   if(saved){ session=saved; journal=JSON.parse(localStorage.getItem(KEY.journal)||'[]'); if(session.role==='shopadmin')startAdminApp(); else startApp(); }
 }
