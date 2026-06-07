@@ -272,14 +272,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
           <div id="clStaff_body" style="padding:0 12px 12px;display:none"><div id="closeStaffDetail"></div></div>
         </div>
 
-        <!-- Безнал -->
-        <div style="background:#1a1e2e;border-radius:10px;margin-bottom:5px;overflow:hidden">
-          <div onclick="toggleSub('clCard')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:11px 12px">
-            <div style="font-size:13px;font-weight:700;color:#60c8f0">💳 Безнал</div>
-            <div id="clCard_arrow" style="color:#60c8f0">▶</div>
-          </div>
-          <div id="clCard_body" style="padding:0 12px 12px;display:none"><div id="closeCardDetail"></div></div>
-        </div>
+
 
       </div><!-- end acc_close_wood_body -->
     </div><!-- end acc_close_wood -->
@@ -358,13 +351,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
           <div id="clDrRcv_body" style="padding:0 12px 12px;display:none"><div id="closeDrRcvDetail"></div></div>
         </div>
 
-        <div style="background:#1a1e2e;border-radius:10px;margin-bottom:5px;overflow:hidden">
-          <div onclick="toggleSub('clDrCard')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:11px 12px">
-            <div style="font-size:13px;font-weight:700;color:#60c8f0">💳 Безнал</div>
-            <div id="clDrCard_arrow" style="color:#60c8f0">▶</div>
-          </div>
-          <div id="clDrCard_body" style="padding:0 12px 12px;display:none"><div id="closeDrCardDetail"></div></div>
-        </div>
+
 
       </div><!-- end acc_close_dr_body -->
     </div><!-- end acc_close_dr -->
@@ -1939,33 +1926,57 @@ function renderClose(){
 
   // DR Продажи
   var drSd = document.getElementById('closeDrSalesDetail');
-  if(drSd) drSd.innerHTML = drSales.length
-    ? '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Нал</span><span style="color:#60f090;font-weight:700">+'+fmt(drCashSales)+'</span></div>'
-      +'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Безнал</span><span style="color:#60c8f0;font-weight:700">+'+fmt(drCardSales)+'</span></div>'
-      +(drDisc?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Скидки</span><span>−'+fmt(drDisc)+'</span></div>':'')
-    : '<div style="font-size:12px;color:#555568">Продаж ДР нет</div>';
+  if(drSd){
+    var drTermAmt = drSales.filter(function(s){return s.payMethod==='terminal';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
+    var drSbpAmt  = drSales.filter(function(s){return s.payMethod==='sbp';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
+    var drQrAmt   = drSales.filter(function(s){return s.payMethod==='qr';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
+    var drTransferAmt = drSales.filter(function(s){return s.payMethod==='transfer';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
+    var drBeznal = drTermAmt + drSbpAmt + drQrAmt;
+    var Rd = function(label,val,color){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">'+label+'</span><span style="color:'+(color||'#f0f0f8')+'">'+fmt(val)+'</span></div>'; };
+    drSd.innerHTML =
+      Rd('💵 Нал', drCashSales, '#60f090') +
+      Rd('🏦 Перевод', drTransferAmt, '#60c8f0') +
+      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">💳 Безнал</span><span style="color:#60c8f0">'+fmt(drBeznal)+'</span></div>'+
+      '<div style="padding:2px 0 4px 12px;border-bottom:1px solid #2e2e3e">'+
+        '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;color:#555568"><span>Терминал</span><span>'+fmt(drTermAmt)+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;color:#555568"><span>СБП</span><span>'+fmt(drSbpAmt)+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;color:#555568"><span>QR</span><span>'+fmt(drQrAmt)+'</span></div>'+
+      '</div>'+
+      Rd('🎁 Скидка', drDisc, '#8888aa') +
+      '<div style="display:flex;justify-content:space-between;font-size:14px;padding:7px 0;font-weight:700"><span>Итого выручка</span><span style="color:#60c8f0">'+fmt(drCashSales+drBeznal+drTransferAmt+drDisc)+'</span></div>';
+  }
 
   var drWod = document.getElementById('closeDrWoDetail');
-  if(drWod) drWod.innerHTML = drWo.length
-    ? drWo.map(function(w){ return '<div style="font-size:13px;padding:3px 0;color:#8888aa">'+w.sub+' <span style="color:#f06060">−'+fmt(w.amount)+'</span></div>'; }).join('')
-    : '<div style="font-size:12px;color:#555568">Нет</div>';
+  if(drWod){
+    var drWoTotal = drWo.reduce(function(s,w){return s+(w.amount||0);},0);
+    drWod.innerHTML = drWo.length
+      ? drWo.map(function(w){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">'+(w.sub||w.label||'Списание')+'</span><span style="color:#f06060">'+fmt(w.amount)+'</span></div>'; }).join('')
+        + '<div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;font-weight:700"><span>Итого</span><span style="color:#f06060">'+fmt(drWoTotal)+'</span></div>'
+      : '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Списаний за смену</span><span style="color:#f06060">0₽</span></div>';
+  }
 
   var drRd = document.getElementById('closeDrRcvDetail');
-  if(drRd) drRd.innerHTML = drRcv.length
-    ? drRcv.map(function(r){ return '<div style="font-size:13px;padding:3px 0;color:#8888aa">'+(r.sub||r.label)+' <span style="color:#60f090">+'+fmt(r.goodsEffect||0)+'</span></div>'; }).join('')
-    : '<div style="font-size:12px;color:#555568">Нет</div>';
+  if(drRd){
+    var drRcvTotal = drRcv.reduce(function(s,r){return s+(r.goodsEffect||0);},0);
+    drRd.innerHTML = drRcv.length
+      ? drRcv.map(function(r){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">'+(r.sub||r.label||'Приход')+'</span><span style="color:#60f090">+'+fmt(r.goodsEffect||0)+'</span></div>'; }).join('')
+        + '<div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;font-weight:700"><span>Итого</span><span style="color:#60f090">+'+fmt(drRcvTotal)+'</span></div>'
+      : '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Приходов за смену</span><span style="color:#60f090">0₽</span></div>';
+  }
 
-  var drCd = document.getElementById('closeDrCardDetail');
-  if(drCd) drCd.innerHTML = '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Безнал ДР</span><span style="color:#60c8f0;font-weight:700">'+fmt(drCardSales)+'</span></div>';
+  // Безнал ДР теперь внутри блока Продажи ДР
+
+  // DR покупки сотрудников
+  var drStaffP = staffP.filter(function(e){ return e.goodsType==='dr'; });
+  var drStaffTotal = drStaffP.reduce(function(s,e){return s+e.amount;},0);
+  var drStD = document.getElementById('closeDrStaffDetail');
+  if(drStD) drStD.innerHTML = drStaffP.length
+    ? drStaffP.map(function(s){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">'+s.label+'</span><span style="color:#a060f0">'+fmt(s.amount)+'</span></div>'; }).join('')
+      + '<div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;font-weight:700"><span>Итого</span><span style="color:#a060f0">'+fmt(drStaffTotal)+'</span></div>'
+    : '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Покупок сотрудников</span><span style="color:#a060f0">0₽</span></div>';
 
   // 💳 БЕЗНАЛ
-  var cd = document.getElementById('closeCardDetail');
-  if(cd) cd.innerHTML =
-    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">💳 Терминал</span><span style="color:#60c8f0">'+fmt(sales.filter(function(s){return s.payMethod==='terminal';}).reduce(function(a,s){return a+(s.cardPart||0);},0))+'</span></div>'+
-    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">📱 СБП</span><span style="color:#60c8f0">'+fmt(sales.filter(function(s){return s.payMethod==='sbp';}).reduce(function(a,s){return a+(s.cardPart||0);},0))+'</span></div>'+
-    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">🏦 Перевод</span><span style="color:#60c8f0">'+fmt(sales.filter(function(s){return s.payMethod==='transfer';}).reduce(function(a,s){return a+(s.cardPart||0);},0))+'</span></div>'+
-    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">🔲 QR</span><span style="color:#60c8f0">'+fmt(sales.filter(function(s){return s.payMethod==='qr';}).reduce(function(a,s){return a+(s.cardPart||0);},0))+'</span></div>'+
-    '<div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;font-weight:700"><span>Итого безнал</span><span style="color:#60c8f0">'+fmt(t.card)+'</span></div>';
+  // Безнал теперь внутри блока Продажи
 
   // Update title
   var title = document.getElementById('closeShiftTitle');
