@@ -174,31 +174,36 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
   <div class="page" id="pg-close">
     <div class="stitle" id="closeShiftTitle">Закрытие смены</div>
 
-    <!-- ══ КАССА — всегда видна, ввод вручную ══ -->
-    <div style="background:#1e2a14;border-radius:12px;padding:12px;margin-bottom:8px">
-      <div style="font-size:12px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 КАССА</div>
-      <div class="row2" style="margin-bottom:8px">
-        <div>
-          <div style="font-size:11px;color:#8888aa;margin-bottom:4px">Нал утро</div>
-          <div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700" id="closeNalMorn">—</div>
-        </div>
-        <div>
-          <div style="font-size:11px;color:#f0a060;margin-bottom:4px">Нал вечер (введите)</div>
-          <input class="fi" type="number" id="cashEveInput" placeholder="Пересчитайте..." inputmode="numeric"
-            style="font-size:16px;font-weight:700;text-align:center;border-color:#f0a060;padding:8px" oninput="validateClose()">
-        </div>
+    <!-- ══ 🌳 ДЕРЕВО ══ -->
+    <div id="acc_close_wood" style="margin-bottom:6px">
+      <div onclick="toggleAcc('close_wood')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 0">
+        <div style="font-size:15px;font-weight:700;color:#c8f060">🌳 ДЕРЕВО</div>
+        <div style="font-size:18px;color:#c8f060" id="acc_close_wood_arrow">▼</div>
       </div>
-      <div id="cashValidation"></div>
-      <div id="cashDiffReasonBlock" style="display:none">
-        <div style="font-size:12px;color:#f06060;font-weight:700;margin-top:6px">⛔ Неверный остаток. Пересчитайте кассу.</div>
-      </div>
-    </div>
 
-    <!-- ══ ТОВАРНЫЙ ОСТАТОК — всегда виден ══ -->
-    <div id="closeGoodsBlock" style="margin-bottom:8px">
-      <!-- Дерево -->
-      <div style="background:#1e2a14;border-radius:12px;padding:12px;margin-bottom:6px">
-        <div style="font-size:12px;color:#c8f060;font-weight:700;margin-bottom:8px">📦 ТОВАР — 🌳 ДЕРЕВО</div>
+      <!-- КАССА — всегда видна, ввод нал вечер -->
+      <div style="background:#1e2a14;border-radius:10px;padding:12px;margin-bottom:6px">
+        <div style="font-size:12px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 КАССА</div>
+        <div id="cashValidation" style="margin-bottom:6px"></div>
+        <div id="cashDiffReasonBlock" style="display:none;margin-bottom:6px">
+          <div style="font-size:12px;color:#f06060;font-weight:700">⛔ Неверный остаток. Пересчитайте кассу.</div>
+        </div>
+        <div class="row2">
+          <div>
+            <div style="font-size:11px;color:#8888aa;margin-bottom:4px">Нал утро</div>
+            <div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700" id="closeNalMorn">—</div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:#f0a060;margin-bottom:4px">Нал вечер (введите)</div>
+            <input class="fi" type="number" id="cashEveInput" placeholder="Пересчитайте..." inputmode="numeric"
+              style="font-size:16px;font-weight:700;text-align:center;border-color:#f0a060;padding:8px" oninput="validateClose()">
+          </div>
+        </div>
+      </div>
+
+      <!-- ТОВАРНЫЙ ОСТАТОК — всегда виден -->
+      <div style="background:#1e2a14;border-radius:10px;padding:12px;margin-bottom:6px">
+        <div style="font-size:12px;color:#c8f060;font-weight:700;margin-bottom:8px">📦 ТОВАРНЫЙ ОСТАТОК</div>
         <div class="row2">
           <div>
             <div style="font-size:11px;color:#8888aa;margin-bottom:4px">Утро</div>
@@ -210,9 +215,102 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
           </div>
         </div>
       </div>
-      <!-- ДР Товар - только для магазинов где ведётся ДР учёт -->
-      <div id="closeDrGoodsBlock" style="background:#1e1a2e;border-radius:12px;padding:12px;display:none">
-        <div style="font-size:12px;color:#a060f0;font-weight:700;margin-bottom:8px">📦 ТОВАР — 🛍 ДР ТОВАР</div>
+
+      <!-- ИТОГО ВЫРУЧКА -->
+      <div style="background:#1a1e2e;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:12px;color:#8888aa">Итого выручка</div>
+          <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#60c8f0" id="closeTotalRev">0₽</div>
+        </div>
+      </div>
+
+      <!-- КОЛЛАПСИРУЕМОЕ ДЕРЕВО -->
+      <div id="acc_close_wood_body">
+
+        <!-- Продажи -->
+        <div style="background:#1a1e2e;border-radius:10px;margin-bottom:5px;overflow:hidden">
+          <div onclick="toggleSub('clS')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:11px 12px">
+            <div style="font-size:13px;font-weight:700;color:#60c8f0">💰 Продажи</div>
+            <div id="clS_arrow" style="color:#60c8f0">▶</div>
+          </div>
+          <div id="clS_body" style="padding:0 12px 12px;display:none"><div id="closeSalesDetail"></div></div>
+        </div>
+
+        <!-- Расходы -->
+        <div style="background:#2a1e14;border-radius:10px;margin-bottom:5px;overflow:hidden">
+          <div onclick="toggleSub('clExp')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:11px 12px">
+            <div style="font-size:13px;font-weight:700;color:#f0a060">💸 Расходы</div>
+            <div id="clExp_arrow" style="color:#f0a060">▶</div>
+          </div>
+          <div id="clExp_body" style="padding:0 12px 12px;display:none"><div id="closeExpDetail"></div></div>
+        </div>
+
+        <!-- Списание -->
+        <div style="background:#2e1a1a;border-radius:10px;margin-bottom:5px;overflow:hidden">
+          <div onclick="toggleSub('clWo')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:11px 12px">
+            <div style="font-size:13px;font-weight:700;color:#f06060">🗑 Списание товара</div>
+            <div id="clWo_arrow" style="color:#f06060">▶</div>
+          </div>
+          <div id="clWo_body" style="padding:0 12px 12px;display:none"><div id="closeWoDetail"></div></div>
+        </div>
+
+        <!-- Приход -->
+        <div style="background:#1a2e1e;border-radius:10px;margin-bottom:5px;overflow:hidden">
+          <div onclick="toggleSub('clRcv')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:11px 12px">
+            <div style="font-size:13px;font-weight:700;color:#60f090">📥 Приход товара</div>
+            <div id="clRcv_arrow" style="color:#60f090">▶</div>
+          </div>
+          <div id="clRcv_body" style="padding:0 12px 12px;display:none"><div id="closeRcvDetail"></div></div>
+        </div>
+
+        <!-- Покупки сотрудников -->
+        <div style="background:#1e1a2e;border-radius:10px;margin-bottom:5px;overflow:hidden">
+          <div onclick="toggleSub('clStaff')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:11px 12px">
+            <div style="font-size:13px;font-weight:700;color:#a060f0">🛒 Покупки сотрудников</div>
+            <div id="clStaff_arrow" style="color:#a060f0">▶</div>
+          </div>
+          <div id="clStaff_body" style="padding:0 12px 12px;display:none"><div id="closeStaffDetail"></div></div>
+        </div>
+
+        <!-- Безнал -->
+        <div style="background:#1a1e2e;border-radius:10px;margin-bottom:5px;overflow:hidden">
+          <div onclick="toggleSub('clCard')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:11px 12px">
+            <div style="font-size:13px;font-weight:700;color:#60c8f0">💳 Безнал</div>
+            <div id="clCard_arrow" style="color:#60c8f0">▶</div>
+          </div>
+          <div id="clCard_body" style="padding:0 12px 12px;display:none"><div id="closeCardDetail"></div></div>
+        </div>
+
+      </div><!-- end acc_close_wood_body -->
+    </div><!-- end acc_close_wood -->
+
+    <!-- ══ 🛍 ДР ТОВАР ══ -->
+    <div id="acc_close_dr" style="margin-bottom:10px">
+      <div onclick="toggleAcc('close_dr')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 0">
+        <div style="font-size:15px;font-weight:700;color:#a060f0">🛍 ДР ТОВАР</div>
+        <div style="font-size:18px;color:#a060f0" id="acc_close_dr_arrow">▼</div>
+      </div>
+
+      <!-- КАССА ДР — только для магазина -->
+      <div id="closeDrCassaBlock" style="background:#1e1a2e;border-radius:10px;padding:12px;margin-bottom:6px;display:none">
+        <div style="font-size:12px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 КАССА</div>
+        <div class="row2">
+          <div>
+            <div style="font-size:11px;color:#8888aa;margin-bottom:4px">Нал утро</div>
+            <div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700" id="closeDrNalMorn">—</div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:#f0a060;margin-bottom:4px">Нал вечер</div>
+            <input class="fi" type="number" id="drCashEveInput" placeholder="Пересчитайте..." inputmode="numeric"
+              style="font-size:14px;font-weight:700;text-align:center;border-color:#f0a060;padding:8px" oninput="validateClose()">
+          </div>
+        </div>
+        <div id="drCashValidation" style="margin-top:6px"></div>
+      </div>
+
+      <!-- ТОВАРНЫЙ ОСТАТОК ДР -->
+      <div id="closeDrGoodsBlock" style="background:#1e1a2e;border-radius:10px;padding:12px;margin-bottom:6px">
+        <div style="font-size:12px;color:#a060f0;font-weight:700;margin-bottom:8px">📦 ТОВАРНЫЙ ОСТАТОК</div>
         <div class="row2">
           <div>
             <div style="font-size:11px;color:#8888aa;margin-bottom:4px">Утро</div>
@@ -224,87 +322,56 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- ══ ИТОГО ВЫРУЧКА — всегда видна ══ -->
-    <div style="background:#1a1e2e;border:1px solid #60c8f0;border-radius:12px;padding:12px;margin-bottom:8px">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div style="font-size:12px;color:#8888aa">Итого выручка (нал + безнал + скидка)</div>
-        <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#60c8f0" id="closeTotalRev">0₽</div>
+      <!-- ИТОГО ДР -->
+      <div style="background:#1a1e2e;border:1px solid #a060f0;border-radius:10px;padding:10px;margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:12px;color:#8888aa">Итого выручка ДР</div>
+          <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#a060f0" id="closeDrTotalRev">0₽</div>
+        </div>
       </div>
-    </div>
 
-    <!-- ══ АККОРДЕОНЫ ══ -->
+      <!-- КОЛЛАПСИРУЕМОЕ ДР -->
+      <div id="acc_close_dr_body">
 
-    <!-- ПРОДАЖИ -->
-    <div style="background:#1a1e2e;border-radius:12px;margin-bottom:6px;overflow:hidden">
-      <div onclick="toggleSub('closeS')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:12px">
-        <div style="font-size:13px;font-weight:700;color:#60c8f0">💰 Продажи</div>
-        <div id="closeS_arrow" style="color:#60c8f0">▼</div>
-      </div>
-      <div id="closeS_body" style="padding:0 12px 12px;display:none">
-        <div id="closeSalesDetail"></div>
-      </div>
-    </div>
+        <div style="background:#1a1e2e;border-radius:10px;margin-bottom:5px;overflow:hidden">
+          <div onclick="toggleSub('clDrS')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:11px 12px">
+            <div style="font-size:13px;font-weight:700;color:#60c8f0">💰 Продажи</div>
+            <div id="clDrS_arrow" style="color:#60c8f0">▶</div>
+          </div>
+          <div id="clDrS_body" style="padding:0 12px 12px;display:none"><div id="closeDrSalesDetail"></div></div>
+        </div>
 
-    <!-- РАСХОДЫ -->
-    <div style="background:#2a1e14;border-radius:12px;margin-bottom:6px;overflow:hidden">
-      <div onclick="toggleSub('closeExp')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:12px">
-        <div style="font-size:13px;font-weight:700;color:#f0a060">💸 Расходы</div>
-        <div id="closeExp_arrow" style="color:#f0a060">▼</div>
-      </div>
-      <div id="closeExp_body" style="padding:0 12px 12px;display:none">
-        <div id="closeExpDetail"></div>
-      </div>
-    </div>
+        <div style="background:#2e1a1a;border-radius:10px;margin-bottom:5px;overflow:hidden">
+          <div onclick="toggleSub('clDrWo')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:11px 12px">
+            <div style="font-size:13px;font-weight:700;color:#f06060">🗑 Списание товара</div>
+            <div id="clDrWo_arrow" style="color:#f06060">▶</div>
+          </div>
+          <div id="clDrWo_body" style="padding:0 12px 12px;display:none"><div id="closeDrWoDetail"></div></div>
+        </div>
 
-    <!-- СПИСАНИЕ ТОВАРА -->
-    <div style="background:#2e1a1a;border-radius:12px;margin-bottom:6px;overflow:hidden">
-      <div onclick="toggleSub('closeWo')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:12px">
-        <div style="font-size:13px;font-weight:700;color:#f06060">🗑 Списание товара</div>
-        <div id="closeWo_arrow" style="color:#f06060">▼</div>
-      </div>
-      <div id="closeWo_body" style="padding:0 12px 12px;display:none">
-        <div id="closeWoDetail"></div>
-      </div>
-    </div>
+        <div style="background:#1a2e1e;border-radius:10px;margin-bottom:5px;overflow:hidden">
+          <div onclick="toggleSub('clDrRcv')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:11px 12px">
+            <div style="font-size:13px;font-weight:700;color:#60f090">📥 Приход товара</div>
+            <div id="clDrRcv_arrow" style="color:#60f090">▶</div>
+          </div>
+          <div id="clDrRcv_body" style="padding:0 12px 12px;display:none"><div id="closeDrRcvDetail"></div></div>
+        </div>
 
-    <!-- ПРИХОД ТОВАРА -->
-    <div style="background:#1a2e1e;border-radius:12px;margin-bottom:6px;overflow:hidden">
-      <div onclick="toggleSub('closeRcv')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:12px">
-        <div style="font-size:13px;font-weight:700;color:#60f090">📥 Приход товара</div>
-        <div id="closeRcv_arrow" style="color:#60f090">▼</div>
-      </div>
-      <div id="closeRcv_body" style="padding:0 12px 12px;display:none">
-        <div id="closeRcvDetail"></div>
-      </div>
-    </div>
+        <div style="background:#1a1e2e;border-radius:10px;margin-bottom:5px;overflow:hidden">
+          <div onclick="toggleSub('clDrCard')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:11px 12px">
+            <div style="font-size:13px;font-weight:700;color:#60c8f0">💳 Безнал</div>
+            <div id="clDrCard_arrow" style="color:#60c8f0">▶</div>
+          </div>
+          <div id="clDrCard_body" style="padding:0 12px 12px;display:none"><div id="closeDrCardDetail"></div></div>
+        </div>
 
-    <!-- ПОКУПКИ СОТРУДНИКОВ -->
-    <div style="background:#1e1a2e;border-radius:12px;margin-bottom:6px;overflow:hidden">
-      <div onclick="toggleSub('closeStaff')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:12px">
-        <div style="font-size:13px;font-weight:700;color:#a060f0">🛒 Покупки сотрудников</div>
-        <div id="closeStaff_arrow" style="color:#a060f0">▼</div>
-      </div>
-      <div id="closeStaff_body" style="padding:0 12px 12px;display:none">
-        <div id="closeStaffDetail"></div>
-      </div>
-    </div>
-
-    <!-- БЕЗНАЛ -->
-    <div style="background:#1a1e2e;border-radius:12px;margin-bottom:10px;overflow:hidden">
-      <div onclick="toggleSub('closeCard')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:12px">
-        <div style="font-size:13px;font-weight:700;color:#60c8f0">💳 Безнал</div>
-        <div id="closeCard_arrow" style="color:#60c8f0">▼</div>
-      </div>
-      <div id="closeCard_body" style="padding:0 12px 12px;display:none">
-        <div id="closeCardDetail"></div>
-      </div>
-    </div>
+      </div><!-- end acc_close_dr_body -->
+    </div><!-- end acc_close_dr -->
 
     <div id="closeSummary"></div>
     <button class="btn red" id="closeShiftBtn" style="margin-bottom:16px;opacity:.5" disabled onclick="closeShift()">🔐 Закрыть смену</button>
-  </div>
+  </div>  </div>
   <!-- ADMIN PAGES -->
 
   <!-- TODAY SHIFT -->
@@ -783,6 +850,21 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <div class="fg"><label class="fl">Нал (₽)</label><input class="fi" type="number" id="mixCash" placeholder="0" inputmode="numeric"></div>
       <div class="fg"><label class="fl">Безнал (₽)</label><input class="fi" type="number" id="mixCard" placeholder="0" inputmode="numeric"></div>
     </div>
+    <!-- Тип товара — Дерево или ДР Товар -->
+    <div class="fg">
+      <label class="fl">Тип товара</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="goodsTypeDerevo" onclick="setGoodsType('derevo',this)"
+          style="flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">
+          🌳 Дерево
+        </button>
+        <button type="button" id="goodsTypeDr" onclick="setGoodsType('dr',this)"
+          style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer">
+          🛍 ДР Товар
+        </button>
+      </div>
+    </div>
+
     <!-- Transfer card selector -->
     <div id="transferCardBlock" style="display:none" class="fg">
       <label class="fl">На какую карту перевод</label>
@@ -1227,13 +1309,18 @@ function adaptUIForShopType(){
   }
 
   // Hide close shift sections for opt
-  ['closeWo_arrow','closeRcv_arrow','closeExp_arrow','closeStaff_arrow'].forEach(function(id){
+  // For opt: hide расходы, списание, приход, покупки in close shift
+  var optHide = ['clExp_arrow','clWo_arrow','clRcv_arrow','clStaff_arrow'];
+  optHide.forEach(function(id){
     var el=document.getElementById(id);
     if(el){
-      var block=el.closest('div[style*="border-radius:12px"]');
+      var block=el.closest('div[style*="border-radius:10px"]');
       if(block) block.style.display = isOpt ? 'none' : 'block';
     }
   });
+  // DR товар visible for ALL types
+  var drAcc=document.getElementById('acc_close_dr');
+  if(drAcc) drAcc.style.display = 'block';
 
   // Update sale modal payment methods for online/offline
   // For non-shop: add РС option, keep all methods
@@ -1366,7 +1453,9 @@ function resetSaleForm(){
   }
   var tb=document.getElementById('transferCardBlock'); if(tb)tb.style.display='none';
   var rb=document.getElementById('rsAccountBlock'); if(rb)rb.style.display='none';
-  saleItems=[]; renderSaleItems(); calcSaleTotal();
+  saleItems=[]; goodsType='derevo';
+  setGoodsType('derevo', document.getElementById('goodsTypeDerevo'));
+  renderSaleItems(); calcSaleTotal();
   ['siNum','siName','siPrice','siNameM','siPriceM','saleComment','mixCash','mixCard','discInput','saleDiscount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('siLookupResult').style.display='none';
   document.getElementById('siManualBlock').style.display='none';
@@ -1425,6 +1514,20 @@ function calcSaleTotal(){
   const total=saleItems.reduce((s,it)=>s+it.price,0), disc=parseFloat(gv('saleDiscount'))||0;
   const el=document.getElementById('saleFinal'); if(el)el.textContent=fmt(Math.max(0,total-disc));
 }
+var goodsType = 'derevo';
+function setGoodsType(type, el){
+  goodsType = type;
+  var db = document.getElementById('goodsTypeDerevo');
+  var dr = document.getElementById('goodsTypeDr');
+  if(type==='derevo'){
+    if(db){ db.style.cssText='flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer'; }
+    if(dr){ dr.style.cssText='flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer'; }
+  } else {
+    if(dr){ dr.style.cssText='flex:1;padding:9px;border-radius:10px;border:2px solid #a060f0;background:#1e1a2e;color:#a060f0;font-size:12px;font-weight:700;cursor:pointer'; }
+    if(db){ db.style.cssText='flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer'; }
+  }
+}
+
 function setPayM(m,el){
   payMethod=m;
   document.querySelectorAll('#saleMo .pc').forEach(p=>p.classList.remove('active'));
@@ -1706,99 +1809,127 @@ function saveExpense(){
 
 // ── renderClose — pull all data from journal ──
 function renderClose(){
-  const t = calcTotals();
-  const sales = journal.filter(e=>e.type==='sale');
-  const expenses = journal.filter(e=>e.type==='expense');
-  const writeoffs = journal.filter(e=>e.type==='writeoff');
-  const receives = journal.filter(e=>e.type==='receive');
-  const staffP = journal.filter(e=>e.type==='staff');
+  var t = calcTotals();
+  var sales = journal.filter(function(e){ return e.type==='sale'; });
+  var expenses = journal.filter(function(e){ return e.type==='expense'; });
+  var writeoffs = journal.filter(function(e){ return e.type==='writeoff'; });
+  var receives = journal.filter(function(e){ return e.type==='receive'; });
+  var staffP = journal.filter(function(e){ return e.type==='staff'; });
 
-  const cashSales = sales.reduce((s,e)=>s+(e.cashPart||0),0);
-  const cardSales = sales.reduce((s,e)=>s+(e.cardPart||0),0);
-  const totalSales = sales.reduce((s,e)=>s+(e.totalPaid||0),0);
-  const disc = sales.reduce((s,e)=>s+(e.discount||0),0);
-  const zp = expenses.filter(e=>e.expType==='zp').reduce((s,e)=>s+e.amount,0);
-  const travel = expenses.filter(e=>e.expType==='travel').reduce((s,e)=>s+e.amount,0);
-  const inkass = expenses.filter(e=>e.expType==='inkass').reduce((s,e)=>s+e.amount,0);
-  const other = expenses.filter(e=>e.expType==='other').reduce((s,e)=>s+e.amount,0);
-  const totalWo = writeoffs.reduce((s,e)=>s+(e.amount||0),0);
-  const totalRcv = receives.reduce((s,e)=>s+(e.goodsEffect||0),0);
-  const staffTotal = staffP.reduce((s,e)=>s+e.amount,0);
+  var cashSales = sales.reduce(function(s,e){ return s+(e.cashPart||0); },0);
+  var cardSales = sales.reduce(function(s,e){ return s+(e.cardPart||0); },0);
+  var disc = sales.reduce(function(s,e){ return s+(e.discount||0); },0);
+  var totalRev = cashSales + cardSales + disc;
+  var staffTotal = staffP.reduce(function(s,e){ return s+e.amount; },0);
+  var zp = expenses.filter(function(e){return e.expType==='zp';}).reduce(function(s,e){return s+e.amount;},0);
+  var travel = expenses.filter(function(e){return e.expType==='travel';}).reduce(function(s,e){return s+e.amount;},0);
+  var inkass = expenses.filter(function(e){return e.expType==='inkass';}).reduce(function(s,e){return s+e.amount;},0);
+  var other = expenses.filter(function(e){return e.expType==='other';}).reduce(function(s,e){return s+e.amount;},0);
+  var totalWo = writeoffs.reduce(function(s,e){return s+(e.amount||0);},0);
+  var totalRcv = receives.reduce(function(s,e){return s+(e.goodsEffect||0);},0);
 
-  // Always-visible blocks
-  const nal_morn = document.getElementById('closeNalMorn');
-  if(nal_morn) nal_morn.textContent = fmt(session.cashMorning);
-
-  // Goods - show shop name in label
-  const shopName = session.shopName || '';
-  const gm = document.getElementById('closeGoodsMorn');
-  if(gm) gm.textContent = fmt(session.goodsMorning);
-  const ge = document.getElementById('closeGoodsEve');
+  // Always-visible: Нал утро, Товарный остаток, Итого выручка
+  var nm = document.getElementById('closeNalMorn');
+  if(nm) nm.textContent = fmt(session.cashMorning||0);
+  var gm = document.getElementById('closeGoodsMorn');
+  if(gm) gm.textContent = fmt(session.goodsMorning||0);
+  var ge = document.getElementById('closeGoodsEve');
   if(ge) ge.textContent = fmt(t.goods);
-  // DR goods - check if session has drGoods tracking
-  const drGoodsBlock = document.getElementById('closeDrGoodsBlock');
-  const drGm = document.getElementById('closeDrGoodsMorn');
-  const drGe = document.getElementById('closeDrGoodsEve');
-  // Show DR goods block for shop types that track it
-  if(drGoodsBlock && session.drGoodsMorning != null){
-    drGoodsBlock.style.display = 'block';
-    if(drGm) drGm.textContent = fmt(session.drGoodsMorning||0);
-    // DR goods evening = morning + dr receives - dr sales (from journal drEffect)
-    const drEve = (session.drGoodsMorning||0) + receives.reduce((s,e)=>s+(e.drGoodsEffect||0),0);
-    if(drGe) drGe.textContent = fmt(drEve);
-  } else if(drGoodsBlock){
-    drGoodsBlock.style.display = 'none';
-  }
+  var tr = document.getElementById('closeTotalRev');
+  if(tr) tr.textContent = fmt(totalRev);
 
-  const tr = document.getElementById('closeTotalRev');
-  if(tr) tr.textContent = fmt(cashSales+cardSales+disc);
+  // DR товар — always shown for all shop types
+  var drGb = document.getElementById('closeDrGoodsBlock');
+  var drGm = document.getElementById('closeDrGoodsMorn');
+  var drGe = document.getElementById('closeDrGoodsEve');
+  var drTr = document.getElementById('closeDrTotalRev');
+  if(drGb) drGb.style.display='block';
+  // DR sales from journal
+  var drSales = sales.filter(function(e){ return e.goodsType==='dr'; });
+  var drCashSales = drSales.reduce(function(s,e){ return s+(e.cashPart||0); },0);
+  var drCardSales = drSales.reduce(function(s,e){ return s+(e.cardPart||0); },0);
+  var drDisc = drSales.reduce(function(s,e){ return s+(e.discount||0); },0);
+  var drTotalRevAmt = drCashSales + drCardSales + drDisc;
+  if(drTr) drTr.textContent = fmt(drTotalRevAmt);
+  // DR writeoffs and receives
+  var drWo = writeoffs.filter(function(e){ return e.goodsType==='dr'; });
+  var drRcv = receives.filter(function(e){ return e.goodsType==='dr'; });
+  // DR goods evening
+  var drMorn = session.drGoodsMorning||0;
+  var drEveCalc = drMorn + drRcv.reduce(function(s,e){return s+(e.goodsEffect||0);},0) - drSales.reduce(function(s,e){return s+(e.totalPrice||0);},0) - drWo.reduce(function(s,e){return s+(e.amount||0);},0);
+  if(drGm) drGm.textContent = fmt(drMorn);
+  if(drGe) drGe.textContent = fmt(drEveCalc);
+  if(drTr) drTr.textContent = '0₽';
 
-  // ПРОДАЖИ detail
-  const sd = document.getElementById('closeSalesDetail');
-  if(sd) sd.innerHTML = sales.length ? `
-    <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Нал</span><span style="color:#60f090;font-weight:700">+${fmt(cashSales)}</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Безнал</span><span style="color:#60c8f0;font-weight:700">+${fmt(cardSales)}</span></div>
-    ${disc?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Скидки</span><span style="color:#8888aa">−${fmt(disc)}</span></div>`:''}
-    <div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;border-top:1px solid #2e2e3e;font-weight:700;margin-top:4px"><span>Итого выручка</span><span style="color:#60c8f0">${fmt(cashSales+cardSales+disc)}</span></div>
-    ${sales.map(s=>`<div style="font-size:11px;color:#555568;padding:2px 0">· ${s.sub}</div>`).join('')}
-  ` : '<div style="font-size:12px;color:#555568">Продаж нет</div>';
+  // 💰 ПРОДАЖИ detail
+  var sd = document.getElementById('closeSalesDetail');
+  if(sd) sd.innerHTML = sales.length ? [
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Нал</span><span style="color:#60f090;font-weight:700">+'+fmt(cashSales)+'</span></div>',
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Безнал</span><span style="color:#60c8f0;font-weight:700">+'+fmt(cardSales)+'</span></div>',
+    disc?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Скидки</span><span style="color:#8888aa">−'+fmt(disc)+'</span></div>':'',
+    '<div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;border-top:1px solid #2e2e3e;font-weight:700;margin-top:4px"><span>Итого</span><span style="color:#60c8f0">'+fmt(totalRev)+'</span></div>',
+    sales.map(function(s){ return '<div style="font-size:11px;color:#555568;padding:2px 0">· '+s.sub+'</div>'; }).join('')
+  ].join('') : '<div style="font-size:12px;color:#555568">Продаж нет</div>';
 
-  // РАСХОДЫ detail
-  const ed = document.getElementById('closeExpDetail');
-  if(ed) ed.innerHTML = expenses.length ? `
-    ${zp?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>💰 ЗП</span><span style="color:#f0a060;font-weight:700">−${fmt(zp)}</span></div>`:''}
-    ${travel?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>🚌 Проезд</span><span style="color:#f0a060;font-weight:700">−${fmt(travel)}</span></div>`:''}
-    ${inkass?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>🏦 Инкассация</span><span style="color:#f0a060;font-weight:700">−${fmt(inkass)}</span></div>`:''}
-    ${other?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>📝 Прочее</span><span style="color:#f0a060;font-weight:700">−${fmt(other)}</span></div>`:''}
-    ${expenses.map(e=>`<div style="font-size:11px;color:#555568;padding:2px 0">· ${e.comment||e.label}</div>`).join('')}
-  ` : '<div style="font-size:12px;color:#555568">Расходов нет</div>';
+  // 💸 РАСХОДЫ detail
+  var ed = document.getElementById('closeExpDetail');
+  if(ed) ed.innerHTML = expenses.length ? [
+    zp?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>💰 ЗП</span><span style="color:#f0a060;font-weight:700">−'+fmt(zp)+'</span></div>':'',
+    travel?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>🚌 Проезд</span><span style="color:#f0a060;font-weight:700">−'+fmt(travel)+'</span></div>':'',
+    inkass?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>🏦 Инкассация</span><span style="color:#f0a060;font-weight:700">−'+fmt(inkass)+'</span></div>':'',
+    other?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>📝 Прочее</span><span style="color:#f0a060;font-weight:700">−'+fmt(other)+'</span></div>':''
+  ].join('') : '<div style="font-size:12px;color:#555568">Расходов нет</div>';
 
-  // СПИСАНИЯ detail
-  const wd = document.getElementById('closeWoDetail');
+  // 🗑 СПИСАНИЯ
+  var wd = document.getElementById('closeWoDetail');
   if(wd) wd.innerHTML = writeoffs.length
-    ? writeoffs.map(w=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:#8888aa">${w.sub}</span><span style="color:#f06060">−${fmt(w.amount)}</span></div>`).join('')
+    ? writeoffs.map(function(w){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:#8888aa">'+w.sub+'</span><span style="color:#f06060">−'+fmt(w.amount)+'</span></div>'; }).join('')
     : '<div style="font-size:12px;color:#555568">Списаний нет</div>';
 
-  // ПРИХОДЫ detail
-  const rd = document.getElementById('closeRcvDetail');
+  // 📥 ПРИХОДЫ
+  var rd = document.getElementById('closeRcvDetail');
   if(rd) rd.innerHTML = receives.length
-    ? receives.map(r=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:#8888aa">${r.sub||r.label}</span><span style="color:#60f090">+${fmt(r.goodsEffect||0)}</span></div>`).join('')
+    ? receives.map(function(r){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:#8888aa">'+(r.sub||r.label)+'</span><span style="color:#60f090">+'+fmt(r.goodsEffect||0)+'</span></div>'; }).join('')
     : '<div style="font-size:12px;color:#555568">Приходов нет</div>';
 
-  // ПОКУПКИ СОТРУДНИКОВ
-  const stD = document.getElementById('closeStaffDetail');
+  // 🛒 СОТРУДНИКИ
+  var stD = document.getElementById('closeStaffDetail');
   if(stD) stD.innerHTML = staffP.length
-    ? staffP.map(s=>`<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:#8888aa">${s.label}</span><span style="color:#a060f0">${fmt(s.amount)}</span></div>`).join('')+
-      `<div style="font-size:13px;font-weight:700;padding:6px 0;border-top:1px solid #2e2e3e;margin-top:4px;display:flex;justify-content:space-between"><span>Итого</span><span style="color:#a060f0">${fmt(staffTotal)}</span></div>`
+    ? staffP.map(function(s){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:#8888aa">'+s.label+'</span><span style="color:#a060f0">'+fmt(s.amount)+'</span></div>'; }).join('')
+      + '<div style="font-size:13px;font-weight:700;padding:6px 0;border-top:1px solid #2e2e3e;margin-top:4px;display:flex;justify-content:space-between"><span>Итого</span><span style="color:#a060f0">'+fmt(staffTotal)+'</span></div>'
     : '<div style="font-size:12px;color:#555568">Нет</div>';
 
-  // БЕЗНАЛ accordion
-  const cd = document.getElementById('closeCardDetail');
-  if(cd) cd.innerHTML = `
-    <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Терминал+СБП+Перевод+QR</span><span style="color:#60c8f0;font-weight:700">${fmt(t.card)}</span></div>
-    ${staffTotal?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Покупки сотрудников</span><span style="color:#a060f0;font-weight:700">${fmt(staffTotal)}</span></div>`:''}
-  `;
+  // DR Продажи
+  var drSd = document.getElementById('closeDrSalesDetail');
+  if(drSd) drSd.innerHTML = drSales.length
+    ? '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Нал</span><span style="color:#60f090;font-weight:700">+'+fmt(drCashSales)+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Безнал</span><span style="color:#60c8f0;font-weight:700">+'+fmt(drCardSales)+'</span></div>'
+      +(drDisc?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Скидки</span><span>−'+fmt(drDisc)+'</span></div>':'')
+    : '<div style="font-size:12px;color:#555568">Продаж ДР нет</div>';
+
+  var drWod = document.getElementById('closeDrWoDetail');
+  if(drWod) drWod.innerHTML = drWo.length
+    ? drWo.map(function(w){ return '<div style="font-size:13px;padding:3px 0;color:#8888aa">'+w.sub+' <span style="color:#f06060">−'+fmt(w.amount)+'</span></div>'; }).join('')
+    : '<div style="font-size:12px;color:#555568">Нет</div>';
+
+  var drRd = document.getElementById('closeDrRcvDetail');
+  if(drRd) drRd.innerHTML = drRcv.length
+    ? drRcv.map(function(r){ return '<div style="font-size:13px;padding:3px 0;color:#8888aa">'+(r.sub||r.label)+' <span style="color:#60f090">+'+fmt(r.goodsEffect||0)+'</span></div>'; }).join('')
+    : '<div style="font-size:12px;color:#555568">Нет</div>';
+
+  var drCd = document.getElementById('closeDrCardDetail');
+  if(drCd) drCd.innerHTML = '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Безнал ДР</span><span style="color:#60c8f0;font-weight:700">'+fmt(drCardSales)+'</span></div>';
+
+  // 💳 БЕЗНАЛ
+  var cd = document.getElementById('closeCardDetail');
+  if(cd) cd.innerHTML = '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Безнал итого</span><span style="color:#60c8f0;font-weight:700">'+fmt(t.card)+'</span></div>'
+    +(staffTotal?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Покупки сотр.</span><span style="color:#a060f0">'+fmt(staffTotal)+'</span></div>':'');
+
+  // Update title
+  var title = document.getElementById('closeShiftTitle');
+  if(title) title.textContent = 'Закрытие смены · ' + (session.shopName||'');
 }
+
 
 function validateClose(){
   // Calculate expected but DO NOT show to seller
