@@ -960,7 +960,18 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 <div class="mo" id="expMo">
   <div class="md"><div class="mh"></div><div class="mt">💸 Расходы смены</div>
     <div class="al-info" style="margin-bottom:12px">Расходы подтянутся в закрытие смены автоматически</div>
+
     <div class="fg">
+      <label class="fl">Относится к</label>
+      <div style="display:flex;gap:8px;margin-bottom:4px">
+        <button type="button" id="expGoodsDerevo" onclick="setExpGoods('derevo',this)"
+          style="flex:1;padding:8px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">🌳 Дерево</button>
+        <button type="button" id="expGoodsDr" onclick="setExpGoods('dr',this)"
+          style="flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
+      </div>
+    </div>
+
+    <div id="expTypeDerevoBlock" class="fg">
       <label class="fl">Тип расхода</label>
       <div class="pay-chips" id="expTypeChips">
         <div class="pc active" onclick="setExpType('zp',this)">💰 ЗП</div>
@@ -969,6 +980,20 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
         <div class="pc" onclick="setExpType('other',this)">📝 Прочее</div>
       </div>
     </div>
+
+    <div id="expTypeDrBlock" style="display:none" class="fg">
+      <label class="fl">Тип расхода</label>
+      <div class="pay-chips" id="expTypeDrChips">
+        <div class="pc active" onclick="setExpType('inkass',this)">🏦 Инкассация</div>
+        <div class="pc" onclick="setExpType('supplier',this)">🏭 Поставщику</div>
+      </div>
+    </div>
+
+    <div id="expSupplierBlock" style="display:none" class="fg">
+      <label class="fl">Поставщик</label>
+      <input class="fi" id="expSupplierName" placeholder="Название поставщика..." list="suppliersList">
+    </div>
+
     <div class="fg"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="expAmt" placeholder="0" inputmode="numeric"></div>
     <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="expComment" placeholder="Необязательно"></div>
     <button class="btn" style="background:#f0a060;color:#0f0f13;border:none" onclick="saveExpense()">Добавить расход</button>
@@ -1768,29 +1793,59 @@ function acceptInvoice(){
 // ════ CLOSE SHIFT ════
 // ── Expense type for expense modal ──
 var expType = 'zp';
+var expGoodsType = 'derevo';
+
+function setExpGoods(type, el){
+  expGoodsType = type;
+  var db = document.getElementById('expGoodsDerevo');
+  var dr = document.getElementById('expGoodsDr');
+  var dBlock = document.getElementById('expTypeDerevoBlock');
+  var drBlock = document.getElementById('expTypeDrBlock');
+  if(type==='derevo'){
+    if(db){ db.style.cssText='flex:1;padding:8px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer'; }
+    if(dr){ dr.style.cssText='flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer'; }
+    if(dBlock) dBlock.style.display='block';
+    if(drBlock) drBlock.style.display='none';
+    expType='zp';
+  } else {
+    if(dr){ dr.style.cssText='flex:1;padding:8px;border-radius:10px;border:2px solid #a060f0;background:#1e1a2e;color:#a060f0;font-size:12px;font-weight:700;cursor:pointer'; }
+    if(db){ db.style.cssText='flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer'; }
+    if(dBlock) dBlock.style.display='none';
+    if(drBlock) drBlock.style.display='block';
+    expType='inkass';
+  }
+  document.getElementById('expSupplierBlock').style.display='none';
+}
+
 function setExpType(type, el){
   expType = type;
-  document.querySelectorAll('#expTypeChips .pc').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('#expTypeChips .pc, #expTypeDrChips .pc').forEach(p=>p.classList.remove('active'));
   el.classList.add('active');
+  var supBlock = document.getElementById('expSupplierBlock');
+  if(supBlock) supBlock.style.display = (type==='supplier') ? 'block' : 'none';
 }
 
 function saveExpense(){
   var amt = parseFloat(document.getElementById('expAmt')?.value)||0;
   if(!amt){showToast('Введите сумму');return;}
   var comment = document.getElementById('expComment')?.value||'';
-  var labels = {zp:'💰 ЗП',travel:'🚌 Проезд',inkass:'🏦 Инкассация',other:'📝 Прочее'};
+  var supplier = document.getElementById('expSupplierName')?.value||'';
+  var labels = {zp:'💰 ЗП',travel:'🚌 Проезд',inkass:'🏦 Инкассация',other:'📝 Прочее',supplier:'🏭 Поставщику'};
+  var label = labels[expType] + (expGoodsType==='dr'?' (ДР)':'');
   journal.push({
     id:uid(), type:'expense', ts:new Date().toISOString(),
-    icon:'💸', label:'Расход: '+labels[expType],
-    sub:fmt(amt)+(comment?' · '+comment:''),
-    expType, amount:amt, comment,
+    icon:'💸', label:'Расход: '+label,
+    sub:fmt(amt)+(supplier?' · '+supplier:'')+(comment?' · '+comment:''),
+    expType, goodsType:expGoodsType, amount:amt, comment, supplier,
     amtCls:'exp', amtSign:'−',
-    cashEffect: expType==='inkass' ? -amt : -amt,
+    cashEffect: -amt,
     cardEffect:0, staffEffect:0, goodsEffect:0
   });
   saveJ();
   document.getElementById('expAmt').value='';
   document.getElementById('expComment').value='';
+  if(document.getElementById('expSupplierName')) document.getElementById('expSupplierName').value='';
+  expGoodsType='derevo'; setExpGoods('derevo', document.getElementById('expGoodsDerevo'));
   closeMo('expMo');
   renderAll();
   showToast('💸 Расход '+fmt(amt)+' записан');
