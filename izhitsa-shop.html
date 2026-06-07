@@ -151,14 +151,14 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
   </div>
   <div class="page" id="pg-journal">
     <div id="pendingAlert"></div>
-    <div style="display:flex;gap:7px;margin-bottom:8px">
+    <div id="journalBtns1" style="display:flex;gap:7px;margin-bottom:8px">
       <button class="btn" style="margin:0;flex:1.2;font-size:13px" onclick="openMo('saleMo');resetSaleForm()">＋ Продажа</button>
-      <button class="btn red" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openMo('woMo')">🗑 Списание</button>
-      <button class="btn blue" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openMo('receiveMo')">📥 Приход</button>
+      <button id="btnWriteoff" class="btn red" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openMo('woMo')">🗑 Списание</button>
+      <button id="btnReceive" class="btn blue" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openMo('receiveMo')">📥 Приход</button>
     </div>
-    <div style="display:flex;gap:7px;margin-bottom:10px">
-      <button class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#2a1e14;border:1px solid #f0a060;color:#f0a060" onclick="openMo('expMo')">💸 Расходы</button>
-      <button class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#1a1e2e;border:1px solid #60c8f0;color:#60c8f0" onclick="openMo('staffMo')">🛒 Покупка сотр.</button>
+    <div id="journalBtns2" style="display:flex;gap:7px;margin-bottom:10px">
+      <button id="btnExpense" class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#2a1e14;border:1px solid #f0a060;color:#f0a060" onclick="openMo('expMo')">💸 Расходы</button>
+      <button id="btnStaffPurchase" class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#1a1e2e;border:1px solid #60c8f0;color:#60c8f0" onclick="openMo('staffMo')">🛒 Покупка сотр.</button>
     </div>
     <div class="card"><div class="ctitle">Журнал смены</div><div id="journalList"></div></div>
   </div>
@@ -1125,6 +1125,66 @@ function adaptUIForShopType(){
     shopEl.textContent = icon + ' ' + session.shopName;
   }
 
+  // For OFFLINE/OPT: show only invoices tab
+  if(shopType === 'offline'){
+    // Rebuild tabs - only invoices
+    var t=document.getElementById('mainTabs'); 
+    if(t) t.innerHTML=`
+      <button class="tab active" onclick="showPg('invoices',this);renderInvoices()"><div class="ti">📋</div><span>Накладные</span><div class="tbadge" id="invBadge"></div></button>
+      <button class="tab" onclick="exitShift()"><div class="ti">🚪</div><span>Выйти</span></button>`;
+    // Show invoices page
+    document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
+    var invPage = document.getElementById('pg-invoices');
+    if(invPage) invPage.classList.add('active');
+    // Update invoices page title
+    var invTitle = invPage?.querySelector('.stitle');
+    if(invTitle) invTitle.textContent = 'Исходящие накладные · '+session.shopName;
+    renderInvoices();
+    return; // skip rest of adaptUIForShopType
+  }
+
+  // For ONLINE: hide staff, show goods source
+  // For all non-shop: hide cash-related close shift elements
+  if(shopType !== 'shop'){
+    // Hide in journal: Списание, Приход, Расходы, Покупки кнопки
+    var btns = document.querySelectorAll('#pg-journal button');
+    btns.forEach(function(b){
+      var txt = b.textContent;
+      if(txt.indexOf('Списание')>=0 || txt.indexOf('Приход')>=0 || txt.indexOf('Расходы')>=0){
+        if(shopType==='online') b.style.display='none';
+      }
+    });
+  }
+
+  // Show/hide journal buttons based on type
+  var isOpt = shopType==='offline';
+  var isOnline = shopType==='online';
+  var isShop2 = shopType==='shop';
+
+  // Opt: hide Списание, Приход, Расходы, Покупки
+  ['btnWriteoff','btnReceive','btnExpense','btnStaffPurchase'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el) el.style.display = isOpt ? 'none' : '';
+  });
+  // Online: hide Списание, Приход, Расходы, Покупки  
+  if(isOnline){
+    ['btnWriteoff','btnReceive','btnStaffPurchase'].forEach(function(id){
+      var el=document.getElementById(id); if(el) el.style.display='none';
+    });
+  }
+  // journalBtns2 row - hide if all buttons hidden
+  var btn2 = document.getElementById('journalBtns2');
+  if(btn2) btn2.style.display = isOpt ? 'none' : 'flex';
+
+  // Hide close shift sections for opt
+  ['closeWo_arrow','closeRcv_arrow','closeExp_arrow','closeStaff_arrow'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el){
+      var block=el.closest('div[style*="border-radius:12px"]');
+      if(block) block.style.display = isOpt ? 'none' : 'block';
+    }
+  });
+
   // Update sale modal payment methods for online/offline
   // For non-shop: add РС option, keep all methods
   var payChips = document.querySelector('#saleMo .pay-chips');
@@ -1147,7 +1207,7 @@ function adaptUIForShopType(){
       var sourceBlock = document.createElement('div');
       sourceBlock.id = 'goodsSourceBlock';
       sourceBlock.className = 'fg';
-      var shopNames = getShopNames().filter(function(s){ return getShopType(s)==='shop'; });
+      var shopNames = getShopNames().filter(function(s){ var t=getShopType(s); return t==='shop'||t==='offline'; });
       sourceBlock.innerHTML = '<label class="fl">Откуда списать товар</label>'+
         '<select class="fs" id="goodsSource">'+
         shopNames.map(function(s){ return '<option>'+s+'</option>'; }).join('')+
@@ -1426,6 +1486,35 @@ function showOnlineSaleNotifs(){
 }
 function renderInvoices(){
   const c=document.getElementById('invoicesList'); if(!c)return;
+  var shopType = session.shopType || getShopType(session.shopName||'');
+
+  // For offline/opt: show outgoing invoices (created by this shop/warehouse)
+  if(shopType === 'offline'){
+    const all=getInvoices();
+    const outgoing=all.filter(i=>i.sourceName===session?.shopName||i.createdBy===session?.shopName);
+    if(!outgoing.length){
+      c.innerHTML='<div class="empty"><div class="ei">📋</div>Исходящих накладных нет</div>'; return;
+    }
+    c.innerHTML=outgoing.map(inv=>`
+      <div class="card" style="border-color:${inv.disputed?'#f06060':inv.status==='accepted'?'#60f090':'#f0a060'}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div>
+            <div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700">${inv.num}</div>
+            <div style="font-size:11px;color:#8888aa">📅 ${inv.date} · 📦 ${inv.destName||'—'} · ${inv.items?.length||0} изд.</div>
+          </div>
+          <span style="font-size:10px;padding:3px 8px;border-radius:6px;font-weight:700;
+            background:${inv.disputed?'#2e1a1a':inv.status==='accepted'?'#1a2e1e':'#2a1e14'};
+            color:${inv.disputed?'#f06060':inv.status==='accepted'?'#60f090':'#f0a060'}">
+            ${inv.disputed?'⚠️ Расхождение':inv.status==='accepted'?'✅ Принята':'⏳ Ожидает'}
+          </span>
+        </div>
+        ${inv.items?.slice(0,3).map(it=>`<div style="font-size:12px;color:#8888aa;padding:2px 0">· №${it.num||'—'} ${it.name}</div>`).join('')||''}
+        ${inv.disputed?`<div style="font-size:11px;color:#f06060;margin-top:6px">⚠️ Есть расхождения при приёмке — проверьте</div>`:''}
+      </div>`).join('');
+    return;
+  }
+
+  // For shop type: show incoming invoices
   const sh=getInvoices().filter(i=>i.destName===session?.shopName);
   const pending=sh.filter(i=>i.status==='pending'), done=sh.filter(i=>i.status==='accepted').slice(0,5);
   let html='';
