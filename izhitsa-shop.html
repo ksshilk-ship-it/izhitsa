@@ -202,8 +202,25 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
     <button class="btn red" id="closeShiftBtn" style="margin-bottom:16px;opacity:.5" disabled onclick="closeShift()">🔐 Закрыть смену</button>
   </div>
   <!-- ADMIN PAGES -->
+
+  <!-- TODAY SHIFT -->
+  <div class="page" id="pg-today">
+    <div class="stitle">Смена сегодня</div>
+    <div id="todayShiftContent"></div>
+  </div>
+
+  <!-- ARCHIVE (history + edit) -->
   <div class="page" id="pg-history">
-    <div class="stitle">История смен</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="stitle" style="margin:0">Архив смен</div>
+    </div>
+    <!-- Period filter -->
+    <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">
+      <button type="button" onclick="setHistPeriod('today',this)" style="padding:6px 12px;border-radius:20px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Сегодня</button>
+      <button type="button" onclick="setHistPeriod('week',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">Неделя</button>
+      <button type="button" onclick="setHistPeriod('month',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">Месяц</button>
+      <button type="button" onclick="setHistPeriod('all',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">Все</button>
+    </div>
     <div id="histShopFilter" style="display:flex;gap:8px;margin-bottom:12px;overflow-x:auto"></div>
     <div id="shiftHistoryList"></div>
   </div>
@@ -718,7 +735,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <button onclick="closeMo('editShiftMo')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:5px 10px;color:#8888aa;cursor:pointer;font-size:12px">✕</button>
     </div>
     <div id="editShiftBody"></div>
-    <button class="btn" onclick="saveEditShift()">💾 Сохранить</button>
+    <button class="btn" id="esh_saveBtn" onclick="saveEditShift()" style="display:none">💾 Сохранить изменения</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('editShiftMo')">Отмена</button>
   </div>
 </div>
@@ -969,8 +986,9 @@ function startAdminApp(){
 function buildAdminTabs(){
   const t=document.getElementById('mainTabs'); t.style.display='flex';
   t.innerHTML=`
-    <button class="tab active" onclick="showPg('history',this);renderShiftHistory()"><div class="ti">📋</div><span>Смены</span></button>
-    <button class="tab" onclick="showPg('pastshift',this)"><div class="ti">📅</div><span>Архив</span></button>
+    <button class="tab active" onclick="showPg('today',this);renderTodayShift()"><div class="ti">📋</div><span>Смена</span></button>
+    <button class="tab" onclick="showPg('history',this);renderShiftHistory()"><div class="ti">📁</div><span>Архив</span></button>
+    <button class="tab" onclick="showPg('pastshift',this)"><div class="ti">✏️</div><span>Ввод данных</span></button>
     <button class="tab" onclick="showPg('sellers',this);renderSellersAdmin()"><div class="ti">👥</div><span>Роли</span></button>
     <button class="tab" onclick="exitShift()"><div class="ti">🚪</div><span>Выйти</span></button>`;
 }
@@ -1311,18 +1329,54 @@ function openEditShift(id){
   const shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   const sh=shifts.find(s=>s.id===id); if(!sh)return;
   document.getElementById('editShiftTitle').textContent=sh.shopName+' · '+sh.date;
+
+  // Show report + edit button
+  const cashRev=sh.cashRevenue||0, cardRev=sh.cardRevenue||0;
+  const totalRev=cashRev+cardRev+(sh.totalDiscount||0);
   document.getElementById('editShiftBody').innerHTML=`
-    <div style="font-size:11px;color:#8888aa;margin-bottom:12px">Продавец: ${sh.sellerName}</div>
-    <div class="row2">
-      <div class="fg"><label class="fl">Нал утро</label><input class="fi" type="number" id="esh_cashMorn" value="${sh.cashMorning||0}" inputmode="numeric"></div>
-      <div class="fg"><label class="fl">Нал вечер</label><input class="fi" type="number" id="esh_cashEve" value="${sh.cashEvening||0}" inputmode="numeric"></div>
+    <!-- REPORT VIEW -->
+    <div style="background:#1e2a14;border:1px solid #c8f060;border-radius:12px;padding:12px;margin-bottom:12px">
+      <div style="font-size:11px;color:#8888aa;margin-bottom:8px">👤 ${sh.sellerName} · ${sh.date}${sh.backfilled?' · 📅 задним числом':''}</div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span>Нал утро</span><span style="font-weight:700">${fmt(sh.cashMorning||0)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span>Нал вечер</span><span style="font-weight:700">${fmt(sh.cashEvening||0)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span>Выручка нал</span><span style="color:#60f090;font-weight:700">+${fmt(cashRev)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span>Выручка безнал</span><span style="color:#60c8f0;font-weight:700">+${fmt(cardRev)}</span></div>
+      ${sh.totalDiscount?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span>Скидки</span><span style="color:#8888aa">−${fmt(sh.totalDiscount)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;padding:7px 0;font-size:14px;font-weight:700"><span>Итого выручка</span><span style="color:#c8f060">${fmt(totalRev)}</span></div>
+      ${sh.hasCashDiff?`<div style="background:#2e1a1a;border-radius:8px;padding:8px;margin-top:6px"><div style="font-size:11px;color:#f06060;font-weight:700">⚠️ Расхождение кассы: ${fmt(sh.cashDiff)}</div>${sh.cashDiffReason?`<div style="font-size:10px;color:#8888aa;margin-top:2px">Причина: ${sh.cashDiffReason}</div>`:''}</div>`:''}
+      ${sh.editedBy?`<div style="font-size:10px;color:#8888aa;margin-top:8px;padding-top:8px;border-top:1px solid #2e2e3e">✏️ Правки: ${sh.editedBy} · ${sh.editReason||''}</div>`:''}
     </div>
-    <div class="row2">
-      <div class="fg"><label class="fl">Выручка нал</label><input class="fi" type="number" id="esh_cashRev" value="${sh.cashRevenue||0}" inputmode="numeric"></div>
-      <div class="fg"><label class="fl">Выручка безнал</label><input class="fi" type="number" id="esh_cardRev" value="${sh.cardRevenue||0}" inputmode="numeric"></div>
+
+    <!-- EDIT FORM (hidden by default) -->
+    <div id="esh_editForm" style="display:none">
+      <div class="row2">
+        <div class="fg"><label class="fl">Нал утро</label><input class="fi" type="number" id="esh_cashMorn" value="${sh.cashMorning||0}" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">Нал вечер</label><input class="fi" type="number" id="esh_cashEve" value="${sh.cashEvening||0}" inputmode="numeric"></div>
+      </div>
+      <div class="row2">
+        <div class="fg"><label class="fl">Выручка нал</label><input class="fi" type="number" id="esh_cashRev" value="${cashRev}" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">Выручка безнал</label><input class="fi" type="number" id="esh_cardRev" value="${cardRev}" inputmode="numeric"></div>
+      </div>
+      <div class="fg"><label class="fl">Товар вечер</label><input class="fi" type="number" id="esh_goodsEve" value="${sh.goodsEvening||0}" inputmode="numeric"></div>
+      <div class="fg"><label class="fl">Причина правки (обязательно)</label><input class="fi" id="esh_reason" placeholder="Укажите причину..."></div>
     </div>
-    <div class="fg"><label class="fl">Причина правки (обязательно)</label><input class="fi" id="esh_reason" placeholder="Укажите причину..."></div>`;
+
+    <button type="button" id="esh_toggleBtn" onclick="toggleEditForm()"
+      style="width:100%;padding:12px;background:#1a1e2e;border:1px solid #60c8f0;border-radius:10px;color:#60c8f0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">
+      ✏️ Внести изменения
+    </button>`;
   openMo('editShiftMo');
+}
+
+function toggleEditForm(){
+  var form=document.getElementById('esh_editForm');
+  var btn=document.getElementById('esh_toggleBtn');
+  var saveBtn=document.getElementById('esh_saveBtn');
+  if(!form) return;
+  var visible=form.style.display!=='none';
+  form.style.display=visible?'none':'block';
+  if(btn) btn.textContent=visible?'✏️ Внести изменения':'✕ Отменить правки';
+  if(saveBtn) saveBtn.style.display=visible?'none':'block';
 }
 function saveEditShift(){
   const reason=(document.getElementById('esh_reason')?.value||'').trim();
@@ -2029,15 +2083,31 @@ function renderSellersAdmin(){
   if(nss) nss.innerHTML='<option value="">Универсальный</option>'+shops.map(s=>`<option>${s}</option>`).join('');
   if(!sellers.length){c.innerHTML='<div class="empty"><div class="ei">🏪</div>Нет продавцов</div>';return;}
   c.innerHTML=sellers.map((s,i)=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:8px;background:${s.blocked?'#2e1a1a':'#1a1a22'};border:1px solid ${s.blocked?'#f06060':'#2e2e3e'};border-radius:12px">
-      <div style="font-size:22px">${s.blocked?'🚫':'🏪'}</div>
-      <div style="flex:1"><div style="font-size:13px;font-weight:700">${s.name}${s.blocked?' (заблокирован)':''}</div><div style="font-size:11px;color:#8888aa">${s.shop||'Универсальный'}</div></div>
-      <div style="display:flex;flex-direction:column;gap:5px">
-        <button onclick="openBlockSeller('${s.blocked?'unblock':'block'}',${i},'${s.name}')" style="background:${s.blocked?'#1a2e1e':'#2a1e14'};border:1px solid ${s.blocked?'#60f090':'#f0a060'};border-radius:8px;padding:4px 8px;font-size:10px;color:${s.blocked?'#60f090':'#f0a060'};cursor:pointer">${s.blocked?'Разблок.':'Блок.'}</button>
-        <button onclick="openBlockSeller('delete',${i},'${s.name}')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:10px;color:#f06060;cursor:pointer">✕ Удалить</button>
+    <div style="background:${s.blocked?'#2e1a1a':'#1a1a22'};border:1px solid ${s.blocked?'#f06060':'#2e2e3e'};border-radius:12px;padding:10px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="font-size:22px">${s.blocked?'🚫':'🏪'}</div>
+        <div style="flex:1"><div style="font-size:13px;font-weight:700">${s.name}${s.blocked?' (заблокирован)':''}</div><div style="font-size:11px;color:#8888aa">${s.shop||'Универсальный'}</div></div>
+        <button onclick="openBlockSeller('${s.blocked?'unblock':'block'}',${i},'${s.name}')" style="background:${s.blocked?'#1a2e1e':'#2a1e14'};border:1px solid ${s.blocked?'#60f090':'#f0a060'};border-radius:8px;padding:4px 8px;font-size:10px;color:${s.blocked?'#60f090':'#f0a060'};cursor:pointer;white-space:nowrap">${s.blocked?'Разблок.':'Блок.'}</button>
+        <button onclick="openBlockSeller('delete',${i},'${s.name}')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:10px;color:#f06060;cursor:pointer">✕</button>
+      </div>
+      <div style="display:flex;gap:6px">
+        <input id="newpass_${i}" type="password" placeholder="Новый пароль..." style="flex:1;background:#0f0f13;border:1px solid #2e2e3e;border-radius:8px;padding:7px 10px;color:#f0f0f8;font-size:12px;outline:none">
+        <button onclick="changeSellerPass(${i})" style="background:#1a1e2e;border:1px solid #60c8f0;border-radius:8px;padding:7px 12px;font-size:11px;color:#60c8f0;cursor:pointer;white-space:nowrap">Сменить пароль</button>
       </div>
     </div>`).join('');
 }
+function changeSellerPass(idx){
+  var inp=document.getElementById('newpass_'+idx);
+  var newPass=(inp?.value||'').trim();
+  if(!newPass){showToast('Введите новый пароль');return;}
+  var sellers=getSellers();
+  if(!sellers[idx]){showToast('Ошибка');return;}
+  sellers[idx].pass=newPass;
+  localStorage.setItem('iz_sellers',JSON.stringify(sellers));
+  inp.value='';
+  showToast('✅ Пароль продавца «'+sellers[idx].name+'» изменён');
+}
+
 function addSellerAdmin(){
   const name=gv('newSName'),shop=gv('newSShop'),pass=gv('newSPass');
   if(!name||!pass){showToast('Заполните имя и пароль');return;}
