@@ -1974,33 +1974,6 @@ function validateClose(){
   }
   renderClose();
 }
-function renderClose(){
-  const t=calcTotals();
-  const sales=journal.filter(e=>e.type==='sale');
-  const receives=journal.filter(e=>e.type==='receive');
-  const wos=journal.filter(e=>e.type==='writeoff');
-  const staffP=journal.filter(e=>e.type==='staff');
-  const inkass=parseFloat(gv('inkassInput'))||0;
-  const prev=getPrevShift(session.shopName);
-  document.getElementById('closeSummary').innerHTML=`
-    <div class="card" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:#c8f060">
-      <div class="ctitle">Итоги смены — ${session.shopName}</div>
-      <div style="font-size:10px;color:#f0a060;font-weight:700;margin-bottom:6px">💵 НАЛИЧНЫЕ</div>
-      <div class="cs-row"><span>Нал утро</span><span class="cs-val">${fmt(session.cashMorning)}</span></div>
-      <div class="cs-row"><span>Продажи нал</span><span class="cs-val" style="color:#60f090">+${fmt(sales.reduce((s,e)=>s+(e.cashPart||0),0))}</span></div>
-      ${inkass?`<div class="cs-row"><span>Инкассация</span><span class="cs-val" style="color:#f06060">−${fmt(inkass)}</span></div>`:''}
-      <div class="cs-row tot"><span>Расчётный нал вечер</span><span class="cs-val" style="color:#c8f060">${fmt(t.cash-inkass)}</span></div>
-      ${t.card>0?`<div class="sep"></div><div style="font-size:10px;color:#60c8f0;font-weight:700;margin-bottom:6px">💳 БЕЗНАЛ</div><div class="cs-row"><span>Итого безнал</span><span class="cs-val" style="color:#60c8f0">+${fmt(t.card)}</span></div>`:''}
-      ${t.staff>0?`<div class="sep"></div><div style="font-size:10px;color:#a060f0;font-weight:700;margin-bottom:6px">🛒 СОТРУДНИКИ</div><div class="cs-row"><span>Покупки (${staffP.length})</span><span class="cs-val" style="color:#a060f0">${fmt(t.staff)}</span></div>`:''}
-      <div class="sep"></div>
-      <div style="font-size:10px;color:#c8f060;font-weight:700;margin-bottom:6px">📦 ТОВАР</div>
-      <div class="cs-row"><span>Остаток утро</span><span class="cs-val">${fmt(session.goodsMorning)}</span></div>
-      ${receives.length?`<div class="cs-row"><span>Приход</span><span class="cs-val" style="color:#60f090">+${fmt(receives.reduce((s,e)=>s+(e.goodsEffect||0),0))}</span></div>`:''}
-      <div class="cs-row"><span>Продано</span><span class="cs-val" style="color:#f06060">−${fmt(sales.reduce((s,e)=>s+e.totalPrice,0))}</span></div>
-      <div class="cs-row tot"><span>Расчётный остаток товара</span><span class="cs-val" style="color:#c8f060">${fmt(t.goods)}</span></div>
-      ${prev&&prev.cashEvening!=null&&Math.abs(session.cashMorning-prev.cashEvening)>1?`<div class="sep"></div><div style="background:#2a1e14;border:1px solid #f0a060;border-radius:8px;padding:8px"><div style="font-size:11px;font-weight:700;color:#f0a060">⚠️ Нал утро ≠ вечер прошлой смены</div><div style="font-size:10px;color:#8888aa;margin-top:2px">Прошлая: ${fmt(prev.cashEvening)} · Эта утро: ${fmt(session.cashMorning)}</div></div>`:''}
-    </div>`;
-}
 function closeShift(){
   const cashEveVal=document.getElementById('cashEveInput')?.value||'';
   if(!cashEveVal){showToast('Введите остаток наличных вечер');return;}
