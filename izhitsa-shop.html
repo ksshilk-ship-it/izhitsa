@@ -229,307 +229,325 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
     <div class="card">
       <div class="fg"><label class="fl">Магазин</label><select class="fs" id="psShop" onchange="populatePastShiftSellers();psLoadPrev()"></select></div>
       <div class="fg"><label class="fl">Продавец</label><select class="fs" id="psSeller"></select></div>
-      <div class="fg"><label class="fl">Дата</label><input class="fi" type="date" id="psDate" onchange="psLoadPrev()"></div>
+      <div class="fg"><label class="fl">Дата (ГГГГ-ММ-ДД)</label>
+        <input class="fi" type="date" id="psDate" onchange="psLoadPrev()"
+          style="-webkit-appearance:none;color-scheme:dark">
+      </div>
 
       <!-- ══ ДЕРЕВО ══ -->
       <div class="sep"></div>
-      <div style="font-size:14px;font-weight:700;color:#c8f060;margin-bottom:12px">🌳 ДЕРЕВО</div>
 
-      <div style="font-size:11px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 КАССА</div>
-      <div id="psPrevCashInfo" style="font-size:11px;color:#8888aa;margin-bottom:8px;display:none"></div>
-      <div class="row2">
-        <div class="fg"><label class="fl">Нал утро (факт)</label><input class="fi" type="number" id="psCashMorn" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalc()"></div>
-        <div class="fg"><label class="fl">Нал вечер (факт)</label><input class="fi" type="number" id="psCashEve" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalc()"></div>
-      </div>
-      <div id="psMornCheck" style="margin-bottom:6px"></div>
-      <div id="psCashCheck" style="margin-bottom:8px"></div>
+      <!-- ACCORDION: ДЕРЕВО -->
+      <div id="acc_wood" style="margin-bottom:4px">
+        <!-- Header always visible: title + касса + товар -->
+        <div onclick="toggleAcc('wood')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 0">
+          <div style="font-size:15px;font-weight:700;color:#c8f060">🌳 ДЕРЕВО</div>
+          <div style="font-size:18px;color:#c8f060" id="acc_wood_arrow">▼</div>
+        </div>
 
-      <div style="font-size:11px;color:#60c8f0;font-weight:700;margin-bottom:8px">💰 ПРОДАЖИ</div>
-      <div class="row2">
-        <div class="fg"><label class="fl">Нал</label><input class="fi" type="number" id="psCashRev" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
-        <div class="fg"><label class="fl">Скидка</label><input class="fi" type="number" id="psDiscount" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
-      </div>
-      <div class="row2">
-        <div class="fg"><label class="fl">Терминал</label><input class="fi" type="number" id="psTerminal" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
-        <div class="fg"><label class="fl">Перевод</label><input class="fi" type="number" id="psTransfer" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
-      </div>
-      <div class="fg"><label class="fl">QR</label><input class="fi" type="number" id="psQR" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
-      <!-- Итого выручка — всегда видна -->
-      <div style="background:#1e2a14;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div style="color:#8888aa;font-size:11px">Итого выручка (нал+безнал+скидка)</div>
-          <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#60c8f0" id="psTotalRevVal">0₽</div>
+        <!-- КАССА — always visible -->
+        <div style="background:#1e2a14;border-radius:10px;padding:10px;margin-bottom:8px">
+          <div style="font-size:11px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 КАССА</div>
+          <div id="psPrevCashInfo" style="font-size:11px;color:#8888aa;margin-bottom:8px;display:none"></div>
+          <div class="row2">
+            <div class="fg"><label class="fl">Нал утро</label><input class="fi" type="number" id="psCashMorn" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalc()"></div>
+            <div class="fg"><label class="fl">Нал вечер (факт)</label><input class="fi" type="number" id="psCashEve" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalc()"></div>
+          </div>
+          <div id="psMornCheck" style="margin-bottom:4px"></div>
+          <div id="psCashCheck"></div>
         </div>
-      </div>
-      <div id="psTotalRevBlock" style="display:none"></div>
 
-      <div class="row2">
-        <div class="fg"><label class="fl">ЗП</label><input class="fi" type="number" id="psZP" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
-        <div class="fg"><label class="fl">Инкассация</label><input class="fi" type="number" id="psInkass" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
-      </div>
-      <div class="fg">
-        <label class="fl">Прочие расходы</label>
-        <div style="display:flex;gap:8px">
-          <input class="fi" type="number" id="psOtherExp" placeholder="₽" inputmode="numeric" oninput="psCalc()" style="width:100px;flex-shrink:0">
-          <input class="fi" id="psOtherExpComment" placeholder="На что потрачено...">
+        <!-- ТОВАРНЫЙ ОСТАТОК — always visible -->
+        <div style="background:#1e2a14;border-radius:10px;padding:10px;margin-bottom:8px">
+          <div style="font-size:11px;color:#c8f060;font-weight:700;margin-bottom:8px">📦 ТОВАРНЫЙ ОСТАТОК</div>
+          <div id="psPrevGoodsInfo" style="font-size:11px;color:#8888aa;margin-bottom:6px;display:none"></div>
+          <div class="row2">
+            <div class="fg"><label class="fl">Утро</label><input class="fi" type="number" id="psWoodMorn" placeholder="0" inputmode="numeric" oninput="psCalcGoods()"></div>
+            <div class="fg"><label class="fl">Вечер (авто)</label>
+              <div style="background:#0f0f13;border:1px solid #c8f060;border-radius:10px;padding:11px 13px;font-family:Unbounded,sans-serif;font-size:14px;font-weight:700;color:#c8f060" id="psWoodEveVal">—</div>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="fg">
-        <label class="fl">Проезд</label>
-        <div style="display:flex;gap:8px">
-          <input class="fi" type="number" id="psTravel" placeholder="₽" inputmode="numeric" oninput="psCalc()" style="width:100px;flex-shrink:0">
-          <input class="fi" id="psTravelComment" placeholder="Маршрут, цель...">
-        </div>
-      </div>
-      <!-- Расчётный нал вечер -->
-      <div id="psCashCalc" style="background:#1e2a14;border:1px solid #c8f060;border-radius:10px;padding:10px;margin-bottom:10px;display:none">
-        <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Расчётный нал вечер = утро + нал − ЗП − инкассация − расходы − проезд</div>
-        <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#c8f060" id="psCashCalcVal">0₽</div>
-      </div>
 
-      <!-- СПИСАНИЯ Дерево -->
-      <div style="font-size:11px;color:#f06060;font-weight:700;margin-bottom:8px">🗑 СПИСАНИЯ</div>
-      <div id="psWriteoffList" style="margin-bottom:8px"></div>
-      <div style="background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
-        <div class="row2" style="margin-bottom:6px">
-          <input class="fi" id="psWoNum" placeholder="Артикул" oninput="psLookupWriteoff(this.value)">
-          <input class="fi" id="psWoName" placeholder="Название (авто или вручную)">
-        </div>
-        <div id="psWoLookupHint" style="font-size:11px;margin-bottom:6px;display:none"></div>
-        <div class="row2" style="margin-bottom:6px">
-          <input class="fi" id="psWoQty" placeholder="Кол-во / шт.">
-          <input class="fi" type="number" id="psWoAmt" placeholder="Сумма ₽" inputmode="numeric">
-        </div>
-        <input class="fi" id="psWoReason" placeholder="Причина списания" style="margin-bottom:8px">
-        <button type="button" onclick="psAddWriteoff()" style="background:#f06060;border:none;border-radius:8px;padding:8px 14px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;width:100%">＋ Добавить списание</button>
-      </div>
+        <!-- COLLAPSIBLE CONTENT -->
+        <div id="acc_wood_body">
 
-      <!-- ПРИХОД ТОВАРА Дерево -->
-      <div style="font-size:11px;color:#60f090;font-weight:700;margin-bottom:8px">📥 ПРИХОД ТОВАРА</div>
-      <div id="psReceiveList" style="margin-bottom:8px"></div>
+          <!-- ИТОГО ВЫРУЧКА -->
+          <div style="background:#1e2a14;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="color:#8888aa;font-size:12px">Итого выручка</div>
+              <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#60c8f0" id="psTotalRevVal">0₽</div>
+            </div>
+          </div>
 
-      <!-- Выбор способа -->
-      <div style="display:flex;gap:8px;margin-bottom:10px">
-        <button type="button" id="psRcvByInv" onclick="psToggleRcvMode('invoice')"
-          style="flex:1;padding:9px;border-radius:10px;border:2px solid #60f090;background:#1a2e1e;color:#60f090;font-size:12px;font-weight:700;cursor:pointer">
-          📋 По накладной
-        </button>
-        <button type="button" id="psRcvByManual" onclick="psToggleRcvMode('manual')"
-          style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer">
-          ✏️ Вручную
-        </button>
-      </div>
+          <!-- ПРОДАЖИ -->
+          <div style="background:#1a1e2e;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div onclick="toggleSub('woodSales')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
+              <div style="font-size:13px;font-weight:700;color:#60c8f0">💰 Продажи</div>
+              <div id="woodSales_arrow" style="color:#60c8f0">▼</div>
+            </div>
+            <div id="woodSales_body">
+              <div class="row2">
+                <div class="fg"><label class="fl">Нал</label><input class="fi" type="number" id="psCashRev" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
+                <div class="fg"><label class="fl">Скидка</label><input class="fi" type="number" id="psDiscount" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
+              </div>
+              <div class="row2">
+                <div class="fg"><label class="fl">Терминал</label><input class="fi" type="number" id="psTerminal" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
+                <div class="fg"><label class="fl">Перевод</label><input class="fi" type="number" id="psTransfer" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
+              </div>
+              <div class="fg"><label class="fl">QR</label><input class="fi" type="number" id="psQR" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
+            </div>
+          </div>
 
-      <!-- По накладной -->
-      <div id="psRcvInvoiceBlock" style="background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
-        <div class="fg" style="margin-bottom:8px">
-          <label class="fl">Выберите накладную</label>
-          <select class="fs" id="psInvoiceSelect" onchange="psLoadInvoice()">
-            <option value="">— загрузка накладных —</option>
-          </select>
-        </div>
-        <div id="psInvoiceItems" style="margin-bottom:8px"></div>
-        <button type="button" onclick="psAcceptInvoice()" id="psAcceptInvBtn"
-          style="background:#60f090;border:none;border-radius:8px;padding:8px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;width:100%;display:none">
-          ✅ Принять по накладной
-        </button>
-      </div>
+          <!-- РАСХОДЫ -->
+          <div style="background:#2a1e14;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div onclick="toggleSub('woodExp')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
+              <div style="font-size:13px;font-weight:700;color:#f0a060">💸 Расходы</div>
+              <div id="woodExp_arrow" style="color:#f0a060">▼</div>
+            </div>
+            <div id="woodExp_body">
+              <div class="row2">
+                <div class="fg"><label class="fl">ЗП</label><input class="fi" type="number" id="psZP" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
+                <div class="fg"><label class="fl">Инкассация</label><input class="fi" type="number" id="psInkass" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
+              </div>
+              <div class="fg">
+                <label class="fl">Прочие расходы</label>
+                <div style="display:flex;gap:8px">
+                  <input class="fi" type="number" id="psOtherExp" placeholder="₽" inputmode="numeric" oninput="psCalc()" style="width:100px;flex-shrink:0">
+                  <input class="fi" id="psOtherExpComment" placeholder="На что потрачено...">
+                </div>
+              </div>
+              <div class="fg">
+                <label class="fl">Проезд</label>
+                <div style="display:flex;gap:8px">
+                  <input class="fi" type="number" id="psTravel" placeholder="₽" inputmode="numeric" oninput="psCalc()" style="width:100px;flex-shrink:0">
+                  <input class="fi" id="psTravelComment" placeholder="Маршрут, цель...">
+                </div>
+              </div>
+              <!-- Расчётный нал вечер -->
+              <div id="psCashCalc" style="background:#0f0f13;border:1px solid #c8f060;border-radius:10px;padding:10px;margin-top:4px;display:none">
+                <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Расчётный нал вечер = утро + нал − ЗП − инкассация − расходы − проезд</div>
+                <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#c8f060" id="psCashCalcVal">0₽</div>
+              </div>
+            </div>
+          </div>
 
-      <!-- Вручную -->
-      <div id="psRcvManualBlock" style="display:none;background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
-        <div class="row2" style="margin-bottom:6px">
-          <input class="fi" id="psRcvNum" placeholder="Артикул" oninput="psLookupReceive(this.value)">
-          <input class="fi" id="psRcvName" placeholder="Название">
-        </div>
-        <div id="psRcvLookupHint" style="font-size:11px;color:#60f090;margin-bottom:6px;display:none"></div>
-        <div class="row2" style="margin-bottom:6px">
-          <input class="fi" id="psRcvQty" placeholder="Количество">
-          <input class="fi" type="number" id="psRcvPrice" placeholder="Цена за ед. ₽" inputmode="numeric">
-        </div>
-        <div class="row2" style="margin-bottom:6px">
-          <input class="fi" id="psRcvFrom" placeholder="Откуда">
-          <input class="fi" type="number" id="psRcvAmt" placeholder="Сумма итого ₽" inputmode="numeric">
-        </div>
-        <button type="button" onclick="psAddReceive()"
-          style="background:#60f090;border:none;border-radius:8px;padding:8px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;width:100%">
-          ＋ Добавить приход
-        </button>
-      </div>
+          <!-- СПИСАНИЕ -->
+          <div style="background:#2e1a1a;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div onclick="toggleSub('woodWo')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
+              <div style="font-size:13px;font-weight:700;color:#f06060">🗑 Списание товара</div>
+              <div id="woodWo_arrow" style="color:#f06060">▼</div>
+            </div>
+            <div id="woodWo_body">
+              <div id="psWriteoffList" style="margin-bottom:8px"></div>
+              <div style="background:#0f0f13;border-radius:10px;padding:10px">
+                <div class="row2" style="margin-bottom:6px">
+                  <input class="fi" id="psWoNum" placeholder="Артикул" oninput="psLookupWriteoff(this.value)">
+                  <input class="fi" id="psWoName" placeholder="Название (авто)">
+                </div>
+                <div id="psWoLookupHint" style="font-size:11px;margin-bottom:6px;display:none"></div>
+                <div class="row2" style="margin-bottom:6px">
+                  <input class="fi" id="psWoQty" placeholder="Кол-во">
+                  <input class="fi" type="number" id="psWoAmt" placeholder="Сумма ₽" inputmode="numeric">
+                </div>
+                <input class="fi" id="psWoReason" placeholder="Причина" style="margin-bottom:8px">
+                <button type="button" onclick="psAddWriteoff()" style="background:#f06060;border:none;border-radius:8px;padding:8px 14px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;width:100%">＋ Добавить списание</button>
+              </div>
+            </div>
+          </div>
 
-      <!-- ТОВАРНЫЙ ОСТАТОК Дерево -->
-      <div style="font-size:11px;color:#c8f060;font-weight:700;margin-bottom:8px">📦 ТОВАРНЫЙ ОСТАТОК</div>
-      <div id="psPrevGoodsInfo" style="font-size:11px;color:#8888aa;margin-bottom:8px;display:none"></div>
-      <div class="fg"><label class="fl">Остаток утро (авто или вручную)</label><input class="fi" type="number" id="psWoodMorn" placeholder="0" inputmode="numeric" oninput="psCalcGoods()"></div>
-      <!-- авторасчёт вечера -->
-      <div style="background:#1e2a14;border:1px solid #c8f060;border-radius:10px;padding:10px;margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
-          <div style="color:#8888aa;font-size:11px">Остаток товара вечер (авто)</div>
-          <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#c8f060" id="psWoodEveVal">—</div>
-        </div>
-        <div style="color:#555568;font-size:10px">утро + приход − продажи − списание</div>
-      </div>
-      <div id="psWoodEveBlock" style="display:none"></div>
+          <!-- ПРИХОД ТОВАРА -->
+          <div style="background:#1a2e1e;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div onclick="toggleSub('woodRcv')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
+              <div style="font-size:13px;font-weight:700;color:#60f090">📥 Приход товара</div>
+              <div id="woodRcv_arrow" style="color:#60f090">▼</div>
+            </div>
+            <div id="woodRcv_body">
+              <div id="psReceiveList" style="margin-bottom:8px"></div>
+              <div style="display:flex;gap:8px;margin-bottom:10px">
+                <button type="button" id="psRcvByInv" onclick="psToggleRcvMode('invoice')" style="flex:1;padding:9px;border-radius:10px;border:2px solid #60f090;background:#1a2e1e;color:#60f090;font-size:12px;font-weight:700;cursor:pointer">📋 По накладной</button>
+                <button type="button" id="psRcvByManual" onclick="psToggleRcvMode('manual')" style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer">✏️ Вручную</button>
+              </div>
+              <div id="psRcvInvoiceBlock" style="background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
+                <div class="fg" style="margin-bottom:8px"><label class="fl">Выберите накладную</label><select class="fs" id="psInvoiceSelect" onchange="psLoadInvoice()"><option value="">— загрузка —</option></select></div>
+                <div id="psInvoiceItems" style="margin-bottom:8px"></div>
+                <button type="button" onclick="psAcceptInvoice()" id="psAcceptInvBtn" style="background:#60f090;border:none;border-radius:8px;padding:8px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;width:100%;display:none">✅ Принять</button>
+              </div>
+              <div id="psRcvManualBlock" style="display:none;background:#0f0f13;border-radius:10px;padding:10px">
+                <div class="row2" style="margin-bottom:6px"><input class="fi" id="psRcvNum" placeholder="Артикул" oninput="psLookupReceive(this.value)"><input class="fi" id="psRcvName" placeholder="Название"></div>
+                <div id="psRcvLookupHint" style="font-size:11px;color:#60f090;margin-bottom:6px;display:none"></div>
+                <div class="row2" style="margin-bottom:6px"><input class="fi" id="psRcvQty" placeholder="Количество"><input class="fi" type="number" id="psRcvPrice" placeholder="Цена за ед. ₽" inputmode="numeric"></div>
+                <div class="row2" style="margin-bottom:6px"><input class="fi" id="psRcvFrom" placeholder="Откуда"><input class="fi" type="number" id="psRcvAmt" placeholder="Сумма итого ₽" inputmode="numeric"></div>
+                <button type="button" onclick="psAddReceive()" style="background:#60f090;border:none;border-radius:8px;padding:8px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;width:100%">＋ Добавить</button>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- end acc_wood_body -->
+      </div><!-- end acc_wood -->
 
       <!-- ══ ДР ТОВАР ══ -->
       <div class="sep"></div>
-      <div style="font-size:14px;font-weight:700;color:#a060f0;margin-bottom:12px">🛍 ДР ТОВАР</div>
-
-      <div style="font-size:11px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 КАССА</div>
-      <div class="row2">
-        <div class="fg"><label class="fl">Нал утро (факт)</label><input class="fi" type="number" id="psDrCashMorn" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalcDr()"></div>
-        <div class="fg"><label class="fl">Нал вечер (факт)</label><input class="fi" type="number" id="psDrCashEve" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalcDr()"></div>
-      </div>
-      <div id="psDrMornCheck" style="margin-bottom:6px"></div>
-      <div id="psDrCashCheck" style="margin-bottom:8px"></div>
-
-      <div style="font-size:11px;color:#60c8f0;font-weight:700;margin-bottom:8px">💰 ПРОДАЖИ</div>
-      <div class="row2">
-        <div class="fg"><label class="fl">Нал</label><input class="fi" type="number" id="psDrCashRev" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
-        <div class="fg"><label class="fl">Скидка</label><input class="fi" type="number" id="psDrDiscount" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
-      </div>
-      <div class="row2">
-        <div class="fg"><label class="fl">Терминал</label><input class="fi" type="number" id="psDrTerminal" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
-        <div class="fg"><label class="fl">Перевод</label><input class="fi" type="number" id="psDrTransfer" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
-      </div>
-      <div class="fg"><label class="fl">QR</label><input class="fi" type="number" id="psDrQR" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
-      <!-- Итого выручка ДР ТОВАР — всегда видна -->
-      <div style="background:#1e1a2e;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div style="color:#8888aa;font-size:11px">Итого выручка (нал+безнал+скидка)</div>
-          <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#60c8f0" id="psDrTotalRevVal">0₽</div>
+      <div id="acc_dr" style="margin-bottom:4px">
+        <div onclick="toggleAcc('dr')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 0">
+          <div style="font-size:15px;font-weight:700;color:#a060f0">🛍 ДР ТОВАР</div>
+          <div style="font-size:18px;color:#a060f0" id="acc_dr_arrow">▼</div>
         </div>
-      </div>
-      <div id="psDrTotalRevBlock" style="display:none"></div>
-      <div class="fg"><label class="fl">Инкассация</label><input class="fi" type="number" id="psDrInkass" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
 
+        <!-- КАССА ДР — always visible -->
+        <div style="background:#1e1a2e;border-radius:10px;padding:10px;margin-bottom:8px">
+          <div style="font-size:11px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 КАССА</div>
+          <div class="row2">
+            <div class="fg"><label class="fl">Нал утро</label><input class="fi" type="number" id="psDrCashMorn" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalcDr()"></div>
+            <div class="fg"><label class="fl">Нал вечер (факт)</label><input class="fi" type="number" id="psDrCashEve" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalcDr()"></div>
+          </div>
+          <div id="psDrMornCheck" style="margin-bottom:4px"></div>
+          <div id="psDrCashCheck"></div>
+        </div>
+
+        <!-- ТОВАРНЫЙ ОСТАТОК ДР — always visible -->
+        <div style="background:#1e1a2e;border-radius:10px;padding:10px;margin-bottom:8px">
+          <div style="font-size:11px;color:#a060f0;font-weight:700;margin-bottom:8px">📦 ТОВАРНЫЙ ОСТАТОК</div>
+          <div class="row2">
+            <div class="fg"><label class="fl">Утро</label><input class="fi" type="number" id="psDrMorn" placeholder="0" inputmode="numeric" oninput="psCalcDrGoods()"></div>
+            <div class="fg"><label class="fl">Вечер (авто)</label>
+              <div style="background:#0f0f13;border:1px solid #a060f0;border-radius:10px;padding:11px 13px;font-family:Unbounded,sans-serif;font-size:14px;font-weight:700;color:#a060f0" id="psDrEveVal">—</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- COLLAPSIBLE DR CONTENT -->
+        <div id="acc_dr_body">
+
+          <!-- ИТОГО ВЫРУЧКА ДР -->
+          <div style="background:#1e1a2e;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="color:#8888aa;font-size:12px">Итого выручка</div>
+              <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#60c8f0" id="psDrTotalRevVal">0₽</div>
+            </div>
+          </div>
+
+          <!-- ПРОДАЖИ ДР -->
+          <div style="background:#1a1e2e;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div onclick="toggleSub('drSales')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
+              <div style="font-size:13px;font-weight:700;color:#60c8f0">💰 Продажи</div>
+              <div id="drSales_arrow" style="color:#60c8f0">▼</div>
+            </div>
+            <div id="drSales_body">
+              <div class="row2">
+                <div class="fg"><label class="fl">Нал</label><input class="fi" type="number" id="psDrCashRev" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
+                <div class="fg"><label class="fl">Скидка</label><input class="fi" type="number" id="psDrDiscount" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
+              </div>
+              <div class="row2">
+                <div class="fg"><label class="fl">Терминал</label><input class="fi" type="number" id="psDrTerminal" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
+                <div class="fg"><label class="fl">Перевод</label><input class="fi" type="number" id="psDrTransfer" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
+              </div>
+              <div class="fg"><label class="fl">QR</label><input class="fi" type="number" id="psDrQR" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
+            </div>
+          </div>
+
+          <!-- РАСХОДЫ ДР -->
+          <div style="background:#2a1e14;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div onclick="toggleSub('drExp')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
+              <div style="font-size:13px;font-weight:700;color:#f0a060">💸 Расходы</div>
+              <div id="drExp_arrow" style="color:#f0a060">▼</div>
+            </div>
+            <div id="drExp_body">
+              <div class="fg"><label class="fl">Инкассация</label><input class="fi" type="number" id="psDrInkass" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
+              <div id="psDrCashCalc" style="background:#0f0f13;border:1px solid #a060f0;border-radius:10px;padding:10px;margin-bottom:8px;display:none">
+                <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Расчётный нал вечер = утро + нал − инкассация</div>
+                <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#a060f0" id="psDrCashCalcVal">0₽</div>
+              </div>
+              <!-- ОПЛАТА ПОСТАВЩИКУ -->
+              <div style="font-size:12px;font-weight:700;color:#a060f0;margin-bottom:8px;margin-top:4px">💸 Оплата поставщику</div>
+              <div class="fg"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="psDrSupplierAmt" placeholder="0" inputmode="numeric"></div>
+              <div class="fg"><label class="fl">Поставщик</label>
+                <input class="fi" id="psDrSupplierName" placeholder="Введите или выберите..." list="suppliersList">
+                <datalist id="suppliersList"></datalist>
+              </div>
+            </div>
+          </div>
+
+          <!-- СПИСАНИЕ ДР -->
+          <div style="background:#2e1a1a;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div onclick="toggleSub('drWo')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
+              <div style="font-size:13px;font-weight:700;color:#f06060">🗑 Списание товара</div>
+              <div id="drWo_arrow" style="color:#f06060">▼</div>
+            </div>
+            <div id="drWo_body">
+              <div id="psDrWriteoffList" style="margin-bottom:8px"></div>
+              <div style="background:#0f0f13;border-radius:10px;padding:10px">
+                <div class="row2" style="margin-bottom:6px"><input class="fi" id="psDrWoName" placeholder="Название"><input class="fi" id="psDrWoQty" placeholder="Кол-во"></div>
+                <div class="row2" style="margin-bottom:6px"><input class="fi" type="number" id="psDrWoAmt" placeholder="Сумма ₽" inputmode="numeric"><input class="fi" id="psDrWoReason" placeholder="Причина"></div>
+                <button type="button" onclick="psDrAddWriteoff()" style="background:#f06060;border:none;border-radius:8px;padding:8px 14px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;width:100%">＋ Добавить списание</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ПРИХОД ДР -->
+          <div style="background:#1a2e1e;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div onclick="toggleSub('drRcv')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
+              <div style="font-size:13px;font-weight:700;color:#60f090">📥 Приход товара</div>
+              <div id="drRcv_arrow" style="color:#60f090">▼</div>
+            </div>
+            <div id="drRcv_body">
+              <div id="psDrReceiveList" style="margin-bottom:8px"></div>
+              <div style="display:flex;gap:8px;margin-bottom:10px">
+                <button type="button" id="psDrRcvByInv" onclick="psDrToggleRcvMode('invoice')" style="flex:1;padding:9px;border-radius:10px;border:2px solid #60f090;background:#1a2e1e;color:#60f090;font-size:12px;font-weight:700;cursor:pointer">📋 По накладной</button>
+                <button type="button" id="psDrRcvByManual" onclick="psDrToggleRcvMode('manual')" style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer">✏️ Вручную</button>
+              </div>
+              <div id="psDrRcvInvoiceBlock" style="background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
+                <div class="fg" style="margin-bottom:8px"><label class="fl">Выберите накладную</label><select class="fs" id="psDrInvoiceSelect" onchange="psDrLoadInvoice()"><option value="">— загрузка —</option></select></div>
+                <div id="psDrInvoiceItems" style="margin-bottom:8px"></div>
+                <button type="button" onclick="psDrAcceptInvoice()" id="psDrAcceptInvBtn" style="background:#60f090;border:none;border-radius:8px;padding:8px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;width:100%;display:none">✅ Принять</button>
+              </div>
+              <div id="psDrRcvManualBlock" style="display:none;background:#0f0f13;border-radius:10px;padding:10px">
+                <div class="row2" style="margin-bottom:6px"><input class="fi" id="psDrRcvNum" placeholder="Артикул" oninput="psDrLookupReceive(this.value)"><input class="fi" id="psDrRcvName" placeholder="Название"></div>
+                <div id="psDrRcvLookupHint" style="font-size:11px;color:#60f090;margin-bottom:6px;display:none"></div>
+                <div class="row2" style="margin-bottom:6px"><input class="fi" id="psDrRcvQty" placeholder="Количество"><input class="fi" type="number" id="psDrRcvPrice" placeholder="Цена за ед. ₽" inputmode="numeric"></div>
+                <div class="row2" style="margin-bottom:6px"><input class="fi" id="psDrRcvFrom" placeholder="Откуда"><input class="fi" type="number" id="psDrRcvAmt" placeholder="Сумма итого ₽" inputmode="numeric"></div>
+                <button type="button" onclick="psDrAddReceive()" style="background:#60f090;border:none;border-radius:8px;padding:8px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;width:100%">＋ Добавить</button>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- end acc_dr_body -->
+      </div><!-- end acc_dr -->
+
+      <!-- ПОКУПКИ СОТРУДНИКОВ -->
       <div class="sep"></div>
-      <div style="font-size:11px;color:#a060f0;font-weight:700;margin-bottom:8px">💸 ОПЛАТА ПОСТАВЩИКУ</div>
-      <div class="fg">
-        <label class="fl">Сумма оплаты поставщику (₽)</label>
-        <input class="fi" type="number" id="psDrSupplierAmt" placeholder="0" inputmode="numeric">
-      </div>
-      <div class="fg">
-        <label class="fl">Поставщик</label>
-        <div style="display:flex;gap:8px">
-          <input class="fi" id="psDrSupplierName" placeholder="Введите или выберите..." list="suppliersList" style="flex:1">
-          <datalist id="suppliersList"></datalist>
+      <div id="acc_staff_ps" style="margin-bottom:4px">
+        <div onclick="toggleAcc('staff_ps')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 0">
+          <div style="font-size:15px;font-weight:700;color:#a060f0">🛒 ПОКУПКИ СОТРУДНИКОВ</div>
+          <div style="font-size:18px;color:#a060f0" id="acc_staff_ps_arrow">▼</div>
         </div>
-        <div id="psDrSupplierHint" style="font-size:10px;color:#8888aa;margin-top:4px">Список поставщиков пополняется автоматически</div>
-      </div>
-      <div id="psDrCashCalc" style="background:#1e1a2e;border:1px solid #a060f0;border-radius:10px;padding:10px;margin-bottom:10px;display:none">
-        <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Расчётный нал вечер = утро + нал − инкассация</div>
-        <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#a060f0" id="psDrCashCalcVal">0₽</div>
-      </div>
-
-      <!-- СПИСАНИЯ ДР ТОВАР -->
-      <div style="font-size:11px;color:#f06060;font-weight:700;margin-bottom:8px">🗑 СПИСАНИЯ</div>
-      <div id="psDrWriteoffList" style="margin-bottom:8px"></div>
-      <div style="background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
-        <div class="row2" style="margin-bottom:6px">
-          <input class="fi" id="psDrWoName" placeholder="Название">
-          <input class="fi" id="psDrWoQty" placeholder="Кол-во">
+        <div id="acc_staff_ps_body">
+          <div id="psStaffList" style="margin-bottom:8px"></div>
+          <div id="psStaffWoOptions" style="margin-bottom:10px">
+            <div style="font-size:11px;color:#555568;font-style:italic">Добавьте списания — они появятся здесь</div>
+          </div>
+          <div style="font-size:11px;color:#8888aa;font-weight:600;margin-bottom:6px">Или ввести вручную:</div>
+          <div style="background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
+            <div class="fg" style="margin-bottom:6px"><input class="fi" id="psStaffWho" placeholder="Кто покупает (ФИО)"></div>
+            <div class="row2" style="margin-bottom:6px">
+              <input class="fi" id="psStaffNum" placeholder="Артикул" oninput="psLookupStaff(this.value)">
+              <input class="fi" id="psStaffItem" placeholder="Название (авто)">
+            </div>
+            <div id="psStaffLookupHint" style="font-size:11px;margin-bottom:6px;display:none"></div>
+            <div class="row2" style="margin-bottom:6px">
+              <input class="fi" type="number" id="psStaffRetail" placeholder="Розница ₽" inputmode="numeric">
+              <input class="fi" type="number" id="psStaffOpt" placeholder="Опт ₽" inputmode="numeric">
+            </div>
+            <input class="fi" id="psStaffComment" placeholder="Комментарий" style="margin-bottom:8px">
+            <button type="button" onclick="psAddStaff()" style="background:#a060f0;border:none;border-radius:8px;padding:8px 14px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;width:100%">＋ Добавить</button>
+          </div>
+          <div id="psStaffTotal" style="background:#1e1a2e;border:1px solid #a060f0;border-radius:10px;padding:10px;display:none">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="color:#8888aa;font-size:12px">Итого нал сотрудников (по опту)</div>
+              <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#a060f0" id="psStaffTotalVal">0₽</div>
+            </div>
+          </div>
         </div>
-        <div class="row2" style="margin-bottom:6px">
-          <input class="fi" type="number" id="psDrWoAmt" placeholder="Сумма ₽" inputmode="numeric">
-          <input class="fi" id="psDrWoReason" placeholder="Причина">
-        </div>
-        <button type="button" onclick="psDrAddWriteoff()" style="background:#f06060;border:none;border-radius:8px;padding:8px 14px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;width:100%">＋ Добавить списание</button>
-      </div>
-
-      <!-- ПРИХОД ДР ТОВАР -->
-      <div style="font-size:11px;color:#60f090;font-weight:700;margin-bottom:8px">📥 ПРИХОД ТОВАРА</div>
-      <div id="psDrReceiveList" style="margin-bottom:8px"></div>
-
-      <div style="display:flex;gap:8px;margin-bottom:10px">
-        <button type="button" id="psDrRcvByInv" onclick="psDrToggleRcvMode('invoice')"
-          style="flex:1;padding:9px;border-radius:10px;border:2px solid #60f090;background:#1a2e1e;color:#60f090;font-size:12px;font-weight:700;cursor:pointer">
-          📋 По накладной
-        </button>
-        <button type="button" id="psDrRcvByManual" onclick="psDrToggleRcvMode('manual')"
-          style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer">
-          ✏️ Вручную
-        </button>
-      </div>
-
-      <div id="psDrRcvInvoiceBlock" style="background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
-        <div class="fg" style="margin-bottom:8px">
-          <label class="fl">Выберите накладную</label>
-          <select class="fs" id="psDrInvoiceSelect" onchange="psDrLoadInvoice()">
-            <option value="">— загрузка накладных —</option>
-          </select>
-        </div>
-        <div id="psDrInvoiceItems" style="margin-bottom:8px"></div>
-        <button type="button" onclick="psDrAcceptInvoice()" id="psDrAcceptInvBtn"
-          style="background:#60f090;border:none;border-radius:8px;padding:8px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;width:100%;display:none">
-          ✅ Принять по накладной
-        </button>
-      </div>
-
-      <div id="psDrRcvManualBlock" style="display:none;background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
-        <div class="row2" style="margin-bottom:6px">
-          <input class="fi" id="psDrRcvNum" placeholder="Артикул" oninput="psDrLookupReceive(this.value)">
-          <input class="fi" id="psDrRcvName" placeholder="Название">
-        </div>
-        <div id="psDrRcvLookupHint" style="font-size:11px;color:#60f090;margin-bottom:6px;display:none"></div>
-        <div class="row2" style="margin-bottom:6px">
-          <input class="fi" id="psDrRcvQty" placeholder="Количество">
-          <input class="fi" type="number" id="psDrRcvPrice" placeholder="Цена за ед. ₽" inputmode="numeric">
-        </div>
-        <div class="row2" style="margin-bottom:6px">
-          <input class="fi" id="psDrRcvFrom" placeholder="Откуда">
-          <input class="fi" type="number" id="psDrRcvAmt" placeholder="Сумма итого ₽" inputmode="numeric">
-        </div>
-        <button type="button" onclick="psDrAddReceive()"
-          style="background:#60f090;border:none;border-radius:8px;padding:8px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;width:100%">
-          ＋ Добавить приход
-        </button>
-      </div>
-
-      <!-- ТОВАРНЫЙ ОСТАТОК ДР ТОВАР -->
-      <div style="font-size:11px;color:#a060f0;font-weight:700;margin-bottom:8px">📦 ТОВАРНЫЙ ОСТАТОК</div>
-      <div class="fg"><label class="fl">Остаток утро (авто или вручную)</label><input class="fi" type="number" id="psDrMorn" placeholder="0" inputmode="numeric" oninput="psCalcDrGoods()"></div>
-      <div style="background:#1e1a2e;border:1px solid #a060f0;border-radius:10px;padding:10px;margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
-          <div style="color:#8888aa;font-size:11px">Остаток товара вечер (авто)</div>
-          <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#a060f0" id="psDrEveVal">—</div>
-        </div>
-        <div style="color:#555568;font-size:10px">утро + приход − продажи − списание</div>
-      </div>
-      <div id="psDrEveBlock" style="display:none"></div>
-
-      <!-- ══ ПОКУПКИ СОТРУДНИКОВ ══ -->
-      <div class="sep"></div>
-      <div style="font-size:14px;font-weight:700;color:#a060f0;margin-bottom:12px">🛒 ПОКУПКИ СОТРУДНИКОВ</div>
-      <div id="psStaffList" style="margin-bottom:8px"></div>
-
-      <!-- Выбор из списаний -->
-      <div id="psStaffFromWoBlock" style="margin-bottom:10px">
-        <div style="font-size:11px;color:#8888aa;font-weight:600;margin-bottom:6px">Выбрать из списаний дня:</div>
-        <div id="psStaffWoOptions" style="margin-bottom:8px">
-          <div style="font-size:11px;color:#555568;font-style:italic">Добавьте списания выше — они появятся здесь</div>
-        </div>
-      </div>
-
-      <div style="font-size:11px;color:#8888aa;font-weight:600;margin-bottom:6px">Или ввести вручную:</div>
-      <div style="background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
-        <div class="fg" style="margin-bottom:6px"><input class="fi" id="psStaffWho" placeholder="Кто покупает (ФИО)"></div>
-        <div class="row2" style="margin-bottom:6px">
-          <input class="fi" id="psStaffNum" placeholder="Артикул" oninput="psLookupStaff(this.value)">
-          <input class="fi" id="psStaffItem" placeholder="Название (авто)">
-        </div>
-        <div id="psStaffLookupHint" style="font-size:11px;margin-bottom:6px;display:none"></div>
-        <div class="row2" style="margin-bottom:6px">
-          <input class="fi" type="number" id="psStaffRetail" placeholder="Цена розница ₽" inputmode="numeric">
-          <input class="fi" type="number" id="psStaffOpt" placeholder="Цена опт ₽" inputmode="numeric">
-        </div>
-        <input class="fi" id="psStaffComment" placeholder="Комментарий" style="margin-bottom:8px">
-        <button type="button" onclick="psAddStaff()" style="background:#a060f0;border:none;border-radius:8px;padding:8px 14px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;width:100%">＋ Добавить вручную</button>
-      </div>
-
-      <!-- Итого нал сотрудников -->
-      <div id="psStaffTotal" style="background:#1e1a2e;border:1px solid #a060f0;border-radius:10px;padding:10px;margin-bottom:10px;display:none">
-        <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Итого нал сотрудников (сумма по опту)</div>
-        <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#a060f0" id="psStaffTotalVal">0₽</div>
       </div>
 
       <div class="sep"></div>
@@ -1581,6 +1599,7 @@ function psCalcGoods(){
   var block=document.getElementById('psWoodEveBlock'), val=document.getElementById('psWoodEveVal');
   var val2=document.getElementById('psWoodEveVal');
   if(val2) val2.textContent=fmt2(eve);
+  var block=document.getElementById('psWoodEveBlock'); if(block) block.style.display='none';
 }
 
 function psCalcDr(){
@@ -1618,6 +1637,7 @@ function psCalcDrGoods(){
   var block=document.getElementById('psDrEveBlock'), val=document.getElementById('psDrEveVal');
   var val2=document.getElementById('psDrEveVal');
   if(val2) val2.textContent=fmt2(eve);
+  var block=document.getElementById('psDrEveBlock'); if(block) block.style.display='none';
 }
 
 // ── Writeoffs ──
@@ -2043,6 +2063,28 @@ function psSaveSupplier(){
   if(!name) return;
   var suppliers=getSupplierslist();
   if(!suppliers.includes(name)){ suppliers.push(name); saveSupplierslist(suppliers); psPopulateSuppliers(); }
+}
+
+// ── Accordion helpers ──
+var accState = {};
+var subState = {};
+
+function toggleAcc(id){
+  var body = document.getElementById('acc_'+id+'_body');
+  var arrow = document.getElementById('acc_'+id+'_arrow');
+  if(!body) return;
+  var open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if(arrow) arrow.textContent = open ? '▶' : '▼';
+}
+
+function toggleSub(id){
+  var body = document.getElementById(id+'_body');
+  var arrow = document.getElementById(id+'_arrow');
+  if(!body) return;
+  var open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if(arrow) arrow.textContent = open ? '▶' : '▼';
 }
 
 function populatePastShiftSellers(){
