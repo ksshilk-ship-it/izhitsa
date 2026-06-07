@@ -181,8 +181,8 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
         <div style="font-size:18px;color:#c8f060" id="acc_close_wood_arrow">▼</div>
       </div>
 
-      <!-- КАССА — всегда видна, ввод нал вечер -->
-      <div style="background:#1e2a14;border-radius:10px;padding:12px;margin-bottom:6px">
+      <!-- КАССА — только для магазинов -->
+      <div id="closeCassaWood" style="background:#1e2a14;border-radius:10px;padding:12px;margin-bottom:6px">
         <div style="font-size:12px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 КАССА</div>
         <div id="cashValidation" style="margin-bottom:6px"></div>
         <div id="cashDiffReasonBlock" style="display:none;margin-bottom:6px">
@@ -1841,6 +1841,22 @@ function renderClose(){
   var tr = document.getElementById('closeTotalRev');
   if(tr) tr.textContent = fmt(totalRev);
 
+  // Касса — only for shop type
+  var shopType2 = session.shopType || getShopType(session.shopName||'');
+  var isShopType2 = shopType2 === 'shop';
+
+  // ДЕРЕВО касса — hide for non-shop
+  var woodCassaBlock = document.querySelector('#acc_close_wood > div[style*="background:#1e2a14"]:first-of-type');
+  // Use ID approach instead
+  var closeCassaWood = document.getElementById('closeCassaWood');
+  if(closeCassaWood) closeCassaWood.style.display = isShopType2 ? 'block' : 'none';
+
+  // DR касса — show only for shop type
+  var drCassaBlock = document.getElementById('closeDrCassaBlock');
+  if(drCassaBlock) drCassaBlock.style.display = isShopType2 ? 'block' : 'none';
+  var drNalMorn = document.getElementById('closeDrNalMorn');
+  if(drNalMorn && isShopType2) drNalMorn.textContent = fmt(session.drCashMorning||0);
+
   // DR товар — always shown for all shop types
   var drGb = document.getElementById('closeDrGoodsBlock');
   var drGm = document.getElementById('closeDrGoodsMorn');
@@ -1866,41 +1882,60 @@ function renderClose(){
 
   // 💰 ПРОДАЖИ detail
   var sd = document.getElementById('closeSalesDetail');
-  if(sd) sd.innerHTML = sales.length ? [
-    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Нал</span><span style="color:#60f090;font-weight:700">+'+fmt(cashSales)+'</span></div>',
-    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Безнал</span><span style="color:#60c8f0;font-weight:700">+'+fmt(cardSales)+'</span></div>',
-    disc?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Скидки</span><span style="color:#8888aa">−'+fmt(disc)+'</span></div>':'',
-    '<div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;border-top:1px solid #2e2e3e;font-weight:700;margin-top:4px"><span>Итого</span><span style="color:#60c8f0">'+fmt(totalRev)+'</span></div>',
-    sales.map(function(s){ return '<div style="font-size:11px;color:#555568;padding:2px 0">· '+s.sub+'</div>'; }).join('')
-  ].join('') : '<div style="font-size:12px;color:#555568">Продаж нет</div>';
+  if(sd){
+    var cashSalesByMethod = {};
+    sales.forEach(function(s){ var m=s.payMethod||'cash'; cashSalesByMethod[m]=(cashSalesByMethod[m]||0)+(s.cashPart||0)+(s.cardPart||0); });
+    var termAmt = sales.filter(function(s){return s.payMethod==='terminal';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
+    var sbpAmt = sales.filter(function(s){return s.payMethod==='sbp';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
+    var transferAmt = sales.filter(function(s){return s.payMethod==='transfer';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
+    var qrAmt = sales.filter(function(s){return s.payMethod==='qr';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
+    var rsAmt = sales.filter(function(s){return s.payMethod==='rs';}).reduce(function(a,s){return a+(s.cardPart||0);},0);
+    sd.innerHTML =
+      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">💵 Нал</span><span style="color:#60f090;font-weight:700">'+fmt(cashSales)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">💳 Терминал</span><span style="color:#60c8f0">'+fmt(termAmt)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">📱 СБП</span><span style="color:#60c8f0">'+fmt(sbpAmt)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">🏦 Перевод</span><span style="color:#60c8f0">'+fmt(transferAmt)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">🔲 QR</span><span style="color:#60c8f0">'+fmt(qrAmt)+'</span></div>'+
+
+      '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">🎁 Скидка</span><span style="color:#8888aa">'+fmt(disc)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:14px;padding:7px 0;font-weight:700;margin-top:2px"><span>Итого выручка</span><span style="color:#60c8f0">'+fmt(totalRev)+'</span></div>';
+  }
 
   // 💸 РАСХОДЫ detail
   var ed = document.getElementById('closeExpDetail');
-  if(ed) ed.innerHTML = expenses.length ? [
-    zp?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>💰 ЗП</span><span style="color:#f0a060;font-weight:700">−'+fmt(zp)+'</span></div>':'',
-    travel?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>🚌 Проезд</span><span style="color:#f0a060;font-weight:700">−'+fmt(travel)+'</span></div>':'',
-    inkass?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>🏦 Инкассация</span><span style="color:#f0a060;font-weight:700">−'+fmt(inkass)+'</span></div>':'',
-    other?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>📝 Прочее</span><span style="color:#f0a060;font-weight:700">−'+fmt(other)+'</span></div>':''
-  ].join('') : '<div style="font-size:12px;color:#555568">Расходов нет</div>';
+  if(ed) ed.innerHTML =
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">💰 ЗП</span><span style="color:#f0a060;font-weight:700">'+fmt(zp)+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">🚌 Проезд</span><span style="color:#f0a060">'+fmt(travel)+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">🏦 Инкассация</span><span style="color:#f0a060">'+fmt(inkass)+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">📝 Прочее</span><span style="color:#f0a060">'+fmt(other)+'</span></div>'+
+    (expenses.filter(function(e){return e.expType==='other'&&e.comment;}).map(function(e){return '<div style="font-size:11px;color:#555568;padding:2px 0">· '+e.comment+'</div>';}).join(''));
 
   // 🗑 СПИСАНИЯ
   var wd = document.getElementById('closeWoDetail');
-  if(wd) wd.innerHTML = writeoffs.length
-    ? writeoffs.map(function(w){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:#8888aa">'+w.sub+'</span><span style="color:#f06060">−'+fmt(w.amount)+'</span></div>'; }).join('')
-    : '<div style="font-size:12px;color:#555568">Списаний нет</div>';
+  if(wd){
+    var woTotal = writeoffs.reduce(function(s,w){return s+(w.amount||0);},0);
+    wd.innerHTML = writeoffs.length
+      ? writeoffs.map(function(w){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">'+(w.sub||w.label)+'</span><span style="color:#f06060">'+fmt(w.amount)+'</span></div>'; }).join('')
+        + '<div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;font-weight:700"><span>Итого</span><span style="color:#f06060">'+fmt(woTotal)+'</span></div>'
+      : '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Списаний за смену</span><span style="color:#f06060">0₽</span></div>';
+  }
 
   // 📥 ПРИХОДЫ
   var rd = document.getElementById('closeRcvDetail');
-  if(rd) rd.innerHTML = receives.length
-    ? receives.map(function(r){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:#8888aa">'+(r.sub||r.label)+'</span><span style="color:#60f090">+'+fmt(r.goodsEffect||0)+'</span></div>'; }).join('')
-    : '<div style="font-size:12px;color:#555568">Приходов нет</div>';
+  if(rd){
+    var rcvTotal = receives.reduce(function(s,r){return s+(r.goodsEffect||0);},0);
+    rd.innerHTML = receives.length
+      ? receives.map(function(r){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">'+(r.sub||r.label)+'</span><span style="color:#60f090">+'+fmt(r.goodsEffect||0)+'</span></div>'; }).join('')
+        + '<div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;font-weight:700"><span>Итого</span><span style="color:#60f090">+'+fmt(rcvTotal)+'</span></div>'
+      : '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Приходов за смену</span><span style="color:#60f090">0₽</span></div>';
+  }
 
   // 🛒 СОТРУДНИКИ
   var stD = document.getElementById('closeStaffDetail');
   if(stD) stD.innerHTML = staffP.length
-    ? staffP.map(function(s){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span style="color:#8888aa">'+s.label+'</span><span style="color:#a060f0">'+fmt(s.amount)+'</span></div>'; }).join('')
-      + '<div style="font-size:13px;font-weight:700;padding:6px 0;border-top:1px solid #2e2e3e;margin-top:4px;display:flex;justify-content:space-between"><span>Итого</span><span style="color:#a060f0">'+fmt(staffTotal)+'</span></div>'
-    : '<div style="font-size:12px;color:#555568">Нет</div>';
+    ? staffP.map(function(s){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">'+s.label+'</span><span style="color:#a060f0">'+fmt(s.amount)+'</span></div>'; }).join('')
+      + '<div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;font-weight:700"><span>Итого</span><span style="color:#a060f0">'+fmt(staffTotal)+'</span></div>'
+    : '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Покупок сотрудников</span><span style="color:#a060f0">0₽</span></div>';
 
   // DR Продажи
   var drSd = document.getElementById('closeDrSalesDetail');
@@ -1925,8 +1960,12 @@ function renderClose(){
 
   // 💳 БЕЗНАЛ
   var cd = document.getElementById('closeCardDetail');
-  if(cd) cd.innerHTML = '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Безнал итого</span><span style="color:#60c8f0;font-weight:700">'+fmt(t.card)+'</span></div>'
-    +(staffTotal?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Покупки сотр.</span><span style="color:#a060f0">'+fmt(staffTotal)+'</span></div>':'');
+  if(cd) cd.innerHTML =
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">💳 Терминал</span><span style="color:#60c8f0">'+fmt(sales.filter(function(s){return s.payMethod==='terminal';}).reduce(function(a,s){return a+(s.cardPart||0);},0))+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">📱 СБП</span><span style="color:#60c8f0">'+fmt(sales.filter(function(s){return s.payMethod==='sbp';}).reduce(function(a,s){return a+(s.cardPart||0);},0))+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">🏦 Перевод</span><span style="color:#60c8f0">'+fmt(sales.filter(function(s){return s.payMethod==='transfer';}).reduce(function(a,s){return a+(s.cardPart||0);},0))+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">🔲 QR</span><span style="color:#60c8f0">'+fmt(sales.filter(function(s){return s.payMethod==='qr';}).reduce(function(a,s){return a+(s.cardPart||0);},0))+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;font-weight:700"><span>Итого безнал</span><span style="color:#60c8f0">'+fmt(t.card)+'</span></div>';
 
   // Update title
   var title = document.getElementById('closeShiftTitle');
