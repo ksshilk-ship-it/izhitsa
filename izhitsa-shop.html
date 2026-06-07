@@ -237,20 +237,34 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
         <div class="fg"><label class="fl">Перевод</label><input class="fi" type="number" id="psTransfer" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
       </div>
       <div class="fg"><label class="fl">QR</label><input class="fi" type="number" id="psQR" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
-      <!-- Итого выручка авто -->
-      <div id="psTotalRevBlock" style="background:#1e2a14;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:10px;display:none">
-        <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Валовая выручка = нал + терминал + перевод + QR + скидка</div>
-        <div style="font-family:Unbounded,sans-serif;font-size:18px;font-weight:700;color:#60c8f0" id="psTotalRevVal">0₽</div>
+      <!-- Итого выручка — всегда видна -->
+      <div style="background:#1e2a14;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="color:#8888aa;font-size:11px">Итого выручка (нал+безнал+скидка)</div>
+          <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#60c8f0" id="psTotalRevVal">0₽</div>
+        </div>
       </div>
+      <div id="psTotalRevBlock" style="display:none"></div>
 
       <div class="row2">
         <div class="fg"><label class="fl">ЗП</label><input class="fi" type="number" id="psZP" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
         <div class="fg"><label class="fl">Инкассация</label><input class="fi" type="number" id="psInkass" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
       </div>
-      <div class="fg"><label class="fl">Прочие расходы</label><input class="fi" type="number" id="psOtherExp" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
+      <div class="fg"><label class="fl">Прочие расходы (₽)</label>
+        <input class="fi" type="number" id="psOtherExp" placeholder="0" inputmode="numeric" oninput="psCalc()">
+      </div>
+      <div class="fg"><label class="fl">Комментарий к прочим расходам</label>
+        <input class="fi" id="psOtherExpComment" placeholder="На что потрачено...">
+      </div>
+      <div class="fg"><label class="fl">Проезд (₽)</label>
+        <input class="fi" type="number" id="psTravel" placeholder="0" inputmode="numeric" oninput="psCalc()">
+      </div>
+      <div class="fg"><label class="fl">Комментарий к проезду</label>
+        <input class="fi" id="psTravelComment" placeholder="Маршрут, цель поездки...">
+      </div>
       <!-- Расчётный нал вечер -->
       <div id="psCashCalc" style="background:#1e2a14;border:1px solid #c8f060;border-radius:10px;padding:10px;margin-bottom:10px;display:none">
-        <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Расчётный нал вечер = утро + нал − ЗП − инкассация − расходы</div>
+        <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Расчётный нал вечер = утро + нал − ЗП − инкассация − расходы − проезд</div>
         <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#c8f060" id="psCashCalcVal">0₽</div>
       </div>
 
@@ -259,9 +273,10 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <div id="psWriteoffList" style="margin-bottom:8px"></div>
       <div style="background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
         <div class="row2" style="margin-bottom:6px">
-          <input class="fi" id="psWoNum" placeholder="Артикул">
-          <input class="fi" id="psWoName" placeholder="Название">
+          <input class="fi" id="psWoNum" placeholder="Артикул" oninput="psLookupWriteoff(this.value)">
+          <input class="fi" id="psWoName" placeholder="Название (авто или вручную)">
         </div>
+        <div id="psWoLookupHint" style="font-size:11px;margin-bottom:6px;display:none"></div>
         <div class="row2" style="margin-bottom:6px">
           <input class="fi" id="psWoQty" placeholder="Кол-во / шт.">
           <input class="fi" type="number" id="psWoAmt" placeholder="Сумма ₽" inputmode="numeric">
@@ -273,11 +288,41 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <!-- ПРИХОД ТОВАРА Дерево -->
       <div style="font-size:11px;color:#60f090;font-weight:700;margin-bottom:8px">📥 ПРИХОД ТОВАРА</div>
       <div id="psReceiveList" style="margin-bottom:8px"></div>
-      <div style="background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
+
+      <!-- Выбор способа -->
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button type="button" id="psRcvByInv" onclick="psToggleRcvMode('invoice')"
+          style="flex:1;padding:9px;border-radius:10px;border:2px solid #60f090;background:#1a2e1e;color:#60f090;font-size:12px;font-weight:700;cursor:pointer">
+          📋 По накладной
+        </button>
+        <button type="button" id="psRcvByManual" onclick="psToggleRcvMode('manual')"
+          style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer">
+          ✏️ Вручную
+        </button>
+      </div>
+
+      <!-- По накладной -->
+      <div id="psRcvInvoiceBlock" style="background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
+        <div class="fg" style="margin-bottom:8px">
+          <label class="fl">Выберите накладную</label>
+          <select class="fs" id="psInvoiceSelect" onchange="psLoadInvoice()">
+            <option value="">— загрузка накладных —</option>
+          </select>
+        </div>
+        <div id="psInvoiceItems" style="margin-bottom:8px"></div>
+        <button type="button" onclick="psAcceptInvoice()" id="psAcceptInvBtn"
+          style="background:#60f090;border:none;border-radius:8px;padding:8px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;width:100%;display:none">
+          ✅ Принять по накладной
+        </button>
+      </div>
+
+      <!-- Вручную -->
+      <div id="psRcvManualBlock" style="display:none;background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
         <div class="row2" style="margin-bottom:6px">
-          <input class="fi" id="psRcvNum" placeholder="Артикул">
+          <input class="fi" id="psRcvNum" placeholder="Артикул" oninput="psLookupReceive(this.value)">
           <input class="fi" id="psRcvName" placeholder="Название">
         </div>
+        <div id="psRcvLookupHint" style="font-size:11px;color:#60f090;margin-bottom:6px;display:none"></div>
         <div class="row2" style="margin-bottom:6px">
           <input class="fi" id="psRcvQty" placeholder="Количество">
           <input class="fi" type="number" id="psRcvPrice" placeholder="Цена за ед. ₽" inputmode="numeric">
@@ -286,7 +331,10 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
           <input class="fi" id="psRcvFrom" placeholder="Откуда">
           <input class="fi" type="number" id="psRcvAmt" placeholder="Сумма итого ₽" inputmode="numeric">
         </div>
-        <button type="button" onclick="psAddReceive()" style="background:#60f090;border:none;border-radius:8px;padding:8px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;width:100%">＋ Добавить приход</button>
+        <button type="button" onclick="psAddReceive()"
+          style="background:#60f090;border:none;border-radius:8px;padding:8px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;width:100%">
+          ＋ Добавить приход
+        </button>
       </div>
 
       <!-- ТОВАРНЫЙ ОСТАТОК Дерево -->
@@ -294,10 +342,14 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <div id="psPrevGoodsInfo" style="font-size:11px;color:#8888aa;margin-bottom:8px;display:none"></div>
       <div class="fg"><label class="fl">Остаток утро (авто или вручную)</label><input class="fi" type="number" id="psWoodMorn" placeholder="0" inputmode="numeric" oninput="psCalcGoods()"></div>
       <!-- авторасчёт вечера -->
-      <div id="psWoodEveBlock" style="background:#1e2a14;border:1px solid #c8f060;border-radius:10px;padding:10px;margin-bottom:10px;display:none">
-        <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Остаток вечер = утро + приход − продажи − списание</div>
-        <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#c8f060" id="psWoodEveVal">0₽</div>
+      <div style="background:#1e2a14;border:1px solid #c8f060;border-radius:10px;padding:10px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+          <div style="color:#8888aa;font-size:11px">Остаток товара вечер (авто)</div>
+          <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#c8f060" id="psWoodEveVal">—</div>
+        </div>
+        <div style="color:#555568;font-size:10px">утро + приход − продажи − списание</div>
       </div>
+      <div id="psWoodEveBlock" style="display:none"></div>
 
       <!-- ══ ДР ТОВАР ══ -->
       <div class="sep"></div>
@@ -321,10 +373,14 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
         <div class="fg"><label class="fl">Перевод</label><input class="fi" type="number" id="psDrTransfer" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
       </div>
       <div class="fg"><label class="fl">QR</label><input class="fi" type="number" id="psDrQR" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
-      <div id="psDrTotalRevBlock" style="background:#1e1a2e;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:10px;display:none">
-        <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Валовая выручка = нал + терминал + перевод + QR + скидка</div>
-        <div style="font-family:Unbounded,sans-serif;font-size:18px;font-weight:700;color:#60c8f0" id="psDrTotalRevVal">0₽</div>
+      <!-- Итого выручка ДР ТОВАР — всегда видна -->
+      <div style="background:#1e1a2e;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="color:#8888aa;font-size:11px">Итого выручка (нал+безнал+скидка)</div>
+          <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#60c8f0" id="psDrTotalRevVal">0₽</div>
+        </div>
       </div>
+      <div id="psDrTotalRevBlock" style="display:none"></div>
       <div class="fg"><label class="fl">Инкассация</label><input class="fi" type="number" id="psDrInkass" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
       <div id="psDrCashCalc" style="background:#1e1a2e;border:1px solid #a060f0;border-radius:10px;padding:10px;margin-bottom:10px;display:none">
         <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Расчётный нал вечер = утро + нал − инкассация</div>
@@ -368,10 +424,14 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <!-- ТОВАРНЫЙ ОСТАТОК ДР ТОВАР -->
       <div style="font-size:11px;color:#a060f0;font-weight:700;margin-bottom:8px">📦 ТОВАРНЫЙ ОСТАТОК</div>
       <div class="fg"><label class="fl">Остаток утро (авто или вручную)</label><input class="fi" type="number" id="psDrMorn" placeholder="0" inputmode="numeric" oninput="psCalcDrGoods()"></div>
-      <div id="psDrEveBlock" style="background:#1e1a2e;border:1px solid #a060f0;border-radius:10px;padding:10px;margin-bottom:10px;display:none">
-        <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Остаток вечер = утро + приход − продажи − списание</div>
-        <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#a060f0" id="psDrEveVal">0₽</div>
+      <div style="background:#1e1a2e;border:1px solid #a060f0;border-radius:10px;padding:10px;margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+          <div style="color:#8888aa;font-size:11px">Остаток товара вечер (авто)</div>
+          <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#a060f0" id="psDrEveVal">—</div>
+        </div>
+        <div style="color:#555568;font-size:10px">утро + приход − продажи − списание</div>
       </div>
+      <div id="psDrEveBlock" style="display:none"></div>
 
       <!-- ══ ПОКУПКИ СОТРУДНИКОВ ══ -->
       <div class="sep"></div>
@@ -1372,13 +1432,12 @@ function psCalc(){
 
   // Total revenue
   var totalRev=salesCash+terminal+transfer+qr+disc; // валовая = нал+безнал+скидка
-  var trBlock=document.getElementById('psTotalRevBlock');
   var trVal=document.getElementById('psTotalRevVal');
-  if(salesCash||terminal||transfer||qr){trBlock.style.display='block';trVal.textContent=fmt2(totalRev);}
-  else trBlock.style.display='none';
+  if(trVal) trVal.textContent=fmt2(totalRev);
 
   // Calculated cash evening
-  var calcEve=morn+salesCash-zp-inkass-other;
+  var travel=parseFloat(gv('psTravel'))||0;
+  var calcEve=morn+salesCash-zp-inkass-other-travel;
   var block=document.getElementById('psCashCalc'), valEl=document.getElementById('psCashCalcVal');
   if(morn||salesCash||zp||inkass||other){block.style.display='block';valEl.textContent=fmt2(calcEve);}
   else block.style.display='none';
@@ -1403,8 +1462,8 @@ function psCalcGoods(){
   var writeoff=psWriteoffs.reduce((s,w)=>s+(w.amt||0),0);
   var eve=morn+income-salesCash-salesCard-writeoff;
   var block=document.getElementById('psWoodEveBlock'), val=document.getElementById('psWoodEveVal');
-  if(morn||income||salesCash||salesCard||writeoff){block.style.display='block';val.textContent=fmt2(eve);}
-  else block.style.display='none';
+  var val2=document.getElementById('psWoodEveVal');
+  if(val2) val2.textContent=fmt2(eve);
 }
 
 function psCalcDr(){
@@ -1416,9 +1475,8 @@ function psCalcDr(){
   var disc=parseFloat(gv('psDrDiscount'))||0;
   var inkass=parseFloat(gv('psDrInkass'))||0;
   var totalRev=salesCash+terminal+transfer+qr+disc; // валовая = нал+безнал+скидка
-  var trBlock=document.getElementById('psDrTotalRevBlock'), trVal=document.getElementById('psDrTotalRevVal');
-  if(salesCash||terminal||transfer||qr){trBlock.style.display='block';trVal.textContent=fmt2(totalRev);}
-  else trBlock.style.display='none';
+  var trVal=document.getElementById('psDrTotalRevVal');
+  if(trVal) trVal.textContent=fmt2(totalRev);
   var calcEve=morn+salesCash-inkass;
   var block=document.getElementById('psDrCashCalc'), valEl=document.getElementById('psDrCashCalcVal');
   if(morn||salesCash||inkass){block.style.display='block';valEl.textContent=fmt2(calcEve);}
@@ -1441,8 +1499,8 @@ function psCalcDrGoods(){
   var writeoff=psDrWriteoffs.reduce((s,w)=>s+(w.amt||0),0);
   var eve=morn+income-salesCash-salesCard-writeoff;
   var block=document.getElementById('psDrEveBlock'), val=document.getElementById('psDrEveVal');
-  if(morn||income||salesCash||salesCard||writeoff){block.style.display='block';val.textContent=fmt2(eve);}
-  else block.style.display='none';
+  var val2=document.getElementById('psDrEveVal');
+  if(val2) val2.textContent=fmt2(eve);
 }
 
 // ── Writeoffs ──
@@ -1560,6 +1618,173 @@ function renderPsLists(){
   if(sl) sl.innerHTML=psStaffs.map((s,i)=>`<div style="background:#1e1a2e;border-radius:8px;padding:8px;margin-bottom:4px;font-size:12px"><div style="display:flex;justify-content:space-between"><span style="font-weight:700">${s.who}</span><button onclick="psStaffs.splice(${i},1);renderPsLists()" style="background:none;border:none;color:#8888aa;cursor:pointer;font-size:14px">✕</button></div><div>${s.item}</div><div style="color:#8888aa">Розница: ${fmt2(s.retail)} · Опт: ${fmt2(s.opt)}</div>${s.comment?`<div style="color:#8888aa">${s.comment}</div>`:''}</div>`).join('');
   if(st){st.style.display=psStaffs.length?'block':'none';}
   if(sv) sv.textContent=fmt2(totalOpt);
+}
+
+// ── Invoice receive for past shift ──
+var psCurrentInvoice = null;
+var psInvoiceCheckState = [];
+
+function psToggleRcvMode(mode){
+  var invBtn=document.getElementById('psRcvByInv');
+  var manBtn=document.getElementById('psRcvByManual');
+  var invBlock=document.getElementById('psRcvInvoiceBlock');
+  var manBlock=document.getElementById('psRcvManualBlock');
+  if(mode==='invoice'){
+    invBtn.style.cssText='flex:1;padding:9px;border-radius:10px;border:2px solid #60f090;background:#1a2e1e;color:#60f090;font-size:12px;font-weight:700;cursor:pointer';
+    manBtn.style.cssText='flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer';
+    invBlock.style.display='block'; manBlock.style.display='none';
+    psPopulateInvoices();
+  } else {
+    manBtn.style.cssText='flex:1;padding:9px;border-radius:10px;border:2px solid #60f090;background:#1a2e1e;color:#60f090;font-size:12px;font-weight:700;cursor:pointer';
+    invBtn.style.cssText='flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer';
+    invBlock.style.display='none'; manBlock.style.display='block';
+  }
+}
+
+function psPopulateInvoices(){
+  var shop=gv('psShop');
+  var invs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  var shopInvs=invs.filter(function(i){ return !shop||i.destName===shop; });
+  var sel=document.getElementById('psInvoiceSelect');
+  if(!sel) return;
+  if(!shopInvs.length){
+    sel.innerHTML='<option value="">— нет накладных —</option>';
+  } else {
+    sel.innerHTML='<option value="">Выберите накладную...</option>'+
+      shopInvs.map(function(i){ return '<option value="'+(i.id||i._id)+'">'+i.num+' · '+i.date+' · '+i.items.length+' изд.</option>'; }).join('');
+  }
+}
+
+function psLoadInvoice(){
+  var id=document.getElementById('psInvoiceSelect')?.value;
+  var btn=document.getElementById('psAcceptInvBtn');
+  var c=document.getElementById('psInvoiceItems');
+  if(!id||!c){ if(c)c.innerHTML=''; if(btn)btn.style.display='none'; return; }
+  var invs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  var inv=invs.find(function(i){ return (i.id||i._id)===id; });
+  if(!inv){ c.innerHTML=''; return; }
+  psCurrentInvoice=inv;
+  psInvoiceCheckState=inv.items.map(function(it){ return {ok:false,factPrice:it.price,comment:'',diff:false}; });
+  c.innerHTML=inv.items.map(function(item,i){
+    return '<div id="psInvRow'+i+'" style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;padding:10px;margin-bottom:6px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'+
+        '<div><div style="font-size:13px;font-weight:700">№'+(item.num||'—')+' '+item.name+'</div>'+
+        '<div style="font-size:11px;color:#8888aa">По накладной: '+fmt2(item.price)+'</div></div>'+
+        '<div onclick="psToggleInvItem('+i+')" id="psInvOk'+i+'" style="width:26px;height:26px;border-radius:8px;border:2px solid #2e2e3e;background:#0f0f13;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;flex-shrink:0"></div>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'+
+        '<span style="font-size:11px;color:#8888aa">Факт цена:</span>'+
+        '<input id="psInvFact'+i+'" type="number" value="'+item.price+'" inputmode="numeric" oninput="psCheckInvDiff('+i+','+item.price+')"'+
+          ' style="flex:1;padding:7px;background:#0f0f13;border:1px solid #2e2e3e;border-radius:8px;color:#f0f0f8;font-size:13px;outline:none;text-align:right"> ₽'+
+      '</div>'+
+      '<input id="psInvComment'+i+'" placeholder="Комментарий при расхождении..." style="width:100%;padding:7px;background:#0f0f13;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:11px;outline:none;display:none">'+
+    '</div>';
+  }).join('');
+  if(btn) btn.style.display='block';
+}
+
+function psToggleInvItem(i){
+  psInvoiceCheckState[i].ok=!psInvoiceCheckState[i].ok;
+  var el=document.getElementById('psInvOk'+i);
+  if(el){ el.textContent=psInvoiceCheckState[i].ok?'✓':''; el.style.background=psInvoiceCheckState[i].ok?'#c8f060':'#0f0f13'; el.style.color='#0f0f13'; el.style.borderColor=psInvoiceCheckState[i].ok?'#c8f060':'#2e2e3e'; }
+}
+
+function psCheckInvDiff(i,orig){
+  var fEl=document.getElementById('psInvFact'+i);
+  var cEl=document.getElementById('psInvComment'+i);
+  var row=document.getElementById('psInvRow'+i);
+  if(!fEl||!psCurrentInvoice) return;
+  var fact=parseFloat(fEl.value)||0;
+  var diff=Math.abs(fact-orig)>0;
+  psInvoiceCheckState[i].factPrice=fact;
+  psInvoiceCheckState[i].diff=diff;
+  if(cEl) cEl.style.display=diff?'block':'none';
+  if(row) row.style.borderColor=diff?'#f06060':'#2e2e3e';
+  if(fEl) fEl.style.borderColor=diff?'#f06060':'#2e2e3e';
+}
+
+function psAcceptInvoice(){
+  if(!psCurrentInvoice) return;
+  var inv=psCurrentInvoice;
+  var hasDiffs=psInvoiceCheckState.some(function(s){ return s.diff; });
+
+  // Add items to receives
+  inv.items.forEach(function(item,i){
+    var state=psInvoiceCheckState[i];
+    var comment=document.getElementById('psInvComment'+i)?.value||'';
+    psReceives.push({
+      num:item.num||'',name:item.name,qty:'1',
+      price:state.factPrice,amt:state.factPrice,
+      from:'Накладная '+inv.num,
+      diff:state.diff, diffComment:comment,
+      invoiceId:inv.id||inv._id
+    });
+  });
+
+  // If diffs — notify kladovshchik
+  if(hasDiffs){
+    var diffItems=inv.items.filter(function(it,i){ return psInvoiceCheckState[i].diff; });
+    // Save alert
+    var alerts=JSON.parse(localStorage.getItem('iz_admin_alerts')||'[]');
+    alerts.unshift({id:uid(),type:'invoice_diff',shopName:gv('psShop'),
+      invoiceNum:inv.num,date:gv('psDate'),
+      diffItems:diffItems.map(function(it,i){ return {name:it.name,orig:it.price,fact:psInvoiceCheckState[i].factPrice}; }),
+      read:false,createdAt:new Date().toISOString()});
+    localStorage.setItem('iz_admin_alerts',JSON.stringify(alerts.slice(0,50)));
+    try{ db.collection('iz_admin_alerts').add(alerts[0]); }catch(e){}
+    // Mark invoice as disputed
+    var invs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+    var idx=invs.findIndex(function(i){ return (i.id||i._id)===(inv.id||inv._id); });
+    if(idx>=0){ invs[idx].hasDiffs=true; invs[idx].disputed=true; localStorage.setItem('iz_invoices',JSON.stringify(invs)); try{ db.collection('iz_invoices').doc(inv.id||inv._id).update({hasDiffs:true,disputed:true}); }catch(e){} }
+    showToast('⚠️ Приход с расхождениями — уведомление отправлено кладовщику');
+  } else {
+    showToast('✅ Принято по накладной '+inv.num);
+  }
+
+  renderPsLists(); psCalcGoods();
+  // Reset invoice selector
+  document.getElementById('psInvoiceItems').innerHTML='';
+  document.getElementById('psInvoiceSelect').value='';
+  document.getElementById('psAcceptInvBtn').style.display='none';
+  psCurrentInvoice=null;
+}
+
+// Lookup item from shop inventory by artikul
+function psLookupWriteoff(num){
+  var hint=document.getElementById('psWoLookupHint');
+  var nameEl=document.getElementById('psWoName');
+  var amtEl=document.getElementById('psWoAmt');
+  if(!num.trim()||!hint) return;
+  var items=JSON.parse(localStorage.getItem('iz_items')||'[]');
+  var found=items.find(function(i){ return String(i.num)===num.trim(); });
+  if(found){
+    if(nameEl&&!nameEl.value) nameEl.value=found.name||'';
+    if(amtEl&&!amtEl.value) amtEl.value=found.price||'';
+    hint.style.display='block'; hint.style.color='#60f090';
+    hint.textContent='✓ '+found.name+(found.price?' · '+fmt2(found.price):'');
+  } else {
+    hint.style.display='block'; hint.style.color='#8888aa';
+    hint.textContent='Артикул не найден — введите вручную';
+  }
+}
+
+function psLookupReceive(num){
+  var hint=document.getElementById('psRcvLookupHint');
+  var nameEl=document.getElementById('psRcvName');
+  var priceEl=document.getElementById('psRcvPrice');
+  if(!num.trim()||!hint) return;
+  var items=JSON.parse(localStorage.getItem('iz_items')||'[]');
+  var found=items.find(function(i){ return String(i.num)===num.trim(); });
+  if(found){
+    if(nameEl&&!nameEl.value) nameEl.value=found.name||'';
+    if(priceEl&&!priceEl.value) priceEl.value=found.price||'';
+    hint.style.display='block';
+    hint.textContent='✓ Найдено: '+found.name+(found.price?' · '+fmt2(found.price):'');
+  } else {
+    hint.style.display='block';
+    hint.style.color='#8888aa';
+    hint.textContent='Артикул не найден в базе — введите вручную';
+  }
 }
 
 function populatePastShiftSellers(){
