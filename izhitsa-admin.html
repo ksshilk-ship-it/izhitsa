@@ -853,7 +853,15 @@ function startApp(){
   db.collection('iz_admin_accounts').onSnapshot(snap=>{if(snap.docs.length){setD('accounts',snap.docs.map(d=>({...d.data(),_fid:d.id})));}},()=>{});
   db.collection('iz_admin_expcats').onSnapshot(snap=>{if(snap.docs.length){setD('expCats',snap.docs.map(d=>({...d.data(),_fid:d.id})));}},()=>{});
   db.collection('iz_admin_inccats').onSnapshot(snap=>{if(snap.docs.length){setD('incCats',snap.docs.map(d=>({...d.data(),_fid:d.id})));}},()=>{});
-  db.collection('iz_admin_shops').onSnapshot(snap=>{if(snap.docs.length){setD('shops',snap.docs.map(d=>({...d.data(),_fid:d.id})));}},()=>{});
+  db.collection('iz_shop_zp_settings').doc('main').onSnapshot(snap=>{
+  if(snap.exists){
+    setZpSettings(snap.data()||{});
+    renderZpSettings();
+  }
+},e=>{
+  console.error('ZP settings load error',e);
+});
+db.collection('iz_admin_shops').onSnapshot(snap=>{if(snap.docs.length){setD('shops',snap.docs.map(d=>({...d.data(),_fid:d.id})));}},()=>{});
   db.collection('iz_transactions').orderBy('_ts','desc').onSnapshot(snap=>{
     const fbTxs=snap.docs.map(d=>({...d.data(),_id:d.id}));
     if(fbTxs.length>0){setD('transactions',fbTxs);}
