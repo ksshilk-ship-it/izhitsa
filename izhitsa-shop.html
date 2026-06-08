@@ -356,9 +356,24 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 
   <!-- ARCHIVE (history + edit) -->
   <div class="page" id="pg-history">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
       <div class="stitle" style="margin:0">Архив смен</div>
       <button type="button" onclick="openPeriodReport()" style="padding:7px 12px;border-radius:10px;border:1px solid #60c8f0;background:#1a1e2e;color:#60c8f0;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📊 Отчёт</button>
+    </div>
+    <!-- Archive / Live switcher -->
+    <div style="display:flex;gap:5px;margin-bottom:10px">
+      <button type="button" id="histMode_live" onclick="setHistMode('live',this)"
+        style="flex:1;padding:7px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">
+        📊 Живые
+      </button>
+      <button type="button" id="histMode_archive" onclick="setHistMode('archive',this)"
+        style="flex:1;padding:7px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">
+        🗄 Архив
+      </button>
+      <button type="button" id="histMode_all" onclick="setHistMode('all',this)"
+        style="flex:1;padding:7px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">
+        🔗 Всё
+      </button>
     </div>
     <!-- Period filter -->
     <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">
@@ -1166,6 +1181,12 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div class="mt" style="margin:0">📊 Отчёт за период</div>
       <button onclick="closeMo('periodReportMo')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:5px 10px;color:#8888aa;cursor:pointer;font-size:12px">✕</button>
+    </div>
+    <!-- Data mode: live / archive / all -->
+    <div style="display:flex;gap:5px;margin-bottom:12px">
+      <button type="button" id="prMode_live" onclick="setPrMode('live',this)" style="flex:1;padding:7px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">📊 Живые</button>
+      <button type="button" id="prMode_archive" onclick="setPrMode('archive',this)" style="flex:1;padding:7px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">🗄 Архив</button>
+      <button type="button" id="prMode_all" onclick="setPrMode('all',this)" style="flex:1;padding:7px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">🔗 Всё</button>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
       <button type="button" onclick="setPrPeriod('week',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">Неделя</button>
@@ -2695,18 +2716,45 @@ _closeShiftReal();
 }
 
 // ════ ADMIN FUNCTIONS ════
+var histMode = 'live'; // 'live' | 'archive' | 'all'
+function setHistMode(mode, el) {
+  histMode = mode;
+  ['live','archive','all'].forEach(function(m){
+    var btn = document.getElementById('histMode_'+m);
+    if(!btn) return;
+    var active = m === mode;
+    btn.style.borderWidth = active ? '2px' : '1px';
+    btn.style.background = active ? '#1e2a14' : '#22222e';
+    btn.style.color = active ? '#c8f060' : '#8888aa';
+    btn.style.borderColor = active ? '#c8f060' : '#2e2e3e';
+    btn.style.fontWeight = active ? '700' : '400';
+  });
+  renderShiftHistory();
+}
+
 function renderShiftHistory(){
   const c=document.getElementById('shiftHistoryList'); if(!c)return;
   const shops=getShops();
   const sf=document.getElementById('histShopFilter');
   if(sf&&!sf.innerHTML) sf.innerHTML='<div style="padding:5px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#c8f060;color:#0f0f13;font-size:11px;cursor:pointer;white-space:nowrap;font-weight:700" onclick="filterHistShop(\'\',this)">Все</div>'+shops.map(s=>`<div style="padding:5px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#1a1a22;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap" onclick="filterHistShop('${s}',this)">${s}</div>`).join('');
-  const allShifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-  if(!allShifts.length){c.innerHTML='<div class="empty"><div class="ei">📋</div>Нет смен</div>';return;}
-  c.innerHTML=allShifts.slice(0,30).map(sh=>`
-    <div class="card" style="cursor:pointer;border-color:${sh.hasCashDiff?'#f06060':'#2e2e3e'}" onclick="openEditShift('${sh.id}')">
+  var allShifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  // Filter by mode
+  if(histMode === 'live') allShifts = allShifts.filter(function(s){ return !s.isArchive; });
+  else if(histMode === 'archive') allShifts = allShifts.filter(function(s){ return !!s.isArchive; });
+  // 'all' = no filter
+  if(!allShifts.length){
+    var modeLabel = histMode==='live' ? 'живых смен' : histMode==='archive' ? 'архивных смен' : 'смен';
+    c.innerHTML='<div class="empty"><div class="ei">📋</div>Нет '+modeLabel+'</div>';
+    return;
+  }
+  c.innerHTML=allShifts.slice(0,50).map(sh=>`
+    <div class="card" style="cursor:pointer;border-color:${sh.hasCashDiff?'#f06060':sh.isArchive?'#604020':'#2e2e3e'}" onclick="openEditShift('${sh.id}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div>
-          <div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700">${sh.shopName}</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700">${sh.shopName}</div>
+            ${sh.isArchive?'<div style="font-size:9px;background:#604020;color:#f0a060;border-radius:4px;padding:2px 5px;font-weight:700">АРХИВ</div>':''}
+          </div>
           <div style="font-size:11px;color:#8888aa;margin-top:2px">👤 ${sh.sellerName} · 📅 ${sh.date}</div>
           ${sh.hasCashDiff?`<div style="font-size:10px;color:#f06060;margin-top:3px">⚠️ Расхождение: ${fmt(sh.cashDiff)}</div>`:''}
         </div>
@@ -2838,7 +2886,7 @@ function savePastShift(){
   // Auto-calculate goods evening
   var woodEve=n('psWoodMorn')+n('psWoodIn')-(n('psCashRev')+n('psTerminal')+n('psTransfer')+n('psQR'))-n('psWoodOff');
   var drEve=n('psDrMorn')+n('psDrIn')-(n('psDrCashRev')+n('psDrTerminal')+n('psDrTransfer')+n('psDrQR'))-n('psDrOff');
-  const shift={id:uid(),source:'shop',shopName:shop,sellerName:gv('psSeller')||'—',date,
+  const shift={id:uid(),source:'shop',isArchive:true,shopName:shop,sellerName:gv('psSeller')||'—',date,
     openedAt:date+'T09:00:00.000Z',closedAt:date+'T21:00:00.000Z',
     // ДЕРЕВО — наличные
     cashMorning:n('psCashMorn'),cashEvening:n('psCashEve'),
@@ -3919,7 +3967,7 @@ function savePsjAsShift() {
   });
 
   var shift = {
-    id: uid(), source: 'psj', backfilled: true,
+    id: uid(), source: 'psj', isArchive: true, backfilled: true,
     shopName: shopName, sellerName: sellerName, date: date,
     openedAt: date+'T09:00:00.000Z', closedAt: date+'T21:00:00.000Z',
     cashRevenue: cashRev, cardRevenue: cardRev, totalDiscount: disc,
@@ -4173,7 +4221,7 @@ function validateAndPreviewImport(data, filename){
   data.forEach(function(row,i){
     if(!row.date){errors.push('Строка '+(i+1)+': нет даты'); return;}
     if(!row.shopName){errors.push('Строка '+(i+1)+': нет магазина'); return;}
-    valid.push({id:uid(),source:'import',backfilled:true,
+    valid.push({id:uid(),source:'import',isArchive:true,backfilled:true,
       shopName:row.shopName, sellerName:row.sellerName||'—', date:row.date,
       openedAt:row.date+'T09:00:00.000Z', closedAt:row.date+'T21:00:00.000Z',
       cashMorning:parseFloat(row.cashMorning)||0, cashEvening:parseFloat(row.cashEvening)||0,
@@ -4284,15 +4332,31 @@ function setPrPeriod(type,el){
   document.getElementById('prDateTo').value=today;
   generatePeriodReport();
 }
+var prMode = 'live';
+function setPrMode(mode, el) {
+  prMode = mode;
+  ['live','archive','all'].forEach(function(m){
+    var btn=document.getElementById('prMode_'+m); if(!btn) return;
+    var active=m===mode;
+    btn.style.borderWidth=active?'2px':'1px'; btn.style.background=active?'#1e2a14':'#22222e';
+    btn.style.color=active?'#c8f060':'#8888aa'; btn.style.borderColor=active?'#c8f060':'#2e2e3e';
+    btn.style.fontWeight=active?'700':'400';
+  });
+  generatePeriodReport();
+}
 function generatePeriodReport(){
   var from=(document.getElementById('prDateFrom')||{}).value||'';
   var to=(document.getElementById('prDateTo')||{}).value||'';
   var shopF=(document.getElementById('prShopFilter')||{}).value||'';
   if(!from||!to) return;
   var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  // Filter by archive/live mode
+  if(prMode==='live') shifts=shifts.filter(function(s){return !s.isArchive;});
+  else if(prMode==='archive') shifts=shifts.filter(function(s){return !!s.isArchive;});
   var filtered=shifts.filter(function(s){return s.date>=from&&s.date<=to&&(!shopF||s.shopName===shopF);});
+  var modeLabel=prMode==='archive'?'🗄 Архив':prMode==='live'?'📊 Живые':'🔗 Все данные';
   var c=document.getElementById('periodReportBody');
-  if(!filtered.length){c.innerHTML='<div class="empty"><div class="ei">📊</div>Нет данных за период</div>';return;}
+  if(!filtered.length){c.innerHTML='<div class="empty"><div class="ei">📊</div>Нет данных ('+modeLabel+')</div>';return;}
   var totCash=0,totCard=0,totDisc=0,totZp=0,totInkass=0,totOther=0;
   filtered.forEach(function(s){totCash+=s.cashRevenue||0;totCard+=s.cardRevenue||0;totDisc+=s.totalDiscount||0;totZp+=s.zp||0;totInkass+=s.inkass||0;totOther+=s.otherExp||0;});
   var totRev=totCash+totCard+totDisc, totExp=totZp+totInkass+totOther;
