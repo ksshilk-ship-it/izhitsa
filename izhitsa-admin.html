@@ -850,10 +850,10 @@ function startApp(){
     shifts=JSON.parse(localStorage.getItem('iz_shifts')||'[]');renderDash();renderShops();
   });
   // Sync admin settings to Firebase
-  db.collection('iz_admin_accounts').onSnapshot(snap=>{if(snap.docs.length){setD('accounts',snap.docs.map(d=>d.data()));}},()=>{});
-  db.collection('iz_admin_expcats').onSnapshot(snap=>{if(snap.docs.length){setD('expCats',snap.docs.map(d=>d.data()));}},()=>{});
-  db.collection('iz_admin_inccats').onSnapshot(snap=>{if(snap.docs.length){setD('incCats',snap.docs.map(d=>d.data()));}},()=>{});
-  db.collection('iz_admin_shops').onSnapshot(snap=>{if(snap.docs.length){setD('shops',snap.docs.map(d=>d.data()));}},()=>{});
+  db.collection('iz_admin_accounts').onSnapshot(snap=>{if(snap.docs.length){setD('accounts',snap.docs.map(d=>({...d.data(),_fid:d.id})));}},()=>{});
+  db.collection('iz_admin_expcats').onSnapshot(snap=>{if(snap.docs.length){setD('expCats',snap.docs.map(d=>({...d.data(),_fid:d.id})));}},()=>{});
+  db.collection('iz_admin_inccats').onSnapshot(snap=>{if(snap.docs.length){setD('incCats',snap.docs.map(d=>({...d.data(),_fid:d.id})));}},()=>{});
+  db.collection('iz_admin_shops').onSnapshot(snap=>{if(snap.docs.length){setD('shops',snap.docs.map(d=>({...d.data(),_fid:d.id})));}},()=>{});
   db.collection('iz_transactions').orderBy('_ts','desc').onSnapshot(snap=>{
     const fbTxs=snap.docs.map(d=>({...d.data(),_id:d.id}));
     if(fbTxs.length>0){setD('transactions',fbTxs);}
@@ -1389,7 +1389,21 @@ function savePayment(){const amount=parseFloat(gv('payAmt'));if(!amount){showToa
 
 // ════════ SETTINGS ════════
 function addSetting(key,data,clearId){if(!data.name?.trim()){showToast('Введите название');return;}data.id=uid();data.name=data.name.trim();const arr=getD(key);arr.push(data);setD(key,arr);db.collection(SK[key]||key).add(data).catch(console.error);const el=document.getElementById(clearId);if(el)el.value='';const el2=document.getElementById('newExpB');if(el2&&clearId==='newExpC')el2.value='';renderSettings();populateOpSelects();showToast('✅ Добавлено');}
-function delSetting(key,id){const arr=getD(key).filter(i=>i.id!==id);setD(key,arr);renderSettings();populateOpSelects();}
+function delSetting(key,id){
+  const arr=getD(key);
+  const item=arr.find(i=>i.id===id);
+  const newArr=arr.filter(i=>i.id!==id);
+  setD(key,newArr);
+  if(db&&item){
+    const col=SK[key]||key;
+    if(item._fid){
+      db.collection(col).doc(item._fid).delete().catch(console.error);
+    } else {
+      db.collection(col).where('id','==',id).get().then(snap=>snap.forEach(d=>d.ref.delete())).catch(console.error);
+    }
+  }
+  renderSettings();populateOpSelects();
+}
 function getZpSettings(){ return JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}'); }
 function setZpSettings(d){ localStorage.setItem('iz_shop_zp_settings',JSON.stringify(d)); }
 
