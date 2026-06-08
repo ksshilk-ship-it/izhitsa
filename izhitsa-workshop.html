@@ -170,6 +170,13 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
         <div class="rs">Полный доступ</div>
       </div>
     </div>
+    <div style="margin-top:8px">
+      <div class="role-card" onclick="selectRole('администратор',this)" style="border-color:#6c3fc5">
+        <div class="ri">🛡</div>
+        <div class="rn">Администратор</div>
+        <div class="rs">Суперадмин</div>
+      </div>
+    </div>
     <div class="fg"><label class="fl">Сотрудник</label><select class="fs" id="loginUser"><option value="">— выберите роль —</option></select></div>
     <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="loginPass" placeholder="••••"></div>
     <div id="loginErr" style="color:var(--exp);font-size:12px;margin-bottom:8px;display:none">Неверный пароль</div>
@@ -285,6 +292,47 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
     <div id="statsContent"></div>
   </div>
 
+  <!-- IMPORT PAGE (Администратор) -->
+  <div class="page" id="pg-import">
+    <div class="stitle">📥 Загрузка данных</div>
+    <div class="card" style="border-color:var(--a2)">
+      <div class="ctitle">Инструкция</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.7">
+        Загрузите CSV с историческими данными о производстве.<br>
+        <strong style="color:var(--text)">Колонки:</strong> мастер; дата; изделие; количество; цена; зарплата<br>
+        <strong style="color:var(--text)">Дата:</strong> ДД.ММ.ГГГГ или ГГГГ-ММ-ДД<br>
+        <strong style="color:var(--text)">Разделитель:</strong> ; или ,
+      </div>
+    </div>
+    <button class="btn sec" onclick="downloadImportTemplate()" style="margin-bottom:10px">📄 Скачать шаблон CSV</button>
+    <div class="card">
+      <div class="ctitle">Выбрать файл</div>
+      <div style="border:2px dashed var(--border);border-radius:12px;padding:20px;text-align:center;cursor:pointer" onclick="document.getElementById('importFile').click()">
+        <div style="font-size:28px;margin-bottom:6px">📂</div>
+        <div style="font-size:13px;font-weight:600">Нажмите для выбора CSV</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:4px" id="importFileName">Файл не выбран</div>
+      </div>
+      <input type="file" id="importFile" accept=".csv,.txt" style="display:none" onchange="handleImportFile(this)">
+    </div>
+    <div id="importPreview" style="display:none">
+      <div class="card">
+        <div class="ctitle">Предпросмотр</div>
+        <div id="importStats" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px"></div>
+        <div id="importPreviewContent"></div>
+      </div>
+      <div class="card" id="importIssuesCard" style="display:none;border-color:var(--a4)">
+        <div class="ctitle" style="color:var(--a4)">⚠️ Предупреждения</div>
+        <div id="importIssues"></div>
+      </div>
+      <button class="btn green" onclick="confirmImport()" id="importConfirmBtn">✅ Загрузить в базу</button>
+      <button class="btn sec" style="margin-top:8px" onclick="cancelImport()">Отмена</button>
+    </div>
+    <div class="card" style="margin-top:10px">
+      <div class="ctitle">История загрузок</div>
+      <div id="importHistory"></div>
+    </div>
+  </div>
+
   <div class="tabs" id="mainTabs"></div>
 </div>
 
@@ -302,6 +350,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
         <option value="мастер">🔨 Мастер</option>
         <option value="кладовщик">📦 Кладовщик</option>
         <option value="управляющий">👑 Управляющий</option>
+        <option value="администратор">🛡 Администратор</option>
       </select>
     </div>
     <div class="fg"><label class="fl">Ставка ЗП (₽/изделие, для мастера)</label><input class="fi" type="number" id="empRate" placeholder="0" inputmode="numeric"></div>
@@ -410,10 +459,11 @@ let currentItemId = null;
 let extraWorkCats = JSON.parse(localStorage.getItem('ws_extra_cats')||'["Шлифовка","Покраска","Пропитка","Сборка","Доставка","Прочее"]');
 
 const ROLES = {
-  заготовщик: {tabs:['dash','blanks','extrawork'], label:'🪚 Заготовщик'},
-  мастер:      {tabs:['dash','mywork','zp'], label:'🔨 Мастер'},
-  кладовщик:   {tabs:['dash','warehouse'], label:'📦 Кладовщик'},
-  управляющий: {tabs:['dash','warehouse','zp','zpay','stats','admin'], label:'👑 Управляющий'},
+  заготовщик:    {tabs:['dash','blanks','extrawork'], label:'🪚 Заготовщик'},
+  мастер:        {tabs:['dash','mywork','zp'], label:'🔨 Мастер'},
+  кладовщик:     {tabs:['dash','warehouse'], label:'📦 Кладовщик'},
+  управляющий:   {tabs:['dash','warehouse','zp','zpay','stats','admin'], label:'👑 Управляющий'},
+  администратор: {tabs:['dash','warehouse','zp','zpay','stats','admin','import'], label:'🛡 Администратор'},
 };
 
 const TAB_CFG = {
@@ -425,7 +475,8 @@ const TAB_CFG = {
   zp:        {icon:'💰', label:'ЗП', page:'pg-zp'},
   zpay:      {icon:'💳', label:'Выплаты', page:'pg-zpay'},
   stats:     {icon:'📊', label:'Статистика', page:'pg-stats'},
-  admin:     {icon:'👑', label:'Настройки', page:'pg-admin'},
+  admin:     {icon:'⚙️', label:'Настройки', page:'pg-admin'},
+  import:    {icon:'📥', label:'Загрузка', page:'pg-import'},
 };
 
 // ════════ UTILS ════════
@@ -449,6 +500,7 @@ function showPg(name,el){
   if(name==='zpay')      renderZPay();
   if(name==='stats')     renderStats();
   if(name==='admin')     renderAdmin();
+  if(name==='import')    renderImportPage();
   if(name==='extrawork') { renderExtraWorkList(); }
   if(name==='dash')      renderDash();
 }
@@ -535,7 +587,7 @@ function startApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
   document.getElementById('hdrName').textContent=session.name;
-  document.getElementById('hdrRole').textContent={заготовщик:'🪚 Заготовщик',мастер:'🔨 Мастер',кладовщик:'📦 Кладовщик',управляющий:'👑 Управляющий'}[session.role]||session.role;
+  document.getElementById('hdrRole').textContent={заготовщик:'🪚 Заготовщик',мастер:'🔨 Мастер',кладовщик:'📦 Кладовщик',управляющий:'👑 Управляющий',администратор:'🛡 Администратор'}[session.role]||session.role;
   buildTabs();
   startListeners();
   renderExtraCatSelect('ewCat');
@@ -1023,10 +1075,47 @@ function renderZP(){
 function renderAdmin(){
   const ai=document.getElementById('adminAllItems');
   if(!ai)return;
+  const isAdmin = session.role==='администратор';
+
+  // Admin: show full employee panel
+  let adminExtra = document.getElementById('adminExtraPanel');
+  if(isAdmin){
+    if(!adminExtra){
+      adminExtra = document.createElement('div');
+      adminExtra.id = 'adminExtraPanel';
+      ai.parentElement.insertBefore(adminExtra, ai.parentElement.firstChild);
+    }
+    const emps = getEmployees();
+    const roleIcons={заготовщик:'🪚',мастер:'🔨',кладовщик:'📦',управляющий:'👑',администратор:'🛡'};
+    adminExtra.innerHTML=`
+      <div class="stitle" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span>🛡 Управление персоналом</span>
+        <button class="btn" style="width:auto;padding:7px 14px;font-size:11px;margin:0" onclick="openMo('adminSetupMo')">＋ Добавить</button>
+      </div>
+      <div class="card" style="border-color:#6c3fc5">
+        <div class="ctitle">Сотрудники (${emps.length})</div>
+        ${emps.map((e,i)=>`
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+            <div style="width:34px;height:34px;border-radius:9px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:18px">${roleIcons[e.role]||'👤'}</div>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:700">${e.name}</div>
+              <div style="font-size:10px;color:var(--t2)">${e.role}${e.rate?' · '+fmt(e.rate)+'/изд.':''}</div>
+            </div>
+            <div style="display:flex;gap:5px">
+              ${e._builtin?'':`<button onclick="adminEditEmp(${i})" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 8px;color:var(--a2);cursor:pointer;font-size:11px">✏️</button>`}
+              ${e._builtin?'':`<button onclick="adminToggleBlock(${i})" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 8px;color:${e.blocked?'var(--inc)':'var(--exp)'};cursor:pointer;font-size:11px">${e.blocked?'✅':'🔒'}</button>`}
+              ${e._builtin?'':`<button onclick="delEmployee(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>`}
+            </div>
+          </div>`).join('')}
+      </div>`;
+  } else if(adminExtra){
+    adminExtra.innerHTML='';
+  }
+
   const statusL={in_work:'🔨 В работе',done:'✅ Готово',delivered:'📦 Сдано',received:'На складе',shipped:'🚚 Отгружено'};
-  ai.innerHTML=items.length?items.slice(0,30).map(i=>`
+  ai.innerHTML=items.length?items.slice(0,50).map(i=>`
     <div class="at-row">
-      <span class="at-lbl">${i.name||i.itemName}<br><span style="font-size:10px">👤 ${i.masterName} · ⏱ ${elapsed(i.startedAt,i.receivedAt||undefined)}</span></span>
+      <span class="at-lbl">${i.name||i.itemName}<br><span style="font-size:10px">👤 ${i.masterName} · ${i.receivedAt?fmtDT(i.receivedAt):''} · ⏱ ${elapsed(i.startedAt,i.receivedAt||undefined)}</span></span>
       <span class="at-val" style="font-size:11px">${statusL[i.status]||i.status}</span>
     </div>`).join(''):'<div class="empty"><div class="ei">📋</div>Нет изделий</div>';
 
@@ -1037,6 +1126,169 @@ function renderAdmin(){
   monthItems.forEach(i=>{if(!byM[i.masterName])byM[i.masterName]=0;byM[i.masterName]+=(i.zp||0);});
   azp.innerHTML=Object.entries(byM).length?Object.entries(byM).map(([name,total])=>`
     <div class="at-row"><span class="at-lbl">${name}</span><span class="at-val" style="color:var(--a5)">${fmt(total)}</span></div>`).join(''):'<div style="font-size:12px;color:var(--t2)">Нет начислений</div>';
+}
+
+function adminToggleBlock(i){
+  const emps=getEmployees();
+  if(emps[i]?._builtin) return;
+  emps[i].blocked=!emps[i].blocked;
+  saveEmployees(emps);
+  renderAdmin();
+  showToast(emps[i].blocked?`🔒 ${emps[i].name} заблокирован`:`✅ ${emps[i].name} разблокирован`);
+}
+
+let _adminEditIdx=null;
+function adminEditEmp(i){
+  _adminEditIdx=i;
+  const e=getEmployees()[i];
+  document.getElementById('editEmpName').value=e.name;
+  document.getElementById('editEmpRole').value=e.role;
+  document.getElementById('editEmpRate').value=e.rate||0;
+  document.getElementById('editEmpPass').value='';
+  openMo('editEmpMo');
+}
+function saveEditEmp(){
+  const emps=getEmployees();
+  const e=emps[_adminEditIdx];
+  e.name=document.getElementById('editEmpName').value.trim()||e.name;
+  e.role=document.getElementById('editEmpRole').value;
+  e.rate=parseFloat(document.getElementById('editEmpRate').value)||0;
+  const p=document.getElementById('editEmpPass').value;
+  if(p) e.pass=p;
+  saveEmployees(emps);
+  closeMo('editEmpMo');
+  renderAdmin();
+  showToast('✅ Сотрудник обновлён');
+}
+
+// ════════════════════════════════
+// IMPORT PAGE
+// ════════════════════════════════
+let _importRows=[];
+
+function renderImportPage(){
+  renderImportHistory();
+}
+
+function downloadImportTemplate(){
+  const csv='мастер;дата;изделие;количество;цена;зарплата\nИванов Иван;01.06.2025;Столешница дуб;1;12000;1500\nПетрова Анна;15.05.2025;Подоконник ясень;2;8000;900\n';
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='izhitsa_import_template.csv';
+  a.click();
+}
+
+function handleImportFile(input){
+  const file=input.files[0]; if(!file) return;
+  document.getElementById('importFileName').textContent=file.name;
+  const reader=new FileReader();
+  reader.onload=e=>parseImportCSV(e.target.result);
+  reader.readAsText(file,'UTF-8');
+}
+
+function parseImportCSV(text){
+  const sep=text.includes(';')?';':',';
+  const lines=text.replace(/\r/g,'').split('\n').filter(l=>l.trim());
+  if(lines.length<2){showToast('Файл пустой');return;}
+  const header=lines[0].split(sep).map(h=>h.trim().toLowerCase().replace(/["']/g,''));
+  const aliases={
+    мастер:     ['мастер','master','имя','фио','сотрудник'],
+    дата:       ['дата','date','дата_приёмки','принято'],
+    изделие:    ['изделие','название','item','наименование'],
+    количество: ['количество','qty','кол-во','кол_во','шт'],
+    цена:       ['цена','price','стоимость','розница','сумма'],
+    зарплата:   ['зарплата','зп','salary','оплата','заработок'],
+  };
+  const colMap={};
+  Object.entries(aliases).forEach(([f,alts])=>{
+    const idx=header.findIndex(h=>alts.includes(h));
+    if(idx>=0) colMap[f]=idx;
+  });
+  const missing=Object.keys(aliases).filter(k=>colMap[k]===undefined);
+  if(missing.length){showToast('Не найдены колонки: '+missing.join(', '));return;}
+
+  const rows=[],issues=[];
+  lines.slice(1).forEach((line,li)=>{
+    if(!line.trim())return;
+    const c=line.split(sep).map(x=>x.trim().replace(/^["']|["']$/g,''));
+    const masterName=c[colMap['мастер']]||'';
+    const dateRaw=c[colMap['дата']]||'';
+    const itemName=c[colMap['изделие']]||'';
+    const qty=parseInt(c[colMap['количество']])||1;
+    const price=parseFloat((c[colMap['цена']]||'0').replace(/[^\d.]/g,''))||0;
+    const zp=parseFloat((c[colMap['зарплата']]||'0').replace(/[^\d.]/g,''))||0;
+    if(!masterName||!itemName){issues.push(`Строка ${li+2}: пропущено имя или изделие`);return;}
+    let dateISO='';
+    if(dateRaw.match(/^\d{2}\.\d{2}\.\d{4}$/)){const[d,m,y]=dateRaw.split('.');dateISO=`${y}-${m}-${d}T12:00:00.000Z`;}
+    else if(dateRaw.match(/^\d{4}-\d{2}-\d{2}$/)){dateISO=dateRaw+'T12:00:00.000Z';}
+    else{issues.push(`Строка ${li+2}: неверная дата "${dateRaw}"`);dateISO=new Date().toISOString();}
+    const master=getEmployees().find(e=>e.name.toLowerCase()===masterName.toLowerCase()&&e.role==='мастер');
+    if(!master) issues.push(`Строка ${li+2}: мастер "${masterName}" не найден`);
+    rows.push({masterName,masterId:master?.id||'imp_'+masterName.replace(/\s/g,'_'),itemName,qty,price,zp,dateISO,dateDisplay:dateRaw});
+  });
+
+  _importRows=rows;
+  if(!rows.length){showToast('Нет данных');return;}
+
+  const totalRev=rows.reduce((s,r)=>s+r.price*r.qty,0);
+  const masters=[...new Set(rows.map(r=>r.masterName))];
+  document.getElementById('importStats').innerHTML=`
+    <div class="sc"><div class="sc-v" style="color:var(--accent)">${rows.length}</div><div class="sc-l">Записей</div></div>
+    <div class="sc"><div class="sc-v" style="color:var(--a2)">${masters.length}</div><div class="sc-l">Мастеров</div></div>
+    <div class="sc"><div class="sc-v" style="color:var(--a5);font-size:13px">${fmt(totalRev)}</div><div class="sc-l">Выручка</div></div>`;
+
+  const issCard=document.getElementById('importIssuesCard');
+  if(issues.length){issCard.style.display='block';document.getElementById('importIssues').innerHTML=issues.map(i=>`<div style="font-size:11px;color:var(--a4);padding:3px 0">${i}</div>`).join('');}
+  else issCard.style.display='none';
+
+  document.getElementById('importPreviewContent').innerHTML=`<div style="overflow-x:auto"><table style="width:100%;font-size:11px;border-collapse:collapse">
+    <tr style="color:var(--t2);font-size:10px"><td style="padding:4px">Мастер</td><td>Дата</td><td>Изделие</td><td style="text-align:right">Цена</td><td style="text-align:right">ЗП</td></tr>
+    ${rows.slice(0,10).map(r=>`<tr style="border-top:1px solid var(--border)"><td style="padding:5px 4px;font-weight:600">${r.masterName}</td><td style="color:var(--t2)">${r.dateDisplay}</td><td>${r.itemName}</td><td style="text-align:right;color:var(--accent)">${fmt(r.price)}</td><td style="text-align:right;color:var(--a5)">${fmt(r.zp)}</td></tr>`).join('')}
+    ${rows.length>10?`<tr><td colspan="5" style="padding:6px;text-align:center;color:var(--t2)">... и ещё ${rows.length-10} записей</td></tr>`:''}
+  </table></div>`;
+  document.getElementById('importPreview').style.display='block';
+}
+
+async function confirmImport(){
+  const btn=document.getElementById('importConfirmBtn');
+  btn.disabled=true; btn.textContent='⏳ Загружаю...';
+  let success=0;
+  for(let i=0;i<_importRows.length;i+=20){
+    const chunk=_importRows.slice(i,i+20);
+    const batch=db.batch();
+    chunk.forEach(r=>{
+      for(let q=0;q<(r.qty||1);q++){
+        const ref=db.collection('ws_items').doc();
+        batch.set(ref,{id:uid(),name:r.itemName,itemName:r.itemName,masterName:r.masterName,masterId:r.masterId,qty:1,price:r.price,zp:r.zp,zpPaid:r.zp>0,status:'received',createdAt:r.dateISO,startedAt:r.dateISO,receivedAt:r.dateISO,importedAt:now(),importedBy:session.name,isImported:true,itemNum:'IMP-'+uid().toUpperCase()});
+      }
+    });
+    try{await batch.commit();success+=chunk.length;}catch(e){console.error(e);}
+    btn.textContent=`⏳ ${Math.min(i+20,_importRows.length)}/${_importRows.length}...`;
+  }
+  const hist=JSON.parse(localStorage.getItem('ws_import_history')||'[]');
+  hist.unshift({date:new Date().toISOString().split('T')[0],count:success,by:session.name,revenue:_importRows.reduce((s,r)=>s+r.price*r.qty,0)});
+  localStorage.setItem('ws_import_history',JSON.stringify(hist.slice(0,20)));
+  btn.disabled=false;
+  cancelImport();
+  showToast(`✅ Загружено ${success} записей`);
+  renderImportHistory();
+}
+
+function cancelImport(){
+  _importRows=[];
+  document.getElementById('importPreview').style.display='none';
+  document.getElementById('importFile').value='';
+  document.getElementById('importFileName').textContent='Файл не выбран';
+  const btn=document.getElementById('importConfirmBtn');
+  if(btn){btn.disabled=false;btn.textContent='✅ Загрузить в базу';}
+}
+
+function renderImportHistory(){
+  const c=document.getElementById('importHistory');if(!c)return;
+  const hist=JSON.parse(localStorage.getItem('ws_import_history')||'[]');
+  if(!hist.length){c.innerHTML='<div class="empty" style="padding:12px 0"><div class="ei">📂</div>Загрузок ещё не было</div>';return;}
+  c.innerHTML=hist.map(h=>`<div class="at-row"><span class="at-lbl">${h.date} · ${h.by}</span><span class="at-val" style="color:var(--accent)">${h.count} зап. · ${fmt(h.revenue)}</span></div>`).join('');
 }
 
 
@@ -1391,6 +1643,26 @@ document.addEventListener('DOMContentLoaded', ()=>{
     <div class="fg"><label class="fl">ЗП (₽)</label><input class="fi" type="number" id="editEwZP" inputmode="numeric"></div>
     <button class="btn" onclick="saveExtraEdit()">Сохранить</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('editExtraMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- EDIT EMPLOYEE (Администратор) -->
+<div class="mo" id="editEmpMo">
+  <div class="md"><div class="mh"></div><div class="mt">✏️ Редактировать сотрудника</div>
+    <div class="fg"><label class="fl">Имя</label><input class="fi" id="editEmpName"></div>
+    <div class="fg"><label class="fl">Роль</label>
+      <select class="fs" id="editEmpRole">
+        <option value="заготовщик">🪚 Заготовщик</option>
+        <option value="мастер">🔨 Мастер</option>
+        <option value="кладовщик">📦 Кладовщик</option>
+        <option value="управляющий">👑 Управляющий</option>
+        <option value="администратор">🛡 Администратор</option>
+      </select>
+    </div>
+    <div class="fg"><label class="fl">Ставка (₽/изд.)</label><input class="fi" type="number" id="editEmpRate" inputmode="numeric"></div>
+    <div class="fg"><label class="fl">Новый пароль (оставьте пустым — без изменений)</label><input class="fi" type="password" id="editEmpPass" placeholder="••••"></div>
+    <button class="btn" onclick="saveEditEmp()">💾 Сохранить</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('editEmpMo')">Отмена</button>
   </div>
 </div>
 
