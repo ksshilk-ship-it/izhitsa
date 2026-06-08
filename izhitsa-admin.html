@@ -1456,33 +1456,177 @@ function renderShops() {
   const txs = getFilteredTransactionsShops();
   const sources = getSalesSources();
   
+  let income = 0, totalOps = 0;
   const bySource = {};
+  const bySeller = {};
+  const byDay = {};
+  
   sources.forEach(s => {
-    bySource[s.name] = {amount: 0, type: s.type};
+    bySource[s.name] = {amount: 0, count: 0, type: s.type};
   });
   
   txs.forEach(tx => {
-    if(tx.source && bySource[tx.source]) {
-      bySource[tx.source].amount += tx.amount;
+    if(tx.type === 'income') {
+      income += tx.amount;
+      totalOps++;
+      
+      // By source
+      if(tx.source && bySource[tx.source]) {
+        bySource[tx.source].amount += tx.amount;
+        bySource[tx.source].count += 1;
+      }
+      
+      // By seller (from createdBy)
+      const seller = tx.createdBy || 'Неизвестно';
+      if(!bySeller[seller]) bySeller[seller] = {amount: 0, count: 0};
+      bySeller[seller].amount += tx.amount;
+      bySeller[seller].count += 1;
+      
+      // By day
+      const day = tx.date.split('T')[0];
+      if(!byDay[day]) byDay[day] = 0;
+      byDay[day] += tx.amount;
     }
   });
   
+  // Calculate KPI
+  const days = Object.keys(byDay);
+  const avgPerDay = days.length > 0 ? income / days.length : 0;
+  const avgPerWeek = avgPerDay * 7;
+  const avgPerMonth = avgPerDay * 30;
+  const maxDay = days.length > 0 ? Math.max(...Object.values(byDay)) : 0;
+  const minDay = days.length > 0 ? Math.min(...Object.values(byDay)) : 0;
+  
+  // Best/Worst
+  const bestSource = Object.entries(bySource).reduce((a,b) => a[1].amount > b[1].amount ? a : b, ['', {amount:0}]);
+  const worstSource = Object.entries(bySource).filter(([,v]) => v.amount > 0).reduce((a,b) => a[1].amount < b[1].amount ? a : b, ['', {amount:0}]);
+  const bestSeller = Object.entries(bySeller).reduce((a,b) => a[1].amount > b[1].amount ? a : b, ['', {amount:0}]);
+  
+  // Avg check
+  const avgCheck = totalOps > 0 ? income / totalOps : 0;
+  
   const sourceIcons = {shop: '🏪', online: '📱', offline: '📦', workshop: '🏭'};
-  let html = '';
   
-  Object.entries(bySource)
-    .filter(([name, data]) => data.amount > 0)
-    .sort((a,b) => b[1].amount - a[1].amount)
-    .forEach(([name, data]) => {
-      html += '<div class="pl-row"><div>' + sourceIcons[data.type] + ' ' + name + '</div><div class="pl-val" style="color:var(--inc)">' + data.amount.toLocaleString('ru-RU') + ' ₽</div></div>';
-    });
+  let html = `
+    <!-- СТАТИСТИКА / KPI -->
+    <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
+      <div class="ctitle">📊 Статистика</div>
+      
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div style="background:var(--s2);border-radius:8px;padding:10px">
+          <div style="font-size:11px;color:var(--t2)">Ср. выручка/день</div>
+          <div style="font-size:14px;font-weight:700;color:var(--inc)">${avgPerDay.toLocaleString('ru-RU')} ₽</div>
+        </div>
+        <div style="background:var(--s2);border-radius:8px;padding:10px">
+          <div style="font-size:11px;color:var(--t2)">Ср. выручка/неделю</div>
+          <div style="font-size:14px;font-weight:700;color:var(--inc)">${avgPerWeek.toLocaleString('ru-RU')} ₽</div>
+        </div>
+        <div style="background:var(--s2);border-radius:8px;padding:10px">
+          <div style="font-size:11px;color:var(--t2)">Ср. выручка/месяц</div>
+          <div style="font-size:14px;font-weight:700;color:var(--inc)">${avgPerMonth.toLocaleString('ru-RU')} ₽</div>
+        </div>
+        <div style="background:var(--s2);border-radius:8px;padding:10px">
+          <div style="font-size:11px;color:var(--t2)">Средний чек</div>
+          <div style="font-size:14px;font-weight:700;color:var(--a2)">${avgCheck.toLocaleString('ru-RU')} ₽</div>
+        </div>
+        <div style="background:var(--s2);border-radius:8px;padding:10px">
+          <div style="font-size:11px;color:var(--t2)">Макс. за день</div>
+          <div style="font-size:14px;font-weight:700;color:var(--inc)">${maxDay.toLocaleString('ru-RU')} ₽</div>
+        </div>
+        <div style="background:var(--s2);border-radius:8px;padding:10px">
+          <div style="font-size:11px;color:var(--t2)">Мин. за день</div>
+          <div style="font-size:14px;font-weight:700;color:var(--exp)">${minDay.toLocaleString('ru-RU')} ₽</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- TOP МЕТРИКИ -->
+    <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
+      <div class="ctitle">🏆 Top метрики</div>
+      
+      <div class="pl-row" style="margin-bottom:12px;padding:10px;background:var(--s2);border-radius:8px">
+        <div>
+          <div style="font-size:11px;color:var(--t2)">Лучший источник</div>
+          <div style="font-weight:600;font-size:12px">${bestSource[0] || 'Нет'}</div>
+        </div>
+        <div class="pl-val" style="color:var(--inc);font-weight:700">${bestSource[1].amount.toLocaleString('ru-RU')} ₽</div>
+      </div>
+      
+      <div class="pl-row" style="margin-bottom:12px;padding:10px;background:var(--s2);border-radius:8px">
+        <div>
+          <div style="font-size:11px;color:var(--t2)">Лучший продавец</div>
+          <div style="font-weight:600;font-size:12px">${bestSeller[0] || 'Нет'}</div>
+        </div>
+        <div class="pl-val" style="color:var(--inc);font-weight:700">${bestSeller[1].amount.toLocaleString('ru-RU')} ₽</div>
+      </div>
+      
+      ${worstSource[0] ? `<div class="pl-row" style="padding:10px;background:var(--s2);border-radius:8px">
+        <div>
+          <div style="font-size:11px;color:var(--t2)">Худший источник</div>
+          <div style="font-weight:600;font-size:12px">${worstSource[0]}</div>
+        </div>
+        <div class="pl-val" style="color:var(--exp);font-weight:700">${worstSource[1].amount.toLocaleString('ru-RU')} ₽</div>
+      </div>` : ''}
+    </div>
+    
+    <!-- ПРОДАЖИ ПО ИСТОЧНИКАМ -->
+    <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
+      <div class="ctitle">📍 Продажи по источникам</div>
+      ${
+        Object.entries(bySource)
+          .filter(([name, data]) => data.amount > 0)
+          .sort((a,b) => b[1].amount - a[1].amount)
+          .map(([name, data]) => {
+            const pct = income > 0 ? ((data.amount / income) * 100).toFixed(0) : 0;
+            const avgCheckSource = data.count > 0 ? (data.amount / data.count).toFixed(0) : 0;
+            return `<div class="pl-row" style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px">
+              <div>
+                <div style="font-weight:600;font-size:12px">${sourceIcons[data.type] || '📌'} ${name}</div>
+                <div style="font-size:11px;color:var(--t2)">${data.count} опер. | ср.чек ${avgCheckSource}₽</div>
+              </div>
+              <div class="pl-val">
+                <div style="color:var(--inc);font-weight:700">${data.amount.toLocaleString('ru-RU')} ₽</div>
+                <div style="font-size:11px;color:var(--a2)">${pct}%</div>
+              </div>
+            </div>`;
+          }).join('')
+      }
+    </div>
+    
+    <!-- АНАЛИЗ ПО ПРОДАВЦАМ -->
+    <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
+      <div class="ctitle">👥 Анализ по продавцам</div>
+      ${
+        Object.entries(bySeller)
+          .sort((a,b) => b[1].amount - a[1].amount)
+          .map(([seller, data]) => {
+            const pct = income > 0 ? ((data.amount / income) * 100).toFixed(0) : 0;
+            const avgCheckSeller = data.count > 0 ? (data.amount / data.count).toFixed(0) : 0;
+            return `<div class="pl-row" style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px">
+              <div>
+                <div style="font-weight:600;font-size:12px">👤 ${seller}</div>
+                <div style="font-size:11px;color:var(--t2)">${data.count} опер. | ср.чек ${avgCheckSeller}₽</div>
+              </div>
+              <div class="pl-val">
+                <div style="color:var(--inc);font-weight:700">${data.amount.toLocaleString('ru-RU')} ₽</div>
+                <div style="font-size:11px;color:var(--a2)">${pct}%</div>
+              </div>
+            </div>`;
+          }).join('')
+      }
+    </div>
+    
+    <!-- АНАЛИЗ ПО ВИДАМ ТОВАРОВ (структура) -->
+    <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
+      <div class="ctitle">📦 Анализ по видам товаров</div>
+      <div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">
+        <div style="margin-bottom:8px">Данные о видах товаров будут доступны когда вы</div>
+        <div style="margin-bottom:8px">загрузите товары в каталог</div>
+        <div style="font-size:11px;color:var(--t3)">(интеграция с izhitsa-shop.html)</div>
+      </div>
+    </div>`;
   
-  if(!html) {
-    html = '<div style="color:var(--t2);font-size:12px;padding:8px 0">Нет данных</div>';
-  }
-  
-  const el = document.getElementById('shopsAnalysis');
-  if(el) el.innerHTML = html;
+  document.getElementById('shopsAnalysis').innerHTML = html;
 }
 
 selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
