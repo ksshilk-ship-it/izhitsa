@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ижица — Админ">
 <meta name="theme-color" content="#0f0f13">
-<title>Ижица — Администратор</title>
+<title>Ижица — Администратор</title><!-- v3 -->
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700;900&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -24,7 +24,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 .app-sub{font-size:12px;color:var(--t2);margin-bottom:28px}
 .role-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:18px}
 .role-card{background:var(--s1);border:2px solid var(--border);border-radius:14px;padding:16px;text-align:center;cursor:pointer;transition:all .2s}
-.role-card.selected{border-color:var(--accent);background:#1e2a14}
+.role-card.selected{border-color:var(--accent);background:#1e2a14;box-shadow:0 0 0 2px var(--accent)}
 .role-card .ri{font-size:26px;margin-bottom:6px}
 .role-card .rn{font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700}
 .role-card .rs{font-size:10px;color:var(--t2);margin-top:3px}
@@ -176,6 +176,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 <div id="loginScreen">
   <div class="app-logo">Ижица</div>
   <div class="app-sub">Администрирование и аналитика</div>
+  <div style="font-size:10px;color:#555;text-align:center;margin-top:4px">v4</div>
   <div class="role-grid">
     <div class="role-card" onclick="selectAdminRole('admin',this)">
       <div class="ri">🔐</div>
@@ -654,19 +655,22 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 
 <div class="toast" id="toast"></div>
 
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" crossorigin="anonymous"></script>
 <script>
-firebase.initializeApp({
-  apiKey:"AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
-  authDomain:"izhitsa-6327c.firebaseapp.com",
-  projectId:"izhitsa-6327c",
-  storageBucket:"izhitsa-6327c.firebasestorage.app",
-  messagingSenderId:"1025102190040",
-  appId:"1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
-});
-const db = firebase.firestore();
-db.enablePersistence().catch(e=>console.log('Persist:',e.code));
+let db = null;
+try {
+  firebase.initializeApp({
+    apiKey:"AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
+    authDomain:"izhitsa-6327c.firebaseapp.com",
+    projectId:"izhitsa-6327c",
+    storageBucket:"izhitsa-6327c.firebasestorage.app",
+    messagingSenderId:"1025102190040",
+    appId:"1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
+  });
+  db = firebase.firestore();
+  db.enablePersistence({synchronizeTabs:false}).catch(e=>console.log('Persist:',e.code));
+} catch(e) { console.log('Firebase unavailable, localStorage only:', e.message); }
 window.addEventListener('online',()=>setSync('online'));
 window.addEventListener('offline',()=>setSync('offline'));
 function setSync(s){
@@ -1001,7 +1005,7 @@ function setTxT(t){
   document.getElementById('txb-inc')?.classList.toggle('i',t==='income');
   document.getElementById('txb-exp')?.classList.toggle('e',t==='expense');
   document.getElementById('txb-tr')?.classList.toggle('t',t==='transfer');
-  document.getElementById('opCatFg').style.display=t==='transfer'?'none':'block';
+  const ocf=document.getElementById('opCatFg');if(ocf)ocf.style.display=t==='transfer'?'none':'block';
   populateOpSelects();
 }
 function populateOpSelects(){
@@ -1414,7 +1418,7 @@ function renderZpSettings(){
       '</div>'+
       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+
         '<input type="checkbox" id="zpa_has_high_'+sid+'" '+(s.highThreshold?'checked':'')+
-        ' onchange="document.getElementById('zpa_high_block_'+sid+'').style.display=this.checked?'grid':'none'"'+
+        ' onchange="toggleHighBlock(\''+sid+'\')"'+
         ' style="width:16px;height:16px;cursor:pointer">'+
         '<label for="zpa_has_high_'+sid+'" style="font-size:12px;color:#8888aa;cursor:pointer">Повышенный % при высокой выручке</label>'+
       '</div>'+
@@ -1426,6 +1430,12 @@ function renderZpSettings(){
       '</div>'+
     '</div>';
   }).join('');
+}
+
+function toggleHighBlock(sid){
+  const el=document.getElementById('zpa_high_block_'+sid);
+  const chk=document.getElementById('zpa_has_high_'+sid);
+  if(el&&chk)el.style.display=chk.checked?'grid':'none';
 }
 
 function saveZpSettings(){
@@ -2367,10 +2377,6 @@ function renderAdminAlerts(){
 // ════════ BOOT ════════
 function init(){
   renderUsersList();
-  document.getElementById('opDate').value=new Date().toISOString().split('T')[0];
-  document.getElementById('dDate').value=new Date().toISOString().split('T')[0];
-  document.getElementById('payDate').value=new Date().toISOString().split('T')[0];
-  setTxT('income');
   const saved=JSON.parse(sessionStorage.getItem('iz_admin_session')||'null');
   if(saved){session=saved;startApp();}
   setSync(navigator.onLine?'online':'offline');
