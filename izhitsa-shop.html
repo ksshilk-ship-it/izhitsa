@@ -385,386 +385,257 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
     <div id="histShopFilter" style="display:flex;gap:8px;margin-bottom:12px;overflow-x:auto"></div>
     <div id="shiftHistoryList"></div>
   </div>
-  <div class="page" id="pg-pastshift">
-    <div class="stitle">Внести задним числом</div>
+  <!-- ════ ВОССТАНОВЛЕНИЕ ДАННЫХ ════ -->
+  <div class="page" id="pg-restore">
+    <div class="stitle">🗄 Восстановление данных</div>
 
-    <!-- TABS: Журнал / Отчёт -->
-    <div style="display:flex;gap:6px;margin-bottom:14px">
-      <button type="button" id="psTab_journal" onclick="switchPsTab('journal')"
-        style="flex:1;padding:10px;border-radius:12px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:13px;font-weight:700;cursor:pointer">
-        📒 Журнал
+    <!-- 4 sub-tabs -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;margin-bottom:14px">
+      <button type="button" id="rst_tab_invoices" onclick="switchRst('invoices')"
+        style="padding:8px 4px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer;text-align:center">
+        📋<br>Накладные
       </button>
-      <button type="button" id="psTab_report" onclick="switchPsTab('report')"
-        style="flex:1;padding:10px;border-radius:12px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:13px;font-weight:600;cursor:pointer">
-        📊 Отчёт
+      <button type="button" id="rst_tab_journal" onclick="switchRst('journal')"
+        style="padding:8px 4px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;text-align:center">
+        📒<br>Журнал
+      </button>
+      <button type="button" id="rst_tab_activate" onclick="switchRst('activate')"
+        style="padding:8px 4px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;text-align:center">
+        ✅<br>Активация
+      </button>
+      <button type="button" id="rst_tab_shifts" onclick="switchRst('shifts')"
+        style="padding:8px 4px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;text-align:center">
+        📊<br>Смены
       </button>
     </div>
 
-    <!-- ══ ЖУРНАЛ ЗАДНИМ ЧИСЛОМ ══ -->
-    <div id="psJournalTab">
-      <!-- Выбор магазина / продавца / даты -->
+    <!-- ══ 1. НАКЛАДНЫЕ ══ -->
+    <div id="rst_invoices">
+      <div class="al-info" style="margin-bottom:10px">Принимайте накладные из мастерской задним числом. Товар встанет на баланс магазина с нужной датой.</div>
+
       <div class="card" style="margin-bottom:10px">
-        <div class="fg"><label class="fl">Магазин</label><select class="fs" id="psjShop" onchange="psjLoadJournal()"></select></div>
-        <div class="fg"><label class="fl">Продавец</label><select class="fs" id="psjSeller"></select></div>
-        <div class="fg" style="margin-bottom:0"><label class="fl">Дата</label>
-          <input class="fi" type="date" id="psjDate" onchange="psjLoadJournal()" style="-webkit-appearance:none;color-scheme:dark">
+        <div class="ctitle">Входящие накладные из мастерской</div>
+        <div id="rstPendingInvoices">
+          <div class="empty"><div class="ei">📋</div>Нет входящих накладных<br><span style="font-size:11px;color:#8888aa">Они появятся когда мастерская отправит</span></div>
         </div>
+        <button class="btn sec" style="margin-top:10px;font-size:12px" onclick="loadPendingInvoices()">🔄 Обновить</button>
       </div>
 
-      <!-- Кнопки действий — как у продавца -->
-      <div style="display:flex;gap:7px;margin-bottom:8px">
-        <button class="btn" style="margin:0;flex:1.2;font-size:13px" onclick="openPsjMo('sale')">＋ Продажа</button>
-        <button class="btn red" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openPsjMo('writeoff')">🗑 Списание</button>
-        <button class="btn blue" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openPsjMo('receive')">📥 Приход</button>
-      </div>
-      <div style="display:flex;gap:7px;margin-bottom:12px">
-        <button class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#2a1e14;border:1px solid #f0a060;color:#f0a060" onclick="openPsjMo('expense')">💸 Расходы</button>
-        <button class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#1a1e2e;border:1px solid #60c8f0;color:#60c8f0" onclick="openPsjMo('staff')">🛒 Покупка сотр.</button>
+      <div class="card" style="margin-bottom:10px">
+        <div class="ctitle">Ввести накладную вручную</div>
+        <div class="fg"><label class="fl">Магазин-получатель</label><select class="fs" id="rstInvShop"></select></div>
+        <div class="fg"><label class="fl">Дата накладной</label><input class="fi" type="date" id="rstInvDate" style="-webkit-appearance:none;color-scheme:dark"></div>
+        <div class="fg"><label class="fl">Откуда (мастерская / поставщик)</label><input class="fi" id="rstInvFrom" placeholder="Мастерская Ижица"></div>
+        <div class="fg"><label class="fl">Номер накладной</label><input class="fi" id="rstInvNum" placeholder="№"></div>
+        <div class="ctitle" style="margin-top:4px">Позиции</div>
+        <div id="rstInvItems" style="margin-bottom:8px"></div>
+        <button class="btn sec" style="font-size:12px;margin-bottom:8px" onclick="addRstInvItem()">＋ Добавить позицию</button>
+        <div id="rstInvTotal" style="font-size:13px;color:#8888aa;margin-bottom:8px"></div>
+        <button class="btn" onclick="saveRstInvoice()">💾 Принять на баланс</button>
       </div>
 
-      <!-- Итоги дня -->
-      <div id="psjDaySummary" style="display:none;margin-bottom:10px"></div>
-
-      <!-- Журнал записей -->
       <div class="card">
-        <div class="ctitle">Записи журнала</div>
-        <div id="psjList"><div class="empty"><div class="ei">📒</div>Нет записей за этот день</div></div>
+        <div class="ctitle">Принятые накладные</div>
+        <div id="rstAcceptedInvoices"><div class="empty"><div class="ei">📦</div>Нет принятых</div></div>
       </div>
     </div>
 
-    <!-- ══ ОТЧЁТ ЗАДНИМ ЧИСЛОМ ══ -->
-    <div id="psReportTab" style="display:none">
-      <div class="card">
-      <div class="fg"><label class="fl">Магазин</label><select class="fs" id="psShop" onchange="populatePastShiftSellers();psLoadPrev()"></select></div>
-      <div class="fg"><label class="fl">Продавец</label><select class="fs" id="psSeller"></select></div>
-      <div class="fg"><label class="fl">Дата (ГГГГ-ММ-ДД)</label>
-        <input class="fi" type="date" id="psDate" onchange="psLoadPrev()"
-          style="-webkit-appearance:none;color-scheme:dark">
+    <!-- ══ 2. ЖУРНАЛ ══ -->
+    <div id="rst_journal" style="display:none">
+      <!-- Sub-sub tabs: фото / файл / вручную -->
+      <div style="display:flex;gap:5px;margin-bottom:12px">
+        <button type="button" id="rstj_photo" onclick="switchRstJ('photo',this)"
+          style="flex:1;padding:7px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">📷 Фото</button>
+        <button type="button" id="rstj_file" onclick="switchRstJ('file',this)"
+          style="flex:1;padding:7px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">📄 Файл</button>
+        <button type="button" id="rstj_manual" onclick="switchRstJ('manual',this)"
+          style="flex:1;padding:7px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">✏️ Вручную</button>
       </div>
 
-      <!-- ══ ДЕРЕВО ══ -->
-      <div class="sep"></div>
-
-      <!-- ACCORDION: ДЕРЕВО -->
-      <div id="acc_wood" style="margin-bottom:4px">
-        <!-- Header always visible: title + касса + товар -->
-        <div onclick="toggleAcc('wood')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 0">
-          <div style="font-size:15px;font-weight:700;color:#c8f060">🌳 ДЕРЕВО</div>
-          <div style="font-size:18px;color:#c8f060" id="acc_wood_arrow">▼</div>
+      <!-- ФОТО -->
+      <div id="rstj_photo_tab">
+        <div class="card" style="margin-bottom:10px">
+          <div class="ctitle">Настройки</div>
+          <div class="fg"><label class="fl">Магазин</label><select class="fs" id="rstjPhotoShop"></select></div>
+          <div class="fg" style="margin-bottom:0"><label class="fl">Продавец (если не указан)</label><input class="fi" id="rstjPhotoSeller" placeholder="Имя продавца"></div>
         </div>
-
-        <!-- КАССА — always visible -->
-        <div style="background:#1e2a14;border-radius:10px;padding:10px;margin-bottom:8px">
-          <div style="font-size:11px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 КАССА</div>
-          <div id="psPrevCashInfo" style="font-size:11px;color:#8888aa;margin-bottom:8px;display:none"></div>
-          <div class="row2">
-            <div class="fg"><label class="fl">Нал утро</label><input class="fi" type="number" id="psCashMorn" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalc()"></div>
-            <div class="fg"><label class="fl">Нал вечер (факт)</label><input class="fi" type="number" id="psCashEve" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalc()"></div>
+        <div class="card" style="margin-bottom:10px">
+          <div id="rstjPhotoZone" onclick="document.getElementById('rstjPhotoInput').click()"
+            ondragover="event.preventDefault();this.style.borderColor='#c8f060'"
+            ondragleave="this.style.borderColor='#2e2e3e'"
+            ondrop="handleRstjPhotoDrop(event)"
+            style="border:2px dashed #2e2e3e;border-radius:12px;padding:24px;text-align:center;cursor:pointer;margin-bottom:12px">
+            <div style="font-size:32px;margin-bottom:8px">📷</div>
+            <div style="font-size:13px;font-weight:700;margin-bottom:4px">Нажмите или перетащите фото журнала</div>
+            <div style="font-size:11px;color:#8888aa">JPG, PNG — страница журнала продаж</div>
+            <input type="file" id="rstjPhotoInput" accept="image/*" multiple style="display:none" onchange="handleRstjPhotoSelect(this)">
           </div>
-          <div id="psMornCheck" style="margin-bottom:4px"></div>
-          <div id="psCashCheck"></div>
+          <div id="rstjPhotoPreview" style="display:none;margin-bottom:12px"></div>
+          <button class="btn" id="rstjRecognizeBtn" style="display:none" onclick="rstjRecognize()">🤖 Распознать AI</button>
         </div>
+        <div id="rstjRecognizeResult" style="display:none"></div>
+      </div>
 
-        <!-- ТОВАРНЫЙ ОСТАТОК — always visible -->
-        <div style="background:#1e2a14;border-radius:10px;padding:10px;margin-bottom:8px">
-          <div style="font-size:11px;color:#c8f060;font-weight:700;margin-bottom:8px">📦 ТОВАРНЫЙ ОСТАТОК</div>
-          <div id="psPrevGoodsInfo" style="font-size:11px;color:#8888aa;margin-bottom:6px;display:none"></div>
-          <div class="row2">
-            <div class="fg"><label class="fl">Утро</label><input class="fi" type="number" id="psWoodMorn" placeholder="0" inputmode="numeric" oninput="psCalcGoods()"></div>
-            <div class="fg"><label class="fl">Вечер (авто)</label>
-              <div style="background:#0f0f13;border:1px solid #c8f060;border-radius:10px;padding:11px 13px;font-family:Unbounded,sans-serif;font-size:14px;font-weight:700;color:#c8f060" id="psWoodEveVal">—</div>
-            </div>
+      <!-- ФАЙЛ -->
+      <div id="rstj_file_tab" style="display:none">
+        <div class="card" style="margin-bottom:10px">
+          <div class="ctitle">Загрузить файл</div>
+          <div id="rstjDropZone" onclick="document.getElementById('rstjFileInput').click()"
+            style="border:2px dashed #2e2e3e;border-radius:12px;padding:24px;text-align:center;cursor:pointer;margin-bottom:12px"
+            ondragover="event.preventDefault();this.style.borderColor='#c8f060'"
+            ondragleave="this.style.borderColor='#2e2e3e'"
+            ondrop="handleRstjFileDrop(event)">
+            <div style="font-size:28px;margin-bottom:6px">📄</div>
+            <div style="font-size:13px;font-weight:700;margin-bottom:4px">JSON или CSV</div>
+            <div style="font-size:11px;color:#8888aa">Данные смен для импорта</div>
+            <input type="file" id="rstjFileInput" accept=".json,.csv" style="display:none" onchange="handleRstjFileSelect(this)">
           </div>
-        </div>
-
-        <!-- COLLAPSIBLE CONTENT -->
-        <div id="acc_wood_body">
-
-          <!-- ИТОГО ВЫРУЧКА -->
-          <div style="background:#1e2a14;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:8px">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <div style="color:#8888aa;font-size:12px">Итого выручка</div>
-              <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#60c8f0" id="psTotalRevVal">0₽</div>
-            </div>
-          </div>
-
-          <!-- ПРОДАЖИ -->
-          <div style="background:#1a1e2e;border-radius:10px;padding:10px;margin-bottom:8px">
-            <div onclick="toggleSub('woodSales')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
-              <div style="font-size:13px;font-weight:700;color:#60c8f0">💰 Продажи</div>
-              <div id="woodSales_arrow" style="color:#60c8f0">▼</div>
-            </div>
-            <div id="woodSales_body">
-              <div class="row2">
-                <div class="fg"><label class="fl">Нал</label><input class="fi" type="number" id="psCashRev" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
-                <div class="fg"><label class="fl">Скидка</label><input class="fi" type="number" id="psDiscount" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
-              </div>
-              <div class="row2">
-                <div class="fg"><label class="fl">Терминал</label><input class="fi" type="number" id="psTerminal" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
-                <div class="fg"><label class="fl">Перевод</label><input class="fi" type="number" id="psTransfer" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
-              </div>
-              <div class="fg"><label class="fl">QR</label><input class="fi" type="number" id="psQR" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
-            </div>
-          </div>
-
-          <!-- РАСХОДЫ -->
-          <div style="background:#2a1e14;border-radius:10px;padding:10px;margin-bottom:8px">
-            <div onclick="toggleSub('woodExp')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
-              <div style="font-size:13px;font-weight:700;color:#f0a060">💸 Расходы</div>
-              <div id="woodExp_arrow" style="color:#f0a060">▼</div>
-            </div>
-            <div id="woodExp_body">
-              <div class="row2">
-                <div class="fg"><label class="fl">ЗП</label><input class="fi" type="number" id="psZP" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
-                <div class="fg"><label class="fl">Инкассация</label><input class="fi" type="number" id="psInkass" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
-              </div>
-              <div class="fg">
-                <label class="fl">Прочие расходы</label>
-                <div style="display:flex;gap:8px">
-                  <input class="fi" type="number" id="psOtherExp" placeholder="₽" inputmode="numeric" oninput="psCalc()" style="width:100px;flex-shrink:0">
-                  <input class="fi" id="psOtherExpComment" placeholder="На что потрачено...">
-                </div>
-              </div>
-              <div class="fg">
-                <label class="fl">Проезд</label>
-                <div style="display:flex;gap:8px">
-                  <input class="fi" type="number" id="psTravel" placeholder="₽" inputmode="numeric" oninput="psCalc()" style="width:100px;flex-shrink:0">
-                  <input class="fi" id="psTravelComment" placeholder="Маршрут, цель...">
-                </div>
-              </div>
-              <!-- Расчётный нал вечер -->
-              <div id="psCashCalc" style="background:#0f0f13;border:1px solid #c8f060;border-radius:10px;padding:10px;margin-top:4px;display:none">
-                <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Расчётный нал вечер = утро + нал − ЗП − инкассация − расходы − проезд</div>
-                <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#c8f060" id="psCashCalcVal">0₽</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- СПИСАНИЕ -->
-          <div style="background:#2e1a1a;border-radius:10px;padding:10px;margin-bottom:8px">
-            <div onclick="toggleSub('woodWo')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
-              <div style="font-size:13px;font-weight:700;color:#f06060">🗑 Списание товара</div>
-              <div id="woodWo_arrow" style="color:#f06060">▼</div>
-            </div>
-            <div id="woodWo_body">
-              <div id="psWriteoffList" style="margin-bottom:8px"></div>
-              <div style="background:#0f0f13;border-radius:10px;padding:10px">
-                <div class="row2" style="margin-bottom:6px">
-                  <input class="fi" id="psWoNum" placeholder="Артикул" oninput="psLookupWriteoff(this.value)">
-                  <input class="fi" id="psWoName" placeholder="Название (авто)">
-                </div>
-                <div id="psWoLookupHint" style="font-size:11px;margin-bottom:6px;display:none"></div>
-                <div class="row2" style="margin-bottom:6px">
-                  <input class="fi" id="psWoQty" placeholder="Кол-во">
-                  <input class="fi" type="number" id="psWoAmt" placeholder="Сумма ₽" inputmode="numeric">
-                </div>
-                <input class="fi" id="psWoReason" placeholder="Причина" style="margin-bottom:8px">
-                <button type="button" onclick="psAddWriteoff()" style="background:#f06060;border:none;border-radius:8px;padding:8px 14px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;width:100%">＋ Добавить списание</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- ПРИХОД ТОВАРА -->
-          <div style="background:#1a2e1e;border-radius:10px;padding:10px;margin-bottom:8px">
-            <div onclick="toggleSub('woodRcv')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
-              <div style="font-size:13px;font-weight:700;color:#60f090">📥 Приход товара</div>
-              <div id="woodRcv_arrow" style="color:#60f090">▼</div>
-            </div>
-            <div id="woodRcv_body">
-              <div id="psReceiveList" style="margin-bottom:8px"></div>
-              <div style="display:flex;gap:8px;margin-bottom:10px">
-                <button type="button" id="psRcvByInv" onclick="psToggleRcvMode('invoice')" style="flex:1;padding:9px;border-radius:10px;border:2px solid #60f090;background:#1a2e1e;color:#60f090;font-size:12px;font-weight:700;cursor:pointer">📋 По накладной</button>
-                <button type="button" id="psRcvByManual" onclick="psToggleRcvMode('manual')" style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer">✏️ Вручную</button>
-              </div>
-              <div id="psRcvInvoiceBlock" style="background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
-                <div class="fg" style="margin-bottom:8px"><label class="fl">Выберите накладную</label><select class="fs" id="psInvoiceSelect" onchange="psLoadInvoice()"><option value="">— загрузка —</option></select></div>
-                <div id="psInvoiceItems" style="margin-bottom:8px"></div>
-                <button type="button" onclick="psAcceptInvoice()" id="psAcceptInvBtn" style="background:#60f090;border:none;border-radius:8px;padding:8px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;width:100%;display:none">✅ Принять</button>
-              </div>
-              <div id="psRcvManualBlock" style="display:none;background:#0f0f13;border-radius:10px;padding:10px">
-                <div class="row2" style="margin-bottom:6px"><input class="fi" id="psRcvNum" placeholder="Артикул" oninput="psLookupReceive(this.value)"><input class="fi" id="psRcvName" placeholder="Название"></div>
-                <div id="psRcvLookupHint" style="font-size:11px;color:#60f090;margin-bottom:6px;display:none"></div>
-                <div class="row2" style="margin-bottom:6px"><input class="fi" id="psRcvQty" placeholder="Количество"><input class="fi" type="number" id="psRcvPrice" placeholder="Цена за ед. ₽" inputmode="numeric"></div>
-                <div class="row2" style="margin-bottom:6px"><input class="fi" id="psRcvFrom" placeholder="Откуда"><input class="fi" type="number" id="psRcvAmt" placeholder="Сумма итого ₽" inputmode="numeric"></div>
-                <button type="button" onclick="psAddReceive()" style="background:#60f090;border:none;border-radius:8px;padding:8px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;width:100%">＋ Добавить</button>
-              </div>
-            </div>
-          </div>
-
-        </div><!-- end acc_wood_body -->
-      </div><!-- end acc_wood -->
-
-      <!-- ══ ДР ТОВАР ══ -->
-      <div class="sep"></div>
-      <div id="acc_dr" style="margin-bottom:4px">
-        <div onclick="toggleAcc('dr')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 0">
-          <div style="font-size:15px;font-weight:700;color:#a060f0">🛍 ДР ТОВАР</div>
-          <div style="font-size:18px;color:#a060f0" id="acc_dr_arrow">▼</div>
-        </div>
-
-        <!-- КАССА ДР — always visible -->
-        <div style="background:#1e1a2e;border-radius:10px;padding:10px;margin-bottom:8px">
-          <div style="font-size:11px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 КАССА</div>
-          <div class="row2">
-            <div class="fg"><label class="fl">Нал утро</label><input class="fi" type="number" id="psDrCashMorn" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalcDr()"></div>
-            <div class="fg"><label class="fl">Нал вечер (факт)</label><input class="fi" type="number" id="psDrCashEve" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalcDr()"></div>
-          </div>
-          <div id="psDrMornCheck" style="margin-bottom:4px"></div>
-          <div id="psDrCashCheck"></div>
-        </div>
-
-        <!-- ТОВАРНЫЙ ОСТАТОК ДР — always visible -->
-        <div style="background:#1e1a2e;border-radius:10px;padding:10px;margin-bottom:8px">
-          <div style="font-size:11px;color:#a060f0;font-weight:700;margin-bottom:8px">📦 ТОВАРНЫЙ ОСТАТОК</div>
-          <div class="row2">
-            <div class="fg"><label class="fl">Утро</label><input class="fi" type="number" id="psDrMorn" placeholder="0" inputmode="numeric" oninput="psCalcDrGoods()"></div>
-            <div class="fg"><label class="fl">Вечер (авто)</label>
-              <div style="background:#0f0f13;border:1px solid #a060f0;border-radius:10px;padding:11px 13px;font-family:Unbounded,sans-serif;font-size:14px;font-weight:700;color:#a060f0" id="psDrEveVal">—</div>
-            </div>
+          <div id="rstjFileResult" style="display:none"></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn" id="rstjFileConfirmBtn" style="display:none" onclick="rstjConfirmFileImport()">✅ Импортировать</button>
+            <button class="btn sec" id="rstjFileCancelBtn" style="display:none" onclick="rstjCancelFile()">Отмена</button>
           </div>
         </div>
-
-        <!-- COLLAPSIBLE DR CONTENT -->
-        <div id="acc_dr_body">
-
-          <!-- ИТОГО ВЫРУЧКА ДР -->
-          <div style="background:#1e1a2e;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:8px">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <div style="color:#8888aa;font-size:12px">Итого выручка</div>
-              <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#60c8f0" id="psDrTotalRevVal">0₽</div>
-            </div>
-          </div>
-
-          <!-- ПРОДАЖИ ДР -->
-          <div style="background:#1a1e2e;border-radius:10px;padding:10px;margin-bottom:8px">
-            <div onclick="toggleSub('drSales')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
-              <div style="font-size:13px;font-weight:700;color:#60c8f0">💰 Продажи</div>
-              <div id="drSales_arrow" style="color:#60c8f0">▼</div>
-            </div>
-            <div id="drSales_body">
-              <div class="row2">
-                <div class="fg"><label class="fl">Нал</label><input class="fi" type="number" id="psDrCashRev" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
-                <div class="fg"><label class="fl">Скидка</label><input class="fi" type="number" id="psDrDiscount" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
-              </div>
-              <div class="row2">
-                <div class="fg"><label class="fl">Терминал</label><input class="fi" type="number" id="psDrTerminal" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
-                <div class="fg"><label class="fl">Перевод</label><input class="fi" type="number" id="psDrTransfer" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
-              </div>
-              <div class="fg"><label class="fl">QR</label><input class="fi" type="number" id="psDrQR" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
-            </div>
-          </div>
-
-          <!-- РАСХОДЫ ДР -->
-          <div style="background:#2a1e14;border-radius:10px;padding:10px;margin-bottom:8px">
-            <div onclick="toggleSub('drExp')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
-              <div style="font-size:13px;font-weight:700;color:#f0a060">💸 Расходы</div>
-              <div id="drExp_arrow" style="color:#f0a060">▼</div>
-            </div>
-            <div id="drExp_body">
-              <div class="fg"><label class="fl">Инкассация</label><input class="fi" type="number" id="psDrInkass" placeholder="0" inputmode="numeric" oninput="psCalcDr()"></div>
-              <div id="psDrCashCalc" style="background:#0f0f13;border:1px solid #a060f0;border-radius:10px;padding:10px;margin-bottom:8px;display:none">
-                <div style="color:#8888aa;font-size:11px;margin-bottom:4px">Расчётный нал вечер = утро + нал − инкассация</div>
-                <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#a060f0" id="psDrCashCalcVal">0₽</div>
-              </div>
-              <!-- ОПЛАТА ПОСТАВЩИКУ -->
-              <div style="font-size:12px;font-weight:700;color:#a060f0;margin-bottom:8px;margin-top:4px">💸 Оплата поставщику</div>
-              <div class="fg"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="psDrSupplierAmt" placeholder="0" inputmode="numeric"></div>
-              <div class="fg"><label class="fl">Поставщик</label>
-                <input class="fi" id="psDrSupplierName" placeholder="Введите или выберите..." list="suppliersList">
-                <datalist id="suppliersList"></datalist>
-              </div>
-            </div>
-          </div>
-
-          <!-- СПИСАНИЕ ДР -->
-          <div style="background:#2e1a1a;border-radius:10px;padding:10px;margin-bottom:8px">
-            <div onclick="toggleSub('drWo')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
-              <div style="font-size:13px;font-weight:700;color:#f06060">🗑 Списание товара</div>
-              <div id="drWo_arrow" style="color:#f06060">▼</div>
-            </div>
-            <div id="drWo_body">
-              <div id="psDrWriteoffList" style="margin-bottom:8px"></div>
-              <div style="background:#0f0f13;border-radius:10px;padding:10px">
-                <div class="row2" style="margin-bottom:6px"><input class="fi" id="psDrWoName" placeholder="Название"><input class="fi" id="psDrWoQty" placeholder="Кол-во"></div>
-                <div class="row2" style="margin-bottom:6px"><input class="fi" type="number" id="psDrWoAmt" placeholder="Сумма ₽" inputmode="numeric"><input class="fi" id="psDrWoReason" placeholder="Причина"></div>
-                <button type="button" onclick="psDrAddWriteoff()" style="background:#f06060;border:none;border-radius:8px;padding:8px 14px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;width:100%">＋ Добавить списание</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- ПРИХОД ДР -->
-          <div style="background:#1a2e1e;border-radius:10px;padding:10px;margin-bottom:8px">
-            <div onclick="toggleSub('drRcv')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:8px">
-              <div style="font-size:13px;font-weight:700;color:#60f090">📥 Приход товара</div>
-              <div id="drRcv_arrow" style="color:#60f090">▼</div>
-            </div>
-            <div id="drRcv_body">
-              <div id="psDrReceiveList" style="margin-bottom:8px"></div>
-              <div style="display:flex;gap:8px;margin-bottom:10px">
-                <button type="button" id="psDrRcvByInv" onclick="psDrToggleRcvMode('invoice')" style="flex:1;padding:9px;border-radius:10px;border:2px solid #60f090;background:#1a2e1e;color:#60f090;font-size:12px;font-weight:700;cursor:pointer">📋 По накладной</button>
-                <button type="button" id="psDrRcvByManual" onclick="psDrToggleRcvMode('manual')" style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer">✏️ Вручную</button>
-              </div>
-              <div id="psDrRcvInvoiceBlock" style="background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
-                <div class="fg" style="margin-bottom:8px"><label class="fl">Выберите накладную</label><select class="fs" id="psDrInvoiceSelect" onchange="psDrLoadInvoice()"><option value="">— загрузка —</option></select></div>
-                <div id="psDrInvoiceItems" style="margin-bottom:8px"></div>
-                <button type="button" onclick="psDrAcceptInvoice()" id="psDrAcceptInvBtn" style="background:#60f090;border:none;border-radius:8px;padding:8px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;width:100%;display:none">✅ Принять</button>
-              </div>
-              <div id="psDrRcvManualBlock" style="display:none;background:#0f0f13;border-radius:10px;padding:10px">
-                <div class="row2" style="margin-bottom:6px"><input class="fi" id="psDrRcvNum" placeholder="Артикул" oninput="psDrLookupReceive(this.value)"><input class="fi" id="psDrRcvName" placeholder="Название"></div>
-                <div id="psDrRcvLookupHint" style="font-size:11px;color:#60f090;margin-bottom:6px;display:none"></div>
-                <div class="row2" style="margin-bottom:6px"><input class="fi" id="psDrRcvQty" placeholder="Количество"><input class="fi" type="number" id="psDrRcvPrice" placeholder="Цена за ед. ₽" inputmode="numeric"></div>
-                <div class="row2" style="margin-bottom:6px"><input class="fi" id="psDrRcvFrom" placeholder="Откуда"><input class="fi" type="number" id="psDrRcvAmt" placeholder="Сумма итого ₽" inputmode="numeric"></div>
-                <button type="button" onclick="psDrAddReceive()" style="background:#60f090;border:none;border-radius:8px;padding:8px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;width:100%">＋ Добавить</button>
-              </div>
-            </div>
-          </div>
-
-        </div><!-- end acc_dr_body -->
-      </div><!-- end acc_dr -->
-
-      <!-- ПОКУПКИ СОТРУДНИКОВ -->
-      <div class="sep"></div>
-      <div id="acc_staff_ps" style="margin-bottom:4px">
-        <div onclick="toggleAcc('staff_ps')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 0">
-          <div style="font-size:15px;font-weight:700;color:#a060f0">🛒 ПОКУПКИ СОТРУДНИКОВ</div>
-          <div style="font-size:18px;color:#a060f0" id="acc_staff_ps_arrow">▼</div>
-        </div>
-        <div id="acc_staff_ps_body">
-          <div id="psStaffList" style="margin-bottom:8px"></div>
-          <div id="psStaffWoOptions" style="margin-bottom:10px">
-            <div style="font-size:11px;color:#555568;font-style:italic">Добавьте списания — они появятся здесь</div>
-          </div>
-          <div style="font-size:11px;color:#8888aa;font-weight:600;margin-bottom:6px">Или ввести вручную:</div>
-          <div style="background:#0f0f13;border-radius:10px;padding:10px;margin-bottom:10px">
-            <div class="fg" style="margin-bottom:6px"><input class="fi" id="psStaffWho" placeholder="Кто покупает (ФИО)"></div>
-            <div class="row2" style="margin-bottom:6px">
-              <input class="fi" id="psStaffNum" placeholder="Артикул" oninput="psLookupStaff(this.value)">
-              <input class="fi" id="psStaffItem" placeholder="Название (авто)">
-            </div>
-            <div id="psStaffLookupHint" style="font-size:11px;margin-bottom:6px;display:none"></div>
-            <div class="row2" style="margin-bottom:6px">
-              <input class="fi" type="number" id="psStaffRetail" placeholder="Розница ₽" inputmode="numeric">
-              <input class="fi" type="number" id="psStaffOpt" placeholder="Опт ₽" inputmode="numeric">
-            </div>
-            <input class="fi" id="psStaffComment" placeholder="Комментарий" style="margin-bottom:8px">
-            <button type="button" onclick="psAddStaff()" style="background:#a060f0;border:none;border-radius:8px;padding:8px 14px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;width:100%">＋ Добавить</button>
-          </div>
-          <div id="psStaffTotal" style="background:#1e1a2e;border:1px solid #a060f0;border-radius:10px;padding:10px;display:none">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <div style="color:#8888aa;font-size:12px">Итого нал сотрудников (по опту)</div>
-              <div style="font-family:Unbounded,sans-serif;font-size:16px;font-weight:700;color:#a060f0" id="psStaffTotalVal">0₽</div>
-            </div>
+        <div class="card">
+          <div class="ctitle">Шаблон</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn sec" style="font-size:11px" onclick="downloadTemplate()">⬇️ JSON</button>
+            <button class="btn sec" style="font-size:11px" onclick="downloadCsvTemplate()">⬇️ CSV</button>
           </div>
         </div>
       </div>
 
-      <div class="sep"></div>
-      <div id="psSaveError" style="color:#f06060;font-size:13px;margin-bottom:8px;display:none"></div>
-      <div class="fg"><label class="fl">Комментарий к смене</label><input class="fi" id="psComment" placeholder="Причина внесения задним числом..."></div>
-      <button class="btn" onclick="savePastShift()">💾 Сохранить смену</button>
+      <!-- ВРУЧНУЮ -->
+      <div id="rstj_manual_tab" style="display:none">
+        <div class="card" style="margin-bottom:10px">
+          <div class="fg"><label class="fl">Магазин</label><select class="fs" id="psjShop" onchange="psjLoadJournal()"></select></div>
+          <div class="fg"><label class="fl">Продавец</label><select class="fs" id="psjSeller"></select></div>
+          <div class="fg" style="margin-bottom:0"><label class="fl">Дата</label>
+            <input class="fi" type="date" id="psjDate" onchange="psjLoadJournal()" style="-webkit-appearance:none;color-scheme:dark">
+          </div>
+        </div>
+        <div style="display:flex;gap:7px;margin-bottom:8px">
+          <button class="btn" style="margin:0;flex:1.2;font-size:13px" onclick="openPsjMo('sale')">＋ Продажа</button>
+          <button class="btn red" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openPsjMo('writeoff')">🗑 Списание</button>
+          <button class="btn blue" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openPsjMo('receive')">📥 Приход</button>
+        </div>
+        <div style="display:flex;gap:7px;margin-bottom:12px">
+          <button class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#2a1e14;border:1px solid #f0a060;color:#f0a060" onclick="openPsjMo('expense')">💸 Расходы</button>
+          <button class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#1a1e2e;border:1px solid #60c8f0;color:#60c8f0" onclick="openPsjMo('staff')">🛒 Покупка сотр.</button>
+        </div>
+        <div id="psjDaySummary" style="display:none;margin-bottom:10px"></div>
+        <div class="card">
+          <div class="ctitle">Записи журнала</div>
+          <div id="psjList"><div class="empty"><div class="ei">📒</div>Нет записей за этот день</div></div>
+        </div>
+      </div>
+
+      <!-- История загрузок -->
+      <div class="card" style="margin-top:10px">
+        <div class="ctitle">История загрузок</div>
+        <div id="rstjHistory"><div class="empty"><div class="ei">📷</div>Загрузок не было</div></div>
+      </div>
     </div>
-    </div><!-- end psReportTab -->
+
+    <!-- ══ 3. АКТИВАЦИЯ ══ -->
+    <div id="rst_activate" style="display:none">
+      <div class="al-info" style="margin-bottom:12px">После активации данные переходят из черновика архива в реальные исторические данные и участвуют в общей статистике.</div>
+
+      <div class="card" style="margin-bottom:10px">
+        <div class="ctitle">Активировать период</div>
+        <div class="fg"><label class="fl">Магазин</label>
+          <select class="fs" id="rstActShop"><option value="">Все магазины</option></select>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+          <button type="button" onclick="setActPeriod('month',this)"
+            style="padding:6px 12px;border-radius:20px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">Месяц</button>
+          <button type="button" onclick="setActPeriod('quarter',this)"
+            style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">Квартал</button>
+          <button type="button" onclick="setActPeriod('year',this)"
+            style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">Год</button>
+          <button type="button" onclick="setActPeriod('custom',this)"
+            style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">Период</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <div class="fg" style="flex:1;margin:0"><label class="fl">С</label><input class="fi" type="date" id="rstActFrom" style="-webkit-appearance:none;color-scheme:dark" onchange="rstActPreview()"></div>
+          <div class="fg" style="flex:1;margin:0"><label class="fl">По</label><input class="fi" type="date" id="rstActTo" style="-webkit-appearance:none;color-scheme:dark" onchange="rstActPreview()"></div>
+        </div>
+        <div id="rstActPreviewBlock" style="display:none;margin-bottom:12px"></div>
+        <button class="btn" style="background:#60f090;color:#0f0f13;border:none" onclick="activateArchivePeriod()">✅ Активировать период</button>
+      </div>
+
+      <div class="card">
+        <div class="ctitle">Активированные периоды</div>
+        <div id="rstActivatedList"><div class="empty"><div class="ei">✅</div>Нет активированных периодов</div></div>
+      </div>
+    </div>
+
+    <!-- ══ 4. СМЕНЫ ══ -->
+    <div id="rst_shifts" style="display:none">
+      <div class="al-info" style="margin-bottom:10px">Внесите итоги закрытия смены вручную для сравнения с расчётными данными.</div>
+      <div class="card">
+        <div class="fg"><label class="fl">Магазин</label><select class="fs" id="psShop" onchange="populatePastShiftSellers();psLoadPrev()"></select></div>
+        <div class="fg"><label class="fl">Продавец</label><select class="fs" id="psSeller"></select></div>
+        <div class="fg"><label class="fl">Дата</label>
+          <input class="fi" type="date" id="psDate" onchange="psLoadPrev()" style="-webkit-appearance:none;color-scheme:dark">
+        </div>
+        <div class="sep"></div>
+        <div id="acc_wood" style="margin-bottom:4px">
+          <div onclick="toggleAcc('wood')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 0">
+            <div style="font-size:15px;font-weight:700;color:#c8f060">🌳 ДЕРЕВО</div>
+            <div style="font-size:18px;color:#c8f060" id="acc_wood_arrow">▼</div>
+          </div>
+          <div style="background:#1e2a14;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div style="font-size:11px;color:#f0a060;font-weight:700;margin-bottom:8px">💵 КАССА</div>
+            <div id="psPrevCashInfo" style="font-size:11px;color:#8888aa;margin-bottom:8px;display:none"></div>
+            <div class="row2">
+              <div class="fg"><label class="fl">Нал утро</label><input class="fi" type="number" id="psCashMorn" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalc()"></div>
+              <div class="fg"><label class="fl">Нал вечер (факт)</label><input class="fi" type="number" id="psCashEve" placeholder="0" inputmode="numeric" style="border-color:#f0a060" oninput="psCalc()"></div>
+            </div>
+            <div id="psMornCheck" style="margin-bottom:4px"></div>
+            <div id="psCashCheck"></div>
+          </div>
+          <div style="background:#1e2a14;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div style="font-size:11px;color:#c8f060;font-weight:700;margin-bottom:8px">📦 ТОВАРНЫЙ ОСТАТОК</div>
+            <div id="psPrevGoodsInfo" style="font-size:11px;color:#8888aa;margin-bottom:6px;display:none"></div>
+            <div class="row2">
+              <div class="fg"><label class="fl">Утро</label><input class="fi" type="number" id="psWoodMorn" placeholder="0" inputmode="numeric" oninput="psCalcGoods()"></div>
+              <div class="fg"><label class="fl">Вечер (авто)</label>
+                <div style="background:#0f0f13;border:1px solid #c8f060;border-radius:10px;padding:11px 13px;font-family:Unbounded,sans-serif;font-size:14px;font-weight:700;color:#c8f060" id="psWoodEveVal">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- DR BLOCK -->
+        <div id="acc_dr">
+          <div onclick="toggleAcc('dr')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:10px 0">
+            <div style="font-size:15px;font-weight:700;color:#60c8f0">🛍 ДР ТОВАР</div>
+            <div style="font-size:18px;color:#60c8f0" id="acc_dr_arrow">▶</div>
+          </div>
+          <div id="acc_dr_body" style="display:none">
+            <div class="row2">
+              <div class="fg"><label class="fl">Нал утро ДР</label><input class="fi" type="number" id="psDrCashMorn" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
+              <div class="fg"><label class="fl">Нал вечер ДР</label><input class="fi" type="number" id="psDrCashEve" placeholder="0" inputmode="numeric" oninput="psCalc()"></div>
+            </div>
+            <div class="row2">
+              <div class="fg"><label class="fl">Товар утро ДР</label><input class="fi" type="number" id="psDrGoodsMorn" placeholder="0" inputmode="numeric" oninput="psCalcGoods()"></div>
+              <div class="fg"><label class="fl">Товар вечер ДР (авто)</label>
+                <div style="background:#0f0f13;border:1px solid #60c8f0;border-radius:10px;padding:11px 13px;font-family:Unbounded,sans-serif;font-size:14px;font-weight:700;color:#60c8f0" id="psDrGoodsEveVal">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- РАСЧЁТ ЗП -->
+        <div class="sep"></div>
+        <div id="psZpBlock" style="display:none"></div>
+        <div class="sep"></div>
+        <div id="psSaveError" style="color:#f06060;font-size:13px;margin-bottom:8px;display:none"></div>
+        <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="psComment" placeholder="Причина внесения задним числом..."></div>
+        <button class="btn" onclick="savePastShift()">💾 Сохранить смену</button>
+      </div>
+    </div>
   </div>
+
   <div class="page" id="pg-sellers">
     <div class="stitle">Управление сотрудниками</div>
 
@@ -840,112 +711,6 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
         </select>
       </div>
       <button class="btn sec" onclick="addAccountAdmin()">＋ Добавить реквизит</button>
-    </div>
-  </div>
-
-  <!-- DATA UPLOAD PAGE -->
-  <div class="page" id="pg-dataupload">
-    <div class="stitle">📥 Загрузка данных</div>
-
-    <!-- TABS -->
-    <div style="display:flex;gap:6px;margin-bottom:14px">
-      <button type="button" id="duTab_photo" onclick="switchDuTab('photo')"
-        style="flex:1;padding:10px;border-radius:12px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">
-        📷 Фото журнала
-      </button>
-      <button type="button" id="duTab_file" onclick="switchDuTab('file')"
-        style="flex:1;padding:10px;border-radius:12px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;cursor:pointer">
-        📄 Файл JSON/CSV
-      </button>
-    </div>
-
-    <!-- ══ ФОТО ЖУРНАЛА ══ -->
-    <div id="duPhotoTab">
-      <div class="al-info" style="margin-bottom:12px">📷 Сфотографируй страницу журнала — AI распознает данные и занесёт в базу.</div>
-
-      <!-- Настройки -->
-      <div class="card" style="margin-bottom:10px">
-        <div class="ctitle">Настройки распознавания</div>
-        <div class="fg"><label class="fl">Магазин</label>
-          <select class="fs" id="duPhotoShop"></select>
-        </div>
-        <div class="fg" style="margin-bottom:0"><label class="fl">Продавец (если не указан в журнале)</label>
-          <input class="fi" id="duPhotoSeller" placeholder="Имя продавца">
-        </div>
-      </div>
-
-      <!-- Загрузка фото -->
-      <div class="card" style="margin-bottom:10px">
-        <div class="ctitle">Загрузить фото</div>
-        <div id="duPhotoZone" onclick="document.getElementById('duPhotoInput').click()"
-          style="border:2px dashed #2e2e3e;border-radius:12px;padding:24px;text-align:center;cursor:pointer;margin-bottom:12px;transition:.2s"
-          ondragover="event.preventDefault();this.style.borderColor='#c8f060'"
-          ondragleave="this.style.borderColor='#2e2e3e'"
-          ondrop="handlePhotoDrop(event)">
-          <div style="font-size:32px;margin-bottom:8px">📷</div>
-          <div style="font-size:13px;font-weight:700;margin-bottom:4px">Нажмите или перетащите фото</div>
-          <div style="font-size:11px;color:#8888aa">JPG, PNG — страница журнала продаж</div>
-          <input type="file" id="duPhotoInput" accept="image/*" multiple style="display:none" onchange="handlePhotoSelect(this)">
-        </div>
-        <div id="duPhotoPreview" style="display:none;margin-bottom:12px"></div>
-        <button class="btn" id="duRecognizeBtn" style="display:none" onclick="recognizeJournalPhoto()">🤖 Распознать</button>
-      </div>
-
-      <!-- Результат распознавания -->
-      <div id="duRecognizeResult" style="display:none"></div>
-
-      <!-- История распознаваний -->
-      <div class="card">
-        <div class="ctitle">История загрузок из фото</div>
-        <div id="duPhotoHistory"><div class="empty"><div class="ei">📷</div>Загрузок не было</div></div>
-      </div>
-    </div>
-
-    <!-- ══ ФАЙЛ JSON/CSV ══ -->
-    <div id="duFileTab" style="display:none">
-      <div class="al-info" style="margin-bottom:12px">💡 Загрузите JSON или CSV с историческими сменами. Система заполнит базу автоматически.</div>
-      <div class="card" style="margin-bottom:10px">
-        <div class="ctitle">Выбрать файл</div>
-        <div id="dropZone" onclick="document.getElementById('fileInput').click()" ondragover="event.preventDefault();this.style.borderColor='#c8f060'" ondragleave="this.style.borderColor='#2e2e3e'" ondrop="handleFileDrop(event)" style="border:2px dashed #2e2e3e;border-radius:12px;padding:24px;text-align:center;cursor:pointer;margin-bottom:12px">
-          <div style="font-size:28px;margin-bottom:6px">📄</div>
-          <div style="font-size:13px;font-weight:700;margin-bottom:4px">Нажмите или перетащите файл</div>
-          <div style="font-size:11px;color:#8888aa">JSON или CSV</div>
-          <input type="file" id="fileInput" accept=".json,.csv" style="display:none" onchange="handleFileSelect(this)">
-        </div>
-        <div id="fileParseResult" style="display:none"></div>
-        <div style="display:flex;gap:8px">
-          <button class="btn" id="importConfirmBtn" style="display:none" onclick="confirmImport()">✅ Импортировать</button>
-          <button class="btn sec" id="importCancelBtn" style="display:none" onclick="cancelImport()">Отмена</button>
-        </div>
-      </div>
-      <div class="card" style="margin-bottom:10px">
-        <div class="ctitle">Шаблон JSON</div>
-        <div style="background:#0f0f13;border-radius:10px;padding:12px;font-family:monospace;font-size:10px;color:#8888aa;line-height:1.7;white-space:pre-wrap">[
-  {
-    "date": "2024-01-15",
-    "shopName": "Роза Хутор",
-    "sellerName": "Ксения",
-    "cashMorning": 5000,
-    "cashEvening": 8200,
-    "cashRevenue": 12000,
-    "cardRevenue": 8500,
-    "discount": 500,
-    "goodsMorning": 450000,
-    "goodsEvening": 438000,
-    "zp": 1500,
-    "inkass": 0,
-    "otherExp": 200
-  }
-]</div>
-        <div style="display:flex;gap:8px;margin-top:10px">
-          <button class="btn sec" style="font-size:11px" onclick="downloadTemplate()">⬇️ JSON шаблон</button>
-          <button class="btn sec" style="font-size:11px" onclick="downloadCsvTemplate()">⬇️ CSV шаблон</button>
-        </div>
-      </div>
-      <div class="card">
-        <div class="ctitle">История импортов</div>
-        <div id="importHistoryList"><div class="empty"><div class="ei">📭</div>Импортов не было</div></div>
-      </div>
     </div>
   </div>
 
@@ -1829,10 +1594,9 @@ function buildAdminTabs(){
   t.innerHTML=`
     <button class="tab active" onclick="showPg('today',this);renderTodayShift()"><div class="ti">📋</div><span>Смена</span></button>
     <button class="tab" onclick="showPg('history',this);renderShiftHistory()"><div class="ti">📁</div><span>Архив</span></button>
-    <button class="tab" onclick="showPg('pastshift',this);switchPsTab('journal')"><div class="ti">✏️</div><span>Ввод</span></button>
+    <button class="tab" onclick="showPg('restore',this);initRestore()"><div class="ti">🗄</div><span>Восст.</span></button>
     <button class="tab" onclick="showPg('sellers',this);renderSellersAdmin()"><div class="ti">👥</div><span>Роли</span></button>
     <button class="tab" onclick="showPg('shopsettings',this);renderShopSettings()"><div class="ti">⚙️</div><span>Настройки</span></button>
-    <button class="tab" onclick="showPg('dataupload',this);switchDuTab('photo')"><div class="ti">📥</div><span>Загрузка</span></button>
     <button class="tab" onclick="exitShift()"><div class="ti">🚪</div><span>Выйти</span></button>`;
 }
 
@@ -4524,6 +4288,375 @@ function generatePeriodReport(){
   c.innerHTML=html;
 }
 
+
+
+// ════ RESTORE MODULE ════
+function initRestore() {
+  switchRst('invoices');
+}
+
+function switchRst(tab) {
+  var tabs = ['invoices','journal','activate','shifts'];
+  tabs.forEach(function(t) {
+    var el = document.getElementById('rst_'+t);
+    var btn = document.getElementById('rst_tab_'+t);
+    if(el) el.style.display = t===tab ? 'block' : 'none';
+    if(btn) {
+      btn.style.borderWidth = t===tab ? '2px' : '1px';
+      btn.style.background = t===tab ? '#1e2a14' : '#22222e';
+      btn.style.color = t===tab ? '#c8f060' : '#8888aa';
+      btn.style.borderColor = t===tab ? '#c8f060' : '#2e2e3e';
+      btn.style.fontWeight = t===tab ? '700' : '400';
+    }
+  });
+  if(tab==='invoices') { rstInitInvoices(); }
+  if(tab==='journal') { rstInitJournal(); switchRstJ('photo', document.getElementById('rstj_photo')); }
+  if(tab==='activate') { rstInitActivate(); }
+  if(tab==='shifts') { populatePastShiftSellers(); }
+}
+
+// ── Nakładnye (Invoices) ──
+var rstInvItems = [];
+function rstInitInvoices() {
+  var shops = getShopNames();
+  var sel = document.getElementById('rstInvShop');
+  if(sel) sel.innerHTML = shops.map(function(s){return '<option>'+s+'</option>';}).join('');
+  var d = document.getElementById('rstInvDate');
+  if(d && !d.value) d.value = new Date().toISOString().split('T')[0];
+  rstInvItems = [];
+  renderRstInvItems();
+  loadPendingInvoices();
+  renderAcceptedInvoices();
+}
+function addRstInvItem() {
+  rstInvItems.push({name:'',article:'',qty:1,price:0});
+  renderRstInvItems();
+}
+function renderRstInvItems() {
+  var c = document.getElementById('rstInvItems'); if(!c) return;
+  if(!rstInvItems.length) { c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:4px">Нет позиций</div>'; return; }
+  c.innerHTML = rstInvItems.map(function(item,i){
+    return '<div style="background:#1a1a22;border-radius:10px;padding:10px;margin-bottom:6px">' +
+      '<div style="display:flex;gap:6px;margin-bottom:6px">' +
+        '<input class="fi" placeholder="Название" value="'+item.name+'" oninput="rstInvItems['+i+'].name=this.value;rstCalcInvTotal()" style="flex:2;margin:0">' +
+        '<input class="fi" placeholder="Арт." value="'+item.article+'" oninput="rstInvItems['+i+'].article=this.value" style="flex:1;margin:0">' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;align-items:center">' +
+        '<input class="fi" type="number" placeholder="Кол-во" value="'+item.qty+'" oninput="rstInvItems['+i+'].qty=parseFloat(this.value)||1;rstCalcInvTotal()" style="flex:1;margin:0" inputmode="numeric">' +
+        '<input class="fi" type="number" placeholder="Цена ₽" value="'+item.price+'" oninput="rstInvItems['+i+'].price=parseFloat(this.value)||0;rstCalcInvTotal()" style="flex:1;margin:0" inputmode="numeric">' +
+        '<button onclick="rstInvItems.splice('+i+',1);renderRstInvItems();rstCalcInvTotal()" style="background:none;border:1px solid #3e2e2e;border-radius:8px;padding:6px 8px;color:#f06060;font-size:12px;cursor:pointer">✕</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  rstCalcInvTotal();
+}
+function rstCalcInvTotal() {
+  var total = rstInvItems.reduce(function(s,i){return s+(i.qty||1)*(i.price||0);},0);
+  var el = document.getElementById('rstInvTotal');
+  if(el) el.textContent = rstInvItems.length ? 'Итого: '+Math.round(total).toLocaleString('ru-RU')+'₽ · '+rstInvItems.length+' позиций' : '';
+}
+function saveRstInvoice() {
+  var shop = (document.getElementById('rstInvShop')||{}).value||'';
+  var date = (document.getElementById('rstInvDate')||{}).value||new Date().toISOString().split('T')[0];
+  var from = (document.getElementById('rstInvFrom')||{}).value||'Мастерская';
+  var num = (document.getElementById('rstInvNum')||{}).value||uid().substring(0,6);
+  if(!rstInvItems.length){showToast('Добавьте позиции');return;}
+  var totalAmt = rstInvItems.reduce(function(s,i){return s+(i.qty||1)*(i.price||0);},0);
+  var inv = {
+    id:uid(), date:date, shopName:shop, from:from, num:num,
+    items:rstInvItems.map(function(i){return Object.assign({},i);}),
+    totalAmt:totalAmt, isArchive:true, source:'restore',
+    status:'accepted', acceptedAt:new Date().toISOString()
+  };
+  var invs = JSON.parse(localStorage.getItem('iz_archive_invoices')||'[]');
+  invs.unshift(inv);
+  localStorage.setItem('iz_archive_invoices', JSON.stringify(invs));
+  try{db.collection('iz_archive_invoices').doc(inv.id).set(inv);}catch(e){}
+  // Add to psj as receive entries
+  var entries = getPsjEntries();
+  inv.items.forEach(function(item){
+    entries.push({id:uid(),date:date,shopName:shop,sellerName:'',type:'receive',
+      ts:new Date().toISOString(),label:'Приход товара',
+      sub:item.name+(item.article?' №'+item.article:'')+'· накл. '+num+' от '+from,
+      amount:(item.qty||1)*(item.price||0),amtSign:'+',
+      cashEffect:0,cardEffect:0,discEffect:0,isArchive:true,source:'invoice_restore'
+    });
+  });
+  savePsjEntries(entries);
+  rstInvItems=[];
+  document.getElementById('rstInvFrom').value='';
+  document.getElementById('rstInvNum').value='';
+  renderRstInvItems(); renderAcceptedInvoices();
+  showToast('✅ Накладная принята на баланс '+shop);
+}
+function loadPendingInvoices() {
+  var c = document.getElementById('rstPendingInvoices'); if(!c) return;
+  // Load from Firestore pending invoices sent from workshop
+  try {
+    db.collection('iz_invoices').where('status','==','pending').get().then(function(snap){
+      if(snap.empty){c.innerHTML='<div class="empty"><div class="ei">📋</div>Нет входящих накладных</div>';return;}
+      c.innerHTML = snap.docs.map(function(doc){
+        var inv = doc.data();
+        rstPendingInvoicesData[doc.id] = inv;
+        return '<div style="background:#1a1e2e;border:1px solid #60c8f0;border-radius:10px;padding:12px;margin-bottom:8px">'+
+          '<div style="font-size:13px;font-weight:700">📋 Накладная №'+inv.num+' · '+inv.date+'</div>'+
+          '<div style="font-size:11px;color:#8888aa;margin:4px 0">Из: '+(inv.from||'Мастерская')+' · '+((inv.items||[]).length)+' позиций</div>'+
+          '<div style="display:flex;gap:8px;margin-top:8px">'+
+            '<select class="fs" id="inv_shop_'+doc.id+'" style="flex:1;margin:0">'+getShopNames().map(function(s){return '<option>'+s+'</option>';}).join('')+'</select>'+
+            '<input class="fi" type="date" id="inv_date_'+doc.id+'" value="'+inv.date+'" style="flex:1;margin:0;-webkit-appearance:none;color-scheme:dark">'+
+          '</div>'+
+          '<button onclick="acceptPendingInvoice(\''+doc.id+'\')" style="width:100%;margin-top:8px;padding:9px;border-radius:10px;border:none;background:#60f090;color:#0f0f13;font-weight:700;font-size:12px;cursor:pointer">✅ Принять</button>'+
+        '</div>';
+      }).join('');
+    });
+  } catch(e) { c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:8px">Нет подключения к базе</div>'; }
+}
+var rstPendingInvoicesData = {};
+function acceptPendingInvoice(docId) {
+  var inv = rstPendingInvoicesData[docId] || {};
+  var shop = (document.getElementById('inv_shop_'+docId)||{}).value||'';
+  var date = (document.getElementById('inv_date_'+docId)||{}).value||inv.date||new Date().toISOString().split('T')[0];
+  inv.shopName=shop; inv.date=date; inv.status='accepted'; inv.isArchive=true; inv.acceptedAt=new Date().toISOString();
+  var invs=JSON.parse(localStorage.getItem('iz_archive_invoices')||'[]');
+  invs.unshift(inv); localStorage.setItem('iz_archive_invoices',JSON.stringify(invs));
+  try{db.collection('iz_invoices').doc(docId).update({status:'accepted',shopName:shop,date:date});}catch(e){}
+  var entries=getPsjEntries();
+  (inv.items||[]).forEach(function(item){
+    entries.push({id:uid(),date:date,shopName:shop,sellerName:'',type:'receive',
+      ts:new Date().toISOString(),label:'Приход товара',
+      sub:item.name+(item.article?' №'+item.article:'')+' · накл. '+(inv.num||''),
+      amount:(item.qty||1)*(item.price||0),amtSign:'+',cashEffect:0,cardEffect:0,discEffect:0,isArchive:true});
+  });
+  savePsjEntries(entries);
+  loadPendingInvoices(); renderAcceptedInvoices();
+  showToast('✅ Накладная принята');
+}
+function renderAcceptedInvoices() {
+  var c=document.getElementById('rstAcceptedInvoices'); if(!c) return;
+  var invs=JSON.parse(localStorage.getItem('iz_archive_invoices')||'[]');
+  if(!invs.length){c.innerHTML='<div class="empty"><div class="ei">📦</div>Нет принятых</div>';return;}
+  c.innerHTML=invs.slice(0,20).map(function(inv){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px">'+
+      '<div><div style="font-size:13px;font-weight:700">📋 №'+inv.num+' · '+inv.date+'</div>'+
+      '<div style="font-size:11px;color:#8888aa">'+inv.shopName+' · '+(inv.items||[]).length+' поз. · '+Math.round(inv.totalAmt||0).toLocaleString('ru-RU')+'₽</div></div>'+
+      '<div style="font-size:10px;color:#60f090;font-weight:700">✅</div></div>';
+  }).join('');
+}
+
+// ── Journal ──
+function rstInitJournal() {
+  var shops = getShopNames();
+  ['rstjPhotoShop'].forEach(function(id){
+    var sel=document.getElementById(id);
+    if(sel) sel.innerHTML=shops.map(function(s){return '<option>'+s+'</option>';}).join('');
+  });
+  psjInit();
+  renderRstjHistory();
+}
+function switchRstJ(tab, el) {
+  ['photo','file','manual'].forEach(function(t){
+    var panel=document.getElementById('rstj_'+t+'_tab');
+    var btn=document.getElementById('rstj_'+t);
+    if(panel) panel.style.display=t===tab?'block':'none';
+    if(btn){btn.style.borderWidth=t===tab?'2px':'1px';btn.style.background=t===tab?'#1e2a14':'#22222e';btn.style.color=t===tab?'#c8f060':'#8888aa';btn.style.borderColor=t===tab?'#c8f060':'#2e2e3e';btn.style.fontWeight=t===tab?'700':'400';}
+  });
+}
+
+// Photo recognition for restore journal (reuses existing AI logic)
+var rstjPhotoFiles=[];
+function handleRstjPhotoSelect(input){rstjPhotoFiles=Array.from(input.files);rstjShowPreview();}
+function handleRstjPhotoDrop(ev){ev.preventDefault();rstjPhotoFiles=Array.from(ev.dataTransfer.files).filter(function(f){return f.type.startsWith('image/');});rstjShowPreview();}
+function rstjShowPreview(){
+  var p=document.getElementById('rstjPhotoPreview'),btn=document.getElementById('rstjRecognizeBtn');
+  if(!rstjPhotoFiles.length){p.style.display='none';btn.style.display='none';return;}
+  p.style.display='block';
+  p.innerHTML='<div style="font-size:12px;color:#8888aa;margin-bottom:6px">Выбрано: '+rstjPhotoFiles.length+' фото</div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap">'+rstjPhotoFiles.map(function(f){return '<img src="'+URL.createObjectURL(f)+'" style="width:70px;height:70px;object-fit:cover;border-radius:8px;border:1px solid #2e2e3e">';}).join('')+'</div>';
+  btn.style.display='block';
+}
+function rstjRecognize(){
+  if(!rstjPhotoFiles.length){showToast('Выберите фото');return;}
+  var shopName=(document.getElementById('rstjPhotoShop')||{}).value||'';
+  var sellerHint=(document.getElementById('rstjPhotoSeller')||{}).value||'';
+  var res=document.getElementById('rstjRecognizeResult');
+  var btn=document.getElementById('rstjRecognizeBtn');
+  btn.textContent='⏳ Распознаю...';btn.disabled=true;
+  res.style.display='block';
+  res.innerHTML='<div class="card"><div style="text-align:center;padding:20px"><div style="font-size:24px">🤖</div><div style="font-size:13px;color:#8888aa;margin-top:8px">AI читает журнал...</div></div></div>';
+  var promises=rstjPhotoFiles.map(function(f){return fileToBase64(f);});
+  Promise.all(promises).then(function(b64arr){
+    var imageBlocks=b64arr.map(function(b,i){return{type:'image',source:{type:'base64',media_type:rstjPhotoFiles[i].type||'image/jpeg',data:b}};});
+    var prompt='Распознай рукописный журнал продаж магазина "'+shopName+'".'+(sellerHint?'\nПродавец: '+sellerHint:'')+'\nВерни ТОЛЬКО JSON массив:\n[{"date":"ДД.ММ","sellerName":"имя","type":"sale|expense|writeoff|receive","name":"товар","article":"арт или null","amount":число,"discount":0,"payMethod":"cash|terminal|sbp|transfer|qr|mixed","cashAmount":0,"cardAmount":0,"goodsType":"derevo|dr","comment":"","uncertain":true_если_плохо}]\nПравила: нал→cash+cashAmount, П/Т/QR/СБП→cardAmount. Год 2025. Только JSON.';
+    return fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,messages:[{role:'user',content:[...imageBlocks,{type:'text',text:prompt}]}]})});
+  }).then(function(r){return r.json();}).then(function(data){
+    btn.textContent='🤖 Распознать AI';btn.disabled=false;
+    var text=(data.content||[]).map(function(c){return c.text||'';}).join('');
+    var clean=text.replace(/```json|```/g,'').trim();
+    try{
+      var entries=JSON.parse(clean);
+      if(!entries||!entries.length){res.innerHTML='<div class="al-warn">⚠️ Записей не найдено</div>';return;}
+      showRstjRecognized(entries,shopName,res);
+    }catch(e){res.innerHTML='<div class="al-err">❌ Не удалось распознать.<br><small>'+text.substring(0,150)+'</small></div>';}
+  }).catch(function(e){btn.textContent='🤖 Распознать AI';btn.disabled=false;res.innerHTML='<div class="al-err">❌ '+e.message+'</div>';});
+}
+var rstjPending=[];
+function showRstjRecognized(entries,shopName,res){
+  rstjPending=entries.map(function(e){return Object.assign({},e,{shopName:shopName});});
+  var uncertain=entries.filter(function(e){return e.uncertain;}).length;
+  var html='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="ctitle" style="margin:0">Распознано: '+entries.length+'</div>'+(uncertain?'<div style="font-size:11px;color:#f0a060;font-weight:700">⚠️ '+uncertain+' проверьте</div>':'<div style="font-size:11px;color:#60f090;font-weight:700">✅ Всё чётко</div>')+'</div>';
+  html+=entries.map(function(e,i){
+    var isU=e.uncertain;
+    var tl={sale:'💰 Продажа',expense:'💸 Расход',writeoff:'🗑 Списание',receive:'📥 Приход'}[e.type]||'📝';
+    return '<div style="background:'+(isU?'#2e1a00':'#1a1a22')+';border:1px solid '+(isU?'#f0a060':'#2e2e3e')+';border-radius:10px;padding:10px;margin-bottom:8px">'+
+      (isU?'<div style="font-size:10px;color:#f0a060;font-weight:700;margin-bottom:4px">⚠️ ПРОВЕРЬТЕ</div>':'')+
+      '<div style="display:flex;justify-content:space-between"><div><div style="font-size:13px;font-weight:700">'+tl+' · '+(e.name||'?')+'</div><div style="font-size:11px;color:#8888aa">'+e.date+(e.sellerName?' · '+e.sellerName:'')+'</div></div><div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;color:'+(isU?'#f0a060':'#c8f060')+'">'+Math.round(e.amount||0).toLocaleString('ru-RU')+'₽</div></div>'+
+      '<div style="display:flex;gap:6px;margin-top:8px"><button onclick="rstjEditEntry('+i+')" style="flex:1;padding:5px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">✏️ Правка</button><button onclick="rstjRemoveEntry('+i+')" style="padding:5px 8px;border-radius:8px;border:1px solid #3e2e2e;background:#2e1a1a;color:#f06060;font-size:11px;cursor:pointer">✕</button></div>'+
+    '</div>';
+  }).join('');
+  html+='<button class="btn" onclick="rstjSaveAll()" style="width:100%;margin-top:4px">💾 Сохранить в журнал</button></div>';
+  res.innerHTML=html;
+}
+function rstjEditEntry(i){var e=rstjPending[i];var a=prompt('Сумма для "'+e.name+'"',e.amount||0);if(a!==null){rstjPending[i].amount=parseFloat(a)||0;rstjPending[i].uncertain=false;}var res=document.getElementById('rstjRecognizeResult');showRstjRecognized(rstjPending,(rstjPending[0]&&rstjPending[0].shopName)||'',res);}
+function rstjRemoveEntry(i){rstjPending.splice(i,1);var res=document.getElementById('rstjRecognizeResult');if(rstjPending.length)showRstjRecognized(rstjPending,(rstjPending[0]&&rstjPending[0].shopName)||'',res);else res.innerHTML='';}
+function rstjSaveAll(){
+  if(!rstjPending.length){showToast('Нет записей');return;}
+  var shopName=(document.getElementById('rstjPhotoShop')||{}).value||'';
+  var existing=getPsjEntries(); var added=0;
+  rstjPending.forEach(function(e){
+    var entry={id:uid(),date:normalizeDate(e.date),shopName:shopName,sellerName:e.sellerName||'',
+      type:e.type||'sale',ts:new Date().toISOString(),
+      label:{sale:'Продажа',expense:'Расход',writeoff:'Списание',receive:'Приход товара'}[e.type||'sale'],
+      sub:(e.name||'')+(e.article?' №'+e.article:'')+' · '+(e.payMethod||''),
+      amount:e.amount||0,amtSign:e.type==='expense'||e.type==='writeoff'?'−':'+',
+      cashEffect:e.cashAmount||(e.payMethod==='cash'&&e.type==='sale'?e.amount||0:0),
+      cardEffect:e.cardAmount||(e.payMethod!=='cash'&&e.type==='sale'?e.amount||0:0),
+      discEffect:e.discount||0,goodsType:e.goodsType||'derevo',
+      comment:e.comment||'',isArchive:true,source:'photo_restore'};
+    existing.push(entry);
+    try{db.collection('iz_psj').doc(entry.id).set(entry);}catch(err){}
+    added++;
+  });
+  savePsjEntries(existing);
+  var hist=JSON.parse(localStorage.getItem('iz_photo_imports')||'[]');
+  hist.unshift({date:new Date().toISOString().split('T')[0],count:added,shopName:shopName,importedAt:new Date().toISOString()});
+  localStorage.setItem('iz_photo_imports',JSON.stringify(hist.slice(0,30)));
+  rstjPending=[];rstjPhotoFiles=[];
+  document.getElementById('rstjPhotoPreview').style.display='none';
+  document.getElementById('rstjRecognizeBtn').style.display='none';
+  document.getElementById('rstjRecognizeResult').style.display='none';
+  document.getElementById('rstjPhotoInput').value='';
+  renderRstjHistory();
+  showToast('✅ Добавлено '+added+' записей в журнал');
+}
+
+// File import for restore journal (reuses existing functions)
+function handleRstjFileSelect(input){
+  var file=input.files[0]; if(!file) return;
+  readImportFile(file); // reuse existing
+  document.getElementById('rstjFileResult').style.display='block';
+  document.getElementById('rstjFileConfirmBtn').style.display='block';
+  document.getElementById('rstjFileCancelBtn').style.display='block';
+}
+function handleRstjFileDrop(ev){ev.preventDefault();var f=ev.dataTransfer.files[0];if(f){document.getElementById('rstjFileInput').files=ev.dataTransfer.files;handleRstjFileSelect({files:ev.dataTransfer.files});}}
+function rstjConfirmFileImport(){confirmImport();rstjCancelFile();}
+function rstjCancelFile(){document.getElementById('rstjFileResult').style.display='none';document.getElementById('rstjFileConfirmBtn').style.display='none';document.getElementById('rstjFileCancelBtn').style.display='none';document.getElementById('rstjFileInput').value='';}
+
+function renderRstjHistory(){
+  var c=document.getElementById('rstjHistory'); if(!c) return;
+  var hist=JSON.parse(localStorage.getItem('iz_photo_imports')||'[]');
+  if(!hist.length){c.innerHTML='<div class="empty"><div class="ei">📷</div>Загрузок не было</div>';return;}
+  c.innerHTML=hist.slice(0,10).map(function(h){
+    return '<div style="display:flex;justify-content:space-between;padding:9px;background:#22222e;border-radius:10px;margin-bottom:5px"><div><div style="font-size:12px;font-weight:700">📷 '+h.shopName+'</div><div style="font-size:11px;color:#8888aa">'+h.date+' · '+h.count+' записей</div></div><div style="color:#60f090;font-weight:700;font-size:12px">+'+h.count+'</div></div>';
+  }).join('');
+}
+
+// ── Activation ──
+function rstInitActivate(){
+  var shops=getShopNames();
+  var sel=document.getElementById('rstActShop');
+  if(sel) sel.innerHTML='<option value="">Все магазины</option>'+shops.map(function(s){return '<option>'+s+'</option>';}).join('');
+  var now=new Date(),y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');
+  var df=document.getElementById('rstActFrom'),dt=document.getElementById('rstActTo');
+  if(df&&!df.value) df.value=y+'-'+m+'-01';
+  if(dt&&!dt.value) dt.value=new Date(y,now.getMonth()+1,0).toISOString().split('T')[0];
+  rstActPreview();
+  renderActivatedList();
+}
+function setActPeriod(type,el){
+  document.querySelectorAll('#rst_activate button[type=button]').forEach(function(b){b.style.background='#22222e';b.style.color='#8888aa';b.style.borderWidth='1px';b.style.borderColor='#2e2e3e';});
+  el.style.background='#1e2a14';el.style.color='#c8f060';el.style.borderWidth='2px';el.style.borderColor='#c8f060';
+  var now=new Date(),today=now.toISOString().split('T')[0],from,to=today;
+  if(type==='month'){var y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');from=y+'-'+m+'-01';}
+  else if(type==='quarter'){var q=Math.floor(now.getMonth()/3),qm=String(q*3+1).padStart(2,'0');from=now.getFullYear()+'-'+qm+'-01';}
+  else if(type==='year'){from=now.getFullYear()+'-01-01';}
+  else{rstActPreview();return;}
+  document.getElementById('rstActFrom').value=from;
+  document.getElementById('rstActTo').value=to;
+  rstActPreview();
+}
+function rstActPreview(){
+  var from=(document.getElementById('rstActFrom')||{}).value||'';
+  var to=(document.getElementById('rstActTo')||{}).value||'';
+  var shop=(document.getElementById('rstActShop')||{}).value||'';
+  var c=document.getElementById('rstActPreviewBlock'); if(!c) return;
+  if(!from||!to){c.style.display='none';return;}
+  var entries=getPsjEntries().filter(function(e){return e.date>=from&&e.date<=to&&(!shop||e.shopName===shop)&&e.isArchive&&!e.activated;});
+  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]').filter(function(s){return s.date>=from&&s.date<=to&&(!shop||s.shopName===shop)&&s.isArchive&&!s.activated;});
+  c.style.display='block';
+  var totRev=0;
+  entries.forEach(function(e){if(e.type==='sale')totRev+=(e.cashEffect||0)+(e.cardEffect||0)+(e.discEffect||0);});
+  c.innerHTML='<div style="background:#1e2a14;border:1px solid #c8f060;border-radius:10px;padding:12px">'+
+    '<div style="font-size:12px;color:#8888aa;margin-bottom:8px">Период: '+from+' — '+to+(shop?' · '+shop:'')+'</div>'+
+    '<div style="font-size:13px;margin-bottom:4px">📒 Записей журнала: <strong style="color:#c8f060">'+entries.length+'</strong></div>'+
+    '<div style="font-size:13px;margin-bottom:4px">📋 Смен: <strong style="color:#c8f060">'+shifts.length+'</strong></div>'+
+    '<div style="font-size:13px">💰 Выручка к активации: <strong style="color:#c8f060">'+Math.round(totRev).toLocaleString('ru-RU')+'₽</strong></div>'+
+  '</div>';
+}
+function activateArchivePeriod(){
+  var from=(document.getElementById('rstActFrom')||{}).value||'';
+  var to=(document.getElementById('rstActTo')||{}).value||'';
+  var shop=(document.getElementById('rstActShop')||{}).value||'';
+  if(!from||!to){showToast('Укажите период');return;}
+  if(!confirm('Активировать период '+from+' — '+to+'? Данные войдут в общую статистику.')){return;}
+
+  // Activate psj entries
+  var entries=getPsjEntries();
+  var activated=0;
+  entries.forEach(function(e){
+    if(e.date>=from&&e.date<=to&&(!shop||e.shopName===shop)&&e.isArchive&&!e.activated){
+      e.activated=true; e.activatedAt=new Date().toISOString(); activated++;
+    }
+  });
+  savePsjEntries(entries);
+
+  // Activate shifts
+  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  shifts.forEach(function(s){
+    if(s.date>=from&&s.date<=to&&(!shop||s.shopName===shop)&&s.isArchive&&!s.activated){
+      s.activated=true; s.activatedAt=new Date().toISOString();
+    }
+  });
+  localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+
+  // Save activation record
+  var acts=JSON.parse(localStorage.getItem('iz_activations')||'[]');
+  acts.unshift({id:uid(),from:from,to:to,shopName:shop||'Все',activatedAt:new Date().toISOString(),count:activated,by:(session&&session.name)||'Admin'});
+  localStorage.setItem('iz_activations',JSON.stringify(acts));
+
+  rstActPreview(); renderActivatedList();
+  showToast('✅ Активировано '+activated+' записей за период '+from+' — '+to);
+}
+function renderActivatedList(){
+  var c=document.getElementById('rstActivatedList'); if(!c) return;
+  var acts=JSON.parse(localStorage.getItem('iz_activations')||'[]');
+  if(!acts.length){c.innerHTML='<div class="empty"><div class="ei">✅</div>Нет активированных периодов</div>';return;}
+  c.innerHTML=acts.map(function(a){
+    return '<div style="padding:10px;background:#1e2a14;border:1px solid #c8f060;border-radius:10px;margin-bottom:6px">'+
+      '<div style="font-size:13px;font-weight:700">✅ '+a.from+' — '+a.to+'</div>'+
+      '<div style="font-size:11px;color:#8888aa;margin-top:3px">'+a.shopName+' · '+a.count+' записей · '+a.activatedAt.split('T')[0]+' · '+a.by+'</div>'+
+    '</div>';
+  }).join('');
+}
 
 function init(){
   const shopNames=getShopNames();
