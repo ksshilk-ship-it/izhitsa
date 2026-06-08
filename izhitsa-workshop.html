@@ -402,6 +402,42 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
         <div id="shipImportHistory"></div>
       </div>
     </div>
+
+    <!-- АРХИВ: управление периодами -->
+    <div style="margin-top:6px;padding-top:16px;border-top:2px solid var(--border)">
+      <div class="stitle" style="font-size:15px;margin-bottom:10px">🗄 Архив черновиков</div>
+      <div class="card" style="border-color:#6c3fc5">
+        <div class="ctitle">Активировать период</div>
+        <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">
+          Все загруженные данные хранятся как <strong style="color:#c8a0ff">черновики</strong> — они не влияют на остатки и аналитику.<br>
+          Когда вы полностью проработали период — активируйте его: данные перейдут в исторический архив и станут видны в статистике управляющего.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+          <div><label class="fl">С даты</label><input class="fi" type="date" id="archiveFrom"></div>
+          <div><label class="fl">По дату</label><input class="fi" type="date" id="archiveTo"></div>
+        </div>
+        <div id="archivePreviewInfo" style="display:none;background:var(--s2);border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px"></div>
+        <button class="btn sec" onclick="previewArchivePeriod()" style="margin-bottom:8px">🔍 Проверить период</button>
+        <button class="btn" onclick="activateArchivePeriod()" id="archiveActivateBtn" style="background:linear-gradient(135deg,#6c3fc5,#4a2a8a);display:none">
+          ✅ Активировать период
+        </button>
+      </div>
+
+      <!-- Активированные периоды -->
+      <div class="card">
+        <div class="ctitle">Активированные периоды</div>
+        <div id="activatedPeriodsList"></div>
+      </div>
+
+      <!-- Черновики сейчас -->
+      <div class="card">
+        <div class="ctitle" style="display:flex;justify-content:space-between">
+          <span>Черновики (ещё не активированы)</span>
+          <span id="draftCountBadge" style="background:var(--a4);color:#000;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:700"></span>
+        </div>
+        <div id="draftItemsList"></div>
+      </div>
+    </div>
   </div>
 
   <div class="tabs" id="mainTabs"></div>
@@ -1237,11 +1273,6 @@ function saveEditEmp(){
 // ════════════════════════════════
 let _importRows=[];
 
-function renderImportPage(){
-  setImportMode(_currentImportMode);
-  renderImportHistory();
-}
-
 function downloadImportTemplate(){
   const csv='дата;мастер;изделие;артикул;количество;цена;зарплата\n01.06.2025;Иванов Иван;Столешница дуб;СТ-001;1;12000;1500\n15.05.2025;Петрова Анна;Подоконник ясень;ПД-045;2;8000;900\n';
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
@@ -1336,7 +1367,7 @@ async function confirmImport(){
     chunk.forEach(r=>{
       for(let q=0;q<(r.qty||1);q++){
         const ref=db.collection('ws_items').doc();
-        batch.set(ref,{id:uid(),name:r.itemName,itemName:r.itemName,artikul:r.artikul||'',masterName:r.masterName,masterId:r.masterId,qty:1,price:r.price,zp:r.zp,zpPaid:r.zp>0,status:'received',createdAt:r.dateISO,startedAt:r.dateISO,receivedAt:r.dateISO,importedAt:now(),importedBy:session.name,isImported:true,itemNum:'IMP-'+uid().toUpperCase()});
+        batch.set(ref,{id:uid(),name:r.itemName,itemName:r.itemName,artikul:r.artikul||'',masterName:r.masterName,masterId:r.masterId,qty:1,price:r.price,zp:r.zp,zpPaid:r.zp>0,status:'received',createdAt:r.dateISO,startedAt:r.dateISO,receivedAt:r.dateISO,importedAt:now(),importedBy:session.name,isImported:true,isArchiveDraft:true,isArchive:false,itemNum:'IMP-'+uid().toUpperCase()});
       }
     });
     try{await batch.commit();success+=chunk.length;}catch(e){console.error(e);}
@@ -1582,6 +1613,8 @@ function filterByPeriod(arr, dateField){
   const {from,to} = getStatsDates();
   return arr.filter(i=>{
     if(!i[dateField]) return false;
+    // Черновики архива — не показываем нигде кроме админ-архива
+    if(i.isArchiveDraft) return false;
     const d = i[dateField].split('T')[0];
     if(from && d < from) return false;
     if(to   && d > to)   return false;
@@ -1663,6 +1696,183 @@ function renderStats(){
           <span class="at-val" style="color:var(--accent)">${fmt(i.price)}</span>
         </div>`).join('') || '<div class="empty" style="padding:12px 0">Нет данных</div>'}
     </div>`;
+}
+
+// ════════════════════════════════
+// ARCHIVE MANAGEMENT
+// ════════════════════════════════
+
+function renderImportPage(){
+  setImportMode(_currentImportMode);
+  renderImportHistory();
+  renderArchiveDrafts();
+  renderActivatedPeriods();
+}
+
+function renderArchiveDrafts(){
+  const draftItems = items.filter(i=>i.isArchiveDraft);
+  const draftShips = shipments.filter(s=>s.isArchiveDraft);
+  const total = draftItems.length + draftShips.length;
+
+  const badge = document.getElementById('draftCountBadge');
+  if(badge) badge.textContent = total ? total+' шт.' : '';
+
+  const c = document.getElementById('draftItemsList'); if(!c) return;
+  if(!total){
+    c.innerHTML='<div style="font-size:12px;color:var(--t2);padding:8px 0">Черновиков нет</div>';
+    return;
+  }
+
+  // Group by date
+  const byDate = {};
+  draftItems.forEach(i=>{
+    const d = (i.receivedAt||i.createdAt||'').split('T')[0];
+    if(!byDate[d]) byDate[d]={items:[],ships:[]};
+    byDate[d].items.push(i);
+  });
+  draftShips.forEach(s=>{
+    const d = (s.date||s.createdAt||'').split('T')[0];
+    if(!byDate[d]) byDate[d]={items:[],ships:[]};
+    byDate[d].ships.push(s);
+  });
+
+  c.innerHTML = Object.keys(byDate).sort().reverse().slice(0,20).map(date=>{
+    const g = byDate[date];
+    const rev = g.items.reduce((s,i)=>s+(i.price||0),0) + g.ships.reduce((s,s2)=>s+(s2.total||0),0);
+    return `<div class="at-row">
+      <span class="at-lbl">${date}<br>
+        <span style="font-size:10px;color:var(--t2)">
+          ${g.items.length?'🔨 '+g.items.length+' изд. ':''}${g.ships.length?'🚚 '+g.ships.length+' накл.':''}
+        </span>
+      </span>
+      <span class="at-val" style="color:#c8a0ff">${fmt(rev)}</span>
+    </div>`;
+  }).join('');
+}
+
+async function previewArchivePeriod(){
+  const from = document.getElementById('archiveFrom').value;
+  const to   = document.getElementById('archiveTo').value;
+  if(!from||!to){ showToast('Выберите даты'); return; }
+
+  const draftItems = items.filter(i=>{
+    if(!i.isArchiveDraft) return false;
+    const d = (i.receivedAt||i.createdAt||'').split('T')[0];
+    return d>=from && d<=to;
+  });
+  const draftShips = shipments.filter(s=>{
+    if(!s.isArchiveDraft) return false;
+    const d = (s.date||s.createdAt||'').split('T')[0];
+    return d>=from && d<=to;
+  });
+
+  const totalRev = draftItems.reduce((s,i)=>s+(i.price||0),0);
+  const totalShip = draftShips.reduce((s,s2)=>s+(s2.total||0),0);
+  const totalZP = draftItems.reduce((s,i)=>s+(i.zp||0),0);
+
+  const info = document.getElementById('archivePreviewInfo');
+  const btn  = document.getElementById('archiveActivateBtn');
+
+  if(!draftItems.length && !draftShips.length){
+    info.style.display='block';
+    info.innerHTML=`<span style="color:var(--a4)">⚠️ За период ${from} — ${to} черновиков не найдено</span>`;
+    btn.style.display='none';
+    return;
+  }
+
+  info.style.display='block';
+  info.innerHTML=`
+    <div style="font-weight:700;margin-bottom:6px;color:var(--text)">За период ${from} — ${to}:</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <div>🔨 Изделий: <strong style="color:var(--accent)">${draftItems.length}</strong></div>
+      <div>🚚 Накладных: <strong style="color:var(--a6)">${draftShips.length}</strong></div>
+      <div>💰 Выручка: <strong style="color:var(--inc)">${fmt(totalRev)}</strong></div>
+      <div>💳 ЗП: <strong style="color:var(--a5)">${fmt(totalZP)}</strong></div>
+    </div>
+    <div style="margin-top:6px;font-size:11px;color:var(--t2)">После активации данные станут видны в статистике управляющего</div>`;
+  btn.style.display='block';
+}
+
+async function activateArchivePeriod(){
+  const from = document.getElementById('archiveFrom').value;
+  const to   = document.getElementById('archiveTo').value;
+  if(!from||!to) return;
+
+  const btn = document.getElementById('archiveActivateBtn');
+  btn.disabled=true; btn.textContent='⏳ Активирую...';
+
+  const draftItems = items.filter(i=>{
+    if(!i.isArchiveDraft) return false;
+    const d = (i.receivedAt||i.createdAt||'').split('T')[0];
+    return d>=from && d<=to;
+  });
+  const draftShips = shipments.filter(s=>{
+    if(!s.isArchiveDraft) return false;
+    const d = (s.date||s.createdAt||'').split('T')[0];
+    return d>=from && d<=to;
+  });
+
+  let done=0;
+  const total = draftItems.length + draftShips.length;
+
+  // Batch update items
+  for(let i=0; i<draftItems.length; i+=400){
+    const chunk = draftItems.slice(i,i+400);
+    const batch = db.batch();
+    chunk.forEach(item=>{
+      batch.update(db.collection('ws_items').doc(item._id), {isArchiveDraft:false, isArchive:true, activatedAt:now(), activatedBy:session.name});
+    });
+    await batch.commit().catch(console.error);
+    done+=chunk.length;
+    btn.textContent=`⏳ ${done}/${total}...`;
+  }
+
+  // Batch update shipments
+  for(let i=0; i<draftShips.length; i+=400){
+    const chunk = draftShips.slice(i,i+400);
+    const batch = db.batch();
+    chunk.forEach(s=>{
+      batch.update(db.collection('ws_shipments').doc(s._id), {isArchiveDraft:false, isArchive:true, activatedAt:now(), activatedBy:session.name});
+    });
+    await batch.commit().catch(console.error);
+    done+=chunk.length;
+    btn.textContent=`⏳ ${done}/${total}...`;
+  }
+
+  // Сохранить в историю активированных периодов
+  const hist = JSON.parse(localStorage.getItem('ws_activated_periods')||'[]');
+  hist.unshift({
+    from, to,
+    items: draftItems.length,
+    ships: draftShips.length,
+    revenue: draftItems.reduce((s,i)=>s+(i.price||0),0),
+    activatedAt: now(),
+    by: session.name
+  });
+  localStorage.setItem('ws_activated_periods', JSON.stringify(hist.slice(0,50)));
+
+  btn.disabled=false; btn.style.display='none';
+  document.getElementById('archivePreviewInfo').style.display='none';
+  showToast(`✅ Активировано: ${draftItems.length} изд. + ${draftShips.length} накл. за ${from}–${to}`);
+  renderActivatedPeriods();
+  renderArchiveDrafts();
+}
+
+function renderActivatedPeriods(){
+  const c = document.getElementById('activatedPeriodsList'); if(!c) return;
+  const hist = JSON.parse(localStorage.getItem('ws_activated_periods')||'[]');
+  if(!hist.length){
+    c.innerHTML='<div style="font-size:12px;color:var(--t2);padding:8px 0">Активированных периодов нет</div>';
+    return;
+  }
+  c.innerHTML = hist.map(h=>`
+    <div class="at-row">
+      <span class="at-lbl">
+        <span style="color:var(--inc);font-weight:700">✅ ${h.from} — ${h.to}</span><br>
+        <span style="font-size:10px;color:var(--t2)">🔨 ${h.items} изд. · 🚚 ${h.ships} накл. · активировал ${h.by}</span>
+      </span>
+      <span class="at-val" style="color:var(--accent)">${fmt(h.revenue)}</span>
+    </div>`).join('');
 }
 
 // ════════════════════════════════
@@ -1857,7 +2067,8 @@ async function confirmShipImport(){
     items: rows, total,
     createdAt: now(), createdBy: session.name,
     isImported: true, importedBy: session.name, importedAt: now(),
-    photoImported: !!_shipPhotoBase64
+    photoImported: !!_shipPhotoBase64,
+    isArchiveDraft: true, isArchive: false
   };
 
   try {
