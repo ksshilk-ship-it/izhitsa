@@ -321,6 +321,11 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
       <div class="ctitle">📊 Прибыль и убыток</div>
       <div id="plTable"></div>
     </div>
+    
+    <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-top:16px">
+      <div class="ctitle">📈 План vs Факт</div>
+      <div id="plBudget"></div>
+    </div>
   </div>
 
   <!-- DEBT -->
@@ -539,6 +544,15 @@ function getSalesSources() {
 
 function saveSalesSources(data) {
   localStorage.setItem('iz_sales_sources', JSON.stringify(data));
+}
+
+function getPlanData() {
+  try { return JSON.parse(localStorage.getItem('iz_plan_data') || '{}'); } 
+  catch(e) { return {}; }
+}
+
+function savePlanData(data) {
+  localStorage.setItem('iz_plan_data', JSON.stringify(data));
 }
 
 function getWsEmployees() {
@@ -924,16 +938,29 @@ document.addEventListener('DOMContentLoaded', function() {
     saveShops(['ОПИТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
   }
   
-  // Init sales sources if not exist
-  if(!localStorage.getItem('iz_sales_sources')) {
-    saveSalesSources([
-      {id: '1', name: 'Роза Хутор', type: 'shop'},
-      {id: '2', name: 'Горки', type: 'shop'},
-      {id: '3', name: 'ТГ канал', type: 'online'},
-      {id: '4', name: 'Instagram', type: 'online'},
-      {id: '5', name: 'Мастерская', type: 'workshop'},
-      {id: '6', name: 'Опт', type: 'offline'}
-    ]);
+  // Init plan data if not exist
+  if(!localStorage.getItem('iz_plan_data')) {
+    savePlanData({
+      planIncome: 130000,
+      planExpense: 68000
+    });
+  }
+  
+  // Init transactions with test data if not exist
+  if(!localStorage.getItem('iz_transactions')) {
+    const today = new Date();
+    const testTransactions = [
+      {id: uid(), type: 'income', amount: 50000, source: 'Роза Хутор', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'income', amount: 35000, source: 'Горки', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'income', amount: 20000, source: 'ТГ канал', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'income', amount: 15000, source: 'Instagram', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 30000, source: '', category: 'Закупки', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 12000, source: '', category: 'Материалы', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 15000, source: '', category: 'Аренда', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 8000, source: '', category: 'Зарплаты', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 3000, source: '', category: 'Коммунальные', date: today.toISOString(), createdAt: now(), createdBy: 'System'}
+    ];
+    saveTransactions(testTransactions);
   }
   
   // Init sales sources if not exist
@@ -978,6 +1005,7 @@ document.addEventListener('DOMContentLoaded', function() {
       setTxType('income');
       clearOperationForm();
       renderPL();
+      renderPLBudget();
       renderShops();
     } catch(e) {}
   }
@@ -1158,11 +1186,12 @@ function renderPLBudget() {
   const factProfit = factIncome - factExpense;
   const factMargin = factIncome > 0 ? ((factProfit / factIncome) * 100).toFixed(1) : 0;
   
-  // Плановые значения (пока нули, потом заполнятся)
-  const planIncome = 0;
-  const planExpense = 0;
-  const planProfit = 0;
-  const planMargin = 0;
+  // Плановые значения из localStorage
+  const planData = getPlanData();
+  const planIncome = planData.planIncome || 0;
+  const planExpense = planData.planExpense || 0;
+  const planProfit = planIncome - planExpense;
+  const planMargin = planIncome > 0 ? ((planProfit / planIncome) * 100).toFixed(1) : 0;
   
   // Отклонения
   const incomeVar = factIncome - planIncome;
@@ -1204,7 +1233,7 @@ function renderPLBudget() {
     </div>
     
     <div style="font-size:11px;color:var(--t2);margin-top:12px;padding:8px;background:var(--s2);border-radius:6px">
-      📌 <strong>План:</strong> задайте плановые цифры для сравнения<br>
+      📌 <strong>План:</strong> ${planIncome > 0 ? 'задано' : 'не задано'} - Доход ${planIncome.toLocaleString('ru-RU')} ₽, Расходы ${planExpense.toLocaleString('ru-RU')} ₽<br>
       📌 <strong>Факт:</strong> текущие данные из операций<br>
       📌 <strong>Отклон:</strong> разница в процентах
     </div>`;
