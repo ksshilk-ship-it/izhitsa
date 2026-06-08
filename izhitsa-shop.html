@@ -372,7 +372,54 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
   </div>
   <div class="page" id="pg-pastshift">
     <div class="stitle">Внести задним числом</div>
-    <div class="card">
+
+    <!-- TABS: Журнал / Отчёт -->
+    <div style="display:flex;gap:6px;margin-bottom:14px">
+      <button type="button" id="psTab_journal" onclick="switchPsTab('journal')"
+        style="flex:1;padding:10px;border-radius:12px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:13px;font-weight:700;cursor:pointer">
+        📒 Журнал
+      </button>
+      <button type="button" id="psTab_report" onclick="switchPsTab('report')"
+        style="flex:1;padding:10px;border-radius:12px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:13px;font-weight:600;cursor:pointer">
+        📊 Отчёт
+      </button>
+    </div>
+
+    <!-- ══ ЖУРНАЛ ЗАДНИМ ЧИСЛОМ ══ -->
+    <div id="psJournalTab">
+      <!-- Выбор магазина / продавца / даты -->
+      <div class="card" style="margin-bottom:10px">
+        <div class="fg"><label class="fl">Магазин</label><select class="fs" id="psjShop" onchange="psjLoadJournal()"></select></div>
+        <div class="fg"><label class="fl">Продавец</label><select class="fs" id="psjSeller"></select></div>
+        <div class="fg" style="margin-bottom:0"><label class="fl">Дата</label>
+          <input class="fi" type="date" id="psjDate" onchange="psjLoadJournal()" style="-webkit-appearance:none;color-scheme:dark">
+        </div>
+      </div>
+
+      <!-- Кнопки действий — как у продавца -->
+      <div style="display:flex;gap:7px;margin-bottom:8px">
+        <button class="btn" style="margin:0;flex:1.2;font-size:13px" onclick="openPsjMo('sale')">＋ Продажа</button>
+        <button class="btn red" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openPsjMo('writeoff')">🗑 Списание</button>
+        <button class="btn blue" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openPsjMo('receive')">📥 Приход</button>
+      </div>
+      <div style="display:flex;gap:7px;margin-bottom:12px">
+        <button class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#2a1e14;border:1px solid #f0a060;color:#f0a060" onclick="openPsjMo('expense')">💸 Расходы</button>
+        <button class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#1a1e2e;border:1px solid #60c8f0;color:#60c8f0" onclick="openPsjMo('staff')">🛒 Покупка сотр.</button>
+      </div>
+
+      <!-- Итоги дня -->
+      <div id="psjDaySummary" style="display:none;margin-bottom:10px"></div>
+
+      <!-- Журнал записей -->
+      <div class="card">
+        <div class="ctitle">Записи журнала</div>
+        <div id="psjList"><div class="empty"><div class="ei">📒</div>Нет записей за этот день</div></div>
+      </div>
+    </div>
+
+    <!-- ══ ОТЧЁТ ЗАДНИМ ЧИСЛОМ ══ -->
+    <div id="psReportTab" style="display:none">
+      <div class="card">
       <div class="fg"><label class="fl">Магазин</label><select class="fs" id="psShop" onchange="populatePastShiftSellers();psLoadPrev()"></select></div>
       <div class="fg"><label class="fl">Продавец</label><select class="fs" id="psSeller"></select></div>
       <div class="fg"><label class="fl">Дата (ГГГГ-ММ-ДД)</label>
@@ -701,6 +748,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <div class="fg"><label class="fl">Комментарий к смене</label><input class="fi" id="psComment" placeholder="Причина внесения задним числом..."></div>
       <button class="btn" onclick="savePastShift()">💾 Сохранить смену</button>
     </div>
+    </div><!-- end psReportTab -->
   </div>
   <div class="page" id="pg-sellers">
     <div class="stitle">Управление сотрудниками</div>
@@ -1076,6 +1124,121 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <select class="fs" id="prShopFilter" onchange="generatePeriodReport()"><option value="">Все магазины</option></select>
     </div>
     <div id="periodReportBody"></div>
+  </div>
+</div>
+
+<!-- PSJ SALE MODAL -->
+<div class="mo" id="psjSaleMo">
+  <div class="md">
+    <div class="mh"></div><div class="mt">Продажа (задним числом)</div>
+    <div class="fg"><label class="fl">Наименование товара</label><input class="fi" id="psjSaleName" placeholder="Название изделия"></div>
+    <div class="row2">
+      <div class="fg"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="psjSaleAmt" placeholder="0" inputmode="numeric" oninput="psjCalcSale()"></div>
+      <div class="fg"><label class="fl">Скидка (₽)</label><input class="fi" type="number" id="psjSaleDisc" placeholder="0" inputmode="numeric" oninput="psjCalcSale()"></div>
+    </div>
+    <div id="psjSaleTotal" style="background:#22222e;border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+      <span style="color:#8888aa;font-size:13px">К оплате:</span>
+      <span style="font-family:Unbounded,sans-serif;font-size:20px;font-weight:700;color:#c8f060">0₽</span>
+    </div>
+    <div class="fg"><label class="fl">Способ оплаты</label>
+      <div class="pay-chips">
+        <div class="pc active" onclick="setPsjPayM('cash',this)">💵 Нал</div>
+        <div class="pc" onclick="setPsjPayM('terminal',this)">💳 Терминал</div>
+        <div class="pc" onclick="setPsjPayM('sbp',this)">📱 СБП</div>
+        <div class="pc" onclick="setPsjPayM('transfer',this)">🏦 Перевод</div>
+        <div class="pc" onclick="setPsjPayM('mixed',this)">➗ Смешанный</div>
+      </div>
+    </div>
+    <div id="psjMixedBlock" style="display:none" class="row2">
+      <div class="fg"><label class="fl">Нал (₽)</label><input class="fi" type="number" id="psjMixCash" placeholder="0" inputmode="numeric"></div>
+      <div class="fg"><label class="fl">Безнал (₽)</label><input class="fi" type="number" id="psjMixCard" placeholder="0" inputmode="numeric"></div>
+    </div>
+    <div class="fg">
+      <label class="fl">Тип товара</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="psjGoodsDerevo" onclick="setPsjGoods('derevo',this)" style="flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">🌳 Дерево</button>
+        <button type="button" id="psjGoodsDr" onclick="setPsjGoods('dr',this)" style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;cursor:pointer">🛍 ДР Товар</button>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="psjSaleComment" placeholder="Необязательно"></div>
+    <button class="btn" onclick="savePsjEntry('sale')">✅ Добавить продажу</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('psjSaleMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- PSJ WRITEOFF MODAL -->
+<div class="mo" id="psjWriteoffMo">
+  <div class="md">
+    <div class="mh"></div><div class="mt">Списание (задним числом)</div>
+    <div class="fg"><label class="fl">Наименование</label><input class="fi" id="psjWoName" placeholder="Что списываем"></div>
+    <div class="row2">
+      <div class="fg"><label class="fl">Артикул</label><input class="fi" id="psjWoNum" placeholder="№"></div>
+      <div class="fg"><label class="fl">Кол-во</label><input class="fi" type="number" id="psjWoQty" placeholder="1" inputmode="numeric"></div>
+    </div>
+    <div class="fg"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="psjWoAmt" placeholder="0" inputmode="numeric"></div>
+    <div class="fg"><label class="fl">Причина</label><input class="fi" id="psjWoReason" placeholder="Причина списания"></div>
+    <div class="fg">
+      <label class="fl">Тип товара</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="psjWoDerevo" onclick="setPsjWoGoods('derevo',this)" style="flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">🌳 Дерево</button>
+        <button type="button" id="psjWoDr" onclick="setPsjWoGoods('dr',this)" style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;cursor:pointer">🛍 ДР Товар</button>
+      </div>
+    </div>
+    <button class="btn red" onclick="savePsjEntry('writeoff')">🗑 Добавить списание</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('psjWriteoffMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- PSJ RECEIVE MODAL -->
+<div class="mo" id="psjReceiveMo">
+  <div class="md">
+    <div class="mh"></div><div class="mt">Приход товара (задним числом)</div>
+    <div class="fg"><label class="fl">Наименование</label><input class="fi" id="psjRcvName" placeholder="Что пришло"></div>
+    <div class="row2">
+      <div class="fg"><label class="fl">Артикул</label><input class="fi" id="psjRcvNum" placeholder="№"></div>
+      <div class="fg"><label class="fl">Кол-во</label><input class="fi" id="psjRcvQty" placeholder="1"></div>
+    </div>
+    <div class="row2">
+      <div class="fg"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="psjRcvPrice" placeholder="0" inputmode="numeric"></div>
+      <div class="fg"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="psjRcvAmt" placeholder="0" inputmode="numeric"></div>
+    </div>
+    <div class="fg"><label class="fl">Откуда</label><input class="fi" id="psjRcvFrom" placeholder="Мастерская / поставщик"></div>
+    <button class="btn blue" onclick="savePsjEntry('receive')">📥 Добавить приход</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('psjReceiveMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- PSJ EXPENSE MODAL -->
+<div class="mo" id="psjExpenseMo">
+  <div class="md">
+    <div class="mh"></div><div class="mt">Расходы (задним числом)</div>
+    <div class="fg"><label class="fl">Тип расхода</label>
+      <select class="fs" id="psjExpType">
+        <option value="zp">💰 Зарплата</option>
+        <option value="travel">🚗 Дорога</option>
+        <option value="inkass">🏦 Инкассация</option>
+        <option value="other">📋 Прочее</option>
+      </select>
+    </div>
+    <div class="fg"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="psjExpAmt" placeholder="0" inputmode="numeric"></div>
+    <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="psjExpComment" placeholder="Необязательно"></div>
+    <button class="btn" style="background:#f0a060;border:none;color:#0f0f13" onclick="savePsjEntry('expense')">💸 Добавить расход</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('psjExpenseMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- PSJ STAFF MODAL -->
+<div class="mo" id="psjStaffMo">
+  <div class="md">
+    <div class="mh"></div><div class="mt">Покупка сотрудника (задним числом)</div>
+    <div class="fg"><label class="fl">Кто купил</label><input class="fi" id="psjStaffWho" placeholder="Имя сотрудника"></div>
+    <div class="fg"><label class="fl">Товар</label><input class="fi" id="psjStaffItem" placeholder="Наименование"></div>
+    <div class="row2">
+      <div class="fg"><label class="fl">Розница (₽)</label><input class="fi" type="number" id="psjStaffRetail" placeholder="0" inputmode="numeric"></div>
+      <div class="fg"><label class="fl">Опт (₽)</label><input class="fi" type="number" id="psjStaffOpt" placeholder="0" inputmode="numeric"></div>
+    </div>
+    <button class="btn" style="background:#a060f0;border:none;color:#fff" onclick="savePsjEntry('staff')">🛒 Добавить покупку</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('psjStaffMo')">Отмена</button>
   </div>
 </div>
 
@@ -1536,7 +1699,7 @@ function buildAdminTabs(){
   t.innerHTML=`
     <button class="tab active" onclick="showPg('today',this);renderTodayShift()"><div class="ti">📋</div><span>Смена</span></button>
     <button class="tab" onclick="showPg('history',this);renderShiftHistory()"><div class="ti">📁</div><span>Архив</span></button>
-    <button class="tab" onclick="showPg('pastshift',this)"><div class="ti">✏️</div><span>Ввод</span></button>
+    <button class="tab" onclick="showPg('pastshift',this);switchPsTab('journal')"><div class="ti">✏️</div><span>Ввод</span></button>
     <button class="tab" onclick="showPg('sellers',this);renderSellersAdmin()"><div class="ti">👥</div><span>Роли</span></button>
     <button class="tab" onclick="showPg('shopsettings',this);renderShopSettings()"><div class="ti">⚙️</div><span>Настройки</span></button>
     <button class="tab" onclick="showPg('dataupload',this);renderImportHistory()"><div class="ti">📥</div><span>Загрузка</span></button>
@@ -3440,7 +3603,266 @@ function deleteAdmin(idx,name){
 }
 
 
-// ════ DATA IMPORT ════
+
+// ════ PASTSHIFT TABS ════
+function switchPsTab(tab) {
+  var isJournal = tab === 'journal';
+  document.getElementById('psJournalTab').style.display = isJournal ? 'block' : 'none';
+  document.getElementById('psReportTab').style.display = isJournal ? 'none' : 'block';
+  var btnJ = document.getElementById('psTab_journal');
+  var btnR = document.getElementById('psTab_report');
+  if(btnJ) { btnJ.style.borderWidth = isJournal ? '2px' : '1px'; btnJ.style.background = isJournal ? '#1e2a14' : '#22222e'; btnJ.style.color = isJournal ? '#c8f060' : '#8888aa'; btnJ.style.borderColor = isJournal ? '#c8f060' : '#2e2e3e'; }
+  if(btnR) { btnR.style.borderWidth = isJournal ? '1px' : '2px'; btnR.style.background = isJournal ? '#22222e' : '#1e2a14'; btnR.style.color = isJournal ? '#8888aa' : '#c8f060'; btnR.style.borderColor = isJournal ? '#2e2e3e' : '#c8f060'; }
+  if(isJournal) psjInit();
+}
+
+function psjInit() {
+  // Populate shops
+  var shops = getShopNames();
+  var shopSel = document.getElementById('psjShop');
+  if(shopSel) shopSel.innerHTML = shops.map(function(s){ return '<option>'+s+'</option>'; }).join('');
+  // Populate sellers
+  psjPopulateSellers();
+  // Default date = today
+  var d = document.getElementById('psjDate');
+  if(d && !d.value) d.value = new Date().toISOString().split('T')[0];
+  psjLoadJournal();
+}
+
+function psjPopulateSellers() {
+  var shop = (document.getElementById('psjShop')||{}).value || '';
+  var sellers = getSellers().filter(function(s){ return !s.blocked && (!s.shop || s.shop === shop || !shop); });
+  var sel = document.getElementById('psjSeller');
+  if(sel) sel.innerHTML = sellers.map(function(s){ return '<option value="'+s.id+'">'+s.name+'</option>'; }).join('');
+}
+
+// Storage key for backdate journal entries
+var PSJ_KEY = 'iz_psj_entries';
+
+function getPsjEntries() {
+  return JSON.parse(localStorage.getItem(PSJ_KEY) || '[]');
+}
+function savePsjEntries(entries) {
+  localStorage.setItem(PSJ_KEY, JSON.stringify(entries));
+}
+
+function psjLoadJournal() {
+  psjPopulateSellers();
+  var date = (document.getElementById('psjDate')||{}).value || '';
+  var shop = (document.getElementById('psjShop')||{}).value || '';
+  var entries = getPsjEntries().filter(function(e){ return e.date === date && e.shopName === shop; });
+  var list = document.getElementById('psjList');
+  if(!list) return;
+  if(!entries.length) {
+    list.innerHTML = '<div class="empty"><div class="ei">📒</div>Нет записей за этот день</div>';
+    document.getElementById('psjDaySummary').style.display = 'none';
+    return;
+  }
+  // Render entries
+  list.innerHTML = entries.map(function(e) {
+    var icon = {sale:'💰',writeoff:'🗑️',receive:'📥',expense:'💸',staff:'🛒'}[e.type] || '📝';
+    var color = {sale:'#60f090',writeoff:'#f06060',receive:'#60c8f0',expense:'#f0a060',staff:'#a060f0'}[e.type] || '#f0f0f8';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #2e2e3e">' +
+      '<div>' +
+        '<div style="font-size:13px;font-weight:700">'+icon+' '+e.label+'</div>' +
+        '<div style="font-size:11px;color:#8888aa;margin-top:2px">'+e.sub+'</div>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:8px">' +
+        '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;color:'+color+'">'+e.amtSign+(Math.round(e.amount||0)).toLocaleString('ru-RU')+'₽</div>' +
+        '<button onclick="deletePsjEntry(\''+e.id+'\')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:4px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  // Day summary
+  var totCash=0, totCard=0, totDisc=0, totExp=0;
+  entries.forEach(function(e){
+    if(e.type==='sale'){ totCash+=e.cashEffect||0; totCard+=e.cardEffect||0; totDisc+=e.discEffect||0; }
+    if(e.type==='expense') totExp+=e.amount||0;
+  });
+  var totRev = totCash + totCard + totDisc;
+  var summary = document.getElementById('psjDaySummary');
+  summary.style.display = 'block';
+  summary.innerHTML = '<div style="background:#1e2a14;border:1px solid #c8f060;border-radius:12px;padding:12px;margin-bottom:4px">' +
+    '<div style="font-size:11px;color:#8888aa;margin-bottom:6px;font-weight:700">ИТОГИ ДНЯ — '+date+'</div>' +
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">💵 Нал</span><span style="color:#60f090;font-weight:700">'+Math.round(totCash).toLocaleString('ru-RU')+'₽</span></div>' +
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">💳 Безнал</span><span style="color:#60c8f0;font-weight:700">'+Math.round(totCard).toLocaleString('ru-RU')+'₽</span></div>' +
+    (totDisc ? '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">🎁 Скидка</span><span style="color:#8888aa;font-weight:700">'+Math.round(totDisc).toLocaleString('ru-RU')+'₽</span></div>' : '') +
+    '<div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;padding:6px 0;border-top:1px solid #2e2e3e;margin-top:4px"><span>Итого выручка</span><span style="color:#c8f060">'+Math.round(totRev).toLocaleString('ru-RU')+'₽</span></div>' +
+    (totExp ? '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">💸 Расходы</span><span style="color:#f06060;font-weight:700">'+Math.round(totExp).toLocaleString('ru-RU')+'₽</span></div>' : '') +
+    '<button onclick="savePsjAsShift()" style="width:100%;margin-top:10px;padding:10px;border-radius:10px;border:none;background:#c8f060;color:#0f0f13;font-weight:700;font-size:13px;cursor:pointer">💾 Сохранить как отчёт за день</button>' +
+  '</div>';
+}
+
+function deletePsjEntry(id) {
+  var entries = getPsjEntries().filter(function(e){ return e.id !== id; });
+  savePsjEntries(entries);
+  psjLoadJournal();
+}
+
+// Pay method for psj sale
+var psjPayMethod = 'cash';
+var psjGoodsType = 'derevo';
+var psjWoGoodsType = 'derevo';
+
+function openPsjMo(type) {
+  psjPayMethod = 'cash'; psjGoodsType = 'derevo'; psjWoGoodsType = 'derevo';
+  if(type==='sale') {
+    // reset fields
+    ['psjSaleName','psjSaleAmt','psjSaleDisc','psjSaleComment'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+    document.getElementById('psjMixedBlock').style.display='none';
+    setPsjGoods('derevo', document.getElementById('psjGoodsDerevo'));
+    // reset pay chips
+    document.querySelectorAll('#psjSaleMo .pc').forEach(function(p){ p.classList.remove('active'); });
+    var first = document.querySelector('#psjSaleMo .pc'); if(first) first.classList.add('active');
+    psjCalcSale();
+    openMo('psjSaleMo');
+  } else if(type==='writeoff') {
+    ['psjWoName','psjWoNum','psjWoQty','psjWoAmt','psjWoReason'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+    openMo('psjWriteoffMo');
+  } else if(type==='receive') {
+    ['psjRcvName','psjRcvNum','psjRcvQty','psjRcvPrice','psjRcvAmt','psjRcvFrom'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+    openMo('psjReceiveMo');
+  } else if(type==='expense') {
+    ['psjExpAmt','psjExpComment'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+    openMo('psjExpenseMo');
+  } else if(type==='staff') {
+    ['psjStaffWho','psjStaffItem','psjStaffRetail','psjStaffOpt'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+    openMo('psjStaffMo');
+  }
+}
+
+function setPsjPayM(method, el) {
+  psjPayMethod = method;
+  document.querySelectorAll('#psjSaleMo .pc').forEach(function(p){ p.classList.remove('active'); });
+  if(el) el.classList.add('active');
+  document.getElementById('psjMixedBlock').style.display = method==='mixed' ? 'flex' : 'none';
+}
+function setPsjGoods(type, el) {
+  psjGoodsType = type;
+  ['psjGoodsDerevo','psjGoodsDr'].forEach(function(id){ var b=document.getElementById(id); if(b){ b.style.borderWidth='1px'; b.style.background='#22222e'; b.style.color='#8888aa'; b.style.borderColor='#2e2e3e'; } });
+  if(el){ el.style.borderWidth='2px'; el.style.background='#1e2a14'; el.style.color='#c8f060'; el.style.borderColor='#c8f060'; }
+}
+function setPsjWoGoods(type, el) {
+  psjWoGoodsType = type;
+  ['psjWoDerevo','psjWoDr'].forEach(function(id){ var b=document.getElementById(id); if(b){ b.style.borderWidth='1px'; b.style.background='#22222e'; b.style.color='#8888aa'; b.style.borderColor='#2e2e3e'; } });
+  if(el){ el.style.borderWidth='2px'; el.style.background='#1e2a14'; el.style.color='#c8f060'; el.style.borderColor='#c8f060'; }
+}
+function psjCalcSale() {
+  var amt = parseFloat((document.getElementById('psjSaleAmt')||{}).value)||0;
+  var disc = parseFloat((document.getElementById('psjSaleDisc')||{}).value)||0;
+  var total = Math.max(0, amt - disc);
+  var el = document.querySelector('#psjSaleTotal span:last-child');
+  if(el) el.textContent = Math.round(total).toLocaleString('ru-RU')+'₽';
+}
+
+function savePsjEntry(type) {
+  var date = (document.getElementById('psjDate')||{}).value || new Date().toISOString().split('T')[0];
+  var shopName = (document.getElementById('psjShop')||{}).value || '';
+  var sellerEl = document.getElementById('psjSeller');
+  var sellerName = sellerEl ? sellerEl.options[sellerEl.selectedIndex]&&sellerEl.options[sellerEl.selectedIndex].text : '';
+  var entry = { id: uid(), date: date, shopName: shopName, sellerName: sellerName, type: type, ts: new Date().toISOString() };
+
+  if(type==='sale') {
+    var name = (document.getElementById('psjSaleName')||{}).value||'';
+    var amt = parseFloat((document.getElementById('psjSaleAmt')||{}).value)||0;
+    var disc = parseFloat((document.getElementById('psjSaleDisc')||{}).value)||0;
+    if(!name){ showToast('Введите наименование'); return; }
+    if(!amt){ showToast('Введите сумму'); return; }
+    var paid = Math.max(0, amt - disc);
+    var isCash = psjPayMethod==='cash';
+    var isMixed = psjPayMethod==='mixed';
+    var cash = isCash ? paid : (isMixed ? parseFloat((document.getElementById('psjMixCash')||{}).value)||0 : 0);
+    var card = (!isCash && !isMixed) ? paid : (isMixed ? parseFloat((document.getElementById('psjMixCard')||{}).value)||0 : 0);
+    entry.label = 'Продажа'; entry.sub = name + (disc?' · скидка '+Math.round(disc)+'₽':'') + ' · ' + (isCash?'Нал':psjPayMethod);
+    entry.amount = amt; entry.amtSign = '+'; entry.goodsType = psjGoodsType;
+    entry.cashEffect = cash; entry.cardEffect = card; entry.discEffect = disc;
+    entry.comment = (document.getElementById('psjSaleComment')||{}).value||'';
+    closeMo('psjSaleMo');
+  } else if(type==='writeoff') {
+    var name = (document.getElementById('psjWoName')||{}).value||'';
+    var amt = parseFloat((document.getElementById('psjWoAmt')||{}).value)||0;
+    var reason = (document.getElementById('psjWoReason')||{}).value||'';
+    if(!name){ showToast('Введите наименование'); return; }
+    entry.label='Списание'; entry.sub=name+(reason?' · '+reason:'');
+    entry.amount=amt; entry.amtSign='−'; entry.goodsType=psjWoGoodsType;
+    entry.cashEffect=0; entry.cardEffect=0; entry.discEffect=0;
+    closeMo('psjWriteoffMo');
+  } else if(type==='receive') {
+    var name = (document.getElementById('psjRcvName')||{}).value||'';
+    var amt = parseFloat((document.getElementById('psjRcvAmt')||{}).value)||parseFloat((document.getElementById('psjRcvPrice')||{}).value)||0;
+    if(!name){ showToast('Введите наименование'); return; }
+    entry.label='Приход товара'; entry.sub=name+' · '+((document.getElementById('psjRcvFrom')||{}).value||'');
+    entry.amount=amt; entry.amtSign='+';
+    entry.cashEffect=0; entry.cardEffect=0; entry.discEffect=0;
+    closeMo('psjReceiveMo');
+  } else if(type==='expense') {
+    var amt = parseFloat((document.getElementById('psjExpAmt')||{}).value)||0;
+    var expType = (document.getElementById('psjExpType')||{}).value||'other';
+    var comment = (document.getElementById('psjExpComment')||{}).value||'';
+    if(!amt){ showToast('Введите сумму'); return; }
+    var expLabels = {zp:'Зарплата',travel:'Дорога',inkass:'Инкассация',other:'Расход'};
+    entry.label='Расход · '+(expLabels[expType]||'Прочее'); entry.sub=comment;
+    entry.amount=amt; entry.amtSign='−';
+    entry.cashEffect=0; entry.cardEffect=0; entry.discEffect=0; entry.expType=expType;
+    closeMo('psjExpenseMo');
+  } else if(type==='staff') {
+    var who = (document.getElementById('psjStaffWho')||{}).value||'';
+    var item = (document.getElementById('psjStaffItem')||{}).value||'';
+    var retail = parseFloat((document.getElementById('psjStaffRetail')||{}).value)||0;
+    if(!who||!item){ showToast('Заполните поля'); return; }
+    entry.label='Покупка сотр.'; entry.sub=who+' · '+item;
+    entry.amount=retail; entry.amtSign='+';
+    entry.cashEffect=0; entry.cardEffect=0; entry.discEffect=0;
+    closeMo('psjStaffMo');
+  }
+
+  var entries = getPsjEntries();
+  entries.push(entry);
+  savePsjEntries(entries);
+  // also sync to Firestore
+  try { db.collection('iz_psj').doc(entry.id).set(entry); } catch(e) {}
+  psjLoadJournal();
+  showToast('✅ Запись добавлена');
+}
+
+function savePsjAsShift() {
+  var date = (document.getElementById('psjDate')||{}).value || '';
+  var shopName = (document.getElementById('psjShop')||{}).value || '';
+  var sellerEl = document.getElementById('psjSeller');
+  var sellerName = sellerEl ? sellerEl.options[sellerEl.selectedIndex]&&sellerEl.options[sellerEl.selectedIndex].text : '';
+  var entries = getPsjEntries().filter(function(e){ return e.date === date && e.shopName === shopName; });
+  if(!entries.length){ showToast('Нет записей для сохранения'); return; }
+
+  // Aggregate
+  var cashRev=0, cardRev=0, disc=0, exp=0;
+  var journal = entries.map(function(e){
+    cashRev += e.cashEffect||0; cardRev += e.cardEffect||0; disc += e.discEffect||0;
+    if(e.type==='expense') exp += e.amount||0;
+    return { id:e.id, type:e.type, ts:e.date+'T12:00:00.000Z', icon: {sale:'💰',writeoff:'🗑️',receive:'📥',expense:'💸',staff:'🛒'}[e.type]||'📝',
+      label:e.label, sub:e.sub, amount:e.amount, amtCls:e.type==='sale'?'pos':'exp', amtSign:e.amtSign,
+      cashEffect:e.cashEffect||0, cardEffect:e.cardEffect||0, staffEffect:0, goodsEffect: e.type==='sale'?-(e.amount||0): e.type==='receive'?(e.amount||0): e.type==='writeoff'?-(e.amount||0):0 };
+  });
+
+  var shift = {
+    id: uid(), source: 'psj', backfilled: true,
+    shopName: shopName, sellerName: sellerName, date: date,
+    openedAt: date+'T09:00:00.000Z', closedAt: date+'T21:00:00.000Z',
+    cashRevenue: cashRev, cardRevenue: cardRev, totalDiscount: disc,
+    zp: 0, inkass: 0, otherExp: exp,
+    journal: journal,
+    savedAt: new Date().toISOString(), savedBy: (session&&session.name)||'Admin'
+  };
+
+  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  // Remove existing for same date+shop
+  shifts = shifts.filter(function(s){ return !(s.date===date && s.shopName===shopName && s.source==='psj'); });
+  shifts.unshift(shift);
+  localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+  try { db.collection('iz_shifts').doc(shift.id).set(shift); } catch(e) {}
+  showToast('✅ Отчёт за '+date+' сохранён');
+}
+
+
 var pendingImportData = null;
 
 function handleFileSelect(input){
