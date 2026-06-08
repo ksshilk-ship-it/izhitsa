@@ -67,51 +67,18 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
   <div id="loginErr" style="color:var(--exp);font-size:12px;margin-top:8px;text-align:center;min-height:16px"></div>
 </div>
 
-<div id="appScreen" style="display:none;min-height:100dvh;padding:20px 16px 80px;background:var(--bg)">
-  <h2 style="color:var(--accent);margin-bottom:20px">Добро пожаловать!</h2>
-  <p id="userGreeting" style="color:var(--t2);margin-bottom:30px"></p>
-  
-  <!-- Page content -->
-  <div id="dashPage" class="page" style="display:block">
-    <h3>Главная</h3>
-    <p style="color:var(--t2);font-size:14px">Выбери вкладку внизу для навигации</p>
-  </div>
-  
-  <div id="shopPage" class="page" style="display:none">
-    <h3>Магазины</h3>
-    <p style="color:var(--t2);font-size:14px">Управление магазинами</p>
-  </div>
-  
-  <div id="staffPage" class="page" style="display:none">
-    <h3>Сотрудники</h3>
-    <p style="color:var(--t2);font-size:14px">Управление сотрудниками и продавцами</p>
-  </div>
-  
-  <div id="settingsPage" class="page" style="display:none">
-    <h3>Настройки</h3>
-    <p style="color:var(--t2);font-size:14px">Общие настройки</p>
-    <button class="btn" onclick="doLogout()" style="margin-top:20px">Выход</button>
-  </div>
-</div>
+<script async src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" crossorigin="anonymous"></script>
+<script async src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" crossorigin="anonymous"></script>
 
-<!-- Tabs bar -->
-<div id="tabsBar" style="display:none;position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:62px;background:var(--s1);border-top:1px solid var(--border);display:flex;z-index:100;overflow-x:auto">
-  <button class="tab active" onclick="showPage('dash')" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:none;background:none;color:var(--accent);cursor:pointer;font-size:11px;font-weight:500">
-    <div style="font-size:18px">🏠</div>
-    <span>Главная</span>
-  </button>
-  <button class="tab" onclick="showPage('shop')" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:none;background:none;color:var(--t2);cursor:pointer;font-size:11px;font-weight:500">
-    <div style="font-size:18px">🏪</div>
-    <span>Магазины</span>
-  </button>
-  <button class="tab" onclick="showPage('staff')" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:none;background:none;color:var(--t2);cursor:pointer;font-size:11px;font-weight:500">
-    <div style="font-size:18px">👥</div>
-    <span>Сотрудники</span>
-  </button>
-  <button class="tab" onclick="showPage('settings')" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:none;background:none;color:var(--t2);cursor:pointer;font-size:11px;font-weight:500">
-    <div style="font-size:18px">⚙️</div>
-    <span>Настройки</span>
-  </button>
+<!-- Edit Modal -->
+<div id="editSellerModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;padding:20px;overflow-y:auto">
+  <div style="background:var(--s1);padding:20px;border-radius:14px;margin-top:50px;max-width:400px;margin-left:auto;margin-right:auto">
+    <h3 style="margin-bottom:20px">Изменить доступы</h3>
+    <div id="editSellerName" style="margin-bottom:12px;color:var(--t2)"></div>
+    <div id="editShopCheckboxes" style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px"></div>
+    <button class="btn" onclick="saveSellerEdit()" style="margin-bottom:10px">Сохранить</button>
+    <button class="btn sec" onclick="document.getElementById('editSellerModal').style.display='none'">Закрыть</button>
+  </div>
 </div>
 
 <script async src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" crossorigin="anonymous"></script>
@@ -133,6 +100,152 @@ function getAdminUsers() {
   } catch(e) {
     return [];
   }
+}
+
+function getShops() {
+  try {
+    return JSON.parse(localStorage.getItem('iz_shops') || '[]');
+  } catch(e) {
+    return [];
+  }
+}
+
+function getSellers() {
+  try {
+    return JSON.parse(localStorage.getItem('iz_sellers') || '[]');
+  } catch(e) {
+    return [];
+  }
+}
+
+function saveSellers(sellers) {
+  localStorage.setItem('iz_sellers', JSON.stringify(sellers));
+}
+
+function addSeller() {
+  var name = document.getElementById('sellerName').value;
+  var pass = document.getElementById('sellerPass').value;
+  
+  if(!name || !pass) {
+    alert('Заполните имя и пароль');
+    return;
+  }
+  
+  var checkboxes = document.querySelectorAll('#shopCheckboxes input[type="checkbox"]:checked');
+  var shops = [];
+  for(var i = 0; i < checkboxes.length; i++) {
+    shops.push(checkboxes[i].value);
+  }
+  
+  if(!shops.length) {
+    alert('Выберите хотя бы один магазин');
+    return;
+  }
+  
+  var sellers = getSellers();
+  sellers.push({
+    id: Date.now().toString(),
+    name: name,
+    shops: shops,
+    pass: pass,
+    createdAt: new Date().toISOString()
+  });
+  
+  saveSellers(sellers);
+  document.getElementById('sellerName').value = '';
+  document.getElementById('sellerPass').value = '';
+  document.querySelectorAll('#shopCheckboxes input').forEach(cb => cb.checked = false);
+  alert('Продавец добавлен!');
+  renderSellers();
+}
+
+function editSeller(id) {
+  var sellers = getSellers();
+  var seller = sellers.find(s => s.id === id);
+  if(!seller) return;
+  
+  var checkboxes = document.querySelectorAll('#editShopCheckboxes input[type="checkbox"]');
+  checkboxes.forEach(cb => {
+    cb.checked = seller.shops.includes(cb.value);
+  });
+  
+  document.getElementById('editSellerModal').style.display = 'block';
+  document.getElementById('editSellerModal').dataset.sellerId = id;
+  document.getElementById('editSellerName').innerHTML = seller.name;
+}
+
+function saveSellerEdit() {
+  var sellerId = document.getElementById('editSellerModal').dataset.sellerId;
+  var checkboxes = document.querySelectorAll('#editShopCheckboxes input[type="checkbox"]:checked');
+  var shops = [];
+  for(var i = 0; i < checkboxes.length; i++) {
+    shops.push(checkboxes[i].value);
+  }
+  
+  if(!shops.length) {
+    alert('Выберите хотя бы один магазин');
+    return;
+  }
+  
+  var sellers = getSellers();
+  var seller = sellers.find(s => s.id === sellerId);
+  if(seller) {
+    seller.shops = shops;
+    saveSellers(sellers);
+    document.getElementById('editSellerModal').style.display = 'none';
+    renderSellers();
+  }
+}
+
+function deleteSeller(id) {
+  if(!confirm('Удалить продавца?')) return;
+  var sellers = getSellers();
+  sellers = sellers.filter(s => s.id !== id);
+  saveSellers(sellers);
+  renderSellers();
+}
+
+function renderSellers() {
+  var sellers = getSellers();
+  var html = '';
+  
+  if(sellers.length === 0) {
+    html = '<p style="color:var(--t2);font-size:12px">Продавцов нет</p>';
+  } else {
+    for(var i = 0; i < sellers.length; i++) {
+      var s = sellers[i];
+      html += '<div style="padding:12px;background:var(--s2);border-radius:8px;margin-bottom:10px">';
+      html += '<div style="font-weight:600;margin-bottom:4px">' + s.name + '</div>';
+      html += '<div style="font-size:12px;color:var(--t2);margin-bottom:8px">Магазины: ' + s.shops.join(', ') + '</div>';
+      html += '<div style="display:flex;gap:8px">';
+      html += '<button class="btn" style="flex:1;padding:8px;font-size:12px" onclick="editSeller(\'' + s.id + '\')">Изменить</button>';
+      html += '<button class="btn" style="flex:1;padding:8px;font-size:12px;background:var(--exp)" onclick="deleteSeller(\'' + s.id + '\')">Удалить</button>';
+      html += '</div>';
+      html += '</div>';
+    }
+  }
+  
+  var container = document.getElementById('sellersList');
+  if(container) {
+    container.innerHTML = html;
+  }
+}
+
+function renderShopCheckboxes() {
+  var shops = getShops();
+  var html = '';
+  for(var i = 0; i < shops.length; i++) {
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:8px;cursor:pointer;margin-bottom:8px;background:var(--s2);border-radius:6px">';
+    html += '<input type="checkbox" value="' + shops[i] + '" style="width:16px;height:16px;cursor:pointer">';
+    html += '<span>' + shops[i] + '</span>';
+    html += '</label>';
+  }
+  
+  var addContainer = document.getElementById('shopCheckboxes');
+  if(addContainer) addContainer.innerHTML = html;
+  
+  var editContainer = document.getElementById('editShopCheckboxes');
+  if(editContainer) editContainer.innerHTML = html;
 }
 
 function selectAdminRole(role, el) {
@@ -207,52 +320,26 @@ function doLogin() {
   // Success
   session = {id: user.id, name: user.name, role: user.role};
   sessionStorage.setItem('iz_admin_session', JSON.stringify(session));
+  document.getElementById('loginErr').innerHTML = '✅ Вход выполнен!';
   
-  // Show appScreen
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('appScreen').style.display = 'block';
-  document.getElementById('tabsBar').style.display = 'flex';
-  document.getElementById('userGreeting').innerHTML = 'Вы вошли как <strong>' + user.name + '</strong> (' + user.role + ')';
-}
-
-function doLogout() {
-  session = null;
-  sessionStorage.removeItem('iz_admin_session');
-  document.getElementById('loginScreen').style.display = 'flex';
-  document.getElementById('appScreen').style.display = 'none';
-  document.getElementById('tabsBar').style.display = 'none';
-  document.getElementById('loginErr').innerHTML = '';
-  document.getElementById('loginPass').value = '';
-  document.getElementById('loginUser').value = '';
-}
-
-function showPage(page) {
-  // Hide all pages
-  var pages = document.querySelectorAll('.page');
-  for(var i = 0; i < pages.length; i++) {
-    pages[i].style.display = 'none';
-  }
-  
-  // Hide all tabs active state
-  var tabs = document.querySelectorAll('.tab');
-  for(var i = 0; i < tabs.length; i++) {
-    tabs[i].style.color = 'var(--t2)';
-  }
-  
-  // Show selected page
-  var pageId = page + 'Page';
-  var pageEl = document.getElementById(pageId);
-  if(pageEl) {
-    pageEl.style.display = 'block';
-  }
-  
-  // Highlight selected tab
-  event.target.closest('.tab').style.color = 'var(--accent)';
+  // Redirect or show app
+  setTimeout(function() {
+    alert('Успешный вход как ' + user.name + ' (' + user.role + ')');
+  }, 500);
 }
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
-  // Populate first role
+  // Initialize default shops if not exist
+  if(!localStorage.getItem('iz_shops')) {
+    localStorage.setItem('iz_shops', JSON.stringify(['Роза Хутор', 'Горки', 'Мастерская']));
+  }
+  
+  // Load initial data
+  renderShopCheckboxes();
+  renderSellers();
+  
+  // Select first role
   selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
 });
 </script>
