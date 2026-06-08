@@ -229,15 +229,60 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 
   <!-- WAREHOUSE (кладовщик) -->
   <div class="page" id="pg-warehouse">
-    <div id="whNotifications"></div>
-    <div class="srow">
-      <div class="sc"><div class="sc-v" id="whPending" style="color:var(--a4)">0</div><div class="sc-l">Ждут приёмки</div></div>
-      <div class="sc"><div class="sc-v" id="whStock" style="color:var(--accent)">0</div><div class="sc-l">На складе</div></div>
-      <div class="sc"><div class="sc-v" id="whShipped" style="color:var(--a2)">0</div><div class="sc-l">Отгружено</div></div>
+
+    <!-- Переключатель вкладок -->
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div id="whTab1" onclick="setWhTab('real')" style="flex:1;padding:10px;text-align:center;border-radius:10px;background:var(--accent);color:#000;font-weight:700;font-size:13px;cursor:pointer">
+        📦 Реальное время
+      </div>
+      <div id="whTab2" onclick="setWhTab('archive')" style="flex:1;padding:10px;text-align:center;border-radius:10px;background:var(--s2);color:var(--t2);font-size:13px;cursor:pointer;border:1px solid var(--border)">
+        🗄 Архив
+      </div>
     </div>
-    <div class="card"><div class="ctitle">📥 Ожидают приёмки</div><div id="whPendingList"></div></div>
-    <div class="card"><div class="ctitle">📦 На складе</div><div id="whStockList"></div></div>
-    <button class="btn green" style="margin-top:4px" onclick="openShipmentMo()">🚚 Создать отгрузку</button>
+
+    <!-- ВКЛАДКА 1: Реальное время -->
+    <div id="whReal">
+      <div id="whNotifications"></div>
+      <div class="srow">
+        <div class="sc"><div class="sc-v" id="whPending" style="color:var(--a4)">0</div><div class="sc-l">Ждут приёмки</div></div>
+        <div class="sc"><div class="sc-v" id="whStock" style="color:var(--accent)">0</div><div class="sc-l">На складе</div></div>
+        <div class="sc"><div class="sc-v" id="whShipped" style="color:var(--a2)">0</div><div class="sc-l">Отгружено</div></div>
+      </div>
+      <div class="card"><div class="ctitle">📥 Ожидают приёмки</div><div id="whPendingList"></div></div>
+      <div class="card"><div class="ctitle">📦 На складе</div><div id="whStockList"></div></div>
+      <button class="btn green" style="margin-top:4px" onclick="openShipmentMo()">🚚 Создать отгрузку</button>
+    </div>
+
+    <!-- ВКЛАДКА 2: Архив -->
+    <div id="whArchive" style="display:none">
+
+      <!-- Метка актуальности -->
+      <div id="whArchiveDate" style="display:none;background:linear-gradient(135deg,#2a1a4a,#1a1428);border:1px solid #6c3fc5;border-radius:12px;padding:12px;margin-bottom:12px;text-align:center">
+        <div style="font-size:10px;color:#c8a0ff;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Архивные данные актуальны на утро</div>
+        <div id="whArchiveDateVal" style="font-size:17px;font-weight:700;color:#fff"></div>
+        <div style="font-size:10px;color:var(--t2);margin-top:3px" id="whArchivePeriodInfo"></div>
+      </div>
+
+      <div class="srow">
+        <div class="sc"><div class="sc-v" id="whArchStock" style="color:var(--accent)">0</div><div class="sc-l">На складе</div></div>
+        <div class="sc"><div class="sc-v" id="whArchDraft" style="color:#c8a0ff">0</div><div class="sc-l">Черновики</div></div>
+        <div class="sc"><div class="sc-v" id="whArchShipped" style="color:var(--a2)">0</div><div class="sc-l">Отгружено</div></div>
+      </div>
+
+      <div class="card">
+        <div class="ctitle">📦 Архивный склад</div>
+        <div id="whArchStockList"></div>
+      </div>
+
+      <div class="card" id="whArchDraftCard">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div class="ctitle" style="margin:0">✏️ Черновики (не активированы)</div>
+        </div>
+        <div id="whArchDraftList"></div>
+      </div>
+
+      <button class="btn" style="background:linear-gradient(135deg,#6c3fc5,#4a2a8a);margin-top:4px" onclick="openArchiveShipmentMo()">🚚 Архивная отгрузка</button>
+    </div>
   </div>
 
   <!-- ZP (мастер/управляющий) -->
@@ -983,10 +1028,33 @@ function setItemStatus(id,status){
 }
 
 // ════════ WAREHOUSE (Кладовщик) ════════
+let _whTab = 'real';
+
+function setWhTab(tab){
+  _whTab = tab;
+  const t1 = document.getElementById('whTab1');
+  const t2 = document.getElementById('whTab2');
+  const r  = document.getElementById('whReal');
+  const a  = document.getElementById('whArchive');
+  if(tab==='real'){
+    t1.style.background='var(--accent)'; t1.style.color='#000'; t1.style.fontWeight='700';
+    t2.style.background='var(--s2)'; t2.style.color='var(--t2)'; t2.style.fontWeight='normal';
+    r.style.display='block'; a.style.display='none';
+  } else {
+    t2.style.background='#6c3fc5'; t2.style.color='#fff'; t2.style.fontWeight='700';
+    t1.style.background='var(--s2)'; t1.style.color='var(--t2)'; t1.style.fontWeight='normal';
+    r.style.display='none'; a.style.display='block';
+    renderArchiveWarehouse();
+  }
+}
+
 function renderWarehouse(){
-  const pending=items.filter(i=>i.status==='delivered');
-  const stock=items.filter(i=>i.status==='received');
-  const shipped=items.filter(i=>i.status==='shipped');
+  // Реальный склад — только НЕ черновики
+  const realItems = items.filter(i=>!i.isArchiveDraft);
+  const pending = realItems.filter(i=>i.status==='delivered');
+  const stock   = realItems.filter(i=>i.status==='received');
+  const shipped = realItems.filter(i=>i.status==='shipped');
+
   document.getElementById('whPending').textContent=pending.length;
   document.getElementById('whStock').textContent=stock.length;
   document.getElementById('whShipped').textContent=shipped.length;
@@ -1017,6 +1085,71 @@ function renderWarehouse(){
       </div>
       <span class="badge b-received">${fmt(item.price||0)}</span>
     </div>`).join(''):'<div style="font-size:12px;color:var(--t2);padding:6px 0">Склад пуст</div>';
+
+  // Если мы на архивной вкладке — обновить и её
+  if(_whTab==='archive') renderArchiveWarehouse();
+}
+
+function renderArchiveWarehouse(){
+  // Черновики (ещё не активированы)
+  const drafts  = items.filter(i=>i.isArchiveDraft && i.status==='received');
+  // Активированный архив
+  const archStock   = items.filter(i=>i.isArchive && !i.isArchiveDraft && i.status==='received');
+  const archShipped = items.filter(i=>i.isArchive && !i.isArchiveDraft && i.status==='shipped');
+
+  document.getElementById('whArchStock').textContent  = archStock.length + drafts.length;
+  document.getElementById('whArchDraft').textContent  = drafts.length;
+  document.getElementById('whArchShipped').textContent = archShipped.length;
+
+  // Метка актуальности — берём из последнего активированного периода
+  const hist = JSON.parse(localStorage.getItem('ws_activated_periods')||'[]');
+  const dateEl = document.getElementById('whArchiveDate');
+  const dateVal = document.getElementById('whArchiveDateVal');
+  const periodInfo = document.getElementById('whArchivePeriodInfo');
+  if(hist.length){
+    const last = hist[0];
+    // Дата "на утро" = следующий день после последней даты периода
+    const nextDay = new Date(last.to);
+    nextDay.setDate(nextDay.getDate()+1);
+    const nextDayStr = nextDay.toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
+    dateEl.style.display='block';
+    dateVal.textContent = nextDayStr;
+    periodInfo.textContent = `Последний активированный период: ${last.from} — ${last.to}`;
+  } else if(drafts.length){
+    dateEl.style.display='block';
+    dateVal.textContent = 'Черновики не активированы';
+    periodInfo.textContent = 'Активируйте период в разделе Загрузка → Архив';
+  } else {
+    dateEl.style.display='none';
+  }
+
+  // Список архивного склада (активированный + черновики вместе)
+  const allArchStock = [...archStock, ...drafts].sort((a,b)=>(b.receivedAt||'').localeCompare(a.receivedAt||''));
+  const sl = document.getElementById('whArchStockList');
+  sl.innerHTML = allArchStock.length ? allArchStock.map(item=>`
+    <div class="li">
+      <div class="li-ico" style="background:${item.isArchiveDraft?'#2a1a4a':'#1e2a14'}">${item.isArchiveDraft?'✏️':'📦'}</div>
+      <div class="li-info">
+        <div class="li-name">№${item.itemNum||'—'} ${item.name||item.itemName}${item.artikul?' · '+item.artikul:''}</div>
+        <div class="li-sub">👤 ${item.masterName} · ${fmt(item.price||0)}</div>
+        <div class="li-sub">${fmtDT(item.receivedAt)}${item.isArchiveDraft?' · <span style="color:#c8a0ff">черновик</span>':''}</div>
+      </div>
+      <span class="badge" style="background:${item.isArchiveDraft?'#6c3fc5':'var(--s2)'};color:${item.isArchiveDraft?'#fff':'var(--t2)'}">${fmt(item.price||0)}</span>
+    </div>`).join('') : '<div style="font-size:12px;color:var(--t2);padding:6px 0">Архивный склад пуст</div>';
+
+  // Черновики отдельным списком
+  const dl = document.getElementById('whArchDraftList');
+  dl.innerHTML = drafts.length
+    ? `<div style="font-size:11px;color:#c8a0ff;margin-bottom:8px">Эти записи ещё не активированы — не видны в статистике</div>`
+      + drafts.slice(0,5).map(i=>`<div class="at-row"><span class="at-lbl">${i.name||i.itemName}<br><span style="font-size:10px">${fmtDT(i.receivedAt)} · ${i.masterName}</span></span><span class="at-val" style="color:#c8a0ff">${fmt(i.price||0)}</span></div>`).join('')
+      + (drafts.length>5?`<div style="font-size:11px;color:var(--t2);padding:6px 0;text-align:center">...и ещё ${drafts.length-5}</div>`:'')
+    : '<div style="font-size:12px;color:var(--t2);padding:6px 0">Черновиков нет</div>';
+}
+
+function openArchiveShipmentMo(){
+  // Открываем стандартный modal отгрузки но с пометкой архивной
+  openShipmentMo();
+  showToast('💡 Создаётся архивная отгрузка — укажите прошедшую дату');
 }
 
 function openItemAccept(id){
@@ -1856,6 +1989,7 @@ async function activateArchivePeriod(){
   showToast(`✅ Активировано: ${draftItems.length} изд. + ${draftShips.length} накл. за ${from}–${to}`);
   renderActivatedPeriods();
   renderArchiveDrafts();
+  renderArchiveWarehouse(); // обновить метку даты на складе
 }
 
 function renderActivatedPeriods(){
