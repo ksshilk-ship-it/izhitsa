@@ -358,6 +358,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
   <div class="page" id="pg-history">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="stitle" style="margin:0">Архив смен</div>
+      <button type="button" onclick="openPeriodReport()" style="padding:7px 12px;border-radius:10px;border:1px solid #60c8f0;background:#1a1e2e;color:#60c8f0;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📊 Отчёт</button>
     </div>
     <!-- Period filter -->
     <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">
@@ -745,6 +746,54 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
     <button class="btn" style="margin-top:8px" onclick="saveShopSettings()">💾 Сохранить настройки</button>
   </div>
 
+  <!-- DATA UPLOAD PAGE -->
+  <div class="page" id="pg-dataupload">
+    <div class="stitle">📥 Загрузка данных</div>
+    <div class="al-info" style="margin-bottom:12px">💡 Загрузите JSON или CSV с историческими сменами. Система заполнит базу автоматически.</div>
+    <div class="card" style="margin-bottom:10px">
+      <div class="ctitle">Выбрать файл</div>
+      <div id="dropZone" onclick="document.getElementById('fileInput').click()" ondragover="event.preventDefault();this.style.borderColor='#c8f060'" ondragleave="this.style.borderColor='#2e2e3e'" ondrop="handleFileDrop(event)" style="border:2px dashed #2e2e3e;border-radius:12px;padding:24px;text-align:center;cursor:pointer;margin-bottom:12px">
+        <div style="font-size:28px;margin-bottom:6px">📄</div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">Нажмите или перетащите файл</div>
+        <div style="font-size:11px;color:#8888aa">JSON или CSV</div>
+        <input type="file" id="fileInput" accept=".json,.csv" style="display:none" onchange="handleFileSelect(this)">
+      </div>
+      <div id="fileParseResult" style="display:none"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="importConfirmBtn" style="display:none" onclick="confirmImport()">✅ Импортировать</button>
+        <button class="btn sec" id="importCancelBtn" style="display:none" onclick="cancelImport()">Отмена</button>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:10px">
+      <div class="ctitle">Шаблон JSON</div>
+      <div style="background:#0f0f13;border-radius:10px;padding:12px;font-family:monospace;font-size:10px;color:#8888aa;line-height:1.7;white-space:pre-wrap">[
+  {
+    "date": "2024-01-15",
+    "shopName": "Роза Хутор",
+    "sellerName": "Ксения",
+    "cashMorning": 5000,
+    "cashEvening": 8200,
+    "cashRevenue": 12000,
+    "cardRevenue": 8500,
+    "discount": 500,
+    "goodsMorning": 450000,
+    "goodsEvening": 438000,
+    "zp": 1500,
+    "inkass": 0,
+    "otherExp": 200
+  }
+]</div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn sec" style="font-size:11px" onclick="downloadTemplate()">⬇️ JSON шаблон</button>
+        <button class="btn sec" style="font-size:11px" onclick="downloadCsvTemplate()">⬇️ CSV шаблон</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ctitle">История импортов</div>
+      <div id="importHistoryList"><div class="empty"><div class="ei">📭</div>Импортов не было</div></div>
+    </div>
+  </div>
+
   <div class="tabs" id="mainTabs" style="display:none"></div>
 </div>
 
@@ -1004,6 +1053,32 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
   </div>
 </div>
 
+<!-- PERIOD REPORT MODAL -->
+<div class="mo" id="periodReportMo">
+  <div class="md" style="max-height:95dvh">
+    <div class="mh"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="mt" style="margin:0">📊 Отчёт за период</div>
+      <button onclick="closeMo('periodReportMo')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:5px 10px;color:#8888aa;cursor:pointer;font-size:12px">✕</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      <button type="button" onclick="setPrPeriod('week',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">Неделя</button>
+      <button type="button" onclick="setPrPeriod('month',this)" style="padding:6px 12px;border-radius:20px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">Месяц</button>
+      <button type="button" onclick="setPrPeriod('quarter',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">Квартал</button>
+      <button type="button" onclick="setPrPeriod('custom',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">Период</button>
+    </div>
+    <div id="prCustomDates" style="display:flex;gap:8px;margin-bottom:12px">
+      <div class="fg" style="flex:1;margin:0"><label class="fl">С</label><input class="fi" type="date" id="prDateFrom" onchange="generatePeriodReport()" style="-webkit-appearance:none;color-scheme:dark"></div>
+      <div class="fg" style="flex:1;margin:0"><label class="fl">По</label><input class="fi" type="date" id="prDateTo" onchange="generatePeriodReport()" style="-webkit-appearance:none;color-scheme:dark"></div>
+    </div>
+    <div class="fg" style="margin-bottom:12px">
+      <label class="fl">Магазин</label>
+      <select class="fs" id="prShopFilter" onchange="generatePeriodReport()"><option value="">Все магазины</option></select>
+    </div>
+    <div id="periodReportBody"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -1087,15 +1162,15 @@ function saveS(){ localStorage.setItem(KEY.session,JSON.stringify(session)); }
 // ════ UTILS ════
 function fmt(n){ return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+'₽'; }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
-function gv(id){ return document.getElementById(id)?.value||''; }
+function gv(id){ return (document.getElementById(id)||{}).value||''; }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
 function openMo(id){ document.getElementById(id).classList.add('open'); }
 function closeMo(id){ document.getElementById(id).classList.remove('open'); }
 function showPg(name,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('pg-'+name)?.classList.add('active');
-  el?.classList.add('active');
+  var pgEl=document.getElementById('pg-'+name); if(pgEl) pgEl.classList.add('active');
+  if(el) el.classList.add('active');
 }
 
 // ════ TOTALS ════
@@ -1144,9 +1219,9 @@ function doLogin(){
 }
 
 function exitShift(){
-  const msg=session?.role==='shopadmin'?'Выйти из режима администратора?':'Выйти? Смена останется открытой.';
+  const msg=(session&&session.role)==='shopadmin'?'Выйти из режима администратора?':'Выйти? Смена останется открытой.';
   if(confirm(msg)){
-    if(session?.role==='shopadmin'){ localStorage.removeItem(KEY.session); session=null; }
+    if((session&&session.role)==='shopadmin'){ localStorage.removeItem(KEY.session); session=null; }
     document.getElementById('mainTabs').style.display='none';
     document.getElementById('appScreen').style.display='none';
     document.getElementById('loginScreen').style.display='flex';
@@ -1179,7 +1254,7 @@ function openMorningModal(){
   document.getElementById('morningConfirmBtn').style.opacity='.4';
   const prev=getPrevShift(shopName);
   const mc=document.getElementById('morningCompare');
-  mc.innerHTML=prev?.cashEvening!=null?`<div class="al-info">📊 Нал вечер прошлой смены: <strong>${fmt(prev.cashEvening)}</strong></div>`:'';
+  mc.innerHTML=(prev&&prev.cashEvening)!=null?`<div class="al-info">📊 Нал вечер прошлой смены: <strong>${fmt(prev.cashEvening)}</strong></div>`:'';
   openMo('morningMo');
 }
 function checkMorningValid(){
@@ -1188,8 +1263,8 @@ function checkMorningValid(){
   if(val!==''&&!isNaN(num)&&num>=0){
     btn.disabled=false; btn.style.opacity='1';
     hint.style.display='block'; hint.textContent='✓ '+fmt(num)+' — принято'; hint.style.color='#60f090';
-    const prev=getPrevShift(pendingSession?.shopName||'');
-    if(prev?.cashEvening!=null&&Math.abs(num-prev.cashEvening)>1){
+    const prev=getPrevShift((pendingSession&&pendingSession.shopName)||'');
+    if((prev&&prev.cashEvening)!=null&&Math.abs(num-prev.cashEvening)>1){
       hint.style.color='#f0a060';
       hint.textContent='⚠️ Отличается от вечера прошлой смены ('+fmt(prev.cashEvening)+')';
     }
@@ -1201,7 +1276,7 @@ function confirmMorning(){
   const goodsM=calcGoodsMorning(pendingSession.shopName);
   session={...pendingSession,openedAt:new Date().toISOString(),cashMorning:cashM,goodsMorning:goodsM};
   const prev=getPrevShift(pendingSession.shopName);
-  if(prev?.cashEvening!=null&&Math.abs(cashM-prev.cashEvening)>1){
+  if((prev&&prev.cashEvening)!=null&&Math.abs(cashM-prev.cashEvening)>1){
     saveAdminAlert({type:'morning_diff',shopName:session.shopName,sellerName:session.sellerName,
       date:new Date().toISOString().split('T')[0],cashMorning:cashM,prevCashEve:prev.cashEvening,morningDiff:cashM-prev.cashEvening});
   }
@@ -1231,9 +1306,9 @@ function saveAdminAlert(data){
 function startPreviewMode(){
   // Validate admin password first
   var selEl = document.getElementById('loginSeller');
-  var pass = document.getElementById('loginPass')?.value||'';
+  var pass = (document.getElementById('loginPass')||{}).value||'';
   var admins = JSON.parse(localStorage.getItem('iz_shop_admins')||'[]');
-  var admin = admins.find(function(a){ return a.id===selEl?.value; }) || admins[0];
+  var admin = admins.find(function(a){ return a.id===(selEl&&selEl.value); }) || admins[0];
   if(!admin || admin.pass !== pass){
     var err = document.getElementById('loginErr');
     if(err){ err.style.display='block'; err.textContent='Неверный пароль'; }
@@ -1325,7 +1400,7 @@ function adaptUIForShopType(){
     var invPage = document.getElementById('pg-invoices');
     if(invPage) invPage.classList.add('active');
     // Update invoices page title
-    var invTitle = invPage?.querySelector('.stitle');
+    var invTitle = (invPage&&invPage.querySelector)('.stitle');
     if(invTitle) invTitle.textContent = 'Исходящие накладные · '+session.shopName;
     renderInvoices();
     return; // skip rest of adaptUIForShopType
@@ -1345,8 +1420,8 @@ function adaptUIForShopType(){
   }
 
   // Status bar: hide cash for non-shop, hide staff for opt
-  var sbCashEl = document.getElementById('sbCash')?.closest('.sb');
-  var sbStaffEl = document.getElementById('sbStaff')?.closest('.sb');
+  var sbCashEl = (document.getElementById('sbCash')||{closest:function(){return null}}).closest('.sb');
+  var sbStaffEl = (document.getElementById('sbStaff')||{closest:function(){return null}}).closest('.sb');
   var isOpt = shopType==='offline';
   var isOnl = shopType==='online';
   if(sbCashEl) sbCashEl.style.display = (shopType==='shop') ? 'block' : 'none';
@@ -1419,7 +1494,7 @@ function adaptUIForShopType(){
         '</select>'+
         '<div style="font-size:11px;color:#8888aa;margin-top:4px">Магазину придёт уведомление убрать товар с прилавка</div>';
       // Insert before payment methods
-      var payFg = payChips?.closest('.fg');
+      var payFg = (payChips&&payChips.closest)('.fg');
       if(payFg) saleMo.querySelector('.md').insertBefore(sourceBlock, payFg);
     }
   }
@@ -1461,9 +1536,10 @@ function buildAdminTabs(){
   t.innerHTML=`
     <button class="tab active" onclick="showPg('today',this);renderTodayShift()"><div class="ti">📋</div><span>Смена</span></button>
     <button class="tab" onclick="showPg('history',this);renderShiftHistory()"><div class="ti">📁</div><span>Архив</span></button>
-    <button class="tab" onclick="showPg('pastshift',this)"><div class="ti">✏️</div><span>Ввод данных</span></button>
+    <button class="tab" onclick="showPg('pastshift',this)"><div class="ti">✏️</div><span>Ввод</span></button>
     <button class="tab" onclick="showPg('sellers',this);renderSellersAdmin()"><div class="ti">👥</div><span>Роли</span></button>
     <button class="tab" onclick="showPg('shopsettings',this);renderShopSettings()"><div class="ti">⚙️</div><span>Настройки</span></button>
+    <button class="tab" onclick="showPg('dataupload',this);renderImportHistory()"><div class="ti">📥</div><span>Загрузка</span></button>
     <button class="tab" onclick="exitShift()"><div class="ti">🚪</div><span>Выйти</span></button>`;
 }
 
@@ -1626,7 +1702,7 @@ function saveSale(){
   // For online/offline: notify source shop to remove goods from shelf
   var shopType = session.shopType || getShopType(session.shopName);
   if(shopType !== 'shop'){
-    var sourceShop = document.getElementById('goodsSource')?.value || '';
+    var sourceShop = (document.getElementById('goodsSource')||{}).value || '';
     if(sourceShop){
       // Save notification for source shop
       var notif = {
@@ -1727,19 +1803,19 @@ function createInvoiceFromJournal(){
 }
 
 function updateInvBadge(){
-  const p=getInvoices().filter(i=>i.destName===session?.shopName&&i.status==='pending');
+  const p=getInvoices().filter(i=>i.destName===(session&&session.shopName)&&i.status==='pending');
   const b=document.getElementById('invBadge'); if(b){b.style.display=p.length?'block':'none';b.textContent=p.length;}
 }
 function renderPendingAlert(){
   const c=document.getElementById('pendingAlert'); if(!c)return;
   let html = '';
   // Incoming invoices
-  const p=getInvoices().filter(i=>i.destName===session?.shopName&&i.status==='pending');
+  const p=getInvoices().filter(i=>i.destName===(session&&session.shopName)&&i.status==='pending');
   if(p.length) html+=`<div class="al-warn" style="cursor:pointer" onclick="showPg('invoices',document.querySelectorAll('.tab')[1]);renderInvoices()">🔔 ${p.length} накладная ожидает приёмки</div>`;
   // Online sale notifications for this shop
-  if(getShopType(session?.shopName)==='shop'){
+  if(getShopType((session&&session.shopName))==='shop'){
     var notifs=JSON.parse(localStorage.getItem('iz_shop_notifications')||'[]')
-      .filter(function(n){ return n.sourceShop===session?.shopName && !n.shopAcked; });
+      .filter(function(n){ return n.sourceShop===(session&&session.shopName) && !n.shopAcked; });
     if(notifs.length) html+=`<div class="al-warn" style="cursor:pointer" onclick="showOnlineSaleNotifs()">
       📱 ${notifs.length} онлайн-продажа — нужно убрать товар с прилавка
     </div>`;
@@ -1749,7 +1825,7 @@ function renderPendingAlert(){
 
 function showOnlineSaleNotifs(){
   var notifs=JSON.parse(localStorage.getItem('iz_shop_notifications')||'[]')
-    .filter(function(n){ return n.sourceShop===session?.shopName && !n.shopAcked; });
+    .filter(function(n){ return n.sourceShop===(session&&session.shopName) && !n.shopAcked; });
   if(!notifs.length) return;
   var lines = notifs.map(function(n,i){
     var itemLines = n.items.map(function(it){ return it.name; }).join(', ');
@@ -1774,7 +1850,7 @@ function renderInvoices(){
   // For offline/opt: show outgoing invoices
   if(shopType === 'offline'){
     const all=getInvoices();
-    const outgoing=all.filter(i=>i.sourceName===session?.shopName||i.createdBy===session?.shopName);
+    const outgoing=all.filter(i=>i.sourceName===(session&&session.shopName)||i.createdBy===(session&&session.shopName));
     // Also show today's sales as pending invoice draft
     const todaySales=journal.filter(e=>e.type==='sale');
     let html='';
@@ -1793,7 +1869,7 @@ function renderInvoices(){
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <div>
               <div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700">${inv.num}</div>
-              <div style="font-size:11px;color:#8888aa">📅 ${inv.date} · 📦 ${inv.destName||'—'} · ${inv.items?.length||0} изд.</div>
+              <div style="font-size:11px;color:#8888aa">📅 ${inv.date} · 📦 ${inv.destName||'—'} · ${(inv.items&&inv.items.length)||0} изд.</div>
             </div>
             <span style="font-size:10px;padding:3px 8px;border-radius:6px;font-weight:700;
               background:${inv.disputed?'#2e1a1a':inv.status==='accepted'?'#1a2e1e':'#2a1e14'};
@@ -1810,7 +1886,7 @@ function renderInvoices(){
   }
 
   // For shop type: show incoming invoices
-  const sh=getInvoices().filter(i=>i.destName===session?.shopName);
+  const sh=getInvoices().filter(i=>i.destName===(session&&session.shopName));
   const pending=sh.filter(i=>i.status==='pending'), done=sh.filter(i=>i.status==='accepted').slice(0,5);
   let html='';
   if(!sh.length) html='<div class="empty"><div class="ei">📦</div>Накладных нет</div>';
@@ -1825,7 +1901,7 @@ function openInvoice(invId){
   invCheckState=inv.items.map(it=>({ok:false,factPrice:it.price}));
   document.getElementById('invMoTitle').textContent=inv.num;
   document.getElementById('invMoSub').textContent='Отгружено '+inv.date+' · '+inv.items.length+' изд.';
-  document.getElementById('invWho').value=session?.sellerName||'';
+  document.getElementById('invWho').value=(session&&session.sellerName)||'';
   document.getElementById('invMoItems').innerHTML=inv.items.map((item,i)=>`
     <div class="inv-row" id="invrow${i}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
@@ -1847,7 +1923,7 @@ function acceptInvoice(){
   const who=gv('invWho'); if(!who){showToast('Укажите кто принял');return;}
   const invs=getInvoices(); const inv=invs.find(i=>(i.id||i._id)===currentInvId); if(!inv)return;
   const inv2=JSON.parse(JSON.stringify(inv));
-  const accepted=inv2.items.map((it,i)=>({...it,factPrice:invCheckState[i]?.factPrice??it.price,ok:invCheckState[i]?.ok||false}));
+  const accepted=inv2.items.map((it,i)=>({...it,factPrice:(invCheckState[i]&&invCheckState[i].factPrice!=null?invCheckState[i].factPrice:it.price),ok:(invCheckState[i]&&invCheckState[i].ok)||false}));
   inv2.status='accepted'; inv2.acceptedBy=who; inv2.acceptedDate=new Date().toISOString().split('T')[0]; inv2.acceptedItems=accepted;
   const idx=invs.findIndex(i=>(i.id||i._id)===currentInvId); invs[idx]=inv2; saveInvoices(invs);
   const goodsTotal=accepted.reduce((s,a)=>s+a.factPrice,0);
@@ -1893,10 +1969,10 @@ function setExpType(type, el){
 }
 
 function saveExpense(){
-  var amt = parseFloat(document.getElementById('expAmt')?.value)||0;
+  var amt = parseFloat((document.getElementById('expAmt')||{}).value)||0;
   if(!amt){showToast('Введите сумму');return;}
-  var comment = document.getElementById('expComment')?.value||'';
-  var supplier = document.getElementById('expSupplierName')?.value||'';
+  var comment = (document.getElementById('expComment')||{}).value||'';
+  var supplier = (document.getElementById('expSupplierName')||{}).value||'';
   var labels = {zp:'💰 ЗП',travel:'🚌 Проезд',inkass:'🏦 Инкассация',other:'📝 Прочее',supplier:'🏭 Поставщику'};
   var label = labels[expType] + (expGoodsType==='dr'?' (ДР)':'');
   journal.push({
@@ -2139,7 +2215,7 @@ function renderClose(){
     var rcvWood = receives.filter(function(e){return !e.goodsType||e.goodsType==='derevo';}).reduce(function(a,e){return a+(e.goodsEffect||0);},0);
     var rcvDr = receives.filter(function(e){return e.goodsType==='dr';}).reduce(function(a,e){return a+(e.goodsEffect||0);},0);
 
-    var cashEveEntered = parseFloat(document.getElementById('cashEveInput')?.value)||0;
+    var cashEveEntered = parseFloat((document.getElementById('cashEveInput')||{}).value)||0;
 
     var R2 = function(label, val, color, bold){
       return '<tr><td style="padding:5px 8px;color:#8888aa;font-size:12px">'+label+'</td>'+
@@ -2155,7 +2231,7 @@ function renderClose(){
 
     var drGoodsEve = (session.drGoodsMorning||0)+rcvDr-drSalesArr.reduce(function(a,s){return a+(s.totalPrice||0);},0)-woDr;
     var drCashMorn = session.drCashMorning||0;
-    var drCashEveEntered = parseFloat(document.getElementById('drCashEveInput')?.value)||0;
+    var drCashEveEntered = parseFloat((document.getElementById('drCashEveInput')||{}).value)||0;
 
     var TH = function(label){ return '<th style="padding:6px 8px;text-align:right;font-size:11px;font-weight:700;color:'+label[1]+';border-bottom:2px solid #2e2e3e">'+label[0]+'</th>'; };
     var TR = function(label, v1, v2, c1, c2){
@@ -2291,7 +2367,7 @@ function validateClose(){
   const cashSales = journal.filter(e=>e.type==='sale').reduce((s,e)=>s+(e.cashPart||0),0);
   const expectedCash = session.cashMorning + cashSales - inkassExp - zpExp - travelExp - otherExp;
 
-  const cashEveVal = document.getElementById('cashEveInput')?.value||'';
+  const cashEveVal = (document.getElementById('cashEveInput')||{}).value||'';
   const cashEve = parseFloat(cashEveVal)||0;
   const cv = document.getElementById('cashValidation');
   const crb = document.getElementById('cashDiffReasonBlock');
@@ -2335,7 +2411,7 @@ function closeShift(){
     return;
   }
 function _closeShiftReal(){
-  const cashEveVal=document.getElementById('cashEveInput')?.value||'';
+  const cashEveVal=(document.getElementById('cashEveInput')||{}).value||'';
   if(!cashEveVal){showToast('Введите остаток наличных вечер');return;}
   const cashEve=parseFloat(cashEveVal)||0;
   const t=calcTotals();
@@ -2351,20 +2427,20 @@ function _closeShiftReal(){
   if(Math.abs(cashDiff)>=1){showToast('⛔ Неверный остаток наличных — пересчитайте кассу');return;}
   const reason='';
   const prev=getPrevShift(session.shopName);
-  const morningDiff=prev?.cashEvening!=null?Math.abs(session.cashMorning-prev.cashEvening):0;
+  const morningDiff=(prev&&prev.cashEvening)!=null?Math.abs(session.cashMorning-prev.cashEvening):0;
   const sales=journal.filter(e=>e.type==='sale');
   const report={id:uid(),source:'shop',shopName:session.shopName,sellerName:session.sellerName,
     date:new Date().toISOString().split('T')[0],openedAt:session.openedAt,closedAt:new Date().toISOString(),
     cashMorning:session.cashMorning,goodsMorning:session.goodsMorning,cashEvening:cashEve,goodsEvening:t.goods,
     inkass,cashDiff,cashDiffReason:reason,hasCashDiff:Math.abs(cashDiff)>=1,
     terminalEvening:termEve,terminalDiff:termEve-t.card,staffEvening:staffEve,staffDiff:staffEve-t.staff,
-    morningDiff,prevCashEvening:prev?.cashEvening||null,
+    morningDiff,prevCashEvening:(prev&&prev.cashEvening)||null,
     salesCount:sales.length,totalRevenue:sales.reduce((s,e)=>s+e.totalPaid,0),
     cashRevenue:cashSales,cardRevenue:termEve,expenses:expArr,zp:zpExp,travel:travelExp,inkass:inkass,otherExp:otherExpAmt,
     totalDiscount:sales.reduce((s,e)=>s+(e.discount||0),0),journal:[...journal]};
   if(Math.abs(cashDiff)>=1||morningDiff>1){
     saveAdminAlert({type:'cash_diff',shopName:session.shopName,sellerName:session.sellerName,
-      date:report.date,cashDiff,cashDiffReason:reason,morningDiff,prevCashEve:prev?.cashEvening,cashMorning:session.cashMorning});
+      date:report.date,cashDiff,cashDiffReason:reason,morningDiff,prevCashEve:(prev&&prev.cashEvening),cashMorning:session.cashMorning});
   }
   const shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   shifts.unshift(report); localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
@@ -2463,11 +2539,11 @@ function toggleEditForm(){
   if(saveBtn) saveBtn.style.display=visible?'none':'block';
 }
 function saveEditShift(){
-  const reason=(document.getElementById('esh_reason')?.value||'').trim();
+  const reason=((document.getElementById('esh_reason')||{}).value||'').trim();
   if(!reason){showToast('Укажите причину правки');return;}
   const shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   const idx=shifts.findIndex(s=>s.id===currentEditShiftId); if(idx<0)return;
-  shifts[idx]={...shifts[idx],cashMorning:parseFloat(document.getElementById('esh_cashMorn')?.value)||0,cashEvening:parseFloat(document.getElementById('esh_cashEve')?.value)||0,cashRevenue:parseFloat(document.getElementById('esh_cashRev')?.value)||0,cardRevenue:parseFloat(document.getElementById('esh_cardRev')?.value)||0,editedBy:session.name,editedAt:new Date().toISOString(),editReason:reason};
+  shifts[idx]={...shifts[idx],cashMorning:parseFloat((document.getElementById('esh_cashMorn')||{}).value)||0,cashEvening:parseFloat((document.getElementById('esh_cashEve')||{}).value)||0,cashRevenue:parseFloat((document.getElementById('esh_cashRev')||{}).value)||0,cardRevenue:parseFloat((document.getElementById('esh_cardRev')||{}).value)||0,editedBy:session.name,editedAt:new Date().toISOString(),editReason:reason};
   localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
   try{ db.collection('iz_shifts').doc(currentEditShiftId).set(shifts[idx]); }catch(e){}
   closeMo('editShiftMo'); renderShiftHistory(); showToast('✅ Смена обновлена');
@@ -2708,45 +2784,45 @@ function psCalcDrGoods(){
 
 // ── Writeoffs ──
 function psAddWriteoff(){
-  var name=document.getElementById('psWoName')?.value?.trim();
-  var amt=parseFloat(document.getElementById('psWoAmt')?.value)||0;
+  var name=(document.getElementById('psWoName')||{}).value||"";
+  var amt=parseFloat((document.getElementById('psWoAmt')||{}).value)||0;
   if(!name||!amt){showToast('Введите название и сумму');return;}
-  psWriteoffs.push({num:document.getElementById('psWoNum')?.value||'',name,qty:document.getElementById('psWoQty')?.value||'1',amt,reason:document.getElementById('psWoReason')?.value||''});
+  psWriteoffs.push({num:(document.getElementById('psWoNum')||{}).value||'',name,qty:(document.getElementById('psWoQty')||{}).value||'1',amt,reason:(document.getElementById('psWoReason')||{}).value||''});
   ['psWoNum','psWoName','psWoQty','psWoAmt','psWoReason'].forEach(id=>{var el=document.getElementById(id);if(el)el.value='';});
   renderPsLists(); psCalcGoods();
 }
 function psDrAddWriteoff(){
-  var name=document.getElementById('psDrWoName')?.value?.trim();
-  var amt=parseFloat(document.getElementById('psDrWoAmt')?.value)||0;
+  var name=(document.getElementById('psDrWoName')||{}).value||"";
+  var amt=parseFloat((document.getElementById('psDrWoAmt')||{}).value)||0;
   if(!name||!amt){showToast('Введите название и сумму');return;}
-  psDrWriteoffs.push({name,qty:document.getElementById('psDrWoQty')?.value||'1',amt,reason:document.getElementById('psDrWoReason')?.value||''});
+  psDrWriteoffs.push({name,qty:(document.getElementById('psDrWoQty')||{}).value||'1',amt,reason:(document.getElementById('psDrWoReason')||{}).value||''});
   ['psDrWoName','psDrWoQty','psDrWoAmt','psDrWoReason'].forEach(id=>{var el=document.getElementById(id);if(el)el.value='';});
   renderPsLists(); psCalcDrGoods();
 }
 
 // ── Receives ──
 function psAddReceive(){
-  var name=document.getElementById('psRcvName')?.value?.trim();
+  var name=(document.getElementById('psRcvName')||{}).value||"";
   if(!name){showToast('Введите название');return;}
-  var qty=document.getElementById('psRcvQty')?.value||'';
-  var price=parseFloat(document.getElementById('psRcvPrice')?.value)||0;
-  var amt=parseFloat(document.getElementById('psRcvAmt')?.value)||(price*parseFloat(qty)||0)||0;
+  var qty=(document.getElementById('psRcvQty')||{}).value||'';
+  var price=parseFloat((document.getElementById('psRcvPrice')||{}).value)||0;
+  var amt=parseFloat((document.getElementById('psRcvAmt')||{}).value)||(price*parseFloat(qty)||0)||0;
   psReceives.push({
-    num:document.getElementById('psRcvNum')?.value||'',
-    name, qty, price, from:document.getElementById('psRcvFrom')?.value||'', amt
+    num:(document.getElementById('psRcvNum')||{}).value||'',
+    name, qty, price, from:(document.getElementById('psRcvFrom')||{}).value||'', amt
   });
   ['psRcvNum','psRcvName','psRcvQty','psRcvPrice','psRcvFrom','psRcvAmt'].forEach(id=>{var el=document.getElementById(id);if(el)el.value='';});
   renderPsLists(); psCalcGoods();
 }
 function psDrAddReceive(){
-  var name=document.getElementById('psDrRcvName')?.value?.trim();
+  var name=(document.getElementById('psDrRcvName')||{}).value||"";
   if(!name){showToast('Введите название');return;}
-  var qty=document.getElementById('psDrRcvQty')?.value||'';
-  var price=parseFloat(document.getElementById('psDrRcvPrice')?.value)||0;
-  var amt=parseFloat(document.getElementById('psDrRcvAmt')?.value)||(price*parseFloat(qty)||0)||0;
+  var qty=(document.getElementById('psDrRcvQty')||{}).value||'';
+  var price=parseFloat((document.getElementById('psDrRcvPrice')||{}).value)||0;
+  var amt=parseFloat((document.getElementById('psDrRcvAmt')||{}).value)||(price*parseFloat(qty)||0)||0;
   psDrReceives.push({
-    num:document.getElementById('psDrRcvNum')?.value||'',
-    name, qty, price, from:document.getElementById('psDrRcvFrom')?.value||'', amt
+    num:(document.getElementById('psDrRcvNum')||{}).value||'',
+    name, qty, price, from:(document.getElementById('psDrRcvFrom')||{}).value||'', amt
   });
   ['psDrRcvNum','psDrRcvName','psDrRcvQty','psDrRcvPrice','psDrRcvFrom','psDrRcvAmt'].forEach(id=>{var el=document.getElementById(id);if(el)el.value='';});
   renderPsLists(); psCalcDrGoods();
@@ -2754,12 +2830,12 @@ function psDrAddReceive(){
 
 // ── Staff purchases ──
 function psAddStaff(){
-  var who=document.getElementById('psStaffWho')?.value?.trim();
-  var item=document.getElementById('psStaffItem')?.value?.trim();
-  var retail=parseFloat(document.getElementById('psStaffRetail')?.value)||0;
-  var opt=parseFloat(document.getElementById('psStaffOpt')?.value)||0;
+  var who=(document.getElementById('psStaffWho')||{}).value||"";
+  var item=(document.getElementById('psStaffItem')||{}).value||"";
+  var retail=parseFloat((document.getElementById('psStaffRetail')||{}).value)||0;
+  var opt=parseFloat((document.getElementById('psStaffOpt')||{}).value)||0;
   if(!who||!item){showToast('Введите кто и что покупает');return;}
-  psStaffs.push({who,item,retail,opt,comment:document.getElementById('psStaffComment')?.value||''});
+  psStaffs.push({who,item,retail,opt,comment:(document.getElementById('psStaffComment')||{}).value||''});
   ['psStaffWho','psStaffItem','psStaffRetail','psStaffOpt','psStaffComment'].forEach(id=>{var el=document.getElementById(id);if(el)el.value='';});
   renderPsLists();
 }
@@ -2859,7 +2935,7 @@ function psPopulateInvoices(){
 }
 
 function psLoadInvoice(){
-  var id=document.getElementById('psInvoiceSelect')?.value;
+  var id=(document.getElementById('psInvoiceSelect')||{}).value;
   var btn=document.getElementById('psAcceptInvBtn');
   var c=document.getElementById('psInvoiceItems');
   if(!id||!c){ if(c)c.innerHTML=''; if(btn)btn.style.display='none'; return; }
@@ -2914,7 +2990,7 @@ function psAcceptInvoice(){
   // Add items to receives
   inv.items.forEach(function(item,i){
     var state=psInvoiceCheckState[i];
-    var comment=document.getElementById('psInvComment'+i)?.value||'';
+    var comment=(document.getElementById('psInvComment'+i)||{}).value||'';
     psReceives.push({
       num:item.num||'',name:item.name,qty:'1',
       price:state.factPrice,amt:state.factPrice,
@@ -3019,7 +3095,7 @@ function psDrPopulateInvoices(){
 }
 
 function psDrLoadInvoice(){
-  var id=document.getElementById('psDrInvoiceSelect')?.value;
+  var id=(document.getElementById('psDrInvoiceSelect')||{}).value;
   var btn=document.getElementById('psDrAcceptInvBtn');
   var c=document.getElementById('psDrInvoiceItems');
   if(!id||!c){ if(c)c.innerHTML=''; if(btn)btn.style.display='none'; return; }
@@ -3125,7 +3201,7 @@ function psPopulateSuppliers(){
 }
 
 function psSaveSupplier(){
-  var name=(document.getElementById('psDrSupplierName')?.value||'').trim();
+  var name=((document.getElementById('psDrSupplierName')||{}).value||'').trim();
   if(!name) return;
   var suppliers=getSupplierslist();
   if(!suppliers.includes(name)){ suppliers.push(name); saveSupplierslist(suppliers); psPopulateSuppliers(); }
@@ -3221,14 +3297,14 @@ function saveShopSettings(){
   var settings = {};
   shops.forEach(function(shop){
     var sid = shop.replace(/\s/g,'_');
-    var hasHigh = document.getElementById('zp_has_high_'+sid)?.checked;
+    var hasHigh = (document.getElementById('zp_has_high_'+sid)||{}).checked;
     settings[shop] = {
-      base: parseFloat(document.getElementById('zp_base_'+sid)?.value)||1500,
-      threshold: parseFloat(document.getElementById('zp_thresh_'+sid)?.value)||5000,
-      pct: parseFloat(document.getElementById('zp_pct_'+sid)?.value)||8,
-      travel: parseFloat(document.getElementById('zp_travel_'+sid)?.value)||0,
-      highThreshold: hasHigh ? (parseFloat(document.getElementById('zp_highthresh_'+sid)?.value)||20000) : null,
-      highPct: hasHigh ? (parseFloat(document.getElementById('zp_highpct_'+sid)?.value)||10) : null,
+      base: parseFloat((document.getElementById('zp_base_'+sid)||{}).value)||1500,
+      threshold: parseFloat((document.getElementById('zp_thresh_'+sid)||{}).value)||5000,
+      pct: parseFloat((document.getElementById('zp_pct_'+sid)||{}).value)||8,
+      travel: parseFloat((document.getElementById('zp_travel_'+sid)||{}).value)||0,
+      highThreshold: hasHigh ? (parseFloat((document.getElementById('zp_highthresh_'+sid)||{}).value)||20000) : null,
+      highPct: hasHigh ? (parseFloat((document.getElementById('zp_highpct_'+sid)||{}).value)||10) : null,
     };
   });
   saveShopZpSettingsData(settings);
@@ -3248,7 +3324,7 @@ function renderSuppliersAdmin(){
 }
 
 function addSupplierAdmin(){
-  var name=(document.getElementById('newSupplierName')?.value||'').trim();
+  var name=((document.getElementById('newSupplierName')||{}).value||'').trim();
   if(!name){showToast('Введите название');return;}
   var suppliers=getSupplierslist();
   if(!suppliers.includes(name)){suppliers.push(name);saveSupplierslist(suppliers);}
@@ -3284,7 +3360,7 @@ function renderSellersAdmin(){
 }
 function changeSellerPass(idx){
   var inp=document.getElementById('newpass_'+idx);
-  var newPass=(inp?.value||'').trim();
+  var newPass=((inp&&inp.value)||'').trim();
   if(!newPass){showToast('Введите новый пароль');return;}
   var sellers=getSellers();
   if(!sellers[idx]){showToast('Ошибка');return;}
@@ -3363,7 +3439,214 @@ function deleteAdmin(idx,name){
   showToast('🗑 Администратор удалён');
 }
 
-// ════ INIT ════
+
+// ════ DATA IMPORT ════
+var pendingImportData = null;
+
+function handleFileSelect(input){
+  var file = input.files[0]; if(!file) return; readImportFile(file);
+}
+function handleFileDrop(event){
+  event.preventDefault();
+  document.getElementById('dropZone').style.borderColor='#2e2e3e';
+  var file = event.dataTransfer.files[0]; if(file) readImportFile(file);
+}
+function readImportFile(file){
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var content = e.target.result;
+    var ext = file.name.split('.').pop().toLowerCase();
+    try {
+      var data;
+      if(ext==='json'){ data=JSON.parse(content); if(!Array.isArray(data)) data=[data]; }
+      else if(ext==='csv'){ data=parseCsvToShifts(content); }
+      else { showImportError('Формат не поддерживается. Используйте JSON или CSV.'); return; }
+      validateAndPreviewImport(data, file.name);
+    } catch(err){ showImportError('Ошибка чтения: '+err.message); }
+  };
+  reader.readAsText(file,'UTF-8');
+}
+function parseCsvToShifts(csv){
+  var lines=csv.trim().split('\n'); if(lines.length<2) throw new Error('CSV пустой');
+  var headers=lines[0].split(',').map(function(h){return h.trim().replace(/"/g,'');});
+  var shifts=[];
+  for(var i=1;i<lines.length;i++){
+    if(!lines[i].trim()) continue;
+    var vals=lines[i].split(',').map(function(v){return v.trim().replace(/"/g,'');});
+    var obj={}; headers.forEach(function(h,j){obj[h]=vals[j]||'';});
+    ['cashMorning','cashEvening','cashRevenue','cardRevenue','discount','goodsMorning','goodsEvening','zp','inkass','otherExp'].forEach(function(k){if(obj[k]!==undefined)obj[k]=parseFloat(obj[k])||0;});
+    shifts.push(obj);
+  }
+  return shifts;
+}
+function validateAndPreviewImport(data, filename){
+  if(!data||!data.length){showImportError('Файл пустой.'); return;}
+  var errors=[], valid=[];
+  data.forEach(function(row,i){
+    if(!row.date){errors.push('Строка '+(i+1)+': нет даты'); return;}
+    if(!row.shopName){errors.push('Строка '+(i+1)+': нет магазина'); return;}
+    valid.push({id:uid(),source:'import',backfilled:true,
+      shopName:row.shopName, sellerName:row.sellerName||'—', date:row.date,
+      openedAt:row.date+'T09:00:00.000Z', closedAt:row.date+'T21:00:00.000Z',
+      cashMorning:parseFloat(row.cashMorning)||0, cashEvening:parseFloat(row.cashEvening)||0,
+      cashRevenue:parseFloat(row.cashRevenue)||0, cardRevenue:parseFloat(row.cardRevenue)||0,
+      totalDiscount:parseFloat(row.discount)||0,
+      goodsMorning:parseFloat(row.goodsMorning)||0, goodsEvening:parseFloat(row.goodsEvening)||0,
+      zp:parseFloat(row.zp)||0, inkass:parseFloat(row.inkass)||0, otherExp:parseFloat(row.otherExp)||0,
+      comment:row.comment||'', importedAt:new Date().toISOString(), importFile:filename
+    });
+  });
+  pendingImportData=valid;
+  var res=document.getElementById('fileParseResult'), html='';
+  if(errors.length) html+='<div class="al-warn" style="margin-bottom:8px">⚠️ Пропущено '+errors.length+' строк: '+errors.slice(0,3).join('; ')+'</div>';
+  if(!valid.length){
+    html+='<div class="al-err">❌ Нет корректных данных.</div>';
+    pendingImportData=null; document.getElementById('importConfirmBtn').style.display='none';
+  } else {
+    var byShop={};
+    valid.forEach(function(s){(byShop[s.shopName]=byShop[s.shopName]||[]).push(s);});
+    html+='<div class="al-ok" style="margin-bottom:10px">✅ Найдено <strong>'+valid.length+'</strong> смен · '+valid[0].date+' — '+valid[valid.length-1].date+'</div>';
+    Object.keys(byShop).forEach(function(shop){
+      var rows=byShop[shop];
+      var rev=rows.reduce(function(s,r){return s+(r.cashRevenue||0)+(r.cardRevenue||0)+(r.totalDiscount||0);},0);
+      html+='<div style="background:#22222e;border-radius:10px;padding:10px;margin-bottom:6px;font-size:12px">'+
+        '<div style="font-weight:700">🏪 '+shop+'</div>'+
+        '<div style="color:#8888aa">Смен: '+rows.length+' · Выручка: <span style="color:#c8f060">'+Math.round(rev).toLocaleString('ru-RU')+'₽</span></div></div>';
+    });
+    document.getElementById('importConfirmBtn').style.display='block';
+  }
+  document.getElementById('importCancelBtn').style.display='block';
+  res.style.display='block'; res.innerHTML=html;
+}
+function showImportError(msg){
+  var res=document.getElementById('fileParseResult');
+  res.style.display='block'; res.innerHTML='<div class="al-err">❌ '+msg+'</div>';
+  document.getElementById('importConfirmBtn').style.display='none';
+  document.getElementById('importCancelBtn').style.display='block';
+}
+function confirmImport(){
+  if(!pendingImportData||!pendingImportData.length) return;
+  var existing=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var deduped=pendingImportData.filter(function(s){
+    return !existing.some(function(e){return e.date===s.date&&e.shopName===s.shopName;});
+  });
+  var dupes=pendingImportData.length-deduped.length;
+  var merged=existing.concat(deduped);
+  merged.sort(function(a,b){return b.date.localeCompare(a.date);});
+  localStorage.setItem(KEY.shifts,JSON.stringify(merged));
+  deduped.forEach(function(s){try{db.collection('iz_shifts').doc(s.id).set(s);}catch(e){}});
+  var history=JSON.parse(localStorage.getItem('iz_import_history')||'[]');
+  history.unshift({id:uid(),date:new Date().toISOString().split('T')[0],
+    filename:(pendingImportData[0]&&pendingImportData[0].importFile)||'файл',count:deduped.length,dupes:dupes,
+    importedAt:new Date().toISOString(),importedBy:(session&&session.name)||'Admin'});
+  localStorage.setItem('iz_import_history',JSON.stringify(history.slice(0,20)));
+  cancelImport(); renderImportHistory();
+  showToast('✅ Импортировано '+deduped.length+' смен'+(dupes?' ('+dupes+' дублей пропущено)':''));
+}
+function cancelImport(){
+  pendingImportData=null;
+  document.getElementById('fileParseResult').style.display='none';
+  document.getElementById('fileParseResult').innerHTML='';
+  document.getElementById('importConfirmBtn').style.display='none';
+  document.getElementById('importCancelBtn').style.display='none';
+  document.getElementById('fileInput').value='';
+}
+function renderImportHistory(){
+  var c=document.getElementById('importHistoryList'); if(!c) return;
+  var history=JSON.parse(localStorage.getItem('iz_import_history')||'[]');
+  if(!history.length){c.innerHTML='<div class="empty"><div class="ei">📭</div>Импортов не было</div>';return;}
+  c.innerHTML=history.map(function(h){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:#22222e;border-radius:10px;margin-bottom:6px">'+
+      '<div><div style="font-size:13px;font-weight:700">📄 '+h.filename+'</div>'+
+      '<div style="font-size:11px;color:#8888aa">'+h.date+' · '+h.importedBy+' · '+h.count+' смен'+(h.dupes?' ('+h.dupes+' дублей)':'')+'</div></div>'+
+      '<div style="color:#60f090;font-weight:700;font-size:12px">+'+h.count+'</div></div>';
+  }).join('');
+}
+function downloadTemplate(){
+  var t=JSON.stringify([{date:'2024-01-15',shopName:'Роза Хутор',sellerName:'Ксения',cashMorning:5000,cashEvening:8200,cashRevenue:12000,cardRevenue:8500,discount:500,goodsMorning:450000,goodsEvening:438000,zp:1500,inkass:0,otherExp:200,comment:''}],null,2);
+  var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([t],{type:'application/json'})); a.download='izhitsa_template.json'; a.click();
+}
+function downloadCsvTemplate(){
+  var csv='date,shopName,sellerName,cashMorning,cashEvening,cashRevenue,cardRevenue,discount,goodsMorning,goodsEvening,zp,inkass,otherExp,comment\n2024-01-15,Роза Хутор,Ксения,5000,8200,12000,8500,500,450000,438000,1500,0,200,';
+  var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download='izhitsa_template.csv'; a.click();
+}
+
+// ════ PERIOD REPORT ════
+function openPeriodReport(){
+  var shops=getShopNames();
+  var sel=document.getElementById('prShopFilter');
+  if(sel) sel.innerHTML='<option value="">Все магазины</option>'+shops.map(function(s){return '<option>'+s+'</option>';}).join('');
+  var now=new Date(), y=now.getFullYear(), m=String(now.getMonth()+1).padStart(2,'0');
+  document.getElementById('prDateFrom').value=y+'-'+m+'-01';
+  document.getElementById('prDateTo').value=new Date(y,now.getMonth()+1,0).toISOString().split('T')[0];
+  generatePeriodReport();
+  openMo('periodReportMo');
+}
+function setPrPeriod(type,el){
+  document.querySelectorAll('#periodReportMo .md > div:nth-child(3) button').forEach(function(b){
+    b.style.background='#22222e'; b.style.color='#8888aa'; b.style.borderColor='#2e2e3e'; b.style.fontWeight='';
+  });
+  el.style.background='#1e2a14'; el.style.color='#c8f060'; el.style.borderColor='#c8f060'; el.style.fontWeight='700';
+  var now=new Date(), today=now.toISOString().split('T')[0], from;
+  if(type==='week'){var d=new Date();d.setDate(d.getDate()-6);from=d.toISOString().split('T')[0];}
+  else if(type==='month'){var y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');from=y+'-'+m+'-01';}
+  else if(type==='quarter'){var q=Math.floor(now.getMonth()/3),qm=String(q*3+1).padStart(2,'0');from=now.getFullYear()+'-'+qm+'-01';}
+  else {generatePeriodReport();return;}
+  document.getElementById('prDateFrom').value=from;
+  document.getElementById('prDateTo').value=today;
+  generatePeriodReport();
+}
+function generatePeriodReport(){
+  var from=(document.getElementById('prDateFrom')||{}).value||'';
+  var to=(document.getElementById('prDateTo')||{}).value||'';
+  var shopF=(document.getElementById('prShopFilter')||{}).value||'';
+  if(!from||!to) return;
+  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var filtered=shifts.filter(function(s){return s.date>=from&&s.date<=to&&(!shopF||s.shopName===shopF);});
+  var c=document.getElementById('periodReportBody');
+  if(!filtered.length){c.innerHTML='<div class="empty"><div class="ei">📊</div>Нет данных за период</div>';return;}
+  var totCash=0,totCard=0,totDisc=0,totZp=0,totInkass=0,totOther=0;
+  filtered.forEach(function(s){totCash+=s.cashRevenue||0;totCard+=s.cardRevenue||0;totDisc+=s.totalDiscount||0;totZp+=s.zp||0;totInkass+=s.inkass||0;totOther+=s.otherExp||0;});
+  var totRev=totCash+totCard+totDisc, totExp=totZp+totInkass+totOther;
+  var f2=function(n){return Math.round(n||0).toLocaleString('ru-RU')+'₽';};
+  var R=function(lbl,val,col){return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span style="color:#8888aa">'+lbl+'</span><span style="color:'+(col||'#f0f0f8')+';font-weight:700">'+f2(val)+'</span></div>';};
+  // By shop
+  var byShop={};
+  filtered.forEach(function(s){if(!byShop[s.shopName])byShop[s.shopName]={n:0,cash:0,card:0,disc:0};var sh=byShop[s.shopName];sh.n++;sh.cash+=s.cashRevenue||0;sh.card+=s.cardRevenue||0;sh.disc+=s.totalDiscount||0;});
+  // By seller
+  var bySeller={};
+  filtered.forEach(function(s){var k=s.sellerName||'—';if(!bySeller[k])bySeller[k]={n:0,rev:0};bySeller[k].n++;bySeller[k].rev+=(s.cashRevenue||0)+(s.cardRevenue||0)+(s.totalDiscount||0);});
+  var html='<div style="background:#1e2a14;border:1px solid #c8f060;border-radius:12px;padding:12px;margin-bottom:10px">'+
+    '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">📅 '+from+' — '+to+' · '+filtered.length+' смен'+(shopF?' · '+shopF:'')+'</div>'+
+    R('💵 Нал',totCash,'#60f090')+R('💳 Безнал',totCard,'#60c8f0')+(totDisc?R('🎁 Скидка',totDisc,'#8888aa'):'')+
+    '<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:15px;font-weight:700"><span>Итого выручка</span><span style="color:#c8f060">'+f2(totRev)+'</span></div>'+
+    (totExp?'<div style="border-top:1px solid #2e2e3e;padding-top:8px;margin-top:4px">'+R('💸 Расходы',totExp,'#f06060')+'</div>':'')+'</div>';
+  if(Object.keys(byShop).length>1){
+    html+='<div class="card" style="margin-bottom:10px"><div class="ctitle">По магазинам</div>'+
+      Object.entries(byShop).map(function(e){var sh=e[1],rev=sh.cash+sh.card+sh.disc;
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#22222e;border-radius:8px;margin-bottom:6px">'+
+          '<div><div style="font-size:13px;font-weight:700">🏪 '+e[0]+'</div><div style="font-size:11px;color:#8888aa">'+sh.n+' смен</div></div>'+
+          '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;color:#c8f060">'+f2(rev)+'</div></div>';
+      }).join('')+'</div>';
+  }
+  html+='<div class="card" style="margin-bottom:10px"><div class="ctitle">По продавцам</div>'+
+    Object.entries(bySeller).sort(function(a,b){return b[1].rev-a[1].rev;}).map(function(e){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#22222e;border-radius:8px;margin-bottom:6px">'+
+        '<div><div style="font-size:13px;font-weight:700">👤 '+e[0]+'</div><div style="font-size:11px;color:#8888aa">'+e[1].n+' смен</div></div>'+
+        '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;color:#c8f060">'+f2(e[1].rev)+'</div></div>';
+    }).join('')+'</div>';
+  html+='<div class="card"><div class="ctitle">Список смен ('+filtered.length+')</div>'+
+    filtered.sort(function(a,b){return b.date.localeCompare(a.date);}).map(function(s){
+      var rev=(s.cashRevenue||0)+(s.cardRevenue||0)+(s.totalDiscount||0);
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #2e2e3e;font-size:12px">'+
+        '<div><div style="font-weight:700">'+s.date+' · '+s.shopName+'</div>'+
+        '<div style="color:#8888aa">👤 '+s.sellerName+(s.backfilled?' · 📅 задним числом':'')+'</div></div>'+
+        '<div style="font-family:Unbounded,sans-serif;font-weight:700;color:#c8f060;font-size:12px">'+f2(rev)+'</div></div>';
+    }).join('')+'</div>';
+  c.innerHTML=html;
+}
+
+
 function init(){
   const shopNames=getShopNames();
   const shopSel=document.getElementById('loginShop');
