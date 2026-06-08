@@ -222,7 +222,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
   <div class="page" id="pg-blanks">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="stitle" style="margin:0">Заготовки</div>
-      <button class="btn green" style="width:auto;padding:8px 14px;font-size:11px" onclick="renderMasterSelect();renderItemNameSelect();openMo('addBlankMo')">＋ Выдать</button>
+      <button class="btn green" style="width:auto;padding:8px 14px;font-size:11px" onclick="renderMasterSelect();renderItemNameSelect();renderWoodSelect();openMo('addBlankMo')">＋ Выдать</button>
     </div>
     <div class="card"><div class="ctitle">История выдач</div><div id="blanksList"></div></div>
   </div>
@@ -530,7 +530,13 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
         <button onclick="openAddItemNameMo()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
       </div>
     </div>
-    <div class="fg"><label class="fl">Порода дерева</label><input class="fi" id="blankWood" placeholder="Дуб, ясень, орех..."></div>
+    <div class="fg">
+      <label class="fl">Порода дерева</label>
+      <div style="display:flex;gap:8px">
+        <select class="fs" id="blankWood" style="flex:1"></select>
+        <button onclick="openAddWoodMo()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
+      </div>
+    </div>
     <div class="fg"><label class="fl">Количество заготовок</label><input class="fi" type="number" id="blankQty" placeholder="1" inputmode="numeric" value="1"></div>
     <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="blankComment" placeholder="Размер, особенности..."></div>
     <div class="fg"><label class="fl">Дата выдачи (по умолчанию — сегодня)</label>
@@ -565,6 +571,21 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
     <div class="ctitle" style="margin-top:4px">Список наименований</div>
     <div id="itemNamesList"></div>
     <button class="btn sec" style="margin-top:12px" onclick="closeMo('addItemNameMo')">Готово</button>
+  </div>
+</div>
+
+<!-- ДОБАВИТЬ ПОРОДУ ДЕРЕВА -->
+<div class="mo" id="addWoodMo">
+  <div class="md"><div class="mh"></div><div class="mt">🌳 Породы дерева</div>
+    <div class="fg"><label class="fl">Новая порода</label>
+      <div style="display:flex;gap:8px">
+        <input class="fi" id="newWoodInput" placeholder="Дуб, ясень, орех..." style="flex:1">
+        <button onclick="saveWood()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
+      </div>
+    </div>
+    <div class="ctitle" style="margin-top:4px">Список пород</div>
+    <div id="woodList"></div>
+    <button class="btn sec" style="margin-top:12px" onclick="closeMo('addWoodMo')">Готово</button>
   </div>
 </div>
 <div class="mo" id="blankDetailMo">
@@ -964,6 +985,58 @@ function deleteItemName(i){
   renderItemNamesList();
 }
 
+// ════════ СПРАВОЧНИК ПОРОД ДЕРЕВА ════════
+function getWoods(){
+  return JSON.parse(localStorage.getItem('ws_woods')||'["Дуб","Ясень","Орех","Клён","Береза","Сосна","Лиственница","Тик","Венге","Махагон"]');
+}
+function saveWoods(arr){ localStorage.setItem('ws_woods', JSON.stringify(arr)); }
+
+function renderWoodSelect(){
+  const woods = getWoods();
+  const sel = document.getElementById('blankWood');
+  if(!sel) return;
+  sel.innerHTML = woods.map(w=>`<option value="${w}">${w}</option>`).join('');
+}
+
+function renderWoodList(){
+  const woods = getWoods();
+  const c = document.getElementById('woodList'); if(!c) return;
+  c.innerHTML = woods.map((w,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;font-size:13px">🌳 ${w}</div>
+      <button onclick="deleteWood(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>
+    </div>`).join('');
+}
+
+function openAddWoodMo(){
+  renderWoodList();
+  document.getElementById('newWoodInput').value='';
+  openMo('addWoodMo');
+}
+
+function saveWood(){
+  const val = document.getElementById('newWoodInput').value.trim();
+  if(!val){ showToast('Введите название породы'); return; }
+  const woods = getWoods();
+  if(woods.includes(val)){ showToast('Такая порода уже есть'); return; }
+  woods.push(val);
+  saveWoods(woods);
+  renderWoodSelect();
+  renderWoodList();
+  document.getElementById('newWoodInput').value='';
+  const sel = document.getElementById('blankWood');
+  if(sel) sel.value = val;
+  showToast(`✅ «${val}» добавлена`);
+}
+
+function deleteWood(i){
+  const woods = getWoods();
+  woods.splice(i,1);
+  saveWoods(woods);
+  renderWoodSelect();
+  renderWoodList();
+}
+
 function markMasterNotifsRead(){
   const notifs = JSON.parse(localStorage.getItem('ws_new_master_notifs')||'[]');
   notifs.forEach(n=>n.read=true);
@@ -1021,7 +1094,7 @@ function quickAddMaster(){
 function addBlank(){
   const masterId=document.getElementById('blankMaster').value;
   const itemName=document.getElementById('blankName').value.trim();
-  const wood=document.getElementById('blankWood').value.trim();
+  const wood=document.getElementById('blankWood').value;
   const qty=parseInt(document.getElementById('blankQty').value)||1;
   const comment=document.getElementById('blankComment').value.trim();
   if(!masterId||!itemName){showToast('Заполните мастера и изделие');return;}
@@ -1034,7 +1107,7 @@ function addBlank(){
   };
   db.collection('ws_blanks').add(blank)
     .then(()=>{
-      ['blankWood','blankComment'].forEach(id=>document.getElementById(id).value='');
+      ['blankComment'].forEach(id=>document.getElementById(id).value='');
       document.getElementById('blankQty').value='1';
       closeMo('addBlankMo');
       showToast(`✅ Заготовки переданы мастеру ${master?.name||''}`);
