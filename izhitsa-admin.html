@@ -331,9 +331,42 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
   <!-- DEBT -->
   <div class="page" id="pg-debt">
     <div class="stitle">💰 Долги</div>
-    <div class="card">
-      <div class="ctitle">Задолженность контрагентов</div>
-      <div id="debtList" style="color:var(--t2);font-size:12px;padding:8px 0">Данные задолженности будут здесь</div>
+    
+    <div class="pchips" style="margin-bottom:16px">
+      <div class="pc active" onclick="switchDebtTab('debit',this)">📥 Дебет (нам должны)</div>
+      <div class="pc" onclick="switchDebtTab('credit',this)">📤 Кредит (мы должны)</div>
+    </div>
+    
+    <!-- DEBIT - Кто нам должен -->
+    <div id="debtDebitTab">
+      <div class="card">
+        <div class="ctitle">Дебиторская задолженность</div>
+        <div id="debitList" style="color:var(--t2);font-size:12px;padding:8px 0">
+          <div style="padding:12px;text-align:center;color:var(--t2)">Нет данных о должниках</div>
+        </div>
+        <div style="margin-top:12px;padding:12px;background:var(--s2);border-radius:8px;font-size:11px;color:var(--t2)">
+          <div><strong>+ Добавить должника</strong></div>
+          <input type="text" class="fi" id="debitName" placeholder="ФИ контрагента" style="margin-top:8px;margin-bottom:8px">
+          <input type="number" class="fi" id="debitAmount" placeholder="Сумма долга" style="margin-bottom:8px">
+          <button class="btn" onclick="addDebit()" style="width:100%;margin-bottom:0">Сохранить</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- CREDIT - Кого мы должны -->
+    <div id="debtCreditTab" style="display:none">
+      <div class="card">
+        <div class="ctitle">Кредиторская задолженность</div>
+        <div id="creditList" style="color:var(--t2);font-size:12px;padding:8px 0">
+          <div style="padding:12px;text-align:center;color:var(--t2)">Нет данных о кредиторах</div>
+        </div>
+        <div style="margin-top:12px;padding:12px;background:var(--s2);border-radius:8px;font-size:11px;color:var(--t2)">
+          <div><strong>+ Добавить кредитора</strong></div>
+          <input type="text" class="fi" id="creditName" placeholder="ФИ кредитора" style="margin-top:8px;margin-bottom:8px">
+          <input type="number" class="fi" id="creditAmount" placeholder="Сумма задолженности" style="margin-bottom:8px">
+          <button class="btn" onclick="addCredit()" style="width:100%;margin-bottom:0">Сохранить</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -555,6 +588,24 @@ function savePlanData(data) {
   localStorage.setItem('iz_plan_data', JSON.stringify(data));
 }
 
+function getDebits() {
+  try { return JSON.parse(localStorage.getItem('iz_debits') || '[]'); } 
+  catch(e) { return []; }
+}
+
+function saveDebits(data) {
+  localStorage.setItem('iz_debits', JSON.stringify(data));
+}
+
+function getCredits() {
+  try { return JSON.parse(localStorage.getItem('iz_credits') || '[]'); } 
+  catch(e) { return []; }
+}
+
+function saveCredits(data) {
+  localStorage.setItem('iz_credits', JSON.stringify(data));
+}
+
 function getWsEmployees() {
   try { return JSON.parse(localStorage.getItem('iz_ws_employees') || '[]'); } 
   catch(e) { return []; }
@@ -626,7 +677,7 @@ function doLogin() {
   renderPL();
   renderShops();
   renderPLBudget();
-  // populateSourcesForOp();
+  renderDebts();
   populateShopCheckboxes();
   renderDashboard();
   // setTxType('income');
@@ -664,6 +715,125 @@ function openMo(id) {
 function closeMo(id) {
   const mo = document.getElementById(id);
   if(mo) mo.classList.remove('open');
+}
+
+function switchDebtTab(tab, btn) {
+  document.querySelectorAll('#pg-debt .pchips .pc').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  
+  document.getElementById('debtDebitTab').style.display = tab === 'debit' ? 'block' : 'none';
+  document.getElementById('debtCreditTab').style.display = tab === 'credit' ? 'block' : 'none';
+  
+  renderDebts();
+}
+
+function addDebit() {
+  const name = gv('debitName');
+  const amount = parseInt(gv('debitAmount')) || 0;
+  
+  if(!name || !amount) {
+    alert('Заполните все поля');
+    return;
+  }
+  
+  const debits = getDebits();
+  debits.push({id: uid(), name, amount, date: now(), createdBy: session.name});
+  saveDebits(debits);
+  
+  document.getElementById('debitName').value = '';
+  document.getElementById('debitAmount').value = '';
+  renderDebts();
+}
+
+function addCredit() {
+  const name = gv('creditName');
+  const amount = parseInt(gv('creditAmount')) || 0;
+  
+  if(!name || !amount) {
+    alert('Заполните все поля');
+    return;
+  }
+  
+  const credits = getCredits();
+  credits.push({id: uid(), name, amount, date: now(), createdBy: session.name});
+  saveCredits(credits);
+  
+  document.getElementById('creditName').value = '';
+  document.getElementById('creditAmount').value = '';
+  renderDebts();
+}
+
+function deleteDebit(id) {
+  if(!confirm('Удалить?')) return;
+  let debits = getDebits();
+  debits = debits.filter(d => d.id !== id);
+  saveDebits(debits);
+  renderDebts();
+}
+
+function deleteCredit(id) {
+  if(!confirm('Удалить?')) return;
+  let credits = getCredits();
+  credits = credits.filter(c => c.id !== id);
+  saveCredits(credits);
+  renderDebts();
+}
+
+function renderDebts() {
+  const debits = getDebits();
+  const credits = getCredits();
+  
+  // Render debits
+  let debitHtml = '';
+  if(debits.length === 0) {
+    debitHtml = '<div style="padding:12px;text-align:center;color:var(--t2)">Нет данных о должниках</div>';
+  } else {
+    const totalDebit = debits.reduce((sum, d) => sum + d.amount, 0);
+    debitHtml = `<div class="pl-row tot" style="margin-bottom:12px">
+      <div style="font-weight:600">Итого дебет:</div>
+      <div class="pl-val" style="color:var(--inc);font-weight:700">${totalDebit.toLocaleString('ru-RU')} ₽</div>
+    </div>`;
+    
+    debits.forEach(d => {
+      debitHtml += `<div class="pl-row" style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px">
+        <div>
+          <div style="font-weight:600;font-size:12px">${d.name}</div>
+          <div style="font-size:11px;color:var(--t2)">${new Date(d.date).toLocaleDateString('ru-RU')}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="color:var(--inc);font-weight:700">${d.amount.toLocaleString('ru-RU')} ₽</div>
+          <button class="txt-btn" onclick="deleteDebit('${d.id}')" style="font-size:11px;padding:4px 8px;margin-top:4px">Удалить</button>
+        </div>
+      </div>`;
+    });
+  }
+  document.getElementById('debitList').innerHTML = debitHtml;
+  
+  // Render credits
+  let creditHtml = '';
+  if(credits.length === 0) {
+    creditHtml = '<div style="padding:12px;text-align:center;color:var(--t2)">Нет данных о кредиторах</div>';
+  } else {
+    const totalCredit = credits.reduce((sum, c) => sum + c.amount, 0);
+    creditHtml = `<div class="pl-row tot" style="margin-bottom:12px">
+      <div style="font-weight:600">Итого кредит:</div>
+      <div class="pl-val" style="color:var(--exp);font-weight:700">${totalCredit.toLocaleString('ru-RU')} ₽</div>
+    </div>`;
+    
+    credits.forEach(c => {
+      creditHtml += `<div class="pl-row" style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px">
+        <div>
+          <div style="font-weight:600;font-size:12px">${c.name}</div>
+          <div style="font-size:11px;color:var(--t2)">${new Date(c.date).toLocaleDateString('ru-RU')}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="color:var(--exp);font-weight:700">${c.amount.toLocaleString('ru-RU')} ₽</div>
+          <button class="txt-btn" onclick="deleteCredit('${c.id}')" style="font-size:11px;padding:4px 8px;margin-top:4px">Удалить</button>
+        </div>
+      </div>`;
+    });
+  }
+  document.getElementById('creditList').innerHTML = creditHtml;
 }
 
 function populateShopCheckboxes() {
@@ -1007,6 +1177,7 @@ document.addEventListener('DOMContentLoaded', function() {
       renderPL();
       renderPLBudget();
       renderShops();
+      renderDebts();
     } catch(e) {}
   }
   
