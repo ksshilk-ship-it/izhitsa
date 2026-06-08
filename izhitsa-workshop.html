@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ижица — Мастерская">
 <meta name="theme-color" content="#0f0f13">
@@ -58,14 +58,14 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 .exit-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--t2);cursor:pointer;font-size:11px;padding:5px 9px;font-family:'Golos Text',sans-serif}
 
 /* TABS */
-.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:calc(var(--tabh) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--s1);border-top:1px solid var(--border);display:flex;z-index:100}
+.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:var(--tabh);background:var(--s1);border-top:1px solid var(--border);display:flex;z-index:100}
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--t2);font-size:9px;font-family:'Golos Text',sans-serif;font-weight:500;border:none;background:none;position:relative}
 .tab.active{color:var(--a5)}
 .ti{font-size:18px;line-height:1}
 .tbadge{position:absolute;top:5px;right:calc(50% - 16px);background:var(--exp);color:#fff;font-size:9px;font-weight:700;border-radius:8px;padding:1px 5px;min-width:16px;text-align:center;display:none}
 
 /* PAGES */
-.page{display:none;padding:12px 16px;padding-bottom:calc(var(--tabh) + env(safe-area-inset-bottom) + 32px)}
+.page{display:none;padding:12px 16px;padding-bottom:calc(var(--tabh)+12px)}
 .page.active{display:block;animation:fi .2s ease}
 @keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 
@@ -299,7 +299,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
       <div class="ctitle">Инструкция</div>
       <div style="font-size:12px;color:var(--t2);line-height:1.7">
         Загрузите CSV с историческими данными о производстве.<br>
-        <strong style="color:var(--text)">Колонки:</strong> мастер; дата; изделие; количество; цена; зарплата<br>
+        <strong style="color:var(--text)">Колонки:</strong> дата; мастер; изделие; артикул; количество; цена; зарплата<br>
         <strong style="color:var(--text)">Дата:</strong> ДД.ММ.ГГГГ или ГГГГ-ММ-ДД<br>
         <strong style="color:var(--text)">Разделитель:</strong> ; или ,
       </div>
@@ -1171,7 +1171,7 @@ function renderImportPage(){
 }
 
 function downloadImportTemplate(){
-  const csv='мастер;дата;изделие;количество;цена;зарплата\nИванов Иван;01.06.2025;Столешница дуб;1;12000;1500\nПетрова Анна;15.05.2025;Подоконник ясень;2;8000;900\n';
+  const csv='дата;мастер;изделие;артикул;количество;цена;зарплата\n01.06.2025;Иванов Иван;Столешница дуб;СТ-001;1;12000;1500\n15.05.2025;Петрова Анна;Подоконник ясень;ПД-045;2;8000;900\n';
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
@@ -1196,6 +1196,7 @@ function parseImportCSV(text){
     мастер:     ['мастер','master','имя','фио','сотрудник'],
     дата:       ['дата','date','дата_приёмки','принято'],
     изделие:    ['изделие','название','item','наименование'],
+    артикул:    ['артикул','арт','article','sku','код','артикул изделия'],
     количество: ['количество','qty','кол-во','кол_во','шт'],
     цена:       ['цена','price','стоимость','розница','сумма'],
     зарплата:   ['зарплата','зп','salary','оплата','заработок'],
@@ -1205,7 +1206,9 @@ function parseImportCSV(text){
     const idx=header.findIndex(h=>alts.includes(h));
     if(idx>=0) colMap[f]=idx;
   });
-  const missing=Object.keys(aliases).filter(k=>colMap[k]===undefined);
+  // артикул не обязателен — убираем из проверки missing
+  const required=['мастер','дата','изделие','количество','цена','зарплата'];
+  const missing=required.filter(k=>colMap[k]===undefined);
   if(missing.length){showToast('Не найдены колонки: '+missing.join(', '));return;}
 
   const rows=[],issues=[];
@@ -1215,6 +1218,7 @@ function parseImportCSV(text){
     const masterName=c[colMap['мастер']]||'';
     const dateRaw=c[colMap['дата']]||'';
     const itemName=c[colMap['изделие']]||'';
+    const artikul=colMap['артикул']!==undefined ? (c[colMap['артикул']]||'') : '';
     const qty=parseInt(c[colMap['количество']])||1;
     const price=parseFloat((c[colMap['цена']]||'0').replace(/[^\d.]/g,''))||0;
     const zp=parseFloat((c[colMap['зарплата']]||'0').replace(/[^\d.]/g,''))||0;
@@ -1225,7 +1229,7 @@ function parseImportCSV(text){
     else{issues.push(`Строка ${li+2}: неверная дата "${dateRaw}"`);dateISO=new Date().toISOString();}
     const master=getEmployees().find(e=>e.name.toLowerCase()===masterName.toLowerCase()&&e.role==='мастер');
     if(!master) issues.push(`Строка ${li+2}: мастер "${masterName}" не найден`);
-    rows.push({masterName,masterId:master?.id||'imp_'+masterName.replace(/\s/g,'_'),itemName,qty,price,zp,dateISO,dateDisplay:dateRaw});
+    rows.push({masterName,masterId:master?.id||'imp_'+masterName.replace(/\s/g,'_'),itemName,artikul,qty,price,zp,dateISO,dateDisplay:dateRaw});
   });
 
   _importRows=rows;
@@ -1243,9 +1247,9 @@ function parseImportCSV(text){
   else issCard.style.display='none';
 
   document.getElementById('importPreviewContent').innerHTML=`<div style="overflow-x:auto"><table style="width:100%;font-size:11px;border-collapse:collapse">
-    <tr style="color:var(--t2);font-size:10px"><td style="padding:4px">Мастер</td><td>Дата</td><td>Изделие</td><td style="text-align:right">Цена</td><td style="text-align:right">ЗП</td></tr>
-    ${rows.slice(0,10).map(r=>`<tr style="border-top:1px solid var(--border)"><td style="padding:5px 4px;font-weight:600">${r.masterName}</td><td style="color:var(--t2)">${r.dateDisplay}</td><td>${r.itemName}</td><td style="text-align:right;color:var(--accent)">${fmt(r.price)}</td><td style="text-align:right;color:var(--a5)">${fmt(r.zp)}</td></tr>`).join('')}
-    ${rows.length>10?`<tr><td colspan="5" style="padding:6px;text-align:center;color:var(--t2)">... и ещё ${rows.length-10} записей</td></tr>`:''}
+    <tr style="color:var(--t2);font-size:10px"><td style="padding:4px">Дата</td><td>Мастер</td><td>Изделие</td><td>Артикул</td><td style="text-align:right">Цена</td><td style="text-align:right">ЗП</td></tr>
+    ${rows.slice(0,10).map(r=>`<tr style="border-top:1px solid var(--border)"><td style="padding:5px 4px;color:var(--t2)">${r.dateDisplay}</td><td style="font-weight:600">${r.masterName}</td><td>${r.itemName}</td><td style="color:var(--a2)">${r.artikul||'—'}</td><td style="text-align:right;color:var(--accent)">${fmt(r.price)}</td><td style="text-align:right;color:var(--a5)">${fmt(r.zp)}</td></tr>`).join('')}
+    ${rows.length>10?`<tr><td colspan="6" style="padding:6px;text-align:center;color:var(--t2)">... и ещё ${rows.length-10} записей</td></tr>`:''}
   </table></div>`;
   document.getElementById('importPreview').style.display='block';
 }
@@ -1260,7 +1264,7 @@ async function confirmImport(){
     chunk.forEach(r=>{
       for(let q=0;q<(r.qty||1);q++){
         const ref=db.collection('ws_items').doc();
-        batch.set(ref,{id:uid(),name:r.itemName,itemName:r.itemName,masterName:r.masterName,masterId:r.masterId,qty:1,price:r.price,zp:r.zp,zpPaid:r.zp>0,status:'received',createdAt:r.dateISO,startedAt:r.dateISO,receivedAt:r.dateISO,importedAt:now(),importedBy:session.name,isImported:true,itemNum:'IMP-'+uid().toUpperCase()});
+        batch.set(ref,{id:uid(),name:r.itemName,itemName:r.itemName,artikul:r.artikul||'',masterName:r.masterName,masterId:r.masterId,qty:1,price:r.price,zp:r.zp,zpPaid:r.zp>0,status:'received',createdAt:r.dateISO,startedAt:r.dateISO,receivedAt:r.dateISO,importedAt:now(),importedBy:session.name,isImported:true,itemNum:'IMP-'+uid().toUpperCase()});
       }
     });
     try{await batch.commit();success+=chunk.length;}catch(e){console.error(e);}
