@@ -2736,7 +2736,8 @@ function renderShiftHistory(){
   const c=document.getElementById('shiftHistoryList'); if(!c)return;
   const shops=getShops();
   const sf=document.getElementById('histShopFilter');
-  if(sf&&!sf.innerHTML) sf.innerHTML='<div style="padding:5px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#c8f060;color:#0f0f13;font-size:11px;cursor:pointer;white-space:nowrap;font-weight:700" onclick="filterHistShop(\'\',this)">Все</div>'+shops.map(s=>`<div style="padding:5px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#1a1a22;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap" onclick="filterHistShop('${s}',this)">${s}</div>`).join('');
+  // Always rebuild shop filter to avoid stale [object Object]
+  if(sf) sf.innerHTML='<div style="padding:5px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#c8f060;color:#0f0f13;font-size:11px;cursor:pointer;white-space:nowrap;font-weight:700" onclick="filterHistShop(\'\',this)">Все</div>'+shops.map(s=>`<div style="padding:5px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#1a1a22;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap" onclick="filterHistShop('${s.name||s}',this)">${s.name||s}</div>`).join('');
   var allShifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   // Filter by mode
   if(histMode === 'live') allShifts = allShifts.filter(function(s){ return !s.isArchive; });
@@ -3628,7 +3629,7 @@ function renderSellersAdmin(){
   const c=document.getElementById('sellersAdminList'); if(!c)return;
   const sellers=getSellers(); const shops=getShops();
   const nss=document.getElementById('newSShop');
-  if(nss) nss.innerHTML='<option value="">Универсальный</option>'+shops.map(s=>`<option>${s}</option>`).join('');
+  if(nss) nss.innerHTML='<option value="">Универсальный</option>'+shops.map(s=>`<option value="${s.name||s}">${s.name||s}</option>`).join('');
   if(!sellers.length){c.innerHTML='<div class="empty"><div class="ei">🏪</div>Нет продавцов</div>';return;}
   c.innerHTML=sellers.map((s,i)=>`
     <div style="background:${s.blocked?'#2e1a1a':'#1a1a22'};border:1px solid ${s.blocked?'#f06060':'#2e2e3e'};border-radius:12px;padding:10px;margin-bottom:8px">
