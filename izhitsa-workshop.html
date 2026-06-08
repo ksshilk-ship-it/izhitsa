@@ -295,41 +295,112 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
   <!-- IMPORT PAGE (Администратор) -->
   <div class="page" id="pg-import">
     <div class="stitle">📥 Загрузка данных</div>
-    <div class="card" style="border-color:var(--a2)">
-      <div class="ctitle">Инструкция</div>
-      <div style="font-size:12px;color:var(--t2);line-height:1.7">
-        Загрузите CSV с историческими данными о производстве.<br>
-        <strong style="color:var(--text)">Колонки:</strong> дата; мастер; изделие; артикул; количество; цена; зарплата<br>
-        <strong style="color:var(--text)">Дата:</strong> ДД.ММ.ГГГГ или ГГГГ-ММ-ДД<br>
-        <strong style="color:var(--text)">Разделитель:</strong> ; или ,
+
+    <!-- Выбор режима -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <div id="importModeBtn1" onclick="setImportMode('items')" style="background:var(--s2);border:2px solid var(--a2);border-radius:14px;padding:16px;text-align:center;cursor:pointer">
+        <div style="font-size:26px;margin-bottom:6px">🔨</div>
+        <div style="font-size:13px;font-weight:700">Приёмка изделий</div>
+        <div style="font-size:10px;color:var(--t2);margin-top:3px">от мастеров</div>
+      </div>
+      <div id="importModeBtn2" onclick="setImportMode('shipment')" style="background:var(--s2);border:2px solid var(--border);border-radius:14px;padding:16px;text-align:center;cursor:pointer">
+        <div style="font-size:26px;margin-bottom:6px">🚚</div>
+        <div style="font-size:13px;font-weight:700">Отгрузка</div>
+        <div style="font-size:10px;color:var(--t2);margin-top:3px">в магазины</div>
       </div>
     </div>
-    <button class="btn sec" onclick="downloadImportTemplate()" style="margin-bottom:10px">📄 Скачать шаблон CSV</button>
-    <div class="card">
-      <div class="ctitle">Выбрать файл</div>
-      <div style="border:2px dashed var(--border);border-radius:12px;padding:20px;text-align:center;cursor:pointer" onclick="document.getElementById('importFile').click()">
-        <div style="font-size:28px;margin-bottom:6px">📂</div>
-        <div style="font-size:13px;font-weight:600">Нажмите для выбора CSV</div>
-        <div style="font-size:11px;color:var(--t2);margin-top:4px" id="importFileName">Файл не выбран</div>
+
+    <!-- РЕЖИМ 1: Приёмка изделий -->
+    <div id="importModeItems">
+      <div class="card" style="border-color:var(--a2)">
+        <div class="ctitle">Инструкция</div>
+        <div style="font-size:12px;color:var(--t2);line-height:1.7">
+          Загрузите CSV с историческими данными о производстве.<br>
+          <strong style="color:var(--text)">Колонки:</strong> дата; мастер; изделие; артикул; количество; цена; зарплата<br>
+          <strong style="color:var(--text)">Дата:</strong> ДД.ММ.ГГГГ или ГГГГ-ММ-ДД · <strong style="color:var(--text)">Разделитель:</strong> ; или ,
+        </div>
       </div>
-      <input type="file" id="importFile" accept=".csv,.txt" style="display:none" onchange="handleImportFile(this)">
-    </div>
-    <div id="importPreview" style="display:none">
+      <button class="btn sec" onclick="downloadImportTemplate()" style="margin-bottom:10px">📄 Скачать шаблон CSV</button>
       <div class="card">
-        <div class="ctitle">Предпросмотр</div>
-        <div id="importStats" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px"></div>
-        <div id="importPreviewContent"></div>
+        <div class="ctitle">Выбрать файл</div>
+        <div style="border:2px dashed var(--border);border-radius:12px;padding:20px;text-align:center;cursor:pointer" onclick="document.getElementById('importFile').click()">
+          <div style="font-size:28px;margin-bottom:6px">📂</div>
+          <div style="font-size:13px;font-weight:600">Нажмите для выбора CSV</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:4px" id="importFileName">Файл не выбран</div>
+        </div>
+        <input type="file" id="importFile" accept=".csv,.txt" style="display:none" onchange="handleImportFile(this)">
       </div>
-      <div class="card" id="importIssuesCard" style="display:none;border-color:var(--a4)">
-        <div class="ctitle" style="color:var(--a4)">⚠️ Предупреждения</div>
-        <div id="importIssues"></div>
+      <div id="importPreview" style="display:none">
+        <div class="card">
+          <div class="ctitle">Предпросмотр</div>
+          <div id="importStats" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px"></div>
+          <div id="importPreviewContent"></div>
+        </div>
+        <div class="card" id="importIssuesCard" style="display:none;border-color:var(--a4)">
+          <div class="ctitle" style="color:var(--a4)">⚠️ Предупреждения</div>
+          <div id="importIssues"></div>
+        </div>
+        <button class="btn green" onclick="confirmImport()" id="importConfirmBtn">✅ Загрузить в базу</button>
+        <button class="btn sec" style="margin-top:8px" onclick="cancelImport()">Отмена</button>
       </div>
-      <button class="btn green" onclick="confirmImport()" id="importConfirmBtn">✅ Загрузить в базу</button>
-      <button class="btn sec" style="margin-top:8px" onclick="cancelImport()">Отмена</button>
+      <div class="card" style="margin-top:10px">
+        <div class="ctitle">История загрузок</div>
+        <div id="importHistory"></div>
+      </div>
     </div>
-    <div class="card" style="margin-top:10px">
-      <div class="ctitle">История загрузок</div>
-      <div id="importHistory"></div>
+
+    <!-- РЕЖИМ 2: Отгрузка -->
+    <div id="importModeShipment" style="display:none">
+
+      <!-- Шаг 1: Фото накладной -->
+      <div class="card" id="shipImportStep1">
+        <div class="ctitle">Шаг 1 — Загрузить фото накладной</div>
+        <div style="border:2px dashed var(--border);border-radius:12px;padding:24px;text-align:center;cursor:pointer;margin-bottom:10px" onclick="document.getElementById('shipPhotoInput').click()" id="shipPhotoZone">
+          <div style="font-size:32px;margin-bottom:8px">📷</div>
+          <div style="font-size:13px;font-weight:600">Сфотографировать или выбрать накладную</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:4px" id="shipPhotoName">Файл не выбран</div>
+        </div>
+        <input type="file" id="shipPhotoInput" accept="image/*" capture="environment" style="display:none" onchange="handleShipPhoto(this)">
+        <div id="shipPhotoPreviewWrap" style="display:none;margin-bottom:10px">
+          <img id="shipPhotoPreview" style="width:100%;border-radius:10px;max-height:220px;object-fit:cover">
+        </div>
+        <button class="btn" id="shipRecognizeBtn" onclick="recognizeShipment()" style="display:none">🔍 Распознать накладную</button>
+      </div>
+
+      <!-- Шаг 2: Редактирование распознанной накладной -->
+      <div id="shipImportStep2" style="display:none">
+        <div class="card" style="border-color:var(--a2)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div class="ctitle" style="margin:0">Шаг 2 — Проверьте и исправьте</div>
+            <span style="font-size:10px;background:var(--a2);color:#000;border-radius:6px;padding:3px 8px;font-weight:700">AI распознал</span>
+          </div>
+          <div class="fg"><label class="fl">Магазин / получатель</label><input class="fi" id="shipDest" placeholder="Название магазина"></div>
+          <div class="fg"><label class="fl">Дата накладной</label><input class="fi" type="date" id="shipDate"></div>
+          <div class="fg"><label class="fl">Номер накладной</label><input class="fi" id="shipNum" placeholder="№ накладной"></div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div class="ctitle" style="margin:0">Позиции накладной</div>
+            <button onclick="addShipImportRow()" style="background:none;border:1px solid var(--a2);border-radius:8px;padding:4px 10px;color:var(--a2);cursor:pointer;font-size:12px">＋ Добавить</button>
+          </div>
+          <div id="shipImportRows"></div>
+        </div>
+
+        <div class="card" style="border-color:var(--a5)">
+          <div class="ctitle">Итого</div>
+          <div id="shipImportTotal" style="font-family:'Unbounded',sans-serif;font-size:20px;font-weight:700;color:var(--a5)">0 ₽</div>
+        </div>
+
+        <button class="btn green" onclick="confirmShipImport()">📦 Создать накладную</button>
+        <button class="btn sec" style="margin-top:8px" onclick="resetShipImport()">↩️ Начать заново</button>
+      </div>
+
+      <!-- История отгрузок загруженных -->
+      <div class="card" style="margin-top:10px">
+        <div class="ctitle">История загруженных отгрузок</div>
+        <div id="shipImportHistory"></div>
+      </div>
     </div>
   </div>
 
@@ -1167,6 +1238,7 @@ function saveEditEmp(){
 let _importRows=[];
 
 function renderImportPage(){
+  setImportMode(_currentImportMode);
   renderImportHistory();
 }
 
@@ -1591,6 +1663,241 @@ function renderStats(){
           <span class="at-val" style="color:var(--accent)">${fmt(i.price)}</span>
         </div>`).join('') || '<div class="empty" style="padding:12px 0">Нет данных</div>'}
     </div>`;
+}
+
+// ════════════════════════════════
+// IMPORT MODE SWITCHING
+// ════════════════════════════════
+let _currentImportMode = 'items';
+
+function setImportMode(mode){
+  _currentImportMode = mode;
+  const btn1 = document.getElementById('importModeBtn1');
+  const btn2 = document.getElementById('importModeBtn2');
+  const items = document.getElementById('importModeItems');
+  const ship  = document.getElementById('importModeShipment');
+  if(mode==='items'){
+    btn1.style.borderColor='var(--a2)'; btn1.style.background='var(--s2)';
+    btn2.style.borderColor='var(--border)'; btn2.style.background='var(--s2)';
+    items.style.display='block'; ship.style.display='none';
+  } else {
+    btn2.style.borderColor='var(--a6)'; btn2.style.background='var(--s2)';
+    btn1.style.borderColor='var(--border)'; btn1.style.background='var(--s2)';
+    items.style.display='none'; ship.style.display='block';
+    renderShipImportHistory();
+  }
+}
+
+// ════════════════════════════════
+// SHIPMENT PHOTO OCR
+// ════════════════════════════════
+let _shipPhotoBase64 = null;
+let _shipImportRowCount = 0;
+
+function handleShipPhoto(input){
+  const file = input.files[0]; if(!file) return;
+  document.getElementById('shipPhotoName').textContent = file.name;
+  document.getElementById('shipPhotoZone').style.borderColor = 'var(--a6)';
+  const reader = new FileReader();
+  reader.onload = e => {
+    _shipPhotoBase64 = e.target.result.split(',')[1];
+    const img = document.getElementById('shipPhotoPreview');
+    img.src = e.target.result;
+    document.getElementById('shipPhotoPreviewWrap').style.display = 'block';
+    document.getElementById('shipRecognizeBtn').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function recognizeShipment(){
+  const btn = document.getElementById('shipRecognizeBtn');
+  btn.disabled = true; btn.textContent = '⏳ Распознаю...';
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: 'image/jpeg', data: _shipPhotoBase64 }
+            },
+            {
+              type: 'text',
+              text: `Это фото товарной накладной или накладной отгрузки. Извлеки данные и верни ТОЛЬКО JSON без пояснений:
+{
+  "dest": "название магазина или получателя",
+  "date": "дата в формате ГГГГ-ММ-ДД",
+  "num": "номер накладной",
+  "items": [
+    {"name": "название товара", "artikul": "артикул если есть", "qty": 1, "price": 0}
+  ]
+}
+Если поле не найдено — оставь пустую строку или 0. Отвечай только JSON.`
+            }
+          ]
+        }]
+      })
+    });
+
+    const data = await response.json();
+    const text = data.content?.map(c=>c.text||'').join('') || '';
+    let parsed;
+    try {
+      const clean = text.replace(/```json|```/g,'').trim();
+      parsed = JSON.parse(clean);
+    } catch(e) {
+      showToast('Не удалось разобрать ответ AI. Заполните вручную.');
+      parsed = {dest:'',date:'',num:'',items:[{name:'',artikul:'',qty:1,price:0}]};
+    }
+
+    fillShipImportForm(parsed);
+    btn.disabled = false; btn.textContent = '🔍 Распознать заново';
+
+  } catch(e){
+    showToast('Ошибка распознавания: '+e.message);
+    btn.disabled = false; btn.textContent = '🔍 Распознать накладную';
+    // Показываем форму пустой для ручного заполнения
+    fillShipImportForm({dest:'',date:new Date().toISOString().split('T')[0],num:'',items:[{name:'',artikul:'',qty:1,price:0}]});
+  }
+}
+
+function fillShipImportForm(data){
+  document.getElementById('shipDest').value = data.dest||'';
+  document.getElementById('shipDate').value = data.date||new Date().toISOString().split('T')[0];
+  document.getElementById('shipNum').value  = data.num||'';
+
+  _shipImportRowCount = 0;
+  document.getElementById('shipImportRows').innerHTML = '';
+  const items = (data.items&&data.items.length) ? data.items : [{name:'',artikul:'',qty:1,price:0}];
+  items.forEach(item => addShipImportRow(item));
+
+  document.getElementById('shipImportStep1').style.display = 'none';
+  document.getElementById('shipImportStep2').style.display = 'block';
+  updateShipImportTotal();
+}
+
+function addShipImportRow(data={}){
+  const id = ++_shipImportRowCount;
+  const c = document.getElementById('shipImportRows');
+  const div = document.createElement('div');
+  div.id = 'shipRow_'+id;
+  div.style.cssText = 'background:var(--s2);border-radius:10px;padding:10px;margin-bottom:8px;position:relative';
+  div.innerHTML = `
+    <button onclick="removeShipRow(${id})" style="position:absolute;top:8px;right:8px;background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>
+    <div style="font-size:10px;color:var(--t2);font-weight:700;text-transform:uppercase;margin-bottom:8px">Позиция ${id}</div>
+    <div class="fg" style="margin-bottom:6px"><label class="fl">Название</label>
+      <input class="fi" id="sn_${id}" value="${data.name||''}" placeholder="Название изделия" oninput="updateShipImportTotal()"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <div class="fg"><label class="fl">Артикул</label>
+        <input class="fi" id="sa_${id}" value="${data.artikul||''}" placeholder="Арт."></div>
+      <div class="fg"><label class="fl">Кол-во</label>
+        <input class="fi" type="number" id="sq_${id}" value="${data.qty||1}" inputmode="numeric" oninput="updateShipImportTotal()"></div>
+    </div>
+    <div class="fg" style="margin-top:6px"><label class="fl">Цена (₽)</label>
+      <input class="fi" type="number" id="sp_${id}" value="${data.price||''}" inputmode="numeric" placeholder="0" oninput="updateShipImportTotal()"></div>`;
+  c.appendChild(div);
+  updateShipImportTotal();
+}
+
+function removeShipRow(id){
+  const el = document.getElementById('shipRow_'+id);
+  if(el) el.remove();
+  updateShipImportTotal();
+}
+
+function updateShipImportTotal(){
+  let total = 0;
+  for(let i=1; i<=_shipImportRowCount; i++){
+    const q = parseFloat(document.getElementById('sq_'+i)?.value)||0;
+    const p = parseFloat(document.getElementById('sp_'+i)?.value)||0;
+    total += q*p;
+  }
+  const el = document.getElementById('shipImportTotal');
+  if(el) el.textContent = Math.round(total).toLocaleString('ru-RU')+'₽';
+}
+
+function getShipImportRows(){
+  const rows = [];
+  for(let i=1; i<=_shipImportRowCount; i++){
+    const nameEl = document.getElementById('sn_'+i);
+    if(!nameEl) continue;
+    const name = nameEl.value.trim();
+    if(!name) continue;
+    rows.push({
+      name,
+      artikul: document.getElementById('sa_'+i)?.value.trim()||'',
+      qty: parseFloat(document.getElementById('sq_'+i)?.value)||1,
+      price: parseFloat(document.getElementById('sp_'+i)?.value)||0,
+    });
+  }
+  return rows;
+}
+
+async function confirmShipImport(){
+  const dest = document.getElementById('shipDest').value.trim();
+  const date = document.getElementById('shipDate').value;
+  const num  = document.getElementById('shipNum').value.trim();
+  const rows = getShipImportRows();
+
+  if(!dest){ showToast('Укажите магазин / получателя'); return; }
+  if(!rows.length){ showToast('Добавьте хотя бы одну позицию'); return; }
+
+  const shipNum = num || ('ИМП-'+Date.now().toString(36).toUpperCase());
+  const dateISO = date ? date+'T12:00:00.000Z' : new Date().toISOString();
+  const total = rows.reduce((s,r)=>s+r.qty*r.price,0);
+
+  const shipData = {
+    id: uid(), num: shipNum, dest, date: dateISO,
+    items: rows, total,
+    createdAt: now(), createdBy: session.name,
+    isImported: true, importedBy: session.name, importedAt: now(),
+    photoImported: !!_shipPhotoBase64
+  };
+
+  try {
+    await db.collection('ws_shipments').add(shipData);
+
+    // Сохраняем историю
+    const hist = JSON.parse(localStorage.getItem('ws_ship_import_history')||'[]');
+    hist.unshift({date: date||now().split('T')[0], dest, num: shipNum, items: rows.length, total, by: session.name});
+    localStorage.setItem('ws_ship_import_history', JSON.stringify(hist.slice(0,20)));
+
+    showToast(`✅ Накладная ${shipNum} загружена — ${rows.length} позиций на ${Math.round(total).toLocaleString('ru-RU')}₽`);
+    resetShipImport();
+    renderShipImportHistory();
+  } catch(e){
+    showToast('Ошибка сохранения: '+e.message);
+  }
+}
+
+function resetShipImport(){
+  _shipPhotoBase64 = null;
+  _shipImportRowCount = 0;
+  document.getElementById('shipImportStep1').style.display = 'block';
+  document.getElementById('shipImportStep2').style.display = 'none';
+  document.getElementById('shipPhotoPreviewWrap').style.display = 'none';
+  document.getElementById('shipRecognizeBtn').style.display = 'none';
+  document.getElementById('shipPhotoName').textContent = 'Файл не выбран';
+  document.getElementById('shipPhotoZone').style.borderColor = 'var(--border)';
+  document.getElementById('shipPhotoInput').value = '';
+  document.getElementById('shipImportRows').innerHTML = '';
+}
+
+function renderShipImportHistory(){
+  const c = document.getElementById('shipImportHistory'); if(!c) return;
+  const hist = JSON.parse(localStorage.getItem('ws_ship_import_history')||'[]');
+  if(!hist.length){ c.innerHTML='<div class="empty" style="padding:12px 0"><div class="ei">🚚</div>Загрузок ещё не было</div>'; return; }
+  c.innerHTML = hist.map(h=>`
+    <div class="at-row">
+      <span class="at-lbl">${h.date} · ${h.dest}<br><span style="font-size:10px">№${h.num} · ${h.items} поз. · от ${h.by}</span></span>
+      <span class="at-val" style="color:var(--accent)">${Math.round(h.total).toLocaleString('ru-RU')}₽</span>
+    </div>`).join('');
 }
 
 // ════════ BOOT ════════
