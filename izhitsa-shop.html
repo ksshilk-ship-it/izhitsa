@@ -797,24 +797,81 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
   <!-- DATA UPLOAD PAGE -->
   <div class="page" id="pg-dataupload">
     <div class="stitle">📥 Загрузка данных</div>
-    <div class="al-info" style="margin-bottom:12px">💡 Загрузите JSON или CSV с историческими сменами. Система заполнит базу автоматически.</div>
-    <div class="card" style="margin-bottom:10px">
-      <div class="ctitle">Выбрать файл</div>
-      <div id="dropZone" onclick="document.getElementById('fileInput').click()" ondragover="event.preventDefault();this.style.borderColor='#c8f060'" ondragleave="this.style.borderColor='#2e2e3e'" ondrop="handleFileDrop(event)" style="border:2px dashed #2e2e3e;border-radius:12px;padding:24px;text-align:center;cursor:pointer;margin-bottom:12px">
-        <div style="font-size:28px;margin-bottom:6px">📄</div>
-        <div style="font-size:13px;font-weight:700;margin-bottom:4px">Нажмите или перетащите файл</div>
-        <div style="font-size:11px;color:#8888aa">JSON или CSV</div>
-        <input type="file" id="fileInput" accept=".json,.csv" style="display:none" onchange="handleFileSelect(this)">
+
+    <!-- TABS -->
+    <div style="display:flex;gap:6px;margin-bottom:14px">
+      <button type="button" id="duTab_photo" onclick="switchDuTab('photo')"
+        style="flex:1;padding:10px;border-radius:12px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">
+        📷 Фото журнала
+      </button>
+      <button type="button" id="duTab_file" onclick="switchDuTab('file')"
+        style="flex:1;padding:10px;border-radius:12px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;cursor:pointer">
+        📄 Файл JSON/CSV
+      </button>
+    </div>
+
+    <!-- ══ ФОТО ЖУРНАЛА ══ -->
+    <div id="duPhotoTab">
+      <div class="al-info" style="margin-bottom:12px">📷 Сфотографируй страницу журнала — AI распознает данные и занесёт в базу.</div>
+
+      <!-- Настройки -->
+      <div class="card" style="margin-bottom:10px">
+        <div class="ctitle">Настройки распознавания</div>
+        <div class="fg"><label class="fl">Магазин</label>
+          <select class="fs" id="duPhotoShop"></select>
+        </div>
+        <div class="fg" style="margin-bottom:0"><label class="fl">Продавец (если не указан в журнале)</label>
+          <input class="fi" id="duPhotoSeller" placeholder="Имя продавца">
+        </div>
       </div>
-      <div id="fileParseResult" style="display:none"></div>
-      <div style="display:flex;gap:8px">
-        <button class="btn" id="importConfirmBtn" style="display:none" onclick="confirmImport()">✅ Импортировать</button>
-        <button class="btn sec" id="importCancelBtn" style="display:none" onclick="cancelImport()">Отмена</button>
+
+      <!-- Загрузка фото -->
+      <div class="card" style="margin-bottom:10px">
+        <div class="ctitle">Загрузить фото</div>
+        <div id="duPhotoZone" onclick="document.getElementById('duPhotoInput').click()"
+          style="border:2px dashed #2e2e3e;border-radius:12px;padding:24px;text-align:center;cursor:pointer;margin-bottom:12px;transition:.2s"
+          ondragover="event.preventDefault();this.style.borderColor='#c8f060'"
+          ondragleave="this.style.borderColor='#2e2e3e'"
+          ondrop="handlePhotoDrop(event)">
+          <div style="font-size:32px;margin-bottom:8px">📷</div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:4px">Нажмите или перетащите фото</div>
+          <div style="font-size:11px;color:#8888aa">JPG, PNG — страница журнала продаж</div>
+          <input type="file" id="duPhotoInput" accept="image/*" multiple style="display:none" onchange="handlePhotoSelect(this)">
+        </div>
+        <div id="duPhotoPreview" style="display:none;margin-bottom:12px"></div>
+        <button class="btn" id="duRecognizeBtn" style="display:none" onclick="recognizeJournalPhoto()">🤖 Распознать</button>
+      </div>
+
+      <!-- Результат распознавания -->
+      <div id="duRecognizeResult" style="display:none"></div>
+
+      <!-- История распознаваний -->
+      <div class="card">
+        <div class="ctitle">История загрузок из фото</div>
+        <div id="duPhotoHistory"><div class="empty"><div class="ei">📷</div>Загрузок не было</div></div>
       </div>
     </div>
-    <div class="card" style="margin-bottom:10px">
-      <div class="ctitle">Шаблон JSON</div>
-      <div style="background:#0f0f13;border-radius:10px;padding:12px;font-family:monospace;font-size:10px;color:#8888aa;line-height:1.7;white-space:pre-wrap">[
+
+    <!-- ══ ФАЙЛ JSON/CSV ══ -->
+    <div id="duFileTab" style="display:none">
+      <div class="al-info" style="margin-bottom:12px">💡 Загрузите JSON или CSV с историческими сменами. Система заполнит базу автоматически.</div>
+      <div class="card" style="margin-bottom:10px">
+        <div class="ctitle">Выбрать файл</div>
+        <div id="dropZone" onclick="document.getElementById('fileInput').click()" ondragover="event.preventDefault();this.style.borderColor='#c8f060'" ondragleave="this.style.borderColor='#2e2e3e'" ondrop="handleFileDrop(event)" style="border:2px dashed #2e2e3e;border-radius:12px;padding:24px;text-align:center;cursor:pointer;margin-bottom:12px">
+          <div style="font-size:28px;margin-bottom:6px">📄</div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:4px">Нажмите или перетащите файл</div>
+          <div style="font-size:11px;color:#8888aa">JSON или CSV</div>
+          <input type="file" id="fileInput" accept=".json,.csv" style="display:none" onchange="handleFileSelect(this)">
+        </div>
+        <div id="fileParseResult" style="display:none"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn" id="importConfirmBtn" style="display:none" onclick="confirmImport()">✅ Импортировать</button>
+          <button class="btn sec" id="importCancelBtn" style="display:none" onclick="cancelImport()">Отмена</button>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:10px">
+        <div class="ctitle">Шаблон JSON</div>
+        <div style="background:#0f0f13;border-radius:10px;padding:12px;font-family:monospace;font-size:10px;color:#8888aa;line-height:1.7;white-space:pre-wrap">[
   {
     "date": "2024-01-15",
     "shopName": "Роза Хутор",
@@ -831,14 +888,15 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
     "otherExp": 200
   }
 ]</div>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn sec" style="font-size:11px" onclick="downloadTemplate()">⬇️ JSON шаблон</button>
-        <button class="btn sec" style="font-size:11px" onclick="downloadCsvTemplate()">⬇️ CSV шаблон</button>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn sec" style="font-size:11px" onclick="downloadTemplate()">⬇️ JSON шаблон</button>
+          <button class="btn sec" style="font-size:11px" onclick="downloadCsvTemplate()">⬇️ CSV шаблон</button>
+        </div>
       </div>
-    </div>
-    <div class="card">
-      <div class="ctitle">История импортов</div>
-      <div id="importHistoryList"><div class="empty"><div class="ei">📭</div>Импортов не было</div></div>
+      <div class="card">
+        <div class="ctitle">История импортов</div>
+        <div id="importHistoryList"><div class="empty"><div class="ei">📭</div>Импортов не было</div></div>
+      </div>
     </div>
   </div>
 
@@ -1239,6 +1297,23 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
     </div>
     <button class="btn" style="background:#a060f0;border:none;color:#fff" onclick="savePsjEntry('staff')">🛒 Добавить покупку</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('psjStaffMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- PHOTO RECOGNITION CONFIRM MODAL -->
+<div class="mo" id="duConfirmMo">
+  <div class="md" style="max-height:95dvh">
+    <div class="mh"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="mt" style="margin:0">✅ Проверьте данные</div>
+      <button onclick="closeMo('duConfirmMo')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:5px 10px;color:#8888aa;cursor:pointer;font-size:12px">✕</button>
+    </div>
+    <div class="al-info" style="margin-bottom:10px;font-size:11px">Проверьте распознанные данные. Красные строки — нужна правка.</div>
+    <div id="duConfirmList"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn" onclick="confirmPhotoImport()">💾 Сохранить в журнал</button>
+      <button class="btn sec" onclick="closeMo('duConfirmMo')">Отмена</button>
+    </div>
   </div>
 </div>
 
@@ -1702,7 +1777,7 @@ function buildAdminTabs(){
     <button class="tab" onclick="showPg('pastshift',this);switchPsTab('journal')"><div class="ti">✏️</div><span>Ввод</span></button>
     <button class="tab" onclick="showPg('sellers',this);renderSellersAdmin()"><div class="ti">👥</div><span>Роли</span></button>
     <button class="tab" onclick="showPg('shopsettings',this);renderShopSettings()"><div class="ti">⚙️</div><span>Настройки</span></button>
-    <button class="tab" onclick="showPg('dataupload',this);renderImportHistory()"><div class="ti">📥</div><span>Загрузка</span></button>
+    <button class="tab" onclick="showPg('dataupload',this);switchDuTab('photo')"><div class="ti">📥</div><span>Загрузка</span></button>
     <button class="tab" onclick="exitShift()"><div class="ti">🚪</div><span>Выйти</span></button>`;
 }
 
@@ -3862,6 +3937,197 @@ function savePsjAsShift() {
   showToast('✅ Отчёт за '+date+' сохранён');
 }
 
+
+// ════ DATA UPLOAD TABS ════
+function switchDuTab(tab) {
+  var isPhoto = tab === 'photo';
+  document.getElementById('duPhotoTab').style.display = isPhoto ? 'block' : 'none';
+  document.getElementById('duFileTab').style.display = isPhoto ? 'none' : 'block';
+  var btnP = document.getElementById('duTab_photo');
+  var btnF = document.getElementById('duTab_file');
+  if(btnP){ btnP.style.borderWidth=isPhoto?'2px':'1px'; btnP.style.background=isPhoto?'#1e2a14':'#22222e'; btnP.style.color=isPhoto?'#c8f060':'#8888aa'; btnP.style.borderColor=isPhoto?'#c8f060':'#2e2e3e'; }
+  if(btnF){ btnF.style.borderWidth=isPhoto?'1px':'2px'; btnF.style.background=isPhoto?'#22222e':'#1e2a14'; btnF.style.color=isPhoto?'#8888aa':'#c8f060'; btnF.style.borderColor=isPhoto?'#2e2e3e':'#c8f060'; }
+  if(isPhoto) duPhotoInit();
+}
+function duPhotoInit() {
+  var shops = getShopNames();
+  var sel = document.getElementById('duPhotoShop');
+  if(sel) sel.innerHTML = shops.map(function(s){ return '<option>'+s+'</option>'; }).join('');
+  renderDuPhotoHistory();
+}
+
+var duPhotoFiles = [];
+var duPendingRecognized = [];
+
+function handlePhotoSelect(input) {
+  duPhotoFiles = Array.from(input.files);
+  showPhotoPreview();
+}
+function handlePhotoDrop(event) {
+  event.preventDefault();
+  document.getElementById('duPhotoZone').style.borderColor = '#2e2e3e';
+  duPhotoFiles = Array.from(event.dataTransfer.files).filter(function(f){ return f.type.startsWith('image/'); });
+  showPhotoPreview();
+}
+function showPhotoPreview() {
+  var p = document.getElementById('duPhotoPreview');
+  var btn = document.getElementById('duRecognizeBtn');
+  if(!duPhotoFiles.length){ p.style.display='none'; btn.style.display='none'; return; }
+  p.style.display = 'block';
+  p.innerHTML = '<div style="font-size:12px;color:#8888aa;margin-bottom:8px">Выбрано фото: '+duPhotoFiles.length+'</div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+    duPhotoFiles.map(function(f){
+      return '<div><img src="'+URL.createObjectURL(f)+'" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid #2e2e3e"></div>';
+    }).join('') + '</div>';
+  btn.style.display = 'block';
+}
+
+function recognizeJournalPhoto() {
+  if(!duPhotoFiles.length){ showToast('Выберите фото'); return; }
+  var shopName = (document.getElementById('duPhotoShop')||{}).value || '';
+  var sellerHint = (document.getElementById('duPhotoSeller')||{}).value || '';
+  var res = document.getElementById('duRecognizeResult');
+  var btn = document.getElementById('duRecognizeBtn');
+  btn.textContent = '⏳ Распознаю...'; btn.disabled = true;
+  res.style.display = 'block';
+  res.innerHTML = '<div class="card"><div style="text-align:center;padding:20px"><div style="font-size:24px;margin-bottom:8px">🤖</div><div style="font-size:13px;color:#8888aa">AI читает журнал...</div></div></div>';
+
+  var promises = duPhotoFiles.map(function(file){ return fileToBase64(file); });
+  Promise.all(promises).then(function(base64arr) {
+    var imageBlocks = base64arr.map(function(b64, i){
+      return { type:'image', source:{ type:'base64', media_type: duPhotoFiles[i].type||'image/jpeg', data:b64 } };
+    });
+    var prompt = 'Ты помощник для распознавания журналов продаж деревянных изделий.\n\n' +
+      'На фото — рукописная страница журнала магазина "' + shopName + '".\n' +
+      (sellerHint ? 'Продавец по умолчанию: ' + sellerHint + '\n' : '') +
+      'Распознай ВСЕ записи о продажах, расходах, списаниях и приходах товара.\n\n' +
+      'Верни ТОЛЬКО JSON массив без пояснений и без markdown:\n' +
+      '[\n  {\n    "date": "ДД.ММ или ГГГГ-ММ-ДД",\n    "sellerName": "имя если есть",\n    "type": "sale|expense|writeoff|receive",\n    "name": "наименование товара",\n    "article": "артикул или null",\n    "amount": число,\n    "discount": число_или_0,\n    "payMethod": "cash|terminal|sbp|transfer|qr|mixed",\n    "cashAmount": число_или_0,\n    "cardAmount": число_или_0,\n    "goodsType": "derevo|dr",\n    "comment": "заметки",\n    "uncertain": true_если_плохо_читается\n  }\n]\n\n' +
+      'Правила: нал→cash, П/Т/QR/СБП→cardAmount. Год 2025 если не указан. Верни ТОЛЬКО JSON.';
+
+    return fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        messages: [{ role: 'user', content: [...imageBlocks, { type:'text', text:prompt }] }]
+      })
+    });
+  }).then(function(r){ return r.json(); }).then(function(data) {
+    btn.textContent = '🤖 Распознать'; btn.disabled = false;
+    var text = (data.content||[]).map(function(c){ return c.text||''; }).join('');
+    var clean = text.replace(/```json|```/g,'').trim();
+    try {
+      var entries = JSON.parse(clean);
+      if(!entries||!entries.length){ res.innerHTML='<div class="al-warn">⚠️ Записей не найдено. Попробуйте фото лучшего качества.</div>'; return; }
+      showRecognizedEntries(entries, shopName);
+    } catch(e) {
+      res.innerHTML='<div class="al-err">❌ Не удалось распознать. Попробуйте фото лучшего качества.<br><small style="color:#8888aa">'+text.substring(0,200)+'</small></div>';
+    }
+  }).catch(function(e) {
+    btn.textContent = '🤖 Распознать'; btn.disabled = false;
+    res.innerHTML = '<div class="al-err">❌ Ошибка: '+e.message+'</div>';
+  });
+}
+
+function fileToBase64(file) {
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function(e){ resolve(e.target.result.split(',')[1]); };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function showRecognizedEntries(entries, shopName) {
+  duPendingRecognized = entries.map(function(e){ return Object.assign({}, e, {shopName: shopName}); });
+  var res = document.getElementById('duRecognizeResult');
+  var uncertain = entries.filter(function(e){ return e.uncertain; }).length;
+  var html = '<div class="card" style="margin-bottom:10px">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+      '<div class="ctitle" style="margin:0">Распознано: '+entries.length+'</div>' +
+      (uncertain ? '<div style="font-size:11px;color:#f0a060;font-weight:700">⚠️ '+uncertain+' под вопросом</div>' : '<div style="font-size:11px;color:#60f090;font-weight:700">✅ Всё чётко</div>') +
+    '</div>';
+  html += entries.map(function(e, i) {
+    var isU = e.uncertain;
+    var typeLabel = {sale:'💰 Продажа',expense:'💸 Расход',writeoff:'🗑 Списание',receive:'📥 Приход'}[e.type]||'📝';
+    var payLabel = {cash:'💵 Нал',terminal:'💳 Терминал',sbp:'📱 СБП',transfer:'🏦 Перевод',qr:'🔲 QR',mixed:'➗ Смешанный'}[e.payMethod]||e.payMethod||'';
+    return '<div style="background:'+(isU?'#2e1a00':'#1a1a22')+';border:1px solid '+(isU?'#f0a060':'#2e2e3e')+';border-radius:10px;padding:10px;margin-bottom:8px">' +
+      (isU?'<div style="font-size:10px;color:#f0a060;font-weight:700;margin-bottom:6px">⚠️ ПРОВЕРЬТЕ</div>':'') +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">' +
+        '<div><div style="font-size:13px;font-weight:700">'+typeLabel+' · '+(e.name||'?')+'</div>' +
+        '<div style="font-size:11px;color:#8888aa">'+e.date+(e.sellerName?' · '+e.sellerName:'')+(e.article?' · №'+e.article:'')+'</div></div>' +
+        '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;color:'+(isU?'#f0a060':'#c8f060')+'">'+Math.round(e.amount||0).toLocaleString('ru-RU')+'₽</div>' +
+      '</div>' +
+      (e.type==='sale'?'<div style="font-size:11px;color:#8888aa">'+payLabel+(e.discount?' · скидка '+e.discount+'₽':'')+'</div>':'') +
+      '<div style="display:flex;gap:6px;margin-top:8px">' +
+        '<button onclick="editRecognized('+i+')" style="flex:1;padding:6px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">✏️ Правка</button>' +
+        '<button onclick="removeRecognized('+i+')" style="padding:6px 10px;border-radius:8px;border:1px solid #3e2e2e;background:#2e1a1a;color:#f06060;font-size:11px;cursor:pointer">✕</button>' +
+      '</div></div>';
+  }).join('');
+  html += '<button class="btn" onclick="confirmPhotoImport()" style="width:100%;margin-top:4px">💾 Сохранить все в журнал</button></div>';
+  res.innerHTML = html;
+}
+
+function removeRecognized(i) {
+  duPendingRecognized.splice(i,1);
+  showRecognizedEntries(duPendingRecognized, (duPendingRecognized[0]&&duPendingRecognized[0].shopName)||'');
+}
+function editRecognized(i) {
+  var e = duPendingRecognized[i];
+  var newAmt = prompt('Сумма для "'+e.name+'":', e.amount||0);
+  if(newAmt!==null){ duPendingRecognized[i].amount=parseFloat(newAmt)||0; duPendingRecognized[i].uncertain=false; }
+  showRecognizedEntries(duPendingRecognized, (duPendingRecognized[0]&&duPendingRecognized[0].shopName)||'');
+}
+function confirmPhotoImport() {
+  if(!duPendingRecognized.length){ showToast('Нет записей'); return; }
+  var shopName = (document.getElementById('duPhotoShop')||{}).value || '';
+  var existing = getPsjEntries(); var added=0;
+  duPendingRecognized.forEach(function(e){
+    var date = normalizeDate(e.date);
+    var entry = { id:uid(), date:date, shopName:shopName, sellerName:e.sellerName||'',
+      type:e.type||'sale', ts:new Date().toISOString(),
+      label:{sale:'Продажа',expense:'Расход',writeoff:'Списание',receive:'Приход товара'}[e.type||'sale'],
+      sub:(e.name||'')+(e.article?' №'+e.article:'')+(e.payMethod?' · '+e.payMethod:''),
+      amount:e.amount||0, amtSign:e.type==='expense'||e.type==='writeoff'?'−':'+',
+      cashEffect:e.cashAmount||(e.payMethod==='cash'&&e.type==='sale'?(e.amount||0):0),
+      cardEffect:e.cardAmount||(e.payMethod!=='cash'&&e.type==='sale'?(e.amount||0):0),
+      discEffect:e.discount||0, goodsType:e.goodsType||'derevo', comment:e.comment||'', source:'photo_import'
+    };
+    existing.push(entry);
+    try{ db.collection('iz_psj').doc(entry.id).set(entry); }catch(err){}
+    added++;
+  });
+  savePsjEntries(existing);
+  var hist=JSON.parse(localStorage.getItem('iz_photo_imports')||'[]');
+  hist.unshift({date:new Date().toISOString().split('T')[0],count:added,shopName:shopName,importedAt:new Date().toISOString()});
+  localStorage.setItem('iz_photo_imports',JSON.stringify(hist.slice(0,30)));
+  duPendingRecognized=[]; duPhotoFiles=[];
+  document.getElementById('duPhotoPreview').style.display='none';
+  document.getElementById('duRecognizeBtn').style.display='none';
+  document.getElementById('duRecognizeResult').style.display='none';
+  document.getElementById('duPhotoInput').value='';
+  renderDuPhotoHistory();
+  showToast('✅ Добавлено '+added+' записей в журнал');
+}
+function normalizeDate(str) {
+  if(!str) return new Date().toISOString().split('T')[0];
+  if(/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  var p=str.split('.'); if(p.length>=2){ var d=p[0].padStart(2,'0'),m=p[1].padStart(2,'0'),y=p[2]||new Date().getFullYear().toString(); if(y.length===2)y='20'+y; return y+'-'+m+'-'+d; }
+  return new Date().toISOString().split('T')[0];
+}
+function renderDuPhotoHistory() {
+  var c=document.getElementById('duPhotoHistory'); if(!c) return;
+  var hist=JSON.parse(localStorage.getItem('iz_photo_imports')||'[]');
+  if(!hist.length){ c.innerHTML='<div class="empty"><div class="ei">📷</div>Загрузок не было</div>'; return; }
+  c.innerHTML=hist.map(function(h){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:#22222e;border-radius:10px;margin-bottom:6px">'+
+      '<div><div style="font-size:13px;font-weight:700">📷 '+h.shopName+'</div>'+
+      '<div style="font-size:11px;color:#8888aa">'+h.date+' · '+h.count+' записей</div></div>'+
+      '<div style="color:#60f090;font-weight:700;font-size:12px">+'+h.count+'</div></div>';
+  }).join('');
+}
 
 var pendingImportData = null;
 
