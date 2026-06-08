@@ -222,7 +222,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
   <div class="page" id="pg-blanks">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="stitle" style="margin:0">Заготовки</div>
-      <button class="btn green" style="width:auto;padding:8px 14px;font-size:11px" onclick="openMo('addBlankMo')">＋ Выдать</button>
+      <button class="btn green" style="width:auto;padding:8px 14px;font-size:11px" onclick="renderMasterSelect();openMo('addBlankMo')">＋ Выдать</button>
     </div>
     <div class="card"><div class="ctitle">История выдач</div><div id="blanksList"></div></div>
   </div>
@@ -281,7 +281,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
         <div id="whArchDraftList"></div>
       </div>
 
-      <button class="btn" style="background:linear-gradient(135deg,#6c3fc5,#4a2a8a);margin-top:4px" onclick="openArchiveShipmentMo()">🚚 Архивная отгрузка</button>
+      <button id="whArchShipBtn" class="btn" style="background:linear-gradient(135deg,#6c3fc5,#4a2a8a);margin-top:4px" onclick="openArchiveShipmentMo()">🚚 Архивная отгрузка</button>
     </div>
   </div>
 
@@ -308,7 +308,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
   <div class="page" id="pg-extrawork">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="stitle" style="margin:0">Доп. работы</div>
-      <button class="btn green" style="width:auto;padding:8px 14px;font-size:11px" onclick="openMo('addExtraMo')">＋ Добавить</button>
+      <button class="btn green" style="width:auto;padding:8px 14px;font-size:11px" onclick="renderMasterSelect();openMo('addExtraMo')">＋ Добавить</button>
     </div>
     <div class="card"><div class="ctitle">Назначенные работы</div><div id="extraWorkList"></div></div>
   </div>
@@ -515,7 +515,14 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 <!-- ADD BLANK -->
 <div class="mo" id="addBlankMo">
   <div class="md"><div class="mh"></div><div class="mt">Выдать заготовки мастеру</div>
-    <div class="fg"><label class="fl">Мастер</label><select class="fs" id="blankMaster"></select></div>
+    <div class="fg">
+      <label class="fl">Мастер</label>
+      <div style="display:flex;gap:8px">
+        <select class="fs" id="blankMaster" style="flex:1"></select>
+        <button onclick="openMo('quickAddMasterMo')" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
+      </div>
+      <div style="font-size:10px;color:var(--t2);margin-top:4px">Нет нужного мастера? Нажмите ＋ чтобы добавить</div>
+    </div>
     <div class="fg"><label class="fl">Название изделия</label><input class="fi" id="blankName" placeholder="Столешница, подоконник..."></div>
     <div class="fg"><label class="fl">Порода дерева</label><input class="fi" id="blankWood" placeholder="Дуб, ясень, орех..."></div>
     <div class="fg"><label class="fl">Количество заготовок</label><input class="fi" type="number" id="blankQty" placeholder="1" inputmode="numeric" value="1"></div>
@@ -525,6 +532,19 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
     </div>
     <button class="btn green" onclick="addBlank()">Выдать заготовки →</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('addBlankMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- БЫСТРОЕ ДОБАВЛЕНИЕ МАСТЕРА (Заготовщик) -->
+<div class="mo" id="quickAddMasterMo">
+  <div class="md"><div class="mh"></div><div class="mt">➕ Новый мастер</div>
+    <div style="background:var(--s2);border-radius:10px;padding:10px;margin-bottom:12px;font-size:12px;color:var(--t2)">
+      Управляющий получит уведомление о новом мастере и сможет установить ставку ЗП
+    </div>
+    <div class="fg"><label class="fl">Имя мастера</label><input class="fi" id="qmName" placeholder="Иванов Иван"></div>
+    <div class="fg"><label class="fl">Пароль для входа</label><input class="fi" type="password" id="qmPass" placeholder="Придумайте пароль"></div>
+    <button class="btn green" onclick="quickAddMaster()">✅ Добавить мастера</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('quickAddMasterMo')">Отмена</button>
   </div>
 </div>
 
@@ -808,9 +828,22 @@ function renderDash(){
     const newBlanks=blanks.filter(b=>b.masterId===session.id&&b.status==='new');
     if(newBlanks.length) notifs.push({type:'new',icon:'📦',title:`${newBlanks.length} новых заготовок ждут вас`,sub:'Нажмите чтобы принять в работу',action:()=>showPg('mywork',document.querySelector('.tab[onclick*=mywork]'))});
   }
-  if(session.role==='кладовщик'||session.role==='управляющий'){
-    const delivered=items.filter(i=>i.status==='delivered');
+  if(session.role==='кладовщик'||session.role==='управляющий'||session.role==='администратор'){
+    const delivered=items.filter(i=>i.status==='delivered'&&!i.isArchiveDraft);
     if(delivered.length) notifs.push({type:'warn',icon:'🔨',title:`${delivered.length} изделий ждут приёмки`,sub:'Мастера сдали изделия на склад',action:()=>showPg('warehouse',document.querySelector('.tab[onclick*=warehouse]'))});
+  }
+  if(session.role==='управляющий'||session.role==='администратор'){
+    // Уведомления о новых мастерах добавленных заготовщиком
+    const newMasterNotifs = JSON.parse(localStorage.getItem('ws_new_master_notifs')||'[]');
+    const unread = newMasterNotifs.filter(n=>!n.read);
+    if(unread.length){
+      notifs.push({
+        type:'info', icon:'👤',
+        title:`Новый мастер: ${unread.map(n=>n.masterName).join(', ')}`,
+        sub:`Добавил заготовщик ${unread[0].addedBy} · Установите ставку ЗП`,
+        action:()=>{ openMo('adminSetupMo'); markMasterNotifsRead(); }
+      });
+    }
   }
   const nd=document.getElementById('dashNotifications');
   nd.innerHTML=notifs.map(n=>`<div class="notif ${n.type}" onclick="this._action&&this._action()">
@@ -860,11 +893,64 @@ function renderDash(){
   }
 }
 
+function markMasterNotifsRead(){
+  const notifs = JSON.parse(localStorage.getItem('ws_new_master_notifs')||'[]');
+  notifs.forEach(n=>n.read=true);
+  localStorage.setItem('ws_new_master_notifs', JSON.stringify(notifs));
+  renderDash();
+}
+
 // ════════ BLANKS (Заготовщик) ════════
 function renderMasterSelect(){
   const masters=getEmployees().filter(e=>e.role==='мастер');
-  const opts=masters.length?masters.map(m=>`<option value="${m.id}">${m.name}</option>`).join(''):'<option value="">— нет мастеров —</option>';
+  const opts=masters.length
+    ?masters.map(m=>`<option value="${m.id}">${m.name}</option>`).join('')
+    :'<option value="">— нет мастеров —</option>';
   ['blankMaster','ewMaster'].forEach(id=>{ const s=document.getElementById(id); if(s) s.innerHTML=opts; });
+}
+
+function quickAddMaster(){
+  const name = document.getElementById('qmName').value.trim();
+  const pass = document.getElementById('qmPass').value;
+  if(!name||!pass){ showToast('Заполните имя и пароль'); return; }
+
+  const emps = getEmployees();
+  if(emps.find(e=>e.name.toLowerCase()===name.toLowerCase()&&e.role==='мастер')){
+    showToast('Мастер с таким именем уже есть'); return;
+  }
+
+  const newMaster = {id:uid(), name, role:'мастер', rate:0, pass, addedBy:session.name, addedAt:now()};
+  emps.push(newMaster);
+  saveEmployees(emps);
+
+  // Уведомление управляющему — в Firebase и localStorage
+  const notifData = {
+    type: 'new_master',
+    text: `Заготовщик ${session.name} добавил нового мастера: ${name}`,
+    masterName: name,
+    masterId: newMaster.id,
+    addedBy: session.name,
+    createdAt: now(),
+    read: false
+  };
+  db.collection('ws_notifications').add(notifData).catch(console.error);
+
+  // localStorage для мгновенного показа управляющему
+  const notifs = JSON.parse(localStorage.getItem('ws_new_master_notifs')||'[]');
+  notifs.unshift(notifData);
+  localStorage.setItem('ws_new_master_notifs', JSON.stringify(notifs.slice(0,20)));
+
+  // Обновить селекты
+  renderMasterSelect();
+
+  // Выбрать нового мастера в селекте
+  const sel = document.getElementById('blankMaster');
+  if(sel) sel.value = newMaster.id;
+
+  closeMo('quickAddMasterMo');
+  document.getElementById('qmName').value='';
+  document.getElementById('qmPass').value='';
+  showToast(`✅ Мастер ${name} добавлен · Управляющий уведомлён`);
 }
 
 function addBlank(){
@@ -1091,14 +1177,23 @@ function renderWarehouse(){
 }
 
 function renderArchiveWarehouse(){
-  // Черновики (ещё не активированы)
-  const drafts  = items.filter(i=>i.isArchiveDraft && i.status==='received');
-  // Активированный архив
+  const isAdmin = session.role==='администратор';
+
+  // Черновики видны только администратору
+  const draftCard = document.getElementById('whArchDraftCard');
+  const shipBtn   = document.getElementById('whArchShipBtn');
+  if(draftCard) draftCard.style.display = isAdmin ? 'block' : 'none';
+  if(shipBtn)   shipBtn.style.display   = isAdmin ? 'block' : 'none';
+
+  // Черновики (только для подсчёта у админа)
+  const drafts = isAdmin ? items.filter(i=>i.isArchiveDraft && i.status==='received') : [];
+
+  // Активированный архив — виден всем
   const archStock   = items.filter(i=>i.isArchive && !i.isArchiveDraft && i.status==='received');
   const archShipped = items.filter(i=>i.isArchive && !i.isArchiveDraft && i.status==='shipped');
 
-  document.getElementById('whArchStock').textContent  = archStock.length + drafts.length;
-  document.getElementById('whArchDraft').textContent  = drafts.length;
+  document.getElementById('whArchStock').textContent   = archStock.length + (isAdmin ? drafts.length : 0);
+  document.getElementById('whArchDraft').textContent   = isAdmin ? drafts.length : '—';
   document.getElementById('whArchShipped').textContent = archShipped.length;
 
   // Метка актуальности — берём из последнего активированного периода
@@ -1123,8 +1218,11 @@ function renderArchiveWarehouse(){
     dateEl.style.display='none';
   }
 
-  // Список архивного склада (активированный + черновики вместе)
-  const allArchStock = [...archStock, ...drafts].sort((a,b)=>(b.receivedAt||'').localeCompare(a.receivedAt||''));
+  // Список архивного склада
+  const allArchStock = isAdmin
+    ? [...archStock, ...drafts].sort((a,b)=>(b.receivedAt||'').localeCompare(a.receivedAt||''))
+    : archStock.sort((a,b)=>(b.receivedAt||'').localeCompare(a.receivedAt||''));
+
   const sl = document.getElementById('whArchStockList');
   sl.innerHTML = allArchStock.length ? allArchStock.map(item=>`
     <div class="li">
@@ -1137,13 +1235,15 @@ function renderArchiveWarehouse(){
       <span class="badge" style="background:${item.isArchiveDraft?'#6c3fc5':'var(--s2)'};color:${item.isArchiveDraft?'#fff':'var(--t2)'}">${fmt(item.price||0)}</span>
     </div>`).join('') : '<div style="font-size:12px;color:var(--t2);padding:6px 0">Архивный склад пуст</div>';
 
-  // Черновики отдельным списком
-  const dl = document.getElementById('whArchDraftList');
-  dl.innerHTML = drafts.length
-    ? `<div style="font-size:11px;color:#c8a0ff;margin-bottom:8px">Эти записи ещё не активированы — не видны в статистике</div>`
-      + drafts.slice(0,5).map(i=>`<div class="at-row"><span class="at-lbl">${i.name||i.itemName}<br><span style="font-size:10px">${fmtDT(i.receivedAt)} · ${i.masterName}</span></span><span class="at-val" style="color:#c8a0ff">${fmt(i.price||0)}</span></div>`).join('')
-      + (drafts.length>5?`<div style="font-size:11px;color:var(--t2);padding:6px 0;text-align:center">...и ещё ${drafts.length-5}</div>`:'')
-    : '<div style="font-size:12px;color:var(--t2);padding:6px 0">Черновиков нет</div>';
+  // Черновики отдельным списком — только для администратора
+  if(isAdmin){
+    const dl = document.getElementById('whArchDraftList');
+    dl.innerHTML = drafts.length
+      ? `<div style="font-size:11px;color:#c8a0ff;margin-bottom:8px">Эти записи ещё не активированы — не видны в статистике</div>`
+        + drafts.slice(0,5).map(i=>`<div class="at-row"><span class="at-lbl">${i.name||i.itemName}<br><span style="font-size:10px">${fmtDT(i.receivedAt)} · ${i.masterName}</span></span><span class="at-val" style="color:#c8a0ff">${fmt(i.price||0)}</span></div>`).join('')
+        + (drafts.length>5?`<div style="font-size:11px;color:var(--t2);padding:6px 0;text-align:center">...и ещё ${drafts.length-5}</div>`:'')
+      : '<div style="font-size:12px;color:var(--t2);padding:6px 0">Черновиков нет</div>';
+  }
 }
 
 function openArchiveShipmentMo(){
