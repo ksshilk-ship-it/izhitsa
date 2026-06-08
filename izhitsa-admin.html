@@ -1,16 +1,19 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Ижица - Администрирование</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Ижица — Администратор</title>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700;900&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#0f0f13;--s1:#1a1a22;--s2:#22222e;--border:#2e2e3e;
+  --bg:#0f0f13;--s1:#1a1f18;--s2:#22282a;--border:#2e3530;
   --accent:#c8f060;--a2:#60c8f0;--a3:#f06090;--a4:#f0a060;--a5:#a060f0;
   --text:#f0f0f8;--t2:#8888aa;--t3:#555568;
   --inc:#60f090;--exp:#f06060;--r:14px;--tabh:62px;
 }
+html{background:var(--bg);color:var(--text)}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;min-height:100dvh;max-width:480px;margin:0 auto}
 
@@ -18,356 +21,1271 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 .app-logo{font-family:'Unbounded',sans-serif;font-size:26px;font-weight:900;color:var(--accent);margin-bottom:4px}
 .app-sub{font-size:12px;color:var(--t2);margin-bottom:28px}
 .role-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:18px}
-.role-card{background:var(--s1);border:2px solid var(--border);border-radius:14px;padding:16px;text-align:center;cursor:pointer;transition:all .2s;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-.role-card.selected{border-color:var(--accent);background:#1e2a14;box-shadow:0 0 0 2px var(--accent)}
+.role-card{background:var(--s1);border:2px solid var(--border);border-radius:14px;padding:16px;text-align:center;cursor:pointer;transition:all .2s;-webkit-user-select:none;user-select:none}
+.role-card.selected{border-color:var(--accent);background:#1e2a14}
 .role-card .ri{font-size:26px;margin-bottom:6px}
 .role-card .rn{font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700}
 .role-card .rs{font-size:10px;color:var(--t2);margin-top:3px}
 
 .fg{margin-bottom:12px}
-.fl{display:block;font-size:11px;color:var(--t2);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px}
-.fi{width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:14px}
-.fi::placeholder{color:var(--t3)}
+.fl{font-size:11px;color:var(--t2);font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;display:block}
+.fi,.fs{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:11px 13px;color:var(--text);font-family:'Golos Text',sans-serif;font-size:14px;outline:none;-webkit-appearance:none;transition:border-color .2s}
+.fi:focus,.fs:focus{border-color:var(--accent)}
+.fi::placeholder{color:var(--t2)}
+.btn{width:100%;padding:14px;background:var(--accent);color:#0f0f13;border:none;border-radius:12px;font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;cursor:pointer;margin-top:4px;transition:opacity .2s}
+.btn:active{opacity:.8}
+.btn.sec{background:var(--s2);color:var(--t2);border:1px solid var(--border)}
+.btn.red{background:#2e1a1a;color:var(--exp);border:1px solid var(--exp)}
+.btn.purple{background:var(--a5);color:#fff;border:none}
+.btn.sm{padding:8px 14px;font-size:11px;width:auto}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 
-.btn{width:100%;padding:12px;border:none;border-radius:8px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;background:var(--accent);color:#000}
-.btn:active{opacity:0.8}
-.btn.sec{background:var(--s2);color:var(--t2)}
+.sync-bar{display:flex;align-items:center;gap:6px;padding:5px 16px;font-size:11px;color:var(--t2);background:var(--s1);border-bottom:1px solid var(--border)}
+.sdot{width:7px;height:7px;border-radius:50%;background:var(--t2);transition:background .3s;flex-shrink:0}
 
-#appScreen{display:none;min-height:100dvh;padding:20px 16px 80px;background:var(--bg)}
-#appScreen h2{color:var(--accent);margin-bottom:12px}
-#appScreen h3{color:var(--accent);margin:20px 0 12px;font-size:16px}
-#appScreen h4{font-size:14px;margin-bottom:12px}
+.hdr{padding:11px 16px;display:flex;justify-content:space-between;align-items:center;background:var(--s1);border-bottom:1px solid var(--border)}
+.hdr-logo{font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700;color:var(--accent)}
+.hdr-right{display:flex;align-items:center;gap:8px}
+.hdr-user{text-align:right}
+.hdr-name{font-size:12px;font-weight:700}
+.hdr-role{font-size:10px;color:var(--t2)}
+.exit-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--t2);cursor:pointer;font-size:11px;padding:5px 9px;font-family:'Golos Text',sans-serif}
 
-#tabsBar{display:none;position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:62px;background:var(--s1);border-top:1px solid var(--border);z-index:100;overflow-x:auto}
-.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px;border:none;background:none;color:var(--t2);cursor:pointer;font-size:11px;font-weight:500;transition:color .2s}
+.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:var(--tabh);background:var(--s1);border-top:1px solid var(--border);display:none;z-index:100}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--t2);font-size:9px;font-family:'Golos Text',sans-serif;font-weight:500;border:none;background:none}
 .tab.active{color:var(--accent)}
+.ti{font-size:18px;line-height:1}
 
-.checkbox-label{display:flex;align-items:center;gap:8px;padding:10px;background:var(--s2);border-radius:8px;cursor:pointer;margin-bottom:8px}
+.page{display:none;padding:12px 16px;padding-bottom:calc(var(--tabh)+16px)}
+.page.active{display:block;animation:fi .2s ease}
+@keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+.card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px}
+.ctitle{font-size:10px;color:var(--t2);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:9px}
+.stitle{font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;margin-bottom:10px}
+
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.kpi{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:12px}
+.kpi.full{grid-column:1/-1;background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:var(--accent)}
+.kpi-l{font-size:10px;color:var(--t2);margin-bottom:3px}
+.kpi-v{font-family:'Unbounded',sans-serif;font-size:16px;font-weight:700}
+.kpi-sub{font-size:10px;color:var(--t2);margin-top:3px}
+
+.txi{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.txi:last-child{border-bottom:none}
+.txi-ic{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.txi-ic.income{background:#1a2e1e}.txi-ic.expense{background:#2e1a1a}.txi-ic.transfer{background:#1a1e2e}
+.txi-info{flex:1;min-width:0}
+.txi-desc{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.txi-sub{font-size:10px;color:var(--t2);margin-top:1px}
+.txi-amt{font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;flex-shrink:0}
+.txi-amt.inc{color:var(--inc)}.txi-amt.exp{color:var(--exp)}.txi-amt.tr{color:var(--a2)}
+
+.pl-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
+.pl-row:last-child{border-bottom:none}
+.pl-row.tot{font-weight:700;font-size:14px;padding-top:10px}
+.pl-val{font-family:'Unbounded',sans-serif;font-size:12px;font-weight:600}
+
+.bud-bar{height:6px;background:var(--s2);border-radius:4px;overflow:hidden;margin-top:4px}
+.bud-fill{height:100%;border-radius:4px}
+.bud-fill.ok{background:var(--inc)}.bud-fill.warn{background:#f0c060}.bud-fill.over{background:var(--exp)}
+
+.pchips{display:flex;gap:7px;margin-bottom:10px;overflow-x:auto;-ms-overflow-style:none;scrollbar-width:none}
+.pchips::-webkit-scrollbar{display:none}
+.pc{padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--s1);color:var(--t2);font-size:11px;cursor:pointer;white-space:nowrap;transition:all .2s}
+.pc.active{background:var(--accent);border-color:var(--accent);color:#0f0f13;font-weight:700}
+
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:200;align-items:flex-end;justify-content:center}
+.mo.open{display:flex}
+.md{background:var(--s1);border-radius:22px 22px 0 0;width:100%;max-width:480px;max-height:93dvh;overflow-y:auto;padding:18px}
+.mh{width:34px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 14px}
+.mt{font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;margin-bottom:14px}
+.sep{height:1px;background:var(--border);margin:12px 0}
+
+.txtype{display:flex;gap:7px;margin-bottom:12px}
+.txt-btn{flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--t2);font-family:'Golos Text',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s}
+.txt-btn.i{background:#1a2e1e;border-color:var(--inc);color:var(--inc)}
+.txt-btn.e{background:#2e1a1a;border-color:var(--exp);color:var(--exp)}
+.txt-btn.t{background:#1a1e2e;border-color:var(--a2);color:var(--a2)}
+
+.set-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.set-item:last-child{border-bottom:none}
+.set-name{flex:1;font-size:13px}
+.set-del{background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px;padding:4px}
+.add-row{display:flex;gap:7px;margin-top:8px}
+.add-row .fi{flex:1}
+.add-btn{background:var(--accent);color:#0f0f13;border:none;border-radius:10px;padding:0 12px;font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap}
+
+.dbi{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.dbi:last-child{border-bottom:none}
+.dav{width:34px;height:34px;border-radius:50%;background:var(--s2);display:flex;align-items:center;justify-content:center;font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700;color:var(--a2);flex-shrink:0}
+.pay-btn{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:4px 9px;font-size:11px;color:var(--inc);cursor:pointer}
+
+.al-warn{background:#2a1e14;border:1px solid var(--a4);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--a4);margin-bottom:8px}
+
+.shift-card{background:var(--s2);border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer;border:1px solid var(--border)}
+.shift-card:hover{border-color:var(--accent)}
+
+.empty{text-align:center;padding:28px 0;color:var(--t2);font-size:13px}
+.ei{font-size:32px;margin-bottom:7px}
+.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:9px 16px;font-size:13px;z-index:400;opacity:0;transition:opacity .3s;pointer-events:none;max-width:92%;text-align:center}
+.toast.show{opacity:1}
+
+.at-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
+.at-row:last-child{border-bottom:none}
+.at-lbl{color:var(--t2)}
+.at-val{font-weight:600}
+
+.anl-tab{padding:8px 14px;border-radius:20px;border:1px solid var(--border);background:var(--s1);color:var(--t2);font-family:'Golos Text',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .2s}
+.anl-tab.active{background:var(--accent);border-color:var(--accent);color:#0f0f13}
+
+.profit-bar{height:10px;background:var(--s2);border-radius:6px;overflow:hidden;margin-top:6px}
+.profit-fill{height:100%;border-radius:6px;transition:width .6s}
+
+.metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.metric{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center}
+.metric-v{font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;margin-bottom:3px}
+.metric-l{font-size:9px;color:var(--t2)}
+
+.shop-card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:10px}
+.cost-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
+.cost-row:last-child{border-bottom:none}
+.cost-lbl{color:var(--t2);font-size:12px}
+.cost-val{font-family:'Unbounded',sans-serif;font-size:11px;font-weight:700}
+
+.checkbox-label{display:flex;align-items:center;gap:8px;padding:8px;background:var(--s2);border-radius:6px;cursor:pointer;margin-bottom:8px}
 .checkbox-label input{width:16px;height:16px;cursor:pointer}
-
-.seller-item{padding:12px;background:var(--s2);border-radius:8px;margin-bottom:10px}
-.seller-name{font-weight:600;margin-bottom:4px}
-.seller-shops{font-size:12px;color:var(--t2);margin-bottom:10px}
-.seller-actions{display:flex;gap:8px}
-.seller-actions button{flex:1;padding:8px;font-size:12px}
 </style>
 </head>
 <body>
 
-<!-- Login Screen -->
+<!-- LOGIN SCREEN -->
 <div id="loginScreen">
   <div class="app-logo">Ижица</div>
   <div class="app-sub">Администрирование и аналитика</div>
-  <div style="text-align:center;font-size:10px;color:var(--t2);margin-bottom:20px">v6</div>
-
+  
   <div class="role-grid">
-    <div class="role-card" onclick="selectAdminRole('admin', this)">
+    <div class="role-card" onclick="selectAdminRole('admin',this)">
       <div class="ri">🔐</div>
       <div class="rn">Администратор</div>
-      <div class="rs">Полный доступ</div>
+      <div class="rs">Полный доступ ко всему</div>
     </div>
-    <div class="role-card" onclick="selectAdminRole('owner', this)">
+    <div class="role-card" onclick="selectAdminRole('owner',this)">
       <div class="ri">👑</div>
       <div class="rn">Владелец</div>
-      <div class="rs">Аналитика</div>
+      <div class="rs">Аналитика + операции</div>
     </div>
-    <div class="role-card" onclick="selectAdminRole('accountant', this)">
+    <div class="role-card" onclick="selectAdminRole('accountant',this)">
       <div class="ri">📊</div>
       <div class="rn">Бухгалтер</div>
-      <div class="rs">Учёт</div>
+      <div class="rs">Учёт и настройки</div>
     </div>
   </div>
-
-  <div class="fg"><label class="fl">Пользователь</label><select class="fi" id="loginUser"><option>— выберите роль —</option></select></div>
-  <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="loginPass"></div>
+  
+  <div class="fg"><label class="fl">Пользователь</label><select class="fs" id="loginUser"><option value="">— выберите роль —</option></select></div>
+  <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="loginPass" placeholder="••••"></div>
+  <div id="loginErr" style="color:var(--exp);font-size:12px;margin-bottom:8px;display:none"></div>
   <button class="btn" onclick="doLogin()">Войти →</button>
-  <div id="loginErr" style="color:var(--exp);font-size:12px;margin-top:8px;text-align:center;min-height:16px"></div>
 </div>
 
-<!-- App Screen -->
-<div id="appScreen">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-    <h2>Добро пожаловать</h2>
-    <button class="btn sec" style="width:auto;padding:8px 12px;font-size:12px" onclick="doLogout()">Выход</button>
+<!-- APP SCREEN -->
+<div id="appScreen" style="display:none">
+  <div class="sync-bar"><div class="sdot" id="sdot"></div><span id="stxt">Готова</span></div>
+  <div class="hdr">
+    <div class="hdr-logo">Ижица</div>
+    <div class="hdr-right">
+      <div class="hdr-user"><div class="hdr-name" id="hdrName"></div><div class="hdr-role" id="hdrRole"></div></div>
+      <button class="exit-btn" onclick="doLogout()">Выйти</button>
+    </div>
   </div>
-  <p id="userGreeting" style="color:var(--t2);margin-bottom:20px;font-size:14px"></p>
 
-  <!-- Staff Tab -->
-  <div id="staffTab">
-    <h3>👥 Сотрудники</h3>
-    
-    <div style="background:var(--s2);padding:16px;border-radius:12px;margin-bottom:20px">
-      <h4>Добавить продавца</h4>
-      
-      <div class="fg">
-        <label class="fl">Имя</label>
-        <input class="fi" type="text" id="sellerName" placeholder="Иванова Мария">
-      </div>
-      
-      <div class="fg">
-        <label class="fl">Пароль</label>
-        <input class="fi" type="password" id="sellerPass">
-      </div>
-      
-      <div class="fg">
-        <label class="fl">Магазины (выберите один или несколько)</label>
-        <div id="shopCheckboxes"></div>
-      </div>
-      
-      <button class="btn" onclick="addSeller()">Добавить продавца</button>
+  <!-- DASHBOARD -->
+  <div class="page active" id="pg-dash">
+    <div class="stitle">📊 Главная</div>
+    <div class="pchips">
+      <div class="pc active" onclick="setDashPeriod('month',this)">Месяц</div>
+      <div class="pc" onclick="setDashPeriod('week',this)">Неделя</div>
+      <div class="pc" onclick="setDashPeriod('year',this)">Год</div>
+      <div class="pc" onclick="setDashPeriod('custom',this)">✏️ Период</div>
     </div>
     
-    <h4 style="border-top:1px solid var(--border);padding-top:16px">Список продавцов</h4>
-    <div id="sellersList"></div>
+    <div id="dashCustomDates" style="display:none;margin-bottom:10px" class="row2">
+      <div><label class="fl">С даты</label><input class="fi" type="date" id="dashFrom" onchange="renderDashboard()"></div>
+      <div><label class="fl">По дату</label><input class="fi" type="date" id="dashTo" onchange="renderDashboard()"></div>
+    </div>
+    
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-l">Общий доход</div>
+        <div class="kpi-v" style="color:var(--inc)" id="dashIncome">0 ₽</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-l">Общий расход</div>
+        <div class="kpi-v" style="color:var(--exp)" id="dashExpense">0 ₽</div>
+      </div>
+      <div class="kpi full">
+        <div class="kpi-l">Чистый доход</div>
+        <div class="kpi-v" id="dashBalance">0 ₽</div>
+        <div class="kpi-sub" id="dashDiff">±0 ₽</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ctitle">Продажи по источникам</div>
+      <div id="dashBySalesSource" style="min-height:80px">
+        <div style="color:var(--t2);font-size:12px;padding:8px 0">Загрузка...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ctitle">По категориям расходов</div>
+      <div id="dashByCategory" style="min-height:80px">
+        <div style="color:var(--t2);font-size:12px;padding:8px 0">Загрузка...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ctitle">Последние операции</div>
+      <div id="dashRecentTx" style="min-height:80px">
+        <div style="color:var(--t2);font-size:12px;padding:8px 0">Загрузка...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ALERTS -->
+  <div class="page" id="pg-alerts">
+    <div class="stitle">🚨 Тревоги</div>
+    <div class="card">
+      <div class="ctitle">Уведомления и предупреждения</div>
+      <div id="alertsList" style="color:var(--t2);font-size:12px;padding:8px 0">✅ Все в порядке, тревог нет</div>
+    </div>
+  </div>
+
+  <!-- OPERATIONS -->
+  <div class="page" id="pg-op">
+    <div class="stitle">➕ Операция</div>
+    
+    <div class="txtype">
+      <button class="txt-btn i" id="txb-inc" onclick="setTxType('income')">＋ Доход</button>
+      <button class="txt-btn" id="txb-exp" onclick="setTxType('expense')">− Расход</button>
+      <button class="txt-btn" id="txb-tr" onclick="setTxType('transfer')">⇄ Перевод</button>
+    </div>
+    
+    <div class="card">
+      <div class="fg">
+        <label class="fl">Сумма (₽)</label>
+        <input class="fi" type="number" id="opAmt" placeholder="0" inputmode="numeric">
+      </div>
+      
+      <div class="fg" id="opSourceFg">
+        <label class="fl">Источник продаж</label>
+        <select class="fs" id="opSource"></select>
+      </div>
+      
+      <div class="fg" id="opCategoryFg" style="display:none">
+        <label class="fl">Статья расхода</label>
+        <input class="fi" type="text" id="opCategory" placeholder="Например: Аренда, ЗП, Доставка">
+      </div>
+      
+      <div class="fg">
+        <label class="fl">Описание</label>
+        <input class="fi" id="opDesc" placeholder="Заметка об операции (опционально)">
+      </div>
+      
+      <div class="fg">
+        <label class="fl">Дата</label>
+        <input class="fi" type="date" id="opDate">
+      </div>
+      
+      <button class="btn" onclick="saveOperation()" style="margin-bottom:8px">💾 Сохранить операцию</button>
+      <button class="btn sec" onclick="clearOperationForm()" style="margin-bottom:0">Очистить форму</button>
+    </div>
+  </div>
+
+  <!-- P&L REPORT -->
+  <div class="page" id="pg-pl" style="background:var(--bg)">
+    <div class="stitle">📈 P&L Отчёт</div>
+    <div class="pchips">
+      <div class="pc active" onclick="setPLPeriod('month',this)">Месяц</div>
+      <div class="pc" onclick="setPLPeriod('week',this)">Неделя</div>
+      <div class="pc" onclick="setPLPeriod('year',this)">Год</div>
+      <div class="pc" onclick="setPLPeriod('custom',this)">✏️ Период</div>
+    </div>
+    
+    <div id="plCustomDates" style="display:none;margin-bottom:10px" class="row2">
+      <div><label class="fl">С даты</label><input class="fi" type="date" id="plFrom" onchange="renderPL()"></div>
+      <div><label class="fl">По дату</label><input class="fi" type="date" id="plTo" onchange="renderPL()"></div>
+    </div>
+    
+    <div class="card" style="background:var(--bg);border:1px solid var(--border)">
+      <div class="ctitle">📊 Прибыль и убыток</div>
+      <div id="plTable"></div>
+    </div>
+  </div>
+
+  <!-- DEBT -->
+  <div class="page" id="pg-debt">
+    <div class="stitle">💰 Долги</div>
+    <div class="card">
+      <div class="ctitle">Задолженность контрагентов</div>
+      <div id="debtList" style="color:var(--t2);font-size:12px;padding:8px 0">Данные задолженности будут здесь</div>
+    </div>
+  </div>
+
+  <!-- SHOPS ANALYSIS -->
+  <div class="page" id="pg-shops">
+    <div class="stitle">🏪 Магазины</div>
+    <div class="pchips">
+      <div class="pc active" onclick="setShopPeriod('today',this)">Сегодня</div>
+      <div class="pc" onclick="setShopPeriod('week',this)">Неделя</div>
+      <div class="pc" onclick="setShopPeriod('month',this)">Месяц</div>
+      <div class="pc" onclick="setShopPeriod('custom',this)">✏️ Период</div>
+    </div>
+    
+    <div id="shopCustomDates" style="display:none;margin-bottom:10px" class="row2">
+      <div><label class="fl">С даты</label><input class="fi" type="date" id="shopFrom" onchange="renderShops()"></div>
+      <div><label class="fl">По дату</label><input class="fi" type="date" id="shopTo" onchange="renderShops()"></div>
+    </div>
+    
+    <div class="card">
+      <div class="ctitle">Продажи по источникам</div>
+      <div id="shopsAnalysis"></div>
+    </div>
+  </div>
+
+  <!-- PRODUCTION -->
+  <div class="page" id="pg-prod">
+    <div class="stitle">🏭 Мастерская</div>
+    <div class="pchips">
+      <div class="pc active" onclick="setProdPeriod('month',this)">Месяц</div>
+      <div class="pc" onclick="setProdPeriod('week',this)">Неделя</div>
+      <div class="pc" onclick="setProdPeriod('year',this)">Год</div>
+    </div>
+    
+    <div class="card">
+      <div class="ctitle">Сотрудники мастерской</div>
+      <div id="wsEmployeesData"></div>
+    </div>
+  </div>
+
+  <!-- STAFF -->
+  <div class="page" id="pg-staff">
+    <div class="stitle">👥 Управление сотрудниками</div>
+    
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700">🏪 Продавцы магазинов</div>
+      <button class="btn sm" onclick="openMo('addSellerMo')">＋ Добавить</button>
+    </div>
+    <div class="card" id="staffShopSellers"></div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:8px">
+      <div style="font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700">🏭 Сотрудники мастерской</div>
+      <button class="btn sm" style="background:var(--a5);color:#fff;border:none" onclick="openMo('addWsMo')">＋ Добавить</button>
+    </div>
+    <div class="card" id="staffWsEmployees"></div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:8px">
+      <div style="font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700">🔐 Пользователи системы</div>
+      <button class="btn sm sec" onclick="openMo('setupUsersMo')">＋ Добавить</button>
+    </div>
+    <div class="card" id="staffAdminUsers"></div>
+  </div>
+
+  <!-- ANALYTICS -->
+  <div class="page" id="pg-analytics">
+    <div class="stitle">📊 Аналитика</div>
+    <div class="pchips">
+      <div class="pc active" onclick="setAnalyticsPeriod('month',this)">Месяц</div>
+      <div class="pc" onclick="setAnalyticsPeriod('quarter',this)">Квартал</div>
+      <div class="pc" onclick="setAnalyticsPeriod('year',this)">Год</div>
+    </div>
+    
+    <div class="card">
+      <div class="ctitle">Ключевые показатели</div>
+      <div id="analyticsData"></div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="page" id="pg-settings">
+    <div class="stitle">⚙️ Настройки</div>
+    
+    <div class="card">
+      <div class="ctitle">🏪 Источники продаж</div>
+      <div id="setSourcesList"></div>
+      <div class="add-row" style="margin-top:8px">
+        <input class="fi" id="newSource" placeholder="Название источника (напр. Роза Хутор)">
+        <select class="fs" id="newSourceType" style="width:120px">
+          <option value="shop">🏪 Магазин</option>
+          <option value="online">📱 Онлайн</option>
+          <option value="offline">📦 Офлайн/Опт</option>
+          <option value="workshop">🏭 Мастерская</option>
+        </select>
+      </div>
+      <button class="btn sm" onclick="addSalesSource()" style="margin-top:8px">＋ Добавить источник</button>
+    </div>
+
+    <div class="card"><div class="ctitle">Управление системой</div><p style="font-size:12px;color:var(--t2)">Функция в разработке</p></div>
   </div>
 </div>
 
-<!-- Edit Modal -->
-<div id="editModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:1000;padding:20px;overflow-y:auto">
-  <div style="background:var(--s1);padding:20px;border-radius:14px;margin-top:100px;max-width:400px;margin-left:auto;margin-right:auto">
-    <h3 style="margin-bottom:16px">Изменить магазины</h3>
-    <div id="editSellerName" style="margin-bottom:16px;color:var(--t2)"></div>
-    <div id="editShopCheckboxes"></div>
-    <button class="btn" onclick="saveSellerEdit()" style="margin-bottom:10px">Сохранить</button>
-    <button class="btn sec" onclick="closeEditModal()">Закрыть</button>
+<!-- MODALS -->
+<!-- Add Seller Modal -->
+<div id="addSellerMo" class="mo">
+  <div class="md">
+    <div class="mh"></div>
+    <div class="mt">＋ Добавить продавца</div>
+    <div class="fg"><label class="fl">Имя продавца</label><input class="fi" id="aSellerName" placeholder="Иванова Мария"></div>
+    <div class="fg"><label class="fl">Магазины (выберите один или несколько)</label><div id="aSellerShopsCheckboxes"></div></div>
+    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="aSellerPass" placeholder="Придумайте пароль"></div>
+    <button class="btn" onclick="addSellerFromStaff()" style="margin-bottom:8px">Добавить продавца</button>
+    <button class="btn sec" onclick="closeMo('addSellerMo')">Отмена</button>
   </div>
 </div>
 
-<!-- Tabs Bar -->
-<div id="tabsBar">
-  <button class="tab active" onclick="showTab('staff')">
-    <div style="font-size:18px">👥</div>
-    <span>Сотрудники</span>
-  </button>
+<!-- Add Workshop Employee Modal -->
+<div id="addWsMo" class="mo">
+  <div class="md">
+    <div class="mh"></div>
+    <div class="mt">＋ Добавить сотрудника мастерской</div>
+    <div class="fg"><label class="fl">Имя</label><input class="fi" id="aWsName" placeholder="Иванов Иван"></div>
+    <div class="fg"><label class="fl">Должность</label>
+      <select class="fs" id="aWsRole">
+        <option value="заготовщик">🪚 Заготовщик</option>
+        <option value="мастер">🔨 Мастер</option>
+        <option value="кладовщик">📦 Кладовщик</option>
+        <option value="управляющий">👑 Управляющий мастерской</option>
+      </select>
+    </div>
+    <div class="fg"><label class="fl">Ставка ЗП (₽/изделие)</label><input class="fi" type="number" id="aWsRate" placeholder="0" inputmode="numeric"></div>
+    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="aWsPass" placeholder="Придумайте пароль"></div>
+    <button class="btn purple" onclick="addWsEmployee()" style="margin-bottom:8px">Добавить сотрудника</button>
+    <button class="btn sec" onclick="closeMo('addWsMo')">Отмена</button>
+  </div>
 </div>
 
-<script async src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" crossorigin="anonymous"></script>
-<script async src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" crossorigin="anonymous"></script>
+<!-- Setup Users Modal -->
+<div id="setupUsersMo" class="mo">
+  <div class="md">
+    <div class="mh"></div>
+    <div class="mt">🔐 Управление пользователями</div>
+    <div id="adminUsersList"></div>
+    <div class="sep" style="margin-top:16px;margin-bottom:16px"></div>
+    <div class="fg"><label class="fl">Новый администратор</label><input class="fi" id="newAdminName" placeholder="Фамилия Имя"></div>
+    <div class="fg"><label class="fl">Роль</label>
+      <select class="fs" id="newAdminRole">
+        <option value="admin">🔐 Администратор</option>
+        <option value="owner">👑 Владелец</option>
+        <option value="accountant">📊 Бухгалтер</option>
+      </select>
+    </div>
+    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="newAdminPass" placeholder="Придумайте пароль"></div>
+    <button class="btn sec" onclick="addAdminUser()" style="margin-bottom:8px">Добавить администратора</button>
+    <button class="btn sec" onclick="closeMo('setupUsersMo')">Закрыть</button>
+  </div>
+</div>
+
+<!-- TABS BAR -->
+<div class="tabs" id="tabsBar">
+  <button class="tab active" onclick="switchTab('dash',this)"><div class="ti">🏠</div>Главная</button>
+  <button class="tab" onclick="switchTab('alerts',this)"><div class="ti">🚨</div>Тревоги</button>
+  <button class="tab" onclick="switchTab('op',this)"><div class="ti">➕</div>Операция</button>
+  <button class="tab" onclick="switchTab('pl',this)"><div class="ti">📈</div>P&L</button>
+  <button class="tab" onclick="switchTab('debt',this)"><div class="ti">💰</div>Долги</button>
+  <button class="tab" onclick="switchTab('analytics',this)"><div class="ti">📊</div>Аналитика</button>
+  <button class="tab" onclick="switchTab('shops',this)"><div class="ti">🏪</div>Магазины</button>
+  <button class="tab" onclick="switchTab('prod',this)"><div class="ti">🏭</div>Мастерская</button>
+  <button class="tab" onclick="switchTab('staff',this)"><div class="ti">👥</div>Сотрудники</button>
+  <button class="tab" onclick="switchTab('settings',this)"><div class="ti">⚙️</div>Настройки</button>
+</div>
 
 <script>
 let selectedRole = null;
-let editingId = null;
+let session = null;
 
-function gv(id) {
-  return document.getElementById(id)?.value || '';
-}
+function gv(id) { return document.getElementById(id)?.value || ''; }
 
 function getAdminUsers() {
-  try {
-    return JSON.parse(localStorage.getItem('iz_admin_users') || '[]');
-  } catch(e) {
-    return [];
-  }
+  try { return JSON.parse(localStorage.getItem('iz_admin_users') || '[]'); } 
+  catch(e) { return []; }
+}
+
+function saveAdminUsers(data) {
+  localStorage.setItem('iz_admin_users', JSON.stringify(data));
 }
 
 function getShops() {
-  try {
-    return JSON.parse(localStorage.getItem('iz_shops') || '[]');
-  } catch(e) {
-    return [];
-  }
+  try { return JSON.parse(localStorage.getItem('iz_shops') || '[]'); } 
+  catch(e) { return []; }
 }
 
-function getSellers() {
-  try {
-    return JSON.parse(localStorage.getItem('iz_sellers') || '[]');
-  } catch(e) {
-    return [];
-  }
+function saveShops(data) {
+  localStorage.setItem('iz_shops', JSON.stringify(data));
 }
 
-function saveSellers(sellers) {
-  localStorage.setItem('iz_sellers', JSON.stringify(sellers));
+function getTransactions() {
+  try { return JSON.parse(localStorage.getItem('iz_transactions') || '[]'); } 
+  catch(e) { return []; }
 }
+
+function saveTransactions(data) {
+  localStorage.setItem('iz_transactions', JSON.stringify(data));
+}
+
+function getSalesSources() {
+  try { return JSON.parse(localStorage.getItem('iz_sales_sources') || '[]'); } 
+  catch(e) { return []; }
+}
+
+function saveSalesSources(data) {
+  localStorage.setItem('iz_sales_sources', JSON.stringify(data));
+}
+
+function getWsEmployees() {
+  try { return JSON.parse(localStorage.getItem('iz_ws_employees') || '[]'); } 
+  catch(e) { return []; }
+}
+
+function saveWsEmployees(data) {
+  localStorage.setItem('iz_ws_employees', JSON.stringify(data));
+}
+
+function uid() { return Math.random().toString(36).substr(2,9); }
+function now() { return new Date().toISOString(); }
 
 function selectAdminRole(role, el) {
-  selectedRole = role;
-  document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
-  el.classList.add('selected');
-  
-  var users = getAdminUsers().filter(u => u.role === role);
-  var html = users.length ? users.map(u => '<option value="' + u.id + '">' + u.name + '</option>').join('') : '<option>— нет пользователей —</option>';
-  document.getElementById('loginUser').innerHTML = html;
+  try {
+    selectedRole = role;
+    document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
+    if(el && el.classList) el.classList.add('selected');
+    const users = getAdminUsers().filter(u => u.role === role);
+    document.getElementById('loginUser').innerHTML = users.length
+      ? users.map(u => `<option value="${u.id}">${u.name}</option>`).join('')
+      : '<option value="">— нет пользователей —</option>';
+  } catch(e) {
+    console.error('selectAdminRole error:', e);
+  }
 }
 
 function doLogin() {
-  var uid = gv('loginUser');
-  var pass = gv('loginPass');
+  const uid_sel = gv('loginUser');
+  const pass = gv('loginPass');
+  const errEl = document.getElementById('loginErr');
   
-  if(!uid) {
-    document.getElementById('loginErr').textContent = 'Выберите пользователя';
+  if(!uid_sel) {
+    errEl.style.display = 'block';
+    errEl.textContent = 'Выберите пользователя';
     return;
   }
   
-  var users = getAdminUsers();
-  var user = users.find(u => u.id === uid);
+  const users = getAdminUsers();
+  const user = users.find(u => u.id === uid_sel);
   
-  if(!user || user.pass !== pass) {
-    document.getElementById('loginErr').textContent = 'Неверный пароль';
+  if(!user) {
+    errEl.style.display = 'block';
+    errEl.textContent = 'Пользователь не найден';
     return;
   }
   
-  sessionStorage.setItem('iz_admin_session', JSON.stringify({id: user.id, name: user.name, role: user.role}));
+  if(user.pass !== pass) {
+    errEl.style.display = 'block';
+    errEl.textContent = 'Неверный пароль';
+    return;
+  }
+  
+  session = {id: user.id, name: user.name, role: user.role};
+  sessionStorage.setItem('iz_admin_session', JSON.stringify(session));
+  errEl.style.display = 'none';
+  
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('tabsBar').style.display = 'flex';
-  document.getElementById('userGreeting').innerHTML = 'Вы вошли как <strong>' + user.name + '</strong> (' + user.role + ')';
+  document.getElementById('hdrName').textContent = user.name;
+  document.getElementById('hdrRole').textContent = user.role;
   
-  renderSellers();
+  populateSellers();
+  populateWsEmployees();
+  populateAdminUsers();
+  populateSalesSourcesList();
+  populateSourcesForOp();
+  populateShopCheckboxes();
+  renderPL();
+  renderShops();
+  renderPLBudget();
+  // populateSourcesForOp();
+  populateShopCheckboxes();
+  renderDashboard();
+  // setTxType('income');
+  // clearOperationForm();
+  // renderPL();
+  // renderShops();
+  // renderWsEmployeesData();
+  // renderAnalytics();
 }
 
 function doLogout() {
+  session = null;
   sessionStorage.removeItem('iz_admin_session');
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('appScreen').style.display = 'none';
   document.getElementById('tabsBar').style.display = 'none';
   document.getElementById('loginPass').value = '';
+  document.getElementById('loginErr').textContent = '';
 }
 
-function showTab(tab) {
+function switchTab(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  event.target.closest('.tab').classList.add('active');
+  
+  const page = document.getElementById('pg-' + id);
+  if(page) page.classList.add('active');
+  if(btn) btn.classList.add('active');
 }
 
-function renderShopCheckboxes() {
-  var shops = getShops();
-  var html = shops.map(s => '<label class="checkbox-label"><input type="checkbox" value="' + s + '"><span>' + s + '</span></label>').join('');
-  document.getElementById('shopCheckboxes').innerHTML = html;
-  document.getElementById('editShopCheckboxes').innerHTML = html;
+function openMo(id) {
+  const mo = document.getElementById(id);
+  if(mo) mo.classList.add('open');
 }
 
-function addSeller() {
-  var name = gv('sellerName');
-  var pass = gv('sellerPass');
+function closeMo(id) {
+  const mo = document.getElementById(id);
+  if(mo) mo.classList.remove('open');
+}
+
+function populateShopCheckboxes() {
+  const shops = getShops();
+  const html = shops.map(s => `<label class="checkbox-label"><input type="checkbox" value="${s}"><span>${s}</span></label>`).join('');
+  document.getElementById('aSellerShopsCheckboxes').innerHTML = html;
+}
+
+function addSellerFromStaff() {
+  const name = gv('aSellerName');
+  const pass = gv('aSellerPass');
   
   if(!name || !pass) {
     alert('Заполните имя и пароль');
     return;
   }
   
-  var checkboxes = document.querySelectorAll('#shopCheckboxes input:checked');
-  var shops = Array.from(checkboxes).map(cb => cb.value);
+  const checkboxes = document.querySelectorAll('#aSellerShopsCheckboxes input:checked');
+  const shops = Array.from(checkboxes).map(cb => cb.value);
   
   if(!shops.length) {
     alert('Выберите хотя бы один магазин');
     return;
   }
   
-  var sellers = getSellers();
+  const sellers = getSellers();
   sellers.push({
-    id: Date.now().toString(),
+    id: uid(),
     name: name,
     shops: shops,
+    pass: pass,
+    blocked: false,
+    createdAt: now(),
+    createdBy: session.name
+  });
+  
+  saveSellers(sellers);
+  document.getElementById('aSellerName').value = '';
+  document.getElementById('aSellerPass').value = '';
+  document.querySelectorAll('#aSellerShopsCheckboxes input').forEach(cb => cb.checked = false);
+  closeMo('addSellerMo');
+  populateSellers();
+  alert('✅ Продавец добавлен');
+}
+
+function populateSellers() {
+  const c = document.getElementById('staffShopSellers');
+  const sellers = getSellers();
+  
+  if(!sellers.length) {
+    c.innerHTML = '<div class="empty"><div class="ei">🏪</div>Нет продавцов</div>';
+    return;
+  }
+  
+  c.innerHTML = sellers.map((s, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="width:32px;height:32px;border-radius:50%;background:${s.blocked?'var(--s2)':'#1a2e1e'};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">${s.blocked?'🚫':'🏪'}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;color:${s.blocked?'var(--t2)':'var(--text)'}">${s.name}${s.blocked?' <span style="font-size:10px;color:var(--exp)">(заблокирован)</span>':''}</div>
+        <div style="font-size:11px;color:var(--t2)">Магазины: ${s.shops.join(', ')}</div>
+      </div>
+      <button onclick="deleteSeller(${i})" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>
+    </div>`).join('');
+}
+
+function deleteSeller(idx) {
+  if(!confirm('Удалить продавца?')) return;
+  const sellers = getSellers();
+  sellers.splice(idx, 1);
+  saveSellers(sellers);
+  populateSellers();
+}
+
+function addWsEmployee() {
+  const name = gv('aWsName');
+  const role = gv('aWsRole');
+  const rate = parseFloat(gv('aWsRate')) || 0;
+  const pass = gv('aWsPass');
+  
+  if(!name || !pass) {
+    alert('Заполните имя и пароль');
+    return;
+  }
+  
+  const emps = getWsEmployees();
+  emps.push({
+    id: uid(),
+    name: name,
+    role: role,
+    rate: rate,
+    pass: pass,
+    blocked: false,
+    createdAt: now(),
+    createdBy: session.name
+  });
+  
+  saveWsEmployees(emps);
+  document.getElementById('aWsName').value = '';
+  document.getElementById('aWsRate').value = '';
+  document.getElementById('aWsPass').value = '';
+  closeMo('addWsMo');
+  populateWsEmployees();
+  alert('✅ Сотрудник добавлен');
+}
+
+function populateWsEmployees() {
+  const c = document.getElementById('staffWsEmployees');
+  const emps = getWsEmployees();
+  
+  if(!emps.length) {
+    c.innerHTML = '<div class="empty"><div class="ei">🏭</div>Нет сотрудников</div>';
+    return;
+  }
+  
+  const roleIcons = {заготовщик:'🪚', мастер:'🔨', кладовщик:'📦', управляющий:'👑'};
+  c.innerHTML = emps.map((e, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="width:32px;height:32px;border-radius:50%;background:#1a1e2e;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">${roleIcons[e.role] || '👤'}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${e.name}</div>
+        <div style="font-size:11px;color:var(--t2)">${e.role}${e.rate ? ' • ' + e.rate + '₽' : ''}</div>
+      </div>
+      <button onclick="deleteWsEmployee(${i})" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>
+    </div>`).join('');
+}
+
+function deleteWsEmployee(idx) {
+  if(!confirm('Удалить сотрудника?')) return;
+  const emps = getWsEmployees();
+  emps.splice(idx, 1);
+  saveWsEmployees(emps);
+  populateWsEmployees();
+}
+
+function populateAdminUsers() {
+  const c = document.getElementById('staffAdminUsers');
+  const users = getAdminUsers();
+  const roleL = {admin:'🔐 Администратор', owner:'👑 Владелец', accountant:'📊 Бухгалтер'};
+  
+  if(!users.length) {
+    c.innerHTML = '<div class="empty"><div class="ei">🔐</div>Нет пользователей</div>';
+    return;
+  }
+  
+  c.innerHTML = users.map((u, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:20px">${{admin:'🔐', owner:'👑', accountant:'📊'}[u.role] || '👤'}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${u.name}</div>
+        <div style="font-size:11px;color:var(--t2)">${roleL[u.role]}</div>
+      </div>
+    </div>`).join('');
+}
+
+function addAdminUser() {
+  const name = gv('newAdminName');
+  const role = gv('newAdminRole');
+  const pass = gv('newAdminPass');
+  
+  if(!name || !pass) {
+    alert('Заполните имя и пароль');
+    return;
+  }
+  
+  const users = getAdminUsers();
+  users.push({
+    id: uid(),
+    name: name,
+    role: role,
     pass: pass
   });
   
-  saveSellers(sellers);
-  document.getElementById('sellerName').value = '';
-  document.getElementById('sellerPass').value = '';
-  checkboxes = document.querySelectorAll('#shopCheckboxes input');
-  checkboxes.forEach(cb => cb.checked = false);
-  alert('Продавец добавлен!');
+  saveAdminUsers(users);
+  document.getElementById('newAdminName').value = '';
+  document.getElementById('newAdminPass').value = '';
+  closeMo('setupUsersMo');
+  populateAdminUsers();
+  selectAdminRole(selectedRole || 'admin', document.querySelectorAll('.role-card')[0]);
+  alert('✅ Администратор добавлен');
 }
 
-function editSeller(id) {
-  var seller = getSellers().find(s => s.id === id);
-  if(!seller) return;
-  
-  editingId = id;
-  document.getElementById('editSellerName').innerHTML = 'Продавец: <strong>' + seller.name + '</strong>';
-  
-  var checkboxes = document.querySelectorAll('#editShopCheckboxes input');
-  checkboxes.forEach(cb => {
-    cb.checked = seller.shops.includes(cb.value);
-  });
-  
-  document.getElementById('editModal').style.display = 'block';
+function getTransactions() {
+  try { return JSON.parse(localStorage.getItem('iz_transactions') || '[]'); } 
+  catch(e) { return []; }
 }
 
-function saveSellerEdit() {
-  var checkboxes = document.querySelectorAll('#editShopCheckboxes input:checked');
-  var shops = Array.from(checkboxes).map(cb => cb.value);
+function saveTransactions(data) {
+  localStorage.setItem('iz_transactions', JSON.stringify(data));
+}
+
+let currentTxType = 'income';
+
+function setTxType(type) {
+  currentTxType = type;
+  document.querySelectorAll('.txtype .txt-btn').forEach(b => b.classList.remove('i','e','t'));
+  document.getElementById('txb-inc').classList.remove('i');
+  document.getElementById('txb-exp').classList.remove('e');
+  document.getElementById('txb-tr').classList.remove('t');
   
-  if(!shops.length) {
-    alert('Выберите хотя бы один магазин');
+  if(type === 'income') {
+    document.getElementById('txb-inc').classList.add('i');
+    document.getElementById('opSourceFg').style.display = 'block';
+    document.getElementById('opCategoryFg').style.display = 'none';
+  } else if(type === 'expense') {
+    document.getElementById('txb-exp').classList.add('e');
+    document.getElementById('opSourceFg').style.display = 'none';
+    document.getElementById('opCategoryFg').style.display = 'block';
+  } else {
+    document.getElementById('txb-tr').classList.add('t');
+    document.getElementById('opSourceFg').style.display = 'none';
+    document.getElementById('opCategoryFg').style.display = 'none';
+  }
+}
+
+function populateSourcesForOp() {
+  const sources = getSalesSources();
+  const select = document.getElementById('opSource');
+  select.innerHTML = sources.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+}
+
+function saveOperation() {
+  const amt = parseFloat(gv('opAmt'));
+  const source = gv('opSource');
+  const category = gv('opCategory');
+  const desc = gv('opDesc');
+  const date = gv('opDate');
+  
+  if(!amt || amt <= 0) {
+    alert('Введите сумму больше 0');
     return;
   }
   
-  var sellers = getSellers();
-  var seller = sellers.find(s => s.id === editingId);
-  if(seller) {
-    seller.shops = shops;
-    saveSellers(sellers);
-    closeEditModal();
-  }
-}
-
-function closeEditModal() {
-  document.getElementById('editModal').style.display = 'none';
-  editingId = null;
-}
-
-function deleteSeller(id) {
-  if(!confirm('Удалить продавца?')) return;
-  var sellers = getSellers().filter(s => s.id !== id);
-  saveSellers(sellers);
-}
-
-function renderSellers() {
-  var sellers = getSellers();
-  var html = '';
-  
-  if(sellers.length === 0) {
-    html = '<p style="color:var(--t2);font-size:12px">Продавцов нет</p>';
-  } else {
-    for(var i = 0; i < sellers.length; i++) {
-      var s = sellers[i];
-      html += '<div class="seller-item">';
-      html += '<div class="seller-name">' + s.name + '</div>';
-      html += '<div class="seller-shops">Магазины: ' + s.shops.join(', ') + '</div>';
-      html += '<div class="seller-actions">';
-      html += '<button class="btn" onclick="editSeller(\'' + s.id + '\')">Изменить</button>';
-      html += '<button class="btn" style="background:var(--exp)" onclick="deleteSeller(\'' + s.id + '\')">Удалить</button>';
-      html += '</div>';
-      html += '</div>';
-    }
+  if(!date) {
+    alert('Выберите дату');
+    return;
   }
   
-  document.getElementById('sellersList').innerHTML = html;
+  if(currentTxType === 'income' && !source) {
+    alert('Выберите источник продаж');
+    return;
+  }
+  
+  if(currentTxType === 'expense' && !category) {
+    alert('Введите статью расхода');
+    return;
+  }
+  
+  const txs = getTransactions();
+  txs.push({
+    id: uid(),
+    type: currentTxType,
+    amount: amt,
+    source: source,
+    category: category,
+    desc: desc,
+    date: date + 'T00:00:00',
+    createdAt: now(),
+    createdBy: session.name
+  });
+  
+  saveTransactions(txs);
+  clearOperationForm();
+  renderDashboard();
+  alert('✅ Операция сохранена');
 }
+
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
-  // Set up default shops
+  // Init shops if not exist
   if(!localStorage.getItem('iz_shops')) {
-    localStorage.setItem('iz_shops', JSON.stringify(['Роза Хутор', 'Горки', 'Мастерская']));
+    saveShops(['ОПИТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
   }
   
-  // Set up test users
+  // Init sales sources if not exist
+  if(!localStorage.getItem('iz_sales_sources')) {
+    saveSalesSources([
+      {id: '1', name: 'Роза Хутор', type: 'shop'},
+      {id: '2', name: 'Горки', type: 'shop'},
+      {id: '3', name: 'ТГ канал', type: 'online'},
+      {id: '4', name: 'Instagram', type: 'online'},
+      {id: '5', name: 'Мастерская', type: 'workshop'},
+      {id: '6', name: 'Опт', type: 'offline'}
+    ]);
+  }
+  
+  // Init sales sources if not exist
+  if(!localStorage.getItem('iz_sales_sources')) {
+    saveSalesSources([
+      {id: uid(), name: 'Роза Хутор', type: 'shop', createdAt: now()},
+      {id: uid(), name: 'Горки', type: 'shop', createdAt: now()},
+      {id: uid(), name: 'ТГ канал', type: 'online', createdAt: now()},
+      {id: uid(), name: 'Instagram', type: 'online', createdAt: now()},
+      {id: uid(), name: 'Мастерская', type: 'workshop', createdAt: now()},
+      {id: uid(), name: 'Опт', type: 'offline', createdAt: now()}
+    ]);
+  }
+  
+  // Init users if not exist
   if(!localStorage.getItem('iz_admin_users')) {
-    localStorage.setItem('iz_admin_users', JSON.stringify([
+    saveAdminUsers([
       {id: '1', name: 'Ксения', role: 'admin', pass: '1'},
       {id: '2', name: 'Елена', role: 'admin', pass: '1'},
       {id: '3', name: 'Владимир', role: 'owner', pass: '1'},
       {id: '4', name: 'Анна', role: 'accountant', pass: '1'}
-    ]));
+    ]);
   }
   
   // Check if logged in
-  var session = sessionStorage.getItem('iz_admin_session');
-  if(session) {
+  const saved = sessionStorage.getItem('iz_admin_session');
+  if(saved) {
     try {
-      session = JSON.parse(session);
+      session = JSON.parse(saved);
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('appScreen').style.display = 'block';
       document.getElementById('tabsBar').style.display = 'flex';
-      document.getElementById('userGreeting').innerHTML = 'Вы вошли как <strong>' + session.name + '</strong> (' + session.role + ')';
-      renderSellers();
+      document.getElementById('hdrName').textContent = session.name;
+      document.getElementById('hdrRole').textContent = session.role;
+      populateSellers();
+      populateWsEmployees();
+      populateAdminUsers();
+      populateSalesSourcesList();
+      populateSourcesForOp();
+      populateShopCheckboxes();
+      renderDashboard();
+      setTxType('income');
+      clearOperationForm();
+      renderPL();
+      renderShops();
     } catch(e) {}
   }
   
-  renderShopCheckboxes();
-  selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
+function getFilteredTransactionsPL() {
+  const txs = getTransactions();
+  const today = new Date();
+  let from = new Date(today.getFullYear(), today.getMonth(), 1);
+  
+  const activePeriodBtn = document.querySelector('#pg-pl .pchips .pc.active');
+  const period = activePeriodBtn ? activePeriodBtn.textContent.trim() : 'Месяц';
+  
+  if(period === 'Неделя') {
+    from = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+  } else if(period === 'Год') {
+    from = new Date(today.getFullYear(), 0, 1);
+  } else if(period === '✏️ Период') {
+    const fromStr = document.getElementById('plFrom').value;
+    const toStr = document.getElementById('plTo').value;
+    if(fromStr) from = new Date(fromStr + 'T00:00:00');
+  }
+  
+  return txs.filter(tx => {
+    const txDate = new Date(tx.date);
+    return txDate >= from && txDate <= today;
+  });
+}
+
+function setPLPeriod(period, btn) {
+  const customDiv = document.getElementById('plCustomDates');
+  document.querySelectorAll('#pg-pl .pchips .pc').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  
+  if(period === 'custom') {
+    customDiv.style.display = 'grid';
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    document.getElementById('plFrom').value = firstDay.toISOString().split('T')[0];
+    document.getElementById('plTo').value = today.toISOString().split('T')[0];
+  } else {
+    customDiv.style.display = 'none';
+  }
+  
+  renderPL();
+  renderPLBudget();
+}
+
+function renderPL() {
+  const txs = getFilteredTransactionsPL();
+  
+  let income = 0, expense = 0;
+  const bySource = {};
+  const byCategory = {};
+  
+  // Calculate totals and breakdowns
+  txs.forEach(tx => {
+    if(tx.type === 'income') {
+      income += tx.amount;
+      bySource[tx.source || 'Прочее'] = (bySource[tx.source || 'Прочее'] || 0) + tx.amount;
+    }
+    if(tx.type === 'expense') {
+      expense += tx.amount;
+      byCategory[tx.category || 'Прочее'] = (byCategory[tx.category || 'Прочее'] || 0) + tx.amount;
+    }
+  });
+  
+  // Split expenses into COGS (себестоимость) and Operating (расходы)
+  // COGS: Закупки, Материалы
+  // Operating: Аренда, Зарплаты, Коммунальные, Маркетинг, Прочие
+  const cogsCategories = ['Закупки', 'Материалы', 'Производство'];
+  let cogs = 0, operatingExp = 0;
+  
+  Object.entries(byCategory).forEach(([cat, amt]) => {
+    if(cogsCategories.some(c => cat.includes(c))) {
+      cogs += amt;
+    } else {
+      operatingExp += amt;
+    }
+  });
+  
+  const grossProfit = income - cogs;
+  const ebit = grossProfit - operatingExp;
+  const margin = income > 0 ? ((ebit / income) * 100).toFixed(1) : 0;
+  
+  let html = `
+    <div style="font-size:13px;font-weight:700;margin-bottom:12px;color:var(--accent)">📊 P&L ОТЧЁТ</div>
+    
+    <!-- ДОХОД -->
+    <div class="pl-row tot" style="border-bottom:2px solid var(--border);padding-bottom:12px;margin-bottom:12px">
+      <div style="font-weight:700">ДОХОД (Revenue)</div>
+      <div class="pl-val" style="color:var(--inc);font-size:14px;font-weight:700">${income.toLocaleString('ru-RU')} ₽</div>
+    </div>
+    
+    <div style="font-size:11px;color:var(--t2);margin-bottom:6px">По источникам:</div>`;
+  
+  Object.entries(bySource)
+    .sort((a,b) => b[1] - a[1])
+    .forEach(([src, amt]) => {
+      const pct = income > 0 ? ((amt / income) * 100).toFixed(0) : 0;
+      html += `<div class="pl-row">
+        <div style="margin-left:12px;font-size:12px">├─ ${src}</div>
+        <div class="pl-val" style="color:var(--a2);font-size:12px">${amt.toLocaleString('ru-RU')} ₽ (${pct}%)</div>
+      </div>`;
+    });
+  
+  // COGS
+  html += `
+    <div class="pl-row tot" style="border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:8px 0;margin:12px 0">
+      <div style="font-weight:700">СЕБЕСТОИМОСТЬ (COGS)</div>
+      <div class="pl-val" style="color:var(--exp);font-size:14px;font-weight:700">−${cogs.toLocaleString('ru-RU')} ₽</div>
+    </div>
+    <div style="font-size:11px;color:var(--t2);margin-bottom:6px">По категориям:</div>`;
+  
+  Object.entries(byCategory)
+    .filter(([cat]) => cogsCategories.some(c => cat.includes(c)))
+    .sort((a,b) => b[1] - a[1])
+    .forEach(([cat, amt]) => {
+      html += `<div class="pl-row">
+        <div style="margin-left:12px;font-size:12px">├─ ${cat}</div>
+        <div class="pl-val" style="color:var(--t2);font-size:12px">${amt.toLocaleString('ru-RU')} ₽</div>
+      </div>`;
+    });
+  
+  // GROSS PROFIT
+  html += `
+    <div class="pl-row tot" style="background:var(--s2);border-radius:8px;padding:10px;margin:12px 0;border:1px solid var(--border)">
+      <div style="font-weight:700">ВАЛОВАЯ ПРИБЫЛЬ</div>
+      <div class="pl-val" style="color:var(--inc);font-size:13px;font-weight:700">${grossProfit.toLocaleString('ru-RU')} ₽</div>
+    </div>
+    
+    <!-- OPERATING EXPENSES -->
+    <div class="pl-row tot" style="border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:12px">
+      <div style="font-weight:700">ОПЕРАЦИОННЫЕ РАСХОДЫ</div>
+      <div class="pl-val" style="color:var(--exp);font-size:14px;font-weight:700">−${operatingExp.toLocaleString('ru-RU')} ₽</div>
+    </div>
+    <div style="font-size:11px;color:var(--t2);margin-bottom:6px">По статьям:</div>`;
+  
+  Object.entries(byCategory)
+    .filter(([cat]) => !cogsCategories.some(c => cat.includes(c)))
+    .sort((a,b) => b[1] - a[1])
+    .forEach(([cat, amt]) => {
+      html += `<div class="pl-row">
+        <div style="margin-left:12px;font-size:12px">├─ ${cat}</div>
+        <div class="pl-val" style="color:var(--t2);font-size:12px">${amt.toLocaleString('ru-RU')} ₽</div>
+      </div>`;
+    });
+  
+  // EBIT & MARGIN
+  html += `
+    <div class="pl-row tot" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border:1px solid var(--accent);border-radius:8px;padding:12px;margin:12px 0">
+      <div style="font-weight:700;font-size:13px">EBIT (Операционная прибыль)</div>
+      <div class="pl-val" style="color:var(--accent);font-size:14px;font-weight:700">${ebit >= 0 ? '+' : ''}${ebit.toLocaleString('ru-RU')} ₽</div>
+    </div>
+    
+    <div class="pl-row">
+      <div style="font-weight:600;color:var(--text)">Маржа прибыли</div>
+      <div class="pl-val" style="color:${margin >= 0 ? 'var(--inc)' : 'var(--exp)'}; font-weight:700;font-size:14px">${margin}%</div>
+    </div>
+    
+    <div class="pl-row" style="font-size:11px;color:var(--t2);margin-top:8px">
+      <div>ROI (на доход)</div>
+      <div class="pl-val">${income > 0 ? ((ebit / income) * 100).toFixed(1) : 0}%</div>
+    </div>`;
+  
+  document.getElementById('plTable').innerHTML = html;
+}
+
+function renderPLBudget() {
+  // Получим текущие фактические значения
+  const txs = getFilteredTransactionsPL();
+  let factIncome = 0, factExpense = 0;
+  
+  txs.forEach(tx => {
+    if(tx.type === 'income') factIncome += tx.amount;
+    if(tx.type === 'expense') factExpense += tx.amount;
+  });
+  
+  const factProfit = factIncome - factExpense;
+  const factMargin = factIncome > 0 ? ((factProfit / factIncome) * 100).toFixed(1) : 0;
+  
+  // Плановые значения (пока нули, потом заполнятся)
+  const planIncome = 0;
+  const planExpense = 0;
+  const planProfit = 0;
+  const planMargin = 0;
+  
+  // Отклонения
+  const incomeVar = factIncome - planIncome;
+  const expenseVar = factExpense - planExpense;
+  const profitVar = factProfit - planProfit;
+  
+  const incomeVarPct = planIncome > 0 ? ((incomeVar / planIncome) * 100).toFixed(1) : 0;
+  const expenseVarPct = planExpense > 0 ? ((expenseVar / planExpense) * 100).toFixed(1) : 0;
+  
+  let html = `
+    <div style="font-size:12px;color:var(--t2);margin-bottom:10px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;text-align:center">
+        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">Показатель</div>
+        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">План</div>
+        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">Факт</div>
+        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">Отклон %</div>
+      </div>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;align-items:center">
+      <div style="font-weight:600;font-size:12px">Доход</div>
+      <div style="text-align:center;color:var(--t2);font-size:12px">${planIncome.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;color:var(--inc);font-weight:600;font-size:12px">${factIncome.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;font-size:12px;color:${incomeVar >= 0 ? 'var(--inc)' : 'var(--exp)'}">${incomeVar >= 0 ? '+' : ''}${incomeVarPct}%</div>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;align-items:center">
+      <div style="font-weight:600;font-size:12px">Расходы</div>
+      <div style="text-align:center;color:var(--t2);font-size:12px">${planExpense.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;color:var(--exp);font-weight:600;font-size:12px">${factExpense.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;font-size:12px;color:${expenseVar <= 0 ? 'var(--inc)' : 'var(--exp)'}">${expenseVar <= 0 ? '+' : ''}${expenseVarPct}%</div>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;background:var(--s2);border-radius:6px;padding:8px;align-items:center">
+      <div style="font-weight:700;font-size:12px">Прибыль</div>
+      <div style="text-align:center;color:var(--t2);font-size:12px">${planProfit.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;color:var(--accent);font-weight:700;font-size:12px">${factProfit.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;font-size:12px;font-weight:600;color:${profitVar >= 0 ? 'var(--inc)' : 'var(--exp)'}">${profitVar >= 0 ? '+' : ''}${profitVar.toLocaleString('ru-RU')}</div>
+    </div>
+    
+    <div style="font-size:11px;color:var(--t2);margin-top:12px;padding:8px;background:var(--s2);border-radius:6px">
+      📌 <strong>План:</strong> задайте плановые цифры для сравнения<br>
+      📌 <strong>Факт:</strong> текущие данные из операций<br>
+      📌 <strong>Отклон:</strong> разница в процентах
+    </div>`;
+  
+  document.getElementById('plBudget').innerHTML = html;
+}
+
+function getFilteredTransactionsShops() {
+  const txs = getTransactions();
+  const today = new Date();
+  let from = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  
+  const activePeriodBtn = document.querySelector('#pg-shops .pchips .pc.active');
+  const period = activePeriodBtn ? activePeriodBtn.textContent.trim() : 'Сегодня';
+  
+  if(period === 'Неделя') {
+    from = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+  } else if(period === 'Месяц') {
+    from = new Date(today.getFullYear(), today.getMonth(), 1);
+  } else if(period === '✏️ Период') {
+    const fromStr = document.getElementById('shopFrom').value;
+    if(fromStr) from = new Date(fromStr + 'T00:00:00');
+  }
+  
+  return txs.filter(tx => {
+    const txDate = new Date(tx.date);
+    return txDate >= from && txDate <= today && tx.type === 'income';
+  });
+}
+
+function setShopPeriod(period, btn) {
+  const customDiv = document.getElementById('shopCustomDates');
+  document.querySelectorAll('#pg-shops .pchips .pc').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  
+  if(period === 'custom') {
+    customDiv.style.display = 'grid';
+    const today = new Date();
+    document.getElementById('shopFrom').value = today.toISOString().split('T')[0];
+    document.getElementById('shopTo').value = today.toISOString().split('T')[0];
+  } else {
+    customDiv.style.display = 'none';
+  }
+  
+  renderShops();
+}
+
+function renderShops() {
+  const txs = getFilteredTransactionsShops();
+  const sources = getSalesSources();
+  
+  const bySource = {};
+  sources.forEach(s => {
+    bySource[s.name] = {amount: 0, type: s.type};
+  });
+  
+  txs.forEach(tx => {
+    if(tx.source && bySource[tx.source]) {
+      bySource[tx.source].amount += tx.amount;
+    }
+  });
+  
+  const sourceIcons = {shop: '🏪', online: '📱', offline: '📦', workshop: '🏭'};
+  let html = '';
+  
+  Object.entries(bySource)
+    .filter(([name, data]) => data.amount > 0)
+    .sort((a,b) => b[1].amount - a[1].amount)
+    .forEach(([name, data]) => {
+      html += '<div class="pl-row"><div>' + sourceIcons[data.type] + ' ' + name + '</div><div class="pl-val" style="color:var(--inc)">' + data.amount.toLocaleString('ru-RU') + ' ₽</div></div>';
+    });
+  
+  if(!html) {
+    html = '<div style="color:var(--t2);font-size:12px;padding:8px 0">Нет данных</div>';
+  }
+  
+  const el = document.getElementById('shopsAnalysis');
+  if(el) el.innerHTML = html;
+}
+
+selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
 });
 </script>
 
