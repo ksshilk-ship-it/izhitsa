@@ -1370,7 +1370,6 @@ function saveAdminAlert(data){
 
 // ════ START APP (seller) ════
 function startPreviewMode(){
-  // Validate admin password first
   var selEl = document.getElementById('loginSeller');
   var pass = (document.getElementById('loginPass')||{}).value||'';
   var admins = JSON.parse(localStorage.getItem('iz_shop_admins')||'[]');
@@ -1380,31 +1379,34 @@ function startPreviewMode(){
     if(err){ err.style.display='block'; err.textContent='Неверный пароль'; }
     return;
   }
-  // Choose shop for preview
-  var shops = getShopNames();
-  var shopName = shops.length ? shops[0] : 'Тест';
+  // Let admin choose which shop/channel to preview
+  var shops = getShops();
+  var shopOptions = shops.map(function(s,i){ return i+': '+(s.name||s)+' ('+(s.type||'shop')+')'; }).join('\n');
+  var choice = prompt('Выберите точку продаж для просмотра (введите номер):\n\n'+shopOptions);
+  var idx = parseInt(choice);
+  var chosenShop = (choice !== null && !isNaN(idx) && shops[idx]) ? shops[idx] : (shops[0]||{name:'Тест',type:'shop'});
+  var shopName = chosenShop.name || chosenShop;
+  var shopType = chosenShop.type || getShopType(shopName) || 'shop';
 
-  // Start fake session - preview mode, no stats saved
   session = {
     shopName: shopName,
     sellerName: '🔍 ' + admin.name + ' (просмотр)',
     sellerId: 'preview',
     openedAt: new Date().toISOString(),
-    cashMorning: 13600,
+    cashMorning: shopType==='shop' ? 13600 : 0,
     goodsMorning: 1391857,
     drGoodsMorning: 59860,
-    shopType: 'shop',
+    shopType: shopType,
     isPreview: true
   };
   journal = [{
     id:uid(), type:'open', ts:new Date().toISOString(),
     icon:'🔍', label:'Режим просмотра — данные не сохраняются',
-    sub:'💵 Нал: 13 600₽ · 📦 Товар: 1 391 857₽',
+    sub:'🏪 '+shopName+' · тип: '+shopType,
     cashEffect:0, cardEffect:0, staffEffect:0, goodsEffect:0
   }];
   saveS(); saveJ();
   startApp();
-  // Show preview banner
   setTimeout(function(){
     var hdr = document.getElementById('hdrSeller');
     if(hdr) hdr.style.color = '#a060f0';
@@ -1665,6 +1667,10 @@ function resetSaleForm(){
   document.querySelectorAll('#saleMo .pc').forEach(p=>p.classList.remove('active'));
   document.querySelector('#saleMo .pc').classList.add('active'); payMethod='cash';
   document.getElementById('mixedBlock').style.display='none';
+  // Show/hide РС based on shop type
+  var _shopType = (session && session.shopType) || getShopType(session && session.shopName);
+  var rsChip = document.getElementById('pcRS');
+  if(rsChip) rsChip.style.display = (_shopType === 'shop') ? 'none' : '';
 }
 function addSaleItem(){
   const num=(gv('siNum')||'').trim(); let name,price,hasDiff=false,diffNote='';
