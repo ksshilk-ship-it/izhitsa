@@ -974,9 +974,16 @@ function selectAdminRole(role, el) {
     selectedRole = role;
     document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
     if(el && el.classList) el.classList.add('selected');
-    const users = getAdminUsers().filter(u => u.role === role);
-    document.getElementById('loginUser').innerHTML = users.length
-      ? users.map(u => `<option value="${u.id}">${u.name}</option>`).join('')
+    // Ensure default admin exists
+    var users = getAdminUsers();
+    if(!users.length) {
+      var def = [{id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'}];
+      saveAdminUsers(def);
+      users = def;
+    }
+    var filtered = users.filter(function(u){ return u.role === role; });
+    document.getElementById('loginUser').innerHTML = filtered.length
+      ? filtered.map(function(u){ return '<option value="'+u.id+'">'+u.name+'</option>'; }).join('')
       : '<option value="">— нет пользователей —</option>';
   } catch(e) {
     console.error('selectAdminRole error:', e);
@@ -984,25 +991,30 @@ function selectAdminRole(role, el) {
 }
 
 function doLogin() {
-  const uid_sel = gv('loginUser');
-  const pass = gv('loginPass');
-  const errEl = document.getElementById('loginErr');
-  
+  var uid_sel = gv('loginUser');
+  var pass = gv('loginPass');
+  var errEl = document.getElementById('loginErr');
+
   if(!uid_sel) {
     errEl.style.display = 'block';
     errEl.textContent = 'Выберите пользователя';
     return;
   }
-  
-  const users = getAdminUsers();
-  const user = users.find(u => u.id === uid_sel);
-  
+
+  var users = getAdminUsers();
+  // Fallback: if no users, allow default admin
+  if(!users.length) {
+    users = [{id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'}];
+    saveAdminUsers(users);
+  }
+  var user = users.find(function(u){ return u.id === uid_sel; });
+
   if(!user) {
     errEl.style.display = 'block';
     errEl.textContent = 'Пользователь не найден';
     return;
   }
-  
+
   if(user.pass !== pass) {
     errEl.style.display = 'block';
     errEl.textContent = 'Неверный пароль';
@@ -1944,6 +1956,16 @@ function addWsEmployee(){ openAddStaffModal(); }
 
 document.addEventListener('DOMContentLoaded', function() {
   startAdminSyncListeners();
+  startStaffSyncListener();
+  // Ensure default admin exists for first login
+  var users = getAdminUsers();
+  if(!users.length) {
+    var def = [{id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'}];
+    saveAdminUsers(def);
+  }
+  // Auto-select first role card
+  var firstCard = document.querySelector('.role-card');
+  if(firstCard) firstCard.click();
   startStaffSyncListener();
   // Init shops if not exist
   if(!localStorage.getItem('iz_shops')) {
