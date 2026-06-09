@@ -889,14 +889,35 @@ function populateSellers() {
   }
   
   c.innerHTML = sellers.map((s, i) => `
-    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
-      <div style="width:32px;height:32px;border-radius:50%;background:${s.blocked?'var(--s2)':'#1a2e1e'};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">${s.blocked?'🚫':'🏪'}</div>
+    <div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--s2);border-radius:8px;margin-bottom:8px">
+      <div style="width:40px;height:40px;border-radius:50%;background:${s.blocked?'var(--border)':'#1a2e1e'};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;opacity:${s.blocked?'0.5':'1'}">${s.blocked?'🚫':'🏪'}</div>
       <div style="flex:1">
-        <div style="font-size:13px;font-weight:600;color:${s.blocked?'var(--t2)':'var(--text)'}">${s.name}${s.blocked?' <span style="font-size:10px;color:var(--exp)">(заблокирован)</span>':''}</div>
-        <div style="font-size:11px;color:var(--t2)">Магазины: ${s.shops.join(', ')}</div>
+        <div style="font-size:13px;font-weight:600;color:${s.blocked?'var(--t2)':'var(--text)'}">${s.name}${s.blocked?' (заблокирован)':''}</div>
+        <div style="font-size:11px;color:var(--t2)">Магазины: ${s.shops.join(', ') || 'не выбраны'}</div>
       </div>
-      <button onclick="deleteSeller(${i})" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <button onclick="toggleSellerBlock(${i})" title="Заблокировать" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:${s.blocked?'var(--inc)':'var(--exp)'};cursor:pointer">${s.blocked?'✓ Разбл':'Блок'}</button>
+        <button onclick="changeSellerPassword(${i})" title="Сменить пароль" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:var(--a2);cursor:pointer">🔑</button>
+        <button onclick="deleteSeller(${i})" title="Удалить" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>
+      </div>
     </div>`).join('');
+}
+
+function toggleSellerBlock(idx) {
+  const sellers = getSellers();
+  sellers[idx].blocked = !sellers[idx].blocked;
+  saveSellers(sellers);
+  populateSellers();
+}
+
+function changeSellerPassword(idx) {
+  const sellers = getSellers();
+  const newPass = prompt('Новый пароль для ' + sellers[idx].name + ':', sellers[idx].pass);
+  if(newPass) {
+    sellers[idx].pass = newPass;
+    saveSellers(sellers);
+    alert('✅ Пароль изменён');
+  }
 }
 
 function deleteSeller(idx) {
@@ -950,14 +971,35 @@ function populateWsEmployees() {
   
   const roleIcons = {заготовщик:'🪚', мастер:'🔨', кладовщик:'📦', управляющий:'👑'};
   c.innerHTML = emps.map((e, i) => `
-    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
-      <div style="width:32px;height:32px;border-radius:50%;background:#1a1e2e;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">${roleIcons[e.role] || '👤'}</div>
+    <div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--s2);border-radius:8px;margin-bottom:8px">
+      <div style="width:40px;height:40px;border-radius:50%;background:#1a1e2e;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;opacity:${e.blocked?'0.5':'1'}">${roleIcons[e.role] || '👤'}</div>
       <div style="flex:1">
-        <div style="font-size:13px;font-weight:600">${e.name}</div>
-        <div style="font-size:11px;color:var(--t2)">${e.role}${e.rate ? ' • ' + e.rate + '₽' : ''}</div>
+        <div style="font-size:13px;font-weight:600;color:${e.blocked?'var(--t2)':'var(--text)'}">${e.name}${e.blocked?' (заблокирован)':''}</div>
+        <div style="font-size:11px;color:var(--t2)">${e.role}${e.rate ? ' • ' + e.rate + '₽/шт' : ''}</div>
       </div>
-      <button onclick="deleteWsEmployee(${i})" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <button onclick="toggleWsBlock(${i})" title="Заблокировать" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:${e.blocked?'var(--inc)':'var(--exp)'};cursor:pointer">${e.blocked?'✓ Разбл':'Блок'}</button>
+        <button onclick="changeWsPassword(${i})" title="Сменить пароль" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:var(--a2);cursor:pointer">🔑</button>
+        <button onclick="deleteWsEmployee(${i})" title="Удалить" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>
+      </div>
     </div>`).join('');
+}
+
+function toggleWsBlock(idx) {
+  const emps = getWsEmployees();
+  emps[idx].blocked = !emps[idx].blocked;
+  saveWsEmployees(emps);
+  populateWsEmployees();
+}
+
+function changeWsPassword(idx) {
+  const emps = getWsEmployees();
+  const newPass = prompt('Новый пароль для ' + emps[idx].name + ':', emps[idx].pass);
+  if(newPass) {
+    emps[idx].pass = newPass;
+    saveWsEmployees(emps);
+    alert('✅ Пароль изменён');
+  }
 }
 
 function deleteWsEmployee(idx) {
@@ -972,6 +1014,7 @@ function populateAdminUsers() {
   const c = document.getElementById('staffAdminUsers');
   const users = getAdminUsers();
   const roleL = {admin:'🔐 Администратор', owner:'👑 Владелец', accountant:'📊 Бухгалтер'};
+  const roleIcons = {admin:'🔐', owner:'👑', accountant:'📊'};
   
   if(!users.length) {
     c.innerHTML = '<div class="empty"><div class="ei">🔐</div>Нет пользователей</div>';
@@ -979,13 +1022,36 @@ function populateAdminUsers() {
   }
   
   c.innerHTML = users.map((u, i) => `
-    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
-      <div style="font-size:20px">${{admin:'🔐', owner:'👑', accountant:'📊'}[u.role] || '👤'}</div>
+    <div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--s2);border-radius:8px;margin-bottom:8px">
+      <div style="font-size:24px">${roleIcons[u.role] || '👤'}</div>
       <div style="flex:1">
         <div style="font-size:13px;font-weight:600">${u.name}</div>
         <div style="font-size:11px;color:var(--t2)">${roleL[u.role]}</div>
       </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <button onclick="changeAdminPassword(${i})" title="Сменить пароль" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:var(--a2);cursor:pointer">🔑</button>
+        <button onclick="deleteAdminUser(${i})" title="Удалить" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>
+      </div>
     </div>`).join('');
+}
+
+function changeAdminPassword(idx) {
+  const users = getAdminUsers();
+  const newPass = prompt('Новый пароль для ' + users[idx].name + ':', users[idx].pass);
+  if(newPass) {
+    users[idx].pass = newPass;
+    saveAdminUsers(users);
+    alert('✅ Пароль изменён');
+  }
+}
+
+function deleteAdminUser(idx) {
+  if(confirm('Удалить администратора?')) {
+    const users = getAdminUsers();
+    users.splice(idx, 1);
+    saveAdminUsers(users);
+    populateAdminUsers();
+  }
 }
 
 function addAdminUser() {
