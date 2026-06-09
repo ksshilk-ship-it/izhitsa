@@ -1037,6 +1037,70 @@ function wsSyncSave(lsKey, data) {
   var obj = {}; obj[m.field] = data; obj.updatedAt = new Date().toISOString();
   db.collection('iz_settings').doc(m.doc).set(obj, {merge:true}).catch(function(e){ console.log('ws save err', lsKey, e.code||e); });
 }
+
+// ════ ЕДИНАЯ АВТОРИЗАЦИЯ (iz_staff) ════
+function getStaffAll() {
+  // Primary: iz_staff (unified, set by admin)
+  var staff = JSON.parse(localStorage.getItem('iz_staff')||'[]');
+  return staff;
+}
+
+function getStaffByRole(role) {
+  return getStaffAll().filter(function(s){
+    return s.roles && s.roles.indexOf(role) >= 0 && !s.blocked;
+  });
+}
+
+function getStaffByShopRole(shopName) {
+  // Sellers who have access to this shop
+  return getStaffAll().filter(function(s){
+    if(!s.roles || s.roles.indexOf('seller') < 0) return false;
+    if(s.blocked) return false;
+    // Universal access or specific shop
+    if(!s.shops || !s.shops.length) return true;
+    return s.shops.indexOf(shopName) >= 0;
+  });
+}
+
+function checkStaffPass(staffId, pass) {
+  // Superadmin bypass
+  if(staffId === 'admin_default' && pass === 'admin123') return {id:'admin_default',name:'Администратор',roles:['admin'],pass:'admin123'};
+  var staff = getStaffAll();
+  return staff.find(function(s){ return s.id === staffId && s.pass === pass; }) || null;
+}
+
+// Sync iz_staff from Firestore
+function listenStaffSync(callback) {
+  if(typeof db === 'undefined') return;
+  db.collection('iz_settings').doc('staff').onSnapshot(function(snap){
+    if(!snap.exists) return;
+    var val = snap.data().staff;
+    if(val && val.length) {
+      localStorage.setItem('iz_staff', JSON.stringify(val));
+      // Derive legacy keys for backward compatibility
+      var sellers = val.filter(function(s){ return s.roles && s.roles.indexOf('seller')>=0; })
+        .map(function(s){ return {id:s.id,name:s.name,pass:s.pass,shops:s.shops||[],blocked:s.blocked||false}; });
+      localStorage.setItem('iz_sellers', JSON.stringify(sellers));
+      var wsRoles = ['мастер','заготовщик','кладовщик','управляющий'];
+      var wsEmps = val.filter(function(s){ return s.roles && s.roles.some(function(r){return wsRoles.indexOf(r)>=0;}); })
+        .map(function(s){ 
+          var r=s.roles.find(function(r){return wsRoles.indexOf(r)>=0;})||'мастер';
+          return {id:s.id,name:s.name,pass:s.pass,role:r,rate:s.wsRate||0,blocked:s.blocked||false};
+        });
+      localStorage.setItem('ws_employees', JSON.stringify(wsEmps));
+      var adminRoles=['admin','owner','accountant'];
+      var admins = val.filter(function(s){ return s.roles && s.roles.some(function(r){return adminRoles.indexOf(r)>=0;}); })
+        .map(function(s){ return {id:s.id,name:s.name,pass:s.pass,role:s.roles.find(function(r){return adminRoles.indexOf(r)>=0;})||'admin'}; });
+      // Always keep superadmin
+      if(!admins.some(function(a){return a.id==='admin_default';}))
+        admins.unshift({id:'admin_default',name:'Администратор',role:'admin',pass:'admin123'});
+      localStorage.setItem('iz_admin_users', JSON.stringify(admins));
+      localStorage.setItem('iz_shop_admins', JSON.stringify(admins));
+      if(typeof callback === 'function') callback();
+    }
+  }, function(e){ console.log('staff sync err', e); });
+}
+
 function startWsSyncListeners() {
   Object.keys(WS_SYNC_SETTINGS).forEach(wsSyncListen);
 }
@@ -1125,6 +1189,17 @@ function showPg(name,el){
 
 // ════════ EMPLOYEES ════════
 function getEmployees(){
+  // Try iz_staff first
+  var staff = getStaffAll();
+  if(staff.length) {
+    var wsRoles=['мастер','заготовщик','кладовщик','управляющий'];
+    var emps = staff.filter(function(s){ return s.roles && s.roles.some(function(r){return wsRoles.indexOf(r)>=0;}); })
+      .map(function(s){ 
+        var r=s.roles.find(function(r){return wsRoles.indexOf(r)>=0;})||'мастер';
+        return {id:s.id,name:s.name,pass:s.pass,role:r,rate:s.wsRate||0,blocked:s.blocked||false};
+      });
+    if(emps.length) return emps;
+  }
   const stored = JSON.parse(localStorage.getItem('ws_employees')||'[]');
   // Built-in superadmin — always present, cannot be deleted
   const superadmin = {id:'__superadmin__', name:'Администратор', role:'администратор', rate:0, pass:'izhitsa2025', _builtin:true};
@@ -4155,6 +4230,7 @@ function finishOTTask(id){
 // ════════ BOOT ════════
 document.addEventListener('DOMContentLoaded', ()=>{
   startWsSyncListeners();
+  listenStaffSync();
   renderEmployeeList();
   if(session) startApp();
   setSync(navigator.onLine?'online':'offline');
