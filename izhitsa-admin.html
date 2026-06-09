@@ -2498,4 +2498,40 @@ selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
 </script>
 
 </body>
+
+<!-- PWA Service Worker Registration -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw-admin.js')
+      .then(reg => {
+        console.log('✅ Service Worker registered:', reg);
+        
+        // Check for updates
+        setInterval(() => {
+          reg.update();
+        }, 60000); // Check every minute
+        
+        // Handle updates
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              console.log('🔄 Update available! Refresh page to get new version');
+              // Optionally notify user
+              if (confirm('Доступно обновление приложения. Перезагрузить?')) {
+                newWorker.postMessage({type: 'SKIP_WAITING'});
+                window.location.reload();
+              }
+            }
+          });
+        });
+      })
+      .catch(err => {
+        console.warn('⚠️ Service Worker registration failed:', err);
+      });
+  });
+}
+</script>
+
 </html>
