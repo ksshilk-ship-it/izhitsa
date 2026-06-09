@@ -1225,6 +1225,34 @@ function isOfflineType(name){ return getShopType(name)==='offline'; }
 function saveJ(){ localStorage.setItem(KEY.journal,JSON.stringify(journal)); }
 function saveS(){ localStorage.setItem(KEY.session,JSON.stringify(session)); }
 
+// ════ AUDIT LOG ════
+function getAuditLog(){ try { return JSON.parse(localStorage.getItem('iz_audit_log_shop')||'[]'); } catch(e) { return []; } }
+function saveAuditLog(data){ localStorage.setItem('iz_audit_log_shop',JSON.stringify(data)); }
+function logAction(action, details) {
+  if(!session) return;
+  var log = getAuditLog();
+  var entry = {
+    id: uid(),
+    timestamp: new Date().toISOString(),
+    user: session.name,
+    shopName: session.shop,
+    action: action,
+    details: details || {}
+  };
+  log.push(entry);
+  if(log.length > 5000) log.splice(0, log.length - 5000);
+  saveAuditLog(log);
+}
+function logSale(itemCount, total, shop){ logAction('SALE', {itemCount:itemCount, total:total, shop:shop}); }
+function logWriteoff(reason, amount, shop){ logAction('WRITEOFF', {reason:reason, amount:amount, shop:shop}); }
+function logReceive(type, amount, shop){ logAction('RECEIVE', {type:type, amount:amount, shop:shop}); }
+function logStaff(name, role, amount){ logAction('STAFF_PAYMENT', {name:name, role:role, amount:amount}); }
+function logExpense(category, amount, desc){ logAction('EXPENSE', {category:category, amount:amount, desc:desc}); }
+function logShiftClose(shop, revenue, cashStart, cashEnd){ logAction('SHIFT_CLOSE', {shop:shop, revenue:revenue, cashStart:cashStart, cashEnd:cashEnd}); }
+function logShiftOpen(shop, cashAmount){ logAction('SHIFT_OPEN', {shop:shop, cashAmount:cashAmount}); }
+function logLogin(seller){ logAction('LOGIN', {seller:seller}); }
+function logLogout(){ logAction('LOGOUT', {user: session ? session.name : 'unknown'}); }
+
 // ════ UTILS ════
 function fmt(n){ return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+'₽'; }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
@@ -1349,6 +1377,7 @@ function confirmMorning(){
   journal=[{id:uid(),type:'open',ts:new Date().toISOString(),icon:'🔓',label:'Смена открыта',
     sub:'🌳 Нал: '+fmt(cashM)+' 🛍 Нал ДР: '+fmt(drCashM)+' · 📦 Товар: '+fmt(goodsM),cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0}];
   pendingSession=null; saveS(); saveJ();
+  logShiftOpen(session.shopName, cashM);
   closeMo('morningMo'); startApp();
 }
 function cancelMorning(){ closeMo('morningMo'); pendingSession=null; }
@@ -1786,6 +1815,7 @@ function saveSale(){
     }
   }
   saveJ(); resetSaleForm(); closeMo('saleMo'); renderAll();
+  logSale(saleItems.length, paid, session.shopName);
   showToast('✅ Продажа '+fmt(paid)+' зафиксирована'+(sourceShop?' · уведомление в '+sourceShop:''));
 }
 
@@ -1797,6 +1827,7 @@ function saveWriteoff(){
     sub:(gv('woNum')?'№'+gv('woNum')+' ':'')+gv('woName')+' · '+reason,
     amount:amt,amtCls:'exp',amtSign:'−',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:-amt});
   saveJ(); ['woNum','woName','woAmt','woReason'].forEach(id=>document.getElementById(id).value='');
+  logWriteoff(reason, amt, session.shopName);
   closeMo('woMo'); renderAll(); showToast('🗑️ Списание зафиксировано');
 }
 
@@ -1828,6 +1859,7 @@ function saveReceive(){
     amount:price,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:price,
     article:article});
   saveJ(); ['rcvArticle','rcvName','rcvQty','rcvPrice','rcvFrom'].forEach(id=>{var el=document.getElementById(id); if(el) el.value='';});
+  logReceive(gv('rcvFrom'), price, session.shopName);
   var hint=document.getElementById('rcvLookupHint'); if(hint) hint.style.display='none';
   closeMo('receiveMo'); renderAll(); showToast('📥 Товар принят: '+fmt(price));
 }
@@ -2067,6 +2099,7 @@ function saveExpense(){
     cardEffect:0, staffEffect:0, goodsEffect:0
   });
   saveJ();
+  logExpense(expType, amt, comment);
   document.getElementById('expAmt').value='';
   document.getElementById('expComment').value='';
   if(document.getElementById('expSupplierName')) document.getElementById('expSupplierName').value='';

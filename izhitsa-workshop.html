@@ -1059,6 +1059,33 @@ function getEmployees(){
 }
 function saveEmployees(d){localStorage.setItem('ws_employees',JSON.stringify(d));}
 
+// ════ AUDIT LOG ════
+function getAuditLog(){ try { return JSON.parse(localStorage.getItem('iz_audit_log_ws')||'[]'); } catch(e) { return []; } }
+function saveAuditLog(data){ localStorage.setItem('iz_audit_log_ws',JSON.stringify(data)); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function logAction(action, details) {
+  if(!session) return;
+  var log = getAuditLog();
+  var entry = {
+    id: uid(),
+    timestamp: new Date().toISOString(),
+    user: session.name,
+    role: session.role,
+    action: action,
+    details: details || {}
+  };
+  log.push(entry);
+  if(log.length > 5000) log.splice(0, log.length - 5000);
+  saveAuditLog(log);
+}
+function logAddTask(name, deadline){ logAction('ADD_TASK', {name:name, deadline:deadline}); }
+function logCompleteTask(name){ logAction('COMPLETE_TASK', {name:name}); }
+function logAddEmployee(name, role){ logAction('ADD_EMPLOYEE', {name:name, role:role}); }
+function logDeleteEmployee(name){ logAction('DELETE_EMPLOYEE', {name:name}); }
+function logAddPayment(employeeName, amount){ logAction('ADD_PAYMENT', {employeeName:employeeName, amount:amount}); }
+function logLogin(username){ logAction('LOGIN', {username:username}); }
+function logLogout(){ logAction('LOGOUT', {user: session ? session.name : 'unknown'}); }
+
 function addEmployee(){
   const name=document.getElementById('empName').value.trim();
   const role=document.getElementById('empRole').value;
@@ -1068,6 +1095,7 @@ function addEmployee(){
   const emps=getEmployees();
   emps.push({id:uid(),name,role,rate,pass});
   saveEmployees(emps);
+  logAddEmployee(name, role);
   // Also save to Firebase
   db.collection('ws_employees').add({id:uid(),name,role,rate,createdAt:now()}).catch(console.error);
   ['empName','empPass','empRate'].forEach(id=>document.getElementById(id).value='');
