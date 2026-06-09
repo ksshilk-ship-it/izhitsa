@@ -162,26 +162,8 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./izhitsa-sw.js', {scope: './'})
       .then(function(reg) {
         console.log('[PWA] SW зарегистрирован');
-        // Проверяем обновления каждый час
-        setInterval(function() { reg.update(); }, 3600000);
-        reg.addEventListener('updatefound', function() {
-          var newWorker = reg.installing;
-          newWorker.addEventListener('statechange', function() {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              // Есть обновление — показываем уведомление
-              if (typeof showToast === 'function') {
-                showToast('🔄 Доступно обновление. Перезагрузите страницу.');
-              }
-            }
-          });
-        });
       })
-      .catch(function(e) { console.log('[PWA] SW ошибка:', e); });
-    
-    // Слушаем обновление SW
-    navigator.serviceWorker.addEventListener('controllerchange', function() {
-      window.location.reload();
-    });
+      .catch(function(e) { /* SW не поддерживается в этом контексте */ });
   });
 }
 </script>
@@ -1010,8 +992,11 @@ function doLogin() {
     document.getElementById('hdrName').textContent = 'Администратор';
     document.getElementById('hdrRole').textContent = 'admin';
     populateSellers(); populateWsEmployees(); populateAdminUsers();
-    populateSalesSourcesList(); populateSourcesForOp(); populateShopCheckboxes();
-    renderPL(); renderShops(); renderPLBudget(); renderDebts(); renderDashboard();
+    if(typeof populateSalesSourcesList==='function') populateSalesSourcesList();
+    if(typeof populateSourcesForOp==='function') populateSourcesForOp();
+    populateShopCheckboxes();
+    renderPL(); renderShops(); renderPLBudget(); renderDebts();
+    if(typeof renderDashboard==='function') renderDashboard();
     return;
   }
 
