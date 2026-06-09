@@ -716,8 +716,8 @@ function startAdminSyncListeners() {
   adminSyncListenCollection('iz_psj', 'iz_psj');
 }
 
-let selectedRole = null;
-let session = null;
+var selectedRole = null;
+var session = null;
 
 function gv(id) { var el=document.getElementById(id); return el?el.value||'':''; }
 
@@ -972,16 +972,20 @@ function now() { return new Date().toISOString(); }
 function selectAdminRole(role, el) {
   try {
     selectedRole = role;
-    document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll('.role-card').forEach(function(c){ c.classList.remove('selected'); });
     if(el && el.classList) el.classList.add('selected');
-    // Ensure default admin exists
+    
     var users = getAdminUsers();
+    // Always ensure default admin exists
     if(!users.length) {
-      var def = [{id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'}];
-      saveAdminUsers(def);
-      users = def;
+      users = [{id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'}];
+      localStorage.setItem('iz_admin_users', JSON.stringify(users));
     }
     var filtered = users.filter(function(u){ return u.role === role; });
+    // For admin role, always show at least default
+    if(!filtered.length && role === 'admin') {
+      filtered = [{id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'}];
+    }
     document.getElementById('loginUser').innerHTML = filtered.length
       ? filtered.map(function(u){ return '<option value="'+u.id+'">'+u.name+'</option>'; }).join('')
       : '<option value="">— нет пользователей —</option>';
@@ -1955,14 +1959,14 @@ function addWsEmployee(){ openAddStaffModal(); }
 // Initialize
 
 document.addEventListener('DOMContentLoaded', function() {
-  startAdminSyncListeners();
-  startStaffSyncListener();
-  // Ensure default admin exists for first login
+  // Create default admin FIRST before sync listeners overwrite
   var users = getAdminUsers();
   if(!users.length) {
     var def = [{id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'}];
-    saveAdminUsers(def);
+    localStorage.setItem('iz_admin_users', JSON.stringify(def));
   }
+  startAdminSyncListeners();
+  startStaffSyncListener();
   // Auto-select first role card
   var firstCard = document.querySelector('.role-card');
   if(firstCard) firstCard.click();
