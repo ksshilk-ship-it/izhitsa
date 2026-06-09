@@ -291,6 +291,74 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
     <div id="zpContent"></div>
   </div>
 
+  <!-- СДАЧА НА СКЛАД (мастер) -->
+  <div class="page" id="pg-delivery">
+    <div class="stitle">📬 Сдача на склад</div>
+
+    <!-- Добавить изделие -->
+    <div class="card" style="border-color:var(--a6)">
+      <div class="ctitle">Добавить изделие</div>
+      <div class="fg"><label class="fl">Изделие</label>
+        <div style="display:flex;gap:8px">
+          <select class="fs" id="delivItemSelect" style="flex:1" onchange="onDelivItemChange()"></select>
+          <button onclick="openAddItemNameMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+        </div>
+      </div>
+      <div class="fg"><label class="fl">Порода дерева</label>
+        <select class="fs" id="delivWoodSelect"></select>
+      </div>
+      <div class="fg"><label class="fl">Размер</label>
+        <select class="fs" id="delivSizeSelect"></select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="fg"><label class="fl">Количество</label><input class="fi" type="number" id="delivQty" value="1" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="delivPrice" inputmode="numeric" placeholder="0"></div>
+      </div>
+      <button class="btn" style="background:var(--a6)" onclick="addToDeliveryList()">➕ В список сдачи</button>
+    </div>
+
+    <!-- Список на сдачу -->
+    <div class="card" id="deliveryListCard" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="ctitle" style="margin:0">Список на сдачу</div>
+        <div id="delivTotal" style="font-weight:700;color:var(--accent)"></div>
+      </div>
+      <div id="deliveryList"></div>
+      <button class="btn green" style="margin-top:10px" onclick="submitDelivery()">📦 Сдать на склад</button>
+      <button class="btn sec" style="margin-top:8px" onclick="clearDeliveryList()">Очистить список</button>
+    </div>
+
+    <!-- История сдач -->
+    <div class="card" style="margin-top:4px">
+      <div class="ctitle">История сдач</div>
+      <div id="deliveryHistory"></div>
+    </div>
+  </div>
+
+  <!-- КАТАЛОГ ТОВАРОВ (кладовщик) -->
+  <div class="page" id="pg-catalog">
+    <div class="stitle">📋 Каталог товаров</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="display:flex;gap:6px">
+        <div class="fchip active" onclick="setCatalogFilter('all',this)">Все</div>
+        <div class="fchip" onclick="setCatalogFilter('active',this)">Активные</div>
+        <div class="fchip" onclick="setCatalogFilter('archive',this)">Архив</div>
+      </div>
+      <button onclick="openAddProductMo()" style="background:var(--accent);border:none;border-radius:8px;padding:7px 12px;color:#000;font-size:12px;font-weight:700;cursor:pointer">＋ Товар</button>
+    </div>
+    <div id="catalogPageList"></div>
+
+    <!-- Справочники -->
+    <div class="card" style="margin-top:8px">
+      <div class="ctitle">📚 Справочники</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <button onclick="openAddItemNameMo()" class="btn sec" style="font-size:11px;padding:8px">📋 Наимен.</button>
+        <button onclick="openAddWoodMo()" class="btn sec" style="font-size:11px;padding:8px">🌳 Породы</button>
+        <button onclick="openAddSizeMo()" class="btn sec" style="font-size:11px;padding:8px">📐 Размеры</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ADMIN (управляющий) -->
   <div class="page" id="pg-admin">
     <div class="stitle">Управление</div>
@@ -760,8 +828,8 @@ let extraWorkCats = JSON.parse(localStorage.getItem('ws_extra_cats')||'["Шли�
 
 const ROLES = {
   заготовщик:    {tabs:['dash','blanks','extrawork'], label:'🪚 Заготовщик'},
-  мастер:        {tabs:['dash','mywork','zp'], label:'🔨 Мастер'},
-  кладовщик:     {tabs:['dash','warehouse'], label:'📦 Кладовщик'},
+  мастер:        {tabs:['dash','mywork','delivery','zp'], label:'🔨 Мастер'},
+  кладовщик:     {tabs:['dash','warehouse','catalog'], label:'📦 Кладовщик'},
   управляющий:   {tabs:['dash','warehouse','zp','zpay','stats','admin'], label:'👑 Управляющий'},
   администратор: {tabs:['dash','warehouse','zp','zpay','stats','admin','import'], label:'🛡 Администратор'},
 };
@@ -771,7 +839,9 @@ const TAB_CFG = {
   blanks:    {icon:'🪚', label:'Заготовки', page:'pg-blanks'},
   extrawork: {icon:'🛠', label:'Доп.работы', page:'pg-extrawork'},
   mywork:    {icon:'🔨', label:'Моя работа', page:'pg-mywork'},
+  delivery:  {icon:'📬', label:'Сдача', page:'pg-delivery'},
   warehouse: {icon:'📦', label:'Склад', page:'pg-warehouse'},
+  catalog:   {icon:'📋', label:'Каталог', page:'pg-catalog'},
   zp:        {icon:'💰', label:'ЗП', page:'pg-zp'},
   zpay:      {icon:'💳', label:'Выплаты', page:'pg-zpay'},
   stats:     {icon:'📊', label:'Статистика', page:'pg-stats'},
@@ -796,6 +866,8 @@ function showPg(name,el){
   if(name==='mywork')    renderMyWork();
   if(name==='blanks')    renderBlanks();
   if(name==='warehouse') renderWarehouse();
+  if(name==='delivery')  renderDeliveryPage();
+  if(name==='catalog')   renderCatalogPage();
   if(name==='zp')        renderZP();
   if(name==='zpay')      renderZPay();
   if(name==='stats')     renderStats();
@@ -2648,6 +2720,7 @@ function subscribeProducts(){
       syncCatalogToLocalDicts();
       // Обновляем все зависимые UI
       renderProductCatalogList();
+      renderCatalogPage();
       renderProductSelectsEverywhere();
     }, err=>console.error('products:', err));
 }
@@ -2804,6 +2877,192 @@ function archiveProduct(id, currentStatus){
 function toggleAdminCatalog(){
   const el = document.getElementById('adminCatalogSection');
   if(el) el.style.display = session.role==='администратор' ? 'block' : 'none';
+}
+
+// ════════════════════════════════
+// СДАЧА НА СКЛАД (Мастер)
+// ════════════════════════════════
+let _deliveryList = [];
+
+function renderDeliveryPage(){
+  // Заполняем селекты из каталога + справочников
+  const activeProducts = products.filter(p=>p.status!=='archive');
+  const names = [...new Set([...activeProducts.map(p=>p.name), ...getItemNames()])];
+  const sel = document.getElementById('delivItemSelect');
+  if(sel) sel.innerHTML = names.map(n=>`<option value="${n}">${n}</option>`).join('');
+
+  const woodSel = document.getElementById('delivWoodSelect');
+  if(woodSel) woodSel.innerHTML = getWoods().map(w=>`<option>${w}</option>`).join('');
+
+  const sizeSel = document.getElementById('delivSizeSelect');
+  if(sizeSel) sizeSel.innerHTML = getSizes().map(s=>`<option>${s}</option>`).join('');
+
+  renderDeliveryList();
+  renderDeliveryHistory();
+}
+
+function onDelivItemChange(){
+  // Автозаполнить цену из каталога если есть
+  const name = document.getElementById('delivItemSelect')?.value;
+  const product = products.find(p=>p.name===name && p.status!=='archive');
+  if(product){
+    if(product.price) document.getElementById('delivPrice').value = product.price;
+    const woodSel = document.getElementById('delivWoodSelect');
+    if(woodSel && product.wood) woodSel.value = product.wood;
+    const sizeSel = document.getElementById('delivSizeSelect');
+    if(sizeSel && product.size) sizeSel.value = product.size;
+  }
+}
+
+function addToDeliveryList(){
+  const name  = document.getElementById('delivItemSelect')?.value;
+  const wood  = document.getElementById('delivWoodSelect')?.value;
+  const size  = document.getElementById('delivSizeSelect')?.value;
+  const qty   = parseInt(document.getElementById('delivQty')?.value)||1;
+  const price = parseFloat(document.getElementById('delivPrice')?.value)||0;
+  if(!name){ showToast('Выберите изделие'); return; }
+
+  _deliveryList.push({id:uid(), name, wood, size, qty, price});
+  renderDeliveryList();
+  document.getElementById('delivQty').value = '1';
+  document.getElementById('delivPrice').value = '';
+}
+
+function renderDeliveryList(){
+  const card = document.getElementById('deliveryListCard');
+  const c    = document.getElementById('deliveryList');
+  if(!c) return;
+  if(!_deliveryList.length){
+    if(card) card.style.display='none';
+    return;
+  }
+  if(card) card.style.display='block';
+  const total = _deliveryList.reduce((s,i)=>s+i.price*i.qty,0);
+  const tot = document.getElementById('delivTotal');
+  if(tot) tot.textContent = fmt(total);
+  c.innerHTML = _deliveryList.map((item,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${item.name}</div>
+        <div style="font-size:11px;color:var(--t2)">🌳 ${item.wood||'—'} · 📐 ${item.size||'—'} · ${item.qty} шт.</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:13px;color:var(--accent)">${fmt(item.price)}</div>
+        <button onclick="removeDeliveryItem(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:14px">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function removeDeliveryItem(i){
+  _deliveryList.splice(i,1);
+  renderDeliveryList();
+}
+
+function clearDeliveryList(){
+  _deliveryList = [];
+  renderDeliveryList();
+}
+
+async function submitDelivery(){
+  if(!_deliveryList.length){ showToast('Список пуст'); return; }
+  const batch = db.batch();
+  const deliveryId = uid();
+
+  _deliveryList.forEach(item=>{
+    for(let q=0; q<item.qty; q++){
+      const ref = db.collection('ws_items').doc();
+      batch.set(ref, {
+        id: uid(),
+        name: item.name, itemName: item.name,
+        wood: item.wood, size: item.size,
+        price: item.price, zp: 0, zpPaid: false,
+        masterId: session.id, masterName: session.name,
+        status: 'delivered',
+        createdAt: now(), startedAt: now(), deliveredAt: now(),
+        deliveryGroupId: deliveryId,
+        itemNum: 'МСТ-'+uid().toUpperCase()
+      });
+    }
+  });
+
+  try {
+    await batch.commit();
+    // Сохранить в историю
+    const hist = JSON.parse(localStorage.getItem('ws_delivery_history_'+session.id)||'[]');
+    hist.unshift({
+      date: now().split('T')[0],
+      items: _deliveryList.length,
+      total: _deliveryList.reduce((s,i)=>s+i.price*i.qty,0),
+      list: _deliveryList.map(i=>i.name+' ×'+i.qty).join(', ')
+    });
+    localStorage.setItem('ws_delivery_history_'+session.id, JSON.stringify(hist.slice(0,30)));
+    clearDeliveryList();
+    renderDeliveryHistory();
+    showToast(`✅ ${_deliveryList.length || hist[0].items} изделий сданы на склад`);
+  } catch(e){
+    showToast('Ошибка: '+e.message);
+  }
+}
+
+function renderDeliveryHistory(){
+  const c = document.getElementById('deliveryHistory'); if(!c) return;
+  const hist = JSON.parse(localStorage.getItem('ws_delivery_history_'+session.id)||'[]');
+  if(!hist.length){
+    c.innerHTML='<div class="empty" style="padding:10px 0"><div class="ei">📬</div>Сдач ещё не было</div>';
+    return;
+  }
+  c.innerHTML = hist.map(h=>`
+    <div class="at-row">
+      <span class="at-lbl">${h.date}<br><span style="font-size:10px;color:var(--t2)">${h.list}</span></span>
+      <span class="at-val" style="color:var(--accent)">${fmt(h.total)}</span>
+    </div>`).join('');
+}
+
+// ════════════════════════════════
+// КАТАЛОГ ТОВАРОВ (Кладовщик)
+// ════════════════════════════════
+let _catalogFilter = 'all';
+
+function setCatalogFilter(f, el){
+  _catalogFilter = f;
+  document.querySelectorAll('#pg-catalog .fchip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderCatalogPage();
+}
+
+function renderCatalogPage(){
+  const c = document.getElementById('catalogPageList'); if(!c) return;
+  let list = products;
+  if(_catalogFilter==='active')  list = products.filter(p=>p.status!=='archive');
+  if(_catalogFilter==='archive') list = products.filter(p=>p.status==='archive');
+
+  if(!list.length){
+    c.innerHTML='<div class="empty"><div class="ei">📋</div>Каталог пуст</div>';
+    return;
+  }
+  c.innerHTML = list.map(p=>`
+    <div class="card" style="margin-bottom:8px;padding:12px">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700">${p.name}
+            ${p.artikul?`<span style="color:var(--t2);font-size:10px;margin-left:4px">${p.artikul}</span>`:''}
+          </div>
+          <div style="font-size:11px;color:var(--t2);margin-top:3px">
+            ${p.wood?'🌳 '+p.wood+' ':''}${p.size?'📐 '+p.size:''}
+          </div>
+          <div style="font-size:12px;margin-top:4px">
+            ${p.price?`<span style="color:var(--accent);font-weight:600">${fmt(p.price)}</span> `:''}
+            ${p.zp?`<span style="color:var(--a5);font-size:11px">ЗП: ${fmt(p.zp)}</span>`:''}
+          </div>
+          ${p.desc?`<div style="font-size:11px;color:var(--t2);margin-top:3px">${p.desc}</div>`:''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end">
+          <span style="font-size:10px;padding:2px 7px;border-radius:5px;background:${p.status==='archive'?'var(--s2)':'#1a2a1e'};color:${p.status==='archive'?'var(--t2)':'var(--inc)'}">${p.status==='archive'?'архив':'актив'}</span>
+          <button onclick="editProduct('${p._id}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 8px;color:var(--a2);cursor:pointer;font-size:11px">✏️</button>
+          <button onclick="archiveProduct('${p._id}','${p.status}')" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:12px">${p.status==='archive'?'♻️ Восстановить':'📦 В архив'}</button>
+        </div>
+      </div>
+    </div>`).join('');
 }
 
 // ════════ BOOT ════════
