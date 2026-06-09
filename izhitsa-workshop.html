@@ -139,6 +139,16 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 .bar-wrap{background:var(--s2);border-radius:6px;height:8px;overflow:hidden;margin-top:4px}
 .bar-fill{height:100%;border-radius:6px;transition:width .5s}
 </style>
+
+<script>
+if('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('izhitsa-sw.js')
+      .then(function(reg){ console.log('SW registered'); })
+      .catch(function(e){ console.log('SW failed:', e); });
+  });
+}
+</script>
 </head>
 <body>
 
@@ -1062,7 +1072,7 @@ function showPg(name,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('pg-'+name).classList.add('active');
-  el?.classList.add('active');
+  if(el&&el.classList) el.classList.add('active');
   if(name==='mywork')       renderMyWork();
   if(name==='masterblanks') renderMasterBlanks();
   if(name==='othertasks')   renderOtherTasks();
@@ -1148,7 +1158,7 @@ function renderEmployeeList(){
 
 function delEmployee(i){
   const emps=getEmployees();
-  if(emps[i]?._builtin){showToast('Нельзя удалить встроенного администратора');return;}
+  if((emps[i]&&emps[i]._builtin)){showToast('Нельзя удалить встроенного администратора');return;}
   emps.splice(i,1);
   saveEmployees(emps);
   renderEmployeeList();
@@ -1208,7 +1218,7 @@ function startApp(){
 }
 
 function buildTabs(){
-  const tabs=ROLES[session.role]?.tabs||['dash'];
+  const tabs=(ROLES[session.role]&&ROLES[session.role].tabs)||['dash'];
   document.getElementById('mainTabs').innerHTML=tabs.map(k=>`
     <button class="tab ${k==='dash'?'active':''}" onclick="showPg('${k}',this)">
       <div class="ti">${TAB_CFG[k].icon}</div>
@@ -1303,7 +1313,7 @@ function renderDash(){
     <div style="color:var(--t2);font-size:18px">›</div>
   </div>`).join('');
   // Set action handlers
-  nd.querySelectorAll('.notif').forEach((el,i)=>{ el._action=notifs[i]?.action; });
+  nd.querySelectorAll('.notif').forEach((el,i)=>{ el._action=(notifs[i]&&notifs[i].action); });
 
   const dc=document.getElementById('dashContent');
   if(session.role==='мастер'){
@@ -1333,7 +1343,7 @@ function renderDash(){
         <div class="sc"><div class="sc-v" style="color:var(--a5)">${fmt(zpTotal)}</div><div class="sc-l">ЗП получено</div></div>
       </div>`;
   } else if(session.role==='заготовщик'){
-    const today=blanks.filter(b=>b.createdById===session.id&&b.createdAt?.startsWith(new Date().toISOString().slice(0,10)));
+    const today=blanks.filter(b=>b.createdById===session.id&&(b.createdAt&&b.createdAt.startsWith)(new Date().toISOString().slice(0,10)));
     dc.innerHTML=`<div class="card"><div class="ctitle">Выдано сегодня</div>
       ${today.length?today.map(b=>`<div class="li"><div class="li-ico" style="background:#1a1e2e">🪚</div><div class="li-info"><div class="li-name">${b.itemName}</div><div class="li-sub">→ ${b.masterName} · ${b.wood} · ${fmtDT(b.createdAt)}</div></div><span class="badge b-${b.status==='new'?'new':'accepted'}">${b.status==='new'?'⏳ Ожидает':'✅ Принято'}</span></div>`).join(''):'<div class="empty"><div class="ei">🪚</div>Сегодня ничего не выдавали</div>'}
     </div>`;
@@ -1598,7 +1608,7 @@ function addBlank(){
   const master=getEmployees().find(e=>e.id===masterId);
   const blank={
     id:uid(),itemName,wood,size,qty,comment,
-    masterId,masterName:master?.name||'',
+    masterId,masterName:(master&&master.name)||'',
     createdById:session.id,createdByName:session.name,
     status:'new',createdAt:now()
   };
@@ -1607,7 +1617,7 @@ function addBlank(){
       document.getElementById('blankComment').value='';
       document.getElementById('blankQty').value='1';
       closeMo('addBlankMo');
-      showToast(`✅ Заготовки переданы мастеру ${master?.name||''}`);
+      showToast(`✅ Заготовки переданы мастеру ${(master&&master.name)||''}`);
     }).catch(e=>{ showToast('Ошибка: '+e.message); });
 }
 
@@ -1787,7 +1797,7 @@ function quickAcceptBlank(id){
   const item = {
     id:uid(), blankId:id,
     name:b.itemName, itemName:b.itemName, wood:b.wood, size:b.size||'', qty:b.qty||1,
-    masterId:session.id, masterName:session.name, masterRate:emp?.rate||0,
+    masterId:session.id, masterName:session.name, masterRate:(emp&&emp.rate)||0,
     status:'in_work', createdAt:now(), startedAt:now(),
   };
   db.collection('ws_items').add(item).then(()=>{
@@ -1826,7 +1836,7 @@ function acceptBlank(){
   const item={
     id:uid(),blankId:currentBlankId,
     name:b.itemName,itemName:b.itemName,wood:b.wood,qty,
-    masterId:session.id,masterName:session.name,masterRate:emp?.rate||session.rate||0,
+    masterId:session.id,masterName:session.name,masterRate:(emp&&emp.rate)||session.rate||0,
     status:'in_work',
     createdAt:now(),startedAt:now(),
   };
@@ -2031,7 +2041,7 @@ function openItemAccept(id){
   const master=getEmployees().find(e=>e.id===item.masterId);
   const iaDEl = document.getElementById('iaDate'); if(iaDEl) iaDEl.value = new Date().toISOString().split('T')[0];
   document.getElementById('iaName').value=item.itemName||'';
-  document.getElementById('iaZP').value=master?.rate||item.masterRate||0;
+  document.getElementById('iaZP').value=(master&&master.rate)||item.masterRate||0;
   document.getElementById('iaPrice').value='';
   document.getElementById('iaPriceOpt').value='';
   openMo('itemAcceptMo');
@@ -2047,7 +2057,7 @@ function acceptItem(){
   const allNums=items.filter(i=>i.itemNum).map(i=>parseInt(i.itemNum)||0);
   const nextNum=allNums.length?Math.max(...allNums)+1:1;
   const itemNum=String(nextNum).padStart(3,'0');
-  const iaDateVal = document.getElementById('iaDate')?.value;
+  const iaDateVal = (document.getElementById('iaDate')||{}).value;
   const iaTS = iaDateVal ? new Date(iaDateVal).toISOString() : now();
   db.collection('ws_items').doc(currentItemId).update({
     status:'received',name,price,priceOpt,zp,zpPaid:true,itemNum,
@@ -2098,7 +2108,7 @@ function createShipment(){
   if(!selectedShipItems.size){showToast('Выберите изделия');return;}
   const dest=document.getElementById('shipDest').value;
   const shipItems=items.filter(i=>selectedShipItems.has(i._id));
-  const allShipNums=shipments.map(s=>parseInt(s.num?.replace('НАК-',''))||0);
+  const allShipNums=shipments.map(s=>parseInt((s.num&&s.num.replace)?s.num.replace('НАК-',''):(s.num||''))||0);
   const nextShipNum=allShipNums.length?Math.max(...allShipNums)+1:1;
   const shipNum='НАК-'+String(nextShipNum).padStart(3,'0');
   const shipDoc={
@@ -2339,7 +2349,7 @@ function renderAdmin(){
 
 function adminToggleBlock(i){
   const emps=getEmployees();
-  if(emps[i]?._builtin) return;
+  if((emps[i]&&emps[i]._builtin)) return;
   emps[i].blocked=!emps[i].blocked;
   saveEmployees(emps);
   renderAdmin();
@@ -2434,7 +2444,7 @@ function parseImportCSV(text){
     else{issues.push(`Строка ${li+2}: неверная дата "${dateRaw}"`);dateISO=new Date().toISOString();}
     const master=getEmployees().find(e=>e.name.toLowerCase()===masterName.toLowerCase()&&e.role==='мастер');
     if(!master) issues.push(`Строка ${li+2}: мастер "${masterName}" не найден`);
-    rows.push({masterName,masterId:master?.id||'imp_'+masterName.replace(/\s/g,'_'),itemName,artikul,qty,price,zp,dateISO,dateDisplay:dateRaw});
+    rows.push({masterName,masterId:(master&&master.id)||'imp_'+masterName.replace(/\s/g,'_'),itemName,artikul,qty,price,zp,dateISO,dateDisplay:dateRaw});
   });
 
   _importRows=rows;
@@ -2508,7 +2518,7 @@ function saveExtraCats(){ wsSyncSave('ws_extra_cats', extraWorkCats); }
 
 function addExtraCat(){
   const name = prompt('Название новой категории работ:');
-  if(!name?.trim()) return;
+  if(!(name&&name.trim)()) return;
   extraWorkCats.push(name.trim());
   saveExtraCats();
   renderExtraCatSelect('ewCat');
@@ -2532,18 +2542,18 @@ function addExtraWork(){
   const zp       = parseFloat(document.getElementById('ewZP').value)||0;
   if(!masterId||!cat){ showToast('Выберите мастера и вид работы'); return; }
   const master = getEmployees().find(e=>e.id===masterId);
-  const ewDate = document.getElementById('ewDate')?.value;
+  const ewDate = (document.getElementById('ewDate')||{}).value;
   const ewTS = ewDate ? new Date(ewDate).toISOString() : now();
   const work = {
     id:uid(), cat, desc, zp, zpPaid: zp>0,
-    masterId, masterName: master?.name||'',
+    masterId, masterName: (master&&master.name)||'',
     assignedById: session.id, assignedByName: session.name,
     status: 'pending', createdAt: ewTS
   };
   db.collection('ws_extra_works').add(work).then(()=>{
     ['ewDesc','ewZP'].forEach(id=>document.getElementById(id).value='');
     closeMo('addExtraMo');
-    showToast(`✅ Работа назначена мастеру ${master?.name||''}`);
+    showToast(`✅ Работа назначена мастеру ${(master&&master.name)||''}`);
   }).catch(e=>showToast('Ошибка: '+e.message));
 }
 
@@ -2719,8 +2729,8 @@ function setStatsPeriod(p, el){
 }
 
 function getStatsDates(){
-  const from = document.getElementById('statsFrom')?.value;
-  const to   = document.getElementById('statsTo')?.value;
+  const from = (document.getElementById('statsFrom')||{}).value;
+  const to   = (document.getElementById('statsTo')||{}).value;
   return {from, to};
 }
 
@@ -3085,7 +3095,7 @@ async function recognizeShipment(){
     });
 
     const data = await response.json();
-    const text = data.content?.map(c=>c.text||'').join('') || '';
+    const text = (data.content&&data.content.map?data.content.map(c=>c.text||'').join(''):data.content)||'';
     let parsed;
     try {
       const clean = text.replace(/```json|```/g,'').trim();
@@ -3153,8 +3163,8 @@ function removeShipRow(id){
 function updateShipImportTotal(){
   let total = 0;
   for(let i=1; i<=_shipImportRowCount; i++){
-    const q = parseFloat(document.getElementById('sq_'+i)?.value)||0;
-    const p = parseFloat(document.getElementById('sp_'+i)?.value)||0;
+    const q = parseFloat((document.getElementById('sq_'+i)||{}).value)||0;
+    const p = parseFloat((document.getElementById('sp_'+i)||{}).value)||0;
     total += q*p;
   }
   const el = document.getElementById('shipImportTotal');
@@ -3170,9 +3180,9 @@ function getShipImportRows(){
     if(!name) continue;
     rows.push({
       name,
-      artikul: document.getElementById('sa_'+i)?.value.trim()||'',
-      qty: parseFloat(document.getElementById('sq_'+i)?.value)||1,
-      price: parseFloat(document.getElementById('sp_'+i)?.value)||0,
+      artikul: (document.getElementById('sa_'+i)||{}).value.trim()||'',
+      qty: parseFloat((document.getElementById('sq_'+i)||{}).value)||1,
+      price: parseFloat((document.getElementById('sp_'+i)||{}).value)||0,
     });
   }
   return rows;
@@ -3439,7 +3449,7 @@ function renderDeliveryPage(){
 
 function onDelivItemChange(){
   // Автозаполнить цену из каталога если есть
-  const name = document.getElementById('delivItemSelect')?.value;
+  const name = (document.getElementById('delivItemSelect')||{}).value;
   const product = products.find(p=>p.name===name && p.status!=='archive');
   if(product){
     if(product.price) document.getElementById('delivPrice').value = product.price;
@@ -3451,10 +3461,10 @@ function onDelivItemChange(){
 }
 
 function addToDeliveryList(){
-  const name  = document.getElementById('delivItemSelect')?.value;
-  const wood  = document.getElementById('delivWoodSelect')?.value;
-  const size  = document.getElementById('delivSizeSelect')?.value;
-  const qty   = parseInt(document.getElementById('delivQty')?.value)||1;
+  const name  = (document.getElementById('delivItemSelect')||{}).value;
+  const wood  = (document.getElementById('delivWoodSelect')||{}).value;
+  const size  = (document.getElementById('delivSizeSelect')||{}).value;
+  const qty   = parseInt((document.getElementById('delivQty')||{}).value)||1;
   if(!name){ showToast('Выберите изделие'); return; }
   _deliveryList.push({id:uid(), name, wood, size, qty});
   renderDeliveryList();
@@ -3548,11 +3558,11 @@ function renderDeliveryHistory(){
 }
 
 function addSelfBlank(){
-  const name    = document.getElementById('selfBlankItem')?.value;
-  const wood    = document.getElementById('selfBlankWood')?.value;
-  const size    = document.getElementById('selfBlankSize')?.value;
-  const qty     = parseInt(document.getElementById('selfBlankQty')?.value)||1;
-  const comment = document.getElementById('selfBlankComment')?.value.trim();
+  const name    = (document.getElementById('selfBlankItem')||{}).value;
+  const wood    = (document.getElementById('selfBlankWood')||{}).value;
+  const size    = (document.getElementById('selfBlankSize')||{}).value;
+  const qty     = parseInt((document.getElementById('selfBlankQty')||{}).value)||1;
+  const comment = (document.getElementById('selfBlankComment')||{}).value.trim();
   if(!name){ showToast('Выберите изделие'); return; }
 
   const emp = getEmployees().find(e=>e.id===session.id);
@@ -3569,7 +3579,7 @@ function addSelfBlank(){
     id: uid(), blankId,
     name, itemName: name, wood, size, qty,
     masterId: session.id, masterName: session.name,
-    masterRate: emp?.rate||0,
+    masterRate: (emp&&emp.rate)||0,
     status: 'in_work', isSelfAdded: true,
     createdAt: now(), startedAt: now(),
     itemNum: 'ВП-'+uid().toUpperCase()
@@ -3647,13 +3657,13 @@ function openManualStockMo(){
 }
 
 async function saveManualStock(){
-  const name    = document.getElementById('msName')?.value;
-  const wood    = document.getElementById('msWood')?.value;
-  const size    = document.getElementById('msSize')?.value;
-  const qty     = parseInt(document.getElementById('msQty')?.value)||1;
-  const price   = parseFloat(document.getElementById('msPrice')?.value)||0;
-  const artikul = document.getElementById('msArtikul')?.value.trim();
-  const comment = document.getElementById('msComment')?.value.trim();
+  const name    = (document.getElementById('msName')||{}).value;
+  const wood    = (document.getElementById('msWood')||{}).value;
+  const size    = (document.getElementById('msSize')||{}).value;
+  const qty     = parseInt((document.getElementById('msQty')||{}).value)||1;
+  const price   = parseFloat((document.getElementById('msPrice')||{}).value)||0;
+  const artikul = (document.getElementById('msArtikul')||{}).value.trim();
+  const comment = (document.getElementById('msComment')||{}).value.trim();
   if(!name){ showToast('Укажите название'); return; }
 
   const batch = db.batch();
@@ -3751,7 +3761,7 @@ function renderInvList(){
 
 function scanInvItem(){
   if(!_invStarted){ showToast('Сначала нажмите «▶ Начать»'); return; }
-  const raw = document.getElementById('invArtInput')?.value.trim();
+  const raw = (document.getElementById('invArtInput')||{}).value.trim();
   if(!raw){ showToast('Введите артикул'); return; }
 
   // Ищем по артикулу, затем по названию
@@ -3977,14 +3987,14 @@ function openAssignOtherTask(){
 }
 
 function assignOtherTask(){
-  const masterId = document.getElementById('otMaster')?.value;
-  const cat      = document.getElementById('otCategory')?.value;
-  const desc     = document.getElementById('otDesc')?.value.trim();
-  const pay      = parseFloat(document.getElementById('otPay')?.value)||0;
+  const masterId = (document.getElementById('otMaster')||{}).value;
+  const cat      = (document.getElementById('otCategory')||{}).value;
+  const desc     = (document.getElementById('otDesc')||{}).value.trim();
+  const pay      = parseFloat((document.getElementById('otPay')||{}).value)||0;
   if(!masterId||!cat){ showToast('Выберите мастера и тип'); return; }
   const master = getEmployees().find(e=>e.id===masterId);
   db.collection('ws_other_tasks').add({
-    masterId, masterName: master?.name||'',
+    masterId, masterName: (master&&master.name)||'',
     assignedById: session.id, assignedByName: session.name,
     category: cat, desc, pay,
     status: 'new',
@@ -3992,7 +4002,7 @@ function assignOtherTask(){
     sessions: [] // [{start, end, pausedAt}]
   }).then(()=>{
     closeMo('addOtherTaskMo');
-    showToast(`✅ Задача «${cat}» назначена мастеру ${master?.name||''}`);
+    showToast(`✅ Задача «${cat}» назначена мастеру ${(master&&master.name)||''}`);
   }).catch(e=>showToast('Ошибка: '+e.message));
 }
 

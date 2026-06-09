@@ -156,6 +156,16 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .checkbox-label{display:flex;align-items:center;gap:8px;padding:8px;background:var(--s2);border-radius:6px;cursor:pointer;margin-bottom:8px}
 .checkbox-label input{width:16px;height:16px;cursor:pointer}
 </style>
+
+<script>
+if('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('izhitsa-sw.js')
+      .then(function(reg){ console.log('SW registered'); })
+      .catch(function(e){ console.log('SW failed:', e); });
+  });
+}
+</script>
 </head>
 <body>
 
@@ -413,17 +423,13 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </div>
     <div class="card" id="staffShopSellers"></div>
 
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:8px">
-      <div style="font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700">🏭 Сотрудники мастерской</div>
-      <button class="btn sm" style="background:var(--a5);color:#fff;border:none" onclick="openMo('addWsMo')">＋ Добавить</button>
+    <!-- UNIFIED STAFF LIST -->
+    <div class="stitle">👥 Все сотрудники</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:12px;color:var(--t2)" id="staffCount">0 сотрудников</div>
+      <button class="btn sm" onclick="openMo('addStaffMo')">＋ Добавить</button>
     </div>
-    <div class="card" id="staffWsEmployees"></div>
-
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;margin-top:8px">
-      <div style="font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700">🔐 Пользователи системы</div>
-      <button class="btn sm sec" onclick="openMo('setupUsersMo')">＋ Добавить</button>
-    </div>
-    <div class="card" id="staffAdminUsers"></div>
+    <div id="unifiedStaffList"></div>
   </div>
 
   <!-- ANALYTICS -->
@@ -434,7 +440,6 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <div class="pc" onclick="setAnalyticsPeriod('quarter',this)">Квартал</div>
       <div class="pc" onclick="setAnalyticsPeriod('year',this)">Год</div>
     </div>
-    
     <div class="card">
       <div class="ctitle">Ключевые показатели</div>
       <div id="analyticsData"></div>
@@ -444,120 +449,157 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <!-- AUDIT LOG -->
   <div class="page" id="pg-audit">
     <div class="stitle">🔍 Аудит-лог</div>
-    
     <div class="card">
       <div class="ctitle">📋 История всех действий</div>
-      
       <div class="row2" style="margin-bottom:12px">
-        <div>
-          <label class="fl">Фильтр по пользователю</label>
-          <input class="fi" type="text" id="auditFilterUser" placeholder="Имя пользователя" onkeyup="renderAuditLog()">
-        </div>
-        <div>
-          <label class="fl">Тип действия</label>
+        <div><label class="fl">Пользователь</label><input class="fi" type="text" id="auditFilterUser" placeholder="Имя" onkeyup="renderAuditLog()"></div>
+        <div><label class="fl">Тип</label>
           <select class="fi" id="auditFilterAction" onchange="renderAuditLog()">
-            <option value="">Все действия</option>
-            <option value="LOGIN">Логин</option>
-            <option value="LOGOUT">Логаут</option>
-            <option value="ADD_OPERATION">Добавить операцию</option>
-            <option value="ADD_SELLER">Добавить продавца</option>
-            <option value="DELETE_SELLER">Удалить продавца</option>
-            <option value="CHANGE_PASSWORD">Смена пароля</option>
-            <option value="BLOCK_SELLER">Блокировка/Разблокировка</option>
-            <option value="ADD_DEBT">Добавить долг</option>
-            <option value="DELETE_DEBT">Удалить долг</option>
-            <option value="ADD_WS_EMPLOYEE">Добавить сотрудника</option>
-            <option value="DELETE_WS_EMPLOYEE">Удалить сотрудника</option>
+            <option value="">Все</option><option value="LOGIN">Логин</option><option value="LOGOUT">Логаут</option>
+            <option value="ADD_OPERATION">Операция</option><option value="ADD_SELLER">Продавец</option>
           </select>
         </div>
       </div>
-      
-      <div style="margin-bottom:12px">
-        <button onclick="downloadAuditLog()" style="background:var(--accent);border:none;border-radius:6px;padding:8px 16px;color:var(--bg);font-weight:600;cursor:pointer;font-size:12px">📥 Скачать логи</button>
-      </div>
-      
+      <div style="margin-bottom:12px"><button onclick="downloadAuditLog()" style="background:var(--accent);border:none;border-radius:6px;padding:8px 16px;color:var(--bg);font-weight:600;cursor:pointer;font-size:12px">📥 Скачать</button></div>
       <div id="auditLogList" style="max-height:600px;overflow-y:auto"></div>
     </div>
   </div>
 
-  <!-- SETTINGS -->
+  <!-- SETTINGS — единые справочники системы -->
   <div class="page" id="pg-settings">
-    <div class="stitle">⚙️ Настройки</div>
-    
-    <div class="card">
-      <div class="ctitle">🏪 Источники продаж</div>
-      <div id="setSourcesList"></div>
-      <div class="add-row" style="margin-top:8px">
-        <input class="fi" id="newSource" placeholder="Название источника (напр. Роза Хутор)">
-        <select class="fs" id="newSourceType" style="width:120px">
+    <div class="stitle">⚙️ Настройки системы</div>
+
+    <!-- SHOPS / CHANNELS -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="ctitle">🏪 Точки продаж и каналы</div>
+      <div id="setShopsList" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <input class="fi" id="newShopName" placeholder="Роза Хутор" style="flex:2;margin:0">
+        <select class="fs" id="newShopType" style="flex:1;margin:0">
           <option value="shop">🏪 Магазин</option>
           <option value="online">📱 Онлайн</option>
-          <option value="offline">📦 Офлайн/Опт</option>
+          <option value="offline">📦 Опт/Офлайн</option>
           <option value="workshop">🏭 Мастерская</option>
         </select>
       </div>
-      <button class="btn sm" onclick="addSalesSource()" style="margin-top:8px">＋ Добавить источник</button>
+      <button class="btn sm" onclick="addShop()">＋ Добавить</button>
     </div>
 
-    <div class="card"><div class="ctitle">Управление системой</div><p style="font-size:12px;color:var(--t2)">Функция в разработке</p></div>
-  </div>
-</div>
-
-<!-- MODALS -->
-<!-- Add Seller Modal -->
-<div id="addSellerMo" class="mo">
-  <div class="md">
-    <div class="mh"></div>
-    <div class="mt">＋ Добавить продавца</div>
-    <div class="fg"><label class="fl">Имя продавца</label><input class="fi" id="aSellerName" placeholder="Иванова Мария"></div>
-    <div class="fg"><label class="fl">Магазины (выберите один или несколько)</label><div id="aSellerShopsCheckboxes"></div></div>
-    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="aSellerPass" placeholder="Придумайте пароль"></div>
-    <button class="btn" onclick="addSellerFromStaff()" style="margin-bottom:8px">Добавить продавца</button>
-    <button class="btn sec" onclick="closeMo('addSellerMo')">Отмена</button>
-  </div>
-</div>
-
-<!-- Add Workshop Employee Modal -->
-<div id="addWsMo" class="mo">
-  <div class="md">
-    <div class="mh"></div>
-    <div class="mt">＋ Добавить сотрудника мастерской</div>
-    <div class="fg"><label class="fl">Имя</label><input class="fi" id="aWsName" placeholder="Иванов Иван"></div>
-    <div class="fg"><label class="fl">Должность</label>
-      <select class="fs" id="aWsRole">
-        <option value="заготовщик">🪚 Заготовщик</option>
-        <option value="мастер">🔨 Мастер</option>
-        <option value="кладовщик">📦 Кладовщик</option>
-        <option value="управляющий">👑 Управляющий мастерской</option>
-      </select>
+    <!-- ACCOUNTS -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="ctitle">🏦 Счета и кассы</div>
+      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Кассы магазинов, карты, РС счета</div>
+      <div id="setAccountsList" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <input class="fi" id="newAccName" placeholder="Сбер Ксения / Касса Горки" style="flex:2;margin:0">
+        <select class="fs" id="newAccType" style="flex:1;margin:0">
+          <option value="cash">💵 Касса</option>
+          <option value="card">💳 Карта</option>
+          <option value="bank">🏦 РС счёт</option>
+          <option value="online">📱 Онлайн</option>
+        </select>
+      </div>
+      <button class="btn sm" onclick="addAccount()">＋ Добавить</button>
     </div>
-    <div class="fg"><label class="fl">Ставка ЗП (₽/изделие)</label><input class="fi" type="number" id="aWsRate" placeholder="0" inputmode="numeric"></div>
-    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="aWsPass" placeholder="Придумайте пароль"></div>
-    <button class="btn purple" onclick="addWsEmployee()" style="margin-bottom:8px">Добавить сотрудника</button>
-    <button class="btn sec" onclick="closeMo('addWsMo')">Отмена</button>
+
+    <!-- PAYMENT METHODS -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="ctitle">💳 Способы оплаты</div>
+      <div id="setPayMethodsList" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <input class="fi" id="newPayMethod" placeholder="СБП / Терминал" style="flex:1;margin:0">
+      </div>
+      <button class="btn sm" onclick="addPayMethod()">＋ Добавить</button>
+    </div>
+
+    <!-- ZP SETTINGS per shop -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="ctitle">💰 Формулы ЗП по точкам</div>
+      <div id="setZpList"></div>
+    </div>
+
+    <!-- ITEMS BASE -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="ctitle">📦 База товаров</div>
+      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Общий каталог — доступен в магазинах и мастерской</div>
+      <div id="setItemsList" style="margin-bottom:8px;max-height:200px;overflow-y:auto"></div>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <input class="fi" id="newItemName" placeholder="Столешница дуб" style="flex:2;margin:0">
+        <input class="fi" id="newItemArticle" placeholder="Арт." style="flex:0.7;margin:0">
+        <input class="fi" type="number" id="newItemPrice" placeholder="₽" style="flex:0.7;margin:0">
+      </div>
+      <button class="btn sm" onclick="addItemToBase()">＋ Добавить товар</button>
+    </div>
+
+    <!-- SYSTEM -->
+    <div class="card">
+      <div class="ctitle">🔧 Управление системой</div>
+      <button class="btn sm sec" onclick="exportAllData()" style="margin-bottom:8px">📥 Экспорт всех данных</button>
+      <button class="btn sm red" onclick="clearLocalCache()">🗑 Очистить локальный кеш</button>
+    </div>
   </div>
 </div>
 
-<!-- Setup Users Modal -->
-<div id="setupUsersMo" class="mo">
+<!-- UNIFIED ADD STAFF MODAL -->
+<div id="addStaffMo" class="mo">
   <div class="md">
     <div class="mh"></div>
-    <div class="mt">🔐 Управление пользователями</div>
-    <div id="adminUsersList"></div>
-    <div class="sep" style="margin-top:16px;margin-bottom:16px"></div>
-    <div class="fg"><label class="fl">Новый администратор</label><input class="fi" id="newAdminName" placeholder="Фамилия Имя"></div>
-    <div class="fg"><label class="fl">Роль</label>
-      <select class="fs" id="newAdminRole">
-        <option value="admin">🔐 Администратор</option>
-        <option value="owner">👑 Владелец</option>
-        <option value="accountant">📊 Бухгалтер</option>
-      </select>
+    <div class="mt">👤 Добавить сотрудника</div>
+
+    <div class="fg"><label class="fl">Имя</label><input class="fi" id="staffName" placeholder="Иванова Мария"></div>
+    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="staffPass" placeholder="Придумайте пароль"></div>
+
+    <div class="fg">
+      <label class="fl">Роли в системе (можно несколько)</label>
+      <div style="display:flex;flex-direction:column;gap:6px" id="staffRolesBlock">
+        <!-- Admin module roles -->
+        <div style="font-size:11px;color:var(--t2);font-weight:700;margin-top:4px">📊 Администрирование</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="admin" data-module="admin" style="width:16px;height:16px"> Администратор системы
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="owner" data-module="admin" style="width:16px;height:16px"> Владелец бизнеса
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="accountant" data-module="admin" style="width:16px;height:16px"> Бухгалтер
+        </label>
+        <!-- Shop roles -->
+        <div style="font-size:11px;color:var(--t2);font-weight:700;margin-top:8px">🏪 Продажи (выберите точки)</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="seller" data-module="shop" style="width:16px;height:16px"> Продавец
+        </label>
+        <div id="staffShopsList" style="padding-left:24px;display:flex;flex-direction:column;gap:4px"></div>
+        <!-- Workshop roles -->
+        <div style="font-size:11px;color:var(--t2);font-weight:700;margin-top:8px">🏭 Мастерская</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="мастер" data-module="workshop" style="width:16px;height:16px"> Мастер
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="заготовщик" data-module="workshop" style="width:16px;height:16px"> Заготовщик
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="кладовщик" data-module="workshop" style="width:16px;height:16px"> Кладовщик
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="управляющий" data-module="workshop" style="width:16px;height:16px"> Управляющий мастерской
+        </label>
+      </div>
     </div>
-    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="newAdminPass" placeholder="Придумайте пароль"></div>
-    <button class="btn sec" onclick="addAdminUser()" style="margin-bottom:8px">Добавить администратора</button>
-    <button class="btn sec" onclick="closeMo('setupUsersMo')">Закрыть</button>
+
+    <div class="fg">
+      <label class="fl">ЗП ставка мастерской (₽/изделие)</label>
+      <input class="fi" type="number" id="staffWsRate" placeholder="0" inputmode="numeric">
+    </div>
+
+    <button class="btn" onclick="saveUnifiedStaff()" style="margin-bottom:8px">💾 Сохранить</button>
+    <button class="btn sec" onclick="closeMo('addStaffMo')">Отмена</button>
   </div>
 </div>
+
+<!-- Keep old modals for compatibility but hidden -->
+<div id="addSellerMo" class="mo" style="display:none!important"></div>
+<div id="addWsMo" class="mo" style="display:none!important"></div>
+<div id="setupUsersMo" class="mo" style="display:none!important"></div>
 
 <!-- TABS BAR -->
 <div class="tabs" id="tabsBar">
@@ -569,7 +611,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <button class="tab" onclick="switchTab('analytics',this)"><div class="ti">📊</div>Аналитика</button>
   <button class="tab" onclick="switchTab('shops',this)"><div class="ti">🏪</div>Магазины</button>
   <button class="tab" onclick="switchTab('prod',this)"><div class="ti">🏭</div>Мастерская</button>
-  <button class="tab" onclick="switchTab('staff',this)"><div class="ti">👥</div>Сотрудники</button>
+  <button class="tab" onclick="switchTab('staff',this);renderUnifiedStaff()"><div class="ti">👥</div>Сотрудники</button>
   <button class="tab" onclick="switchTab('audit',this)"><div class="ti">🔍</div>Аудит</button>
   <button class="tab" onclick="switchTab('settings',this)"><div class="ti">⚙️</div>Настройки</button>
 </div>
@@ -1457,9 +1499,417 @@ function saveOperation() {
 }
 
 
+
+// ════ UNIFIED STAFF SYSTEM ════
+// Single source of truth: iz_staff in Firestore
+// Each staff member has: id, name, pass, roles[], shops[], wsRate, blocked
+
+function getStaff() {
+  return JSON.parse(localStorage.getItem('iz_staff') || '[]');
+}
+function saveStaff(data) {
+  localStorage.setItem('iz_staff', JSON.stringify(data));
+  var obj = {staff: data, updatedAt: new Date().toISOString()};
+  db.collection('iz_settings').doc('staff').set(obj, {merge:true})
+    .catch(function(e){ console.log('saveStaff err', e); });
+  // Also sync derived lists for backward compatibility
+  _syncDerivedFromStaff(data);
+}
+
+function _syncDerivedFromStaff(staff) {
+  // Derive iz_sellers for shop module
+  var sellers = staff.filter(function(s){ return s.roles && s.roles.indexOf('seller') >= 0; })
+    .map(function(s){ return {id:s.id, name:s.name, pass:s.pass, shops:s.shops||[], blocked:s.blocked||false, rate:s.wsRate||0}; });
+  adminSyncSave('iz_sellers', sellers);
+
+  // Derive ws_employees for workshop module
+  var wsRoles = ['мастер','заготовщик','кладовщик','управляющий'];
+  var wsEmps = staff.filter(function(s){
+    return s.roles && s.roles.some(function(r){ return wsRoles.indexOf(r) >= 0; });
+  }).map(function(s){
+    var wsRole = s.roles.find(function(r){ return wsRoles.indexOf(r) >= 0; }) || 'мастер';
+    return {id:s.id, name:s.name, pass:s.pass, role:wsRole, rate:s.wsRate||0, blocked:s.blocked||false};
+  });
+  adminSyncSave('iz_ws_employees', wsEmps);
+
+  // Derive iz_shop_admins / iz_admin_users
+  var adminRoles = ['admin','owner','accountant'];
+  var admins = staff.filter(function(s){ return s.roles && s.roles.some(function(r){ return adminRoles.indexOf(r) >= 0; }); })
+    .map(function(s){ return {id:s.id, name:s.name, pass:s.pass, role:s.roles.find(function(r){ return adminRoles.indexOf(r)>=0; })||'admin'}; });
+  // Also add to iz_shop_admins so shop module can log in
+  var shopAdmins = staff.filter(function(s){ return s.roles && (s.roles.indexOf('admin')>=0 || s.roles.indexOf('owner')>=0); })
+    .map(function(s){ return {id:s.id, name:s.name, pass:s.pass}; });
+  if(!shopAdmins.length) shopAdmins = [{id:'admin_default', name:'Администратор', pass:'admin123'}];
+  localStorage.setItem('iz_shop_admins', JSON.stringify(shopAdmins));
+  db.collection('iz_settings').doc('admins').set({admins:shopAdmins, updatedAt:new Date().toISOString()}, {merge:true});
+}
+
+function openAddStaffModal() {
+  // Populate shop checkboxes
+  var shops = getShops();
+  var container = document.getElementById('staffShopsList');
+  if(container) {
+    container.innerHTML = shops.map(function(s) {
+      var name = s.name || s;
+      return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">' +
+        '<input type="checkbox" value="' + name + '" data-shopcheck="1" style="width:14px;height:14px"> ' + name + '</label>';
+    }).join('');
+  }
+  // Reset form
+  ['staffName','staffPass','staffWsRate'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  document.querySelectorAll('#staffRolesBlock input[type=checkbox]').forEach(function(cb){ cb.checked=false; });
+  openMo('addStaffMo');
+}
+
+function saveUnifiedStaff() {
+  var name = gv('staffName').trim();
+  var pass = gv('staffPass').trim();
+  if(!name || !pass) { alert('Введите имя и пароль'); return; }
+
+  var roles = [];
+  document.querySelectorAll('#staffRolesBlock input[type=checkbox]:checked').forEach(function(cb){
+    roles.push(cb.value);
+  });
+  if(!roles.length) { alert('Выберите хотя бы одну роль'); return; }
+
+  var shops = [];
+  document.querySelectorAll('#staffShopsList input[type=checkbox]:checked').forEach(function(cb){
+    shops.push(cb.value);
+  });
+
+  var wsRate = parseFloat(gv('staffWsRate')) || 0;
+  var staff = getStaff();
+  var existing = staff.findIndex(function(s){ return s.name === name; });
+  var entry = {
+    id: existing >= 0 ? staff[existing].id : uid(),
+    name: name, pass: pass, roles: roles, shops: shops,
+    wsRate: wsRate, blocked: false,
+    createdAt: existing >= 0 ? staff[existing].createdAt : new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdBy: session ? session.name : 'admin'
+  };
+  if(existing >= 0) staff[existing] = entry; else staff.push(entry);
+  saveStaff(staff);
+  closeMo('addStaffMo');
+  renderUnifiedStaff();
+  logAction('ADD_STAFF', {name: name, roles: roles});
+  alert('✅ Сотрудник сохранён');
+}
+
+function renderUnifiedStaff() {
+  var c = document.getElementById('unifiedStaffList'); if(!c) return;
+  var staff = getStaff();
+  var cnt = document.getElementById('staffCount');
+  if(cnt) cnt.textContent = staff.length + ' сотрудников';
+
+  if(!staff.length) {
+    c.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)"><div style="font-size:32px;margin-bottom:8px">👥</div>Нет сотрудников</div>';
+    return;
+  }
+
+  var roleLabels = {admin:'🔐 Администратор', owner:'👑 Владелец', accountant:'📊 Бухгалтер',
+    seller:'🏪 Продавец', мастер:'🔨 Мастер', заготовщик:'🪚 Заготовщик',
+    кладовщик:'📦 Кладовщик', управляющий:'👑 Управляющий'};
+
+  c.innerHTML = staff.map(function(s, i) {
+    var roleStr = (s.roles||[]).map(function(r){ return roleLabels[r]||r; }).join(' · ');
+    var shopStr = (s.shops||[]).length ? (s.shops||[]).join(', ') : '';
+    return '<div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+        '<div style="flex:1">' +
+          '<div style="font-size:13px;font-weight:700;color:' + (s.blocked?'var(--t2)':'var(--text)') + '">' + s.name + (s.blocked?' 🚫':'') + '</div>' +
+          '<div style="font-size:11px;color:var(--t2);margin-top:3px">' + roleStr + '</div>' +
+          (shopStr ? '<div style="font-size:11px;color:var(--a2);margin-top:2px">📍 ' + shopStr + '</div>' : '') +
+          (s.wsRate ? '<div style="font-size:11px;color:var(--a4);margin-top:2px">💰 ' + s.wsRate + '₽/шт</div>' : '') +
+        '</div>' +
+        '<div style="display:flex;gap:4px">' +
+          '<button onclick="editStaff(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--a2);cursor:pointer">✏️</button>' +
+          '<button onclick="toggleStaffBlock(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:' + (s.blocked?'var(--inc)':'var(--exp)') + ';cursor:pointer">' + (s.blocked?'✓':'⛔') + '</button>' +
+          '<button onclick="changeStaffPass(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--t2);cursor:pointer">🔑</button>' +
+          '<button onclick="deleteStaff(' + i + ')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:5px 8px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function editStaff(idx) {
+  var s = getStaff()[idx];
+  if(!s) return;
+  // Populate shop checkboxes first
+  var shops = getShops();
+  var container = document.getElementById('staffShopsList');
+  if(container) {
+    container.innerHTML = shops.map(function(sh) {
+      var name = sh.name || sh;
+      var checked = s.shops && s.shops.indexOf(name) >= 0 ? 'checked' : '';
+      return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">' +
+        '<input type="checkbox" value="' + name + '" data-shopcheck="1" ' + checked + ' style="width:14px;height:14px"> ' + name + '</label>';
+    }).join('');
+  }
+  // Fill form
+  var nameEl=document.getElementById('staffName'), passEl=document.getElementById('staffPass'), rateEl=document.getElementById('staffWsRate');
+  if(nameEl) nameEl.value = s.name;
+  if(passEl) passEl.value = s.pass;
+  if(rateEl) rateEl.value = s.wsRate || '';
+  // Check roles
+  document.querySelectorAll('#staffRolesBlock input[type=checkbox]').forEach(function(cb){
+    cb.checked = s.roles && s.roles.indexOf(cb.value) >= 0;
+  });
+  openMo('addStaffMo');
+}
+
+function toggleStaffBlock(idx) {
+  var staff = getStaff();
+  staff[idx].blocked = !staff[idx].blocked;
+  saveStaff(staff);
+  renderUnifiedStaff();
+}
+
+function changeStaffPass(idx) {
+  var staff = getStaff();
+  var np = prompt('Новый пароль для ' + staff[idx].name + ':');
+  if(np && np.trim()) { staff[idx].pass = np.trim(); saveStaff(staff); alert('✅ Пароль изменён'); }
+}
+
+function deleteStaff(idx) {
+  if(!confirm('Удалить сотрудника?')) return;
+  var staff = getStaff();
+  staff.splice(idx, 1);
+  saveStaff(staff);
+  renderUnifiedStaff();
+}
+
+// ════ SETTINGS FUNCTIONS ════
+
+function getAccounts() { return JSON.parse(localStorage.getItem('iz_accounts')||'[]'); }
+function saveAccounts(d) { adminSyncSave('iz_accounts', d); }
+function getPayMethods() { return JSON.parse(localStorage.getItem('iz_pay_methods')||'["Нал","Терминал","СБП","Перевод","QR"]'); }
+function savePayMethods(d) { adminSyncSave('iz_pay_methods', d); }
+
+function renderSettingsPage() {
+  renderShopsList();
+  renderAccountsList();
+  renderPayMethodsList();
+  renderZpList();
+  renderItemsBaseList();
+}
+
+function renderShopsList() {
+  var c = document.getElementById('setShopsList'); if(!c) return;
+  var shops = getShops();
+  if(!shops.length) { c.innerHTML='<div style="color:var(--t2);font-size:12px;padding:4px">Нет точек продаж</div>'; return; }
+  var typeIcons = {shop:'🏪',online:'📱',offline:'📦',workshop:'🏭'};
+  c.innerHTML = shops.map(function(s,i) {
+    var name=s.name||s, type=s.type||'shop';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:8px;margin-bottom:5px">' +
+      '<div><span style="font-size:13px">' + (typeIcons[type]||'🏪') + ' ' + name + '</span>' +
+      '<span style="font-size:10px;color:var(--t2);margin-left:6px">' + type + '</span></div>' +
+      '<button onclick="deleteShop(' + i + ')" style="background:none;border:none;color:var(--exp);font-size:14px;cursor:pointer">✕</button>' +
+    '</div>';
+  }).join('');
+}
+function addShop() {
+  var name = (document.getElementById('newShopName')||{}).value.trim();
+  var type = (document.getElementById('newShopType')||{}).value;
+  if(!name) { alert('Введите название'); return; }
+  var shops = getShops();
+  if(shops.some(function(s){ return (s.name||s)===name; })) { alert('Уже есть'); return; }
+  shops.push({name:name, type:type});
+  adminSyncSave('iz_shops', shops);
+  document.getElementById('newShopName').value = '';
+  renderShopsList();
+  // Also sync to iz_admin_shops
+  localStorage.setItem('iz_admin_shops', JSON.stringify(shops));
+}
+function deleteShop(idx) {
+  if(!confirm('Удалить точку продаж?')) return;
+  var shops = getShops(); shops.splice(idx,1);
+  adminSyncSave('iz_shops', shops);
+  renderShopsList();
+}
+
+function renderAccountsList() {
+  var c = document.getElementById('setAccountsList'); if(!c) return;
+  var accs = getAccounts();
+  if(!accs.length) { c.innerHTML='<div style="color:var(--t2);font-size:12px;padding:4px">Нет счетов</div>'; return; }
+  var icons={cash:'💵',card:'💳',bank:'🏦',online:'📱'};
+  c.innerHTML = accs.map(function(a,i){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:8px;margin-bottom:5px">' +
+      '<span style="font-size:13px">' + (icons[a.type]||'💳') + ' ' + a.name + '</span>' +
+      '<button onclick="deleteAccount(' + i + ')" style="background:none;border:none;color:var(--exp);font-size:14px;cursor:pointer">✕</button>' +
+    '</div>';
+  }).join('');
+}
+function addAccount() {
+  var name = (document.getElementById('newAccName')||{}).value.trim();
+  var type = (document.getElementById('newAccType')||{}).value;
+  if(!name) { alert('Введите название'); return; }
+  var accs = getAccounts();
+  accs.push({id:uid(),name:name,type:type});
+  saveAccounts(accs);
+  document.getElementById('newAccName').value='';
+  renderAccountsList();
+}
+function deleteAccount(idx) {
+  var accs = getAccounts(); accs.splice(idx,1); saveAccounts(accs); renderAccountsList();
+}
+
+function renderPayMethodsList() {
+  var c = document.getElementById('setPayMethodsList'); if(!c) return;
+  var methods = getPayMethods();
+  c.innerHTML = methods.map(function(m,i){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px;background:var(--s2);border-radius:8px;margin-bottom:4px">' +
+      '<span style="font-size:13px">💳 ' + m + '</span>' +
+      '<button onclick="deletePayMethod(' + i + ')" style="background:none;border:none;color:var(--exp);font-size:14px;cursor:pointer">✕</button>' +
+    '</div>';
+  }).join('');
+}
+function addPayMethod() {
+  var name = (document.getElementById('newPayMethod')||{}).value.trim();
+  if(!name) return;
+  var methods = getPayMethods();
+  if(methods.indexOf(name)<0) { methods.push(name); savePayMethods(methods); }
+  document.getElementById('newPayMethod').value='';
+  renderPayMethodsList();
+}
+function deletePayMethod(idx) {
+  var m = getPayMethods(); m.splice(idx,1); savePayMethods(m); renderPayMethodsList();
+}
+
+function renderZpList() {
+  var c = document.getElementById('setZpList'); if(!c) return;
+  var shops = getShops().filter(function(s){ return (s.type||'shop')==='shop'; });
+  var zp = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+  if(!shops.length) { c.innerHTML='<div style="color:var(--t2);font-size:12px">Сначала добавьте магазины</div>'; return; }
+  c.innerHTML = shops.map(function(s) {
+    var name=s.name||s, sid=encodeURIComponent(name).replace(/%/g,'_');
+    var cfg = zp[name]||{base:1500,threshold:5000,pct:8,travel:0};
+    return '<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">' +
+      '<div onclick="this.nextSibling.style.display=this.nextSibling.style.display===\'none\'?\'block\':\'none\'" style="padding:10px;background:var(--s2);cursor:pointer;font-size:13px;font-weight:700">🏪 ' + name + '</div>' +
+      '<div style="display:none;padding:10px">' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+          '<div><label class="fl">База (₽)</label><input class="fi" type="number" id="zp_base_'+sid+'" value="'+(cfg.base||1500)+'" inputmode="numeric"></div>' +
+          '<div><label class="fl">Порог (₽)</label><input class="fi" type="number" id="zp_thresh_'+sid+'" value="'+(cfg.threshold||5000)+'" inputmode="numeric"></div>' +
+          '<div><label class="fl">% выручки</label><input class="fi" type="number" id="zp_pct_'+sid+'" value="'+(cfg.pct||8)+'" step="0.5" inputmode="numeric"></div>' +
+          '<div><label class="fl">Проезд (₽)</label><input class="fi" type="number" id="zp_travel_'+sid+'" value="'+(cfg.travel||0)+'" inputmode="numeric"></div>' +
+        '</div>' +
+        '<button onclick="saveZpForShop(\''+name+'\',\''+sid+'\')" style="margin-top:8px;width:100%;padding:8px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+function saveZpForShop(name, sid) {
+  var zp = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+  zp[name] = {
+    base: parseFloat((document.getElementById('zp_base_'+sid)||{}).value)||1500,
+    threshold: parseFloat((document.getElementById('zp_thresh_'+sid)||{}).value)||5000,
+    pct: parseFloat((document.getElementById('zp_pct_'+sid)||{}).value)||8,
+    travel: parseFloat((document.getElementById('zp_travel_'+sid)||{}).value)||0,
+  };
+  adminSyncSave('iz_shop_zp_settings', zp);
+  alert('✅ ЗП для ' + name + ' сохранена');
+}
+
+function getItemsBase() { return JSON.parse(localStorage.getItem('iz_items')||'[]'); }
+function renderItemsBaseList() {
+  var c = document.getElementById('setItemsList'); if(!c) return;
+  var items = getItemsBase();
+  if(!items.length) { c.innerHTML='<div style="color:var(--t2);font-size:12px;padding:4px">Нет товаров</div>'; return; }
+  c.innerHTML = items.map(function(item,i){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid var(--border);font-size:12px">' +
+      '<div><span style="font-weight:600">' + item.name + '</span>' +
+      (item.num ? '<span style="color:var(--t2);margin-left:6px">№'+item.num+'</span>' : '') +
+      (item.price ? '<span style="color:var(--accent);margin-left:6px">'+item.price+'₽</span>' : '') +
+      '</div>' +
+      '<button onclick="deleteItemFromBase('+i+')" style="background:none;border:none;color:var(--exp);font-size:13px;cursor:pointer">✕</button>' +
+    '</div>';
+  }).join('');
+}
+function addItemToBase() {
+  var name = (document.getElementById('newItemName')||{}).value.trim();
+  var article = (document.getElementById('newItemArticle')||{}).value.trim();
+  var price = parseFloat((document.getElementById('newItemPrice')||{}).value)||0;
+  if(!name) { alert('Введите название'); return; }
+  var items = getItemsBase();
+  if(!items.some(function(i){ return i.name===name; })) {
+    items.push({id:uid(),name:name,num:article,price:price,addedAt:new Date().toISOString()});
+    items.sort(function(a,b){ return a.name.localeCompare(b.name,'ru'); });
+    adminSyncSave('iz_items', items);
+  }
+  document.getElementById('newItemName').value='';
+  document.getElementById('newItemArticle').value='';
+  document.getElementById('newItemPrice').value='';
+  renderItemsBaseList();
+}
+function deleteItemFromBase(idx) {
+  var items = getItemsBase(); items.splice(idx,1); adminSyncSave('iz_items',items); renderItemsBaseList();
+}
+
+function exportAllData() {
+  var data = {};
+  ['iz_staff','iz_shops','iz_accounts','iz_pay_methods','iz_items','iz_shop_zp_settings','iz_shifts','iz_transactions'].forEach(function(k){
+    try { data[k] = JSON.parse(localStorage.getItem(k)||'null'); } catch(e){}
+  });
+  var blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'izhitsa_export_' + new Date().toISOString().split('T')[0] + '.json';
+  a.click();
+}
+function clearLocalCache() {
+  if(!confirm('Очистить локальный кеш? Данные из Firestore подгрузятся снова при появлении интернета.')) return;
+  var keep = ['iz_staff','iz_shops','iz_accounts','iz_items'];
+  Object.keys(localStorage).forEach(function(k){ if(keep.indexOf(k)<0) localStorage.removeItem(k); });
+  alert('✅ Кеш очищен');
+}
+
+// ════ STAFF SYNC LISTENER ════
+function startStaffSyncListener() {
+  db.collection('iz_settings').doc('staff').onSnapshot(function(snap){
+    if(!snap.exists) return;
+    var val = snap.data().staff;
+    if(val) {
+      localStorage.setItem('iz_staff', JSON.stringify(val));
+      _syncDerivedFromStaff(val);
+    }
+  }, function(e){ console.log('staff sync err', e); });
+
+  // Also listen to pay_methods
+  db.collection('iz_settings').doc('pay_methods').onSnapshot(function(snap){
+    if(!snap.exists) return;
+    var val = snap.data().data;
+    if(val) localStorage.setItem('iz_pay_methods', JSON.stringify(val));
+  });
+}
+
+// ════ INIT & SWITCH TAB ════
+function switchTab(tab, el) {
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+  var pg = document.getElementById('pg-'+tab);
+  if(pg) pg.classList.add('active');
+  if(el) el.classList.add('active');
+  if(tab === 'staff') { renderUnifiedStaff(); openAddStaffModal; }
+  if(tab === 'settings') renderSettingsPage();
+  if(tab === 'pl') renderPL();
+  if(tab === 'debt') renderDebts();
+  if(tab === 'analytics') renderAnalytics();
+  if(tab === 'audit') renderAuditLog();
+  if(tab === 'dash') renderDashboard();
+  if(tab === 'shops') renderShopsAnalytics && renderShopsAnalytics();
+  if(tab === 'prod') populateWsEmployees && populateWsEmployees();
+}
+
+// Override old addSellerFromStaff / addWsEmployee / addAdminUser for compatibility
+function addSellerFromStaff(){ openAddStaffModal(); }
+function addWsEmployee(){ openAddStaffModal(); }
+
 // Initialize
+
 document.addEventListener('DOMContentLoaded', function() {
   startAdminSyncListeners();
+  startStaffSyncListener();
   // Init shops if not exist
   if(!localStorage.getItem('iz_shops')) {
     saveShops(['ОПИТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
