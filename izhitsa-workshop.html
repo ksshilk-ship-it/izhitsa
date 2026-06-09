@@ -171,7 +171,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
       </div>
     </div>
     <div style="margin-top:8px">
-      <div class="role-card" onclick="selectRole('администратор',this)" style="border-color:#6c3fc5">
+      <div class="role-card" onclick="selectRole('администратор',this)">
         <div class="ri">🛡</div>
         <div class="rn">Администратор</div>
         <div class="rs">Суперадмин</div>
@@ -222,7 +222,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
   <div class="page" id="pg-blanks">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="stitle" style="margin:0">Заготовки</div>
-      <button class="btn green" style="width:auto;padding:8px 14px;font-size:11px" onclick="renderMasterSelect();renderItemNameSelect();renderWoodSelect();openMo('addBlankMo')">＋ Выдать</button>
+      <button class="btn green" style="width:auto;padding:8px 14px;font-size:11px" onclick="renderMasterSelect();renderItemNameSelect();renderWoodSelect();renderSizeSelect();openMo('addBlankMo')">＋ Выдать</button>
     </div>
     <div class="card"><div class="ctitle">История выдач</div><div id="blanksList"></div></div>
   </div>
@@ -538,7 +538,14 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
       </div>
     </div>
     <div class="fg"><label class="fl">Количество заготовок</label><input class="fi" type="number" id="blankQty" placeholder="1" inputmode="numeric" value="1"></div>
-    <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="blankComment" placeholder="Размер, особенности..."></div>
+    <div class="fg">
+      <label class="fl">Размер</label>
+      <div style="display:flex;gap:8px">
+        <select class="fs" id="blankSize" style="flex:1"></select>
+        <button onclick="openAddSizeMo()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="blankComment" placeholder="Особенности, доп. info..."></div>
     <div class="fg"><label class="fl">Дата выдачи (по умолчанию — сегодня)</label>
       <input class="fi" type="date" id="blankDate">
     </div>
@@ -586,6 +593,21 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
     <div class="ctitle" style="margin-top:4px">Список пород</div>
     <div id="woodList"></div>
     <button class="btn sec" style="margin-top:12px" onclick="closeMo('addWoodMo')">Готово</button>
+  </div>
+</div>
+
+<!-- ДОБАВИТЬ РАЗМЕР -->
+<div class="mo" id="addSizeMo">
+  <div class="md"><div class="mh"></div><div class="mt">📐 Размеры</div>
+    <div class="fg"><label class="fl">Новый размер</label>
+      <div style="display:flex;gap:8px">
+        <input class="fi" id="newSizeInput" placeholder="1200×600, 800×400×40..." style="flex:1">
+        <button onclick="saveSize()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
+      </div>
+    </div>
+    <div class="ctitle" style="margin-top:4px">Список размеров</div>
+    <div id="sizeList"></div>
+    <button class="btn sec" style="margin-top:12px" onclick="closeMo('addSizeMo')">Готово</button>
   </div>
 </div>
 <div class="mo" id="blankDetailMo">
@@ -1037,6 +1059,58 @@ function deleteWood(i){
   renderWoodList();
 }
 
+// ════════ СПРАВОЧНИК РАЗМЕРОВ ════════
+function getSizes(){
+  return JSON.parse(localStorage.getItem('ws_sizes')||'["600×400","800×400","1000×600","1200×600","1400×700","1600×800","1800×900","2000×1000","2400×1200"]');
+}
+function saveSizes(arr){ localStorage.setItem('ws_sizes', JSON.stringify(arr)); }
+
+function renderSizeSelect(){
+  const sizes = getSizes();
+  const sel = document.getElementById('blankSize');
+  if(!sel) return;
+  sel.innerHTML = sizes.map(s=>`<option value="${s}">${s}</option>`).join('');
+}
+
+function renderSizeList(){
+  const sizes = getSizes();
+  const c = document.getElementById('sizeList'); if(!c) return;
+  c.innerHTML = sizes.map((s,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;font-size:13px">📐 ${s}</div>
+      <button onclick="deleteSize(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>
+    </div>`).join('');
+}
+
+function openAddSizeMo(){
+  renderSizeList();
+  document.getElementById('newSizeInput').value='';
+  openMo('addSizeMo');
+}
+
+function saveSize(){
+  const val = document.getElementById('newSizeInput').value.trim();
+  if(!val){ showToast('Введите размер'); return; }
+  const sizes = getSizes();
+  if(sizes.includes(val)){ showToast('Такой размер уже есть'); return; }
+  sizes.push(val);
+  saveSizes(sizes);
+  renderSizeSelect();
+  renderSizeList();
+  document.getElementById('newSizeInput').value='';
+  const sel = document.getElementById('blankSize');
+  if(sel) sel.value = val;
+  showToast(`✅ «${val}» добавлен`);
+}
+
+function deleteSize(i){
+  const sizes = getSizes();
+  sizes.splice(i,1);
+  saveSizes(sizes);
+  renderSizeSelect();
+  renderSizeList();
+}
+
 function markMasterNotifsRead(){
   const notifs = JSON.parse(localStorage.getItem('ws_new_master_notifs')||'[]');
   notifs.forEach(n=>n.read=true);
@@ -1093,21 +1167,22 @@ function quickAddMaster(){
 
 function addBlank(){
   const masterId=document.getElementById('blankMaster').value;
-  const itemName=document.getElementById('blankName').value.trim();
+  const itemName=document.getElementById('blankName').value;
   const wood=document.getElementById('blankWood').value;
+  const size=document.getElementById('blankSize').value;
   const qty=parseInt(document.getElementById('blankQty').value)||1;
   const comment=document.getElementById('blankComment').value.trim();
   if(!masterId||!itemName){showToast('Заполните мастера и изделие');return;}
   const master=getEmployees().find(e=>e.id===masterId);
   const blank={
-    id:uid(),itemName,wood,qty,comment,
+    id:uid(),itemName,wood,size,qty,comment,
     masterId,masterName:master?.name||'',
     createdById:session.id,createdByName:session.name,
     status:'new',createdAt:now()
   };
   db.collection('ws_blanks').add(blank)
     .then(()=>{
-      ['blankComment'].forEach(id=>document.getElementById(id).value='');
+      document.getElementById('blankComment').value='';
       document.getElementById('blankQty').value='1';
       closeMo('addBlankMo');
       showToast(`✅ Заготовки переданы мастеру ${master?.name||''}`);
@@ -1183,6 +1258,7 @@ function openBlankDetail(id){
     <div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:14px">
       <div style="font-size:15px;font-weight:700;margin-bottom:8px">${b.itemName}</div>
       <div class="at-row"><span class="at-lbl">Порода дерева</span><span class="at-val">🌳 ${b.wood||'—'}</span></div>
+      ${b.size?`<div class="at-row"><span class="at-lbl">Размер</span><span class="at-val">📐 ${b.size}</span></div>`:''}
       <div class="at-row"><span class="at-lbl">Количество</span><span class="at-val">${b.qty||1} шт.</span></div>
       <div class="at-row"><span class="at-lbl">От заготовщика</span><span class="at-val">${b.createdByName}</span></div>
       <div class="at-row"><span class="at-lbl">Передано</span><span class="at-val">${fmtDT(b.createdAt)}</span></div>

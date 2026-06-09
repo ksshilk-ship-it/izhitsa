@@ -852,7 +852,15 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 <!-- RECEIVE -->
 <div class="mo" id="receiveMo">
   <div class="md"><div class="mh"></div><div class="mt">📥 Приход товара</div>
-    <div class="fg"><label class="fl">Наименование</label><input class="fi" id="rcvName" placeholder="Название товара"></div>
+    <div class="row2">
+      <div class="fg" style="flex:0 0 120px"><label class="fl">Артикул</label>
+        <input class="fi" id="rcvArticle" placeholder="№" oninput="lookupReceiveItem(this.value)">
+      </div>
+      <div class="fg" style="flex:1"><label class="fl">Наименование</label>
+        <input class="fi" id="rcvName" placeholder="Название товара">
+      </div>
+    </div>
+    <div id="rcvLookupHint" style="display:none;background:#1e2a14;border:1px solid #c8f060;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px"></div>
     <div class="fg"><label class="fl">Количество / описание</label><input class="fi" id="rcvQty" placeholder="1 шт."></div>
     <div class="fg"><label class="fl">Цена розница (₽)</label><input class="fi" type="number" id="rcvPrice" placeholder="0" inputmode="numeric"></div>
     <div class="fg"><label class="fl">Поставщик / откуда</label><input class="fi" id="rcvFrom" placeholder="От кого получен..."></div>
@@ -1797,13 +1805,34 @@ function saveWriteoff(){
 }
 
 // ════ RECEIVE ════
+function lookupReceiveItem(num){
+  var hint = document.getElementById('rcvLookupHint');
+  if(!num.trim()){ if(hint) hint.style.display='none'; return; }
+  var items = JSON.parse(localStorage.getItem('iz_items')||'[]');
+  var found = items.find(function(i){ return String(i.num)===num.trim(); });
+  if(found){
+    var nameEl=document.getElementById('rcvName'), priceEl=document.getElementById('rcvPrice');
+    if(nameEl && !nameEl.value) nameEl.value = found.name||'';
+    if(priceEl && !priceEl.value) priceEl.value = found.price||'';
+    if(hint){
+      hint.style.display='block';
+      hint.innerHTML='✅ <strong>'+found.name+'</strong>'+(found.price?' · '+Math.round(found.price).toLocaleString('ru-RU')+'₽':'')+(found.status?' · '+found.status:'');
+    }
+  } else {
+    if(hint){ hint.style.display='block'; hint.innerHTML='<span style="color:#8888aa">Артикул не найден — заполните вручную</span>'; }
+  }
+}
+
 function saveReceive(){
   const name=gv('rcvName'),price=parseFloat(gv('rcvPrice'))||0;
   if(!name){showToast('Введите наименование');return;} if(!price){showToast('Введите цену');return;}
+  const article=gv('rcvArticle');
   journal.push({id:uid(),type:'receive',ts:new Date().toISOString(),icon:'📥',label:'Приход товара',
-    sub:name+(gv('rcvQty')?' · '+gv('rcvQty'):'')+' · '+gv('rcvFrom')+' · '+gv('rcvDate'),
-    amount:price,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:price});
-  saveJ(); ['rcvName','rcvQty','rcvPrice','rcvFrom'].forEach(id=>document.getElementById(id).value='');
+    sub:(article?'№'+article+' ':'')+name+(gv('rcvQty')?' · '+gv('rcvQty'):'')+' · '+gv('rcvFrom')+' · '+gv('rcvDate'),
+    amount:price,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:price,
+    article:article});
+  saveJ(); ['rcvArticle','rcvName','rcvQty','rcvPrice','rcvFrom'].forEach(id=>{var el=document.getElementById(id); if(el) el.value='';});
+  var hint=document.getElementById('rcvLookupHint'); if(hint) hint.style.display='none';
   closeMo('receiveMo'); renderAll(); showToast('📥 Товар принят: '+fmt(price));
 }
 
