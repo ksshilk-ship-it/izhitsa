@@ -1988,14 +1988,25 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   // Init users if not exist
+  // Init admin users - CRITICAL
   if(!localStorage.getItem('iz_admin_users')) {
-    saveAdminUsers([
+    const adminUsers = [
       {id: '1', name: 'Ксения', role: 'admin', pass: '1'},
       {id: '2', name: 'Елена', role: 'admin', pass: '1'},
       {id: '3', name: 'Владимир', role: 'owner', pass: '1'},
       {id: '4', name: 'Анна', role: 'accountant', pass: '1'}
-    ]);
+    ];
+    localStorage.setItem('iz_admin_users', JSON.stringify(adminUsers));
+    console.log('✅ Admin users initialized');
   }
+  
+  // Initialize first role on page load
+  setTimeout(function() {
+    const firstCard = document.querySelector('.role-card');
+    if(firstCard && !document.querySelector('.role-card.selected')) {
+      firstCard.click();
+    }
+  }, 100);
   
   // Check if logged in
   const saved = sessionStorage.getItem('iz_admin_session');
