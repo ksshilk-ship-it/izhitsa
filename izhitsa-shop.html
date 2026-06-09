@@ -85,15 +85,6 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 .ei{font-size:32px;margin-bottom:7px}
 .toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:9px 16px;font-size:13px;z-index:400;opacity:0;transition:opacity .3s;pointer-events:none;max-width:92%;text-align:center}
 .toast.show{opacity:1}
-/* Item name autocomplete */
-.item-input-wrap{position:relative}
-.item-dropdown{position:absolute;top:100%;left:0;right:0;background:#1a1a22;border:1px solid #c8f060;border-radius:10px;z-index:200;max-height:180px;overflow-y:auto;margin-top:3px;box-shadow:0 4px 20px rgba(0,0,0,.5)}
-.item-dropdown-item{padding:10px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid #2e2e3e;display:flex;justify-content:space-between;align-items:center}
-.item-dropdown-item:last-child{border-bottom:none}
-.item-dropdown-item:active,.item-dropdown-item:hover{background:#22222e}
-.item-dropdown-item .iname{font-weight:600;color:#f0f0f8}
-.item-dropdown-item .iart{font-size:11px;color:#8888aa}
-.item-add-btn{background:#c8f060;border:none;border-radius:8px;padding:6px 10px;font-weight:700;color:#0f0f13;cursor:pointer;font-size:14px;flex-shrink:0;margin-left:6px;line-height:1}
 </style>
 </head>
 <body>
@@ -769,16 +760,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
         <div id="siDiffWarn" style="display:none;margin-top:8px;padding:8px;background:#2e1a1a;border:1px solid #f06060;border-radius:8px;font-size:11px;color:#f06060"></div>
       </div>
       <div id="siManualBlock" style="display:none">
-        <div class="fg" style="margin-bottom:8px">
-          <label class="fl">Наименование</label>
-          <div style="display:flex;gap:6px;align-items:center">
-            <div class="item-input-wrap" style="flex:1">
-              <input class="fi" id="siNameM" placeholder="Введите вручную" oninput="showItemDropdown('siNameM','siNameMDrop',this.value)" onfocus="showItemDropdown('siNameM','siNameMDrop',this.value)" autocomplete="off">
-              <div class="item-dropdown" id="siNameMDrop" style="display:none"></div>
-            </div>
-            <button type="button" class="item-add-btn" onclick="openAddItemModal('siNameM','siNum','siPriceM')" title="Добавить в базу">＋</button>
-          </div>
-        </div>
+        <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label><input class="fi" id="siNameM" placeholder="Введите вручную"></div>
         <div class="fg" style="margin:0"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="siPriceM" placeholder="0" inputmode="numeric"></div>
       </div>
     </div>
@@ -811,7 +793,6 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
         <div class="pc" onclick="setPayM('transfer',this)">🏦 Перевод</div>
         <div class="pc" onclick="setPayM('qr',this)">🔲 QR</div>
         <div class="pc" onclick="setPayM('mixed',this)">➗ Смешанный</div>
-        <div class="pc" id="pcRS" onclick="setPayM('rs',this)">🏦 РС</div>
       </div>
     </div>
     <div id="mixedBlock" style="display:none" class="row2">
@@ -840,13 +821,6 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
         <option value="">— выберите карту —</option>
       </select>
     </div>
-    <!-- RS account selector -->
-    <div id="rsAccountBlock" style="display:none" class="fg">
-      <label class="fl">На какой РС</label>
-      <select class="fs" id="rsAccountSelect">
-        <option value="">— выберите счёт —</option>
-      </select>
-    </div>
     <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="saleComment" placeholder="Необязательно"></div>
     <button class="btn" onclick="saveSale()">✅ Зафиксировать продажу</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('saleMo')">Отмена</button>
@@ -857,17 +831,8 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 <div class="mo" id="woMo">
   <div class="md"><div class="mh"></div><div class="mt">Списание</div>
     <div class="row2">
-      <div class="fg"><label class="fl">Артикул</label><input class="fi" id="woNum" placeholder="001" oninput="woLookupByArticle(this.value)"></div>
-      <div class="fg">
-        <label class="fl">Наименование</label>
-        <div style="display:flex;gap:6px;align-items:center">
-          <div class="item-input-wrap" style="flex:1">
-            <input class="fi" id="woName" placeholder="Изделие..." oninput="showItemDropdown('woName','woNameDrop',this.value)" onfocus="showItemDropdown('woName','woNameDrop',this.value)" autocomplete="off">
-            <div class="item-dropdown" id="woNameDrop" style="display:none"></div>
-          </div>
-          <button type="button" class="item-add-btn" onclick="openAddItemModal('woName','woNum','woAmt')" title="Добавить в базу">＋</button>
-        </div>
-      </div>
+      <div class="fg"><label class="fl">Артикул</label><input class="fi" id="woNum" placeholder="001"></div>
+      <div class="fg"><label class="fl">Наименование</label><input class="fi" id="woName" placeholder="Изделие..."></div>
     </div>
     <div class="fg"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="woAmt" placeholder="0" inputmode="numeric"></div>
     <div class="fg"><label class="fl">Причина (обязательно)</label><input class="fi" id="woReason" placeholder="Укажите причину..."></div>
@@ -883,15 +848,8 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <div class="fg" style="flex:0 0 120px"><label class="fl">Артикул</label>
         <input class="fi" id="rcvArticle" placeholder="№" oninput="lookupReceiveItem(this.value)">
       </div>
-      <div class="fg" style="flex:1">
-        <label class="fl">Наименование</label>
-        <div style="display:flex;gap:6px;align-items:center">
-          <div class="item-input-wrap" style="flex:1">
-            <input class="fi" id="rcvName" placeholder="Название товара" oninput="showItemDropdown('rcvName','rcvNameDrop',this.value)" onfocus="showItemDropdown('rcvName','rcvNameDrop',this.value)" autocomplete="off">
-            <div class="item-dropdown" id="rcvNameDrop" style="display:none"></div>
-          </div>
-          <button type="button" class="item-add-btn" onclick="openAddItemModal('rcvName','rcvArticle','rcvPrice')" title="Добавить в базу">＋</button>
-        </div>
+      <div class="fg" style="flex:1"><label class="fl">Наименование</label>
+        <input class="fi" id="rcvName" placeholder="Название товара">
       </div>
     </div>
     <div id="rcvLookupHint" style="display:none;background:#1e2a14;border:1px solid #c8f060;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px"></div>
@@ -1176,28 +1134,6 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <button class="btn" onclick="confirmPhotoImport()">💾 Сохранить в журнал</button>
       <button class="btn sec" onclick="closeMo('duConfirmMo')">Отмена</button>
     </div>
-  </div>
-</div>
-
-<!-- ADD ITEM TO BASE MODAL -->
-<div class="mo" id="addItemMo">
-  <div class="md"><div class="mh"></div>
-    <div class="mt">＋ Добавить в базу товаров</div>
-    <div class="al-info" style="margin-bottom:12px;font-size:11px">Товар сохранится в общую базу — будет доступен в продажах, списаниях, приходах и в мастерской.</div>
-    <div class="fg"><label class="fl">Наименование</label><input class="fi" id="addItemName" placeholder="Название изделия"></div>
-    <div class="row2">
-      <div class="fg"><label class="fl">Артикул</label><input class="fi" id="addItemArticle" placeholder="№"></div>
-      <div class="fg"><label class="fl">Цена розница (₽)</label><input class="fi" type="number" id="addItemPrice" placeholder="0" inputmode="numeric"></div>
-    </div>
-    <div class="fg">
-      <label class="fl">Тип</label>
-      <div style="display:flex;gap:8px">
-        <button type="button" id="addItemDerevo" onclick="setAddItemType('derevo',this)" style="flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">🌳 Дерево</button>
-        <button type="button" id="addItemDr" onclick="setAddItemType('dr',this)" style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;cursor:pointer">🛍 Другой</button>
-      </div>
-    </div>
-    <button class="btn" onclick="confirmAddItem()">💾 Сохранить в базу</button>
-    <button class="btn sec" style="margin-top:8px" onclick="closeMo('addItemMo')">Отмена</button>
   </div>
 </div>
 
@@ -1846,8 +1782,6 @@ function saveSale(){
     }
   }
   saveJ(); resetSaleForm(); closeMo('saleMo'); renderAll();
-  // Auto-save any new item names to the base
-  saleItems.forEach(function(it){ if(it.name) autoSaveToItemBase(it.name, it.num||'', it.price||0, it.goodsType||'derevo'); });
   showToast('✅ Продажа '+fmt(paid)+' зафиксирована'+(sourceShop?' · уведомление в '+sourceShop:''));
 }
 
@@ -1855,13 +1789,10 @@ function saveSale(){
 function saveWriteoff(){
   const reason=gv('woReason'); if(!reason){showToast('Укажите причину');return;}
   const amt=parseFloat(gv('woAmt'))||0; if(!amt){showToast('Введите сумму');return;}
-  const woName=gv('woName'), woNum=gv('woNum');
-  autoSaveToItemBase(woName, woNum, amt, 'derevo');
   journal.push({id:uid(),type:'writeoff',ts:new Date().toISOString(),icon:'🗑️',label:'Списание',
-    sub:(woNum?'№'+woNum+' ':'')+woName+' · '+reason,
+    sub:(gv('woNum')?'№'+gv('woNum')+' ':'')+gv('woName')+' · '+reason,
     amount:amt,amtCls:'exp',amtSign:'−',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:-amt});
-  saveJ(); ['woNum','woName','woAmt','woReason'].forEach(id=>{var el=document.getElementById(id);if(el)el.value='';});
-  var d=document.getElementById('woNameDrop'); if(d) d.style.display='none';
+  saveJ(); ['woNum','woName','woAmt','woReason'].forEach(id=>document.getElementById(id).value='');
   closeMo('woMo'); renderAll(); showToast('🗑️ Списание зафиксировано');
 }
 
@@ -1888,14 +1819,12 @@ function saveReceive(){
   const name=gv('rcvName'),price=parseFloat(gv('rcvPrice'))||0;
   if(!name){showToast('Введите наименование');return;} if(!price){showToast('Введите цену');return;}
   const article=gv('rcvArticle');
-  autoSaveToItemBase(name, article, price, 'derevo');
   journal.push({id:uid(),type:'receive',ts:new Date().toISOString(),icon:'📥',label:'Приход товара',
     sub:(article?'№'+article+' ':'')+name+(gv('rcvQty')?' · '+gv('rcvQty'):'')+' · '+gv('rcvFrom')+' · '+gv('rcvDate'),
     amount:price,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:price,
     article:article});
   saveJ(); ['rcvArticle','rcvName','rcvQty','rcvPrice','rcvFrom'].forEach(id=>{var el=document.getElementById(id); if(el) el.value='';});
   var hint=document.getElementById('rcvLookupHint'); if(hint) hint.style.display='none';
-  var drop=document.getElementById('rcvNameDrop'); if(drop) drop.style.display='none';
   closeMo('receiveMo'); renderAll(); showToast('📥 Товар принят: '+fmt(price));
 }
 
@@ -4748,169 +4677,6 @@ function renderActivatedList(){
       '<div style="font-size:11px;color:#8888aa;margin-top:3px">'+a.shopName+' · '+a.count+' записей · '+a.activatedAt.split('T')[0]+' · '+a.by+'</div>'+
     '</div>';
   }).join('');
-}
-
-
-// ════ ITEM BASE (iz_items shared catalog) ════
-
-function getItemsBase() {
-  return JSON.parse(localStorage.getItem('iz_items')||'[]');
-}
-function saveItemsBase(items) {
-  localStorage.setItem('iz_items', JSON.stringify(items));
-  // Sync to Firestore so workshop and admin see it too
-  try { db.collection('iz_settings').doc('items_catalog').set({items: items, updatedAt: new Date().toISOString()}); } catch(e) {}
-}
-
-// Add or update item in base. Returns the item.
-function addOrUpdateItemBase(name, article, price, type) {
-  if(!name || !name.trim()) return null;
-  var items = getItemsBase();
-  var existing = items.find(function(i){
-    return i.name && i.name.toLowerCase() === name.trim().toLowerCase();
-  });
-  if(existing) {
-    // Update article/price if provided and not already set
-    if(article && !existing.num) existing.num = article;
-    if(price && !existing.price) existing.price = price;
-    saveItemsBase(items);
-    return existing;
-  }
-  var newItem = {
-    id: uid(),
-    name: name.trim(),
-    num: article || '',
-    price: parseFloat(price) || 0,
-    type: type || 'derevo',
-    status: 'shop',
-    addedAt: new Date().toISOString(),
-    addedBy: (session && session.name) || 'seller'
-  };
-  items.push(newItem);
-  // Sort alphabetically
-  items.sort(function(a,b){ return (a.name||'').localeCompare(b.name||'', 'ru'); });
-  saveItemsBase(items);
-  return newItem;
-}
-
-// Show autocomplete dropdown for a name input
-function showItemDropdown(inputId, dropId, query) {
-  var drop = document.getElementById(dropId);
-  if(!drop) return;
-  var q = (query||'').trim().toLowerCase();
-  var items = getItemsBase();
-  var filtered = q
-    ? items.filter(function(i){ return i.name && i.name.toLowerCase().includes(q); })
-    : items.slice(0, 30); // show first 30 when empty
-  filtered = filtered.slice(0, 20); // max 20 in dropdown
-
-  if(!filtered.length) { drop.style.display = 'none'; return; }
-
-  drop.style.display = 'block';
-  drop.innerHTML = filtered.map(function(item){
-    return '<div class="item-dropdown-item" onmousedown="selectItemFromDrop(\''+inputId+'\',\''+dropId+'\','+JSON.stringify(item.name).replace(/'/g,"\\'")+','+JSON.stringify(item.num||'').replace(/'/g,"\\'")+','+(item.price||0)+')">'+
-      '<span class="iname">'+item.name+'</span>'+
-      '<span class="iart">'+(item.num?'№'+item.num+' ':'')+(item.price?Math.round(item.price).toLocaleString('ru-RU')+'₽':'')+'</span>'+
-    '</div>';
-  }).join('');
-
-  // Close on outside click
-  if(!drop._closeListener) {
-    drop._closeListener = true;
-    document.addEventListener('click', function handler(e){
-      var inp = document.getElementById(inputId);
-      if(inp && !inp.contains(e.target) && !drop.contains(e.target)){
-        drop.style.display='none';
-      }
-    });
-  }
-}
-
-function selectItemFromDrop(inputId, dropId, name, article, price) {
-  var inp = document.getElementById(inputId);
-  if(inp) inp.value = name;
-  var drop = document.getElementById(dropId);
-  if(drop) drop.style.display = 'none';
-  // Fill related article/price fields based on inputId
-  if(inputId === 'woName') {
-    var artEl = document.getElementById('woNum'), amtEl = document.getElementById('woAmt');
-    if(artEl && !artEl.value) artEl.value = article;
-    if(amtEl && !amtEl.value && price) amtEl.value = price;
-  } else if(inputId === 'rcvName') {
-    var artEl = document.getElementById('rcvArticle'), prEl = document.getElementById('rcvPrice');
-    if(artEl && !artEl.value) artEl.value = article;
-    if(prEl && !prEl.value && price) prEl.value = price;
-  } else if(inputId === 'siNameM') {
-    var prEl = document.getElementById('siPriceM');
-    if(prEl && !prEl.value && price) prEl.value = price;
-  }
-}
-
-// Lookup by article for writeoff
-function woLookupByArticle(num) {
-  if(!num.trim()) return;
-  var items = getItemsBase();
-  var found = items.find(function(i){ return String(i.num) === num.trim(); });
-  if(found) {
-    var nameEl = document.getElementById('woName'), amtEl = document.getElementById('woAmt');
-    if(nameEl && !nameEl.value) nameEl.value = found.name || '';
-    if(amtEl && !amtEl.value && found.price) amtEl.value = found.price;
-  }
-}
-
-// Open "add to base" modal, prefilling from current input
-var _addItemContext = {nameId:'', articleId:'', priceId:''};
-var _addItemType = 'derevo';
-function openAddItemModal(nameId, articleId, priceId) {
-  _addItemContext = {nameId: nameId, articleId: articleId, priceId: priceId};
-  _addItemType = 'derevo';
-  var name = (document.getElementById(nameId)||{}).value || '';
-  var article = (document.getElementById(articleId)||{}).value || '';
-  var price = (document.getElementById(priceId)||{}).value || '';
-  var nameEl = document.getElementById('addItemName');
-  var artEl = document.getElementById('addItemArticle');
-  var prEl = document.getElementById('addItemPrice');
-  if(nameEl) nameEl.value = name;
-  if(artEl) artEl.value = article;
-  if(prEl) prEl.value = price;
-  setAddItemType('derevo', document.getElementById('addItemDerevo'));
-  openMo('addItemMo');
-}
-function setAddItemType(type, el) {
-  _addItemType = type;
-  var btns = {'derevo': 'addItemDerevo', 'dr': 'addItemDr'};
-  Object.keys(btns).forEach(function(t){
-    var b = document.getElementById(btns[t]); if(!b) return;
-    var active = t === type;
-    b.style.borderWidth = active ? '2px' : '1px';
-    b.style.background = active ? '#1e2a14' : '#22222e';
-    b.style.color = active ? '#c8f060' : '#8888aa';
-    b.style.borderColor = active ? '#c8f060' : '#2e2e3e';
-    b.style.fontWeight = active ? '700' : '400';
-  });
-}
-function confirmAddItem() {
-  var name = ((document.getElementById('addItemName')||{}).value||'').trim();
-  var article = ((document.getElementById('addItemArticle')||{}).value||'').trim();
-  var price = parseFloat((document.getElementById('addItemPrice')||{}).value)||0;
-  if(!name) { showToast('Введите наименование'); return; }
-  var item = addOrUpdateItemBase(name, article, price, _addItemType);
-  // Fill back into the originating input
-  var nameEl = document.getElementById(_addItemContext.nameId);
-  var artEl = document.getElementById(_addItemContext.articleId);
-  var prEl = document.getElementById(_addItemContext.priceId);
-  if(nameEl) nameEl.value = item.name;
-  if(artEl && article) artEl.value = article;
-  if(prEl && price) prEl.value = price;
-  closeMo('addItemMo');
-  showToast('✅ «'+name+'» сохранён в базу товаров');
-}
-
-// Auto-save to base when a sale/writeoff/receive is saved
-function autoSaveToItemBase(name, article, price, type) {
-  if(name && name.trim()) {
-    addOrUpdateItemBase(name.trim(), article||'', price||0, type||'derevo');
-  }
 }
 
 function init(){
