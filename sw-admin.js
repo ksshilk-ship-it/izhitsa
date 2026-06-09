@@ -2,36 +2,38 @@
 const CACHE_NAME = 'izhitsa-admin-v1';
 const URLS_TO_CACHE = [
   './izhitsa-admin.html',
-  './manifest-admin.json',
-  './'
+  './manifest-admin.json'
 ];
 
 // Install event - cache files
 self.addEventListener('install', event => {
-  console.log('[Service Worker] Installing...');
+  console.log('[SW] Installing...');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('[Service Worker] Caching essential files');
-        return cache.addAll(URLS_TO_CACHE).catch(err => {
-          console.warn('[Service Worker] Some files could not be cached:', err);
-          // Continue even if some files fail
+        console.log('[SW] Caching files');
+        return cache.addAll(URLS_TO_CACHE).catch(() => {
+          // Continue even if caching fails
+          console.warn('[SW] Cache failed, continuing anyway');
         });
       })
-      .then(() => self.skipWaiting())
+      .then(() => {
+        console.log('[SW] Skipping waiting');
+        self.skipWaiting();
+      })
   );
 });
 
-// Activate event - clean old caches
+// Activate event
 self.addEventListener('activate', event => {
-  console.log('[Service Worker] Activating...');
+  console.log('[SW] Activating');
   event.waitUntil(
-    caches.keys().then(cacheNames => {
+    caches.keys().then(names => {
       return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('[Service Worker] Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
+        names.map(name => {
+          if (name !== CACHE_NAME) {
+            console.log('[SW] Deleting old cache:', name);
+            return caches.delete(name);
           }
         })
       );
@@ -39,70 +41,27 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event
 self.addEventListener('fetch', event => {
-  const { request } = event;
+  const {request} = event;
   
-  // Skip non-GET requests
-  if (request.method !== 'GET') {
-    return;
-  }
+  if (request.method !== 'GET') return;
   
-  // Skip external URLs
-  if (!request.url.startsWith(self.location.origin)) {
-    return;
-  }
-  
-  // Network first for API calls and dynamic content
-  if (request.url.includes('/api/') || request.url.includes('firebase')) {
-    event.respondWith(
-      fetch(request)
-        .then(response => {
-          // Cache successful responses
-          if (response && response.status === 200) {
-            const cache = caches.open(CACHE_NAME);
-            cache.then(c => c.put(request, response.clone()));
-          }
-          return response;
-        })
-        .catch(() => {
-          // Fallback to cache if network fails
-          return caches.match(request)
-            .then(response => response || new Response('Offline', {status: 503}));
-        })
-    );
-    return;
-  }
-  
-  // Cache first for static assets
+  // Network first for everything
   event.respondWith(
-    caches.match(request)
+    fetch(request)
       .then(response => {
-        if (response) {
-          return response;
-        }
+        if (!response || response.status !== 200) return response;
         
-        return fetch(request)
-          .then(response => {
-            // Cache successful HTML responses
-            if (response && response.status === 200 && 
-                (request.url.endsWith('.html') || request.url.endsWith('/'))) {
-              const cache = caches.open(CACHE_NAME);
-              cache.then(c => c.put(request, response.clone()));
-            }
-            return response;
-          })
-          .catch(() => {
-            // Return offline page if available
-            return caches.match('./izhitsa-admin.html');
-          });
+        // Cache successful responses
+        const cache = caches.open(CACHE_NAME);
+        cache.then(c => c.put(request, response.clone()));
+        return response;
+      })
+      .catch(() => {
+        // Fallback to cache on offline
+        return caches.match(request)
+          .then(cached => cached || caches.match('./izhitsa-admin.html'));
       })
   );
-});
-
-// Handle messages from clients
-self.addEventListener('message', event => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
 });
