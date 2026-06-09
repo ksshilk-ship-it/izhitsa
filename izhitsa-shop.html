@@ -1167,7 +1167,7 @@ function pick(role) {
     if(label) label.textContent='Администратор';
     if(lb){ lb.textContent='Войти →'; lb.style.background='#a060f0'; lb.style.color='#fff'; }
     var admins = JSON.parse(localStorage.getItem('iz_shop_admins')||'[]');
-    if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; localStorage.setItem('iz_shop_admins',JSON.stringify(admins)); }
+    if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; saveShopAdmins(admins); }
     if(selEl) selEl.innerHTML = admins.map(function(a){ return '<option value="'+a.id+'">'+a.name+'</option>'; }).join('');
     // Show preview mode button
     var prevBtn = document.getElementById('previewModeBtn');
@@ -1193,7 +1193,52 @@ firebase.initializeApp({
   appId:"1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
 });
 const db = firebase.firestore();
-db.enablePersistence().catch(e=>console.log('Persist:',e.code));
+db.enablePersistence({synchronizeTabs:true}).catch(e=>console.log('Persist:',e.code));
+
+// ════ FIRESTORE SYNC LAYER ════
+var _syncUnsubs = {};
+var SYNC_SETTINGS = {
+  'iz_admin_shops':      {doc:'shops',    field:'shops'},
+  'iz_shop_admins':      {doc:'admins',   field:'admins'},
+  'iz_sellers':          {doc:'sellers',  field:'sellers'},
+  'iz_shop_zp_settings': {doc:'zp',       field:'zp'},
+  'iz_items':            {doc:'items',    field:'items'},
+  'iz_accounts':         {doc:'accounts', field:'accounts'},
+};
+function syncListen(lsKey) {
+  var m = SYNC_SETTINGS[lsKey]; if(!m || _syncUnsubs[lsKey]) return;
+  _syncUnsubs[lsKey] = db.collection('iz_settings').doc(m.doc).onSnapshot(function(snap){
+    if(!snap.exists) return;
+    var val = snap.data()[m.field];
+    if(val !== undefined) {
+      localStorage.setItem(lsKey, JSON.stringify(val));
+      if(lsKey === 'iz_admin_shops' || lsKey === 'iz_sellers') { try { pick(loginRole); } catch(e){} }
+    }
+  }, function(e){ console.log('syncListen err', lsKey, e.code||e); });
+}
+function syncSave(lsKey, data) {
+  localStorage.setItem(lsKey, JSON.stringify(data));
+  var m = SYNC_SETTINGS[lsKey]; if(!m) return;
+  var obj = {}; obj[m.field] = data; obj.updatedAt = new Date().toISOString();
+  db.collection('iz_settings').doc(m.doc).set(obj, {merge:true}).catch(function(e){ console.log('syncSave err', lsKey, e.code||e); });
+}
+function syncListenCollection(lsKey, colName) {
+  if(_syncUnsubs[lsKey]) return;
+  _syncUnsubs[lsKey] = db.collection(colName).onSnapshot(function(snap){
+    var docs = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
+    docs.sort(function(a,b){ return (b.date||b.closedAt||b.createdAt||'').localeCompare(a.date||a.closedAt||a.createdAt||''); });
+    localStorage.setItem(lsKey, JSON.stringify(docs));
+  }, function(e){ console.log('col sync err', colName, e.code||e); });
+}
+function startSyncListeners() {
+  Object.keys(SYNC_SETTINGS).forEach(syncListen);
+  syncListenCollection('iz_shifts', 'iz_shifts');
+  syncListenCollection('iz_invoices', 'iz_invoices');
+  syncListenCollection('iz_psj', 'iz_psj');
+  syncListenCollection('iz_shop_notifications', 'iz_shop_notifications');
+}
+
+
 
 
 // ════ STATE ════
@@ -1209,10 +1254,12 @@ let blockSellerAction = null;
 const KEY = {session:'iz_shop_session',journal:'iz_shop_journal',shifts:'iz_shifts'};
 function getSellers(){ return JSON.parse(localStorage.getItem('iz_sellers')||'[]'); }
 function getShopAdmins(){ return JSON.parse(localStorage.getItem('iz_shop_admins')||'[]'); }
-function saveShopAdmins(d){ localStorage.setItem('iz_shop_admins',JSON.stringify(d)); }
+function saveShopAdmins(d){ syncSave('iz_shop_admins', d); }
 function getInvoices(){ return JSON.parse(localStorage.getItem('iz_invoices')||'[]'); }
 function saveInvoices(d){ localStorage.setItem('iz_invoices',JSON.stringify(d)); }
 function getShops(){ return JSON.parse(localStorage.getItem('iz_admin_shops')||'[]'); }
+function saveShops(d){ syncSave('iz_admin_shops', d); }
+function saveSellers(d){ syncSave('iz_sellers', d); }
 function getShopNames(){ var s=getShops(); return s.length?s.map(x=>x.name):['Дерево','ДР Товар']; }
 function getShopType(name){
   var shops=getShops();
@@ -3382,7 +3429,6 @@ function getShopZpSettings(){
 }
 function saveShopZpSettingsData(d){
   localStorage.setItem('iz_shop_zp_settings', JSON.stringify(d));
-  try{ db.collection('iz_settings').doc('zp').set(d); }catch(e){}
 }
 
 // ── Shop management ──
@@ -3406,8 +3452,7 @@ function addShopAdmin(){
   var shops=getShops();
   if(shops.some(function(s){return (s.name||s)===name;})){showToast('Такой магазин уже есть');return;}
   shops.push({name:name,type:type});
-  localStorage.setItem('iz_admin_shops',JSON.stringify(shops));
-  try{db.collection('iz_settings').doc('shops').set({shops:shops});}catch(e){}
+  saveShops(shops);
   document.getElementById('newShopName').value='';
   renderShopsManage(); renderShopSettings();
   showToast('✅ Магазин добавлен');
@@ -3415,8 +3460,7 @@ function addShopAdmin(){
 function deleteShopAdmin(idx){
   if(!confirm('Удалить магазин?')) return;
   var shops=getShops(); shops.splice(idx,1);
-  localStorage.setItem('iz_admin_shops',JSON.stringify(shops));
-  try{db.collection('iz_settings').doc('shops').set({shops:shops});}catch(e){}
+  saveShops(shops);
   renderShopsManage(); renderShopSettings();
   showToast('🗑 Магазин удалён');
 }
@@ -3440,13 +3484,13 @@ function addAccountAdmin(){
   if(!name){showToast('Введите название');return;}
   var accounts=JSON.parse(localStorage.getItem('iz_accounts')||'[]');
   accounts.push({name:name,type:type});
-  localStorage.setItem('iz_accounts',JSON.stringify(accounts));
+  syncSave('iz_accounts',accounts);
   document.getElementById('newAccName').value='';
   renderAccountsList(); showToast('✅ Реквизит добавлен');
 }
 function deleteAccountAdmin(idx){
   var accounts=JSON.parse(localStorage.getItem('iz_accounts')||'[]');
-  accounts.splice(idx,1); localStorage.setItem('iz_accounts',JSON.stringify(accounts));
+  accounts.splice(idx,1); syncSave('iz_accounts',accounts);
   renderAccountsList(); showToast('🗑 Реквизит удалён');
 }
 
@@ -3599,7 +3643,7 @@ function changeSellerPass(idx){
   var sellers=getSellers();
   if(!sellers[idx]){showToast('Ошибка');return;}
   sellers[idx].pass=newPass;
-  localStorage.setItem('iz_sellers',JSON.stringify(sellers));
+  saveSellers(sellers);
   inp.value='';
   showToast('✅ Пароль продавца «'+sellers[idx].name+'» изменён');
 }
@@ -3609,7 +3653,7 @@ function addSellerAdmin(){
   if(!name||!pass){showToast('Заполните имя и пароль');return;}
   const sellers=getSellers();
   sellers.push({id:uid(),name,shop,pass,blocked:false,createdAt:new Date().toISOString()});
-  localStorage.setItem('iz_sellers',JSON.stringify(sellers));
+  saveSellers(sellers);
   ['newSName','newSPass'].forEach(id=>document.getElementById(id).value='');
   renderSellersAdmin(); showToast('✅ Продавец добавлен');
 }
@@ -3629,7 +3673,7 @@ function confirmBlockSeller(){
   if(type==='delete')sellers.splice(idx,1);
   else if(type==='block')sellers[idx].blocked=true;
   else if(type==='unblock')sellers[idx].blocked=false;
-  localStorage.setItem('iz_sellers',JSON.stringify(sellers));
+  saveSellers(sellers);
   closeMo('blockSellerMo'); renderSellersAdmin();
   showToast(type==='delete'?'🗑 Удалено':type==='block'?'🚫 Заблокировано':'✅ Разблокировано');
 }
@@ -4717,12 +4761,13 @@ function renderActivatedList(){
 }
 
 function init(){
+  startSyncListeners();
   const shopNames=getShopNames();
   const shopSel=document.getElementById('loginShop');
   if(shopSel) shopSel.innerHTML=shopNames.map(s=>`<option>${s}</option>`).join('');
   // Ensure default admin
   var admins=JSON.parse(localStorage.getItem('iz_shop_admins')||'[]');
-  if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; localStorage.setItem('iz_shop_admins',JSON.stringify(admins)); }
+  if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; saveShopAdmins(admins); }
   // Init role selection — seller by default
   pick('seller');
   const saved=JSON.parse(localStorage.getItem(KEY.session)||'null');

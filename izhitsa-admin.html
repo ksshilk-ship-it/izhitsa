@@ -574,11 +574,75 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <button class="tab" onclick="switchTab('settings',this)"><div class="ti">⚙️</div>Настройки</button>
 </div>
 
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script>
+
+// ════ FIREBASE + SYNC LAYER ════
+firebase.initializeApp({
+  apiKey:"AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
+  authDomain:"izhitsa-6327c.firebaseapp.com",
+  projectId:"izhitsa-6327c",
+  storageBucket:"izhitsa-6327c.firebasestorage.app",
+  messagingSenderId:"1025102190040",
+  appId:"1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
+});
+const db = firebase.firestore();
+db.enablePersistence({synchronizeTabs:true}).catch(function(e){ console.log('Persist:',e.code); });
+
+var _adminSyncUnsubs = {};
+var ADMIN_SYNC_SETTINGS = {
+  'iz_admin_users':      {doc:'admins',        field:'admins'},
+  'iz_shops':            {doc:'shops',         field:'shops'},
+  'iz_sellers':          {doc:'sellers',       field:'sellers'},
+  'iz_shop_zp_settings': {doc:'zp',            field:'zp'},
+  'iz_items':            {doc:'items',         field:'items'},
+  'iz_sales_sources':    {doc:'sales_sources', field:'data'},
+  'iz_plan_data':        {doc:'plan',          field:'data'},
+  'iz_debits':           {doc:'debits',        field:'data'},
+  'iz_ws_employees':     {doc:'ws_employees',  field:'data'},
+};
+function adminSyncListen(lsKey) {
+  var m = ADMIN_SYNC_SETTINGS[lsKey]; if(!m || _adminSyncUnsubs[lsKey]) return;
+  _adminSyncUnsubs[lsKey] = db.collection('iz_settings').doc(m.doc).onSnapshot(function(snap){
+    if(!snap.exists) return;
+    var val = snap.data()[m.field];
+    if(val !== undefined) {
+      localStorage.setItem(lsKey, JSON.stringify(val));
+      // Mirror shops to iz_admin_shops for shop module
+      if(lsKey === 'iz_shops') localStorage.setItem('iz_admin_shops', JSON.stringify(val));
+    }
+  }, function(e){ console.log('adminSyncListen err', lsKey, e.code||e); });
+}
+function adminSyncSave(lsKey, data) {
+  localStorage.setItem(lsKey, JSON.stringify(data));
+  if(lsKey === 'iz_shops') localStorage.setItem('iz_admin_shops', JSON.stringify(data));
+  var m = ADMIN_SYNC_SETTINGS[lsKey]; if(!m) return;
+  var obj = {}; obj[m.field] = data; obj.updatedAt = new Date().toISOString();
+  db.collection('iz_settings').doc(m.doc).set(obj, {merge:true}).catch(function(e){ console.log('adminSyncSave err', lsKey, e.code||e); });
+}
+function adminSyncListenCollection(lsKey, colName) {
+  if(_adminSyncUnsubs[lsKey]) return;
+  _adminSyncUnsubs[lsKey] = db.collection(colName).onSnapshot(function(snap){
+    var docs = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
+    localStorage.setItem(lsKey, JSON.stringify(docs));
+  }, function(e){ console.log('adminCol sync err', colName, e.code||e); });
+}
+function startAdminSyncListeners() {
+  Object.keys(ADMIN_SYNC_SETTINGS).forEach(adminSyncListen);
+  adminSyncListenCollection('iz_shifts', 'iz_shifts');
+  adminSyncListenCollection('iz_transactions', 'iz_transactions');
+  adminSyncListenCollection('iz_admin_alerts', 'iz_admin_alerts');
+  adminSyncListenCollection('iz_invoices', 'iz_invoices');
+  adminSyncListenCollection('iz_shop_notifications', 'iz_shop_notifications');
+  adminSyncListenCollection('iz_psj', 'iz_psj');
+}
+
 let selectedRole = null;
 let session = null;
 
-function gv(id) { return document.getElementById(id)?.value || ''; }
+function gv(id) { var el=document.getElementById(id); return el?el.value||'':''; }
 
 function getAdminUsers() {
   try { return JSON.parse(localStorage.getItem('iz_admin_users') || '[]'); } 
@@ -586,7 +650,7 @@ function getAdminUsers() {
 }
 
 function saveAdminUsers(data) {
-  localStorage.setItem('iz_admin_users', JSON.stringify(data));
+  adminSyncSave('iz_admin_users', data);
 }
 
 function getShops() {
@@ -595,7 +659,7 @@ function getShops() {
 }
 
 function saveShops(data) {
-  localStorage.setItem('iz_shops', JSON.stringify(data));
+  adminSyncSave('iz_shops', data);
 }
 
 function getTransactions() {
@@ -604,7 +668,7 @@ function getTransactions() {
 }
 
 function saveTransactions(data) {
-  localStorage.setItem('iz_transactions', JSON.stringify(data));
+  adminSyncSave('iz_transactions', data);
 }
 
 function getSalesSources() {
@@ -613,7 +677,7 @@ function getSalesSources() {
 }
 
 function saveSalesSources(data) {
-  localStorage.setItem('iz_sales_sources', JSON.stringify(data));
+  adminSyncSave('iz_sales_sources', data);
 }
 
 function getPlanData() {
@@ -622,7 +686,7 @@ function getPlanData() {
 }
 
 function savePlanData(data) {
-  localStorage.setItem('iz_plan_data', JSON.stringify(data));
+  adminSyncSave('iz_plan_data', data);
 }
 
 function getDebits() {
@@ -631,7 +695,7 @@ function getDebits() {
 }
 
 function saveDebits(data) {
-  localStorage.setItem('iz_debits', JSON.stringify(data));
+  adminSyncSave('iz_debits', data);
 }
 
 function getAuditLog() {
@@ -640,7 +704,7 @@ function getAuditLog() {
 }
 
 function saveAuditLog(data) {
-  localStorage.setItem('iz_audit_log', JSON.stringify(data));
+  adminSyncSave('iz_audit_log', data);
 }
 
 function logAction(action, details = {}) {
@@ -822,7 +886,7 @@ function getWsEmployees() {
 }
 
 function saveWsEmployees(data) {
-  localStorage.setItem('iz_ws_employees', JSON.stringify(data));
+  adminSyncSave('iz_ws_employees', data);
 }
 
 function uid() { return Math.random().toString(36).substr(2,9); }
@@ -1312,7 +1376,7 @@ function getTransactions() {
 }
 
 function saveTransactions(data) {
-  localStorage.setItem('iz_transactions', JSON.stringify(data));
+  adminSyncSave('iz_transactions', data);
 }
 
 let currentTxType = 'income';
@@ -1395,6 +1459,7 @@ function saveOperation() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
+  startAdminSyncListeners();
   // Init shops if not exist
   if(!localStorage.getItem('iz_shops')) {
     saveShops(['ОПИТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
