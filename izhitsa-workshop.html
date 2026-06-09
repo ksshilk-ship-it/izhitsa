@@ -348,27 +348,57 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
         </div>
       </div>
       <div class="fg"><label class="fl">Порода дерева</label>
-        <select class="fs" id="delivWoodSelect"></select>
+        <div style="display:flex;gap:8px">
+          <select class="fs" id="delivWoodSelect" style="flex:1"></select>
+          <button onclick="openAddWoodMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+        </div>
       </div>
       <div class="fg"><label class="fl">Размер</label>
-        <select class="fs" id="delivSizeSelect"></select>
+        <div style="display:flex;gap:8px">
+          <select class="fs" id="delivSizeSelect" style="flex:1"></select>
+          <button onclick="openAddSizeMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+        </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div class="fg"><label class="fl">Количество</label><input class="fi" type="number" id="delivQty" value="1" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="delivPrice" inputmode="numeric" placeholder="0"></div>
+      <div class="fg"><label class="fl">Количество</label>
+        <input class="fi" type="number" id="delivQty" value="1" inputmode="numeric">
       </div>
       <button class="btn" style="background:var(--a6)" onclick="addToDeliveryList()">➕ В список сдачи</button>
     </div>
 
     <!-- Список на сдачу -->
     <div class="card" id="deliveryListCard" style="display:none">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div class="ctitle" style="margin:0">Список на сдачу</div>
-        <div id="delivTotal" style="font-weight:700;color:var(--accent)"></div>
-      </div>
+      <div class="ctitle" style="margin:0">Список на сдачу</div>
       <div id="deliveryList"></div>
       <button class="btn green" style="margin-top:10px" onclick="submitDelivery()">📦 Сдать на склад</button>
       <button class="btn sec" style="margin-top:8px" onclick="clearDeliveryList()">Очистить список</button>
+    </div>
+
+    <!-- Внеплановая заготовка -->
+    <div class="card" style="border-color:var(--a4)">
+      <div class="ctitle">🪵 Внеплановая заготовка</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Добавить заготовку вручную — для внеплановых работ без заготовщика</div>
+      <div class="fg"><label class="fl">Изделие</label>
+        <select class="fs" id="selfBlankItem"></select>
+      </div>
+      <div class="fg"><label class="fl">Порода дерева</label>
+        <div style="display:flex;gap:8px">
+          <select class="fs" id="selfBlankWood" style="flex:1"></select>
+          <button onclick="openAddWoodMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+        </div>
+      </div>
+      <div class="fg"><label class="fl">Размер</label>
+        <div style="display:flex;gap:8px">
+          <select class="fs" id="selfBlankSize" style="flex:1"></select>
+          <button onclick="openAddSizeMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+        </div>
+      </div>
+      <div class="fg"><label class="fl">Количество</label>
+        <input class="fi" type="number" id="selfBlankQty" value="1" inputmode="numeric">
+      </div>
+      <div class="fg"><label class="fl">Комментарий</label>
+        <input class="fi" id="selfBlankComment" placeholder="Причина, заказчик...">
+      </div>
+      <button class="btn" style="background:var(--a4);color:#000" onclick="addSelfBlank()">🪵 Взять в работу</button>
     </div>
 
     <!-- История сдач -->
@@ -3105,17 +3135,20 @@ function toggleAdminCatalog(){
 let _deliveryList = [];
 
 function renderDeliveryPage(){
-  // Заполняем селекты из каталога + справочников
   const activeProducts = products.filter(p=>p.status!=='archive');
   const names = [...new Set([...activeProducts.map(p=>p.name), ...getItemNames()])];
-  const sel = document.getElementById('delivItemSelect');
-  if(sel) sel.innerHTML = names.map(n=>`<option value="${n}">${n}</option>`).join('');
+  const woods = getWoods();
+  const sizes = getSizes();
 
-  const woodSel = document.getElementById('delivWoodSelect');
-  if(woodSel) woodSel.innerHTML = getWoods().map(w=>`<option>${w}</option>`).join('');
-
-  const sizeSel = document.getElementById('delivSizeSelect');
-  if(sizeSel) sizeSel.innerHTML = getSizes().map(s=>`<option>${s}</option>`).join('');
+  ['delivItemSelect','selfBlankItem'].forEach(id=>{
+    const s=document.getElementById(id); if(s) s.innerHTML=names.map(n=>`<option value="${n}">${n}</option>`).join('');
+  });
+  ['delivWoodSelect','selfBlankWood'].forEach(id=>{
+    const s=document.getElementById(id); if(s) s.innerHTML=woods.map(w=>`<option>${w}</option>`).join('');
+  });
+  ['delivSizeSelect','selfBlankSize'].forEach(id=>{
+    const s=document.getElementById(id); if(s) s.innerHTML=sizes.map(s2=>`<option>${s2}</option>`).join('');
+  });
 
   renderDeliveryList();
   renderDeliveryHistory();
@@ -3139,13 +3172,10 @@ function addToDeliveryList(){
   const wood  = document.getElementById('delivWoodSelect')?.value;
   const size  = document.getElementById('delivSizeSelect')?.value;
   const qty   = parseInt(document.getElementById('delivQty')?.value)||1;
-  const price = parseFloat(document.getElementById('delivPrice')?.value)||0;
   if(!name){ showToast('Выберите изделие'); return; }
-
-  _deliveryList.push({id:uid(), name, wood, size, qty, price});
+  _deliveryList.push({id:uid(), name, wood, size, qty});
   renderDeliveryList();
   document.getElementById('delivQty').value = '1';
-  document.getElementById('delivPrice').value = '';
 }
 
 function renderDeliveryList(){
@@ -3166,10 +3196,7 @@ function renderDeliveryList(){
         <div style="font-size:13px;font-weight:600">${item.name}</div>
         <div style="font-size:11px;color:var(--t2)">🌳 ${item.wood||'—'} · 📐 ${item.size||'—'} · ${item.qty} шт.</div>
       </div>
-      <div style="text-align:right">
-        <div style="font-size:13px;color:var(--accent)">${fmt(item.price)}</div>
-        <button onclick="removeDeliveryItem(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:14px">✕</button>
-      </div>
+      <button onclick="removeDeliveryItem(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:18px">✕</button>
     </div>`).join('');
 }
 
@@ -3212,7 +3239,6 @@ async function submitDelivery(){
     hist.unshift({
       date: now().split('T')[0],
       items: _deliveryList.length,
-      total: _deliveryList.reduce((s,i)=>s+i.price*i.qty,0),
       list: _deliveryList.map(i=>i.name+' ×'+i.qty).join(', ')
     });
     localStorage.setItem('ws_delivery_history_'+session.id, JSON.stringify(hist.slice(0,30)));
@@ -3234,8 +3260,45 @@ function renderDeliveryHistory(){
   c.innerHTML = hist.map(h=>`
     <div class="at-row">
       <span class="at-lbl">${h.date}<br><span style="font-size:10px;color:var(--t2)">${h.list}</span></span>
-      <span class="at-val" style="color:var(--accent)">${fmt(h.total)}</span>
+      <span class="at-val" style="color:var(--t2)">${h.items} шт.</span>
     </div>`).join('');
+}
+
+function addSelfBlank(){
+  const name    = document.getElementById('selfBlankItem')?.value;
+  const wood    = document.getElementById('selfBlankWood')?.value;
+  const size    = document.getElementById('selfBlankSize')?.value;
+  const qty     = parseInt(document.getElementById('selfBlankQty')?.value)||1;
+  const comment = document.getElementById('selfBlankComment')?.value.trim();
+  if(!name){ showToast('Выберите изделие'); return; }
+
+  const emp = getEmployees().find(e=>e.id===session.id);
+  // Создаём заготовку сразу со статусом accepted и изделие в работе
+  const blankId = uid();
+  const blank = {
+    id: blankId, itemName: name, wood, size, qty, comment,
+    masterId: session.id, masterName: session.name,
+    createdById: session.id, createdByName: session.name+' (самостоятельно)',
+    status: 'accepted', isSelfAdded: true,
+    createdAt: now(), acceptedAt: now(), acceptedQty: qty
+  };
+  const item = {
+    id: uid(), blankId,
+    name, itemName: name, wood, size, qty,
+    masterId: session.id, masterName: session.name,
+    masterRate: emp?.rate||0,
+    status: 'in_work', isSelfAdded: true,
+    createdAt: now(), startedAt: now(),
+    itemNum: 'ВП-'+uid().toUpperCase()
+  };
+
+  db.collection('ws_blanks').add(blank)
+    .then(()=>db.collection('ws_items').add(item))
+    .then(()=>{
+      document.getElementById('selfBlankQty').value='1';
+      document.getElementById('selfBlankComment').value='';
+      showToast(`✅ «${name}» взято в работу как внеплановая заготовка`);
+    }).catch(e=>showToast('Ошибка: '+e.message));
 }
 
 // ════════════════════════════════

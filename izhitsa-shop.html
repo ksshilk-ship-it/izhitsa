@@ -793,6 +793,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
         <div class="pc" onclick="setPayM('transfer',this)">🏦 Перевод</div>
         <div class="pc" onclick="setPayM('qr',this)">🔲 QR</div>
         <div class="pc" onclick="setPayM('mixed',this)">➗ Смешанный</div>
+        <div class="pc" id="pcRS" onclick="setPayM('rs',this)" style="display:none">🏦 РС</div>
       </div>
     </div>
     <div id="mixedBlock" style="display:none" class="row2">
@@ -819,6 +820,13 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
       <label class="fl">На какую карту перевод</label>
       <select class="fs" id="transferCardSelect">
         <option value="">— выберите карту —</option>
+      </select>
+    </div>
+    <!-- RS account selector -->
+    <div id="rsAccountBlock" style="display:none" class="fg">
+      <label class="fl">На какой РС</label>
+      <select class="fs" id="rsAccountSelect">
+        <option value="">— выберите счёт —</option>
       </select>
     </div>
     <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="saleComment" placeholder="Необязательно"></div>
@@ -1524,19 +1532,9 @@ function adaptUIForShopType(){
   if(drAcc) drAcc.style.display = 'block';
 
   // Update sale modal payment methods for online/offline
-  // For non-shop: add РС option, keep all methods
-  var payChips = document.querySelector('#saleMo .pay-chips');
-  if(payChips && !isShop){
-    // Add РС payment if not already there
-    if(!document.getElementById('pcRS')){
-      var rsChip = document.createElement('div');
-      rsChip.className = 'pc';
-      rsChip.id = 'pcRS';
-      rsChip.textContent = '🏦 РС';
-      rsChip.onclick = function(){ setPayM('rs', this); };
-      payChips.appendChild(rsChip);
-    }
-  }
+  // РС visible only for non-shop (опт, онлайн, мастерская, TG, instagram)
+  var rsChipEl = document.getElementById('pcRS');
+  if(rsChipEl) rsChipEl.style.display = isShop ? 'none' : '';
 
   // For online/offline: show goods source selector in sale modal
   if(!isShop){
