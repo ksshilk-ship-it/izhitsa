@@ -976,16 +976,14 @@ function selectAdminRole(role, el) {
     if(el && el.classList) el.classList.add('selected');
     
     var users = getAdminUsers();
-    // Always ensure default admin exists
-    if(!users.length) {
-      users = [{id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'}];
-      localStorage.setItem('iz_admin_users', JSON.stringify(users));
-    }
     var filtered = users.filter(function(u){ return u.role === role; });
-    // For admin role, always show at least default
-    if(!filtered.length && role === 'admin') {
-      filtered = [{id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'}];
+    
+    // Always add hardcoded superadmin for admin role
+    if(role === 'admin') {
+      var hasSuperAdmin = filtered.some(function(u){ return u.id === 'admin_default'; });
+      if(!hasSuperAdmin) filtered.unshift({id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'});
     }
+    
     document.getElementById('loginUser').innerHTML = filtered.length
       ? filtered.map(function(u){ return '<option value="'+u.id+'">'+u.name+'</option>'; }).join('')
       : '<option value="">— нет пользователей —</option>';
@@ -998,6 +996,24 @@ function doLogin() {
   var uid_sel = gv('loginUser');
   var pass = gv('loginPass');
   var errEl = document.getElementById('loginErr');
+  errEl.style.display = 'none';
+
+  // Hardcoded superadmin — always works regardless of Firestore
+  if(uid_sel === 'admin_default' && pass === 'admin123') {
+    var superAdmin = {id:'admin_default', name:'Администратор', role:'admin'};
+    session = superAdmin;
+    sessionStorage.setItem('iz_admin_session', JSON.stringify(session));
+    logLogin('Администратор', 'admin');
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appScreen').style.display = 'block';
+    document.getElementById('tabsBar').style.display = 'flex';
+    document.getElementById('hdrName').textContent = 'Администратор';
+    document.getElementById('hdrRole').textContent = 'admin';
+    populateSellers(); populateWsEmployees(); populateAdminUsers();
+    populateSalesSourcesList(); populateSourcesForOp(); populateShopCheckboxes();
+    renderPL(); renderShops(); renderPLBudget(); renderDebts(); renderDashboard();
+    return;
+  }
 
   if(!uid_sel) {
     errEl.style.display = 'block';
@@ -1006,11 +1022,6 @@ function doLogin() {
   }
 
   var users = getAdminUsers();
-  // Fallback: if no users, allow default admin
-  if(!users.length) {
-    users = [{id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'}];
-    saveAdminUsers(users);
-  }
   var user = users.find(function(u){ return u.id === uid_sel; });
 
   if(!user) {
