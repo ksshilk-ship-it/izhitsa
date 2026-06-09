@@ -256,6 +256,37 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
     </div>
 
     <div class="card"><div id="masterBlanksList"></div></div>
+
+    <!-- Внеплановая заготовка -->
+    <div class="card" style="border-color:var(--a4);margin-top:4px">
+      <div class="ctitle">🪵 Внеплановая заготовка</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Для работы без заготовщика — заготовка сразу берётся в работу</div>
+      <div class="fg"><label class="fl">Изделие</label>
+        <div style="display:flex;gap:8px">
+          <select class="fs" id="selfBlankItem" style="flex:1"></select>
+          <button onclick="openAddItemNameMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+        </div>
+      </div>
+      <div class="fg"><label class="fl">Порода дерева</label>
+        <div style="display:flex;gap:8px">
+          <select class="fs" id="selfBlankWood" style="flex:1"></select>
+          <button onclick="openAddWoodMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+        </div>
+      </div>
+      <div class="fg"><label class="fl">Размер</label>
+        <div style="display:flex;gap:8px">
+          <select class="fs" id="selfBlankSize" style="flex:1"></select>
+          <button onclick="openAddSizeMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+        </div>
+      </div>
+      <div class="fg"><label class="fl">Количество</label>
+        <input class="fi" type="number" id="selfBlankQty" value="1" inputmode="numeric">
+      </div>
+      <div class="fg"><label class="fl">Комментарий</label>
+        <input class="fi" id="selfBlankComment" placeholder="Причина, заказчик...">
+      </div>
+      <button class="btn" style="background:var(--a4);color:#000" onclick="addSelfBlank()">🪵 Взять в работу</button>
+    </div>
   </div>
 
   <!-- BLANKS (заготовщик) -->
@@ -371,34 +402,6 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
       <div id="deliveryList"></div>
       <button class="btn green" style="margin-top:10px" onclick="submitDelivery()">📦 Сдать на склад</button>
       <button class="btn sec" style="margin-top:8px" onclick="clearDeliveryList()">Очистить список</button>
-    </div>
-
-    <!-- Внеплановая заготовка -->
-    <div class="card" style="border-color:var(--a4)">
-      <div class="ctitle">🪵 Внеплановая заготовка</div>
-      <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Добавить заготовку вручную — для внеплановых работ без заготовщика</div>
-      <div class="fg"><label class="fl">Изделие</label>
-        <select class="fs" id="selfBlankItem"></select>
-      </div>
-      <div class="fg"><label class="fl">Порода дерева</label>
-        <div style="display:flex;gap:8px">
-          <select class="fs" id="selfBlankWood" style="flex:1"></select>
-          <button onclick="openAddWoodMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
-        </div>
-      </div>
-      <div class="fg"><label class="fl">Размер</label>
-        <div style="display:flex;gap:8px">
-          <select class="fs" id="selfBlankSize" style="flex:1"></select>
-          <button onclick="openAddSizeMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
-        </div>
-      </div>
-      <div class="fg"><label class="fl">Количество</label>
-        <input class="fi" type="number" id="selfBlankQty" value="1" inputmode="numeric">
-      </div>
-      <div class="fg"><label class="fl">Комментарий</label>
-        <input class="fi" id="selfBlankComment" placeholder="Причина, заказчик...">
-      </div>
-      <button class="btn" style="background:var(--a4);color:#000" onclick="addSelfBlank()">🪵 Взять в работу</button>
     </div>
 
     <!-- История сдач -->
@@ -1180,6 +1183,14 @@ function startListeners(){
     otherTasks=snap.docs.map(d=>({_id:d.id,...d.data()}));
     renderDash(); renderOtherTasks();
   },()=>{});
+  // Выплаты ЗП — для мастера
+  if(session.role==='мастер'){
+    db.collection('ws_zp_payments').where('masterId','==',session.id).get().then(snap=>{
+      const pays = snap.docs.map(d=>d.data());
+      localStorage.setItem('ws_zp_payments_'+session.id, JSON.stringify(pays));
+      renderZP();
+    }).catch(()=>{});
+  }
   // Shops from admin
   db.collection('iz_admin_shops').onSnapshot(snap=>{
     const shops=snap.docs.map(d=>d.data().name).filter(Boolean);
@@ -1671,6 +1682,15 @@ function renderMasterBlanks(){
   document.getElementById('mbAccepted').textContent = accepted.length;
   document.getElementById('mbAll').textContent      = myBlanks.length;
 
+  // Заполнить селекты внеплановой заготовки
+  const names = [...new Set([...products.filter(p=>p.status!=='archive').map(p=>p.name), ...getItemNames()])];
+  const sbi = document.getElementById('selfBlankItem');
+  const sbw = document.getElementById('selfBlankWood');
+  const sbs = document.getElementById('selfBlankSize');
+  if(sbi) sbi.innerHTML = names.map(n=>`<option>${n}</option>`).join('');
+  if(sbw) sbw.innerHTML = getWoods().map(w=>`<option>${w}</option>`).join('');
+  if(sbs) sbs.innerHTML = getSizes().map(s=>`<option>${s}</option>`).join('');
+
   const c = document.getElementById('masterBlanksList'); if(!c) return;
   let list = myBlanks;
   if(_mbFilter==='new')      list = newB;
@@ -2054,42 +2074,151 @@ function calcMonthZP(){
 
 function renderZP(){
   const c=document.getElementById('zpContent');if(!c)return;
-  const n=new Date(),m=n.getMonth(),y=n.getFullYear();
-  let myItems=items.filter(i=>i.receivedAt&&new Date(i.receivedAt).getMonth()===m&&new Date(i.receivedAt).getFullYear()===y);
-  if(session.role==='мастер') myItems=myItems.filter(i=>i.masterId===session.id);
-  const monthName=n.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
 
   if(session.role==='мастер'){
-    const total=myItems.filter(i=>i.zpPaid).reduce((s,i)=>s+(i.zp||0),0);
-    c.innerHTML=`<div class="card" style="background:linear-gradient(135deg,#1e1a2e,#1a1e2e);border-color:var(--a5)">
-      <div class="ctitle">Моя ЗП — ${monthName}</div>
-      <div style="font-family:'Unbounded',sans-serif;font-size:24px;font-weight:700;color:var(--a5)">${fmt(total)}</div>
-      <div style="font-size:11px;color:var(--t2);margin-top:4px">${myItems.filter(i=>i.zpPaid).length} изделий</div>
-    </div>
-    <div class="card"><div class="ctitle">По изделиям</div>
-      ${myItems.filter(i=>i.zpPaid).map(i=>`<div class="at-row"><span class="at-lbl">№${i.itemNum||'—'} ${i.name||i.itemName}<br><span style="font-size:10px">${fmtDT(i.receivedAt)} · ⏱ ${elapsed(i.startedAt,i.receivedAt)}</span></span><span class="at-val" style="color:var(--a5)">+${fmt(i.zp)}</span></div>`).join('')||'<div class="empty" style="padding:12px 0">Нет начислений</div>'}
-    </div>`;
-  } else {
-    // Manager view - grouped by master
-    const byMaster={};
-    myItems.filter(i=>i.zpPaid).forEach(i=>{
-      if(!byMaster[i.masterId])byMaster[i.masterId]={name:i.masterName,items:[],total:0};
-      byMaster[i.masterId].items.push(i);
-      byMaster[i.masterId].total+=(i.zp||0);
-    });
-    const grandTotal=Object.values(byMaster).reduce((s,m)=>s+m.total,0);
-    c.innerHTML=`<div class="card" style="background:linear-gradient(135deg,#1e1a2e,#1a1e2e);border-color:var(--a5)">
-      <div class="ctitle">Итого к выплате — ${monthName}</div>
-      <div style="font-family:'Unbounded',sans-serif;font-size:24px;font-weight:700;color:var(--a5)">${fmt(grandTotal)}</div>
-    </div>`+Object.entries(byMaster).map(([mid,d])=>`
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <div><div style="font-size:14px;font-weight:700">${d.name}</div><div style="font-size:11px;color:var(--t2)">${d.items.length} изделий</div></div>
-          <div style="font-family:'Unbounded',sans-serif;font-size:18px;font-weight:700;color:var(--a5)">${fmt(d.total)}</div>
-        </div>
-        ${d.items.map(i=>`<div class="at-row"><span class="at-lbl">№${i.itemNum||'—'} ${i.name||i.itemName}<br><span style="font-size:10px">⏱ ${elapsed(i.startedAt,i.receivedAt)}</span></span><span class="at-val" style="color:var(--inc)">+${fmt(i.zp)}</span></div>`).join('')}
-      </div>`).join('')||'<div class="empty"><div class="ei">💰</div>Нет начислений в этом месяце</div>';
+    renderMasterZP(c);
+    return;
   }
+
+  // Управляющий/Администратор — по мастерам за текущий месяц
+  const n=new Date(),m=n.getMonth(),y=n.getFullYear();
+  let myItems=items.filter(i=>i.receivedAt&&new Date(i.receivedAt).getMonth()===m&&new Date(i.receivedAt).getFullYear()===y);
+  const monthName=n.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
+  const byMaster={};
+  myItems.filter(i=>i.zpPaid).forEach(i=>{
+    if(!byMaster[i.masterId])byMaster[i.masterId]={name:i.masterName,items:[],total:0};
+    byMaster[i.masterId].items.push(i);
+    byMaster[i.masterId].total+=(i.zp||0);
+  });
+  const grandTotal=Object.values(byMaster).reduce((s,m)=>s+m.total,0);
+  c.innerHTML=`<div class="card" style="background:linear-gradient(135deg,#1e1a2e,#1a1e2e);border-color:var(--a5)">
+    <div class="ctitle">Итого к выплате — ${monthName}</div>
+    <div style="font-family:'Unbounded',sans-serif;font-size:24px;font-weight:700;color:var(--a5)">${fmt(grandTotal)}</div>
+  </div>`+Object.entries(byMaster).map(([mid,d])=>`
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div><div style="font-size:14px;font-weight:700">${d.name}</div><div style="font-size:11px;color:var(--t2)">${d.items.length} изделий</div></div>
+        <div style="font-family:'Unbounded',sans-serif;font-size:18px;font-weight:700;color:var(--a5)">${fmt(d.total)}</div>
+      </div>
+      ${d.items.map(i=>`<div class="at-row"><span class="at-lbl">№${i.itemNum||'—'} ${i.name||i.itemName}<br><span style="font-size:10px">⏱ ${elapsed(i.startedAt,i.receivedAt)}</span></span><span class="at-val" style="color:var(--inc)">+${fmt(i.zp)}</span></div>`).join('')}
+    </div>`).join('')||'<div class="empty"><div class="ei">💰</div>Нет начислений в этом месяце</div>';
+}
+
+let _zpMonth = null; // null = текущий, иначе 'ГГГГ-ММ'
+
+function renderMasterZP(c){
+  const myItems = items.filter(i=>i.masterId===session.id&&i.zpPaid&&i.receivedAt);
+
+  // Все месяцы в которых есть данные
+  const monthSet = new Set(myItems.map(i=>i.receivedAt.slice(0,7)));
+  const now_ = new Date();
+  const curKey = now_.toISOString().slice(0,7);
+  monthSet.add(curKey);
+  const months = [...monthSet].sort().reverse();
+
+  if(!_zpMonth || !months.includes(_zpMonth)) _zpMonth = months[0];
+
+  // Вкладки месяцев
+  const tabsHtml = `<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;padding-bottom:4px">
+    ${months.map(mo=>`
+      <div onclick="setZPMonth('${mo}')" style="flex-shrink:0;padding:7px 12px;border-radius:10px;font-size:11px;font-weight:600;cursor:pointer;
+        background:${mo===_zpMonth?'var(--a5)':'var(--s2)'};
+        color:${mo===_zpMonth?'#000':'var(--t2)'};
+        border:1px solid ${mo===_zpMonth?'var(--a5)':'var(--border)'}">
+        ${formatMonthKey(mo)}
+      </div>`).join('')}
+  </div>`;
+
+  // Данные выбранного месяца
+  const [yr,mn] = _zpMonth.split('-').map(Number);
+  const monthItems = myItems.filter(i=>new Date(i.receivedAt).getMonth()===mn-1&&new Date(i.receivedAt).getFullYear()===yr);
+  const accrued = monthItems.reduce((s,i)=>s+(i.zp||0),0); // начислено
+
+  // Фактические выплаты из ws_zp_payments
+  const payments = JSON.parse(localStorage.getItem('ws_zp_payments_'+session.id)||'[]');
+  const monthPayments = payments.filter(p=>p.month===_zpMonth);
+  const paid = monthPayments.reduce((s,p)=>s+(p.amount||0),0);
+  const balance = accrued - paid;
+
+  // Также прочие задачи с вознаграждением
+  const otMonth = otherTasks.filter(t=>t.masterId===session.id&&t.status==='done'&&t.finishedAt&&t.finishedAt.slice(0,7)===_zpMonth&&t.pay>0);
+  const otPay = otMonth.reduce((s,t)=>s+(t.pay||0),0);
+  const totalAccrued = accrued + otPay;
+  const totalBalance = totalAccrued - paid;
+
+  const balanceColor = totalBalance>0?'var(--exp)':totalBalance<0?'var(--a4)':'var(--inc)';
+  const balanceLabel = totalBalance>0?`К выплате: ${fmt(totalBalance)}`:totalBalance<0?`Переплата: ${fmt(-totalBalance)}`:'Всё выплачено ✅';
+
+  c.innerHTML = tabsHtml + `
+    <!-- Итог месяца -->
+    <div class="card" style="background:linear-gradient(135deg,#1e1a2e,#1a1e2e);border-color:var(--a5)">
+      <div class="ctitle">${formatMonthKey(_zpMonth)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:4px">
+        <div style="text-align:center">
+          <div style="font-size:15px;font-weight:700;color:var(--a5)">${fmt(totalAccrued)}</div>
+          <div style="font-size:10px;color:var(--t2)">Начислено</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:15px;font-weight:700;color:var(--inc)">${fmt(paid)}</div>
+          <div style="font-size:10px;color:var(--t2)">Выплачено</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:15px;font-weight:700;color:${balanceColor}">${fmt(Math.abs(totalBalance))}</div>
+          <div style="font-size:10px;color:${balanceColor}">${totalBalance>0?'Долг':totalBalance<0?'Переплата':'Закрыто'}</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;padding:8px;border-radius:8px;background:${totalBalance>0?'rgba(255,100,100,0.1)':totalBalance<0?'rgba(255,200,50,0.1)':'rgba(50,255,100,0.1)'};text-align:center;font-size:12px;font-weight:700;color:${balanceColor}">
+        ${balanceLabel}
+      </div>
+    </div>
+
+    <!-- По изделиям -->
+    <div class="card">
+      <div class="ctitle">По изделиям (${monthItems.length})</div>
+      ${monthItems.length ? monthItems.map(i=>`
+        <div class="at-row">
+          <span class="at-lbl">
+            ${i.name||i.itemName}${i.wood?' · 🌳'+i.wood:''}
+            <br><span style="font-size:10px">${fmtDT(i.receivedAt)} · ⏱ ${elapsed(i.startedAt,i.receivedAt)||'—'}</span>
+          </span>
+          <span class="at-val" style="color:var(--a5)">+${fmt(i.zp)}</span>
+        </div>`).join('')
+        : '<div style="font-size:12px;color:var(--t2);padding:8px 0">Нет изделий в этом месяце</div>'}
+    </div>
+
+    ${otMonth.length?`
+    <!-- Прочие работы -->
+    <div class="card" style="border-color:var(--a4)">
+      <div class="ctitle">🛠 Прочие работы (${otMonth.length})</div>
+      ${otMonth.map(t=>`
+        <div class="at-row">
+          <span class="at-lbl">${t.category}${t.desc?' · '+t.desc.slice(0,25):''}
+            <br><span style="font-size:10px">${fmtDT(t.finishedAt)} · ⏱ ${calcOTTime(t)||'—'}</span>
+          </span>
+          <span class="at-val" style="color:var(--a4)">+${fmt(t.pay)}</span>
+        </div>`).join('')}
+    </div>`:''}
+
+    <!-- История выплат -->
+    <div class="card">
+      <div class="ctitle">💳 Выплаты за месяц</div>
+      ${monthPayments.length ? monthPayments.map(p=>`
+        <div class="at-row">
+          <span class="at-lbl">${p.date}<br><span style="font-size:10px">Выплатил: ${p.by}</span></span>
+          <span class="at-val" style="color:var(--inc)">+${fmt(p.amount)}</span>
+        </div>`).join('')
+        : '<div style="font-size:12px;color:var(--t2);padding:8px 0">Выплат в этом месяце нет</div>'}
+    </div>`;
+}
+
+function setZPMonth(mo){
+  _zpMonth = mo;
+  const c = document.getElementById('zpContent'); if(c) renderMasterZP(c);
+}
+
+function formatMonthKey(key){
+  const [y,m]=key.split('-');
+  return new Date(y,m-1,1).toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
 }
 
 // ════════ ADMIN ════════
@@ -2492,17 +2621,27 @@ function saveZPPayment(){
   if(!amount){ showToast('Введите сумму'); return; }
   const comment  = document.getElementById('zpPayComment').value;
   const nextDate = document.getElementById('zpNextDate').value;
+  const date = new Date().toISOString().split('T')[0];
+  const month = date.slice(0,7);
   const payments = getZPPayments();
-  payments.push({
+  const payEntry = {
     id:uid(), masterId:currentZPMasterId,
-    amount, comment,
-    date: new Date().toISOString().split('T')[0],
-    createdAt: now()
-  });
+    amount, comment, date, month,
+    createdAt: now(), by: session.name
+  };
+  payments.push(payEntry);
   saveZPPayments(payments);
   if(nextDate) saveNextPayDate(currentZPMasterId, nextDate);
-  // Also save to Firebase
-  db.collection('ws_zp_payments').add({masterId:currentZPMasterId,amount,comment,date:new Date().toISOString().split('T')[0],createdAt:now()}).catch(console.error);
+
+  // Сохраняем в Firebase
+  db.collection('ws_zp_payments').add({masterId:currentZPMasterId,amount,comment,date,month,createdAt:now(),by:session.name}).catch(console.error);
+
+  // Синхронизируем в localStorage мастера для его ЗП-страницы
+  const masterPayKey = 'ws_zp_payments_'+currentZPMasterId;
+  const masterPays = JSON.parse(localStorage.getItem(masterPayKey)||'[]');
+  masterPays.unshift(payEntry);
+  localStorage.setItem(masterPayKey, JSON.stringify(masterPays.slice(0,100)));
+
   closeMo('zpPayMo');
   renderZPay();
   showToast(`✅ Выплата ${fmt(amount)} зафиксирована`);
@@ -3228,15 +3367,12 @@ function renderDeliveryPage(){
   const woods = getWoods();
   const sizes = getSizes();
 
-  ['delivItemSelect','selfBlankItem'].forEach(id=>{
-    const s=document.getElementById(id); if(s) s.innerHTML=names.map(n=>`<option value="${n}">${n}</option>`).join('');
-  });
-  ['delivWoodSelect','selfBlankWood'].forEach(id=>{
-    const s=document.getElementById(id); if(s) s.innerHTML=woods.map(w=>`<option>${w}</option>`).join('');
-  });
-  ['delivSizeSelect','selfBlankSize'].forEach(id=>{
-    const s=document.getElementById(id); if(s) s.innerHTML=sizes.map(s2=>`<option>${s2}</option>`).join('');
-  });
+  const delivItem = document.getElementById('delivItemSelect');
+  if(delivItem) delivItem.innerHTML = names.map(n=>`<option value="${n}">${n}</option>`).join('');
+  const delivWood = document.getElementById('delivWoodSelect');
+  if(delivWood) delivWood.innerHTML = woods.map(w=>`<option>${w}</option>`).join('');
+  const delivSize = document.getElementById('delivSizeSelect');
+  if(delivSize) delivSize.innerHTML = sizes.map(s=>`<option>${s}</option>`).join('');
 
   renderDeliveryList();
   renderDeliveryHistory();
