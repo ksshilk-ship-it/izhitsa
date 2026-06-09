@@ -2,11 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Ижица — Магазин">
-<meta name="theme-color" content="#0f0f13">
-<title>Ижица — Магазин</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>Ижица — Магазин</title>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sans-serif;min-height:100dvh;max-width:480px;margin:0 auto}
@@ -88,14 +84,51 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 </style>
 
 <script>
-if('serviceWorker' in navigator) {
+// PWA Service Worker — офлайн кеш
+if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
-    navigator.serviceWorker.register('izhitsa-sw.js')
-      .then(function(reg){ console.log('SW registered'); })
-      .catch(function(e){ console.log('SW failed:', e); });
+    navigator.serviceWorker.register('./izhitsa-sw.js', {scope: './'})
+      .then(function(reg) {
+        console.log('[PWA] SW зарегистрирован');
+        // Проверяем обновления каждый час
+        setInterval(function() { reg.update(); }, 3600000);
+        reg.addEventListener('updatefound', function() {
+          var newWorker = reg.installing;
+          newWorker.addEventListener('statechange', function() {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // Есть обновление — показываем уведомление
+              if (typeof showToast === 'function') {
+                showToast('🔄 Доступно обновление. Перезагрузите страницу.');
+              }
+            }
+          });
+        });
+      })
+      .catch(function(e) { console.log('[PWA] SW ошибка:', e); });
+    
+    // Слушаем обновление SW
+    navigator.serviceWorker.addEventListener('controllerchange', function() {
+      window.location.reload();
+    });
   });
 }
 </script>
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="manifest-shop.json">
+  
+  <!-- iOS PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Ижица — Магазин">
+  <link rel="apple-touch-icon" href="icon-shop-180.svg">
+  <link rel="apple-touch-icon" sizes="152x152" href="icon-shop-152.svg">
+  <link rel="apple-touch-icon" sizes="120x120" href="icon-shop-120.svg">
+  
+  <!-- Android / Chrome PWA -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#c8f060">
+  <meta name="application-name" content="Ижица — Магазин">
 </head>
 <body>
 

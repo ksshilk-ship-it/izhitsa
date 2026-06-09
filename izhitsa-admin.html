@@ -2,9 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<title>Ижица — Администратор</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>Ижица — Администратор</title>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700;900&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -158,14 +156,51 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 </style>
 
 <script>
-if('serviceWorker' in navigator) {
+// PWA Service Worker — офлайн кеш
+if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
-    navigator.serviceWorker.register('izhitsa-sw.js')
-      .then(function(reg){ console.log('SW registered'); })
-      .catch(function(e){ console.log('SW failed:', e); });
+    navigator.serviceWorker.register('./izhitsa-sw.js', {scope: './'})
+      .then(function(reg) {
+        console.log('[PWA] SW зарегистрирован');
+        // Проверяем обновления каждый час
+        setInterval(function() { reg.update(); }, 3600000);
+        reg.addEventListener('updatefound', function() {
+          var newWorker = reg.installing;
+          newWorker.addEventListener('statechange', function() {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // Есть обновление — показываем уведомление
+              if (typeof showToast === 'function') {
+                showToast('🔄 Доступно обновление. Перезагрузите страницу.');
+              }
+            }
+          });
+        });
+      })
+      .catch(function(e) { console.log('[PWA] SW ошибка:', e); });
+    
+    // Слушаем обновление SW
+    navigator.serviceWorker.addEventListener('controllerchange', function() {
+      window.location.reload();
+    });
   });
 }
 </script>
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="manifest-admin.json">
+  
+  <!-- iOS PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Ижица — Администратор">
+  <link rel="apple-touch-icon" href="icon-admin-180.svg">
+  <link rel="apple-touch-icon" sizes="152x152" href="icon-admin-152.svg">
+  <link rel="apple-touch-icon" sizes="120x120" href="icon-admin-120.svg">
+  
+  <!-- Android / Chrome PWA -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#a060f0">
+  <meta name="application-name" content="Ижица — Администратор">
 </head>
 <body>
 
