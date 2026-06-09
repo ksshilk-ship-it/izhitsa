@@ -208,14 +208,54 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
   </div>
 
   <!-- MY WORK (мастер) -->
+  <!-- MY WORK (мастер) -->
   <div class="page" id="pg-mywork">
-    <div class="stitle">Мои изделия</div>
+    <div class="stitle">Моя работа</div>
+
+    <!-- Фильтр -->
+    <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">
+      <div class="fchip active" onclick="setMWFilter('all',this)">Все</div>
+      <div class="fchip" onclick="setMWFilter('in_work',this)">В работе</div>
+      <div class="fchip" onclick="setMWFilter('done',this)">Готово</div>
+      <div class="fchip" onclick="setMWFilter('delivered',this)">Сдано</div>
+      <div class="fchip" onclick="setMWFilter('received',this)">Архив</div>
+    </div>
+
+    <!-- Счётчики -->
     <div class="srow">
-      <div class="sc"><div class="sc-v" id="mwNew" style="color:var(--a2)">0</div><div class="sc-l">Новые загот.</div></div>
       <div class="sc"><div class="sc-v" id="mwWork" style="color:var(--a4)">0</div><div class="sc-l">В работе</div></div>
       <div class="sc"><div class="sc-v" id="mwDone" style="color:var(--a6)">0</div><div class="sc-l">Готово</div></div>
+      <div class="sc"><div class="sc-v" id="mwTotal" style="color:var(--accent)">0</div><div class="sc-l">Всего сделано</div></div>
     </div>
-    <div class="card"><div class="ctitle">Мои изделия</div><div id="myWorkList"></div></div>
+
+    <!-- Аналитика -->
+    <div class="card" id="mwAnalytics" style="display:none">
+      <div class="ctitle">📊 Мой анализ</div>
+      <div id="mwAnalyticsContent"></div>
+    </div>
+
+    <div class="card"><div id="myWorkList"></div></div>
+  </div>
+
+  <!-- ЗАГОТОВКИ МАСТЕРА -->
+  <div class="page" id="pg-masterblanks">
+    <div class="stitle">🪵 Мои заготовки</div>
+
+    <!-- Фильтр -->
+    <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">
+      <div class="fchip active" onclick="setMBFilter('new',this)">Новые</div>
+      <div class="fchip" onclick="setMBFilter('accepted',this)">Принятые</div>
+      <div class="fchip" onclick="setMBFilter('all',this)">Все</div>
+    </div>
+
+    <!-- Счётчики -->
+    <div class="srow">
+      <div class="sc"><div class="sc-v" id="mbNew" style="color:var(--a4)">0</div><div class="sc-l">Новых</div></div>
+      <div class="sc"><div class="sc-v" id="mbAccepted" style="color:var(--inc)">0</div><div class="sc-l">В работе</div></div>
+      <div class="sc"><div class="sc-v" id="mbAll" style="color:var(--t2)">0</div><div class="sc-l">Всего</div></div>
+    </div>
+
+    <div class="card"><div id="masterBlanksList"></div></div>
   </div>
 
   <!-- BLANKS (заготовщик) -->
@@ -828,7 +868,7 @@ let extraWorkCats = JSON.parse(localStorage.getItem('ws_extra_cats')||'["Шли�
 
 const ROLES = {
   заготовщик:    {tabs:['dash','blanks','extrawork'], label:'🪚 Заготовщик'},
-  мастер:        {tabs:['dash','mywork','delivery','zp'], label:'🔨 Мастер'},
+  мастер:        {tabs:['dash','masterblanks','mywork','delivery','zp'], label:'🔨 Мастер'},
   кладовщик:     {tabs:['dash','warehouse','catalog'], label:'📦 Кладовщик'},
   управляющий:   {tabs:['dash','warehouse','zp','zpay','stats','admin'], label:'👑 Управляющий'},
   администратор: {tabs:['dash','warehouse','zp','zpay','stats','admin','import'], label:'🛡 Администратор'},
@@ -839,6 +879,7 @@ const TAB_CFG = {
   blanks:    {icon:'🪚', label:'Заготовки', page:'pg-blanks'},
   extrawork: {icon:'🛠', label:'Доп.работы', page:'pg-extrawork'},
   mywork:    {icon:'🔨', label:'Моя работа', page:'pg-mywork'},
+  masterblanks: {icon:'🪵', label:'Заготовки', page:'pg-masterblanks'},
   delivery:  {icon:'📬', label:'Сдача', page:'pg-delivery'},
   warehouse: {icon:'📦', label:'Склад', page:'pg-warehouse'},
   catalog:   {icon:'📋', label:'Каталог', page:'pg-catalog'},
@@ -863,8 +904,9 @@ function showPg(name,el){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('pg-'+name).classList.add('active');
   el?.classList.add('active');
-  if(name==='mywork')    renderMyWork();
-  if(name==='blanks')    renderBlanks();
+  if(name==='mywork')       renderMyWork();
+  if(name==='masterblanks') renderMasterBlanks();
+  if(name==='blanks')       renderBlanks();
   if(name==='warehouse') renderWarehouse();
   if(name==='delivery')  renderDeliveryPage();
   if(name==='catalog')   renderCatalogPage();
@@ -990,7 +1032,7 @@ function startListeners(){
   // Blanks
   db.collection('ws_blanks').orderBy('createdAt','desc').onSnapshot(snap=>{
     blanks=snap.docs.map(d=>({_id:d.id,...d.data()}));
-    renderDash(); renderBlanks(); renderMyWork(); updateBadges();
+    renderDash(); renderBlanks(); renderMyWork(); renderMasterBlanks(); updateBadges();
   },console.error);
   // Items
   db.collection('ws_items').orderBy('createdAt','desc').onSnapshot(snap=>{
@@ -1030,7 +1072,7 @@ function renderDash(){
   const notifs=[];
   if(session.role==='мастер'){
     const newBlanks=blanks.filter(b=>b.masterId===session.id&&b.status==='new');
-    if(newBlanks.length) notifs.push({type:'new',icon:'📦',title:`${newBlanks.length} новых заготовок ждут вас`,sub:'Нажмите чтобы принять в работу',action:()=>showPg('mywork',document.querySelector('.tab[onclick*=mywork]'))});
+    if(newBlanks.length) notifs.push({type:'new',icon:'📦',title:`${newBlanks.length} новых заготовок ждут вас`,sub:'Нажмите чтобы принять в работу',action:()=>showPg('masterblanks',document.querySelector('.tab[onclick*=masterblanks]'))});
   }
   if(session.role==='кладовщик'||session.role==='управляющий'||session.role==='администратор'){
     const delivered=items.filter(i=>i.status==='delivered'&&!i.isArchiveDraft);
@@ -1354,46 +1396,161 @@ function renderBlanks(){
 }
 
 // ════════ MY WORK (Мастер) ════════
-function renderMyWork(){
-  const myBlanks=blanks.filter(b=>b.masterId===session.id);
-  const myItems=items.filter(i=>i.masterId===session.id);
-  const newB=myBlanks.filter(b=>b.status==='new').length;
-  const inW=myItems.filter(i=>i.status==='in_work').length;
-  const done=myItems.filter(i=>['done','delivered','received','shipped'].includes(i.status)).length;
-  document.getElementById('mwNew').textContent=newB;
-  document.getElementById('mwWork').textContent=inW;
-  document.getElementById('mwDone').textContent=done;
+let _mwFilter = 'all';
+let _mbFilter = 'new';
 
-  const c=document.getElementById('myWorkList');if(!c)return;
-  const allWork=[
-    ...myBlanks.filter(b=>b.status==='new').map(b=>({...b,_type:'blank'})),
-    ...myItems.map(i=>({...i,_type:'item'}))
-  ];
-  if(!allWork.length){c.innerHTML='<div class="empty"><div class="ei">🔨</div>Нет изделий</div>';return;}
-  c.innerHTML=allWork.map(w=>{
-    if(w._type==='blank'){
-      return`<div class="li" onclick="openBlankDetail('${w._id}')">
-        <div class="li-ico" style="background:#1a1e2e">📦</div>
-        <div class="li-info"><div class="li-name">Заготовка: ${w.itemName}</div>
-        <div class="li-sub">🌳 ${w.wood||'—'} · ${w.qty||1} шт. · от ${w.createdByName}</div>
-        <div class="li-sub">Поступила: ${fmtDT(w.createdAt)}</div></div>
-        <span class="badge b-new">⏳ Новая</span>
-      </div>`;
-    } else {
-      const statusMap={in_work:'🔨 В работе',done:'✅ Готово',delivered:'📦 Сдано',received:'✅ Принято',shipped:'🚚 Отгружено'};
-      const badgeMap={in_work:'b-working',done:'b-done',delivered:'b-delivered',received:'b-received',shipped:'b-shipped'};
-      const timeSpent=w.status==='in_work'?elapsed(w.startedAt):elapsed(w.startedAt,w.doneAt);
-      return`<div class="li" onclick="openItemAction('${w._id}')">
-        <div class="li-ico" style="background:#1e2a14">🔨</div>
-        <div class="li-info"><div class="li-name">${w.name||w.itemName}</div>
-        <div class="li-sub">🌳 ${w.wood||'—'} · Начато: ${fmtDT(w.startedAt)}</div>
-        ${timeSpent?`<div class="li-sub">⏱ Время: ${timeSpent}</div>`:''}
+function setMWFilter(f, el){
+  _mwFilter = f;
+  document.querySelectorAll('#pg-mywork .fchip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderMyWork();
+}
+
+function setMBFilter(f, el){
+  _mbFilter = f;
+  document.querySelectorAll('#pg-masterblanks .fchip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderMasterBlanks();
+}
+
+function renderMyWork(){
+  const myItems = items.filter(i=>i.masterId===session.id);
+  const inWork  = myItems.filter(i=>i.status==='in_work');
+  const done    = myItems.filter(i=>i.status==='done');
+  const all     = myItems.filter(i=>['done','delivered','received','shipped'].includes(i.status));
+
+  document.getElementById('mwWork').textContent  = inWork.length;
+  document.getElementById('mwDone').textContent  = done.length;
+  document.getElementById('mwTotal').textContent = all.length;
+
+  // Аналитика — показываем если есть история
+  const analCard = document.getElementById('mwAnalytics');
+  if(all.length >= 3){
+    analCard.style.display = 'block';
+    renderMWAnalytics(myItems);
+  } else {
+    analCard.style.display = 'none';
+  }
+
+  const c = document.getElementById('myWorkList'); if(!c) return;
+  let list = myItems;
+  if(_mwFilter==='in_work')   list = myItems.filter(i=>i.status==='in_work');
+  if(_mwFilter==='done')      list = myItems.filter(i=>i.status==='done');
+  if(_mwFilter==='delivered') list = myItems.filter(i=>i.status==='delivered');
+  if(_mwFilter==='received')  list = myItems.filter(i=>['received','shipped'].includes(i.status));
+
+  if(!list.length){ c.innerHTML='<div class="empty"><div class="ei">🔨</div>Нет изделий</div>'; return; }
+
+  const statusMap = {in_work:'🔨 В работе', done:'✅ Готово', delivered:'📦 Сдано', received:'🏪 На складе', shipped:'🚚 Отгружено'};
+  const badgeMap  = {in_work:'b-working', done:'b-done', delivered:'b-delivered', received:'b-received', shipped:'b-shipped'};
+
+  c.innerHTML = list.map(w=>{
+    const timeSpent = w.status==='in_work' ? elapsed(w.startedAt) : elapsed(w.startedAt, w.doneAt);
+    return `<div class="li" onclick="openItemAction('${w._id}')">
+      <div class="li-ico" style="background:#1e2a14">🔨</div>
+      <div class="li-info">
+        <div class="li-name">${w.name||w.itemName}</div>
+        <div class="li-sub">🌳 ${w.wood||'—'}${w.size?' · 📐 '+w.size:''}</div>
+        <div class="li-sub">Начато: ${fmtDT(w.startedAt)}${timeSpent?' · ⏱ '+timeSpent:''}</div>
         ${w.zp&&w.zpPaid?`<div class="li-sub" style="color:var(--a5)">💰 ЗП: ${fmt(w.zp)}</div>`:''}
-        </div>
-        <span class="badge ${badgeMap[w.status]||'b-new'}">${statusMap[w.status]||w.status}</span>
-      </div>`;
-    }
+      </div>
+      <span class="badge ${badgeMap[w.status]||'b-new'}">${statusMap[w.status]||w.status}</span>
+    </div>`;
   }).join('');
+}
+
+function renderMWAnalytics(myItems){
+  const c = document.getElementById('mwAnalyticsContent'); if(!c) return;
+  const done = myItems.filter(i=>['done','delivered','received','shipped'].includes(i.status));
+
+  // По наименованиям
+  const byName = {};
+  done.forEach(i=>{ const n=i.name||i.itemName; byName[n]=(byName[n]||0)+1; });
+  const topNames = Object.entries(byName).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+  // Среднее время
+  const timed = done.filter(i=>i.startedAt&&i.doneAt);
+  const avgMs = timed.length ? timed.reduce((s,i)=>s+(new Date(i.doneAt)-new Date(i.startedAt)),0)/timed.length : 0;
+  const avgTime = avgMs ? elapsed(new Date(Date.now()-avgMs).toISOString()) : '—';
+
+  // Общая ЗП
+  const totalZP = myItems.reduce((s,i)=>s+(i.zpPaid?i.zp||0:0),0);
+
+  c.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div style="background:var(--s2);border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:18px;font-weight:700;color:var(--accent)">${done.length}</div>
+        <div style="font-size:10px;color:var(--t2)">Сделано всего</div>
+      </div>
+      <div style="background:var(--s2);border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:15px;font-weight:700;color:var(--a5)">${fmt(totalZP)}</div>
+        <div style="font-size:10px;color:var(--t2)">Заработано</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--t2);margin-bottom:4px;font-weight:600">ТОП ИЗДЕЛИЙ</div>
+    ${topNames.map(([name,cnt])=>`
+      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <span>${name}</span>
+        <span style="color:var(--accent);font-weight:700">${cnt} шт.</span>
+      </div>`).join('')}
+    ${avgMs?`<div style="margin-top:8px;font-size:12px;color:var(--t2)">⏱ Среднее время на изделие: <strong style="color:var(--text)">${avgTime}</strong></div>`:''}`;
+}
+
+// ════════ ЗАГОТОВКИ МАСТЕРА ════════
+function renderMasterBlanks(){
+  const myBlanks = blanks.filter(b=>b.masterId===session.id);
+  const newB     = myBlanks.filter(b=>b.status==='new');
+  const accepted = myBlanks.filter(b=>b.status!=='new');
+
+  document.getElementById('mbNew').textContent      = newB.length;
+  document.getElementById('mbAccepted').textContent = accepted.length;
+  document.getElementById('mbAll').textContent      = myBlanks.length;
+
+  const c = document.getElementById('masterBlanksList'); if(!c) return;
+  let list = myBlanks;
+  if(_mbFilter==='new')      list = newB;
+  if(_mbFilter==='accepted') list = accepted;
+
+  if(!list.length){
+    c.innerHTML='<div class="empty"><div class="ei">🪵</div>'+(newB.length===0&&_mbFilter==='new'?'Новых заготовок нет':'Заготовок нет')+'</div>';
+    return;
+  }
+
+  c.innerHTML = list.map(b=>{
+    const age = elapsed(b.createdAt);
+    const statusL = {new:'⏳ Ожидает', accepted:'✅ Принято'};
+    const badgeL  = {new:'b-new', accepted:'b-accepted'};
+    return `<div class="li" onclick="${b.status==='new'?`openBlankDetail('${b._id}')`:''}" style="${b.status==='new'?'cursor:pointer':''}">
+      <div class="li-ico" style="background:${b.status==='new'?'#2a1e14':'#1e2a14'}">🪵</div>
+      <div class="li-info">
+        <div class="li-name">${b.itemName}${b.qty>1?' × '+b.qty:''}</div>
+        <div class="li-sub">🌳 ${b.wood||'—'}${b.size?' · 📐 '+b.size:''}</div>
+        <div class="li-sub">Выдано: ${fmtDT(b.createdAt)}${age?' · <span style="color:var(--a4)">уже '+age+'</span>':''}</div>
+        ${b.comment?`<div class="li-sub" style="color:var(--t2)">${b.comment}</div>`:''}
+        ${b.status==='accepted'?`<div class="li-sub" style="color:var(--inc)">Принято: ${fmtDT(b.acceptedAt)}</div>`:''}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+        <span class="badge ${badgeL[b.status]||'b-new'}">${statusL[b.status]||b.status}</span>
+        ${b.status==='new'?`<button onclick="event.stopPropagation();quickAcceptBlank('${b._id}')" class="btn green" style="width:auto;padding:4px 10px;font-size:11px;margin:0">✅ Принять</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function quickAcceptBlank(id){
+  const b = blanks.find(x=>x._id===id); if(!b) return;
+  const emp = getEmployees().find(e=>e.id===session.id);
+  const item = {
+    id:uid(), blankId:id,
+    name:b.itemName, itemName:b.itemName, wood:b.wood, size:b.size||'', qty:b.qty||1,
+    masterId:session.id, masterName:session.name, masterRate:emp?.rate||0,
+    status:'in_work', createdAt:now(), startedAt:now(),
+  };
+  db.collection('ws_items').add(item).then(()=>{
+    db.collection('ws_blanks').doc(id).update({status:'accepted', acceptedAt:now(), acceptedQty:b.qty||1});
+    showToast('✅ Принято в работу! Таймер запущен.');
+    renderMasterBlanks();
+  }).catch(e=>showToast('Ошибка: '+e.message));
 }
 
 function openBlankDetail(id){
