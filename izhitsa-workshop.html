@@ -294,6 +294,34 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
   <!-- ADMIN (управляющий) -->
   <div class="page" id="pg-admin">
     <div class="stitle">Управление</div>
+
+    <!-- КАТАЛОГ ТОВАРОВ — только администратор -->
+    <div id="adminCatalogSection" style="display:none">
+      <div class="card" style="border-color:var(--a2)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div class="ctitle" style="margin:0">📋 Каталог товаров</div>
+          <button onclick="openAddProductMo()" style="background:var(--a2);border:none;border-radius:8px;padding:6px 12px;color:#000;font-size:12px;font-weight:700;cursor:pointer">＋ Добавить</button>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">
+          <div class="fchip active" id="catAll" onclick="setCatFilter('all',this)">Все</div>
+          <div class="fchip" id="catActive" onclick="setCatFilter('active',this)">Активные</div>
+          <div class="fchip" id="catArchive" onclick="setCatFilter('archive',this)">Архив</div>
+        </div>
+        <div id="productCatalogList"></div>
+      </div>
+
+      <!-- Справочники -->
+      <div class="card">
+        <div class="ctitle">📚 Справочники</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <button onclick="openAddItemNameMo()" class="btn sec" style="font-size:11px;padding:8px">📋 Наимен.</button>
+          <button onclick="openAddWoodMo()" class="btn sec" style="font-size:11px;padding:8px">🌳 Породы</button>
+          <button onclick="openAddSizeMo()" class="btn sec" style="font-size:11px;padding:8px">📐 Размеры</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="adminExtraPanel"></div>
     <div class="card">
       <div class="ctitle">Все изделия</div>
       <div id="adminAllItems"></div>
@@ -610,6 +638,45 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
     <button class="btn sec" style="margin-top:12px" onclick="closeMo('addSizeMo')">Готово</button>
   </div>
 </div>
+
+<!-- ДОБАВИТЬ / РЕДАКТИРОВАТЬ ТОВАР В КАТАЛОГ -->
+<div class="mo" id="addProductMo">
+  <div class="md"><div class="mh"></div>
+    <div class="mt" id="addProductMoTitle">📦 Новый товар</div>
+    <div class="fg"><label class="fl">Название</label>
+      <div style="display:flex;gap:8px">
+        <select class="fs" id="prodName" style="flex:1"></select>
+        <button onclick="openAddItemNameMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">✏️</button>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Порода дерева</label>
+      <div style="display:flex;gap:8px">
+        <select class="fs" id="prodWood" style="flex:1"></select>
+        <button onclick="openAddWoodMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">✏️</button>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Размер</label>
+      <div style="display:flex;gap:8px">
+        <select class="fs" id="prodSize" style="flex:1"></select>
+        <button onclick="openAddSizeMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">✏️</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="fg"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="prodPrice" inputmode="numeric" placeholder="0"></div>
+      <div class="fg"><label class="fl">ЗП мастеру (₽)</label><input class="fi" type="number" id="prodZP" inputmode="numeric" placeholder="0"></div>
+    </div>
+    <div class="fg"><label class="fl">Артикул</label><input class="fi" id="prodArtikul" placeholder="СТ-001"></div>
+    <div class="fg"><label class="fl">Описание</label><input class="fi" id="prodDesc" placeholder="Доп. информация..."></div>
+    <div class="fg"><label class="fl">Статус</label>
+      <select class="fs" id="prodStatus">
+        <option value="active">✅ Активный</option>
+        <option value="archive">📦 Архив</option>
+      </select>
+    </div>
+    <button class="btn green" id="addProductBtn" onclick="saveProduct()">💾 Сохранить товар</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('addProductMo')">Отмена</button>
+  </div>
+</div>
 <div class="mo" id="blankDetailMo">
   <div class="md"><div class="mh"></div><div class="mt" id="bdTitle">Заготовка</div>
     <div id="bdContent"></div>
@@ -873,6 +940,10 @@ function startListeners(){
     const sel=document.getElementById('shipDest');
     if(sel) sel.innerHTML=shops.length?shops.map(s=>`<option>${s}</option>`).join(''):'<option>Дерево</option>';
   },()=>{});
+  // Единый каталог товаров
+  subscribeProducts();
+  // Показать каталог только администратору
+  toggleAdminCatalog();
 }
 
 function updateBadges(){
@@ -992,8 +1063,10 @@ function saveItemName(){
   saveItemNames(names);
   renderItemNameSelect();
   renderItemNamesList();
+  // Обновить select в каталоге если открыт
+  const pn = document.getElementById('prodName');
+  if(pn) pn.innerHTML = names.map(n=>`<option>${n}</option>`).join('');
   document.getElementById('newItemNameInput').value='';
-  // Выбрать новое в селекте
   const sel = document.getElementById('blankName');
   if(sel) sel.value = val;
   showToast(`✅ «${val}» добавлено`);
@@ -2557,6 +2630,180 @@ function renderShipImportHistory(){
       <span class="at-lbl">${h.date} · ${h.dest}<br><span style="font-size:10px">№${h.num} · ${h.items} поз. · от ${h.by}</span></span>
       <span class="at-val" style="color:var(--accent)">${Math.round(h.total).toLocaleString('ru-RU')}₽</span>
     </div>`).join('');
+}
+
+// ════════════════════════════════
+// ЕДИНЫЙ КАТАЛОГ ТОВАРОВ
+// ════════════════════════════════
+let products = []; // загружается из Firebase ws_products
+let _catFilter = 'all';
+let _editProductId = null;
+
+// Подписка на каталог (вызывается при старте)
+function subscribeProducts(){
+  db.collection('ws_products').orderBy('createdAt','desc')
+    .onSnapshot(snap=>{
+      products = snap.docs.map(d=>({...d.data(), _id:d.id}));
+      // Синхронизируем локальные справочники из каталога
+      syncCatalogToLocalDicts();
+      // Обновляем все зависимые UI
+      renderProductCatalogList();
+      renderProductSelectsEverywhere();
+    }, err=>console.error('products:', err));
+}
+
+// Синхронизация названий/пород/размеров из каталога в локальные справочники
+function syncCatalogToLocalDicts(){
+  if(!products.length) return;
+  const names  = new Set(getItemNames());
+  const woods  = new Set(getWoods());
+  const sizes  = new Set(getSizes());
+  products.forEach(p=>{
+    if(p.name)   names.add(p.name);
+    if(p.wood)   woods.add(p.wood);
+    if(p.size)   sizes.add(p.size);
+  });
+  saveItemNames([...names]);
+  saveWoods([...woods]);
+  saveSizes([...sizes]);
+}
+
+// Обновить все select-ы с товарами во всех формах
+function renderProductSelectsEverywhere(){
+  renderItemNameSelect();
+  renderWoodSelect();
+  renderSizeSelect();
+  renderProductSelects(); // для мастера/кладовщика
+}
+
+// Select товара из каталога (для мастера при выборе изделия)
+function renderProductSelects(){
+  const active = products.filter(p=>p.status!=='archive');
+  ['masterItemSelect','warehouseItemSelect'].forEach(id=>{
+    const s = document.getElementById(id); if(!s) return;
+    s.innerHTML = active.length
+      ? active.map(p=>`<option value="${p._id}" data-price="${p.price||0}" data-zp="${p.zp||0}" data-wood="${p.wood||''}" data-size="${p.size||''}">${p.name}${p.wood?' · '+p.wood:''}${p.size?' · '+p.size:''}</option>`).join('')
+      : '<option value="">— нет товаров —</option>';
+  });
+}
+
+let _catFilter2 = 'all';
+function setCatFilter(f, el){
+  _catFilter2 = f;
+  document.querySelectorAll('#adminCatalogSection .fchip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderProductCatalogList();
+}
+
+function renderProductCatalogList(){
+  const c = document.getElementById('productCatalogList'); if(!c) return;
+  let list = products;
+  if(_catFilter2==='active')  list = products.filter(p=>p.status!=='archive');
+  if(_catFilter2==='archive') list = products.filter(p=>p.status==='archive');
+
+  if(!list.length){
+    c.innerHTML='<div class="empty" style="padding:12px 0"><div class="ei">📋</div>Товаров нет</div>';
+    return;
+  }
+  c.innerHTML = list.map(p=>`
+    <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700">${p.name}${p.artikul?' <span style="color:var(--t2);font-size:11px">· ${p.artikul}</span>':''}</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:2px">
+            ${p.wood?'🌳 '+p.wood+' ':''}${p.size?'📐 '+p.size+' ':''}
+          </div>
+          <div style="font-size:11px;margin-top:3px">
+            ${p.price?`<span style="color:var(--accent)">💰 ${fmt(p.price)}</span> `:''}
+            ${p.zp?`<span style="color:var(--a5)">ЗП: ${fmt(p.zp)}</span>`:''}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-size:10px;padding:3px 7px;border-radius:6px;background:${p.status==='archive'?'var(--s2)':'#1a2a1e'};color:${p.status==='archive'?'var(--t2)':'var(--inc)'}">${p.status==='archive'?'архив':'актив'}</span>
+          <button onclick="editProduct('${p._id}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 8px;color:var(--a2);cursor:pointer;font-size:11px">✏️</button>
+          <button onclick="archiveProduct('${p._id}','${p.status}')" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:14px">${p.status==='archive'?'♻️':'📦'}</button>
+        </div>
+      </div>
+      ${p.desc?`<div style="font-size:11px;color:var(--t2);margin-top:4px">${p.desc}</div>`:''}
+    </div>`).join('');
+}
+
+function openAddProductMo(){
+  _editProductId = null;
+  document.getElementById('addProductMoTitle').textContent = '📦 Новый товар';
+  document.getElementById('addProductBtn').textContent = '💾 Добавить в каталог';
+  // Заполняем селекты
+  ['prodName','prodWood','prodSize'].forEach(id=>{
+    const el = document.getElementById(id); if(!el) return;
+    if(id==='prodName') el.innerHTML = getItemNames().map(n=>`<option>${n}</option>`).join('');
+    if(id==='prodWood') el.innerHTML = getWoods().map(w=>`<option>${w}</option>`).join('');
+    if(id==='prodSize') el.innerHTML = getSizes().map(s=>`<option>${s}</option>`).join('');
+  });
+  ['prodPrice','prodZP','prodArtikul','prodDesc'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('prodStatus').value = 'active';
+  openMo('addProductMo');
+}
+
+function editProduct(id){
+  const p = products.find(p=>p._id===id); if(!p) return;
+  _editProductId = id;
+  document.getElementById('addProductMoTitle').textContent = '✏️ Редактировать товар';
+  document.getElementById('addProductBtn').textContent = '💾 Сохранить изменения';
+  // Заполняем селекты
+  const nameEl = document.getElementById('prodName');
+  const woodEl = document.getElementById('prodWood');
+  const sizeEl = document.getElementById('prodSize');
+  nameEl.innerHTML = getItemNames().map(n=>`<option ${n===p.name?'selected':''}>${n}</option>`).join('');
+  woodEl.innerHTML = getWoods().map(w=>`<option ${w===p.wood?'selected':''}>${w}</option>`).join('');
+  sizeEl.innerHTML = getSizes().map(s=>`<option ${s===p.size?'selected':''}>${s}</option>`).join('');
+  document.getElementById('prodPrice').value   = p.price||'';
+  document.getElementById('prodZP').value      = p.zp||'';
+  document.getElementById('prodArtikul').value = p.artikul||'';
+  document.getElementById('prodDesc').value    = p.desc||'';
+  document.getElementById('prodStatus').value  = p.status||'active';
+  openMo('addProductMo');
+}
+
+function saveProduct(){
+  const data = {
+    name:     document.getElementById('prodName').value,
+    wood:     document.getElementById('prodWood').value,
+    size:     document.getElementById('prodSize').value,
+    price:    parseFloat(document.getElementById('prodPrice').value)||0,
+    zp:       parseFloat(document.getElementById('prodZP').value)||0,
+    artikul:  document.getElementById('prodArtikul').value.trim(),
+    desc:     document.getElementById('prodDesc').value.trim(),
+    status:   document.getElementById('prodStatus').value,
+    updatedAt: now(),
+    updatedBy: session.name,
+  };
+  if(!data.name){ showToast('Укажите название'); return; }
+
+  const ref = _editProductId
+    ? db.collection('ws_products').doc(_editProductId)
+    : db.collection('ws_products').doc();
+
+  if(!_editProductId) data.createdAt = now(); data.createdBy = session.name;
+
+  ref.set(data, {merge:true})
+    .then(()=>{
+      closeMo('addProductMo');
+      showToast(_editProductId ? '✅ Товар обновлён' : '✅ Товар добавлен в каталог');
+    })
+    .catch(e=>showToast('Ошибка: '+e.message));
+}
+
+function archiveProduct(id, currentStatus){
+  const newStatus = currentStatus==='archive' ? 'active' : 'archive';
+  db.collection('ws_products').doc(id).update({status:newStatus, updatedAt:now(), updatedBy:session.name})
+    .then(()=>showToast(newStatus==='archive'?'📦 Товар в архиве':'✅ Товар активирован'))
+    .catch(e=>showToast('Ошибка: '+e.message));
+}
+
+// Показать каталог только администратору
+function toggleAdminCatalog(){
+  const el = document.getElementById('adminCatalogSection');
+  if(el) el.style.display = session.role==='администратор' ? 'block' : 'none';
 }
 
 // ════════ BOOT ════════

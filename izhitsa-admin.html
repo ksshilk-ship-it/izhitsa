@@ -1528,6 +1528,12 @@ function setShopPeriod(period, btn) {
 
 function renderShops() {
   try {
+    const el = document.getElementById('shopsAnalysis');
+    if(!el) {
+      console.error('shopsAnalysis element not found');
+      return;
+    }
+    
     const txs = getFilteredTransactionsShops();
     const sources = getSalesSources();
     
@@ -1705,10 +1711,11 @@ function renderShops() {
         </div>
       </div>`;
     
-    document.getElementById('shopsAnalysis').innerHTML = html;
+    el.innerHTML = html;
   } catch(e) {
     console.error('renderShops error:', e);
-    document.getElementById('shopsAnalysis').innerHTML = '<div style="color:var(--exp);padding:12px">Ошибка при загрузке данных: ' + e.message + '</div>';
+    const el = document.getElementById('shopsAnalysis');
+    if(el) el.innerHTML = '<div style="color:var(--exp);padding:12px">Ошибка: ' + e.message + '</div>';
   }
 }
 
