@@ -1472,11 +1472,6 @@ function renderShops() {
       bySource[s.name] = {amount: 0, count: 0, type: s.type};
     });
     
-    if(!txs || txs.length === 0) {
-      document.getElementById('shopsAnalysis').innerHTML = '<div style="padding:20px;text-align:center;color:var(--t2);font-size:12px">Нет данных за выбранный период</div>';
-      return;
-    }
-    
     txs.forEach(tx => {
       if(tx.type === 'income') {
         income += tx.amount;
@@ -1510,9 +1505,9 @@ function renderShops() {
     const minDay = days.length > 0 ? Math.min(...Object.values(byDay)) : 0;
     
     // Best/Worst
-    const bestSource = Object.entries(bySource).reduce((a,b) => a[1].amount > b[1].amount ? a : b, ['', {amount:0}]);
+    const bestSource = Object.entries(bySource).reduce((a,b) => a[1].amount > b[1].amount ? a : b, ['Нет данных', {amount:0}]);
     const worstSource = Object.entries(bySource).filter(([,v]) => v.amount > 0).reduce((a,b) => a[1].amount < b[1].amount ? a : b, ['', {amount:0}]);
-    const bestSeller = Object.entries(bySeller).reduce((a,b) => a[1].amount > b[1].amount ? a : b, ['', {amount:0}]);
+    const bestSeller = Object.entries(bySeller).length > 0 ? Object.entries(bySeller).reduce((a,b) => a[1].amount > b[1].amount ? a : b) : ['Нет данных', {amount:0}];
     
     // Avg check
     const avgCheck = totalOps > 0 ? income / totalOps : 0;
@@ -1559,7 +1554,7 @@ function renderShops() {
         <div class="pl-row" style="margin-bottom:12px;padding:10px;background:var(--s2);border-radius:8px">
           <div>
             <div style="font-size:11px;color:var(--t2)">Лучший источник</div>
-            <div style="font-weight:600;font-size:12px">${bestSource[0] || 'Нет'}</div>
+            <div style="font-weight:600;font-size:12px">${bestSource[0]}</div>
           </div>
           <div class="pl-val" style="color:var(--inc);font-weight:700">${bestSource[1].amount.toLocaleString('ru-RU')} ₽</div>
         </div>
@@ -1567,7 +1562,7 @@ function renderShops() {
         <div class="pl-row" style="margin-bottom:12px;padding:10px;background:var(--s2);border-radius:8px">
           <div>
             <div style="font-size:11px;color:var(--t2)">Лучший продавец</div>
-            <div style="font-weight:600;font-size:12px">${bestSeller[0] || 'Нет'}</div>
+            <div style="font-weight:600;font-size:12px">${bestSeller[0]}</div>
           </div>
           <div class="pl-val" style="color:var(--inc);font-weight:700">${bestSeller[1].amount.toLocaleString('ru-RU')} ₽</div>
         </div>
@@ -1584,9 +1579,11 @@ function renderShops() {
       <!-- ПРОДАЖИ ПО ИСТОЧНИКАМ -->
       <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
         <div class="ctitle">📍 Продажи по источникам</div>
+        <div style="font-size:11px;color:var(--t2);margin-bottom:8px">
+          ${Object.entries(bySource).length > 0 ? 'Все источники:' : 'Нет источников'}
+        </div>
         ${
           Object.entries(bySource)
-            .filter(([name, data]) => data.amount > 0)
             .sort((a,b) => b[1].amount - a[1].amount)
             .map(([name, data]) => {
               const pct = income > 0 ? ((data.amount / income) * 100).toFixed(0) : 0;
@@ -1609,6 +1606,7 @@ function renderShops() {
       <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
         <div class="ctitle">👥 Анализ по продавцам</div>
         ${
+          Object.entries(bySeller).length > 0 ? 
           Object.entries(bySeller)
             .sort((a,b) => b[1].amount - a[1].amount)
             .map(([seller, data]) => {
@@ -1625,6 +1623,7 @@ function renderShops() {
                 </div>
               </div>`;
             }).join('')
+          : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных о продавцах</div>'
         }
       </div>
       
@@ -1641,7 +1640,7 @@ function renderShops() {
     document.getElementById('shopsAnalysis').innerHTML = html;
   } catch(e) {
     console.error('renderShops error:', e);
-    document.getElementById('shopsAnalysis').innerHTML = '<div style="color:var(--exp);padding:12px">Ошибка при загрузке данных</div>';
+    document.getElementById('shopsAnalysis').innerHTML = '<div style="color:var(--exp);padding:12px">Ошибка при загрузке данных: ' + e.message + '</div>';
   }
 }
 
