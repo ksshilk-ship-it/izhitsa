@@ -408,6 +408,30 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
     </div>
   </div>
 
+  </div>
+
+  <!-- ПРОЧИЕ РАБОТЫ (мастер) -->
+  <div class="page" id="pg-othertasks">
+    <div class="stitle">🛠 Прочие работы</div>
+
+    <!-- Активные задачи -->
+    <div class="card" id="otActiveCard">
+      <div class="ctitle">Активные задачи</div>
+      <div id="otActiveList"></div>
+    </div>
+
+    <!-- История -->
+    <div class="card">
+      <div style="display:flex;gap:6px;margin-bottom:8px;overflow-x:auto">
+        <div class="fchip active" onclick="setOTFilter('all',this)">Все</div>
+        <div class="fchip" onclick="setOTFilter('active',this)">В работе</div>
+        <div class="fchip" onclick="setOTFilter('paused',this)">Пауза</div>
+        <div class="fchip" onclick="setOTFilter('done',this)">Завершены</div>
+      </div>
+      <div id="otHistoryList"></div>
+    </div>
+  </div>
+
   <!-- КАТАЛОГ ТОВАРОВ (кладовщик) -->
   <div class="page" id="pg-catalog">
     <div class="stitle">📋 Каталог товаров</div>
@@ -535,9 +559,16 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
   <div class="page" id="pg-extrawork">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="stitle" style="margin:0">Доп. работы</div>
-      <button class="btn green" style="width:auto;padding:8px 14px;font-size:11px" onclick="renderMasterSelect();openMo('addExtraMo')">＋ Добавить</button>
+      <div style="display:flex;gap:6px">
+        <button class="btn" style="width:auto;padding:8px 12px;font-size:11px;background:var(--a2);color:#000" onclick="openAssignOtherTask()">🛠 Прочая работа</button>
+        <button class="btn green" style="width:auto;padding:8px 12px;font-size:11px" onclick="renderMasterSelect();openMo('addExtraMo')">＋ Доп. работа</button>
+      </div>
     </div>
     <div class="card"><div class="ctitle">Назначенные работы</div><div id="extraWorkList"></div></div>
+    <div class="card" style="margin-top:8px">
+      <div class="ctitle">🛠 Прочие задачи</div>
+      <div id="otAllList"></div>
+    </div>
   </div>
 
   <!-- ZP PAYMENTS PAGE -->
@@ -951,6 +982,7 @@ let blanks = [];
 let items = [];
 let extraWorks = [];
 let shipments = [];
+let otherTasks = [];
 let zpPayments = [];
 let selectedShipItems = new Set();
 let currentBlankId = null;
@@ -959,7 +991,7 @@ let extraWorkCats = JSON.parse(localStorage.getItem('ws_extra_cats')||'["Шли�
 
 const ROLES = {
   заготовщик:    {tabs:['dash','blanks','extrawork'], label:'🪚 Заготовщик'},
-  мастер:        {tabs:['dash','masterblanks','mywork','delivery','zp'], label:'🔨 Мастер'},
+  мастер:        {tabs:['dash','masterblanks','mywork','othertasks','delivery','zp'], label:'🔨 Мастер'},
   кладовщик:     {tabs:['dash','warehouse','inventory','catalog'], label:'📦 Кладовщик'},
   управляющий:   {tabs:['dash','warehouse','zp','zpay','stats','admin'], label:'👑 Управляющий'},
   администратор: {tabs:['dash','warehouse','zp','zpay','stats','admin','import'], label:'🛡 Администратор'},
@@ -971,6 +1003,7 @@ const TAB_CFG = {
   extrawork: {icon:'🛠', label:'Доп.работы', page:'pg-extrawork'},
   mywork:    {icon:'🔨', label:'Моя работа', page:'pg-mywork'},
   masterblanks: {icon:'🪵', label:'Заготовки', page:'pg-masterblanks'},
+  othertasks:   {icon:'🛠', label:'Прочие', page:'pg-othertasks'},
   delivery:  {icon:'📬', label:'Сдача', page:'pg-delivery'},
   warehouse: {icon:'📦', label:'Склад', page:'pg-warehouse'},
   inventory: {icon:'🔍', label:'Инвент.', page:'pg-inventory'},
@@ -998,6 +1031,7 @@ function showPg(name,el){
   el?.classList.add('active');
   if(name==='mywork')       renderMyWork();
   if(name==='masterblanks') renderMasterBlanks();
+  if(name==='othertasks')   renderOtherTasks();
   if(name==='blanks')       renderBlanks();
   if(name==='warehouse') renderWarehouse();
   if(name==='inventory') renderInventoryPage();
@@ -1141,6 +1175,11 @@ function startListeners(){
     extraWorks=snap.docs.map(d=>({_id:d.id,...d.data()}));
     renderExtraWorkList(); renderZPay(); renderStats();
   },console.error);
+  // Прочие работы
+  db.collection('ws_other_tasks').orderBy('createdAt','desc').onSnapshot(snap=>{
+    otherTasks=snap.docs.map(d=>({_id:d.id,...d.data()}));
+    renderDash(); renderOtherTasks();
+  },()=>{});
   // Shops from admin
   db.collection('iz_admin_shops').onSnapshot(snap=>{
     const shops=snap.docs.map(d=>d.data().name).filter(Boolean);
@@ -1166,6 +1205,9 @@ function renderDash(){
   if(session.role==='мастер'){
     const newBlanks=blanks.filter(b=>b.masterId===session.id&&b.status==='new');
     if(newBlanks.length) notifs.push({type:'new',icon:'📦',title:`${newBlanks.length} новых заготовок ждут вас`,sub:'Нажмите чтобы принять в работу',action:()=>showPg('masterblanks',document.querySelector('.tab[onclick*=masterblanks]'))});
+    // Уведомление о новых прочих задачах
+    const newTasks=otherTasks.filter(t=>t.masterId===session.id&&t.status==='new');
+    if(newTasks.length) notifs.push({type:'warn',icon:'🛠',title:`${newTasks.length} новых прочих задач`,sub:'Нажмите чтобы посмотреть',action:()=>showPg('othertasks',document.querySelector('.tab[onclick*=othertasks]'))});
   }
   if(session.role==='кладовщик'||session.role==='управляющий'||session.role==='администратор'){
     const delivered=items.filter(i=>i.status==='delivered'&&!i.isArchiveDraft);
@@ -1199,11 +1241,27 @@ function renderDash(){
     const inWork=myItems.filter(i=>i.status==='in_work').length;
     const done=myItems.filter(i=>['done','delivered','received'].includes(i.status)).length;
     const zpTotal=myItems.filter(i=>i.zpPaid).reduce((s,i)=>s+(i.zp||0),0);
-    dc.innerHTML=`<div class="srow">
-      <div class="sc"><div class="sc-v" style="color:var(--a4)">${inWork}</div><div class="sc-l">В работе</div></div>
-      <div class="sc"><div class="sc-v" style="color:var(--a6)">${done}</div><div class="sc-l">Сдано</div></div>
-      <div class="sc"><div class="sc-v" style="color:var(--a5)">${fmt(zpTotal)}</div><div class="sc-l">ЗП получено</div></div>
-    </div>`;
+    const todayKey=new Date().toISOString().slice(0,10);
+    const arrivedToday=JSON.parse(localStorage.getItem('ws_arrivals_'+session.id)||'[]').find(a=>a.date===todayKey);
+    dc.innerHTML=`
+      <!-- КНОПКА ПРИБЫТИЯ -->
+      <div style="margin-bottom:14px">
+        ${arrivedToday
+          ? `<div style="background:#1a2a1e;border:2px solid var(--inc);border-radius:16px;padding:16px;text-align:center">
+              <div style="font-size:22px;margin-bottom:4px">✅</div>
+              <div style="font-size:13px;font-weight:700;color:var(--inc)">Прибыл сегодня</div>
+              <div style="font-size:11px;color:var(--t2);margin-top:3px">${arrivedToday.time}</div>
+            </div>`
+          : `<button onclick="markArrival()" style="width:100%;background:linear-gradient(135deg,var(--a6),#00c9a7);border:none;border-radius:16px;padding:22px;color:#000;font-size:17px;font-weight:800;cursor:pointer;box-shadow:0 4px 20px rgba(0,200,150,0.3)">
+              🏁 Прибыл на работу
+            </button>`
+        }
+      </div>
+      <div class="srow">
+        <div class="sc"><div class="sc-v" style="color:var(--a4)">${inWork}</div><div class="sc-l">В работе</div></div>
+        <div class="sc"><div class="sc-v" style="color:var(--a6)">${done}</div><div class="sc-l">Сдано</div></div>
+        <div class="sc"><div class="sc-v" style="color:var(--a5)">${fmt(zpTotal)}</div><div class="sc-l">ЗП получено</div></div>
+      </div>`;
   } else if(session.role==='заготовщик'){
     const today=blanks.filter(b=>b.createdById===session.id&&b.createdAt?.startsWith(new Date().toISOString().slice(0,10)));
     dc.innerHTML=`<div class="card"><div class="ctitle">Выдано сегодня</div>
@@ -1221,6 +1279,16 @@ function renderDash(){
     const delivered=items.filter(i=>i.status==='delivered').length;
     const stock=items.filter(i=>i.status==='received').length;
     const zpMonth=calcMonthZP();
+    const todayKey=new Date().toISOString().slice(0,10);
+    // Прибытия сегодня — из Firebase подгружаем асинхронно
+    db.collection('ws_arrivals').where('date','==',todayKey).get().then(snap=>{
+      const arrivals=snap.docs.map(d=>d.data());
+      const arrHtml = arrivals.length
+        ? arrivals.map(a=>`<div class="at-row"><span class="at-lbl">${a.masterName}</span><span class="at-val" style="color:var(--inc)">${a.time}</span></div>`).join('')
+        : '<div style="font-size:12px;color:var(--t2)">Никто не отметился</div>';
+      const arrBlock=document.getElementById('dashArrivals');
+      if(arrBlock) arrBlock.innerHTML=arrHtml;
+    }).catch(()=>{});
     dc.innerHTML=`<div class="srow">
       <div class="sc"><div class="sc-v" style="color:var(--a4)">${inWork}</div><div class="sc-l">В работе</div></div>
       <div class="sc"><div class="sc-v" style="color:var(--a5)">${delivered}</div><div class="sc-l">На приёмке</div></div>
@@ -1228,6 +1296,10 @@ function renderDash(){
     </div>
     <div class="card"><div class="ctitle">ЗП к выплате (месяц)</div>
       <div style="font-family:'Unbounded',sans-serif;font-size:22px;font-weight:700;color:var(--a5)">${fmt(zpMonth)}</div>
+    </div>
+    <div class="card" style="border-color:var(--inc)">
+      <div class="ctitle">🏁 Прибыли сегодня</div>
+      <div id="dashArrivals"><div style="font-size:12px;color:var(--t2)">Загрузка...</div></div>
     </div>`;
   }
 }
@@ -2291,8 +2363,8 @@ function renderExtraWorkList(){
   const c = document.getElementById('extraWorkList'); if(!c) return;
   let list = extraWorks;
   if(session.role==='заготовщик') list = extraWorks.filter(w=>w.assignedById===session.id);
-  if(!list.length){ c.innerHTML='<div class="empty"><div class="ei">🛠</div>Нет доп. работ</div>'; return; }
-  c.innerHTML = list.slice(0,30).map(w=>`
+  if(!list.length){ c.innerHTML='<div class="empty"><div class="ei">🛠</div>Нет доп. работ</div>'; }
+  else c.innerHTML = list.slice(0,30).map(w=>`
     <div class="li">
       <div class="li-ico" style="background:#1a2a1e">🛠</div>
       <div class="li-info">
@@ -2300,8 +2372,24 @@ function renderExtraWorkList(){
         <div class="li-sub">→ ${w.masterName} · ${fmtDT(w.createdAt)} · от ${w.assignedByName}</div>
         ${w.zp?`<div class="li-sub" style="color:var(--a5)">ЗП: ${fmt(w.zp)}</div>`:'<div class="li-sub" style="color:var(--t2)">ЗП не проставлена</div>'}
       </div>
-      ${session.role==='управляющий'?`<button onclick="openEditExtra('${w._id}')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 8px;color:var(--t2);cursor:pointer;font-size:11px;flex-shrink:0">✏️</button>`:''}
+      ${(session.role==='управляющий'||session.role==='администратор')?`<button onclick="openEditExtra('${w._id}')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 8px;color:var(--t2);cursor:pointer;font-size:11px;flex-shrink:0">✏️</button>`:''}
     </div>`).join('');
+
+  // Прочие задачи
+  const otEl = document.getElementById('otAllList'); if(!otEl) return;
+  const statusMap={new:'⏳ Новая',active:'🔨 В работе',paused:'⏸ Пауза',done:'✅ Завершена'};
+  otEl.innerHTML = otherTasks.length ? otherTasks.slice(0,20).map(t=>`
+    <div class="li">
+      <div class="li-ico" style="background:#1a1e2a">🛠</div>
+      <div class="li-info">
+        <div class="li-name">${t.category}</div>
+        <div class="li-sub">→ ${t.masterName} · ${fmtDT(t.createdAt)}</div>
+        ${calcOTTime(t)?`<div class="li-sub">⏱ ${calcOTTime(t)}</div>`:''}
+        ${t.pay?`<div class="li-sub" style="color:var(--a5)">💰 ${fmt(t.pay)}</div>`:''}
+      </div>
+      <span style="font-size:10px;color:var(--t2);font-weight:600">${statusMap[t.status]||t.status}</span>
+    </div>`).join('')
+    : '<div style="font-size:12px;color:var(--t2);padding:8px 0">Прочих задач нет</div>';
 }
 
 let currentExtraId = null;
@@ -3642,6 +3730,190 @@ function checkInvProgress(){
   showInventoryDiff();
 }
 
+// ════════════════════════════════
+// ПРИБЫТИЕ НА РАБОТУ
+// ════════════════════════════════
+function markArrival(){
+  const now_ = new Date();
+  const todayKey = now_.toISOString().slice(0,10);
+  const timeStr = now_.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+
+  // Локально
+  const arr = JSON.parse(localStorage.getItem('ws_arrivals_'+session.id)||'[]');
+  if(arr.find(a=>a.date===todayKey)){ showToast('Уже отмечено сегодня'); return; }
+  arr.unshift({date:todayKey, time:timeStr, name:session.name});
+  localStorage.setItem('ws_arrivals_'+session.id, JSON.stringify(arr.slice(0,90)));
+
+  // В Firebase — для управляющего и администратора
+  db.collection('ws_arrivals').add({
+    masterId: session.id,
+    masterName: session.name,
+    date: todayKey,
+    time: timeStr,
+    arrivedAt: new Date().toISOString()
+  }).catch(console.error);
+
+  renderDash();
+  showToast(`✅ Прибытие зафиксировано в ${timeStr}`);
+}
+
+// ════════════════════════════════
+// ПРОЧИЕ РАБОТЫ
+// ════════════════════════════════
+let _otFilter = 'all';
+let _otCategories = ['Разгрузка машины','Выравнивание досок','Исправление брака','Заливка эпоксидной смолой','Производство мебели','Покраска','Шлифовка','Другое'];
+
+function addOtherTaskCategory(){
+  const val = prompt('Новый тип работы:');
+  if(!val) return;
+  if(!_otCategories.includes(val)) _otCategories.push(val);
+  const sel = document.getElementById('otCategory');
+  if(sel) sel.innerHTML = _otCategories.map(c=>`<option ${c===val?'selected':''}>${c}</option>`).join('');
+}
+
+function openAssignOtherTask(){
+  const sel = document.getElementById('otMaster');
+  if(sel) sel.innerHTML = getEmployees().filter(e=>e.role==='мастер').map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+  const cat = document.getElementById('otCategory');
+  if(cat) cat.innerHTML = _otCategories.map(c=>`<option>${c}</option>`).join('');
+  document.getElementById('otDesc').value='';
+  document.getElementById('otPay').value='';
+  openMo('addOtherTaskMo');
+}
+
+function assignOtherTask(){
+  const masterId = document.getElementById('otMaster')?.value;
+  const cat      = document.getElementById('otCategory')?.value;
+  const desc     = document.getElementById('otDesc')?.value.trim();
+  const pay      = parseFloat(document.getElementById('otPay')?.value)||0;
+  if(!masterId||!cat){ showToast('Выберите мастера и тип'); return; }
+  const master = getEmployees().find(e=>e.id===masterId);
+  db.collection('ws_other_tasks').add({
+    masterId, masterName: master?.name||'',
+    assignedById: session.id, assignedByName: session.name,
+    category: cat, desc, pay,
+    status: 'new',
+    createdAt: now(),
+    sessions: [] // [{start, end, pausedAt}]
+  }).then(()=>{
+    closeMo('addOtherTaskMo');
+    showToast(`✅ Задача «${cat}» назначена мастеру ${master?.name||''}`);
+  }).catch(e=>showToast('Ошибка: '+e.message));
+}
+
+function setOTFilter(f, el){
+  _otFilter = f;
+  document.querySelectorAll('#pg-othertasks .fchip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderOtherTasks();
+}
+
+function renderOtherTasks(){
+  const myTasks = otherTasks.filter(t=>t.masterId===session.id);
+  const active  = myTasks.filter(t=>['new','active','paused'].includes(t.status));
+  const ac = document.getElementById('otActiveList'); if(ac){
+    ac.innerHTML = active.length ? active.map(t=>otTaskCard(t,true)).join('') :
+      '<div style="font-size:12px;color:var(--t2);padding:8px 0">Нет активных задач</div>';
+  }
+  let list = myTasks;
+  if(_otFilter==='active') list = myTasks.filter(t=>t.status==='active');
+  if(_otFilter==='paused') list = myTasks.filter(t=>t.status==='paused');
+  if(_otFilter==='done')   list = myTasks.filter(t=>t.status==='done');
+  const hc = document.getElementById('otHistoryList'); if(hc){
+    hc.innerHTML = list.length ? list.map(t=>otTaskCard(t,false)).join('') :
+      '<div class="empty"><div class="ei">🛠</div>Задач нет</div>';
+  }
+}
+
+function otTaskCard(t, isActive){
+  const statusMap = {new:'⏳ Новая', active:'🔨 В работе', paused:'⏸ Пауза', done:'✅ Завершена'};
+  const statusColor= {new:'var(--a4)', active:'var(--inc)', paused:'var(--a2)', done:'var(--t2)'};
+  const totalTime  = calcOTTime(t);
+  return `<div class="li" onclick="openOTDetail('${t._id}')">
+    <div class="li-ico" style="background:#1a1e2a">🛠</div>
+    <div class="li-info">
+      <div class="li-name">${t.category}</div>
+      <div class="li-sub">От: ${t.assignedByName}${t.desc?' · '+t.desc.slice(0,30)+(t.desc.length>30?'…':''):''}</div>
+      ${totalTime?`<div class="li-sub">⏱ ${totalTime}</div>`:''}
+      ${t.pay?`<div class="li-sub" style="color:var(--a5)">💰 ${fmt(t.pay)}</div>`:''}
+    </div>
+    <span style="font-size:10px;color:${statusColor[t.status]};font-weight:700;text-align:right;min-width:50px">${statusMap[t.status]||t.status}</span>
+  </div>`;
+}
+
+function calcOTTime(t){
+  if(!t.sessions||!t.sessions.length) return '';
+  let ms = 0;
+  t.sessions.forEach(s=>{
+    const end = s.end ? new Date(s.end) : (t.status==='active'?new Date():null);
+    if(s.start&&end) ms += end-new Date(s.start);
+  });
+  if(!ms) return '';
+  const h = Math.floor(ms/3600000);
+  const m = Math.floor((ms%3600000)/60000);
+  return h?`${h} ч ${m} мин`:`${m} мин`;
+}
+
+function openOTDetail(id){
+  const t = otherTasks.find(x=>x._id===id); if(!t) return;
+  const statusMap = {new:'⏳ Новая', active:'🔨 В работе', paused:'⏸ На паузе', done:'✅ Завершена'};
+  document.getElementById('otDetailTitle').textContent = t.category;
+  document.getElementById('otDetailContent').innerHTML=`
+    <div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:12px">
+      <div class="at-row"><span class="at-lbl">Статус</span><span class="at-val">${statusMap[t.status]||t.status}</span></div>
+      <div class="at-row"><span class="at-lbl">Назначил</span><span class="at-val">${t.assignedByName}</span></div>
+      ${t.desc?`<div class="at-row"><span class="at-lbl">Описание</span><span class="at-val">${t.desc}</span></div>`:''}
+      ${t.pay?`<div class="at-row"><span class="at-lbl">Вознаграждение</span><span class="at-val" style="color:var(--a5)">${fmt(t.pay)}</span></div>`:''}
+      <div class="at-row"><span class="at-lbl">Время работы</span><span class="at-val">⏱ ${calcOTTime(t)||'—'}</span></div>
+    </div>
+    ${(t.sessions||[]).length?`<div style="font-size:11px;color:var(--t2);margin-bottom:8px">
+      ${t.sessions.map((s,i)=>`<div style="padding:3px 0">Сессия ${i+1}: ${fmtDT(s.start)} → ${s.end?fmtDT(s.end):'сейчас'}</div>`).join('')}
+    </div>`:''}`;
+
+  let actions = '';
+  if(t.status==='new')    actions = `<button class="btn green" onclick="startOTTask('${id}')">▶ Начать работу</button>`;
+  if(t.status==='active') actions = `
+    <button class="btn" style="background:var(--a4);color:#000;margin-bottom:8px" onclick="pauseOTTask('${id}')">⏸ Поставить на паузу</button>
+    <button class="btn green" onclick="finishOTTask('${id}')">✅ Завершить работу</button>`;
+  if(t.status==='paused') actions = `
+    <button class="btn green" onclick="resumeOTTask('${id}')">▶ Возобновить</button>
+    <button class="btn" style="background:var(--a5);margin-top:8px" onclick="finishOTTask('${id}')">✅ Завершить</button>`;
+  document.getElementById('otDetailActions').innerHTML = actions;
+  openMo('otTaskDetailMo');
+}
+
+function startOTTask(id){
+  db.collection('ws_other_tasks').doc(id).update({
+    status:'active',
+    sessions: firebase.firestore.FieldValue.arrayUnion({start:now(), end:null})
+  }).then(()=>{ closeMo('otTaskDetailMo'); showToast('▶ Работа начата'); }).catch(e=>showToast(e.message));
+}
+
+function pauseOTTask(id){
+  const t = otherTasks.find(x=>x._id===id); if(!t) return;
+  const sessions = [...(t.sessions||[])];
+  if(sessions.length) sessions[sessions.length-1].end = now();
+  db.collection('ws_other_tasks').doc(id).update({status:'paused', sessions})
+    .then(()=>{ closeMo('otTaskDetailMo'); showToast('⏸ Работа на паузе до завтра'); })
+    .catch(e=>showToast(e.message));
+}
+
+function resumeOTTask(id){
+  db.collection('ws_other_tasks').doc(id).update({
+    status:'active',
+    sessions: firebase.firestore.FieldValue.arrayUnion({start:now(), end:null})
+  }).then(()=>{ closeMo('otTaskDetailMo'); showToast('▶ Работа возобновлена'); }).catch(e=>showToast(e.message));
+}
+
+function finishOTTask(id){
+  const t = otherTasks.find(x=>x._id===id); if(!t) return;
+  const sessions = [...(t.sessions||[])];
+  if(sessions.length&&!sessions[sessions.length-1].end) sessions[sessions.length-1].end = now();
+  db.collection('ws_other_tasks').doc(id).update({status:'done', sessions, finishedAt:now()})
+    .then(()=>{ closeMo('otTaskDetailMo'); showToast('✅ Работа завершена!'); })
+    .catch(e=>showToast(e.message));
+}
+
 // ════════ BOOT ════════
 document.addEventListener('DOMContentLoaded', ()=>{
   renderEmployeeList();
@@ -3722,6 +3994,46 @@ document.addEventListener('DOMContentLoaded', ()=>{
     <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="msComment" placeholder="Причина добавления..."></div>
     <button class="btn green" onclick="saveManualStock()">📦 Добавить на склад</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('manualStockMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- НАЗНАЧИТЬ ПРОЧУЮ РАБОТУ (управляющий/заготовщик) -->
+<div class="mo" id="addOtherTaskMo">
+  <div class="md"><div class="mh"></div><div class="mt">🛠 Назначить работу</div>
+    <div class="fg"><label class="fl">Мастер</label><select class="fs" id="otMaster"></select></div>
+    <div class="fg"><label class="fl">Тип работы</label>
+      <div style="display:flex;gap:8px">
+        <select class="fs" id="otCategory" style="flex:1">
+          <option>Разгрузка машины</option>
+          <option>Выравнивание досок</option>
+          <option>Исправление брака</option>
+          <option>Заливка эпоксидной смолой</option>
+          <option>Производство мебели</option>
+          <option>Покраска</option>
+          <option>Шлифовка</option>
+          <option>Другое</option>
+        </select>
+        <button onclick="addOtherTaskCategory()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Описание задачи</label>
+      <textarea class="fi" id="otDesc" placeholder="Подробнее о задаче..." style="min-height:70px;resize:none"></textarea>
+    </div>
+    <div class="fg"><label class="fl">Вознаграждение (₽, по завершении)</label>
+      <input class="fi" type="number" id="otPay" inputmode="numeric" placeholder="0">
+    </div>
+    <button class="btn green" onclick="assignOtherTask()">📤 Назначить мастеру</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('addOtherTaskMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- ДЕТАЛИ ЗАДАЧИ (мастер) -->
+<div class="mo" id="otTaskDetailMo">
+  <div class="md"><div class="mh"></div>
+    <div class="mt" id="otDetailTitle">Задача</div>
+    <div id="otDetailContent"></div>
+    <div id="otDetailActions"></div>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('otTaskDetailMo')">Закрыть</button>
   </div>
 </div>
 
