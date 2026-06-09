@@ -441,6 +441,45 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </div>
   </div>
 
+  <!-- AUDIT LOG -->
+  <div class="page" id="pg-audit">
+    <div class="stitle">🔍 Аудит-лог</div>
+    
+    <div class="card">
+      <div class="ctitle">📋 История всех действий</div>
+      
+      <div class="row2" style="margin-bottom:12px">
+        <div>
+          <label class="fl">Фильтр по пользователю</label>
+          <input class="fi" type="text" id="auditFilterUser" placeholder="Имя пользователя" onkeyup="renderAuditLog()">
+        </div>
+        <div>
+          <label class="fl">Тип действия</label>
+          <select class="fi" id="auditFilterAction" onchange="renderAuditLog()">
+            <option value="">Все действия</option>
+            <option value="LOGIN">Логин</option>
+            <option value="LOGOUT">Логаут</option>
+            <option value="ADD_OPERATION">Добавить операцию</option>
+            <option value="ADD_SELLER">Добавить продавца</option>
+            <option value="DELETE_SELLER">Удалить продавца</option>
+            <option value="CHANGE_PASSWORD">Смена пароля</option>
+            <option value="BLOCK_SELLER">Блокировка/Разблокировка</option>
+            <option value="ADD_DEBT">Добавить долг</option>
+            <option value="DELETE_DEBT">Удалить долг</option>
+            <option value="ADD_WS_EMPLOYEE">Добавить сотрудника</option>
+            <option value="DELETE_WS_EMPLOYEE">Удалить сотрудника</option>
+          </select>
+        </div>
+      </div>
+      
+      <div style="margin-bottom:12px">
+        <button onclick="downloadAuditLog()" style="background:var(--accent);border:none;border-radius:6px;padding:8px 16px;color:var(--bg);font-weight:600;cursor:pointer;font-size:12px">📥 Скачать логи</button>
+      </div>
+      
+      <div id="auditLogList" style="max-height:600px;overflow-y:auto"></div>
+    </div>
+  </div>
+
   <!-- SETTINGS -->
   <div class="page" id="pg-settings">
     <div class="stitle">⚙️ Настройки</div>
@@ -531,6 +570,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <button class="tab" onclick="switchTab('shops',this)"><div class="ti">🏪</div>Магазины</button>
   <button class="tab" onclick="switchTab('prod',this)"><div class="ti">🏭</div>Мастерская</button>
   <button class="tab" onclick="switchTab('staff',this)"><div class="ti">👥</div>Сотрудники</button>
+  <button class="tab" onclick="switchTab('audit',this)"><div class="ti">🔍</div>Аудит</button>
   <button class="tab" onclick="switchTab('settings',this)"><div class="ti">⚙️</div>Настройки</button>
 </div>
 
@@ -594,13 +634,186 @@ function saveDebits(data) {
   localStorage.setItem('iz_debits', JSON.stringify(data));
 }
 
-function getCredits() {
-  try { return JSON.parse(localStorage.getItem('iz_credits') || '[]'); } 
+function getAuditLog() {
+  try { return JSON.parse(localStorage.getItem('iz_audit_log') || '[]'); } 
   catch(e) { return []; }
 }
 
-function saveCredits(data) {
-  localStorage.setItem('iz_credits', JSON.stringify(data));
+function saveAuditLog(data) {
+  localStorage.setItem('iz_audit_log', JSON.stringify(data));
+}
+
+function logAction(action, details = {}) {
+  if(!session) return;
+  
+  const log = getAuditLog();
+  const entry = {
+    id: uid(),
+    timestamp: new Date().toISOString(),
+    user: session.name,
+    role: session.role,
+    action: action,
+    details: details,
+    ipInfo: 'Browser: ' + navigator.userAgent.substring(0, 50),
+    hash: Math.random().toString(36).substring(2, 15) // Защита от подделки
+  };
+  
+  log.push(entry);
+  // Ограничиваем размер лога - последние 10000 записей
+  if(log.length > 10000) {
+    log.splice(0, log.length - 10000);
+  }
+  
+  saveAuditLog(log);
+}
+
+// Перехватываем основные действия
+function logAddSeller(sellerName, shops) {
+  logAction('ADD_SELLER', {entity: 'Seller', name: sellerName, shops: shops});
+}
+
+function logDeleteSeller(sellerName) {
+  logAction('DELETE_SELLER', {entity: 'Seller', name: sellerName});
+}
+
+function logChangeSellerPassword(sellerName) {
+  logAction('CHANGE_PASSWORD', {entity: 'Seller', name: sellerName});
+}
+
+function logBlockSeller(sellerName, blocked) {
+  logAction('BLOCK_SELLER', {entity: 'Seller', name: sellerName, blocked: blocked});
+}
+
+function logAddOperation(type, amount, source, category) {
+  logAction('ADD_OPERATION', {type: type, amount: amount, source: source, category: category});
+}
+
+function logAddDebt(type, name, amount) {
+  logAction('ADD_DEBT', {type: type, name: name, amount: amount});
+}
+
+function logDeleteDebt(type, name) {
+  logAction('DELETE_DEBT', {type: type, name: name});
+}
+
+function logAddWsEmployee(name, role) {
+  logAction('ADD_WS_EMPLOYEE', {name: name, role: role});
+}
+
+function logDeleteWsEmployee(name) {
+  logAction('DELETE_WS_EMPLOYEE', {name: name});
+}
+
+function logAddAdminUser(name, role) {
+  logAction('ADD_ADMIN', {name: name, role: role});
+}
+
+function logDeleteAdminUser(name) {
+  logAction('DELETE_ADMIN', {name: name});
+}
+
+function logLogin(username) {
+  logAction('LOGIN', {username: username});
+}
+
+function logLogout(username) {
+  logAction('LOGOUT', {username: username});
+}
+
+function renderAuditLog() {
+  const logs = getAuditLog();
+  const filterUser = gv('auditFilterUser').toLowerCase();
+  const filterAction = gv('auditFilterAction');
+  
+  let filtered = logs;
+  
+  if(filterUser) {
+    filtered = filtered.filter(l => l.user.toLowerCase().includes(filterUser));
+  }
+  
+  if(filterAction) {
+    filtered = filtered.filter(l => l.action === filterAction);
+  }
+  
+  // Показываем в обратном порядке (новые сверху)
+  filtered = filtered.reverse();
+  
+  const actionLabels = {
+    LOGIN: '🔐 Логин',
+    LOGOUT: '🚪 Логаут',
+    ADD_OPERATION: '➕ Операция',
+    ADD_SELLER: '👤 Добавить продавца',
+    DELETE_SELLER: '🗑️ Удалить продавца',
+    CHANGE_PASSWORD: '🔑 Смена пароля',
+    BLOCK_SELLER: '🚫 Блокировка',
+    ADD_DEBT: '💰 Добавить долг',
+    DELETE_DEBT: '🗑️ Удалить долг',
+    ADD_WS_EMPLOYEE: '👥 Добавить сотрудника',
+    DELETE_WS_EMPLOYEE: '🗑️ Удалить сотрудника',
+    ADD_ADMIN: '🔐 Добавить админа'
+  };
+  
+  let html = '';
+  
+  if(filtered.length === 0) {
+    html = '<div style="padding:20px;text-align:center;color:var(--t2);font-size:12px">Нет записей</div>';
+  } else {
+    html = filtered.map((log, i) => {
+      const date = new Date(log.timestamp);
+      const timeStr = date.toLocaleString('ru-RU', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'});
+      const label = actionLabels[log.action] || log.action;
+      
+      return `
+        <div style="padding:12px;background:var(--s2);border-radius:8px;margin-bottom:8px;border-left:3px solid var(--a2)">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <div style="font-weight:600;font-size:12px">${label}</div>
+            <div style="font-size:11px;color:var(--t2)">${timeStr}</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:11px">
+            <div style="color:var(--a3)">👤 ${log.user} (${log.role})</div>
+            <div style="color:var(--t3);font-family:monospace;font-size:10px">ID: ${log.id.substring(0,8)}</div>
+          </div>
+          ${log.details && Object.keys(log.details).length > 0 ? `
+            <div style="padding:8px;background:var(--bg);border-radius:4px;font-size:10px;color:var(--t2);font-family:monospace;word-break:break-all">
+              ${Object.entries(log.details).map(([k,v]) => k + ': ' + (typeof v === 'object' ? JSON.stringify(v) : v)).join(' | ')}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+  
+  const el = document.getElementById('auditLogList');
+  if(el) el.innerHTML = html;
+}
+
+function downloadAuditLog() {
+  const logs = getAuditLog();
+  
+  if(logs.length === 0) {
+    alert('Логов нет');
+    return;
+  }
+  
+  // Форматируем в CSV
+  let csv = 'Дата,Пользователь,Роль,Действие,Детали,ID\n';
+  
+  logs.forEach(log => {
+    const date = new Date(log.timestamp).toLocaleString('ru-RU');
+    const details = log.details ? Object.entries(log.details).map(([k,v]) => k + '=' + v).join('; ') : '';
+    csv += `"${date}","${log.user}","${log.role}","${log.action}","${details}","${log.id}"\n`;
+  });
+  
+  // Скачиваем
+  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', 'audit_log_' + new Date().toISOString().split('T')[0] + '.csv');
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 function getWsEmployees() {
@@ -657,6 +870,7 @@ function doLogin() {
   
   session = {id: user.id, name: user.name, role: user.role};
   sessionStorage.setItem('iz_admin_session', JSON.stringify(session));
+  logLogin(user.name);
   errEl.style.display = 'none';
   
   document.getElementById('loginScreen').style.display = 'none';
@@ -686,6 +900,7 @@ function doLogin() {
 }
 
 function doLogout() {
+  if(session) logLogout(session.name);
   session = null;
   sessionStorage.removeItem('iz_admin_session');
   document.getElementById('loginScreen').style.display = 'flex';
@@ -707,6 +922,7 @@ function switchTab(id, btn) {
   if(id === 'shops') renderShops();
   if(id === 'pl') { renderPL(); renderPLBudget(); }
   if(id === 'debt') renderDebts();
+  if(id === 'audit') renderAuditLog();
 }
 
 function openMo(id) {
@@ -741,6 +957,7 @@ function addDebit() {
   const debits = getDebits();
   debits.push({id: uid(), name, amount, date: now(), createdBy: session.name});
   saveDebits(debits);
+  logAddDebt('debit', name, amount);
   
   document.getElementById('debitName').value = '';
   document.getElementById('debitAmount').value = '';
@@ -759,6 +976,7 @@ function addCredit() {
   const credits = getCredits();
   credits.push({id: uid(), name, amount, date: now(), createdBy: session.name});
   saveCredits(credits);
+  logAddDebt('credit', name, amount);
   
   document.getElementById('creditName').value = '';
   document.getElementById('creditAmount').value = '';
@@ -873,6 +1091,7 @@ function addSellerFromStaff() {
   });
   
   saveSellers(sellers);
+  logAddSeller(name, shops);
   document.getElementById('aSellerName').value = '';
   document.getElementById('aSellerPass').value = '';
   document.querySelectorAll('#aSellerShopsCheckboxes input').forEach(cb => cb.checked = false);
@@ -908,6 +1127,7 @@ function populateSellers() {
 function toggleSellerBlock(idx) {
   const sellers = getSellers();
   sellers[idx].blocked = !sellers[idx].blocked;
+  logBlockSeller(sellers[idx].name, sellers[idx].blocked);
   saveSellers(sellers);
   populateSellers();
 }
@@ -917,6 +1137,7 @@ function changeSellerPassword(idx) {
   const newPass = prompt('Новый пароль для ' + sellers[idx].name + ':', sellers[idx].pass);
   if(newPass) {
     sellers[idx].pass = newPass;
+    logChangeSellerPassword(sellers[idx].name);
     saveSellers(sellers);
     alert('✅ Пароль изменён');
   }
@@ -925,6 +1146,8 @@ function changeSellerPassword(idx) {
 function deleteSeller(idx) {
   if(!confirm('Удалить продавца?')) return;
   const sellers = getSellers();
+  const sellerName = sellers[idx].name;
+  logDeleteSeller(sellerName);
   sellers.splice(idx, 1);
   saveSellers(sellers);
   populateSellers();
@@ -1163,6 +1386,7 @@ function saveOperation() {
   });
   
   saveTransactions(txs);
+  logAddOperation(currentTxType, amt, source, category);
   clearOperationForm();
   renderDashboard();
   alert('✅ Операция сохранена');
