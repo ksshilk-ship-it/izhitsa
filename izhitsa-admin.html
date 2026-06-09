@@ -228,7 +228,7 @@ if ('serviceWorker' in navigator) {
   </div>
   
   <div class="fg"><label class="fl">Пользователь</label><select class="fs" id="loginUser"><option value="">— выберите роль —</option></select></div>
-  <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="loginPass" placeholder="••••"></div>
+  <div class="fg"><label class="fl">Пароль</label><input class="fi" type="text" inputmode="text" autocomplete="current-password" id="loginPass" placeholder="••••" style="-webkit-text-security:disc"></div>
   <div id="loginErr" style="color:var(--exp);font-size:12px;margin-bottom:8px;display:none"></div>
   <button class="btn" onclick="doLogin()">Войти →</button>
 </div>
@@ -1961,9 +1961,10 @@ function addWsEmployee(){ openAddStaffModal(); }
 document.addEventListener('DOMContentLoaded', function() {
   // Create default admin FIRST before sync listeners overwrite
   var users = getAdminUsers();
-  if(!users.length) {
-    var def = [{id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'}];
-    localStorage.setItem('iz_admin_users', JSON.stringify(def));
+  var hasDefault = users.some(function(u){ return u.id === 'admin_default'; });
+  if(!hasDefault) {
+    users.unshift({id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'});
+    localStorage.setItem('iz_admin_users', JSON.stringify(users));
   }
   startAdminSyncListeners();
   startStaffSyncListener();
