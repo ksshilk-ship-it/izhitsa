@@ -853,15 +853,70 @@ function applyUpdate() {
       <div style="font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700" id="morningShopName"></div>
       <div style="font-size:12px;color:#8888aa;margin-top:4px" id="morningSellerName"></div>
     </div>
-    <div class="card" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:#c8f060">
-      <div style="font-size:13px;color:#8888aa;margin-bottom:12px">Пересчитайте наличные в кассе и введите фактический остаток.</div>
-      <div class="fg">
-        <label class="fl">💵 Остаток наличных в кассе (₽)</label>
-        <input class="fi" type="number" id="morningCash" placeholder="Введите сумму..." inputmode="numeric"
-          style="font-size:22px;font-weight:700;text-align:center;border-color:#c8f060" oninput="checkMorningValid()">
-        <div id="morningCashHint" style="font-size:12px;margin-top:4px;display:none"></div>
+
+    <!-- НАЛИЧНЫЕ -->
+    <div style="font-size:11px;font-weight:700;color:#c8f060;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">💵 Наличные на утро</div>
+
+    <div class="card" style="background:#0f1a08;border-color:#c8f060;margin-bottom:8px;padding:12px">
+      <label class="fl" style="color:#c8f060">🌳 Дерево (наличные в кассе)</label>
+      <input class="fi" type="number" id="morningCash" placeholder="0" inputmode="numeric"
+        style="font-size:20px;font-weight:700;text-align:center;border-color:#c8f060;margin-top:4px" oninput="checkMorningValid()">
+      <div id="morningCashHint" style="font-size:11px;margin-top:4px;display:none"></div>
+    </div>
+
+    <div class="card" style="background:#0f0a1a;border-color:#a060f0;margin-bottom:8px;padding:12px">
+      <label class="fl" style="color:#a060f0">🛍 ДР Товар (наличные)</label>
+      <input class="fi" type="number" id="morningCashDr" placeholder="0" inputmode="numeric"
+        style="font-size:20px;font-weight:700;text-align:center;border-color:#a060f0;margin-top:4px">
+    </div>
+
+    <div class="card" style="background:#0f130a;border-color:#60c8f0;margin-bottom:12px;padding:12px">
+      <label class="fl" style="color:#60c8f0">🛒 Покупки сотрудников (наличные)</label>
+      <input class="fi" type="number" id="morningCashStaff" placeholder="0" inputmode="numeric"
+        style="font-size:20px;font-weight:700;text-align:center;border-color:#60c8f0;margin-top:4px">
+    </div>
+
+    <!-- ОСТАТКИ ТОВАРА -->
+    <div style="font-size:11px;font-weight:700;color:#f0c060;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">📦 Остаток товара на утро</div>
+
+    <div class="card" style="background:#1a150a;border-color:#f0c060;margin-bottom:8px;padding:12px">
+      <label class="fl" style="color:#f0c060">🌳 Дерево</label>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button type="button" id="goodsAutoBtn" onclick="setGoodsMornMode('auto')"
+          style="flex:1;padding:7px;border-radius:8px;border:2px solid #f0c060;background:#1a150a;color:#f0c060;font-size:11px;font-weight:700;cursor:pointer">🔄 Авто</button>
+        <button type="button" id="goodsManualBtn" onclick="setGoodsMornMode('manual')"
+          style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">✏️ Вручную</button>
+      </div>
+      <div id="goodsAutoBlock" style="margin-top:8px;text-align:center;padding:8px;background:#0f0f13;border-radius:8px">
+        <div style="font-size:10px;color:#8888aa;margin-bottom:2px">Расчёт с прошлой смены</div>
+        <div style="font-size:18px;font-weight:700;color:#f0c060" id="goodsAutoVal">—</div>
+      </div>
+      <div id="goodsManualBlock" style="display:none;margin-top:8px">
+        <input class="fi" type="number" id="morningGoods" placeholder="0" inputmode="numeric"
+          style="font-size:18px;font-weight:700;text-align:center;border-color:#f0c060">
+        <div style="font-size:10px;color:#f0a060;margin-top:4px">⚠️ Приблизительная сумма — уточнить позже</div>
       </div>
     </div>
+
+    <div class="card" style="background:#1a0f1a;border-color:#f060a0;margin-bottom:12px;padding:12px">
+      <label class="fl" style="color:#f060a0">🛍 ДР Товар</label>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button type="button" id="goodsDrAutoBtn" onclick="setGoodsDrMode('auto')"
+          style="flex:1;padding:7px;border-radius:8px;border:2px solid #f060a0;background:#1a0f1a;color:#f060a0;font-size:11px;font-weight:700;cursor:pointer">🔄 Авто</button>
+        <button type="button" id="goodsDrManualBtn" onclick="setGoodsDrMode('manual')"
+          style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">✏️ Вручную</button>
+      </div>
+      <div id="goodsDrAutoBlock" style="margin-top:8px;text-align:center;padding:8px;background:#0f0f13;border-radius:8px">
+        <div style="font-size:10px;color:#8888aa;margin-bottom:2px">Расчёт с прошлой смены</div>
+        <div style="font-size:18px;font-weight:700;color:#f060a0" id="goodsDrAutoVal">—</div>
+      </div>
+      <div id="goodsDrManualBlock" style="display:none;margin-top:8px">
+        <input class="fi" type="number" id="morningGoodsDr" placeholder="0" inputmode="numeric"
+          style="font-size:18px;font-weight:700;text-align:center;border-color:#f060a0">
+        <div style="font-size:10px;color:#f0a060;margin-top:4px">⚠️ Приблизительная сумма — уточнить позже</div>
+      </div>
+    </div>
+
     <div id="morningCompare" style="margin-bottom:12px"></div>
     <button class="btn" id="morningConfirmBtn" onclick="confirmMorning()" disabled style="opacity:.4">Открыть смену →</button>
     <button class="btn sec" style="margin-top:8px" onclick="cancelMorning()">← Назад</button>
@@ -1600,45 +1655,106 @@ function openMorningModal(){
     saveS(); saveJ(); startApp(); return;
   }
 
-  // Shop type: show morning cash modal
+  // Shop type: show morning modal
   document.getElementById('morningShopName').textContent='🏪 '+shopName;
   document.getElementById('morningSellerName').textContent='👤 '+pendingSession.sellerName;
   document.getElementById('morningCash').value='';
   document.getElementById('morningCashHint').style.display='none';
   document.getElementById('morningConfirmBtn').disabled=true;
   document.getElementById('morningConfirmBtn').style.opacity='.4';
-  const prev=getPrevShift(shopName);
-  const mc=document.getElementById('morningCompare');
-  mc.innerHTML=(prev&&prev.cashEvening)!=null?`<div class="al-info">📊 Нал вечер прошлой смены: <strong>${fmt(prev.cashEvening)}</strong></div>`:'';
+  // Reset extra fields
+  ['morningCashDr','morningCashStaff','morningGoods','morningGoodsDr'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.value='';
+  });
+  // Auto goods values
+  var autoGoods = calcGoodsMorning(shopName);
+  var autoGoodsDr = calcGoodsDrMorning(shopName);
+  var agEl=document.getElementById('goodsAutoVal'); if(agEl) agEl.textContent=fmt(autoGoods);
+  var agDrEl=document.getElementById('goodsDrAutoVal'); if(agDrEl) agDrEl.textContent=fmt(autoGoodsDr);
+  // Reset modes
+  _goodsMornMode='auto'; setGoodsMornMode('auto');
+  _goodsDrMode='auto'; setGoodsDrMode('auto');
+  var prev=getPrevShift(shopName);
+  var mc=document.getElementById('morningCompare');
+  mc.innerHTML=(prev&&prev.cashEvening!=null)?'<div class="al-info">📊 Нал вечер прошлой смены: <strong>'+fmt(prev.cashEvening)+'</strong></div>':'';
   openMo('morningMo');
 }
+
+var _goodsMornMode='auto';
+var _goodsDrMode='auto';
+
+function setGoodsMornMode(mode) {
+  _goodsMornMode=mode;
+  var ab=document.getElementById('goodsAutoBtn'), mb=document.getElementById('goodsManualBtn');
+  var abl=document.getElementById('goodsAutoBlock'), mbl=document.getElementById('goodsManualBlock');
+  if(mode==='auto'){
+    if(ab){ab.style.borderWidth='2px';ab.style.borderColor='#f0c060';ab.style.background='#1a150a';ab.style.color='#f0c060';ab.style.fontWeight='700';}
+    if(mb){mb.style.borderWidth='1px';mb.style.borderColor='#2e2e3e';mb.style.background='#22222e';mb.style.color='#8888aa';mb.style.fontWeight='400';}
+    if(abl) abl.style.display='block'; if(mbl) mbl.style.display='none';
+  } else {
+    if(mb){mb.style.borderWidth='2px';mb.style.borderColor='#f0c060';mb.style.background='#1a150a';mb.style.color='#f0c060';mb.style.fontWeight='700';}
+    if(ab){ab.style.borderWidth='1px';ab.style.borderColor='#2e2e3e';ab.style.background='#22222e';ab.style.color='#8888aa';ab.style.fontWeight='400';}
+    if(mbl) mbl.style.display='block'; if(abl) abl.style.display='none';
+  }
+}
+function setGoodsDrMode(mode) {
+  _goodsDrMode=mode;
+  var ab=document.getElementById('goodsDrAutoBtn'), mb=document.getElementById('goodsDrManualBtn');
+  var abl=document.getElementById('goodsDrAutoBlock'), mbl=document.getElementById('goodsDrManualBlock');
+  if(mode==='auto'){
+    if(ab){ab.style.borderWidth='2px';ab.style.borderColor='#f060a0';ab.style.background='#1a0f1a';ab.style.color='#f060a0';ab.style.fontWeight='700';}
+    if(mb){mb.style.borderWidth='1px';mb.style.borderColor='#2e2e3e';mb.style.background='#22222e';mb.style.color='#8888aa';mb.style.fontWeight='400';}
+    if(abl) abl.style.display='block'; if(mbl) mbl.style.display='none';
+  } else {
+    if(mb){mb.style.borderWidth='2px';mb.style.borderColor='#f060a0';mb.style.background='#1a0f1a';mb.style.color='#f060a0';mb.style.fontWeight='700';}
+    if(ab){ab.style.borderWidth='1px';ab.style.borderColor='#2e2e3e';ab.style.background='#22222e';ab.style.color='#8888aa';ab.style.fontWeight='400';}
+    if(mbl) mbl.style.display='block'; if(abl) abl.style.display='none';
+  }
+}
+
 function checkMorningValid(){
-  const val=document.getElementById('morningCash').value, num=parseFloat(val);
-  const btn=document.getElementById('morningConfirmBtn'), hint=document.getElementById('morningCashHint');
+  var val=document.getElementById('morningCash').value, num=parseFloat(val);
+  var btn=document.getElementById('morningConfirmBtn'), hint=document.getElementById('morningCashHint');
   if(val!==''&&!isNaN(num)&&num>=0){
     btn.disabled=false; btn.style.opacity='1';
     hint.style.display='block'; hint.textContent='✓ '+fmt(num)+' — принято'; hint.style.color='#60f090';
-    const prev=getPrevShift((pendingSession&&pendingSession.shopName)||'');
+    var prev=getPrevShift((pendingSession&&pendingSession.shopName)||'');
     if((prev&&prev.cashEvening)!=null&&Math.abs(num-prev.cashEvening)>1){
       hint.style.color='#f0a060';
       hint.textContent='⚠️ Отличается от вечера прошлой смены ('+fmt(prev.cashEvening)+')';
     }
   } else { btn.disabled=true; btn.style.opacity='.4'; hint.style.display='none'; }
 }
+
 function confirmMorning(){
-  const val=document.getElementById('morningCash').value, cashM=parseFloat(val);
+  var val=document.getElementById('morningCash').value, cashM=parseFloat(val);
   if(val===''||isNaN(cashM)||cashM<0) return;
-  const goodsM=calcGoodsMorning(pendingSession.shopName);
-  var drCashEl=document.getElementById('morningDrCash');
-  var drCashM=drCashEl&&drCashEl.value!==''?parseFloat(drCashEl.value)||0:0;
-  session={...pendingSession,openedAt:new Date().toISOString(),cashMorning:cashM,goodsMorning:goodsM,drCashMorning:drCashM};
-  const prev=getPrevShift(pendingSession.shopName);
+  // Read all morning values
+  var cashDr=parseFloat((document.getElementById('morningCashDr')||{}).value)||0;
+  var cashStaff=parseFloat((document.getElementById('morningCashStaff')||{}).value)||0;
+  var goodsM = _goodsMornMode==='manual'
+    ? (parseFloat((document.getElementById('morningGoods')||{}).value)||calcGoodsMorning(pendingSession.shopName))
+    : calcGoodsMorning(pendingSession.shopName);
+  var goodsDrM = _goodsDrMode==='manual'
+    ? (parseFloat((document.getElementById('morningGoodsDr')||{}).value)||calcGoodsDrMorning(pendingSession.shopName))
+    : calcGoodsDrMorning(pendingSession.shopName);
+
+  session=Object.assign({},pendingSession,{
+    openedAt:new Date().toISOString(),
+    cashMorning:cashM, cashDrMorning:cashDr, cashStaffMorning:cashStaff,
+    goodsMorning:goodsM, goodsDrMorning:goodsDrM,
+    shopType:'shop'
+  });
+  var prev=getPrevShift(pendingSession.shopName);
   if((prev&&prev.cashEvening)!=null&&Math.abs(cashM-prev.cashEvening)>1){
     saveAdminAlert({type:'morning_diff',shopName:session.shopName,sellerName:session.sellerName,
       date:new Date().toISOString().split('T')[0],cashMorning:cashM,prevCashEve:prev.cashEvening,morningDiff:cashM-prev.cashEvening});
   }
   journal=[{id:uid(),type:'open',ts:new Date().toISOString(),icon:'🔓',label:'Смена открыта',
-    sub:'🌳 Нал: '+fmt(cashM)+(drCashM?' 🛍 Нал ДР: '+fmt(drCashM):'')+' · 📦 Товар: '+fmt(goodsM),cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0}];
+    sub:'🌳 Нал: '+fmt(cashM)+(cashDr?' 🛍 ДР: '+fmt(cashDr):'')+(cashStaff?' 🛒 Сотр: '+fmt(cashStaff):'')+
+        ' · 📦 Дерево: '+fmt(goodsM)+(_goodsMornMode==='manual'?' (вручную)':'')+
+        ' · 🛍 ДР: '+fmt(goodsDrM)+(_goodsDrMode==='manual'?' (вручную)':''),
+    cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0}];
   pendingSession=null; saveS(); saveJ();
   logShiftOpen(session.shopName, cashM);
   closeMo('morningMo'); startApp();
@@ -1652,6 +1768,11 @@ function calcGoodsMorning(shopName){
   const prev=getPrevShift(shopName); if(!prev) return 0;
   if(prev.goodsEvening!=null) return prev.goodsEvening;
   let g=prev.goodsMorning||0; (prev.journal||[]).forEach(e=>{g+=(e.goodsEffect||0);}); return Math.max(0,g);
+}
+function calcGoodsDrMorning(shopName){
+  const prev=getPrevShift(shopName); if(!prev) return 0;
+  if(prev.goodsDrEvening!=null) return prev.goodsDrEvening;
+  let g=prev.goodsDrMorning||0; (prev.journal||[]).forEach(e=>{g+=(e.goodsDrEffect||0);}); return Math.max(0,g);
 }
 function saveAdminAlert(data){
   const alerts=JSON.parse(localStorage.getItem('iz_admin_alerts')||'[]');
