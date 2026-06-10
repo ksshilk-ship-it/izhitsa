@@ -83,38 +83,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 .toast.show{opacity:1}
 </style>
 
-<script>
-// PWA Service Worker — офлайн кеш
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function() {
-    navigator.serviceWorker.register('./izhitsa-sw.js', {scope: './'})
-      .then(function(reg) {
-        console.log('[PWA] SW зарегистрирован');
-        // Проверяем обновления каждый час
-        setInterval(function() { reg.update(); }, 3600000);
-        reg.addEventListener('updatefound', function() {
-          var newWorker = reg.installing;
-          newWorker.addEventListener('statechange', function() {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              // Есть обновление — показываем уведомление
-              if (typeof showToast === 'function') {
-                showToast('🔄 Доступно обновление. Перезагрузите страницу.');
-              }
-            }
-          });
-        });
-      })
-      .catch(function(e) { console.log('[PWA] SW ошибка:', e); });
-    
-    // Слушаем обновление SW
-    navigator.serviceWorker.addEventListener('controllerchange', function() {
-      window.location.reload();
-    });
-  });
-}
-</script>
-
-  <!-- PWA manifest -->
+<!-- PWA manifest -->
   <link rel="manifest" href="manifest-shop.json">
   
   <!-- iOS PWA -->
@@ -129,8 +98,68 @@ if ('serviceWorker' in navigator) {
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#c8f060">
   <meta name="application-name" content="Ижица — Магазин">
+
+<script>
+// ── PWA Update Detection ──
+var _newSW = null;
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('./izhitsa-sw.js', {scope: './'})
+      .then(function(reg) {
+        // Check for updates every 5 minutes
+        setInterval(function(){ reg.update(); }, 5 * 60 * 1000);
+
+        reg.addEventListener('updatefound', function() {
+          var installing = reg.installing;
+          installing.addEventListener('statechange', function() {
+            if(installing.state === 'installed' && navigator.serviceWorker.controller) {
+              // New version ready — show banner
+              _newSW = installing;
+              document.getElementById('updateBanner').style.display = 'block';
+            }
+          });
+        });
+      })
+      .catch(function(e){ console.log('[PWA] SW error:', e); });
+  });
+}
+
+function applyUpdate() {
+  var banner = document.getElementById('updateBanner');
+  // Show spinner
+  banner.innerHTML = '<div style="font-size:13px;color:#f0f0f8">⏳ Загружаю обновление...</div><div style="margin-top:6px"><div style="display:inline-block;width:24px;height:24px;border:3px solid #c8f060;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></div></div>';
+  banner.style.background = '#1a2a14';
+  banner.style.borderColor = '#c8f060';
+
+  // Tell SW to skip waiting
+  if(_newSW) {
+    _newSW.postMessage({type:'SKIP_WAITING'});
+  } else if(navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({type:'SKIP_WAITING'});
+  }
+
+  // Reload after short delay
+  setTimeout(function(){ window.location.reload(); }, 1500);
+}
+</script>
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+
 </head>
 <body>
+
+<!-- Update notification banner -->
+<div id="updateBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a1e2e;border-bottom:2px solid #c8f060;padding:12px 16px;text-align:center">
+  <div style="font-size:13px;color:#f0f0f8;margin-bottom:8px">🔄 Доступно обновление приложения</div>
+  <button onclick="applyUpdate()" style="background:#c8f060;border:none;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:700;color:#0f0f13;cursor:pointer">
+    Обновить сейчас
+  </button>
+  <button onclick="document.getElementById('updateBanner').style.display='none'" style="background:none;border:none;color:#8888aa;font-size:12px;cursor:pointer;margin-left:8px">
+    Позже
+  </button>
+</div>
+
 
 <!-- LOGIN -->
 <div id="loginScreen" style="display:flex;flex-direction:column;min-height:100dvh;padding:32px 20px 24px;background:#0f0f13">
@@ -1384,8 +1413,23 @@ function getShopType(name){
 function isShopType(name){ return getShopType(name)==='shop'; }
 function isOnlineType(name){ return getShopType(name)==='online'; }
 function isOfflineType(name){ return getShopType(name)==='offline'; }
-function saveJ(){ sessionStorage.setItem(KEY.journal,JSON.stringify(journal)); }
-function saveS(){ sessionStorage.setItem(KEY.session,JSON.stringify(session)); }
+function saveJ(){
+  localStorage.setItem(KEY.journal,JSON.stringify(journal));
+  // Backup to Firestore — защита от потери данных
+  if(session && session.shopName && journal.length) {
+    try {
+      var key = 'journal_'+session.shopName.replace(/\s/g,'_')+'_'+(new Date().toISOString().split('T')[0]);
+      db.collection('iz_shifts').doc(key).set({
+        shopName: session.shopName,
+        sellerName: session.sellerName,
+        date: new Date().toISOString().split('T')[0],
+        journal: journal,
+        updatedAt: new Date().toISOString()
+      }, {merge:true});
+    } catch(e){}
+  }
+}
+function saveS(){ localStorage.setItem(KEY.session,JSON.stringify(session)); }
 
 // ════ AUDIT LOG ════
 function getAuditLog(){ try { return JSON.parse(localStorage.getItem('iz_audit_log_shop')||'[]'); } catch(e) { return []; } }
@@ -1477,7 +1521,7 @@ function doLogin(){
 function exitShift(){
   const msg=(session&&session.role)==='shopadmin'?'Выйти из режима администратора?':'Выйти? Смена останется открытой.';
   if(confirm(msg)){
-    if((session&&session.role)==='shopadmin'){ sessionStorage.removeItem(KEY.session); session=null; }
+    if((session&&session.role)==='shopadmin'){ localStorage.removeItem(KEY.session); session=null; }
     document.getElementById('mainTabs').style.display='none';
     document.getElementById('appScreen').style.display='none';
     document.getElementById('loginScreen').style.display='flex';
@@ -2680,7 +2724,7 @@ function validateClose(){
 function closeShift(){
   if(session && session.isPreview){
     if(confirm('Режим просмотра — данные не будут сохранены. Выйти?')){
-      sessionStorage.removeItem(KEY.session); sessionStorage.removeItem(KEY.journal);
+      localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal);
       session=null; journal=[];
       document.getElementById('mainTabs').style.display='none';
       document.getElementById('appScreen').style.display='none';
@@ -2724,7 +2768,7 @@ function _closeShiftReal(){
   const shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   shifts.unshift(report); localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
   try{ db.collection('iz_shifts').add(report); }catch(e){}
-  sessionStorage.removeItem(KEY.session); sessionStorage.removeItem(KEY.journal);
+  localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal);
   session=null; journal=[];
   document.getElementById('mainTabs').style.display='none';
   document.getElementById('appScreen').style.display='none';
@@ -4888,8 +4932,25 @@ function init(){
   if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; saveShopAdmins(admins); }
   // Init role selection — seller by default
   pick('seller');
-  const saved=JSON.parse(sessionStorage.getItem(KEY.session)||'null');
-  if(saved){ session=saved; journal=JSON.parse(sessionStorage.getItem(KEY.journal)||'[]'); if(session.role==='shopadmin')startAdminApp(); else startApp(); }
+  // Use device-specific session key to prevent cross-device session sharing
+  var _devId = localStorage.getItem('_iz_device_id');
+  if(!_devId){ _devId = 'dev_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); localStorage.setItem('_iz_device_id',_devId); }
+  var _sessionKey = KEY.session + '_' + _devId;
+  var _journalKey = KEY.journal + '_' + _devId;
+  var saved = JSON.parse(localStorage.getItem(_sessionKey)||localStorage.getItem(KEY.session)||'null');
+  if(saved){
+    session = saved;
+    journal = JSON.parse(localStorage.getItem(_journalKey)||localStorage.getItem(KEY.journal)||'[]');
+    // Migrate to device-specific keys
+    localStorage.setItem(_sessionKey, JSON.stringify(session));
+    localStorage.setItem(_journalKey, JSON.stringify(journal));
+    // Override saveS and saveJ to use device keys
+    window._saveS_orig = function(){ localStorage.setItem(_sessionKey, JSON.stringify(session)); };
+    window._saveJ_orig = function(){ localStorage.setItem(_journalKey, JSON.stringify(journal)); };
+    if(session.role==='shopadmin') startAdminApp(); else startApp();
+  }
+  // Also sync journal to Firestore on load for recovery
+  startSyncListeners();
 }
 init();
 </script>
