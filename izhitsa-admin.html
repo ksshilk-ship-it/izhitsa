@@ -425,19 +425,42 @@ function applyUpdate() {
   <!-- SHOPS ANALYSIS -->
   <div class="page" id="pg-shops">
     <div class="stitle">🏪 Магазины</div>
-    <div class="pchips">
-      <div class="pc active" onclick="setShopPeriod('today',this)">Сегодня</div>
-      <div class="pc" onclick="setShopPeriod('week',this)">Неделя</div>
-      <div class="pc" onclick="setShopPeriod('month',this)">Месяц</div>
-      <div class="pc" onclick="setShopPeriod('custom',this)">✏️ Период</div>
+
+    <!-- Sub-tabs: Realtime / Analytics -->
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      <button id="shopsTab_live" onclick="switchShopsTab('live')"
+        style="flex:1;padding:9px;border-radius:10px;border:2px solid var(--accent);background:#1e2a14;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">
+        🔴 Сейчас
+      </button>
+      <button id="shopsTab_stat" onclick="switchShopsTab('stat')"
+        style="flex:1;padding:9px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--t2);font-size:12px;cursor:pointer">
+        📊 Статистика
+      </button>
     </div>
-    
-    <div id="shopCustomDates" style="display:none;margin-bottom:10px" class="row2">
-      <div><label class="fl">С даты</label><input class="fi" type="date" id="shopFrom" onchange="renderShops()"></div>
-      <div><label class="fl">По дату</label><input class="fi" type="date" id="shopTo" onchange="renderShops()"></div>
+
+    <!-- LIVE -->
+    <div id="shopsSection_live">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--t2)" id="liveShiftsMeta">Загрузка...</div>
+        <button onclick="refreshLiveShifts()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--t2);font-size:11px;cursor:pointer">🔄 Обновить</button>
+      </div>
+      <div id="liveShiftsContent"></div>
     </div>
-    
-    <div id="shopsAnalysis"></div>
+
+    <!-- STATS -->
+    <div id="shopsSection_stat" style="display:none">
+      <div class="pchips">
+        <div class="pc active" onclick="setShopPeriod('today',this)">Сегодня</div>
+        <div class="pc" onclick="setShopPeriod('week',this)">Неделя</div>
+        <div class="pc" onclick="setShopPeriod('month',this)">Месяц</div>
+        <div class="pc" onclick="setShopPeriod('custom',this)">✏️ Период</div>
+      </div>
+      <div id="shopCustomDates" style="display:none;margin-bottom:10px" class="row2">
+        <div><label class="fl">С даты</label><input class="fi" type="date" id="shopFrom" onchange="renderShops()"></div>
+        <div><label class="fl">По дату</label><input class="fi" type="date" id="shopTo" onchange="renderShops()"></div>
+      </div>
+      <div id="shopsAnalysis"></div>
+    </div>
   </div>
 
   <!-- PRODUCTION -->
@@ -593,7 +616,7 @@ function applyUpdate() {
   <button class="tab" onclick="switchTab('pl',this)"><div class="ti">📈</div>P&L</button>
   <button class="tab" onclick="switchTab('debt',this)"><div class="ti">💰</div>Долги</button>
   <button class="tab" onclick="switchTab('analytics',this)"><div class="ti">📊</div>Аналитика</button>
-  <button class="tab" onclick="switchTab('shops',this)"><div class="ti">🏪</div>Магазины</button>
+  <button class="tab" onclick="switchTab('shops',this);renderShopsPage()"><div class="ti">🏪</div>Магазины</button>
   <button class="tab" onclick="switchTab('prod',this)"><div class="ti">🏭</div>Мастерская</button>
   <button class="tab" onclick="switchTab('staff',this);renderUnifiedStaff()"><div class="ti">👥</div>Сотрудники</button>
   <button class="tab" onclick="switchTab('audit',this)"><div class="ti">🔍</div>Аудит</button>
@@ -2599,6 +2622,142 @@ function setShopPeriod(period, btn) {
   }
   
   renderShops();
+}
+
+// ════ LIVE SHIFTS MONITORING ════
+var _liveShiftsUnsub = null;
+var _liveShiftsData = [];
+var _shopsTabActive = 'live';
+
+function switchShopsTab(tab) {
+  _shopsTabActive = tab;
+  var liveBtn = document.getElementById('shopsTab_live');
+  var statBtn = document.getElementById('shopsTab_stat');
+  var liveDiv = document.getElementById('shopsSection_live');
+  var statDiv = document.getElementById('shopsSection_stat');
+  if(tab === 'live') {
+    if(liveBtn) { liveBtn.style.borderWidth='2px'; liveBtn.style.background='#1e2a14'; liveBtn.style.color='var(--accent)'; liveBtn.style.borderColor='var(--accent)'; liveBtn.style.fontWeight='700'; }
+    if(statBtn) { statBtn.style.borderWidth='1px'; statBtn.style.background='var(--s2)'; statBtn.style.color='var(--t2)'; statBtn.style.borderColor='var(--border)'; statBtn.style.fontWeight='400'; }
+    if(liveDiv) liveDiv.style.display='block';
+    if(statDiv) statDiv.style.display='none';
+    startLiveShiftsListener();
+  } else {
+    if(statBtn) { statBtn.style.borderWidth='2px'; statBtn.style.background='#1e2a14'; statBtn.style.color='var(--accent)'; statBtn.style.borderColor='var(--accent)'; statBtn.style.fontWeight='700'; }
+    if(liveBtn) { liveBtn.style.borderWidth='1px'; liveBtn.style.background='var(--s2)'; liveBtn.style.color='var(--t2)'; liveBtn.style.borderColor='var(--border)'; liveBtn.style.fontWeight='400'; }
+    if(liveDiv) liveDiv.style.display='none';
+    if(statDiv) statDiv.style.display='block';
+    renderShops();
+  }
+}
+
+function startLiveShiftsListener() {
+  if(_liveShiftsUnsub) { try{_liveShiftsUnsub();}catch(e){} }
+  var today = new Date().toISOString().split('T')[0];
+  var meta = document.getElementById('liveShiftsMeta');
+  if(meta) meta.textContent = 'Подключение...';
+  _liveShiftsUnsub = db.collection('iz_shifts')
+    .where('date', '==', today)
+    .onSnapshot(function(snap) {
+      _liveShiftsData = [];
+      snap.forEach(function(doc){ _liveShiftsData.push(doc.data()); });
+      renderLiveShifts();
+      if(meta) meta.textContent = '🟢 Обновлено ' + new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) + ' · ' + _liveShiftsData.length + ' смен';
+    }, function(e) {
+      if(meta) meta.textContent = '🔴 Нет соединения';
+      console.log('live shifts err', e && e.code);
+    });
+}
+
+function refreshLiveShifts() {
+  startLiveShiftsListener();
+}
+
+function renderLiveShifts() {
+  var c = document.getElementById('liveShiftsContent'); if(!c) return;
+  if(!_liveShiftsData.length) {
+    c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t2)"><div style="font-size:36px;margin-bottom:8px">📋</div>Сегодня смен нет</div>';
+    return;
+  }
+  // Sort: open first
+  var shifts = _liveShiftsData.slice().sort(function(a,b){
+    if(a.status==='open'&&b.status!=='open') return -1;
+    if(b.status==='open'&&a.status!=='open') return 1;
+    return 0;
+  });
+  c.innerHTML = shifts.map(function(shift) {
+    var journal = shift.journal || [];
+    var sales = journal.filter(function(e){ return e.type==='sale'; });
+    var revenue = sales.reduce(function(s,e){ return s+(e.amount||0); }, 0);
+    var cashTotal = (shift.cashMorning||0) + journal.reduce(function(s,e){ return s+(e.cashEffect||0); }, 0);
+    var cardTotal = journal.reduce(function(s,e){ return s+(e.cardEffect||0); }, 0);
+    var goodsTotal = (shift.goodsMorning||0) + journal.reduce(function(s,e){ return s+(e.goodsEffect||0); }, 0);
+    var isOpen = shift.status !== 'closed';
+    var lastUpd = shift.updatedAt ? new Date(shift.updatedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '—';
+    var shiftIdSafe = (shift.id||'').replace(/[^a-z0-9_]/gi,'_');
+
+    return '<div style="background:var(--s1);border:1px solid '+(isOpen?'var(--accent)':'var(--border)')+';border-radius:14px;padding:14px;margin-bottom:10px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+        '<div><div style="font-size:14px;font-weight:700">'+escape_html(shift.shopName||'')+'</div>' +
+        '<div style="font-size:12px;color:var(--t2)">👤 '+escape_html(shift.sellerName||'')+'</div></div>' +
+        '<div style="text-align:right"><div style="font-size:11px;font-weight:700;color:'+(isOpen?'#60f090':'var(--t2)')+'">'+(isOpen?'● Открыта':'Закрыта')+'</div>' +
+        '<div style="font-size:10px;color:var(--t2)">'+lastUpd+'</div></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">' +
+        _lsCard('💰 Выручка', revenue) +
+        _lsCard('💵 Нал касса', cashTotal) +
+        _lsCard('💳 Безнал', cardTotal) +
+        _lsCard('📦 Товар', goodsTotal) +
+      '</div>' +
+      '<button onclick="toggleShiftDetail(\'detail_'+shiftIdSafe+'\')" ' +
+        'style="width:100%;padding:7px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--t2);font-size:11px;cursor:pointer;margin-bottom:6px">' +
+        '📋 Детали ('+sales.length+' продаж)</button>' +
+      '<div id="detail_'+shiftIdSafe+'" style="display:none">' +
+        _renderShiftJournal(journal, shift.id) +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function _lsCard(label, value) {
+  return '<div style="background:var(--bg);border-radius:8px;padding:8px;text-align:center">' +
+    '<div style="font-size:10px;color:var(--t2)">'+label+'</div>' +
+    '<div style="font-size:14px;font-weight:700;color:var(--accent)">'+fmtA(value)+'</div>' +
+  '</div>';
+}
+
+function fmtA(v) {
+  if(typeof v !== 'number') v = parseFloat(v)||0;
+  return v.toLocaleString('ru-RU') + '₽';
+}
+
+function escape_html(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function toggleShiftDetail(id) {
+  var el = document.getElementById(id);
+  if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function _renderShiftJournal(journal, shiftId) {
+  if(!journal || !journal.length) return '<div style="font-size:12px;color:var(--t2);padding:8px">Нет операций</div>';
+  var typeColors = {sale:'var(--inc)', writeoff:'var(--exp)', expense:'var(--exp)', open:'var(--t2)', staff:'#60c8f0', receive:'#60c8f0'};
+  return journal.slice().reverse().map(function(e) {
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 4px;border-bottom:1px solid var(--border);font-size:12px">' +
+      '<div style="font-size:16px;width:24px">'+(e.icon||'📌')+'</div>' +
+      '<div style="flex:1;margin-left:8px">' +
+        '<div style="color:'+(typeColors[e.type]||'var(--text)')+'">'+escape_html(e.label||'')+'</div>' +
+        (e.sub?'<div style="font-size:10px;color:var(--t2)">'+escape_html(e.sub||'')+'</div>':'') +
+        '<div style="font-size:10px;color:var(--t2)">'+new Date(e.ts||Date.now()).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})+'</div>' +
+      '</div>' +
+      (e.amount?'<div style="font-weight:700;color:'+(typeColors[e.type]||'var(--accent)')+'">'+fmtA(e.amount)+'</div>':'') +
+    '</div>';
+  }).join('');
+}
+
+// Init live listener when shops tab is opened
+function renderShopsPage() {
+  switchShopsTab('live');
 }
 
 function renderShops() {

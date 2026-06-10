@@ -1839,18 +1839,62 @@ function buildAdminTabs(){
 
 // ════ JOURNAL ════
 function renderJournal(){
-  const c=document.getElementById('journalList');
+  var c=document.getElementById('journalList');
   if(!journal.length){ c.innerHTML='<div class="empty"><div class="ei">📋</div>Начните фиксировать операции</div>'; return; }
-  c.innerHTML=[...journal].reverse().map(e=>`
-    <div class="ji">
-      <div class="ji-ic ${e.type}">${e.icon||'📌'}</div>
-      <div class="ji-body">
-        <div class="ji-title" style="color:${e.hasDiff?'#f06060':'inherit'}">${e.label}</div>
-        ${e.sub?`<div class="ji-sub">${e.sub}</div>`:''}
-        <div class="ji-time">${new Date(e.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div>
-      </div>
-      ${e.amount?`<div class="ji-amt ${e.amtCls||'neu'}">${e.amtSign||''}${fmt(e.amount)}</div>`:''}
-    </div>`).join('');
+  c.innerHTML=[...journal].reverse().map(function(e,ri){
+    var i = journal.length - 1 - ri; // real index in journal array
+    var canEdit = (e.type==='sale'||e.type==='writeoff'||e.type==='expense'||e.type==='staff');
+    return '<div class="ji" style="cursor:'+(canEdit?'pointer':'default')+'" onclick="'+(canEdit?'toggleJournalEdit('+i+',event)':'')+'">' +
+      '<div class="ji-ic '+e.type+'">'+(e.icon||'📌')+'</div>' +
+      '<div class="ji-body">' +
+        '<div class="ji-title" style="color:'+(e.hasDiff?'#f06060':'inherit')+'">'+(e.label||'')+(canEdit?' <span style="font-size:10px;color:var(--t2)">✏️</span>':'')+'</div>' +
+        (e.sub?'<div class="ji-sub">'+e.sub+'</div>':'') +
+        '<div class="ji-time">'+new Date(e.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})+'</div>' +
+      '</div>' +
+      (e.amount?'<div class="ji-amt '+(e.amtCls||'neu')+'">'+(e.amtSign||'')+fmt(e.amount)+'</div>':'') +
+    '</div>' +
+    (canEdit?'<div id="jedit_'+i+'" style="display:none;background:#1a1e2e;border-radius:10px;padding:12px;margin:-4px 0 8px;border:1px solid var(--border)">'+renderJournalEditForm(e,i)+'</div>':'');
+  }).join('');
+}
+
+function toggleJournalEdit(idx, event) {
+  if(event) event.stopPropagation();
+  var el = document.getElementById('jedit_'+idx);
+  if(!el) return;
+  el.style.display = el.style.display==='none' ? 'block' : 'none';
+}
+
+function renderJournalEditForm(e, idx) {
+  return '<div style="font-size:11px;color:var(--t2);margin-bottom:8px;font-weight:700">✏️ Редактировать запись</div>' +
+    '<div style="display:flex;gap:6px;margin-bottom:8px">' +
+      '<div style="flex:1"><div style="font-size:10px;color:var(--t2);margin-bottom:3px">СУММА ₽</div>' +
+      '<input class="fi" type="number" id="jeAmt_'+idx+'" value="'+(e.amount||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>' +
+      '<div style="flex:2"><div style="font-size:10px;color:var(--t2);margin-bottom:3px">КОММЕНТАРИЙ</div>' +
+      '<input class="fi" id="jeComment_'+idx+'" value="'+(e.comment||'')+'" placeholder="Добавить..." style="margin:0;padding:8px"></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:6px">' +
+      '<button onclick="saveJournalEdit('+idx+')" style="flex:1;padding:8px;border-radius:8px;border:none;background:var(--accent);color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>' +
+      '<button onclick="toggleJournalEdit('+idx+',event)" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--t2);font-size:12px;cursor:pointer">Отмена</button>' +
+    '</div>';
+}
+
+function saveJournalEdit(idx) {
+  if(!journal[idx]) return;
+  var newAmt = parseFloat((document.getElementById('jeAmt_'+idx)||{}).value)||journal[idx].amount||0;
+  var newComment = (document.getElementById('jeComment_'+idx)||{}).value||'';
+  // Recalculate effects proportionally
+  var oldAmt = journal[idx].amount || 0;
+  var ratio = oldAmt > 0 ? newAmt / oldAmt : 1;
+  journal[idx].amount = newAmt;
+  journal[idx].cashEffect = Math.round((journal[idx].cashEffect||0) * ratio);
+  journal[idx].cardEffect = Math.round((journal[idx].cardEffect||0) * ratio);
+  journal[idx].goodsEffect = Math.round((journal[idx].goodsEffect||0) * ratio);
+  if(newComment) journal[idx].comment = newComment;
+  journal[idx].edited = true;
+  journal[idx].editedAt = new Date().toISOString();
+  journal[idx].editedBy = session ? (session.sellerName||session.name||'') : '';
+  saveJ(); renderJournal(); renderAll();
+  showToast('✅ Запись обновлена');
 }
 
 // ════ ITEM LOOKUP ════
