@@ -192,36 +192,36 @@ if ('serviceWorker' in navigator) {
   <div class="login-card">
     <div class="lc-title">Выберите роль и войдите</div>
     <div class="role-grid">
-      <div class="role-card" onclick="selectRole('заготовщик',this)">
+      <div class="role-card" data-role="заготовщик" onclick="selectRole('заготовщик',this)">
         <div class="ri">🪚</div>
         <div class="rn">Заготовщик</div>
         <div class="rs">Выдаёт заготовки</div>
       </div>
-      <div class="role-card" onclick="selectRole('мастер',this)">
+      <div class="role-card" data-role="мастер" onclick="selectRole('мастер',this)">
         <div class="ri">🔨</div>
         <div class="rn">Мастер</div>
         <div class="rs">Делает изделия</div>
       </div>
-      <div class="role-card" onclick="selectRole('кладовщик',this)">
+      <div class="role-card" data-role="кладовщик" onclick="selectRole('кладовщик',this)">
         <div class="ri">📦</div>
         <div class="rn">Кладовщик</div>
         <div class="rs">Принимает, отгружает</div>
       </div>
-      <div class="role-card" onclick="selectRole('управляющий',this)">
+      <div class="role-card" data-role="управляющий" onclick="selectRole('управляющий',this)">
         <div class="ri">👑</div>
         <div class="rn">Управляющий</div>
         <div class="rs">Полный доступ</div>
       </div>
     </div>
     <div style="margin-top:8px">
-      <div class="role-card" onclick="selectRole('администратор',this)">
+      <div class="role-card" data-role="администратор" onclick="selectRole('администратор',this)">
         <div class="ri">🛡</div>
         <div class="rn">Администратор</div>
         <div class="rs">Суперадмин</div>
       </div>
     </div>
     <div class="fg"><label class="fl">Сотрудник</label><select class="fs" id="loginUser"><option value="">— выберите роль —</option></select></div>
-    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="loginPass" placeholder="••••"></div>
+    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="text" inputmode="text" id="loginPass" placeholder="••••" style="-webkit-text-security:disc"></div>
     <div id="loginErr" style="color:var(--exp);font-size:12px;margin-bottom:8px;display:none">Неверный пароль</div>
     <button class="btn" onclick="doLogin()">Войти →</button>
   </div>
@@ -1012,58 +1012,6 @@ firebase.initializeApp({
 const db = firebase.firestore();
 db.enablePersistence({synchronizeTabs:true}).catch(e=>console.log('Persist:',e.code));
 
-// ════ ЕДИНАЯ АВТОРИЗАЦИЯ iz_staff ════
-function getStaff() {
-  return JSON.parse(localStorage.getItem('iz_staff')||'[]');
-}
-function getStaffBySingleRole(role) {
-  return getStaff().filter(function(s){
-    return !s.blocked && s.roles && s.roles.indexOf(role) >= 0;
-  });
-}
-function syncDerivedFromStaff(staff) {
-  if(!staff || !staff.length) return;
-  var sellers = staff.filter(function(s){
-    return s.roles && s.roles.indexOf('seller') >= 0 && !s.blocked;
-  }).map(function(s){
-    return {id:s.id, name:s.name, pass:s.pass, shops:s.shops||[], blocked:false, rate:s.wsRate||0};
-  });
-  localStorage.setItem('iz_sellers', JSON.stringify(sellers));
-  var wsRoles = ['мастер','заготовщик','кладовщик','управляющий'];
-  var wsEmps = staff.filter(function(s){
-    return s.roles && s.roles.some(function(r){ return wsRoles.indexOf(r)>=0; }) && !s.blocked;
-  }).map(function(s){
-    var r = s.roles.find(function(r){ return wsRoles.indexOf(r)>=0; })||'мастер';
-    return {id:s.id, name:s.name, pass:s.pass, role:r, rate:s.wsRate||0, blocked:false};
-  });
-  localStorage.setItem('ws_employees', JSON.stringify(wsEmps));
-  var adminRoles = ['admin','owner','accountant'];
-  var admins = staff.filter(function(s){
-    return s.roles && s.roles.some(function(r){ return adminRoles.indexOf(r)>=0; }) && !s.blocked;
-  }).map(function(s){
-    var r = s.roles.find(function(r){ return adminRoles.indexOf(r)>=0; })||'admin';
-    return {id:s.id, name:s.name, pass:s.pass, role:r};
-  });
-  if(!admins.some(function(a){ return a.id==='admin_default'; }))
-    admins.unshift({id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'});
-  localStorage.setItem('iz_admin_users', JSON.stringify(admins));
-  localStorage.setItem('iz_shop_admins', JSON.stringify(admins));
-}
-function startStaffLiveSync(onUpdate) {
-  if(typeof db === 'undefined') return;
-  db.collection('iz_settings').doc('staff').onSnapshot(function(snap){
-    if(!snap.exists) return;
-    var data = snap.data();
-    var val = data && data.staff;
-    if(val && val.length) {
-      localStorage.setItem('iz_staff', JSON.stringify(val));
-      syncDerivedFromStaff(val);
-      if(typeof onUpdate === 'function') onUpdate();
-    }
-  }, function(e){ console.log('staff sync err', e && e.code); });
-}
-
-
 // ════ WORKSHOP SYNC LAYER ════
 var _wsSyncUnsubs = {};
 var WS_SYNC_SETTINGS = {
@@ -1177,14 +1125,7 @@ function showPg(name,el){
 
 // ════════ EMPLOYEES ════════
 function getEmployees(){
-  var wsRoles=['мастер','заготовщик','кладовщик','управляющий'];
-  var staff = getStaff();
-  if(staff.length) {
-    var emps = staff.filter(function(s){ return s.roles && s.roles.some(function(r){return wsRoles.indexOf(r)>=0;}) && !s.blocked; })
-      .map(function(s){ var r=s.roles.find(function(r){return wsRoles.indexOf(r)>=0;})||'мастер'; return {id:s.id,name:s.name,pass:s.pass,role:r,rate:s.wsRate||0,blocked:false}; });
-    if(emps.length) return emps;
-  }
-  var stored = JSON.parse(localStorage.getItem('ws_employees')||'[]');
+  const stored = JSON.parse(localStorage.getItem('ws_employees')||'[]');
   // Built-in superadmin — always present, cannot be deleted
   const superadmin = {id:'__superadmin__', name:'Администратор', role:'администратор', rate:0, pass:'izhitsa2025', _builtin:true};
   if(!stored.find(e=>e.id==='__superadmin__')) return [superadmin, ...stored];
@@ -1258,26 +1199,42 @@ function delEmployee(i){
 }
 
 function selectRole(role,el){
-  document.querySelectorAll('.role-card').forEach(c=>c.classList.remove('selected'));
-  el.classList.add('selected');
-  const emps=getEmployees().filter(e=>e.role===role&&!e.blocked);
-  document.getElementById('loginUser').innerHTML=emps.length
-    ?emps.map(e=>`<option value="${e.id}">${e.name}</option>`).join('')
-    :'<option value="">— нет сотрудников —</option>';
+  document.querySelectorAll('.role-card').forEach(function(c){ c.classList.remove('selected'); });
+  if(el) { el.classList.add('selected'); el.setAttribute('data-role', role); }
+  var emps = getEmployees().filter(function(e){ return e.role===role && !e.blocked; });
+  var sel = document.getElementById('loginUser');
+  sel.innerHTML = emps.length
+    ? emps.map(function(e){ return '<option value="'+e.id+'">'+e.name+'</option>'; }).join('')
+    : '<option value="">— нет сотрудников —</option>';
 }
 
 // ════════ LOGIN ════════
 function doLogin(){
-  const uid_sel=document.getElementById('loginUser').value;
-  const pass=document.getElementById('loginPass').value;
-  const emp=getEmployees().find(e=>e.id===uid_sel);
-  const errEl=document.getElementById('loginErr');
-  if(!emp){errEl.style.display='block';errEl.textContent='Выберите сотрудника';return;}
-  if(emp.blocked){errEl.style.display='block';errEl.textContent='Аккаунт заблокирован. Обратитесь к администратору.';return;}
-  if(emp.pass!==pass){errEl.style.display='block';errEl.textContent='Неверный пароль';return;}
-  errEl.style.display='none';
-  session={id:emp.id,name:emp.name,role:emp.role,rate:emp.rate||0};
-  sessionStorage.setItem('ws_session',JSON.stringify(session));
+  var uid_sel = document.getElementById('loginUser').value;
+  var pass = document.getElementById('loginPass').value;
+  var errEl = document.getElementById('loginErr');
+  errEl.style.display = 'none';
+
+  if(!uid_sel) { errEl.style.display='block'; errEl.textContent='Выберите сотрудника'; return; }
+
+  // Find in combined list (iz_staff + ws_employees)
+  var emp = getEmployees().find(function(e){ return e.id===uid_sel; });
+  // Also check iz_staff directly for pass (getEmployees may not include pass for some)
+  if(!emp) {
+    var staffEntry = getStaff().find(function(s){ return s.id===uid_sel; });
+    if(staffEntry) {
+      var wsRoles=['мастер','заготовщик','кладовщик','управляющий'];
+      var r = staffEntry.roles ? staffEntry.roles.find(function(r){return wsRoles.indexOf(r)>=0;})||staffEntry.roles[0] : 'мастер';
+      emp = {id:staffEntry.id, name:staffEntry.name, pass:staffEntry.pass, role:r, rate:staffEntry.wsRate||0};
+    }
+  }
+
+  if(!emp) { errEl.style.display='block'; errEl.textContent='Выберите сотрудника'; return; }
+  if(emp.blocked) { errEl.style.display='block'; errEl.textContent='Аккаунт заблокирован. Обратитесь к администратору.'; return; }
+  if(emp.pass !== pass) { errEl.style.display='block'; errEl.textContent='Неверный пароль'; return; }
+
+  session = {id:emp.id, name:emp.name, role:emp.role, rate:emp.rate||0};
+  sessionStorage.setItem('ws_session', JSON.stringify(session));
   startApp();
 }
 
@@ -4214,7 +4171,7 @@ function finishOTTask(id){
 // ════════ BOOT ════════
 document.addEventListener('DOMContentLoaded', ()=>{
   startWsSyncListeners();
-  startStaffLiveSync(function(){ try{renderEmployeeList();}catch(e){} });
+  startWsStaffSync();
   renderEmployeeList();
   if(session) startApp();
   setSync(navigator.onLine?'online':'offline');
