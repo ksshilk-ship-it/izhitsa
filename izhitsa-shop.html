@@ -201,7 +201,7 @@ if ('serviceWorker' in navigator) {
     <div id="journalBtns1" style="display:flex;gap:7px;margin-bottom:8px">
       <button class="btn" style="margin:0;flex:1.2;font-size:13px" onclick="openMo('saleMo');resetSaleForm()">＋ Продажа</button>
       <button id="btnWriteoff" class="btn red" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openMo('woMo')">🗑 Списание</button>
-
+      <button id="btnReceive" class="btn blue" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openMo('receiveMo')">📥 Приход</button>
     </div>
     <div id="journalBtns2" style="display:flex;gap:7px;margin-bottom:10px">
       <button id="btnExpense" class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#2a1e14;border:1px solid #f0a060;color:#f0a060" onclick="openMo('expMo')">💸 Расходы</button>
@@ -210,64 +210,7 @@ if ('serviceWorker' in navigator) {
     <div class="card"><div class="ctitle">Журнал смены</div><div id="journalList"></div></div>
   </div>
   <div class="page" id="pg-invoices">
-    <div class="stitle">📋 Накладные</div>
-
-    <!-- Sub-tabs -->
-    <div style="display:flex;gap:6px;margin-bottom:14px">
-      <button type="button" id="invTab_incoming" onclick="switchInvTab('incoming')"
-        style="flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">
-        📦 Из мастерской
-      </button>
-      <button type="button" id="invTab_manual" onclick="switchInvTab('manual')"
-        style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;cursor:pointer">
-        ✏️ Вручную
-      </button>
-    </div>
-
-    <!-- FROM WORKSHOP -->
-    <div id="invSection_incoming">
-      <div id="invoicesList"></div>
-    </div>
-
-    <!-- MANUAL INVOICE -->
-    <div id="invSection_manual" style="display:none">
-      <div class="card" style="margin-bottom:10px">
-        <div class="ctitle">Новая накладная</div>
-        <div class="row2">
-          <div class="fg"><label class="fl">Номер накладной</label>
-            <input class="fi" id="manInvNum" placeholder="НАК-001">
-          </div>
-          <div class="fg"><label class="fl">Дата накладной</label>
-            <input class="fi" type="date" id="manInvDate" style="-webkit-appearance:none;color-scheme:dark">
-          </div>
-        </div>
-        <div class="fg"><label class="fl">Откуда (поставщик)</label>
-          <div style="display:flex;gap:6px;align-items:center">
-            <div class="item-input-wrap" style="flex:1">
-              <input class="fi" id="manInvFrom" placeholder="Мастерская / поставщик..."
-                oninput="showSupplierDropdown(this.value)"
-                onfocus="showSupplierDropdown(this.value)"
-                autocomplete="off">
-              <div class="item-dropdown" id="manInvFromDrop" style="display:none"></div>
-            </div>
-            <button type="button" class="item-add-btn" onclick="addNewSupplier()" title="Добавить поставщика">＋</button>
-          </div>
-        </div>
-        <div class="ctitle" style="margin-top:4px">Позиции</div>
-        <div id="manInvItems" style="margin-bottom:8px">
-          <div style="font-size:12px;color:#8888aa;padding:4px">Нет позиций — добавьте ниже</div>
-        </div>
-        <button type="button" onclick="addManInvItem()" class="btn sec" style="font-size:12px;margin-bottom:8px">＋ Добавить позицию</button>
-        <div id="manInvTotal" style="font-size:13px;color:#8888aa;margin-bottom:8px"></div>
-        <button class="btn blue" onclick="saveManualInvoice()">📥 Принять на баланс</button>
-      </div>
-
-      <!-- Accepted manual invoices -->
-      <div class="card">
-        <div class="ctitle">Принятые накладные</div>
-        <div id="manInvAccepted"><div class="empty"><div class="ei">📋</div>Нет</div></div>
-      </div>
-    </div>
+    <div class="stitle">Входящие накладные</div><div id="invoicesList"></div>
   </div>
   <div class="page" id="pg-staff-tab">
     <div class="stitle">Покупки сотрудников</div>
@@ -826,9 +769,7 @@ if ('serviceWorker' in navigator) {
       <div style="font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700" id="morningShopName"></div>
       <div style="font-size:12px;color:#8888aa;margin-top:4px" id="morningSellerName"></div>
     </div>
-
-    <!-- КАССА -->
-    <div class="card" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:#c8f060;margin-bottom:10px">
+    <div class="card" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:#c8f060">
       <div style="font-size:13px;color:#8888aa;margin-bottom:12px">Пересчитайте наличные в кассе и введите фактический остаток.</div>
       <div class="fg">
         <label class="fl">💵 Остаток наличных в кассе (₽)</label>
@@ -837,36 +778,6 @@ if ('serviceWorker' in navigator) {
         <div id="morningCashHint" style="font-size:12px;margin-top:4px;display:none"></div>
       </div>
     </div>
-
-    <!-- ТОВАРНЫЙ ОСТАТОК -->
-    <div class="card" style="background:linear-gradient(135deg,#1a1e2e,#141a2e);border-color:#60c8f0;margin-bottom:10px">
-      <div style="font-size:12px;font-weight:700;color:#60c8f0;margin-bottom:10px">📦 Остаток товара на утро (₽)</div>
-      <!-- Выбор: авто или вручную -->
-      <div style="display:flex;gap:6px;margin-bottom:10px">
-        <button type="button" id="goodsMornAuto" onclick="setGoodsMornMode('auto')"
-          style="flex:1;padding:8px;border-radius:10px;border:2px solid #60c8f0;background:#1a1e2e;color:#60c8f0;font-size:11px;font-weight:700;cursor:pointer">
-          🔄 Авто (с прошлой смены)
-        </button>
-        <button type="button" id="goodsMornManual" onclick="setGoodsMornMode('manual')"
-          style="flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">
-          ✏️ Ввести вручную
-        </button>
-      </div>
-      <!-- Авто режим -->
-      <div id="goodsMornAutoBlock">
-        <div id="goodsMornAutoVal" style="font-family:'Unbounded',sans-serif;font-size:20px;font-weight:700;color:#60c8f0;text-align:center;padding:10px;background:#0f0f13;border-radius:10px">
-          —
-        </div>
-        <div style="font-size:11px;color:#8888aa;text-align:center;margin-top:6px">Рассчитано по данным прошлой смены</div>
-      </div>
-      <!-- Ручной режим -->
-      <div id="goodsMornManualBlock" style="display:none">
-        <input class="fi" type="number" id="morningGoods" placeholder="Введите остаток товара..." inputmode="numeric"
-          style="font-size:20px;font-weight:700;text-align:center;border-color:#60c8f0" oninput="checkMorningValid()">
-        <div style="font-size:11px;color:#f0a060;margin-top:6px">⚠️ Введите приблизительную сумму — можно уточнить позже</div>
-      </div>
-    </div>
-
     <div id="morningCompare" style="margin-bottom:12px"></div>
     <button class="btn" id="morningConfirmBtn" onclick="confirmMorning()" disabled style="opacity:.4">Открыть смену →</button>
     <button class="btn sec" style="margin-top:8px" onclick="cancelMorning()">← Назад</button>
@@ -1473,8 +1384,8 @@ function getShopType(name){
 function isShopType(name){ return getShopType(name)==='shop'; }
 function isOnlineType(name){ return getShopType(name)==='online'; }
 function isOfflineType(name){ return getShopType(name)==='offline'; }
-function saveJ(){ localStorage.setItem(KEY.journal,JSON.stringify(journal)); }
-function saveS(){ localStorage.setItem(KEY.session,JSON.stringify(session)); }
+function saveJ(){ sessionStorage.setItem(KEY.journal,JSON.stringify(journal)); }
+function saveS(){ sessionStorage.setItem(KEY.session,JSON.stringify(session)); }
 
 // ════ AUDIT LOG ════
 function getAuditLog(){ try { return JSON.parse(localStorage.getItem('iz_audit_log_shop')||'[]'); } catch(e) { return []; } }
@@ -1566,7 +1477,7 @@ function doLogin(){
 function exitShift(){
   const msg=(session&&session.role)==='shopadmin'?'Выйти из режима администратора?':'Выйти? Смена останется открытой.';
   if(confirm(msg)){
-    if((session&&session.role)==='shopadmin'){ localStorage.removeItem(KEY.session); session=null; }
+    if((session&&session.role)==='shopadmin'){ sessionStorage.removeItem(KEY.session); session=null; }
     document.getElementById('mainTabs').style.display='none';
     document.getElementById('appScreen').style.display='none';
     document.getElementById('loginScreen').style.display='flex';
@@ -1597,15 +1508,6 @@ function openMorningModal(){
   document.getElementById('morningCashHint').style.display='none';
   document.getElementById('morningConfirmBtn').disabled=true;
   document.getElementById('morningConfirmBtn').style.opacity='.4';
-  // Goods morning — calculate auto value
-  var autoGoods = calcGoodsMorning(shopName);
-  var autoEl = document.getElementById('goodsMornAutoVal');
-  if(autoEl) autoEl.textContent = fmt(autoGoods);
-  // Reset to auto mode
-  _goodsMornMode = 'auto';
-  setGoodsMornMode('auto');
-  var goodsInput = document.getElementById('morningGoods');
-  if(goodsInput) goodsInput.value = '';
   const prev=getPrevShift(shopName);
   const mc=document.getElementById('morningCompare');
   mc.innerHTML=(prev&&prev.cashEvening)!=null?`<div class="al-info">📊 Нал вечер прошлой смены: <strong>${fmt(prev.cashEvening)}</strong></div>`:'';
@@ -1627,15 +1529,7 @@ function checkMorningValid(){
 function confirmMorning(){
   const val=document.getElementById('morningCash').value, cashM=parseFloat(val);
   if(val===''||isNaN(cashM)||cashM<0) return;
-  // Get goods morning value
-  var goodsM;
-  if(_goodsMornMode === 'manual') {
-    var gv_el = document.getElementById('morningGoods');
-    var gv_val = gv_el ? gv_el.value : '';
-    goodsM = gv_val !== '' ? (parseFloat(gv_val)||0) : calcGoodsMorning(pendingSession.shopName);
-  } else {
-    goodsM = calcGoodsMorning(pendingSession.shopName);
-  }
+  const goodsM=calcGoodsMorning(pendingSession.shopName);
   var drCashEl=document.getElementById('morningDrCash');
   var drCashM=drCashEl&&drCashEl.value!==''?parseFloat(drCashEl.value)||0:0;
   session={...pendingSession,openedAt:new Date().toISOString(),cashMorning:cashM,goodsMorning:goodsM,drCashMorning:drCashM};
@@ -1645,32 +1539,12 @@ function confirmMorning(){
       date:new Date().toISOString().split('T')[0],cashMorning:cashM,prevCashEve:prev.cashEvening,morningDiff:cashM-prev.cashEvening});
   }
   journal=[{id:uid(),type:'open',ts:new Date().toISOString(),icon:'🔓',label:'Смена открыта',
-    sub:'🌳 Нал: '+fmt(cashM)+(drCashM?' 🛍 Нал ДР: '+fmt(drCashM):'')+' · 📦 Товар: '+fmt(goodsM)+(_goodsMornMode==='manual'?' (введён вручную)':''),
-    cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0}];
+    sub:'🌳 Нал: '+fmt(cashM)+(drCashM?' 🛍 Нал ДР: '+fmt(drCashM):'')+' · 📦 Товар: '+fmt(goodsM),cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0}];
   pendingSession=null; saveS(); saveJ();
   logShiftOpen(session.shopName, cashM);
   closeMo('morningMo'); startApp();
 }
 function cancelMorning(){ closeMo('morningMo'); pendingSession=null; }
-
-function setGoodsMornMode(mode) {
-  _goodsMornMode = mode;
-  var autoBtn = document.getElementById('goodsMornAuto');
-  var manBtn = document.getElementById('goodsMornManual');
-  var autoBlock = document.getElementById('goodsMornAutoBlock');
-  var manBlock = document.getElementById('goodsMornManualBlock');
-  if(mode === 'auto') {
-    if(autoBtn) { autoBtn.style.borderWidth='2px'; autoBtn.style.background='#1a1e2e'; autoBtn.style.color='#60c8f0'; autoBtn.style.borderColor='#60c8f0'; autoBtn.style.fontWeight='700'; }
-    if(manBtn) { manBtn.style.borderWidth='1px'; manBtn.style.background='#22222e'; manBtn.style.color='#8888aa'; manBtn.style.borderColor='#2e2e3e'; manBtn.style.fontWeight='400'; }
-    if(autoBlock) autoBlock.style.display='block';
-    if(manBlock) manBlock.style.display='none';
-  } else {
-    if(autoBtn) { autoBtn.style.borderWidth='1px'; autoBtn.style.background='#22222e'; autoBtn.style.color='#8888aa'; autoBtn.style.borderColor='#2e2e3e'; autoBtn.style.fontWeight='400'; }
-    if(manBtn) { manBtn.style.borderWidth='2px'; manBtn.style.background='#1a1e2e'; manBtn.style.color='#60c8f0'; manBtn.style.borderColor='#60c8f0'; manBtn.style.fontWeight='700'; }
-    if(autoBlock) autoBlock.style.display='none';
-    if(manBlock) manBlock.style.display='block';
-  }
-}
 function getPrevShift(shopName){
   const all=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   return all.filter(s=>s.shopName===shopName).sort((a,b)=>new Date(b.closedAt||0)-new Date(a.closedAt||0))[0]||null;
@@ -1780,7 +1654,7 @@ function adaptUIForShopType(){
     // Rebuild tabs - only invoices
     var t=document.getElementById('mainTabs'); 
     if(t) t.innerHTML=`
-      <button class="tab active" onclick="showPg('invoices',this);switchInvTab('incoming')"><div class="ti">📋</div><span>Накладные</span><div class="tbadge" id="invBadge"></div></button>
+      <button class="tab active" onclick="showPg('invoices',this);renderInvoices()"><div class="ti">📋</div><span>Накладные</span><div class="tbadge" id="invBadge"></div></button>
       <button class="tab" onclick="exitShift()"><div class="ti">🚪</div><span>Выйти</span></button>`;
     // Show invoices page
     document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
@@ -1887,7 +1761,7 @@ function buildSellerTabs(){
   const t=document.getElementById('mainTabs'); t.style.display='flex';
   t.innerHTML=`
     <button class="tab active" onclick="showPg('journal',this)"><div class="ti">📋</div><span>Журнал</span></button>
-    <button class="tab" onclick="showPg('invoices',this);switchInvTab('incoming')"><div class="ti">📦</div><span>Накладные</span><div class="tbadge" id="invBadge"></div></button>
+    <button class="tab" onclick="showPg('invoices',this);renderInvoices()"><div class="ti">📦</div><span>Накладные</span><div class="tbadge" id="invBadge"></div></button>
     <button class="tab" onclick="showPg('staff-tab',this);renderStaff()"><div class="ti">🛒</div><span>Покупки</span></button>
     <button class="tab" onclick="showPg('close',this);renderClose()"><div class="ti">🔐</div><span>Закрыть</span></button>`;
 }
@@ -2806,7 +2680,7 @@ function validateClose(){
 function closeShift(){
   if(session && session.isPreview){
     if(confirm('Режим просмотра — данные не будут сохранены. Выйти?')){
-      localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal);
+      sessionStorage.removeItem(KEY.session); sessionStorage.removeItem(KEY.journal);
       session=null; journal=[];
       document.getElementById('mainTabs').style.display='none';
       document.getElementById('appScreen').style.display='none';
@@ -2850,7 +2724,7 @@ function _closeShiftReal(){
   const shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   shifts.unshift(report); localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
   try{ db.collection('iz_shifts').add(report); }catch(e){}
-  localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal);
+  sessionStorage.removeItem(KEY.session); sessionStorage.removeItem(KEY.journal);
   session=null; journal=[];
   document.getElementById('mainTabs').style.display='none';
   document.getElementById('appScreen').style.display='none';
@@ -5003,237 +4877,6 @@ function renderActivatedList(){
   }).join('');
 }
 
-
-// ════ INVOICE TABS ════
-var _manInvItems = [];
-var _manInvCounter = 1;
-
-function switchInvTab(tab) {
-  var tabs = ['incoming','manual'];
-  tabs.forEach(function(t) {
-    var sec = document.getElementById('invSection_'+t);
-    var btn = document.getElementById('invTab_'+t);
-    if(sec) sec.style.display = t===tab ? 'block' : 'none';
-    if(btn) {
-      btn.style.borderWidth = t===tab ? '2px' : '1px';
-      btn.style.background = t===tab ? '#1e2a14' : '#22222e';
-      btn.style.color = t===tab ? '#c8f060' : '#8888aa';
-      btn.style.borderColor = t===tab ? '#c8f060' : '#2e2e3e';
-      btn.style.fontWeight = t===tab ? '700' : '400';
-    }
-  });
-  if(tab === 'incoming') renderInvoices();
-  if(tab === 'manual') { initManualInvoice(); renderManInvAccepted(); }
-}
-
-function initManualInvoice() {
-  var dateEl = document.getElementById('manInvDate');
-  if(dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split('T')[0];
-  var numEl = document.getElementById('manInvNum');
-  if(numEl && !numEl.value) {
-    var existing = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-    var year = String(new Date().getFullYear()).slice(2);
-    var yearInvs = existing.filter(function(inv){
-      return inv.num && inv.num.indexOf('.'+year) >= 0;
-    });
-    numEl.value = 'НАК-' + String(yearInvs.length + 1).padStart(3,'0') + '.' + year;
-  }
-  if(!_manInvItems.length) renderManInvItems();
-}
-
-function addManInvItem() {
-  _manInvItems.push({name:'', article:'', qty:1, price:0});
-  renderManInvItems();
-}
-
-function renderManInvItems() {
-  var c = document.getElementById('manInvItems'); if(!c) return;
-  if(!_manInvItems.length) {
-    c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:4px">Нет позиций — добавьте ниже</div>';
-    return;
-  }
-  var items = getItemsBase();
-  c.innerHTML = _manInvItems.map(function(item, i) {
-    // Build autocomplete datalist
-    var dlId = 'manInvDl_'+i;
-    var dlHtml = '<datalist id="'+dlId+'">'+items.slice(0,50).map(function(it){
-      return '<option value="'+it.name+'"'+(it.num?' data-num="'+it.num+'"':'')+'>';
-    }).join('')+'</datalist>';
-    return '<div style="background:#1a1a22;border-radius:10px;padding:10px;margin-bottom:6px">'+
-      dlHtml+
-      '<div style="display:flex;gap:6px;margin-bottom:6px">'+
-        '<div style="flex:0 0 90px">'+
-          '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">АРТИКУЛ</div>'+
-          '<input class="fi" value="'+item.article+'" placeholder="№" '+
-            'oninput="_manInvArt('+i+',this.value)" style="margin:0;padding:8px">'+
-        '</div>'+
-        '<div style="flex:1">'+
-          '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">НАИМЕНОВАНИЕ</div>'+
-          '<div style="display:flex;gap:4px">'+
-            '<input class="fi" list="'+dlId+'" value="'+item.name+'" placeholder="Название" '+
-              'oninput="_manInvName('+i+',this.value)" style="margin:0;padding:8px;flex:1">'+
-            '<button type="button" onclick="openAddItemModal(\'manInvName_'+i+'\',\'\',\'\')" '+
-              'style="background:#c8f060;border:none;border-radius:8px;padding:6px 9px;font-weight:700;color:#0f0f13;cursor:pointer;font-size:14px;flex-shrink:0">＋</button>'+
-          '</div>'+
-        '</div>'+
-      '</div>'+
-      '<div style="display:flex;gap:6px;align-items:center">'+
-        '<div style="flex:1">'+
-          '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">КОЛ-ВО</div>'+
-          '<input class="fi" type="number" value="'+item.qty+'" placeholder="1" '+
-            'oninput="_manInvQty('+i+',this.value)" style="margin:0;padding:8px" inputmode="numeric">'+
-        '</div>'+
-        '<div style="flex:1">'+
-          '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">ЦЕНА ₽</div>'+
-          '<input class="fi" type="number" value="'+item.price+'" placeholder="0" '+
-            'oninput="_manInvPrice('+i+',this.value)" style="margin:0;padding:8px" inputmode="numeric">'+
-        '</div>'+
-        '<button type="button" onclick="_manInvDel('+i+')" '+
-          'style="background:none;border:1px solid #3e2e2e;border-radius:8px;padding:8px 10px;color:#f06060;font-size:13px;cursor:pointer;margin-top:14px">✕</button>'+
-      '</div>'+
-    '</div>';
-  }).join('');
-  updateManInvTotal();
-}
-
-function _manInvName(i, val) { _manInvItems[i].name = val; updateManInvTotal(); }
-function _manInvArt(i, val) { _manInvItems[i].article = val; }
-function _manInvQty(i, val) { _manInvItems[i].qty = parseFloat(val)||1; updateManInvTotal(); }
-function _manInvPrice(i, val) { _manInvItems[i].price = parseFloat(val)||0; updateManInvTotal(); }
-function _manInvDel(i) { _manInvItems.splice(i,1); renderManInvItems(); }
-
-function updateManInvTotal() {
-  var total = _manInvItems.reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); }, 0);
-  var el = document.getElementById('manInvTotal');
-  if(el) el.textContent = _manInvItems.length
-    ? 'Итого: '+Math.round(total).toLocaleString('ru-RU')+'₽ · '+_manInvItems.length+' позиций'
-    : '';
-}
-
-function saveManualInvoice() {
-  if(!_manInvItems.length) { showToast('Добавьте позиции'); return; }
-  var num = (document.getElementById('manInvNum')||{}).value || 'НАК-???';
-  var date = (document.getElementById('manInvDate')||{}).value || new Date().toISOString().split('T')[0];
-  var from = (document.getElementById('manInvFrom')||{}).value || '';
-  var totalAmt = _manInvItems.reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); }, 0);
-  if(from) saveSupplier(from);
-  var inv = {
-    id: uid(), num: num, date: date, from: from,
-    destName: session.shopName,
-    items: _manInvItems.map(function(it){ return Object.assign({},it); }),
-    totalAmt: totalAmt,
-    status: 'accepted',
-    acceptedAt: new Date().toISOString(),
-    acceptedDate: new Date().toLocaleDateString('ru-RU'),
-    createdBy: session.sellerName || session.name || '',
-    manual: true
-  };
-  var existing = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-  existing.unshift(inv);
-  localStorage.setItem('iz_manual_invoices', JSON.stringify(existing));
-  // Save to Firestore
-  try { db.collection('iz_invoices').doc(inv.id).set(inv); } catch(e){}
-  // Add to journal as receive entries
-  _manInvItems.forEach(function(item){
-    autoSaveToItemBase(item.name, item.article, item.price, 'derevo');
-    journal.push({
-      id:uid(), type:'receive', ts:new Date().toISOString(), icon:'📥',
-      label:'Приход товара',
-      sub:(item.article?'№'+item.article+' ':'')+item.name+' · '+num+(from?' от '+from:''),
-      amount:(item.qty||1)*(item.price||0),
-      amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
-      goodsEffect:(item.qty||1)*(item.price||0), article:item.article
-    });
-  });
-  saveJ();
-  // Reset form
-  _manInvItems = [];
-  var numEl = document.getElementById('manInvNum');
-  if(numEl) {
-    var year = String(new Date().getFullYear()).slice(2);
-    var yearInvs = existing.filter(function(inv){ return inv.num && inv.num.indexOf('.'+year)>=0; });
-    numEl.value = 'НАК-' + String(yearInvs.length + 1).padStart(3,'0') + '.' + year;
-  }
-  var fromEl = document.getElementById('manInvFrom'); if(fromEl) fromEl.value='';
-  renderManInvItems();
-  renderManInvAccepted();
-  renderAll();
-  showToast('✅ Накладная '+num+' принята на баланс');
-}
-
-function renderManInvAccepted() {
-  var c = document.getElementById('manInvAccepted'); if(!c) return;
-  var all = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-  var mine = all.filter(function(inv){ return inv.destName === session.shopName; });
-  if(!mine.length) { c.innerHTML='<div class="empty"><div class="ei">📋</div>Нет</div>'; return; }
-  c.innerHTML = mine.slice(0,10).map(function(inv){
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px">'+
-      '<div>'+
-        '<div style="font-size:13px;font-weight:700">'+inv.num+'</div>'+
-        '<div style="font-size:11px;color:#8888aa">'+inv.date+' · '+(inv.from||'')+'</div>'+
-        '<div style="font-size:11px;color:#8888aa">'+(inv.items||[]).length+' позиций · '+Math.round(inv.totalAmt||0).toLocaleString('ru-RU')+'₽</div>'+
-      '</div>'+
-      '<div style="font-size:11px;color:#60f090;font-weight:700">✅ Принята</div>'+
-    '</div>';
-  }).join('');
-}
-
-function getItemsBase() {
-  return JSON.parse(localStorage.getItem('iz_items')||'[]');
-}
-
-// ════ SUPPLIERS ════
-function getSuppliers() {
-  var base = ['Мастерская Ижица'];
-  var saved = JSON.parse(localStorage.getItem('iz_suppliers')||'[]');
-  // Merge: saved may be objects {name} or strings
-  var names = saved.map(function(s){ return s.name||s; });
-  base.forEach(function(b){ if(names.indexOf(b)<0) names.push(b); });
-  return names.sort(function(a,b){ return a.localeCompare(b,'ru'); });
-}
-function saveSupplier(name) {
-  if(!name||!name.trim()) return;
-  var saved = JSON.parse(localStorage.getItem('iz_suppliers')||'[]');
-  var names = saved.map(function(s){ return s.name||s; });
-  if(names.indexOf(name.trim())<0) {
-    saved.push({name:name.trim(), addedAt:new Date().toISOString()});
-    localStorage.setItem('iz_suppliers', JSON.stringify(saved));
-    try { db.collection('iz_settings').doc('suppliers').set({suppliers:saved,updatedAt:new Date().toISOString()},{merge:true}); } catch(e){}
-  }
-}
-function showSupplierDropdown(query) {
-  var drop = document.getElementById('manInvFromDrop'); if(!drop) return;
-  var q = (query||'').trim().toLowerCase();
-  var suppliers = getSuppliers();
-  var filtered = q ? suppliers.filter(function(s){ return s.toLowerCase().includes(q); }) : suppliers;
-  if(!filtered.length) { drop.style.display='none'; return; }
-  drop.style.display='block';
-  drop.innerHTML = filtered.map(function(s){
-    return '<div class="item-dropdown-item" onmousedown="selectSupplier(\''+s.replace(/'/g,"\\'")+'\')">' +
-      '<span class="iname">'+s+'</span></div>';
-  }).join('');
-  if(!drop._cl) {
-    drop._cl=true;
-    document.addEventListener('click', function(e){
-      var inp=document.getElementById('manInvFrom');
-      if(inp&&!inp.contains(e.target)&&!drop.contains(e.target)) drop.style.display='none';
-    });
-  }
-}
-function selectSupplier(name) {
-  var el=document.getElementById('manInvFrom'); if(el) el.value=name;
-  var drop=document.getElementById('manInvFromDrop'); if(drop) drop.style.display='none';
-}
-function addNewSupplier() {
-  var el=document.getElementById('manInvFrom');
-  var name=(el&&el.value||'').trim();
-  if(!name) name=prompt('Введите название поставщика:');
-  if(!name||!name.trim()) return;
-  saveSupplier(name.trim());
-  if(el) el.value=name.trim();
-  showToast('✅ Поставщик «'+name+'» добавлен в базу');
-}
-
 function init(){
   startSyncListeners();
   startStaffLiveSync(function(){ try{pick(loginRole);}catch(e){} });
@@ -5245,8 +4888,8 @@ function init(){
   if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; saveShopAdmins(admins); }
   // Init role selection — seller by default
   pick('seller');
-  const saved=JSON.parse(localStorage.getItem(KEY.session)||'null');
-  if(saved){ session=saved; journal=JSON.parse(localStorage.getItem(KEY.journal)||'[]'); if(session.role==='shopadmin')startAdminApp(); else startApp(); }
+  const saved=JSON.parse(sessionStorage.getItem(KEY.session)||'null');
+  if(saved){ session=saved; journal=JSON.parse(sessionStorage.getItem(KEY.journal)||'[]'); if(session.role==='shopadmin')startAdminApp(); else startApp(); }
 }
 init();
 </script>
