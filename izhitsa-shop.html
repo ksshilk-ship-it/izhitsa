@@ -826,7 +826,9 @@ if ('serviceWorker' in navigator) {
       <div style="font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700" id="morningShopName"></div>
       <div style="font-size:12px;color:#8888aa;margin-top:4px" id="morningSellerName"></div>
     </div>
-    <div class="card" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:#c8f060">
+
+    <!-- КАССА -->
+    <div class="card" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:#c8f060;margin-bottom:10px">
       <div style="font-size:13px;color:#8888aa;margin-bottom:12px">Пересчитайте наличные в кассе и введите фактический остаток.</div>
       <div class="fg">
         <label class="fl">💵 Остаток наличных в кассе (₽)</label>
@@ -835,6 +837,36 @@ if ('serviceWorker' in navigator) {
         <div id="morningCashHint" style="font-size:12px;margin-top:4px;display:none"></div>
       </div>
     </div>
+
+    <!-- ТОВАРНЫЙ ОСТАТОК -->
+    <div class="card" style="background:linear-gradient(135deg,#1a1e2e,#141a2e);border-color:#60c8f0;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:700;color:#60c8f0;margin-bottom:10px">📦 Остаток товара на утро (₽)</div>
+      <!-- Выбор: авто или вручную -->
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <button type="button" id="goodsMornAuto" onclick="setGoodsMornMode('auto')"
+          style="flex:1;padding:8px;border-radius:10px;border:2px solid #60c8f0;background:#1a1e2e;color:#60c8f0;font-size:11px;font-weight:700;cursor:pointer">
+          🔄 Авто (с прошлой смены)
+        </button>
+        <button type="button" id="goodsMornManual" onclick="setGoodsMornMode('manual')"
+          style="flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">
+          ✏️ Ввести вручную
+        </button>
+      </div>
+      <!-- Авто режим -->
+      <div id="goodsMornAutoBlock">
+        <div id="goodsMornAutoVal" style="font-family:'Unbounded',sans-serif;font-size:20px;font-weight:700;color:#60c8f0;text-align:center;padding:10px;background:#0f0f13;border-radius:10px">
+          —
+        </div>
+        <div style="font-size:11px;color:#8888aa;text-align:center;margin-top:6px">Рассчитано по данным прошлой смены</div>
+      </div>
+      <!-- Ручной режим -->
+      <div id="goodsMornManualBlock" style="display:none">
+        <input class="fi" type="number" id="morningGoods" placeholder="Введите остаток товара..." inputmode="numeric"
+          style="font-size:20px;font-weight:700;text-align:center;border-color:#60c8f0" oninput="checkMorningValid()">
+        <div style="font-size:11px;color:#f0a060;margin-top:6px">⚠️ Введите приблизительную сумму — можно уточнить позже</div>
+      </div>
+    </div>
+
     <div id="morningCompare" style="margin-bottom:12px"></div>
     <button class="btn" id="morningConfirmBtn" onclick="confirmMorning()" disabled style="opacity:.4">Открыть смену →</button>
     <button class="btn sec" style="margin-top:8px" onclick="cancelMorning()">← Назад</button>
@@ -1565,6 +1597,15 @@ function openMorningModal(){
   document.getElementById('morningCashHint').style.display='none';
   document.getElementById('morningConfirmBtn').disabled=true;
   document.getElementById('morningConfirmBtn').style.opacity='.4';
+  // Goods morning — calculate auto value
+  var autoGoods = calcGoodsMorning(shopName);
+  var autoEl = document.getElementById('goodsMornAutoVal');
+  if(autoEl) autoEl.textContent = fmt(autoGoods);
+  // Reset to auto mode
+  _goodsMornMode = 'auto';
+  setGoodsMornMode('auto');
+  var goodsInput = document.getElementById('morningGoods');
+  if(goodsInput) goodsInput.value = '';
   const prev=getPrevShift(shopName);
   const mc=document.getElementById('morningCompare');
   mc.innerHTML=(prev&&prev.cashEvening)!=null?`<div class="al-info">📊 Нал вечер прошлой смены: <strong>${fmt(prev.cashEvening)}</strong></div>`:'';
@@ -1586,7 +1627,15 @@ function checkMorningValid(){
 function confirmMorning(){
   const val=document.getElementById('morningCash').value, cashM=parseFloat(val);
   if(val===''||isNaN(cashM)||cashM<0) return;
-  const goodsM=calcGoodsMorning(pendingSession.shopName);
+  // Get goods morning value
+  var goodsM;
+  if(_goodsMornMode === 'manual') {
+    var gv_el = document.getElementById('morningGoods');
+    var gv_val = gv_el ? gv_el.value : '';
+    goodsM = gv_val !== '' ? (parseFloat(gv_val)||0) : calcGoodsMorning(pendingSession.shopName);
+  } else {
+    goodsM = calcGoodsMorning(pendingSession.shopName);
+  }
   var drCashEl=document.getElementById('morningDrCash');
   var drCashM=drCashEl&&drCashEl.value!==''?parseFloat(drCashEl.value)||0:0;
   session={...pendingSession,openedAt:new Date().toISOString(),cashMorning:cashM,goodsMorning:goodsM,drCashMorning:drCashM};
@@ -1596,12 +1645,32 @@ function confirmMorning(){
       date:new Date().toISOString().split('T')[0],cashMorning:cashM,prevCashEve:prev.cashEvening,morningDiff:cashM-prev.cashEvening});
   }
   journal=[{id:uid(),type:'open',ts:new Date().toISOString(),icon:'🔓',label:'Смена открыта',
-    sub:'🌳 Нал: '+fmt(cashM)+(drCashM?' 🛍 Нал ДР: '+fmt(drCashM):'')+' · 📦 Товар: '+fmt(goodsM),cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0}];
+    sub:'🌳 Нал: '+fmt(cashM)+(drCashM?' 🛍 Нал ДР: '+fmt(drCashM):'')+' · 📦 Товар: '+fmt(goodsM)+(_goodsMornMode==='manual'?' (введён вручную)':''),
+    cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0}];
   pendingSession=null; saveS(); saveJ();
   logShiftOpen(session.shopName, cashM);
   closeMo('morningMo'); startApp();
 }
 function cancelMorning(){ closeMo('morningMo'); pendingSession=null; }
+
+function setGoodsMornMode(mode) {
+  _goodsMornMode = mode;
+  var autoBtn = document.getElementById('goodsMornAuto');
+  var manBtn = document.getElementById('goodsMornManual');
+  var autoBlock = document.getElementById('goodsMornAutoBlock');
+  var manBlock = document.getElementById('goodsMornManualBlock');
+  if(mode === 'auto') {
+    if(autoBtn) { autoBtn.style.borderWidth='2px'; autoBtn.style.background='#1a1e2e'; autoBtn.style.color='#60c8f0'; autoBtn.style.borderColor='#60c8f0'; autoBtn.style.fontWeight='700'; }
+    if(manBtn) { manBtn.style.borderWidth='1px'; manBtn.style.background='#22222e'; manBtn.style.color='#8888aa'; manBtn.style.borderColor='#2e2e3e'; manBtn.style.fontWeight='400'; }
+    if(autoBlock) autoBlock.style.display='block';
+    if(manBlock) manBlock.style.display='none';
+  } else {
+    if(autoBtn) { autoBtn.style.borderWidth='1px'; autoBtn.style.background='#22222e'; autoBtn.style.color='#8888aa'; autoBtn.style.borderColor='#2e2e3e'; autoBtn.style.fontWeight='400'; }
+    if(manBtn) { manBtn.style.borderWidth='2px'; manBtn.style.background='#1a1e2e'; manBtn.style.color='#60c8f0'; manBtn.style.borderColor='#60c8f0'; manBtn.style.fontWeight='700'; }
+    if(autoBlock) autoBlock.style.display='none';
+    if(manBlock) manBlock.style.display='block';
+  }
+}
 function getPrevShift(shopName){
   const all=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   return all.filter(s=>s.shopName===shopName).sort((a,b)=>new Date(b.closedAt||0)-new Date(a.closedAt||0))[0]||null;
