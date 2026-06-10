@@ -15,7 +15,7 @@
 body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;min-height:100dvh;max-width:480px;margin:0 auto}
 
 /* LOGIN */
-#loginScreen{display:flex;flex-direction:column;min-height:100dvh;padding:48px 24px 24px}
+#loginScreen{display:flex;flex-direction:column;min-height:100dvh;padding:48px 24px calc(24px + env(safe-area-inset-bottom))}
 .app-logo{font-family:'Unbounded',sans-serif;font-size:24px;font-weight:700;color:var(--a5);margin-bottom:4px}
 .app-sub{font-size:12px;color:var(--t2);margin-bottom:32px}
 .login-card{background:var(--s1);border:1px solid var(--border);border-radius:20px;padding:20px}
@@ -193,31 +193,21 @@ if ('serviceWorker' in navigator) {
     <div class="lc-title">Выберите роль и войдите</div>
     <div class="role-grid">
       <div class="role-card" data-role="заготовщик" onclick="selectRole('заготовщик',this)">
-        <div class="ri">🪚</div>
-        <div class="rn">Заготовщик</div>
-        <div class="rs">Выдаёт заготовки</div>
+        <div class="ri">🪚</div><div class="rn">Заготовщик</div><div class="rs">Выдаёт заготовки</div>
       </div>
       <div class="role-card" data-role="мастер" onclick="selectRole('мастер',this)">
-        <div class="ri">🔨</div>
-        <div class="rn">Мастер</div>
-        <div class="rs">Делает изделия</div>
+        <div class="ri">🔨</div><div class="rn">Мастер</div><div class="rs">Делает изделия</div>
       </div>
       <div class="role-card" data-role="кладовщик" onclick="selectRole('кладовщик',this)">
-        <div class="ri">📦</div>
-        <div class="rn">Кладовщик</div>
-        <div class="rs">Принимает, отгружает</div>
+        <div class="ri">📦</div><div class="rn">Кладовщик</div><div class="rs">Принимает, отгружает</div>
       </div>
       <div class="role-card" data-role="управляющий" onclick="selectRole('управляющий',this)">
-        <div class="ri">👑</div>
-        <div class="rn">Управляющий</div>
-        <div class="rs">Полный доступ</div>
+        <div class="ri">👑</div><div class="rn">Управляющий</div><div class="rs">Полный доступ</div>
       </div>
     </div>
     <div style="margin-top:8px">
       <div class="role-card" data-role="администратор" onclick="selectRole('администратор',this)">
-        <div class="ri">🛡</div>
-        <div class="rn">Администратор</div>
-        <div class="rs">Суперадмин</div>
+        <div class="ri">🛡</div><div class="rn">Администратор</div><div class="rs">Суперадмин</div>
       </div>
     </div>
     <div class="fg"><label class="fl">Сотрудник</label><select class="fs" id="loginUser"><option value="">— выберите роль —</option></select></div>
@@ -1124,14 +1114,63 @@ function showPg(name,el){
 }
 
 // ════════ EMPLOYEES ════════
+function getStaff() {
+  return JSON.parse(localStorage.getItem('iz_staff')||'[]');
+}
+
 function getEmployees(){
-  const stored = JSON.parse(localStorage.getItem('ws_employees')||'[]');
-  // Built-in superadmin — always present, cannot be deleted
-  const superadmin = {id:'__superadmin__', name:'Администратор', role:'администратор', rate:0, pass:'izhitsa2025', _builtin:true};
-  if(!stored.find(e=>e.id==='__superadmin__')) return [superadmin, ...stored];
-  return stored.map(e=>e.id==='__superadmin__'?{...e,...superadmin,pass:e.pass||superadmin.pass}:e);
+  var wsRoles = ['мастер','заготовщик','кладовщик','управляющий'];
+  var staff = getStaff();
+  var result = [];
+  if(staff.length) {
+    result = staff.filter(function(s){
+      return s.roles && s.roles.some(function(r){ return wsRoles.indexOf(r)>=0; }) && !s.blocked;
+    }).map(function(s){
+      // If multiple ws-roles, pick primary for display but keep all in roles[]
+      var r = s.roles.find(function(r){ return wsRoles.indexOf(r)>=0; })||'мастер';
+      return {id:s.id, name:s.name, pass:s.pass, role:r, roles:s.roles, rate:s.wsRate||0, blocked:false};
+    });
+  }
+  // Also include ws_employees fallback
+  var stored = JSON.parse(localStorage.getItem('ws_employees')||'[]');
+  stored.forEach(function(e){
+    if(!result.some(function(r){ return r.id===e.id; })) result.push(e);
+  });
+  // Superadmin always present
+  var superadmin = {id:'__superadmin__', name:'Администратор', role:'администратор', rate:0, pass:'izhitsa2025', _builtin:true};
+  if(!result.some(function(e){ return e.id==='__superadmin__'; })) result.unshift(superadmin);
+  return result;
 }
 function saveEmployees(d){ wsSyncSave('ws_employees', d); }
+
+function startWsStaffSync() {
+  if(typeof db === 'undefined') return;
+  db.collection('iz_settings').doc('staff').onSnapshot(function(snap){
+    if(!snap.exists) return;
+    var data = snap.data();
+    var val = data && data.staff;
+    if(!val || !val.length) return;
+    localStorage.setItem('iz_staff', JSON.stringify(val));
+    // Refresh current role list silently
+    var selectedCard = document.querySelector('.role-card.selected');
+    if(selectedCard) {
+      var role = selectedCard.getAttribute('data-role');
+      if(role) {
+        var emps = getEmployees().filter(function(e){
+          return (e.role===role || (e.roles && e.roles.indexOf(role)>=0)) && !e.blocked;
+        });
+        var sel = document.getElementById('loginUser');
+        if(sel) {
+          var cur = sel.value;
+          if(emps.length) {
+            sel.innerHTML = emps.map(function(e){ return '<option value="'+e.id+'">'+e.name+'</option>'; }).join('');
+            if(emps.some(function(e){return e.id===cur;})) sel.value = cur;
+          }
+        }
+      }
+    }
+  }, function(e){ console.log('ws staff sync err', e&&e.code); });
+}
 
 // ════ AUDIT LOG ════
 function getAuditLog(){ try { return JSON.parse(localStorage.getItem('iz_audit_log_ws')||'[]'); } catch(e) { return []; } }
@@ -1161,49 +1200,55 @@ function logLogin(username){ logAction('LOGIN', {username:username}); }
 function logLogout(){ logAction('LOGOUT', {user: session ? session.name : 'unknown'}); }
 
 function addEmployee(){
-  const name=document.getElementById('empName').value.trim();
-  const role=document.getElementById('empRole').value;
-  const rate=parseFloat(document.getElementById('empRate').value)||0;
-  const pass=document.getElementById('empPass').value;
+  var name=document.getElementById('empName').value.trim();
+  var role=document.getElementById('empRole').value;
+  var rate=parseFloat(document.getElementById('empRate').value)||0;
+  var pass=document.getElementById('empPass').value;
   if(!name||!pass){showToast('Заполните имя и пароль');return;}
-  const emps=getEmployees();
-  emps.push({id:uid(),name,role,rate,pass});
+  var emps=getEmployees().filter(function(e){return !e._builtin;});
+  emps.push({id:uid(),name:name,role:role,rate:rate,pass:pass});
   saveEmployees(emps);
   logAddEmployee(name, role);
-  // Also save to Firebase
-  db.collection('ws_employees').add({id:uid(),name,role,rate,createdAt:now()}).catch(console.error);
-  ['empName','empPass','empRate'].forEach(id=>document.getElementById(id).value='');
+  ['empName','empPass','empRate'].forEach(function(id){document.getElementById(id).value='';});
   renderEmployeeList();
   showToast('✅ Сотрудник добавлен');
 }
 
 function renderEmployeeList(){
-  const c=document.getElementById('employeeList');if(!c)return;
-  const emps=getEmployees();
+  var c=document.getElementById('employeeList');if(!c)return;
+  var emps=getEmployees();
   if(!emps.length){c.innerHTML='<div style="font-size:12px;color:var(--t2)">Сотрудников нет</div>';return;}
-  const roleIcons={заготовщик:'🪚',мастер:'🔨',кладовщик:'📦',управляющий:'👑'};
-  c.innerHTML=emps.map((e,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
-    <div style="font-size:20px">${roleIcons[e.role]||'👤'}</div>
-    <div style="flex:1"><div style="font-size:13px;font-weight:600">${e.name}</div><div style="font-size:11px;color:var(--t2)">${e.role}${e.rate?' · '+fmt(e.rate)+'/изд.':''}</div></div>
-    <button onclick="delEmployee(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>
-  </div>`).join('');
+  var roleIcons={заготовщик:'🪚',мастер:'🔨',кладовщик:'📦',управляющий:'👑',администратор:'🛡'};
+  c.innerHTML=emps.map(function(e,i){
+    return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">'+
+      '<div style="font-size:20px">'+(roleIcons[e.role]||'👤')+'</div>'+
+      '<div style="flex:1"><div style="font-size:13px;font-weight:600">'+e.name+'</div>'+
+      '<div style="font-size:11px;color:var(--t2)">'+e.role+(e.rate?' · '+fmt(e.rate)+'/изд.':'')+'</div></div>'+
+      (e._builtin?'':'<button onclick="delEmployee('+i+')" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>')+
+    '</div>';
+  }).join('');
 }
 
 function delEmployee(i){
-  const emps=getEmployees();
-  if((emps[i]&&emps[i]._builtin)){showToast('Нельзя удалить встроенного администратора');return;}
+  var emps=getEmployees();
+  if(emps[i]&&emps[i]._builtin){showToast('Нельзя удалить встроенного администратора');return;}
   emps.splice(i,1);
   saveEmployees(emps);
   renderEmployeeList();
-  renderAdmin();
+  if(typeof renderAdmin==='function') renderAdmin();
 }
 
 function selectRole(role,el){
   document.querySelectorAll('.role-card').forEach(function(c){ c.classList.remove('selected'); });
   if(el) { el.classList.add('selected'); el.setAttribute('data-role', role); }
-  var emps = getEmployees().filter(function(e){ return e.role===role && !e.blocked; });
-  var sel = document.getElementById('loginUser');
-  sel.innerHTML = emps.length
+  // Filter: match role OR roles array
+  var emps = getEmployees().filter(function(e){
+    if(e.blocked) return false;
+    if(e.role === role) return true;
+    if(e.roles && e.roles.indexOf(role) >= 0) return true;
+    return false;
+  });
+  document.getElementById('loginUser').innerHTML = emps.length
     ? emps.map(function(e){ return '<option value="'+e.id+'">'+e.name+'</option>'; }).join('')
     : '<option value="">— нет сотрудников —</option>';
 }
@@ -1214,27 +1259,30 @@ function doLogin(){
   var pass = document.getElementById('loginPass').value;
   var errEl = document.getElementById('loginErr');
   errEl.style.display = 'none';
-
   if(!uid_sel) { errEl.style.display='block'; errEl.textContent='Выберите сотрудника'; return; }
-
-  // Find in combined list (iz_staff + ws_employees)
-  var emp = getEmployees().find(function(e){ return e.id===uid_sel; });
-  // Also check iz_staff directly for pass (getEmployees may not include pass for some)
-  if(!emp) {
-    var staffEntry = getStaff().find(function(s){ return s.id===uid_sel; });
-    if(staffEntry) {
-      var wsRoles=['мастер','заготовщик','кладовщик','управляющий'];
-      var r = staffEntry.roles ? staffEntry.roles.find(function(r){return wsRoles.indexOf(r)>=0;})||staffEntry.roles[0] : 'мастер';
-      emp = {id:staffEntry.id, name:staffEntry.name, pass:staffEntry.pass, role:r, rate:staffEntry.wsRate||0};
-    }
+  // Superadmin bypass
+  if(uid_sel === '__superadmin__' && pass === 'izhitsa2025') {
+    session={id:'__superadmin__',name:'Администратор',role:'администратор',rate:0};
+    sessionStorage.setItem('ws_session',JSON.stringify(session));
+    startApp(); return;
   }
-
+  // Check iz_staff first
+  var staffEntry = getStaff().find(function(s){ return s.id===uid_sel; });
+  if(staffEntry) {
+    if(staffEntry.pass !== pass) { errEl.style.display='block'; errEl.textContent='Неверный пароль'; return; }
+    var wsRoles=['мастер','заготовщик','кладовщик','управляющий','администратор'];
+    var role = staffEntry.roles ? (staffEntry.roles.find(function(r){return wsRoles.indexOf(r)>=0;})||staffEntry.roles[0]) : 'мастер';
+    session={id:staffEntry.id,name:staffEntry.name,role:role,rate:staffEntry.wsRate||0};
+    sessionStorage.setItem('ws_session',JSON.stringify(session));
+    startApp(); return;
+  }
+  // Fallback ws_employees
+  var emp = getEmployees().find(function(e){ return e.id===uid_sel; });
   if(!emp) { errEl.style.display='block'; errEl.textContent='Выберите сотрудника'; return; }
-  if(emp.blocked) { errEl.style.display='block'; errEl.textContent='Аккаунт заблокирован. Обратитесь к администратору.'; return; }
+  if(emp.blocked) { errEl.style.display='block'; errEl.textContent='Аккаунт заблокирован'; return; }
   if(emp.pass !== pass) { errEl.style.display='block'; errEl.textContent='Неверный пароль'; return; }
-
-  session = {id:emp.id, name:emp.name, role:emp.role, rate:emp.rate||0};
-  sessionStorage.setItem('ws_session', JSON.stringify(session));
+  session={id:emp.id,name:emp.name,role:emp.role,rate:emp.rate||0};
+  sessionStorage.setItem('ws_session',JSON.stringify(session));
   startApp();
 }
 
