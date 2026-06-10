@@ -484,69 +484,11 @@ if ('serviceWorker' in navigator) {
 
   <!-- SETTINGS — единые справочники системы -->
   <div class="page" id="pg-settings">
-    <div class="stitle">⚙️ Настройки системы</div>
-
-    <!-- SHOPS / CHANNELS -->
-    <div class="card" style="margin-bottom:10px">
-      <div class="ctitle">🏪 Точки продаж и каналы</div>
-      <div id="setShopsList" style="margin-bottom:8px"></div>
-      <div style="display:flex;gap:6px;margin-bottom:6px">
-        <input class="fi" id="newShopName" placeholder="Роза Хутор" style="flex:2;margin:0">
-        <select class="fs" id="newShopType" style="flex:1;margin:0">
-          <option value="shop">🏪 Магазин</option>
-          <option value="online">📱 Онлайн</option>
-          <option value="offline">📦 Опт/Офлайн</option>
-          <option value="workshop">🏭 Мастерская</option>
-        </select>
-      </div>
-      <button class="btn sm" onclick="addShop()">＋ Добавить</button>
-    </div>
-
-    <!-- ACCOUNTS -->
-    <div class="card" style="margin-bottom:10px">
-      <div class="ctitle">🏦 Счета и кассы</div>
-      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Кассы магазинов, карты, РС счета</div>
-      <div id="setAccountsList" style="margin-bottom:8px"></div>
-      <div style="display:flex;gap:6px;margin-bottom:6px">
-        <input class="fi" id="newAccName" placeholder="Сбер Ксения / Касса Горки" style="flex:2;margin:0">
-        <select class="fs" id="newAccType" style="flex:1;margin:0">
-          <option value="cash">💵 Касса</option>
-          <option value="card">💳 Карта</option>
-          <option value="bank">🏦 РС счёт</option>
-          <option value="online">📱 Онлайн</option>
-        </select>
-      </div>
-      <button class="btn sm" onclick="addAccount()">＋ Добавить</button>
-    </div>
-
-    <!-- PAYMENT METHODS -->
-    <div class="card" style="margin-bottom:10px">
-      <div class="ctitle">💳 Способы оплаты</div>
-      <div id="setPayMethodsList" style="margin-bottom:8px"></div>
-      <div style="display:flex;gap:6px;margin-bottom:6px">
-        <input class="fi" id="newPayMethod" placeholder="СБП / Терминал" style="flex:1;margin:0">
-      </div>
-      <button class="btn sm" onclick="addPayMethod()">＋ Добавить</button>
-    </div>
-
-    <!-- ZP SETTINGS per shop -->
-    <div class="card" style="margin-bottom:10px">
-      <div class="ctitle">💰 Формулы ЗП по точкам</div>
-      <div id="setZpList"></div>
-    </div>
-
-    <!-- ITEMS BASE -->
-    <div class="card" style="margin-bottom:10px">
-      <div class="ctitle">📦 База товаров</div>
-      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Общий каталог — доступен в магазинах и мастерской</div>
-      <div id="setItemsList" style="margin-bottom:8px;max-height:200px;overflow-y:auto"></div>
-      <div style="display:flex;gap:6px;margin-bottom:6px">
-        <input class="fi" id="newItemName" placeholder="Столешница дуб" style="flex:2;margin:0">
-        <input class="fi" id="newItemArticle" placeholder="Арт." style="flex:0.7;margin:0">
-        <input class="fi" type="number" id="newItemPrice" placeholder="₽" style="flex:0.7;margin:0">
-      </div>
-      <button class="btn sm" onclick="addItemToBase()">＋ Добавить товар</button>
-    </div>
+    <div class="stitle">⚙️ Справочники</div>
+    
+    <!-- COLLAPSIBLE REFERENCE BOOKS -->
+    <div id="refBooksContainer"></div>
+  </div>
 
     <!-- SYSTEM -->
     <div class="card">
@@ -1089,6 +1031,7 @@ function switchTab(id, btn) {
   if(id === 'pl') { renderPL(); renderPLBudget(); }
   if(id === 'debt') renderDebts();
   if(id === 'audit') renderAuditLog();
+  if(id === 'settings') renderRefBooks();
 }
 
 function openMo(id) {
@@ -1972,6 +1915,207 @@ function addWsEmployee(){ openAddStaffModal(); }
 
 // Initialize
 
+// ════ REFERENCE BOOKS (СПРАВОЧНИКИ) ════
+function renderRefBooks() {
+  const refBooks = [
+    {id: 'sources', icon: '🏪', name: 'Точки и каналы продаж', getter: getSalesSources, adder: 'addSalesSource'},
+    {id: 'accounts', icon: '🏦', name: 'Счета и кассы', getter: function() { return JSON.parse(localStorage.getItem('iz_accounts') || '[]'); }, adder: 'addAccount'},
+    {id: 'payments', icon: '💳', name: 'Способы оплаты', getter: function() { return JSON.parse(localStorage.getItem('iz_payment_methods') || '[]'); }, adder: 'addPayMethod'},
+    {id: 'salary', icon: '💰', name: 'Формулы расчета ЗП', getter: function() { return JSON.parse(localStorage.getItem('iz_salary_formulas') || '[]'); }, adder: 'addSalaryFormula'},
+    {id: 'goods', icon: '📦', name: 'База товаров', getter: function() { return JSON.parse(localStorage.getItem('iz_goods') || '[]'); }, adder: 'addGood'},
+    {id: 'suppliers', icon: '🚚', name: 'База поставщиков', getter: function() { return JSON.parse(localStorage.getItem('iz_suppliers') || '[]'); }, adder: 'addSupplier'},
+    {id: 'expenses', icon: '📊', name: 'Статьи расходов', getter: function() { return JSON.parse(localStorage.getItem('iz_expense_items') || '[]'); }, adder: 'addExpenseItem'},
+    {id: 'works', icon: '🛠️', name: 'Доп. работы', getter: function() { return JSON.parse(localStorage.getItem('iz_additional_works') || '[]'); }, adder: 'addWork'},
+    {id: 'sizes', icon: '📏', name: 'Размеры изделий', getter: function() { return JSON.parse(localStorage.getItem('iz_sizes') || '[]'); }, adder: 'addSize'},
+    {id: 'materials', icon: '💎', name: 'Породы изделий', getter: function() { return JSON.parse(localStorage.getItem('iz_materials') || '[]'); }, adder: 'addMaterial'},
+    {id: 'emp_status', icon: '👤', name: 'Статусы сотрудников', getter: function() { return JSON.parse(localStorage.getItem('iz_employee_status') || '[]'); }, adder: 'addEmpStatus'},
+    {id: 'schedules', icon: '⏰', name: 'Графики работы', getter: function() { return JSON.parse(localStorage.getItem('iz_work_schedules') || '[]'); }, adder: 'addSchedule'}
+  ];
+  
+  let html = '';
+  refBooks.forEach(book => {
+    const items = book.getter();
+    const count = items.length || 0;
+    html += `
+      <div style="background:var(--s2);border-radius:8px;margin-bottom:8px;overflow:hidden">
+        <div onclick="toggleRefBook('${book.id}')" style="display:flex;align-items:center;justify-content:space-between;padding:12px;cursor:pointer;user-select:none">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:20px">${book.icon}</span>
+            <div>
+              <div style="font-weight:600;font-size:13px">${book.name}</div>
+              <div style="font-size:11px;color:var(--t2)">${count} записей</div>
+            </div>
+          </div>
+          <div style="font-size:20px;transform:rotate(0deg);transition:transform 0.2s" id="arrow_${book.id}">▶</div>
+        </div>
+        <div id="book_${book.id}" style="display:none;padding:12px;border-top:1px solid var(--border);max-height:300px;overflow-y:auto">
+          <div id="items_${book.id}"></div>
+          <input class="fi" id="new_${book.id}" placeholder="Новая запись" style="margin-bottom:6px">
+          <button class="btn sm" onclick="addRefBookItem('${book.id}')">＋ Добавить</button>
+        </div>
+      </div>`;
+  });
+  
+  const el = document.getElementById('refBooksContainer');
+  if(el) el.innerHTML = html;
+  
+  // Render all items
+  refBooks.forEach(book => {
+    renderRefBookItems(book.id);
+  });
+}
+
+function toggleRefBook(id) {
+  const book = document.getElementById('book_' + id);
+  const arrow = document.getElementById('arrow_' + id);
+  if(!book) return;
+  
+  const isOpen = book.style.display !== 'none';
+  book.style.display = isOpen ? 'none' : 'block';
+  arrow.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
+}
+
+function renderRefBookItems(bookId) {
+  const container = document.getElementById('items_' + bookId);
+  if(!container) return;
+  
+  let items = [];
+  switch(bookId) {
+    case 'sources': items = getSalesSources(); break;
+    case 'accounts': items = JSON.parse(localStorage.getItem('iz_accounts') || '[]'); break;
+    case 'payments': items = JSON.parse(localStorage.getItem('iz_payment_methods') || '[]'); break;
+    case 'salary': items = JSON.parse(localStorage.getItem('iz_salary_formulas') || '[]'); break;
+    case 'goods': items = JSON.parse(localStorage.getItem('iz_goods') || '[]'); break;
+    case 'suppliers': items = JSON.parse(localStorage.getItem('iz_suppliers') || '[]'); break;
+    case 'expenses': items = JSON.parse(localStorage.getItem('iz_expense_items') || '[]'); break;
+    case 'works': items = JSON.parse(localStorage.getItem('iz_additional_works') || '[]'); break;
+    case 'sizes': items = JSON.parse(localStorage.getItem('iz_sizes') || '[]'); break;
+    case 'materials': items = JSON.parse(localStorage.getItem('iz_materials') || '[]'); break;
+    case 'emp_status': items = JSON.parse(localStorage.getItem('iz_employee_status') || '[]'); break;
+    case 'schedules': items = JSON.parse(localStorage.getItem('iz_work_schedules') || '[]'); break;
+  }
+  
+  container.innerHTML = items.map((item, idx) => {
+    const name = item.name || item;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:12px">${name}</div>
+      <button onclick="deleteRefBookItem('${bookId}', ${idx})" style="background:none;border:none;color:var(--exp);cursor:pointer;font-size:16px">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function addRefBookItem(bookId) {
+  const input = document.getElementById('new_' + bookId);
+  const value = (input.value || '').trim();
+  
+  if(!value) {
+    alert('Введите значение');
+    return;
+  }
+  
+  let items = [];
+  let key = '';
+  
+  switch(bookId) {
+    case 'sources': 
+      items = getSalesSources();
+      items.push({id: uid(), name: value, type: 'shop'});
+      localStorage.setItem('iz_sales_sources', JSON.stringify(items));
+      key = 'iz_sales_sources';
+      break;
+    case 'accounts':
+      items = JSON.parse(localStorage.getItem('iz_accounts') || '[]');
+      items.push({id: uid(), name: value, type: 'cash'});
+      key = 'iz_accounts';
+      break;
+    case 'payments':
+      items = JSON.parse(localStorage.getItem('iz_payment_methods') || '[]');
+      items.push({id: uid(), name: value});
+      key = 'iz_payment_methods';
+      break;
+    case 'salary':
+      items = JSON.parse(localStorage.getItem('iz_salary_formulas') || '[]');
+      items.push({id: uid(), name: value, percent: 0});
+      key = 'iz_salary_formulas';
+      break;
+    case 'goods':
+      items = JSON.parse(localStorage.getItem('iz_goods') || '[]');
+      items.push({id: uid(), name: value});
+      key = 'iz_goods';
+      break;
+    case 'suppliers':
+      items = JSON.parse(localStorage.getItem('iz_suppliers') || '[]');
+      items.push({id: uid(), name: value});
+      key = 'iz_suppliers';
+      break;
+    case 'expenses':
+      items = JSON.parse(localStorage.getItem('iz_expense_items') || '[]');
+      items.push({id: uid(), name: value});
+      key = 'iz_expense_items';
+      break;
+    case 'works':
+      items = JSON.parse(localStorage.getItem('iz_additional_works') || '[]');
+      items.push({id: uid(), name: value});
+      key = 'iz_additional_works';
+      break;
+    case 'sizes':
+      items = JSON.parse(localStorage.getItem('iz_sizes') || '[]');
+      items.push({id: uid(), name: value});
+      key = 'iz_sizes';
+      break;
+    case 'materials':
+      items = JSON.parse(localStorage.getItem('iz_materials') || '[]');
+      items.push({id: uid(), name: value});
+      key = 'iz_materials';
+      break;
+    case 'emp_status':
+      items = JSON.parse(localStorage.getItem('iz_employee_status') || '[]');
+      items.push({id: uid(), name: value});
+      key = 'iz_employee_status';
+      break;
+    case 'schedules':
+      items = JSON.parse(localStorage.getItem('iz_work_schedules') || '[]');
+      items.push({id: uid(), name: value});
+      key = 'iz_work_schedules';
+      break;
+  }
+  
+  if(key) {
+    localStorage.setItem(key, JSON.stringify(items));
+    input.value = '';
+    renderRefBookItems(bookId);
+    logAction('ADD_REFBOOK', {book: bookId, name: value});
+  }
+}
+
+function deleteRefBookItem(bookId, idx) {
+  if(!confirm('Удалить?')) return;
+  
+  let key = '';
+  switch(bookId) {
+    case 'sources': key = 'iz_sales_sources'; break;
+    case 'accounts': key = 'iz_accounts'; break;
+    case 'payments': key = 'iz_payment_methods'; break;
+    case 'salary': key = 'iz_salary_formulas'; break;
+    case 'goods': key = 'iz_goods'; break;
+    case 'suppliers': key = 'iz_suppliers'; break;
+    case 'expenses': key = 'iz_expense_items'; break;
+    case 'works': key = 'iz_additional_works'; break;
+    case 'sizes': key = 'iz_sizes'; break;
+    case 'materials': key = 'iz_materials'; break;
+    case 'emp_status': key = 'iz_employee_status'; break;
+    case 'schedules': key = 'iz_work_schedules'; break;
+  }
+  
+  if(key) {
+    const items = JSON.parse(localStorage.getItem(key) || '[]');
+    items.splice(idx, 1);
+    localStorage.setItem(key, JSON.stringify(items));
+    renderRefBookItems(bookId);
+    logAction('DELETE_REFBOOK', {book: bookId});
+  }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   // Create default admin FIRST before sync listeners overwrite
   var users = getAdminUsers();
@@ -1987,6 +2131,88 @@ document.addEventListener('DOMContentLoaded', function() {
   // Init shops if not exist
   if(!localStorage.getItem('iz_shops')) {
     saveShops(['ОПИТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
+  }
+  
+  // Init reference books if not exist
+  if(!localStorage.getItem('iz_payment_methods')) {
+    localStorage.setItem('iz_payment_methods', JSON.stringify([
+      {id: uid(), name: 'Наличные'},
+      {id: uid(), name: 'Карта'},
+      {id: uid(), name: 'СБП'},
+      {id: uid(), name: 'Терминал'}
+    ]));
+  }
+  
+  if(!localStorage.getItem('iz_accounts')) {
+    localStorage.setItem('iz_accounts', JSON.stringify([
+      {id: uid(), name: 'Касса Роза Хутор', type: 'cash'},
+      {id: uid(), name: 'Касса Горки', type: 'cash'},
+      {id: uid(), name: 'Карта Сбербанк', type: 'card'},
+      {id: uid(), name: 'РС счёт ООО', type: 'bank'}
+    ]));
+  }
+  
+  if(!localStorage.getItem('iz_expense_items')) {
+    localStorage.setItem('iz_expense_items', JSON.stringify([
+      {id: uid(), name: 'Закупки'},
+      {id: uid(), name: 'Материалы'},
+      {id: uid(), name: 'Аренда'},
+      {id: uid(), name: 'Зарплаты'},
+      {id: uid(), name: 'Коммунальные'}
+    ]));
+  }
+  
+  if(!localStorage.getItem('iz_employee_status')) {
+    localStorage.setItem('iz_employee_status', JSON.stringify([
+      {id: uid(), name: 'Активный'},
+      {id: uid(), name: 'Отпуск'},
+      {id: uid(), name: 'Уволен'},
+      {id: uid(), name: 'На учебе'}
+    ]));
+  }
+  
+  if(!localStorage.getItem('iz_work_schedules')) {
+    localStorage.setItem('iz_work_schedules', JSON.stringify([
+      {id: uid(), name: 'Пн-Вс 10:00-20:00'},
+      {id: uid(), name: 'Пн-Вс 11:00-19:00'},
+      {id: uid(), name: 'Пн-Сб 10:00-20:00, Вс выходной'}
+    ]));
+  }
+  
+  if(!localStorage.getItem('iz_goods')) {
+    localStorage.setItem('iz_goods', JSON.stringify([
+      {id: uid(), name: 'Кольцо'}
+    ]));
+  }
+  
+  if(!localStorage.getItem('iz_suppliers')) {
+    localStorage.setItem('iz_suppliers', JSON.stringify([
+      {id: uid(), name: 'Поставщик 1'}
+    ]));
+  }
+  
+  if(!localStorage.getItem('iz_sizes')) {
+    localStorage.setItem('iz_sizes', JSON.stringify([
+      {id: uid(), name: '16'}, {id: uid(), name: '17'}, {id: uid(), name: '18'}, {id: uid(), name: '19'}
+    ]));
+  }
+  
+  if(!localStorage.getItem('iz_materials')) {
+    localStorage.setItem('iz_materials', JSON.stringify([
+      {id: uid(), name: 'Золото 585'}, {id: uid(), name: 'Серебро 925'}, {id: uid(), name: 'Платина'}
+    ]));
+  }
+  
+  if(!localStorage.getItem('iz_additional_works')) {
+    localStorage.setItem('iz_additional_works', JSON.stringify([
+      {id: uid(), name: 'Переделка'}, {id: uid(), name: 'Чистка'}, {id: uid(), name: 'Полировка'}, {id: uid(), name: 'Пайка'}
+    ]));
+  }
+  
+  if(!localStorage.getItem('iz_salary_formulas')) {
+    localStorage.setItem('iz_salary_formulas', JSON.stringify([
+      {id: uid(), name: 'Роза Хутор', percent: 5}, {id: uid(), name: 'Горки', percent: 4}
+    ]));
   }
   
   // Init plan data if not exist
