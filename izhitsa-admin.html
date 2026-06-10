@@ -162,8 +162,26 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./izhitsa-sw.js', {scope: './'})
       .then(function(reg) {
         console.log('[PWA] SW зарегистрирован');
+        // Проверяем обновления каждый час
+        setInterval(function() { reg.update(); }, 3600000);
+        reg.addEventListener('updatefound', function() {
+          var newWorker = reg.installing;
+          newWorker.addEventListener('statechange', function() {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // Есть обновление — показываем уведомление
+              if (typeof showToast === 'function') {
+                showToast('🔄 Доступно обновление. Перезагрузите страницу.');
+              }
+            }
+          });
+        });
       })
-      .catch(function(e) { /* SW не поддерживается в этом контексте */ });
+      .catch(function(e) { console.log('[PWA] SW ошибка:', e); });
+    
+    // Слушаем обновление SW
+    navigator.serviceWorker.addEventListener('controllerchange', function() {
+      window.location.reload();
+    });
   });
 }
 </script>
@@ -698,6 +716,58 @@ function startAdminSyncListeners() {
   adminSyncListenCollection('iz_psj', 'iz_psj');
 }
 
+
+// ════ ЕДИНАЯ АВТОРИЗАЦИЯ iz_staff ════
+function getStaff() {
+  return JSON.parse(localStorage.getItem('iz_staff')||'[]');
+}
+function getStaffBySingleRole(role) {
+  return getStaff().filter(function(s){
+    return !s.blocked && s.roles && s.roles.indexOf(role) >= 0;
+  });
+}
+function syncDerivedFromStaff(staff) {
+  if(!staff || !staff.length) return;
+  var sellers = staff.filter(function(s){
+    return s.roles && s.roles.indexOf('seller') >= 0 && !s.blocked;
+  }).map(function(s){
+    return {id:s.id, name:s.name, pass:s.pass, shops:s.shops||[], blocked:false, rate:s.wsRate||0};
+  });
+  localStorage.setItem('iz_sellers', JSON.stringify(sellers));
+  var wsRoles = ['мастер','заготовщик','кладовщик','управляющий'];
+  var wsEmps = staff.filter(function(s){
+    return s.roles && s.roles.some(function(r){ return wsRoles.indexOf(r)>=0; }) && !s.blocked;
+  }).map(function(s){
+    var r = s.roles.find(function(r){ return wsRoles.indexOf(r)>=0; })||'мастер';
+    return {id:s.id, name:s.name, pass:s.pass, role:r, rate:s.wsRate||0, blocked:false};
+  });
+  localStorage.setItem('ws_employees', JSON.stringify(wsEmps));
+  var adminRoles = ['admin','owner','accountant'];
+  var admins = staff.filter(function(s){
+    return s.roles && s.roles.some(function(r){ return adminRoles.indexOf(r)>=0; }) && !s.blocked;
+  }).map(function(s){
+    var r = s.roles.find(function(r){ return adminRoles.indexOf(r)>=0; })||'admin';
+    return {id:s.id, name:s.name, pass:s.pass, role:r};
+  });
+  if(!admins.some(function(a){ return a.id==='admin_default'; }))
+    admins.unshift({id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'});
+  localStorage.setItem('iz_admin_users', JSON.stringify(admins));
+  localStorage.setItem('iz_shop_admins', JSON.stringify(admins));
+}
+function startStaffLiveSync(onUpdate) {
+  if(typeof db === 'undefined') return;
+  db.collection('iz_settings').doc('staff').onSnapshot(function(snap){
+    if(!snap.exists) return;
+    var data = snap.data();
+    var val = data && data.staff;
+    if(val && val.length) {
+      localStorage.setItem('iz_staff', JSON.stringify(val));
+      syncDerivedFromStaff(val);
+      if(typeof onUpdate === 'function') onUpdate();
+    }
+  }, function(e){ console.log('staff sync err', e && e.code); });
+}
+
 var selectedRole = null;
 var session = null;
 
@@ -956,22 +1026,15 @@ function selectAdminRole(role, el) {
     selectedRole = role;
     document.querySelectorAll('.role-card').forEach(function(c){ c.classList.remove('selected'); });
     if(el && el.classList) el.classList.add('selected');
-    
-    var users = getAdminUsers();
-    var filtered = users.filter(function(u){ return u.role === role; });
-    
-    // Always add hardcoded superadmin for admin role
+    var filtered = getStaffBySingleRole(role).map(function(s){ return {id:s.id, name:s.name}; });
     if(role === 'admin') {
-      var hasSuperAdmin = filtered.some(function(u){ return u.id === 'admin_default'; });
-      if(!hasSuperAdmin) filtered.unshift({id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'});
+      if(!filtered.some(function(u){ return u.id==='admin_default'; }))
+        filtered.unshift({id:'admin_default', name:'Администратор'});
     }
-    
     document.getElementById('loginUser').innerHTML = filtered.length
       ? filtered.map(function(u){ return '<option value="'+u.id+'">'+u.name+'</option>'; }).join('')
       : '<option value="">— нет пользователей —</option>';
-  } catch(e) {
-    console.error('selectAdminRole error:', e);
-  }
+  } catch(e) { console.error('selectAdminRole error:', e); }
 }
 
 function doLogin() {
@@ -979,77 +1042,39 @@ function doLogin() {
   var pass = gv('loginPass');
   var errEl = document.getElementById('loginErr');
   errEl.style.display = 'none';
-
-  // Hardcoded superadmin — always works regardless of Firestore
+  // Superadmin
   if(uid_sel === 'admin_default' && pass === 'admin123') {
-    var superAdmin = {id:'admin_default', name:'Администратор', role:'admin'};
-    session = superAdmin;
+    session = {id:'admin_default', name:'Администратор', role:'admin'};
     sessionStorage.setItem('iz_admin_session', JSON.stringify(session));
     logLogin('Администратор', 'admin');
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('appScreen').style.display = 'block';
-    document.getElementById('tabsBar').style.display = 'flex';
-    document.getElementById('hdrName').textContent = 'Администратор';
-    document.getElementById('hdrRole').textContent = 'admin';
-    populateSellers(); populateWsEmployees(); populateAdminUsers();
-    if(typeof populateSalesSourcesList==='function') populateSalesSourcesList();
-    if(typeof populateSourcesForOp==='function') populateSourcesForOp();
-    populateShopCheckboxes();
-    renderPL(); renderShops(); renderPLBudget(); renderDebts();
-    if(typeof renderDashboard==='function') renderDashboard();
+    _showAdminApp('Администратор', 'admin');
     return;
   }
-
-  if(!uid_sel) {
-    errEl.style.display = 'block';
-    errEl.textContent = 'Выберите пользователя';
-    return;
-  }
-
-  var users = getAdminUsers();
-  var user = users.find(function(u){ return u.id === uid_sel; });
-
-  if(!user) {
-    errEl.style.display = 'block';
-    errEl.textContent = 'Пользователь не найден';
-    return;
-  }
-
-  if(user.pass !== pass) {
-    errEl.style.display = 'block';
-    errEl.textContent = 'Неверный пароль';
-    return;
-  }
-  
-  session = {id: user.id, name: user.name, role: user.role};
+  if(!uid_sel) { errEl.style.display='block'; errEl.textContent='Выберите пользователя'; return; }
+  // Check iz_staff
+  var user = getStaff().find(function(s){ return s.id === uid_sel; });
+  if(!user) { user = JSON.parse(localStorage.getItem('iz_admin_users')||'[]').find(function(u){ return u.id===uid_sel; }); }
+  if(!user) { errEl.style.display='block'; errEl.textContent='Пользователь не найден'; return; }
+  if(user.blocked) { errEl.style.display='block'; errEl.textContent='Аккаунт заблокирован'; return; }
+  if(user.pass !== pass) { errEl.style.display='block'; errEl.textContent='Неверный пароль'; return; }
+  var adminRoles=['admin','owner','accountant'];
+  var role = user.roles ? (user.roles.find(function(r){return adminRoles.indexOf(r)>=0;})||user.roles[0]) : (user.role||'admin');
+  session = {id:user.id, name:user.name, role:role};
   sessionStorage.setItem('iz_admin_session', JSON.stringify(session));
-  logLogin(user.name);
-  errEl.style.display = 'none';
-  
+  logLogin(user.name, role);
+  _showAdminApp(user.name, role);
+}
+function _showAdminApp(name, role) {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
-  document.getElementById('tabsBar').style.display = 'flex';
-  document.getElementById('hdrName').textContent = user.name;
-  document.getElementById('hdrRole').textContent = user.role;
-  
-  populateSellers();
-  populateWsEmployees();
-  populateAdminUsers();
-  populateSalesSourcesList();
-  populateSourcesForOp();
-  populateShopCheckboxes();
-  renderPL();
-  renderShops();
-  renderPLBudget();
-  renderDebts();
-  populateShopCheckboxes();
-  renderDashboard();
-  // setTxType('income');
-  // clearOperationForm();
-  // renderPL();
-  // renderShops();
-  // renderWsEmployeesData();
-  // renderAnalytics();
+  if(document.getElementById('tabsBar')) document.getElementById('tabsBar').style.display = 'flex';
+  if(document.getElementById('hdrName')) document.getElementById('hdrName').textContent = name;
+  if(document.getElementById('hdrRole')) document.getElementById('hdrRole').textContent = role;
+  ['populateSellers','populateWsEmployees','populateAdminUsers','populateSalesSourcesList',
+   'populateSourcesForOp','populateShopCheckboxes','renderPL','renderShops',
+   'renderPLBudget','renderDebts','renderDashboard'].forEach(function(fn){
+    try{ if(typeof window[fn]==='function') window[fn](); }catch(e){}
+  });
 }
 
 function doLogout() {

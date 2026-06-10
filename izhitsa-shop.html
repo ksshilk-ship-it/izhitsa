@@ -1295,8 +1295,80 @@ let blockSellerAction = null;
 
 // ════ STORAGE ════
 const KEY = {session:'iz_shop_session',journal:'iz_shop_journal',shifts:'iz_shifts'};
-function getSellers(){ return JSON.parse(localStorage.getItem('iz_sellers')||'[]'); }
-function getShopAdmins(){ return JSON.parse(localStorage.getItem('iz_shop_admins')||'[]'); }
+
+// ════ ЕДИНАЯ АВТОРИЗАЦИЯ iz_staff ════
+function getStaff() {
+  return JSON.parse(localStorage.getItem('iz_staff')||'[]');
+}
+function getStaffBySingleRole(role) {
+  return getStaff().filter(function(s){
+    return !s.blocked && s.roles && s.roles.indexOf(role) >= 0;
+  });
+}
+function syncDerivedFromStaff(staff) {
+  if(!staff || !staff.length) return;
+  var sellers = staff.filter(function(s){
+    return s.roles && s.roles.indexOf('seller') >= 0 && !s.blocked;
+  }).map(function(s){
+    return {id:s.id, name:s.name, pass:s.pass, shops:s.shops||[], blocked:false, rate:s.wsRate||0};
+  });
+  localStorage.setItem('iz_sellers', JSON.stringify(sellers));
+  var wsRoles = ['мастер','заготовщик','кладовщик','управляющий'];
+  var wsEmps = staff.filter(function(s){
+    return s.roles && s.roles.some(function(r){ return wsRoles.indexOf(r)>=0; }) && !s.blocked;
+  }).map(function(s){
+    var r = s.roles.find(function(r){ return wsRoles.indexOf(r)>=0; })||'мастер';
+    return {id:s.id, name:s.name, pass:s.pass, role:r, rate:s.wsRate||0, blocked:false};
+  });
+  localStorage.setItem('ws_employees', JSON.stringify(wsEmps));
+  var adminRoles = ['admin','owner','accountant'];
+  var admins = staff.filter(function(s){
+    return s.roles && s.roles.some(function(r){ return adminRoles.indexOf(r)>=0; }) && !s.blocked;
+  }).map(function(s){
+    var r = s.roles.find(function(r){ return adminRoles.indexOf(r)>=0; })||'admin';
+    return {id:s.id, name:s.name, pass:s.pass, role:r};
+  });
+  if(!admins.some(function(a){ return a.id==='admin_default'; }))
+    admins.unshift({id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'});
+  localStorage.setItem('iz_admin_users', JSON.stringify(admins));
+  localStorage.setItem('iz_shop_admins', JSON.stringify(admins));
+}
+function startStaffLiveSync(onUpdate) {
+  if(typeof db === 'undefined') return;
+  db.collection('iz_settings').doc('staff').onSnapshot(function(snap){
+    if(!snap.exists) return;
+    var data = snap.data();
+    var val = data && data.staff;
+    if(val && val.length) {
+      localStorage.setItem('iz_staff', JSON.stringify(val));
+      syncDerivedFromStaff(val);
+      if(typeof onUpdate === 'function') onUpdate();
+    }
+  }, function(e){ console.log('staff sync err', e && e.code); });
+}
+
+function getSellers(){
+  var staff = getStaff();
+  if(staff.length) {
+    return staff.filter(function(s){ return s.roles && s.roles.indexOf('seller')>=0 && !s.blocked; })
+      .map(function(s){ return {id:s.id, name:s.name, pass:s.pass, shops:s.shops||[], blocked:false}; });
+  }
+  return JSON.parse(localStorage.getItem('iz_sellers')||'[]');
+}
+function getShopAdmins(){
+  var adminRoles=['admin','owner','accountant'];
+  var staff = getStaff();
+  if(staff.length) {
+    var admins = staff.filter(function(s){ return s.roles && s.roles.some(function(r){return adminRoles.indexOf(r)>=0;}) && !s.blocked; })
+      .map(function(s){ return {id:s.id, name:s.name, pass:s.pass}; });
+    if(!admins.some(function(a){return a.id==='admin_default';}))
+      admins.unshift({id:'admin_default', name:'Администратор', pass:'admin123'});
+    return admins;
+  }
+  var fallback = JSON.parse(localStorage.getItem('iz_shop_admins')||'[]');
+  if(!fallback.length) fallback = [{id:'admin_default',name:'Администратор',pass:'admin123'}];
+  return fallback;
+}
 function saveShopAdmins(d){ syncSave('iz_shop_admins', d); }
 function getInvoices(){ return JSON.parse(localStorage.getItem('iz_invoices')||'[]'); }
 function saveInvoices(d){ localStorage.setItem('iz_invoices',JSON.stringify(d)); }
@@ -4805,6 +4877,7 @@ function renderActivatedList(){
 
 function init(){
   startSyncListeners();
+  startStaffLiveSync(function(){ try{pick(loginRole);}catch(e){} });
   const shopNames=getShopNames();
   const shopSel=document.getElementById('loginShop');
   if(shopSel) shopSel.innerHTML=shopNames.map(s=>`<option>${s}</option>`).join('');
