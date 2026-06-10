@@ -1530,14 +1530,16 @@ function confirmMorning(){
   const val=document.getElementById('morningCash').value, cashM=parseFloat(val);
   if(val===''||isNaN(cashM)||cashM<0) return;
   const goodsM=calcGoodsMorning(pendingSession.shopName);
-  session={...pendingSession,openedAt:new Date().toISOString(),cashMorning:cashM,goodsMorning:goodsM};
+  var drCashEl=document.getElementById('morningDrCash');
+  var drCashM=drCashEl&&drCashEl.value!==''?parseFloat(drCashEl.value)||0:0;
+  session={...pendingSession,openedAt:new Date().toISOString(),cashMorning:cashM,goodsMorning:goodsM,drCashMorning:drCashM};
   const prev=getPrevShift(pendingSession.shopName);
   if((prev&&prev.cashEvening)!=null&&Math.abs(cashM-prev.cashEvening)>1){
     saveAdminAlert({type:'morning_diff',shopName:session.shopName,sellerName:session.sellerName,
       date:new Date().toISOString().split('T')[0],cashMorning:cashM,prevCashEve:prev.cashEvening,morningDiff:cashM-prev.cashEvening});
   }
   journal=[{id:uid(),type:'open',ts:new Date().toISOString(),icon:'🔓',label:'Смена открыта',
-    sub:'🌳 Нал: '+fmt(cashM)+' 🛍 Нал ДР: '+fmt(drCashM)+' · 📦 Товар: '+fmt(goodsM),cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0}];
+    sub:'🌳 Нал: '+fmt(cashM)+(drCashM?' 🛍 Нал ДР: '+fmt(drCashM):'')+' · 📦 Товар: '+fmt(goodsM),cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0}];
   pendingSession=null; saveS(); saveJ();
   logShiftOpen(session.shopName, cashM);
   closeMo('morningMo'); startApp();
