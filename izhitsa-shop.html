@@ -3367,131 +3367,146 @@ function _renderShiftView(){
 
   // ── ПРИХОДЫ body ──
   var rcvAllLen = receives.length + woodRcv.length + drRcv.length;
+  var woodRcvItems = receives.concat(woodRcv); // journal receives + manual wood receives
   var rcvBody = '';
-  if(receives.length){
-    receives.forEach(function(r, i){
-      rcvBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
-        '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
-          '<div style="flex:1;min-width:0">'+
-            '<div style="font-size:12px;font-weight:700">'+(r.sub||r.label||'Приход')+'</div>'+
-            '<div style="font-size:10px;color:#555568">'+(r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'')+'</div>'+
-          '</div>'+
-          '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
-            '<span style="font-size:12px;font-weight:700;color:#60f090">+'+f(r.goodsEffect||r.amount||0)+'</span>'+
-            '<button onclick="svDeleteJEntry(\'receive\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
-          '</div>'+
+
+  function rcvItem(name, sub, subColor, amt, amtColor, deleteFn){
+    return '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div style="flex:1;min-width:0">'+
+          '<div style="font-size:12px;font-weight:700">'+name+'</div>'+
+          (sub?'<div style="font-size:10px;color:'+(subColor||'#555568')+'">'+sub+'</div>':'')+
         '</div>'+
-      '</div>';
-    });
+        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
+          '<span style="font-size:12px;font-weight:700;color:'+(amtColor||'#60f090')+'">+'+f(amt)+'</span>'+
+          '<button onclick="'+deleteFn+'" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
   }
-  // goodsReceives (from past shift manual entry)
+
+  rcvBody += '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
+  var woodRcvCount = 0;
+  receives.forEach(function(r, i){
+    rcvBody += rcvItem(r.sub||r.label||'Приход', r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#555568', r.goodsEffect||r.amount||0, '#60f090', 'svDeleteJEntry(\'receive\','+i+')');
+    woodRcvCount++;
+  });
   woodRcv.forEach(function(r, i){
-    rcvBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
-        '<div style="flex:1;min-width:0">'+
-          '<div style="font-size:12px;font-weight:700">'+(r.name||'Приход')+(r.qty?' × '+r.qty:'')+(r.from?' · от '+r.from:'')+'</div>'+
-          '<div style="font-size:10px;color:#555568">🌳 Дерево</div>'+
-        '</div>'+
-        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
-          '<span style="font-size:12px;font-weight:700;color:#60f090">+'+f(r.amt||0)+'</span>'+
-          '<button onclick="svDeleteWoodRcv('+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
-        '</div>'+
-      '</div>'+
-    '</div>';
+    rcvBody += rcvItem((r.name||'Приход')+(r.qty?' × '+r.qty:'')+(r.from?' · от '+r.from:''), '🌳 Дерево', '#555568', r.amt||0, '#60f090', 'svDeleteWoodRcv('+i+')');
+    woodRcvCount++;
   });
+  if(!woodRcvCount) rcvBody += '<div style="font-size:11px;color:#555568;padding:6px 0 10px">Приходов не было</div>';
+
+  rcvBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
+  var drRcvCount = 0;
   drRcv.forEach(function(r, i){
-    rcvBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
-        '<div style="flex:1;min-width:0">'+
-          '<div style="font-size:12px;font-weight:700">'+(r.name||'Приход ДР')+(r.qty?' × '+r.qty:'')+'</div>'+
-          '<div style="font-size:10px;color:#a060f0">🛍 ДР Товар</div>'+
-        '</div>'+
-        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
-          '<span style="font-size:12px;font-weight:700;color:#a060f0">+'+f(r.amt||0)+'</span>'+
-          '<button onclick="svDeleteDrRcv('+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
-        '</div>'+
-      '</div>'+
-    '</div>';
+    rcvBody += rcvItem((r.name||'Приход ДР')+(r.qty?' × '+r.qty:''), '🛍 ДР Товар', '#a060f0', r.amt||0, '#a060f0', 'svDeleteDrRcv('+i+')');
+    drRcvCount++;
   });
-  if(!rcvAllLen) rcvBody = '<div style="font-size:12px;color:#8888aa;padding:8px 0">Приходов не было</div>';
+  if(!drRcvCount) rcvBody += '<div style="font-size:11px;color:#555568;padding:6px 0">Приходов не было</div>';
 
   // ── СПИСАНИЯ body ──
   var woAllLen = writeoffs.length + woodWo.length + drWo.length;
   var woBody = '';
-  writeoffs.forEach(function(w, i){
-    woBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
+
+  function woItem(name, sub, subColor, amt, deleteFn){
+    return '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
-        '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">'+(w.sub||w.label||'Списание')+'</div></div>'+
+        '<div style="flex:1;min-width:0">'+
+          '<div style="font-size:12px;font-weight:700">'+name+'</div>'+
+          (sub?'<div style="font-size:10px;color:'+(subColor||'#555568')+'">'+sub+'</div>':'')+
+        '</div>'+
         '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
-          '<span style="font-size:12px;font-weight:700;color:#f06060">'+f(w.amount||0)+'</span>'+
-          '<button onclick="svDeleteJEntry(\'writeoff\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
+          '<span style="font-size:12px;font-weight:700;color:#f06060">'+f(amt)+'</span>'+
+          '<button onclick="'+deleteFn+'" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
         '</div>'+
       '</div>'+
     '</div>';
+  }
+
+  woBody += '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
+  var woodWoCount = 0;
+  writeoffs.forEach(function(w, i){
+    woBody += woItem(w.sub||w.label||'Списание', '', '', w.amount||0, 'svDeleteJEntry(\'writeoff\','+i+')');
+    woodWoCount++;
   });
   woodWo.forEach(function(w, i){
-    woBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
-        '<div style="flex:1;min-width:0">'+
-          '<div style="font-size:12px;font-weight:700">'+(w.name||'Списание')+(w.qty?' × '+w.qty:'')+'</div>'+
-          '<div style="font-size:10px;color:#555568">🌳 Дерево'+(w.reason?' · '+w.reason:'')+'</div>'+
-        '</div>'+
-        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
-          '<span style="font-size:12px;font-weight:700;color:#f06060">'+f(w.amt||0)+'</span>'+
-          '<button onclick="svDeleteWoodWo('+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
-        '</div>'+
-      '</div>'+
-    '</div>';
+    woBody += woItem((w.name||'Списание')+(w.qty?' × '+w.qty:''), '🌳 Дерево'+(w.reason?' · '+w.reason:''), '#555568', w.amt||0, 'svDeleteWoodWo('+i+')');
+    woodWoCount++;
   });
+  if(!woodWoCount) woBody += '<div style="font-size:11px;color:#555568;padding:6px 0 10px">Списаний не было</div>';
+
+  woBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
+  var drWoCount = 0;
   drWo.forEach(function(w, i){
-    woBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
-        '<div style="flex:1;min-width:0">'+
-          '<div style="font-size:12px;font-weight:700">'+(w.name||'Списание ДР')+(w.qty?' × '+w.qty:'')+'</div>'+
-          '<div style="font-size:10px;color:#a060f0">🛍 ДР Товар'+(w.reason?' · '+w.reason:'')+'</div>'+
-        '</div>'+
-        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
-          '<span style="font-size:12px;font-weight:700;color:#f06060">'+f(w.amt||0)+'</span>'+
-          '<button onclick="svDeleteDrWo('+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
-        '</div>'+
-      '</div>'+
-    '</div>';
+    woBody += woItem((w.name||'Списание ДР')+(w.qty?' × '+w.qty:''), '🛍 ДР Товар'+(w.reason?' · '+w.reason:''), '#a060f0', w.amt||0, 'svDeleteDrWo('+i+')');
+    drWoCount++;
   });
-  if(!woAllLen) woBody = '<div style="font-size:12px;color:#8888aa;padding:8px 0">Списаний не было</div>';
+  if(!drWoCount) woBody += '<div style="font-size:11px;color:#555568;padding:6px 0">Списаний не было</div>';
 
   // ── РАСХОДЫ body ──
   var expHasData = zp||inkass||otherExp||drInkass||drSupplier||expenses.length;
   var expBody = '';
-  if(expenses.length){
-    expenses.forEach(function(e, i){
-      var etype={zp:'💰 ЗП',travel:'🚌 Проезд',inkass:'🏦 Инкассация',supplier:'🏭 Поставщик',other:'📝 Прочее'}[e.expType]||e.expType||'Расход';
-      expBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
-        '<div style="display:flex;justify-content:space-between;align-items:center">'+
-          '<div><div style="font-size:12px;font-weight:700">'+etype+(e.comment?' · '+e.comment:'')+'</div></div>'+
-          '<div style="display:flex;align-items:center;gap:8px">'+
-            '<span style="font-size:12px;font-weight:700;color:#f0a060">'+f(e.amount||0)+'</span>'+
-            '<button onclick="svDeleteJEntry(\'expense\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
-          '</div>'+
+  var woodExp = expenses.filter(function(e){ return e.goodsType !== 'dr'; });
+  var drExp   = expenses.filter(function(e){ return e.goodsType === 'dr'; });
+
+  function expItem(label, amt, color, deleteFn){
+    return '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<div style="font-size:12px;font-weight:700">'+label+'</div>'+
+        '<div style="display:flex;align-items:center;gap:8px">'+
+          '<span style="font-size:12px;font-weight:700;color:'+(color||'#f0a060')+'">'+f(amt)+'</span>'+
+          (deleteFn?'<button onclick="'+deleteFn+'" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>':'')+
         '</div>'+
-      '</div>';
+      '</div>'+
+    '</div>';
+  }
+
+  expBody += '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
+  var woodExpCount = 0;
+  if(woodExp.length){
+    var etypes={zp:'💰 ЗП',travel:'🚌 Проезд',inkass:'🏦 Инкассация',supplier:'🏭 Поставщик',other:'📝 Прочее'};
+    woodExp.forEach(function(e, i){
+      var label=(etypes[e.expType]||e.expType||'Расход')+(e.comment?' · '+e.comment:'');
+      expBody += expItem(label, e.amount||0, '#f0a060', 'svDeleteJEntry(\'expense\','+i+')');
+      woodExpCount++;
     });
   } else {
-    if(zp) expBody += row('💰 ЗП', f(zp), '#f0a060');
-    if(inkass) expBody += row('🏦 Инкассация (Дерево)', f(inkass), '#f0a060');
-    if(otherExp) expBody += row('📝 Прочее', f(otherExp), '#f0a060');
-    if(drInkass) expBody += row('🏦 Инкассация (ДР)', f(drInkass), '#a060f0');
-    if(drSupplier) expBody += row('🏭 Поставщик ДР'+(sh.drSupplierName?' ('+sh.drSupplierName+')':''), f(drSupplier), '#a060f0');
-    if(!expHasData) expBody = '<div style="font-size:12px;color:#8888aa;padding:8px 0">Расходов не было</div>';
+    if(zp){ expBody += expItem('💰 ЗП', zp, '#f0a060', null); woodExpCount++; }
+    if(inkass){ expBody += expItem('🏦 Инкассация', inkass, '#f0a060', null); woodExpCount++; }
+    if(otherExp){ expBody += expItem('📝 Прочее', otherExp, '#f0a060', null); woodExpCount++; }
   }
+  if(!woodExpCount) expBody += '<div style="font-size:11px;color:#555568;padding:6px 0 10px">Расходов не было</div>';
+
+  expBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
+  var drExpCount = 0;
+  if(drExp.length){
+    var etypes2={zp:'💰 ЗП',travel:'🚌 Проезд',inkass:'🏦 Инкассация',supplier:'🏭 Поставщик',other:'📝 Прочее'};
+    drExp.forEach(function(e, i){
+      var label=(etypes2[e.expType]||e.expType||'Расход ДР')+(e.comment?' · '+e.comment:'');
+      // find real index in full expenses array
+      var realIdx = expenses.indexOf(e);
+      expBody += expItem(label, e.amount||0, '#a060f0', 'svDeleteJEntry(\'expense\','+realIdx+')');
+      drExpCount++;
+    });
+  } else {
+    if(drInkass){ expBody += expItem('🏦 Инкассация ДР', drInkass, '#a060f0', null); drExpCount++; }
+    if(drSupplier){ expBody += expItem('🏭 Поставщик ДР'+(sh.drSupplierName?' ('+sh.drSupplierName+')':''), drSupplier, '#a060f0', null); drExpCount++; }
+  }
+  if(!drExpCount) expBody += '<div style="font-size:11px;color:#555568;padding:6px 0">Расходов не было</div>';
 
   // ── ПОКУПКИ СОТРУДНИКОВ body ──
   var staffBody = '';
-  staffArr.forEach(function(s, i){
+  var woodStaff = staffArr.filter(function(s){ return s.goodsType !== 'dr'; });
+  var drStaff   = staffArr.filter(function(s){ return s.goodsType === 'dr'; });
+
+  function staffItem(s, realIdx){
     var who = s.who || (s.label||'').replace('Покупка сотр.: ','');
     var item = s.item || s.sub || '';
     var retail = s.retail || 0;
     var opt = s.opt || s.amount || 0;
-    staffBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
+    var canDel = staffPurch.length > 0;
+    return '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
         '<div style="flex:1;min-width:0">'+
           '<div style="font-size:12px;font-weight:700">'+who+'</div>'+
@@ -3499,12 +3514,19 @@ function _renderShiftView(){
         '</div>'+
         '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
           '<span style="font-size:12px;font-weight:700;color:#a060f0">'+f(opt)+'</span>'+
-          (staffPurch.length?'<button onclick="svDeleteJEntry(\'staff\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>':'')+
+          (canDel?'<button onclick="svDeleteJEntry(\'staff\','+realIdx+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>':'')+
         '</div>'+
       '</div>'+
     '</div>';
-  });
-  if(!staffArr.length) staffBody = '<div style="font-size:12px;color:#8888aa;padding:8px 0">Покупок сотрудников не было</div>';
+  }
+
+  staffBody += '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
+  if(woodStaff.length){ woodStaff.forEach(function(s){ staffBody += staffItem(s, staffArr.indexOf(s)); }); }
+  else staffBody += '<div style="font-size:11px;color:#555568;padding:6px 0 10px">Покупок не было</div>';
+
+  staffBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
+  if(drStaff.length){ drStaff.forEach(function(s){ staffBody += staffItem(s, staffArr.indexOf(s)); }); }
+  else staffBody += '<div style="font-size:11px;color:#555568;padding:6px 0">Покупок не было</div>';
 
   // ── ШАПКА ──
   var headerColor = sh.hasCashDiff ? '#f06060' : '#c8f060';
