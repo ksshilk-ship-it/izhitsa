@@ -3293,35 +3293,49 @@ function _renderShiftView(){
     salesBody += '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:700"><span>Итого</span><span style="color:#c8f060">'+f(totalRev)+'</span></div>';
   } else {
     // aggregate
-    salesBody += row('💵 Нал (Дерево)', f(cashRev), '#60f090');
-    salesBody += row('💳 Безнал (Дерево)', f(cardRev), '#60c8f0');
-    if(disc) salesBody += row('🎁 Скидка (Дерево)', f(disc), '#8888aa');
-    if(drTot){
-      salesBody += '<div style="font-size:10px;color:#8888aa;margin:8px 0 4px;font-weight:700">ДР ТОВАР</div>';
-      salesBody += row('💵 Нал ДР', f(drCashRev), '#60f090');
-      salesBody += row('💳 Безнал ДР', f(drCardRev), '#60c8f0');
-      if(drDisc) salesBody += row('🎁 Скидка ДР', f(drDisc), '#8888aa');
-    }
-    salesBody += '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:700"><span>Итого</span><span style="color:#c8f060">'+f(totalRev+(drTot))+'</span></div>';
+    salesBody += '<div style="font-size:10px;color:#c8f060;margin-bottom:5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
+    salesBody += row('💵 Нал', f(cashRev), '#60f090');
+    salesBody += row('💳 Безнал', f(cardRev), '#60c8f0');
+    if(disc) salesBody += row('🎁 Скидка', f(disc), '#8888aa');
+    salesBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
+    salesBody += row('💵 Нал', f(drCashRev), '#60f090');
+    salesBody += row('💳 Безнал', f(drCardRev), '#60c8f0');
+    if(drDisc) salesBody += row('🎁 Скидка', f(drDisc), '#8888aa');
+    salesBody += '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:700;border-top:1px solid #2e2e3e;margin-top:4px"><span>Итого</span><span style="color:#c8f060">'+f(totalRev+drTot)+'</span></div>';
     salesBody += '<div style="font-size:11px;color:#555568;margin-top:4px">Детализация продаж недоступна — смена без журнала</div>';
   }
 
   // ── КАССА body ──
-  var cassaBody = row('Нал утро (Дерево)', f(sh.cashMorning||0), '#f0f0f8');
-  cassaBody += row('Нал вечер (Дерево)', f(sh.cashEvening||0), '#f0f0f8');
-  if(sh.drCashMorning!=null||sh.drCashEvening!=null){
-    cassaBody += row('Нал утро (ДР)', f(sh.drCashMorning||0), '#a060f0');
-    cassaBody += row('Нал вечер (ДР)', f(sh.drCashEvening||0), '#a060f0');
+  function inp(id, val, label){
+    return '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">'+label+'</div>'+
+      '<input class="fi" type="number" id="'+id+'" value="'+(val||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>';
   }
+  var cassaBody = '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
+  cassaBody += row('Нал утро', f(sh.cashMorning||0), '#f0f0f8');
+  cassaBody += row('Нал вечер', f(sh.cashEvening||0), '#f0f0f8');
+  cassaBody += row('Выручка нал', f(cashRev), '#60f090');
+  cassaBody += row('Выручка безнал', f(cardRev), '#60c8f0');
+  cassaBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
+  cassaBody += row('Нал утро', f(sh.drCashMorning||0), '#f0f0f8');
+  cassaBody += row('Нал вечер', f(sh.drCashEvening||0), '#f0f0f8');
+  cassaBody += row('Выручка нал', f(drCashRev), '#60f090');
+  cassaBody += row('Выручка безнал', f(drCardRev), '#60c8f0');
   if(sh.hasCashDiff) cassaBody += '<div style="background:#2e1a1a;border-radius:8px;padding:8px;margin-top:8px;font-size:11px;color:#f06060;font-weight:700">⚠️ Расхождение: '+f(sh.cashDiff||0)+(sh.cashDiffReason?' · '+sh.cashDiffReason:'')+'</div>';
-  // inline edit
   cassaBody += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #2e2e3e">'+
-    '<div style="font-size:10px;color:#8888aa;margin-bottom:6px;font-weight:700">ИСПРАВИТЬ</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">'+
-      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Нал утро</div><input class="fi" type="number" id="sv_cashMorn" value="'+(sh.cashMorning||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
-      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Нал вечер</div><input class="fi" type="number" id="sv_cashEve" value="'+(sh.cashEvening||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
-      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Выручка нал</div><input class="fi" type="number" id="sv_cashRev" value="'+cashRev+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
-      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Выручка безнал</div><input class="fi" type="number" id="sv_cardRev" value="'+cardRev+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
+    '<div style="font-size:10px;color:#8888aa;margin-bottom:8px;font-weight:700">ИСПРАВИТЬ</div>'+
+    '<div style="font-size:10px;color:#c8f060;margin-bottom:5px;font-weight:700">🌳 Дерево</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'+
+      inp('sv_cashMorn', sh.cashMorning, 'Нал утро')+
+      inp('sv_cashEve', sh.cashEvening, 'Нал вечер')+
+      inp('sv_cashRev', cashRev, 'Выручка нал')+
+      inp('sv_cardRev', cardRev, 'Выручка безнал')+
+    '</div>'+
+    '<div style="font-size:10px;color:#a060f0;margin-bottom:5px;font-weight:700">🛍 ДР Товар</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'+
+      inp('sv_drCashMorn', sh.drCashMorning, 'Нал утро')+
+      inp('sv_drCashEve', sh.drCashEvening, 'Нал вечер')+
+      inp('sv_drCashRev', drCashRev, 'Выручка нал')+
+      inp('sv_drCardRev', drCardRev, 'Выручка безнал')+
     '</div>'+
     '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">Причина правки</div>'+
     '<input class="fi" id="sv_cashReason" placeholder="Обязательно укажите причину..." style="margin:0;padding:8px;margin-bottom:8px">'+
@@ -3329,17 +3343,23 @@ function _renderShiftView(){
   '</div>';
 
   // ── ТОВАР body ──
-  var tovarBody = row('Товар утро (Дерево)', f(sh.goodsMorning||0), '#f0a060');
-  tovarBody += row('Товар вечер (Дерево)', f(sh.goodsEvening||0), '#f0a060');
-  if(sh.drGoodsMorning!=null||sh.drGoodsEvening!=null){
-    tovarBody += row('Товар утро (ДР)', f(sh.drGoodsMorning||0), '#a060f0');
-    tovarBody += row('Товар вечер (ДР)', f(sh.drGoodsEvening||0), '#a060f0');
-  }
+  var tovarBody = '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
+  tovarBody += row('Товар утро', f(sh.goodsMorning||0), '#f0a060');
+  tovarBody += row('Товар вечер', f(sh.goodsEvening||0), '#f0a060');
+  tovarBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
+  tovarBody += row('Товар утро', f(sh.drGoodsMorning||0), '#a060f0');
+  tovarBody += row('Товар вечер', f(sh.drGoodsEvening||0), '#a060f0');
   tovarBody += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #2e2e3e">'+
-    '<div style="font-size:10px;color:#8888aa;margin-bottom:6px;font-weight:700">ИСПРАВИТЬ</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">'+
-      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Товар вечер (Дерево)</div><input class="fi" type="number" id="sv_goodsEve" value="'+(sh.goodsEvening||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
-      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Товар вечер (ДР)</div><input class="fi" type="number" id="sv_drGoodsEve" value="'+(sh.drGoodsEvening||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
+    '<div style="font-size:10px;color:#8888aa;margin-bottom:8px;font-weight:700">ИСПРАВИТЬ</div>'+
+    '<div style="font-size:10px;color:#c8f060;margin-bottom:5px;font-weight:700">🌳 Дерево</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'+
+      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Товар утро</div><input class="fi" type="number" id="sv_goodsMorn" value="'+(sh.goodsMorning||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
+      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Товар вечер</div><input class="fi" type="number" id="sv_goodsEve" value="'+(sh.goodsEvening||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
+    '</div>'+
+    '<div style="font-size:10px;color:#a060f0;margin-bottom:5px;font-weight:700">🛍 ДР Товар</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'+
+      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Товар утро</div><input class="fi" type="number" id="sv_drGoodsMorn" value="'+(sh.drGoodsMorning||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
+      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Товар вечер</div><input class="fi" type="number" id="sv_drGoodsEve" value="'+(sh.drGoodsEvening||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
     '</div>'+
     '<input class="fi" id="sv_tovarReason" placeholder="Причина правки (обязательно)..." style="margin:0;padding:8px;margin-bottom:8px">'+
     '<button onclick="svSaveTovar()" style="width:100%;padding:9px;background:#c8f060;border:none;border-radius:9px;font-weight:700;font-size:12px;color:#0f0f13;cursor:pointer">💾 Сохранить остатки</button>'+
@@ -3538,6 +3558,10 @@ function svSaveCassa(){
   _currentShiftView.cashEvening=parseFloat((document.getElementById('sv_cashEve')||{}).value)||0;
   _currentShiftView.cashRevenue=parseFloat((document.getElementById('sv_cashRev')||{}).value)||0;
   _currentShiftView.cardRevenue=parseFloat((document.getElementById('sv_cardRev')||{}).value)||0;
+  _currentShiftView.drCashMorning=parseFloat((document.getElementById('sv_drCashMorn')||{}).value)||0;
+  _currentShiftView.drCashEvening=parseFloat((document.getElementById('sv_drCashEve')||{}).value)||0;
+  _currentShiftView.drCashRevenue=parseFloat((document.getElementById('sv_drCashRev')||{}).value)||0;
+  _currentShiftView.drCardRevenue=parseFloat((document.getElementById('sv_drCardRev')||{}).value)||0;
   _currentShiftView.editedBy=(session&&(session.name||session.sellerName))||'admin';
   _currentShiftView.editedAt=new Date().toISOString();
   _currentShiftView.editReason=reason;
@@ -3546,7 +3570,9 @@ function svSaveCassa(){
 function svSaveTovar(){
   var reason=((document.getElementById('sv_tovarReason')||{}).value||'').trim();
   if(!reason){showToast('Укажите причину правки');return;}
+  _currentShiftView.goodsMorning=parseFloat((document.getElementById('sv_goodsMorn')||{}).value)||0;
   _currentShiftView.goodsEvening=parseFloat((document.getElementById('sv_goodsEve')||{}).value)||0;
+  _currentShiftView.drGoodsMorning=parseFloat((document.getElementById('sv_drGoodsMorn')||{}).value)||0;
   _currentShiftView.drGoodsEvening=parseFloat((document.getElementById('sv_drGoodsEve')||{}).value)||0;
   _currentShiftView.editedBy=(session&&(session.name||session.sellerName))||'admin';
   _currentShiftView.editedAt=new Date().toISOString();
