@@ -822,21 +822,55 @@ if ('serviceWorker' in navigator) {
 <div class="mo" id="morningMo">
   <div class="md">
     <div class="mh"></div>
-    <div style="text-align:center;margin-bottom:16px">
-      <div style="font-size:32px;margin-bottom:8px">🌅</div>
-      <div style="font-family:'Unbounded',sans-serif;font-size:15px;font-weight:700" id="morningShopName"></div>
-      <div style="font-size:12px;color:#8888aa;margin-top:4px" id="morningSellerName"></div>
+    <div style="text-align:center;margin-bottom:12px">
+      <div style="font-size:28px;margin-bottom:6px">🌅</div>
+      <div style="font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700" id="morningShopName"></div>
+      <div style="font-size:12px;color:#8888aa;margin-top:3px" id="morningSellerName"></div>
     </div>
-    <div class="card" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:#c8f060">
-      <div style="font-size:13px;color:#8888aa;margin-bottom:12px">Пересчитайте наличные в кассе и введите фактический остаток.</div>
-      <div class="fg">
-        <label class="fl">💵 Остаток наличных в кассе (₽)</label>
-        <input class="fi" type="number" id="morningCash" placeholder="Введите сумму..." inputmode="numeric"
-          style="font-size:22px;font-weight:700;text-align:center;border-color:#c8f060" oninput="checkMorningValid()">
-        <div id="morningCashHint" style="font-size:12px;margin-top:4px;display:none"></div>
+    <div style="font-size:10px;font-weight:700;color:#c8f060;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">💵 Наличные на утро</div>
+    <div style="background:#0f1a08;border:1px solid #c8f060;border-radius:10px;padding:10px;margin-bottom:6px">
+      <label style="font-size:10px;color:#c8f060;font-weight:700">🌳 Дерево (нал в кассе)</label>
+      <input class="fi" type="number" id="morningCash" placeholder="0" inputmode="numeric" style="font-size:18px;font-weight:700;text-align:center;border-color:#c8f060;margin-top:4px" oninput="checkMorningValid()">
+      <div id="morningCashHint" style="font-size:11px;margin-top:3px;display:none"></div>
+    </div>
+    <div style="background:#0f0a1a;border:1px solid #a060f0;border-radius:10px;padding:10px;margin-bottom:6px">
+      <label style="font-size:10px;color:#a060f0;font-weight:700">🛍 ДР Товар (наличные)</label>
+      <input class="fi" type="number" id="morningCashDr" placeholder="0" inputmode="numeric" style="font-size:18px;font-weight:700;text-align:center;border-color:#a060f0;margin-top:4px">
+    </div>
+    <div style="background:#0a0f13;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:10px">
+      <label style="font-size:10px;color:#60c8f0;font-weight:700">🛒 Покупки сотрудников</label>
+      <input class="fi" type="number" id="morningCashStaff" placeholder="0" inputmode="numeric" style="font-size:18px;font-weight:700;text-align:center;border-color:#60c8f0;margin-top:4px">
+    </div>
+    <div style="font-size:10px;font-weight:700;color:#f0c060;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">📦 Остаток товара на утро</div>
+    <div style="background:#1a150a;border:1px solid #f0c060;border-radius:10px;padding:10px;margin-bottom:6px">
+      <label style="font-size:10px;color:#f0c060;font-weight:700">🌳 Дерево</label>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button type="button" id="goodsAutoBtn" onclick="setGoodsMornMode('auto')" style="flex:1;padding:6px;border-radius:8px;border:2px solid #f0c060;background:#1a150a;color:#f0c060;font-size:11px;font-weight:700;cursor:pointer">🔄 Авто</button>
+        <button type="button" id="goodsManualBtn" onclick="setGoodsMornMode('manual')" style="flex:1;padding:6px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">✏️ Вручную</button>
+      </div>
+      <div id="goodsAutoBlock" style="margin-top:6px;text-align:center;padding:8px;background:#0f0f13;border-radius:8px">
+        <div style="font-size:10px;color:#8888aa">Расчёт с прошлой смены</div>
+        <div style="font-size:16px;font-weight:700;color:#f0c060" id="goodsAutoVal">—</div>
+      </div>
+      <div id="goodsManualBlock" style="display:none;margin-top:6px">
+        <input class="fi" type="number" id="morningGoods" placeholder="0" inputmode="numeric" style="font-size:16px;font-weight:700;text-align:center;border-color:#f0c060">
       </div>
     </div>
-    <div id="morningCompare" style="margin-bottom:12px"></div>
+    <div style="background:#1a0f1a;border:1px solid #f060a0;border-radius:10px;padding:10px;margin-bottom:12px">
+      <label style="font-size:10px;color:#f060a0;font-weight:700">🛍 ДР Товар</label>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button type="button" id="goodsDrAutoBtn" onclick="setGoodsDrMode('auto')" style="flex:1;padding:6px;border-radius:8px;border:2px solid #f060a0;background:#1a0f1a;color:#f060a0;font-size:11px;font-weight:700;cursor:pointer">🔄 Авто</button>
+        <button type="button" id="goodsDrManualBtn" onclick="setGoodsDrMode('manual')" style="flex:1;padding:6px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">✏️ Вручную</button>
+      </div>
+      <div id="goodsDrAutoBlock" style="margin-top:6px;text-align:center;padding:8px;background:#0f0f13;border-radius:8px">
+        <div style="font-size:10px;color:#8888aa">Расчёт с прошлой смены</div>
+        <div style="font-size:16px;font-weight:700;color:#f060a0" id="goodsDrAutoVal">—</div>
+      </div>
+      <div id="goodsDrManualBlock" style="display:none;margin-top:6px">
+        <input class="fi" type="number" id="morningGoodsDr" placeholder="0" inputmode="numeric" style="font-size:16px;font-weight:700;text-align:center;border-color:#f060a0">
+      </div>
+    </div>
+    <div id="morningCompare" style="margin-bottom:10px"></div>
     <button class="btn" id="morningConfirmBtn" onclick="confirmMorning()" disabled style="opacity:.4">Открыть смену →</button>
     <button class="btn sec" style="margin-top:8px" onclick="cancelMorning()">← Назад</button>
   </div>
