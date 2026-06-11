@@ -192,17 +192,17 @@ if ('serviceWorker' in navigator) {
   <div class="app-sub">Администрирование и аналитика</div>
   
   <div class="role-grid">
-    <div class="role-card" data-role="admin">
+    <div class="role-card" onclick="selectAdminRole('admin',this)">
       <div class="ri">🔐</div>
       <div class="rn">Администратор</div>
       <div class="rs">Полный доступ ко всему</div>
     </div>
-    <div class="role-card" data-role="owner">
+    <div class="role-card" onclick="selectAdminRole('owner',this)">
       <div class="ri">👑</div>
       <div class="rn">Владелец</div>
       <div class="rs">Аналитика + операции</div>
     </div>
-    <div class="role-card" data-role="accountant">
+    <div class="role-card" onclick="selectAdminRole('accountant',this)">
       <div class="ri">📊</div>
       <div class="rn">Бухгалтер</div>
       <div class="rs">Учёт и настройки</div>
@@ -2054,8 +2054,6 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   startAdminSyncListeners();
   startStaffSyncListener();
-  // Sync staff once and update login list (NOT auto-click every time)
-  startStaffLiveSync(null);
   // Init shops if not exist
   if(!localStorage.getItem('iz_shops')) {
     saveShops(['ОПИТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
@@ -2688,13 +2686,8 @@ function renderShops() {
   }
 }
 
-  // Init role cards listeners
-  document.querySelectorAll('.role-card').forEach(function(card) {
-    card.addEventListener('click', function() {
-      var role = this.getAttribute('data-role');
-      if(role) selectAdminRole(role, this);
-    });
-  });
+  // Auto-select first role
+  selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
 });
 </script>
 
