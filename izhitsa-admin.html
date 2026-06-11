@@ -155,7 +155,20 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .checkbox-label input{width:16px;height:16px;cursor:pointer}
 </style>
 
-<!-- PWA manifest -->
+<script>
+// PWA Service Worker — офлайн кеш
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('./izhitsa-sw.js', {scope: './'})
+      .then(function(reg) {
+        console.log('[PWA] SW зарегистрирован');
+      })
+      .catch(function(e) { /* SW не поддерживается в этом контексте */ });
+  });
+}
+</script>
+
+  <!-- PWA manifest -->
   <link rel="manifest" href="manifest-admin.json">
   
   <!-- iOS PWA -->
@@ -170,46 +183,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#a060f0">
   <meta name="application-name" content="Ижица — Администратор">
-<script>
-var _newSW = null;
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function() {
-    navigator.serviceWorker.register('./izhitsa-sw.js', {scope: './'})
-      .then(function(reg) {
-        setInterval(function(){ reg.update(); }, 5 * 60 * 1000);
-        reg.addEventListener('updatefound', function() {
-          var installing = reg.installing;
-          installing.addEventListener('statechange', function() {
-            if(installing.state === 'installed' && navigator.serviceWorker.controller) {
-              _newSW = installing;
-              document.getElementById('updateBanner').style.display = 'block';
-            }
-          });
-        });
-      })
-      .catch(function(e){ console.log('[PWA] SW error:', e); });
-  });
-}
-function applyUpdate() {
-  var banner = document.getElementById('updateBanner');
-  banner.innerHTML = '<div style="font-size:13px;color:#f0f0f8">⏳ Загружаю обновление...</div><div style="margin-top:6px"><div style="display:inline-block;width:24px;height:24px;border:3px solid #c8f060;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></div></div>';
-  banner.style.background = '#1a2a14';
-  if(_newSW) { _newSW.postMessage({type:'SKIP_WAITING'}); }
-  else if(navigator.serviceWorker.controller) { navigator.serviceWorker.controller.postMessage({type:'SKIP_WAITING'}); }
-  setTimeout(function(){ window.location.reload(); }, 1500);
-}
-</script>
-<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
-
 </head>
 <body>
-<!-- Update notification banner -->
-<div id="updateBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a1e2e;border-bottom:2px solid #c8f060;padding:12px 16px;text-align:center">
-  <div style="font-size:13px;color:#f0f0f8;margin-bottom:8px">🔄 Доступно обновление приложения</div>
-  <button onclick="applyUpdate()" style="background:#c8f060;border:none;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:700;color:#0f0f13;cursor:pointer">Обновить сейчас</button>
-  <button onclick="document.getElementById('updateBanner').style.display='none'" style="background:none;border:none;color:#8888aa;font-size:12px;cursor:pointer;margin-left:8px">Позже</button>
-</div>
-
 
 <!-- LOGIN SCREEN -->
 <div id="loginScreen">
@@ -425,42 +400,19 @@ function applyUpdate() {
   <!-- SHOPS ANALYSIS -->
   <div class="page" id="pg-shops">
     <div class="stitle">🏪 Магазины</div>
-
-    <!-- Sub-tabs: Realtime / Analytics -->
-    <div style="display:flex;gap:6px;margin-bottom:12px">
-      <button id="shopsTab_live" onclick="switchShopsTab('live')"
-        style="flex:1;padding:9px;border-radius:10px;border:2px solid var(--accent);background:#1e2a14;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">
-        🔴 Сейчас
-      </button>
-      <button id="shopsTab_stat" onclick="switchShopsTab('stat')"
-        style="flex:1;padding:9px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--t2);font-size:12px;cursor:pointer">
-        📊 Статистика
-      </button>
+    <div class="pchips">
+      <div class="pc active" onclick="setShopPeriod('today',this)">Сегодня</div>
+      <div class="pc" onclick="setShopPeriod('week',this)">Неделя</div>
+      <div class="pc" onclick="setShopPeriod('month',this)">Месяц</div>
+      <div class="pc" onclick="setShopPeriod('custom',this)">✏️ Период</div>
     </div>
-
-    <!-- LIVE -->
-    <div id="shopsSection_live">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div style="font-size:11px;color:var(--t2)" id="liveShiftsMeta">Загрузка...</div>
-        <button onclick="refreshLiveShifts()" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--t2);font-size:11px;cursor:pointer">🔄 Обновить</button>
-      </div>
-      <div id="liveShiftsContent"></div>
+    
+    <div id="shopCustomDates" style="display:none;margin-bottom:10px" class="row2">
+      <div><label class="fl">С даты</label><input class="fi" type="date" id="shopFrom" onchange="renderShops()"></div>
+      <div><label class="fl">По дату</label><input class="fi" type="date" id="shopTo" onchange="renderShops()"></div>
     </div>
-
-    <!-- STATS -->
-    <div id="shopsSection_stat" style="display:none">
-      <div class="pchips">
-        <div class="pc active" onclick="setShopPeriod('today',this)">Сегодня</div>
-        <div class="pc" onclick="setShopPeriod('week',this)">Неделя</div>
-        <div class="pc" onclick="setShopPeriod('month',this)">Месяц</div>
-        <div class="pc" onclick="setShopPeriod('custom',this)">✏️ Период</div>
-      </div>
-      <div id="shopCustomDates" style="display:none;margin-bottom:10px" class="row2">
-        <div><label class="fl">С даты</label><input class="fi" type="date" id="shopFrom" onchange="renderShops()"></div>
-        <div><label class="fl">По дату</label><input class="fi" type="date" id="shopTo" onchange="renderShops()"></div>
-      </div>
-      <div id="shopsAnalysis"></div>
-    </div>
+    
+    <div id="shopsAnalysis"></div>
   </div>
 
   <!-- PRODUCTION -->
@@ -555,6 +507,16 @@ function applyUpdate() {
 
     <div class="fg"><label class="fl">Имя</label><input class="fi" id="staffName" placeholder="Иванова Мария"></div>
     <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="staffPass" placeholder="Придумайте пароль"></div>
+    
+    <div class="fg">
+      <label class="fl">Статус сотрудника</label>
+      <select class="fs" id="staffStatus">
+        <option value="Активный">✅ Активный</option>
+        <option value="Отпуск">🏖️ Отпуск</option>
+        <option value="Уволен">❌ Уволен</option>
+        <option value="На учебе">📚 На учебе</option>
+      </select>
+    </div>
 
     <div class="fg">
       <label class="fl">Роли в системе (можно несколько)</label>
@@ -616,7 +578,7 @@ function applyUpdate() {
   <button class="tab" onclick="switchTab('pl',this)"><div class="ti">📈</div>P&L</button>
   <button class="tab" onclick="switchTab('debt',this)"><div class="ti">💰</div>Долги</button>
   <button class="tab" onclick="switchTab('analytics',this)"><div class="ti">📊</div>Аналитика</button>
-  <button class="tab" onclick="switchTab('shops',this);renderShopsPage()"><div class="ti">🏪</div>Магазины</button>
+  <button class="tab" onclick="switchTab('shops',this)"><div class="ti">🏪</div>Магазины</button>
   <button class="tab" onclick="switchTab('prod',this)"><div class="ti">🏭</div>Мастерская</button>
   <button class="tab" onclick="switchTab('staff',this);renderUnifiedStaff()"><div class="ti">👥</div>Сотрудники</button>
   <button class="tab" onclick="switchTab('audit',this)"><div class="ti">🔍</div>Аудит</button>
@@ -1614,6 +1576,8 @@ function openAddStaffModal() {
   // Reset form
   ['staffName','staffPass','staffWsRate'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   document.querySelectorAll('#staffRolesBlock input[type=checkbox]').forEach(function(cb){ cb.checked=false; });
+  var statusEl = document.getElementById('staffStatus');
+  if(statusEl) statusEl.value = 'Активный';
   openMo('addStaffMo');
 }
 
@@ -1634,12 +1598,13 @@ function saveUnifiedStaff() {
   });
 
   var wsRate = parseFloat(gv('staffWsRate')) || 0;
+  var status = gv('staffStatus') || 'Активный';
   var staff = getStaff();
   var existing = staff.findIndex(function(s){ return s.name === name; });
   var entry = {
     id: existing >= 0 ? staff[existing].id : uid(),
     name: name, pass: pass, roles: roles, shops: shops,
-    wsRate: wsRate, blocked: false,
+    wsRate: wsRate, status: status, blocked: false,
     createdAt: existing >= 0 ? staff[existing].createdAt : new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     createdBy: session ? session.name : 'admin'
@@ -1670,11 +1635,13 @@ function renderUnifiedStaff() {
   c.innerHTML = staff.map(function(s, i) {
     var roleStr = (s.roles||[]).map(function(r){ return roleLabels[r]||r; }).join(' · ');
     var shopStr = (s.shops||[]).length ? (s.shops||[]).join(', ') : '';
+    var statusIcon = s.status === 'Активный' ? '✅' : s.status === 'Отпуск' ? '🏖️' : s.status === 'Уволен' ? '❌' : '📚';
     return '<div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px">' +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
         '<div style="flex:1">' +
           '<div style="font-size:13px;font-weight:700;color:' + (s.blocked?'var(--t2)':'var(--text)') + '">' + s.name + (s.blocked?' 🚫':'') + '</div>' +
           '<div style="font-size:11px;color:var(--t2);margin-top:3px">' + roleStr + '</div>' +
+          '<div style="font-size:11px;color:var(--a4);margin-top:2px">' + statusIcon + ' ' + (s.status || 'Активный') + '</div>' +
           (shopStr ? '<div style="font-size:11px;color:var(--a2);margin-top:2px">📍 ' + shopStr + '</div>' : '') +
           (s.wsRate ? '<div style="font-size:11px;color:var(--a4);margin-top:2px">💰 ' + s.wsRate + '₽/шт</div>' : '') +
         '</div>' +
@@ -1704,10 +1671,11 @@ function editStaff(idx) {
     }).join('');
   }
   // Fill form
-  var nameEl=document.getElementById('staffName'), passEl=document.getElementById('staffPass'), rateEl=document.getElementById('staffWsRate');
+  var nameEl=document.getElementById('staffName'), passEl=document.getElementById('staffPass'), rateEl=document.getElementById('staffWsRate'), statusEl=document.getElementById('staffStatus');
   if(nameEl) nameEl.value = s.name;
   if(passEl) passEl.value = s.pass;
   if(rateEl) rateEl.value = s.wsRate || '';
+  if(statusEl) statusEl.value = s.status || 'Активный';
   // Check roles
   document.querySelectorAll('#staffRolesBlock input[type=checkbox]').forEach(function(cb){
     cb.checked = s.roles && s.roles.indexOf(cb.value) >= 0;
@@ -1976,7 +1944,6 @@ function renderRefBooks() {
     {id: 'works', icon: '🛠️', name: 'Доп. работы', getter: function() { return JSON.parse(localStorage.getItem('iz_additional_works') || '[]'); }, adder: 'addWork'},
     {id: 'sizes', icon: '📏', name: 'Размеры изделий', getter: function() { return JSON.parse(localStorage.getItem('iz_sizes') || '[]'); }, adder: 'addSize'},
     {id: 'materials', icon: '💎', name: 'Породы изделий', getter: function() { return JSON.parse(localStorage.getItem('iz_materials') || '[]'); }, adder: 'addMaterial'},
-    {id: 'emp_status', icon: '👤', name: 'Статусы сотрудников', getter: function() { return JSON.parse(localStorage.getItem('iz_employee_status') || '[]'); }, adder: 'addEmpStatus'},
     {id: 'schedules', icon: '⏰', name: 'Графики работы', getter: function() { return JSON.parse(localStorage.getItem('iz_work_schedules') || '[]'); }, adder: 'addSchedule'}
   ];
   
@@ -2039,7 +2006,6 @@ function renderRefBookItems(bookId) {
     case 'works': items = JSON.parse(localStorage.getItem('iz_additional_works') || '[]'); break;
     case 'sizes': items = JSON.parse(localStorage.getItem('iz_sizes') || '[]'); break;
     case 'materials': items = JSON.parse(localStorage.getItem('iz_materials') || '[]'); break;
-    case 'emp_status': items = JSON.parse(localStorage.getItem('iz_employee_status') || '[]'); break;
     case 'schedules': items = JSON.parse(localStorage.getItem('iz_work_schedules') || '[]'); break;
   }
   
@@ -2116,11 +2082,6 @@ function addRefBookItem(bookId) {
       items.push({id: uid(), name: value});
       key = 'iz_materials';
       break;
-    case 'emp_status':
-      items = JSON.parse(localStorage.getItem('iz_employee_status') || '[]');
-      items.push({id: uid(), name: value});
-      key = 'iz_employee_status';
-      break;
     case 'schedules':
       items = JSON.parse(localStorage.getItem('iz_work_schedules') || '[]');
       items.push({id: uid(), name: value});
@@ -2151,7 +2112,6 @@ function deleteRefBookItem(bookId, idx) {
     case 'works': key = 'iz_additional_works'; break;
     case 'sizes': key = 'iz_sizes'; break;
     case 'materials': key = 'iz_materials'; break;
-    case 'emp_status': key = 'iz_employee_status'; break;
     case 'schedules': key = 'iz_work_schedules'; break;
   }
   
@@ -2207,15 +2167,6 @@ document.addEventListener('DOMContentLoaded', function() {
       {id: uid(), name: 'Аренда'},
       {id: uid(), name: 'Зарплаты'},
       {id: uid(), name: 'Коммунальные'}
-    ]));
-  }
-  
-  if(!localStorage.getItem('iz_employee_status')) {
-    localStorage.setItem('iz_employee_status', JSON.stringify([
-      {id: uid(), name: 'Активный'},
-      {id: uid(), name: 'Отпуск'},
-      {id: uid(), name: 'Уволен'},
-      {id: uid(), name: 'На учебе'}
     ]));
   }
   
@@ -2622,142 +2573,6 @@ function setShopPeriod(period, btn) {
   }
   
   renderShops();
-}
-
-// ════ LIVE SHIFTS MONITORING ════
-var _liveShiftsUnsub = null;
-var _liveShiftsData = [];
-var _shopsTabActive = 'live';
-
-function switchShopsTab(tab) {
-  _shopsTabActive = tab;
-  var liveBtn = document.getElementById('shopsTab_live');
-  var statBtn = document.getElementById('shopsTab_stat');
-  var liveDiv = document.getElementById('shopsSection_live');
-  var statDiv = document.getElementById('shopsSection_stat');
-  if(tab === 'live') {
-    if(liveBtn) { liveBtn.style.borderWidth='2px'; liveBtn.style.background='#1e2a14'; liveBtn.style.color='var(--accent)'; liveBtn.style.borderColor='var(--accent)'; liveBtn.style.fontWeight='700'; }
-    if(statBtn) { statBtn.style.borderWidth='1px'; statBtn.style.background='var(--s2)'; statBtn.style.color='var(--t2)'; statBtn.style.borderColor='var(--border)'; statBtn.style.fontWeight='400'; }
-    if(liveDiv) liveDiv.style.display='block';
-    if(statDiv) statDiv.style.display='none';
-    startLiveShiftsListener();
-  } else {
-    if(statBtn) { statBtn.style.borderWidth='2px'; statBtn.style.background='#1e2a14'; statBtn.style.color='var(--accent)'; statBtn.style.borderColor='var(--accent)'; statBtn.style.fontWeight='700'; }
-    if(liveBtn) { liveBtn.style.borderWidth='1px'; liveBtn.style.background='var(--s2)'; liveBtn.style.color='var(--t2)'; liveBtn.style.borderColor='var(--border)'; liveBtn.style.fontWeight='400'; }
-    if(liveDiv) liveDiv.style.display='none';
-    if(statDiv) statDiv.style.display='block';
-    renderShops();
-  }
-}
-
-function startLiveShiftsListener() {
-  if(_liveShiftsUnsub) { try{_liveShiftsUnsub();}catch(e){} }
-  var today = new Date().toISOString().split('T')[0];
-  var meta = document.getElementById('liveShiftsMeta');
-  if(meta) meta.textContent = 'Подключение...';
-  _liveShiftsUnsub = db.collection('iz_shifts')
-    .where('date', '==', today)
-    .onSnapshot(function(snap) {
-      _liveShiftsData = [];
-      snap.forEach(function(doc){ _liveShiftsData.push(doc.data()); });
-      renderLiveShifts();
-      if(meta) meta.textContent = '🟢 Обновлено ' + new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) + ' · ' + _liveShiftsData.length + ' смен';
-    }, function(e) {
-      if(meta) meta.textContent = '🔴 Нет соединения';
-      console.log('live shifts err', e && e.code);
-    });
-}
-
-function refreshLiveShifts() {
-  startLiveShiftsListener();
-}
-
-function renderLiveShifts() {
-  var c = document.getElementById('liveShiftsContent'); if(!c) return;
-  if(!_liveShiftsData.length) {
-    c.innerHTML = '<div style="text-align:center;padding:40px;color:var(--t2)"><div style="font-size:36px;margin-bottom:8px">📋</div>Сегодня смен нет</div>';
-    return;
-  }
-  // Sort: open first
-  var shifts = _liveShiftsData.slice().sort(function(a,b){
-    if(a.status==='open'&&b.status!=='open') return -1;
-    if(b.status==='open'&&a.status!=='open') return 1;
-    return 0;
-  });
-  c.innerHTML = shifts.map(function(shift) {
-    var journal = shift.journal || [];
-    var sales = journal.filter(function(e){ return e.type==='sale'; });
-    var revenue = sales.reduce(function(s,e){ return s+(e.amount||0); }, 0);
-    var cashTotal = (shift.cashMorning||0) + journal.reduce(function(s,e){ return s+(e.cashEffect||0); }, 0);
-    var cardTotal = journal.reduce(function(s,e){ return s+(e.cardEffect||0); }, 0);
-    var goodsTotal = (shift.goodsMorning||0) + journal.reduce(function(s,e){ return s+(e.goodsEffect||0); }, 0);
-    var isOpen = shift.status !== 'closed';
-    var lastUpd = shift.updatedAt ? new Date(shift.updatedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '—';
-    var shiftIdSafe = (shift.id||'').replace(/[^a-z0-9_]/gi,'_');
-
-    return '<div style="background:var(--s1);border:1px solid '+(isOpen?'var(--accent)':'var(--border)')+';border-radius:14px;padding:14px;margin-bottom:10px">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
-        '<div><div style="font-size:14px;font-weight:700">'+escape_html(shift.shopName||'')+'</div>' +
-        '<div style="font-size:12px;color:var(--t2)">👤 '+escape_html(shift.sellerName||'')+'</div></div>' +
-        '<div style="text-align:right"><div style="font-size:11px;font-weight:700;color:'+(isOpen?'#60f090':'var(--t2)')+'">'+(isOpen?'● Открыта':'Закрыта')+'</div>' +
-        '<div style="font-size:10px;color:var(--t2)">'+lastUpd+'</div></div>' +
-      '</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">' +
-        _lsCard('💰 Выручка', revenue) +
-        _lsCard('💵 Нал касса', cashTotal) +
-        _lsCard('💳 Безнал', cardTotal) +
-        _lsCard('📦 Товар', goodsTotal) +
-      '</div>' +
-      '<button onclick="toggleShiftDetail(\'detail_'+shiftIdSafe+'\')" ' +
-        'style="width:100%;padding:7px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--t2);font-size:11px;cursor:pointer;margin-bottom:6px">' +
-        '📋 Детали ('+sales.length+' продаж)</button>' +
-      '<div id="detail_'+shiftIdSafe+'" style="display:none">' +
-        _renderShiftJournal(journal, shift.id) +
-      '</div>' +
-    '</div>';
-  }).join('');
-}
-
-function _lsCard(label, value) {
-  return '<div style="background:var(--bg);border-radius:8px;padding:8px;text-align:center">' +
-    '<div style="font-size:10px;color:var(--t2)">'+label+'</div>' +
-    '<div style="font-size:14px;font-weight:700;color:var(--accent)">'+fmtA(value)+'</div>' +
-  '</div>';
-}
-
-function fmtA(v) {
-  if(typeof v !== 'number') v = parseFloat(v)||0;
-  return v.toLocaleString('ru-RU') + '₽';
-}
-
-function escape_html(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function toggleShiftDetail(id) {
-  var el = document.getElementById(id);
-  if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
-}
-
-function _renderShiftJournal(journal, shiftId) {
-  if(!journal || !journal.length) return '<div style="font-size:12px;color:var(--t2);padding:8px">Нет операций</div>';
-  var typeColors = {sale:'var(--inc)', writeoff:'var(--exp)', expense:'var(--exp)', open:'var(--t2)', staff:'#60c8f0', receive:'#60c8f0'};
-  return journal.slice().reverse().map(function(e) {
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 4px;border-bottom:1px solid var(--border);font-size:12px">' +
-      '<div style="font-size:16px;width:24px">'+(e.icon||'📌')+'</div>' +
-      '<div style="flex:1;margin-left:8px">' +
-        '<div style="color:'+(typeColors[e.type]||'var(--text)')+'">'+escape_html(e.label||'')+'</div>' +
-        (e.sub?'<div style="font-size:10px;color:var(--t2)">'+escape_html(e.sub||'')+'</div>':'') +
-        '<div style="font-size:10px;color:var(--t2)">'+new Date(e.ts||Date.now()).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})+'</div>' +
-      '</div>' +
-      (e.amount?'<div style="font-weight:700;color:'+(typeColors[e.type]||'var(--accent)')+'">'+fmtA(e.amount)+'</div>':'') +
-    '</div>';
-  }).join('');
-}
-
-// Init live listener when shops tab is opened
-function renderShopsPage() {
-  switchShopsTab('live');
 }
 
 function renderShops() {
