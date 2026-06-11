@@ -3173,7 +3173,7 @@ function renderShiftHistory(){
   c.innerHTML=allShifts.slice(0,60).map(function(sh){
     var cashRev=sh.cashRevenue||0, cardRev=sh.cardRevenue||0, disc=sh.totalDiscount||sh.discount||0;
     var total=cashRev+cardRev+disc;
-    return '<div class="card" style="cursor:pointer;border-color:'+(sh.hasCashDiff?'#f06060':sh.isArchive?'#604020':'#2e2e3e')+'" onclick="openShiftView(\''+sh.id+'\')">'+
+    return '<div class="card" style="cursor:pointer;border-color:'+(sh.hasCashDiff?'#f06060':sh.isArchive?'#604020':'#2e2e3e')+'" onclick="openShiftView(\''+(sh.id||sh._id)+'\')">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
         '<div>'+
           '<div style="display:flex;align-items:center;gap:6px">'+
@@ -3207,8 +3207,9 @@ function filterHistShop(shop, el){
 function openShiftView(id){
   currentEditShiftId = id;
   var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-  var sh = shifts.find(function(s){ return s.id===id; }); if(!sh) return;
-  _currentShiftView = JSON.parse(JSON.stringify(sh)); // working copy
+  var sh = shifts.find(function(s){ return (s.id||s._id)===id; }); if(!sh) return;
+  _currentShiftView = JSON.parse(JSON.stringify(sh));
+  if(!_currentShiftView.id) _currentShiftView.id = _currentShiftView._id;
   _renderShiftView();
   openMo('editShiftMo');
 }
@@ -3592,14 +3593,14 @@ function svDeleteShift(){
   if(!confirm('Удалить смену целиком? Это действие нельзя отменить.')) return;
   var id=_currentShiftView.id;
   var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-  shifts=shifts.filter(function(s){return s.id!==id;});
+  shifts=shifts.filter(function(s){return (s.id||s._id)!==id;});
   localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
   try{db.collection('iz_shifts').doc(id).delete();}catch(e){}
   closeMo('editShiftMo'); renderShiftHistory(); showToast('🗑 Смена удалена');
 }
 function svPersist(){
   var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-  var idx=shifts.findIndex(function(s){return s.id===_currentShiftView.id;}); if(idx<0) return;
+  var idx=shifts.findIndex(function(s){return (s.id||s._id)===_currentShiftView.id;}); if(idx<0) return;
   shifts[idx]=_currentShiftView;
   localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
   try{db.collection('iz_shifts').doc(_currentShiftView.id).set(_currentShiftView);}catch(e){}
