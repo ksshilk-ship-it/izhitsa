@@ -460,6 +460,12 @@ function applyUpdate() {
     </div>
   </div>
 
+  <!-- ADMIN INVOICES -->
+  <div class="page" id="pg-admin-invoices">
+    <div class="stitle">📦 Накладные</div>
+    <div id="adminInvoicesList"></div>
+  </div>
+
   <!-- ARCHIVE (history + edit) -->
   <div class="page" id="pg-history">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -2072,12 +2078,116 @@ function startAdminApp(){
   startAdminAlertsListener();
   renderTodayShift();
 }
+function renderAdminInvoices(){
+  var c = document.getElementById('adminInvoicesList'); if(!c) return;
+  var manual = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var incoming = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  var all = manual.concat(incoming.filter(function(inv){
+    return !manual.some(function(m){ return m.id===inv.id; });
+  }));
+  all.sort(function(a,b){ return (b.acceptedAt||b.date||'').localeCompare(a.acceptedAt||a.date||''); });
+
+  if(!all.length){ c.innerHTML='<div class="empty"><div class="ei">📦</div>Накладных нет</div>'; return; }
+
+  c.innerHTML = all.map(function(inv){
+    var itemsStr = (inv.items||[]).map(function(it){ return (it.name||'')+(it.qty&&it.qty!==1?' × '+it.qty:'')+(it.price?' · '+fmt(it.price):''); }).join(', ');
+    var total = inv.totalAmt || (inv.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
+    return '<div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px" id="ainv_'+inv.id+'">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">' +
+        '<div>' +
+          '<div style="font-size:13px;font-weight:700">'+(inv.num||'—')+'</div>' +
+          '<div style="font-size:11px;color:var(--t2)">'+(inv.date||'')+' · '+(inv.from||inv.destName||'')+'</div>' +
+          '<div style="font-size:11px;color:var(--t2);margin-top:2px">'+itemsStr+'</div>' +
+        '</div>' +
+        '<div style="font-size:13px;font-weight:700;color:var(--accent)">'+fmt(total)+'</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;margin-top:8px">' +
+        '<button onclick="adminEditInvoice(\''+inv.id+'\')" style="flex:1;padding:7px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--accent);font-size:11px;cursor:pointer">✏️ Исправить</button>' +
+        '<button onclick="adminDeleteInvoice(\''+inv.id+'\')" style="padding:7px 12px;border-radius:8px;border:1px solid #3e2020;background:#2a1010;color:#f06060;font-size:11px;cursor:pointer">🗑 Удалить</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function adminDeleteInvoice(id){
+  if(!confirm('Удалить накладную? Это действие нельзя отменить.')) return;
+  // Remove from manual invoices
+  var manual = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  manual = manual.filter(function(inv){ return inv.id !== id; });
+  localStorage.setItem('iz_manual_invoices', JSON.stringify(manual));
+  // Remove from iz_invoices
+  var incoming = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  incoming = incoming.filter(function(inv){ return inv.id !== id; });
+  localStorage.setItem('iz_invoices', JSON.stringify(incoming));
+  // Remove from Firestore
+  try{ db.collection('iz_invoices').doc(id).delete(); }catch(e){}
+  renderAdminInvoices();
+  showToast('✅ Накладная удалена');
+}
+
+function adminEditInvoice(id){
+  var manual = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var incoming = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  var inv = manual.find(function(i){ return i.id===id; }) || incoming.find(function(i){ return i.id===id; });
+  if(!inv) return;
+  var card = document.getElementById('ainv_'+id); if(!card) return;
+
+  // Build edit form inline
+  var itemsHtml = (inv.items||[]).map(function(item,i){
+    return '<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center">' +
+      '<input class="fi" value="'+(item.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" onchange="_aie_name(\''+id+'\','+i+',this.value)">' +
+      '<input class="fi" type="number" value="'+(item.qty||1)+'" style="flex:0 0 45px;margin:0;padding:6px;font-size:12px;text-align:center" onchange="_aie_qty(\''+id+'\','+i+',this.value)">' +
+      '<input class="fi" type="number" value="'+(item.price||0)+'" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" onchange="_aie_price(\''+id+'\','+i+',this.value)">' +
+    '</div>';
+  }).join('');
+
+  card.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:8px">✏️ Редактировать: '+(inv.num||'')+'</div>' +
+    '<div class="fg" style="margin-bottom:6px"><label class="fl">Номер</label><input class="fi" id="aie_num_'+id+'" value="'+(inv.num||'')+'" style="margin:0;padding:7px"></div>' +
+    '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата</label><input class="fi" type="date" id="aie_date_'+id+'" value="'+(inv.date||'')+'" style="margin:0;padding:7px;color-scheme:dark"></div>' +
+    '<div class="fg" style="margin-bottom:6px"><label class="fl">Откуда</label><input class="fi" id="aie_from_'+id+'" value="'+(inv.from||'')+'" style="margin:0;padding:7px"></div>' +
+    '<div style="font-size:10px;color:var(--t2);margin-bottom:4px">ПОЗИЦИИ (наим. · кол-во · цена)</div>' +
+    itemsHtml +
+    '<div style="display:flex;gap:6px;margin-top:8px">' +
+      '<button onclick="adminSaveInvoice(\''+id+'\')" style="flex:1;padding:8px;border-radius:8px;border:none;background:var(--accent);color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>' +
+      '<button onclick="renderAdminInvoices()" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--t2);font-size:12px;cursor:pointer">Отмена</button>' +
+    '</div>';
+
+  // Store working copy in memory
+  window._aie_data = window._aie_data || {};
+  window._aie_data[id] = JSON.parse(JSON.stringify(inv));
+}
+
+function _aie_name(id,i,v){ if(window._aie_data&&window._aie_data[id]&&window._aie_data[id].items[i]) window._aie_data[id].items[i].name=v; }
+function _aie_qty(id,i,v){ if(window._aie_data&&window._aie_data[id]&&window._aie_data[id].items[i]) window._aie_data[id].items[i].qty=parseFloat(v)||1; }
+function _aie_price(id,i,v){ if(window._aie_data&&window._aie_data[id]&&window._aie_data[id].items[i]) window._aie_data[id].items[i].price=parseFloat(v)||0; }
+
+function adminSaveInvoice(id){
+  var data = window._aie_data && window._aie_data[id]; if(!data) return;
+  data.num = (document.getElementById('aie_num_'+id)||{}).value || data.num;
+  data.date = (document.getElementById('aie_date_'+id)||{}).value || data.date;
+  data.from = (document.getElementById('aie_from_'+id)||{}).value || data.from;
+  data.totalAmt = (data.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
+  data.editedAt = new Date().toISOString();
+  data.editedBy = session ? (session.name||session.sellerName||'') : 'admin';
+  // Save to manual invoices
+  var manual = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var mi = manual.findIndex(function(i){ return i.id===id; });
+  if(mi>=0) manual[mi]=data; else manual.unshift(data);
+  localStorage.setItem('iz_manual_invoices', JSON.stringify(manual));
+  // Save to Firestore
+  try{ db.collection('iz_invoices').doc(id).set(data,{merge:true}); }catch(e){}
+  if(window._aie_data) delete window._aie_data[id];
+  renderAdminInvoices();
+  showToast('✅ Накладная сохранена');
+}
+
 function buildAdminTabs(){
   const t=document.getElementById('mainTabs'); t.style.display='flex';
   t.innerHTML=`
     <button class="tab active" onclick="showPg('today',this);renderTodayShift()"><div class="ti">📋</div><span>Смена</span></button>
     <button class="tab" onclick="showPg('history',this);renderShiftHistory()"><div class="ti">📁</div><span>Архив</span></button>
     <button class="tab" onclick="showPg('restore',this);initRestore()"><div class="ti">🗄</div><span>Восст.</span></button>
+    <button class="tab" onclick="showPg('admin-invoices',this);renderAdminInvoices()"><div class="ti">📦</div><span>Накладные</span></button>
     <button class="tab" onclick="showPg('sellers',this);renderSellersAdmin()"><div class="ti">👥</div><span>Роли</span></button>
     <button class="tab" onclick="showPg('shopsettings',this);renderShopSettings()"><div class="ti">⚙️</div><span>Настройки</span></button>
     <button class="tab" onclick="exitShift()"><div class="ti">🚪</div><span>Выйти</span></button>`;
