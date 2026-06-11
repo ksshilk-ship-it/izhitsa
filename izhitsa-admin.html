@@ -499,13 +499,6 @@ if ('serviceWorker' in navigator) {
     <div id="refBooksContainer"></div>
   </div>
 
-    <!-- SYSTEM -->
-    <div class="card">
-      <div class="ctitle">🔧 Управление системой</div>
-      <button class="btn sm sec" onclick="exportAllData()" style="margin-bottom:8px">📥 Экспорт всех данных</button>
-      <button class="btn sm red" onclick="clearLocalCache()">🗑 Очистить локальный кеш</button>
-    </div>
-  </div>
 </div>
 
 <!-- UNIFIED ADD STAFF MODAL -->
@@ -960,7 +953,7 @@ function doLogin() {
     if(typeof populateSalesSourcesList==='function') populateSalesSourcesList();
     if(typeof populateSourcesForOp==='function') populateSourcesForOp();
     populateShopCheckboxes();
-    renderPL(); renderShops(); renderPLBudget(); renderDebts();
+    renderPL(); renderShops(); renderPLBudget(); renderDebts(); renderRefBooks();
     if(typeof renderDashboard==='function') renderDashboard();
     return;
   }
@@ -1728,106 +1721,7 @@ function renderSettingsPage() {
   renderItemsBaseList();
 }
 
-function renderShopsList() {
-  var c = document.getElementById('setShopsList'); if(!c) return;
-  var shops = getShops();
-  if(!shops.length) { c.innerHTML='<div style="color:var(--t2);font-size:12px;padding:4px">Нет точек продаж</div>'; return; }
-  var typeIcons = {shop:'🏪',online:'📱',offline:'📦',workshop:'🏭'};
-  c.innerHTML = shops.map(function(s,i) {
-    var name=s.name||s, type=s.type||'shop';
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:8px;margin-bottom:5px">' +
-      '<div><span style="font-size:13px">' + (typeIcons[type]||'🏪') + ' ' + name + '</span>' +
-      '<span style="font-size:10px;color:var(--t2);margin-left:6px">' + type + '</span></div>' +
-      '<button onclick="deleteShop(' + i + ')" style="background:none;border:none;color:var(--exp);font-size:14px;cursor:pointer">✕</button>' +
-    '</div>';
-  }).join('');
-}
-function addShop() {
-  var name = (document.getElementById('newShopName')||{}).value.trim();
-  var type = (document.getElementById('newShopType')||{}).value;
-  if(!name) { alert('Введите название'); return; }
-  var shops = getShops();
-  if(shops.some(function(s){ return (s.name||s)===name; })) { alert('Уже есть'); return; }
-  shops.push({name:name, type:type});
-  adminSyncSave('iz_shops', shops);
-  document.getElementById('newShopName').value = '';
-  renderShopsList();
-  // Also sync to iz_admin_shops
-  localStorage.setItem('iz_admin_shops', JSON.stringify(shops));
-}
-function deleteShop(idx) {
-  if(!confirm('Удалить точку продаж?')) return;
-  var shops = getShops(); shops.splice(idx,1);
-  adminSyncSave('iz_shops', shops);
-  renderShopsList();
-}
-
-function renderAccountsList() {
-  var c = document.getElementById('setAccountsList'); if(!c) return;
-  var accs = getAccounts();
-  if(!accs.length) { c.innerHTML='<div style="color:var(--t2);font-size:12px;padding:4px">Нет счетов</div>'; return; }
-  var icons={cash:'💵',card:'💳',bank:'🏦',online:'📱'};
-  c.innerHTML = accs.map(function(a,i){
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:8px;margin-bottom:5px">' +
-      '<span style="font-size:13px">' + (icons[a.type]||'💳') + ' ' + a.name + '</span>' +
-      '<button onclick="deleteAccount(' + i + ')" style="background:none;border:none;color:var(--exp);font-size:14px;cursor:pointer">✕</button>' +
-    '</div>';
-  }).join('');
-}
-function addAccount() {
-  var name = (document.getElementById('newAccName')||{}).value.trim();
-  var type = (document.getElementById('newAccType')||{}).value;
-  if(!name) { alert('Введите название'); return; }
-  var accs = getAccounts();
-  accs.push({id:uid(),name:name,type:type});
-  saveAccounts(accs);
-  document.getElementById('newAccName').value='';
-  renderAccountsList();
-}
-function deleteAccount(idx) {
-  var accs = getAccounts(); accs.splice(idx,1); saveAccounts(accs); renderAccountsList();
-}
-
-function renderPayMethodsList() {
-  var c = document.getElementById('setPayMethodsList'); if(!c) return;
-  var methods = getPayMethods();
-  c.innerHTML = methods.map(function(m,i){
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px;background:var(--s2);border-radius:8px;margin-bottom:4px">' +
-      '<span style="font-size:13px">💳 ' + m + '</span>' +
-      '<button onclick="deletePayMethod(' + i + ')" style="background:none;border:none;color:var(--exp);font-size:14px;cursor:pointer">✕</button>' +
-    '</div>';
-  }).join('');
-}
-function addPayMethod() {
-  var name = (document.getElementById('newPayMethod')||{}).value.trim();
-  if(!name) return;
-  var methods = getPayMethods();
-  if(methods.indexOf(name)<0) { methods.push(name); savePayMethods(methods); }
-  document.getElementById('newPayMethod').value='';
-  renderPayMethodsList();
-}
-function deletePayMethod(idx) {
-  var m = getPayMethods(); m.splice(idx,1); savePayMethods(m); renderPayMethodsList();
-}
-
-function renderZpList() {
-  var c = document.getElementById('setZpList'); if(!c) return;
-  var shops = getShops().filter(function(s){ return (s.type||'shop')==='shop'; });
-  var zp = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
-  if(!shops.length) { c.innerHTML='<div style="color:var(--t2);font-size:12px">Сначала добавьте магазины</div>'; return; }
-  c.innerHTML = shops.map(function(s) {
-    var name=s.name||s, sid=encodeURIComponent(name).replace(/%/g,'_');
-    var cfg = zp[name]||{base:1500,threshold:5000,pct:8,travel:0};
-    return '<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">' +
-      '<div onclick="this.nextSibling.style.display=this.nextSibling.style.display===\'none\'?\'block\':\'none\'" style="padding:10px;background:var(--s2);cursor:pointer;font-size:13px;font-weight:700">🏪 ' + name + '</div>' +
-      '<div style="display:none;padding:10px">' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
-          '<div><label class="fl">База (₽)</label><input class="fi" type="number" id="zp_base_'+sid+'" value="'+(cfg.base||1500)+'" inputmode="numeric"></div>' +
-          '<div><label class="fl">Порог (₽)</label><input class="fi" type="number" id="zp_thresh_'+sid+'" value="'+(cfg.threshold||5000)+'" inputmode="numeric"></div>' +
-          '<div><label class="fl">% выручки</label><input class="fi" type="number" id="zp_pct_'+sid+'" value="'+(cfg.pct||8)+'" step="0.5" inputmode="numeric"></div>' +
-          '<div><label class="fl">Проезд (₽)</label><input class="fi" type="number" id="zp_travel_'+sid+'" value="'+(cfg.travel||0)+'" inputmode="numeric"></div>' +
-        '</div>' +
-        '<button onclick="saveZpForShop(\''+name+'\',\''+sid+'\')" style="margin-top:8px;width:100%;padding:8px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>' +
+// ════ SYSTEM MANAGEMENT ════ +
       '</div>' +
     '</div>';
   }).join('');
@@ -1844,58 +1738,7 @@ function saveZpForShop(name, sid) {
   alert('✅ ЗП для ' + name + ' сохранена');
 }
 
-function getItemsBase() { return JSON.parse(localStorage.getItem('iz_items')||'[]'); }
-function renderItemsBaseList() {
-  var c = document.getElementById('setItemsList'); if(!c) return;
-  var items = getItemsBase();
-  if(!items.length) { c.innerHTML='<div style="color:var(--t2);font-size:12px;padding:4px">Нет товаров</div>'; return; }
-  c.innerHTML = items.map(function(item,i){
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid var(--border);font-size:12px">' +
-      '<div><span style="font-weight:600">' + item.name + '</span>' +
-      (item.num ? '<span style="color:var(--t2);margin-left:6px">№'+item.num+'</span>' : '') +
-      (item.price ? '<span style="color:var(--accent);margin-left:6px">'+item.price+'₽</span>' : '') +
-      '</div>' +
-      '<button onclick="deleteItemFromBase('+i+')" style="background:none;border:none;color:var(--exp);font-size:13px;cursor:pointer">✕</button>' +
-    '</div>';
-  }).join('');
-}
-function addItemToBase() {
-  var name = (document.getElementById('newItemName')||{}).value.trim();
-  var article = (document.getElementById('newItemArticle')||{}).value.trim();
-  var price = parseFloat((document.getElementById('newItemPrice')||{}).value)||0;
-  if(!name) { alert('Введите название'); return; }
-  var items = getItemsBase();
-  if(!items.some(function(i){ return i.name===name; })) {
-    items.push({id:uid(),name:name,num:article,price:price,addedAt:new Date().toISOString()});
-    items.sort(function(a,b){ return a.name.localeCompare(b.name,'ru'); });
-    adminSyncSave('iz_items', items);
-  }
-  document.getElementById('newItemName').value='';
-  document.getElementById('newItemArticle').value='';
-  document.getElementById('newItemPrice').value='';
-  renderItemsBaseList();
-}
-function deleteItemFromBase(idx) {
-  var items = getItemsBase(); items.splice(idx,1); adminSyncSave('iz_items',items); renderItemsBaseList();
-}
-
-function exportAllData() {
-  var data = {};
-  ['iz_staff','iz_shops','iz_accounts','iz_pay_methods','iz_items','iz_shop_zp_settings','iz_shifts','iz_transactions'].forEach(function(k){
-    try { data[k] = JSON.parse(localStorage.getItem(k)||'null'); } catch(e){}
-  });
-  var blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'izhitsa_export_' + new Date().toISOString().split('T')[0] + '.json';
-  a.click();
-}
-function clearLocalCache() {
-  if(!confirm('Очистить локальный кеш? Данные из Firestore подгрузятся снова при появлении интернета.')) return;
-  var keep = ['iz_staff','iz_shops','iz_accounts','iz_items'];
-  Object.keys(localStorage).forEach(function(k){ if(keep.indexOf(k)<0) localStorage.removeItem(k); });
-  alert('✅ Кеш очищен');
-}
+function getItemsBase() { return JSON.parse(localStorage.getItem('iz_goods')||'[]'); }
 
 // ════ STAFF SYNC LISTENER ════
 function startStaffSyncListener() {
