@@ -3162,6 +3162,8 @@ function renderShiftHistory(){
   // Filter by mode
   if(histMode === 'live') allShifts = allShifts.filter(function(s){ return !s.isArchive; });
   else if(histMode === 'archive') allShifts = allShifts.filter(function(s){ return !!s.isArchive; });
+  // Filter by shop
+  if(_histShopFilter) allShifts = allShifts.filter(function(s){ return s.shopName === _histShopFilter; });
   // 'all' = no filter
   if(!allShifts.length){
     var modeLabel = histMode==='live' ? 'живых смен' : histMode==='archive' ? 'архивных смен' : 'смен';
@@ -3186,53 +3188,191 @@ function renderShiftHistory(){
       </div>
     </div>`).join('');
 }
+var _histShopFilter = '';
 function filterHistShop(shop,el){
-  document.querySelectorAll('#histShopFilter div').forEach(c=>{c.style.background='#1a1a22';c.style.color='#8888aa';c.style.borderColor='#2e2e3e';});
-  el.style.background='#c8f060'; el.style.color='#0f0f13';
+  _histShopFilter = shop;
+  document.querySelectorAll('#histShopFilter div').forEach(function(c){c.style.background='#1a1a22';c.style.color='#8888aa';c.style.borderColor='#2e2e3e';});
+  el.style.background='#c8f060'; el.style.color='#0f0f13'; el.style.borderColor='#c8f060';
   renderShiftHistory();
 }
 function openEditShift(id){
   currentEditShiftId=id;
-  const shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-  const sh=shifts.find(s=>s.id===id); if(!sh)return;
+  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var sh=shifts.find(function(s){return s.id===id;}); if(!sh)return;
   document.getElementById('editShiftTitle').textContent=sh.shopName+' · '+sh.date;
-
-  // Show report + edit button
-  const cashRev=sh.cashRevenue||0, cardRev=sh.cardRevenue||0;
-  const totalRev=cashRev+cardRev+(sh.totalDiscount||0);
-  document.getElementById('editShiftBody').innerHTML=`
-    <!-- REPORT VIEW -->
-    <div style="background:#1e2a14;border:1px solid #c8f060;border-radius:12px;padding:12px;margin-bottom:12px">
-      <div style="font-size:11px;color:#8888aa;margin-bottom:8px">👤 ${sh.sellerName} · ${sh.date}${sh.backfilled?' · 📅 задним числом':''}</div>
-      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span>Нал утро</span><span style="font-weight:700">${fmt(sh.cashMorning||0)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span>Нал вечер</span><span style="font-weight:700">${fmt(sh.cashEvening||0)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span>Выручка нал</span><span style="color:#60f090;font-weight:700">+${fmt(cashRev)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span>Выручка безнал</span><span style="color:#60c8f0;font-weight:700">+${fmt(cardRev)}</span></div>
-      ${sh.totalDiscount?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span>Скидки</span><span style="color:#8888aa">−${fmt(sh.totalDiscount)}</span></div>`:''}
-      <div style="display:flex;justify-content:space-between;padding:7px 0;font-size:14px;font-weight:700"><span>Итого выручка</span><span style="color:#c8f060">${fmt(totalRev)}</span></div>
-      ${sh.hasCashDiff?`<div style="background:#2e1a1a;border-radius:8px;padding:8px;margin-top:6px"><div style="font-size:11px;color:#f06060;font-weight:700">⚠️ Расхождение кассы: ${fmt(sh.cashDiff)}</div>${sh.cashDiffReason?`<div style="font-size:10px;color:#8888aa;margin-top:2px">Причина: ${sh.cashDiffReason}</div>`:''}</div>`:''}
-      ${sh.editedBy?`<div style="font-size:10px;color:#8888aa;margin-top:8px;padding-top:8px;border-top:1px solid #2e2e3e">✏️ Правки: ${sh.editedBy} · ${sh.editReason||''}</div>`:''}
-    </div>
-
-    <!-- EDIT FORM (hidden by default) -->
-    <div id="esh_editForm" style="display:none">
-      <div class="row2">
-        <div class="fg"><label class="fl">Нал утро</label><input class="fi" type="number" id="esh_cashMorn" value="${sh.cashMorning||0}" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Нал вечер</label><input class="fi" type="number" id="esh_cashEve" value="${sh.cashEvening||0}" inputmode="numeric"></div>
-      </div>
-      <div class="row2">
-        <div class="fg"><label class="fl">Выручка нал</label><input class="fi" type="number" id="esh_cashRev" value="${cashRev}" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Выручка безнал</label><input class="fi" type="number" id="esh_cardRev" value="${cardRev}" inputmode="numeric"></div>
-      </div>
-      <div class="fg"><label class="fl">Товар вечер</label><input class="fi" type="number" id="esh_goodsEve" value="${sh.goodsEvening||0}" inputmode="numeric"></div>
-      <div class="fg"><label class="fl">Причина правки (обязательно)</label><input class="fi" id="esh_reason" placeholder="Укажите причину..."></div>
-    </div>
-
-    <button type="button" id="esh_toggleBtn" onclick="toggleEditForm()"
-      style="width:100%;padding:12px;background:#1a1e2e;border:1px solid #60c8f0;border-radius:10px;color:#60c8f0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">
-      ✏️ Внести изменения
-    </button>`;
+  document.getElementById('editShiftBody').innerHTML=buildShiftDetailHTML(sh);
   openMo('editShiftMo');
+}
+
+function buildShiftDetailHTML(sh){
+  var f=function(n){return Math.round(n||0).toLocaleString('ru-RU')+'₽';};
+  var cashRev=sh.cashRevenue||0, cardRev=sh.cardRevenue||0;
+  var disc=sh.totalDiscount||sh.discount||0;
+  var totalRev=cashRev+cardRev+disc;
+  var journal=sh.journal||[];
+  var sales=journal.filter(function(e){return e.type==='sale';});
+  var writeoffs=journal.filter(function(e){return e.type==='writeoff';});
+  var receives=journal.filter(function(e){return e.type==='receive';});
+  var expenses=journal.filter(function(e){return e.type==='expense';});
+  var staffPurch=journal.filter(function(e){return e.type==='staff';});
+
+  // — Шапка смены —
+  var headerColor = sh.hasCashDiff ? '#f06060' : '#c8f060';
+  var html = '<div style="background:#1a1a22;border:1px solid '+headerColor+';border-radius:12px;padding:12px;margin-bottom:10px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">';
+  html += '<div>';
+  html += '<div style="font-size:15px;font-weight:700;color:'+headerColor+'">'+f(totalRev)+'</div>';
+  html += '<div style="font-size:11px;color:#8888aa;margin-top:2px">👤 '+(sh.sellerName||'—')+'</div>';
+  html += '<div style="font-size:11px;color:#8888aa">📅 '+sh.date+(sh.backfilled?' · задним числом':'')+'</div>';
+  html += '</div>';
+  html += '<div style="text-align:right">';
+  if(sh.isArchive) html+='<div style="font-size:9px;background:#604020;color:#f0a060;border-radius:4px;padding:2px 6px;font-weight:700;margin-bottom:4px">АРХИВ</div>';
+  html += '<div style="font-size:11px;color:#60f090">💵 '+f(cashRev)+'</div>';
+  html += '<div style="font-size:11px;color:#60c8f0">💳 '+f(cardRev)+'</div>';
+  if(disc) html += '<div style="font-size:11px;color:#8888aa">🎁 '+f(disc)+'</div>';
+  html += '</div></div>';
+  if(sh.hasCashDiff) html+='<div style="background:#2e1a1a;border-radius:8px;padding:6px 8px;font-size:11px;color:#f06060;font-weight:700">⚠️ Расхождение кассы: '+f(sh.cashDiff||0)+(sh.cashDiffReason?' · '+sh.cashDiffReason:'')+'</div>';
+  if(sh.editedBy) html+='<div style="font-size:10px;color:#555568;margin-top:6px">✏️ Правки: '+sh.editedBy+(sh.editReason?' · '+sh.editReason:'')+'</div>';
+  html += '</div>';
+
+  // — Касса (открытие/закрытие) —
+  html += _shiftSection('🏦 Касса', '#f0c060');
+  html += _shiftRow('Нал утро', f(sh.cashMorning||0), '#f0f0f8');
+  html += _shiftRow('Нал вечер', f(sh.cashEvening||0), '#f0f0f8');
+  if(sh.drCashMorning||sh.drCashEvening){
+    html += _shiftRow('ДР нал утро', f(sh.drCashMorning||0), '#a060f0');
+    html += _shiftRow('ДР нал вечер', f(sh.drCashEvening||0), '#a060f0');
+  }
+  if(sh.goodsMorning!=null) html += _shiftRow('Товар утро', f(sh.goodsMorning||0), '#f0a060');
+  if(sh.goodsEvening!=null) html += _shiftRow('Товар вечер', f(sh.goodsEvening||0), '#f0a060');
+  if(sh.drGoodsMorning!=null) html += _shiftRow('ДР товар утро', f(sh.drGoodsMorning||0), '#a060f0');
+  if(sh.drGoodsEvening!=null) html += _shiftRow('ДР товар вечер', f(sh.drGoodsEvening||0), '#a060f0');
+  html += '</div>';
+
+  // — Продажи из журнала или агрегат —
+  html += _shiftSection('💰 Продажи', '#c8f060');
+  if(sales.length){
+    sales.forEach(function(s){
+      var payIcon = {cash:'💵',terminal:'💳',sbp:'📱',transfer:'🏦',qr:'🔲',mixed:'➗',rs:'🏦'}[s.payMethod]||'💰';
+      html += '<div style="padding:7px 0;border-bottom:1px solid #2e2e3e">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start">';
+      html += '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;color:#f0f0f8">'+(s.sub||s.label||'Продажа')+'</div>';
+      if(s.ts) html += '<div style="font-size:10px;color:#555568;margin-top:1px">'+new Date(s.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})+'  '+payIcon+'</div>';
+      html += '</div>';
+      html += '<div style="font-size:13px;font-weight:700;color:#60f090;white-space:nowrap;margin-left:8px">'+f(s.amount||0)+'</div>';
+      html += '</div></div>';
+    });
+    html += '<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;font-weight:700"><span>Итого</span><span style="color:#c8f060">'+f(totalRev)+'</span></div>';
+  } else {
+    // aggregate view (no journal)
+    html += _shiftRow('💵 Нал', f(cashRev), '#60f090');
+    html += _shiftRow('💳 Безнал', f(cardRev), '#60c8f0');
+    if(disc) html += _shiftRow('🎁 Скидки', f(disc), '#8888aa');
+    html += '<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;font-weight:700"><span>Итого выручка</span><span style="color:#c8f060">'+f(totalRev)+'</span></div>';
+    // DR sales from aggregated fields
+    var drCashRev=sh.drCashRevenue||sh.drCashRev||0, drCardRev=sh.drCardRevenue||0, drDisc=sh.drDiscount||0;
+    var drTot=drCashRev+drCardRev+drDisc;
+    if(drTot){
+      html += '<div style="border-top:1px solid #2e2e3e;padding-top:6px;margin-top:4px"><div style="font-size:10px;color:#8888aa;margin-bottom:4px">ДР ТОВАР</div>';
+      if(drCashRev) html += _shiftRow('💵 Нал ДР', f(drCashRev), '#60f090');
+      if(drCardRev) html += _shiftRow('💳 Безнал ДР', f(drCardRev), '#60c8f0');
+      if(drDisc) html += _shiftRow('🎁 Скидки ДР', f(drDisc), '#8888aa');
+      html += '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;font-weight:700"><span>Итого ДР</span><span style="color:#a060f0">'+f(drTot)+'</span></div>';
+      html += '</div>';
+    }
+  }
+  html += '</div>';
+
+  // — Списания —
+  var woodWo=sh.goodsWriteoffs||[], drWo=sh.drGoodsWriteoffs||[];
+  var jWo=writeoffs;
+  var hasWo=woodWo.length||drWo.length||jWo.length;
+  if(hasWo){
+    html += _shiftSection('🗑 Списания', '#f06060');
+    if(jWo.length){
+      jWo.forEach(function(w){html+=_shiftRow((w.sub||w.label||'Списание'),f(w.amount||0),'#f06060');});
+    }
+    woodWo.forEach(function(w){html+=_shiftRow((w.name||'Списание')+(w.qty?' × '+w.qty:''),f(w.amt||0),'#f06060');});
+    drWo.forEach(function(w){html+=_shiftRow('ДР: '+(w.name||'Списание')+(w.qty?' × '+w.qty:''),f(w.amt||0),'#a060f0');});
+    html += '</div>';
+  }
+
+  // — Приходы —
+  var woodRcv=sh.goodsReceives||[], drRcv=sh.drGoodsReceives||[];
+  var jRcv=receives;
+  var hasRcv=woodRcv.length||drRcv.length||jRcv.length;
+  if(hasRcv){
+    html += _shiftSection('📥 Приходы товара', '#60f090');
+    if(jRcv.length){
+      jRcv.forEach(function(r){html+=_shiftRow((r.sub||r.label||'Приход'),f(r.goodsEffect||r.amount||0),'#60f090');});
+    }
+    woodRcv.forEach(function(r){html+=_shiftRow((r.name||'Приход')+(r.qty?' × '+r.qty:'')+(r.from?' от '+r.from:''),f(r.amt||0),'#60f090');});
+    drRcv.forEach(function(r){html+=_shiftRow('ДР: '+(r.name||'Приход')+(r.qty?' × '+r.qty:''),f(r.amt||0),'#a060f0');});
+    html += '</div>';
+  }
+
+  // — Расходы / инкассация / ЗП —
+  var zp=sh.zp||0, inkass=sh.inkass||0, otherExp=sh.otherExp||0;
+  var drInkass=sh.drInkass||0, drSupplier=sh.drSupplierAmt||0;
+  var hasExp=zp||inkass||otherExp||drInkass||drSupplier||expenses.length;
+  if(hasExp){
+    html += _shiftSection('💸 Расходы и инкассация', '#f0a060');
+    if(expenses.length){
+      expenses.forEach(function(e){
+        var etype={zp:'ЗП',travel:'Проезд',inkass:'Инкассация',supplier:'Поставщик',other:'Прочее'}[e.expType]||e.expType||'Расход';
+        html+=_shiftRow(etype+(e.comment?' · '+e.comment:''),f(e.amount||0),'#f0a060');
+      });
+    } else {
+      if(zp) html+=_shiftRow('💰 ЗП',f(zp),'#f0a060');
+      if(inkass) html+=_shiftRow('🏦 Инкассация',f(inkass),'#f0a060');
+      if(otherExp) html+=_shiftRow('📝 Прочее',f(otherExp),'#f0a060');
+      if(drInkass) html+=_shiftRow('🏦 Инкассация ДР',f(drInkass),'#a060f0');
+      if(drSupplier) html+=_shiftRow('🏭 Поставщик ДР'+(sh.drSupplierName?' ('+sh.drSupplierName+')':''),f(drSupplier),'#a060f0');
+    }
+    html += '</div>';
+  }
+
+  // — Покупки сотрудников —
+  var staffArr=sh.staffPurchases||staffPurch;
+  if(staffArr.length){
+    html += _shiftSection('🛒 Покупки сотрудников', '#a060f0');
+    staffArr.forEach(function(s){
+      var name=s.who||(s.label||'').replace('Покупка сотр.: ','');
+      var item=s.item||s.sub||'';
+      var amt=s.opt||s.amount||0;
+      html+=_shiftRow(name+(item?' · '+item:''),f(amt),'#a060f0');
+    });
+    html += '</div>';
+  }
+
+  // — Комментарий —
+  if(sh.comment){
+    html += '<div style="background:#22222e;border:1px solid #2e2e3e;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px;color:#8888aa">💬 '+sh.comment+'</div>';
+  }
+
+  // — Кнопка редактирования —
+  html += '<div id="esh_editForm" style="display:none">';
+  html += '<div class="row2"><div class="fg"><label class="fl">Нал утро</label><input class="fi" type="number" id="esh_cashMorn" value="'+(sh.cashMorning||0)+'" inputmode="numeric"></div>';
+  html += '<div class="fg"><label class="fl">Нал вечер</label><input class="fi" type="number" id="esh_cashEve" value="'+(sh.cashEvening||0)+'" inputmode="numeric"></div></div>';
+  html += '<div class="row2"><div class="fg"><label class="fl">Выручка нал</label><input class="fi" type="number" id="esh_cashRev" value="'+(cashRev)+'" inputmode="numeric"></div>';
+  html += '<div class="fg"><label class="fl">Выручка безнал</label><input class="fi" type="number" id="esh_cardRev" value="'+(cardRev)+'" inputmode="numeric"></div></div>';
+  html += '<div class="fg"><label class="fl">Товар вечер</label><input class="fi" type="number" id="esh_goodsEve" value="'+(sh.goodsEvening||0)+'" inputmode="numeric"></div>';
+  html += '<div class="fg"><label class="fl">Причина правки (обязательно)</label><input class="fi" id="esh_reason" placeholder="Укажите причину..."></div>';
+  html += '</div>';
+  html += '<button type="button" id="esh_toggleBtn" onclick="toggleEditForm()" style="width:100%;padding:11px;background:#1a1e2e;border:1px solid #60c8f0;border-radius:10px;color:#60c8f0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">✏️ Внести изменения</button>';
+
+  return html;
+}
+
+function _shiftSection(title, color){
+  return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">'
+    + '<div style="font-size:11px;font-weight:700;color:'+(color||'#8888aa')+';text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">'+title+'</div>';
+}
+function _shiftRow(label, val, color){
+  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:12px">'
+    + '<span style="color:#8888aa">'+label+'</span>'
+    + '<span style="font-weight:700;color:'+(color||'#f0f0f8')+'">'+val+'</span>'
+    + '</div>';
 }
 
 function toggleEditForm(){
