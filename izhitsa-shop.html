@@ -1837,6 +1837,82 @@ function buildSellerTabs(){
 }
 
 // ════ START ADMIN APP ════
+// ════ ADMIN: REALTIME SHIFT MONITORING ════
+var _adminActiveShifts = [];
+var _adminShiftUnsub = null;
+
+function startAdminShiftListener() {
+  if(_adminShiftUnsub) { try{_adminShiftUnsub();}catch(e){} }
+  var today = new Date().toISOString().split('T')[0];
+  _adminShiftUnsub = db.collection('iz_shifts')
+    .where('date','==',today)
+    .onSnapshot(function(snap){
+      _adminActiveShifts = [];
+      snap.forEach(function(doc){ _adminActiveShifts.push(doc.data()); });
+      renderTodayShift();
+    }, function(e){ console.log('shift listener err', e&&e.code); renderTodayShift(); });
+}
+
+function renderTodayShift() {
+  var c = document.getElementById('todayShiftContent'); if(!c) return;
+
+  var shifts = _adminActiveShifts.slice().sort(function(a,b){
+    if(a.status==='open'&&b.status!=='open') return -1;
+    if(b.status==='open'&&a.status!=='open') return 1;
+    return 0;
+  });
+
+  if(!shifts.length) {
+    c.innerHTML = '<div style="text-align:center;padding:30px;color:#8888aa"><div style="font-size:36px;margin-bottom:8px">📋</div>Сегодня смен нет</div>';
+    return;
+  }
+
+  c.innerHTML = shifts.map(function(shift) {
+    var journal = shift.journal || [];
+    var sales = journal.filter(function(e){ return e.type==='sale'; });
+    var revenue = sales.reduce(function(s,e){ return s+(e.amount||0); }, 0);
+    var cashTotal = (shift.cashMorning||0) + journal.reduce(function(s,e){ return s+(e.cashEffect||0); }, 0);
+    var cardTotal = journal.reduce(function(s,e){ return s+(e.cardEffect||0); }, 0);
+    var goodsTotal = (shift.goodsMorning||0) + journal.reduce(function(s,e){ return s+(e.goodsEffect||0); }, 0);
+    var isOpen = shift.status !== 'closed';
+    var lastUpd = shift.updatedAt ? new Date(shift.updatedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '—';
+    var sid = (shift.id||'').replace(/[^a-z0-9_]/gi,'_');
+
+    function sc(label,val,color){
+      return '<div style="background:#0f0f13;border-radius:8px;padding:8px;text-align:center">'+
+        '<div style="font-size:9px;color:#8888aa;margin-bottom:2px">'+label+'</div>'+
+        '<div style="font-size:13px;font-weight:700;color:'+color+'">'+fmt(val)+'</div></div>';
+    }
+
+    return '<div style="background:#1a1a22;border:1px solid '+(isOpen?'#c8f060':'#2e2e3e')+';border-radius:14px;padding:14px;margin-bottom:10px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+        '<div><div style="font-size:14px;font-weight:700">'+(shift.shopName||'')+'</div>'+
+        '<div style="font-size:11px;color:#8888aa">👤 '+(shift.sellerName||'')+'</div></div>' +
+        '<div style="text-align:right"><div style="font-size:11px;font-weight:700;color:'+(isOpen?'#60f090':'#8888aa')+'">'+(isOpen?'● Открыта':'Закрыта')+'</div>'+
+        '<div style="font-size:10px;color:#8888aa">'+lastUpd+'</div></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">' +
+        sc('💰 Выручка', revenue, '#c8f060') +
+        sc('💵 Нал касса', cashTotal, '#60f090') +
+        sc('💳 Безнал', cardTotal, '#60c8f0') +
+        sc('📦 Товар', goodsTotal, '#f0c060') +
+      '</div>' +
+      '<button onclick="document.getElementById(\'det_'+sid+'\').style.display=document.getElementById(\'det_'+sid+'\').style.display===\'none\'?\'block\':\'none\'" '+
+        'style="width:100%;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;margin-bottom:6px">'+
+        '📋 Детали ('+sales.length+' продаж)</button>' +
+      '<div id="det_'+sid+'" style="display:none">' +
+        (journal.length > 1 ? journal.slice().reverse().slice(0,8).map(function(e){
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3e;font-size:12px">' +
+            '<span style="font-size:14px">'+(e.icon||'📌')+'</span>' +
+            '<span style="flex:1;margin-left:8px;color:#f0f0f8">'+(e.label||'')+'</span>' +
+            (e.amount?'<span style="color:#c8f060;font-weight:600">+'+fmt(e.amount)+'</span>':'') +
+          '</div>';
+        }).join('') : '<div style="font-size:12px;color:#8888aa;padding:8px">Нет операций</div>') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
 function startAdminApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
@@ -1851,6 +1927,8 @@ function startAdminApp(){
   });
   document.getElementById('psDate').value=new Date().toISOString().split('T')[0];
   renderShiftHistory(); renderSellersAdmin();
+  startAdminShiftListener();
+  renderTodayShift();
 }
 function buildAdminTabs(){
   const t=document.getElementById('mainTabs'); t.style.display='flex';
