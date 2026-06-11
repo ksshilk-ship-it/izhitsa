@@ -1578,6 +1578,39 @@ function exitShift(){
 }
 
 // ════ MORNING MODAL ════
+var _goodsMornMode = 'auto';
+var _goodsDrMode = 'auto';
+
+function setGoodsMornMode(mode) {
+  _goodsMornMode = mode;
+  var ab=document.getElementById('goodsAutoBtn'), mb=document.getElementById('goodsManualBtn');
+  var abl=document.getElementById('goodsAutoBlock'), mbl=document.getElementById('goodsManualBlock');
+  if(mode==='auto') {
+    if(ab){ab.style.borderWidth='2px';ab.style.borderColor='#f0c060';ab.style.background='#1a150a';ab.style.color='#f0c060';ab.style.fontWeight='700';}
+    if(mb){mb.style.borderWidth='1px';mb.style.borderColor='#2e2e3e';mb.style.background='#22222e';mb.style.color='#8888aa';mb.style.fontWeight='400';}
+    if(abl)abl.style.display='block'; if(mbl)mbl.style.display='none';
+  } else {
+    if(mb){mb.style.borderWidth='2px';mb.style.borderColor='#f0c060';mb.style.background='#1a150a';mb.style.color='#f0c060';mb.style.fontWeight='700';}
+    if(ab){ab.style.borderWidth='1px';ab.style.borderColor='#2e2e3e';ab.style.background='#22222e';ab.style.color='#8888aa';ab.style.fontWeight='400';}
+    if(mbl)mbl.style.display='block'; if(abl)abl.style.display='none';
+  }
+}
+
+function setGoodsDrMode(mode) {
+  _goodsDrMode = mode;
+  var ab=document.getElementById('goodsDrAutoBtn'), mb=document.getElementById('goodsDrManualBtn');
+  var abl=document.getElementById('goodsDrAutoBlock'), mbl=document.getElementById('goodsDrManualBlock');
+  if(mode==='auto') {
+    if(ab){ab.style.borderWidth='2px';ab.style.borderColor='#f060a0';ab.style.background='#1a0f1a';ab.style.color='#f060a0';ab.style.fontWeight='700';}
+    if(mb){mb.style.borderWidth='1px';mb.style.borderColor='#2e2e3e';mb.style.background='#22222e';mb.style.color='#8888aa';mb.style.fontWeight='400';}
+    if(abl)abl.style.display='block'; if(mbl)mbl.style.display='none';
+  } else {
+    if(mb){mb.style.borderWidth='2px';mb.style.borderColor='#f060a0';mb.style.background='#1a0f1a';mb.style.color='#f060a0';mb.style.fontWeight='700';}
+    if(ab){ab.style.borderWidth='1px';ab.style.borderColor='#2e2e3e';ab.style.background='#22222e';ab.style.color='#8888aa';ab.style.fontWeight='400';}
+    if(mbl)mbl.style.display='block'; if(abl)abl.style.display='none';
+  }
+}
+
 function openMorningModal(){
   var shopName=pendingSession.shopName;
   var shopType=getShopType(shopName);
@@ -1596,13 +1629,23 @@ function openMorningModal(){
   // Shop type: show morning cash modal
   document.getElementById('morningShopName').textContent='🏪 '+shopName;
   document.getElementById('morningSellerName').textContent='👤 '+pendingSession.sellerName;
-  document.getElementById('morningCash').value='';
+  // Reset all fields
+  ['morningCash','morningCashDr','morningCashStaff','morningGoods','morningGoodsDr'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.value='';
+  });
   document.getElementById('morningCashHint').style.display='none';
   document.getElementById('morningConfirmBtn').disabled=true;
   document.getElementById('morningConfirmBtn').style.opacity='.4';
-  const prev=getPrevShift(shopName);
-  const mc=document.getElementById('morningCompare');
-  mc.innerHTML=(prev&&prev.cashEvening)!=null?`<div class="al-info">📊 Нал вечер прошлой смены: <strong>${fmt(prev.cashEvening)}</strong></div>`:'';
+  // Show auto goods values
+  var autoGoods=calcGoodsMorning(shopName), autoDr=calcGoodsDrMorning(shopName);
+  var agEl=document.getElementById('goodsAutoVal'); if(agEl) agEl.textContent=fmt(autoGoods);
+  var agDrEl=document.getElementById('goodsDrAutoVal'); if(agDrEl) agDrEl.textContent=fmt(autoDr);
+  // Reset to auto mode
+  _goodsMornMode='auto'; setGoodsMornMode('auto');
+  _goodsDrMode='auto'; setGoodsDrMode('auto');
+  var prev=getPrevShift(shopName);
+  var mc=document.getElementById('morningCompare');
+  mc.innerHTML=(prev&&prev.cashEvening!=null)?'<div class="al-info">📊 Нал вечер прошлой смены: <strong>'+fmt(prev.cashEvening)+'</strong></div>':'';
   openMo('morningMo');
 }
 function checkMorningValid(){
