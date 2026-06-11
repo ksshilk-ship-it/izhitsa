@@ -906,29 +906,51 @@ function uid() { return Math.random().toString(36).substr(2,9); }
 function now() { return new Date().toISOString(); }
 
 function selectAdminRole(role, el) {
-  try {
-    selectedRole = role;
-    document.querySelectorAll('.role-card').forEach(function(c){ c.classList.remove('selected'); });
-    if(el && el.classList) el.classList.add('selected');
+  selectedRole = role;
+  
+  // Remove selected from all cards
+  document.querySelectorAll('.role-card').forEach(function(c) { 
+    c.classList.remove('selected'); 
+  });
+  
+  // Add selected to clicked card
+  if(el && el.classList) {
+    el.classList.add('selected');
+  }
 
+  // Get users for this role
+  var filtered = [];
+  
+  try {
     // Try iz_staff first
-    var filtered = getStaffBySingleRole(role).map(function(s){ return {id:s.id, name:s.name}; });
-    // Fallback to old iz_admin_users
-    if(!filtered.length) {
-      var old = getAdminUsers().filter(function(u){ return u.role === role; })
-        .map(function(u){ return {id:u.id, name:u.name}; });
-      filtered = old;
+    var staffUsers = getStaffBySingleRole(role);
+    if(staffUsers && staffUsers.length) {
+      filtered = staffUsers.map(function(s){ return {id:s.id, name:s.name}; });
     }
-    // Always include superadmin for admin role
-    if(role === 'admin') {
-      if(!filtered.some(function(u){ return u.id==='admin_default'; }))
-        filtered.unshift({id:'admin_default', name:'Администратор'});
+  } catch(e) {
+    console.warn('getStaffBySingleRole error:', e);
+  }
+  
+  // Fallback to iz_admin_users if no staff found
+  if(!filtered || !filtered.length) {
+    var adminUsers = getAdminUsers();
+    filtered = adminUsers.filter(function(u){ return u.role === role; })
+      .map(function(u){ return {id:u.id, name:u.name}; });
+  }
+  
+  // Always include superadmin for admin role
+  if(role === 'admin') {
+    if(!filtered.some(function(u){ return u.id==='admin_default'; })) {
+      filtered.unshift({id:'admin_default', name:'Администратор'});
     }
-    document.getElementById('loginUser').innerHTML = filtered.length
+  }
+  
+  // Update select element
+  var selectEl = document.getElementById('loginUser');
+  if(selectEl) {
+    selectEl.innerHTML = filtered.length
       ? filtered.map(function(u){ return '<option value="'+u.id+'">'+u.name+'</option>'; }).join('')
       : '<option value="">— нет пользователей —</option>';
-  } catch(e) {
-    console.error('selectAdminRole error:', e);
   }
 }
 
