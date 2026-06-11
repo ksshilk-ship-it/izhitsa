@@ -2187,7 +2187,6 @@ function buildAdminTabs(){
     <button class="tab active" onclick="showPg('today',this);renderTodayShift()"><div class="ti">📋</div><span>Смена</span></button>
     <button class="tab" onclick="showPg('history',this);renderShiftHistory()"><div class="ti">📁</div><span>Архив</span></button>
     <button class="tab" onclick="showPg('restore',this);initRestore()"><div class="ti">🗄</div><span>Восст.</span></button>
-    <button class="tab" onclick="showPg('admin-invoices',this);renderAdminInvoices()"><div class="ti">📦</div><span>Накладные</span></button>
     <button class="tab" onclick="showPg('sellers',this);renderSellersAdmin()"><div class="ti">👥</div><span>Роли</span></button>
     <button class="tab" onclick="showPg('shopsettings',this);renderShopSettings()"><div class="ti">⚙️</div><span>Настройки</span></button>
     <button class="tab" onclick="exitShift()"><div class="ti">🚪</div><span>Выйти</span></button>`;
@@ -3152,249 +3151,465 @@ function setHistMode(mode, el) {
   renderShiftHistory();
 }
 
+// ── currentShiftView holds the working copy of shift being viewed/edited ──
+var _currentShiftView = null;
+
 function renderShiftHistory(){
-  const c=document.getElementById('shiftHistoryList'); if(!c)return;
-  const shops=getShops();
-  const sf=document.getElementById('histShopFilter');
-  // Always rebuild shop filter to avoid stale [object Object]
-  if(sf) sf.innerHTML='<div style="padding:5px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#c8f060;color:#0f0f13;font-size:11px;cursor:pointer;white-space:nowrap;font-weight:700" onclick="filterHistShop(\'\',this)">Все</div>'+shops.map(s=>`<div style="padding:5px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#1a1a22;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap" onclick="filterHistShop('${s.name||s}',this)">${s.name||s}</div>`).join('');
+  var c=document.getElementById('shiftHistoryList'); if(!c)return;
+  var shops=getShops();
+  var sf=document.getElementById('histShopFilter');
+  if(sf) sf.innerHTML='<div style="padding:5px 12px;border-radius:20px;border:2px solid #c8f060;background:#c8f060;color:#0f0f13;font-size:11px;cursor:pointer;white-space:nowrap;font-weight:700" onclick="filterHistShop(\'\',this)">Все</div>'+shops.map(function(s){return '<div style="padding:5px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#1a1a22;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap" onclick="filterHistShop(\''+(s.name||s)+'\',this)">'+(s.name||s)+'</div>';}).join('');
   var allShifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-  // Filter by mode
   if(histMode === 'live') allShifts = allShifts.filter(function(s){ return !s.isArchive; });
   else if(histMode === 'archive') allShifts = allShifts.filter(function(s){ return !!s.isArchive; });
-  // Filter by shop
   if(_histShopFilter) allShifts = allShifts.filter(function(s){ return s.shopName === _histShopFilter; });
-  // 'all' = no filter
+  if(_histPeriodFrom) allShifts = allShifts.filter(function(s){ return s.date >= _histPeriodFrom && (!_histPeriodTo||s.date <= _histPeriodTo); });
+  allShifts.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
   if(!allShifts.length){
     var modeLabel = histMode==='live' ? 'живых смен' : histMode==='archive' ? 'архивных смен' : 'смен';
     c.innerHTML='<div class="empty"><div class="ei">📋</div>Нет '+modeLabel+'</div>';
     return;
   }
-  c.innerHTML=allShifts.slice(0,50).map(sh=>`
-    <div class="card" style="cursor:pointer;border-color:${sh.hasCashDiff?'#f06060':sh.isArchive?'#604020':'#2e2e3e'}" onclick="openEditShift('${sh.id}')">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div>
-          <div style="display:flex;align-items:center;gap:6px">
-            <div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700">${sh.shopName}</div>
-            ${sh.isArchive?'<div style="font-size:9px;background:#604020;color:#f0a060;border-radius:4px;padding:2px 5px;font-weight:700">АРХИВ</div>':''}
-          </div>
-          <div style="font-size:11px;color:#8888aa;margin-top:2px">👤 ${sh.sellerName} · 📅 ${sh.date}</div>
-          ${sh.hasCashDiff?`<div style="font-size:10px;color:#f06060;margin-top:3px">⚠️ Расхождение: ${fmt(sh.cashDiff)}</div>`:''}
-        </div>
-        <div style="text-align:right">
-          <div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700;color:#c8f060">${fmt((sh.cashRevenue||0)+(sh.cardRevenue||0))}</div>
-          <div style="font-size:10px;color:#8888aa;margin-top:3px">✏️ Редакт.</div>
-        </div>
-      </div>
-    </div>`).join('');
+  c.innerHTML=allShifts.slice(0,60).map(function(sh){
+    var cashRev=sh.cashRevenue||0, cardRev=sh.cardRevenue||0, disc=sh.totalDiscount||sh.discount||0;
+    var total=cashRev+cardRev+disc;
+    return '<div class="card" style="cursor:pointer;border-color:'+(sh.hasCashDiff?'#f06060':sh.isArchive?'#604020':'#2e2e3e')+'" onclick="openShiftView(\''+sh.id+'\')">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div>'+
+          '<div style="display:flex;align-items:center;gap:6px">'+
+            '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700">'+sh.shopName+'</div>'+
+            (sh.isArchive?'<div style="font-size:9px;background:#604020;color:#f0a060;border-radius:4px;padding:2px 5px;font-weight:700">АРХИВ</div>':'')+
+          '</div>'+
+          '<div style="font-size:11px;color:#8888aa;margin-top:2px">👤 '+(sh.sellerName||'—')+' · 📅 '+sh.date+'</div>'+
+          (sh.hasCashDiff?'<div style="font-size:10px;color:#f06060;margin-top:3px">⚠️ Расхождение кассы</div>':'')+
+        '</div>'+
+        '<div style="text-align:right">'+
+          '<div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700;color:#c8f060">'+fmt(total)+'</div>'+
+          '<div style="font-size:11px;color:#8888aa;margin-top:2px">💵 '+fmt(cashRev)+' / 💳 '+fmt(cardRev)+'</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
 }
+
 var _histShopFilter = '';
-function filterHistShop(shop,el){
+var _histPeriodFrom = '';
+var _histPeriodTo = '';
+
+function filterHistShop(shop, el){
   _histShopFilter = shop;
-  document.querySelectorAll('#histShopFilter div').forEach(function(c){c.style.background='#1a1a22';c.style.color='#8888aa';c.style.borderColor='#2e2e3e';});
-  el.style.background='#c8f060'; el.style.color='#0f0f13'; el.style.borderColor='#c8f060';
+  document.querySelectorAll('#histShopFilter div').forEach(function(c){ c.style.background='#1a1a22'; c.style.color='#8888aa'; c.style.borderWidth='1px'; c.style.borderColor='#2e2e3e'; });
+  el.style.background='#c8f060'; el.style.color='#0f0f13'; el.style.borderWidth='2px'; el.style.borderColor='#c8f060';
   renderShiftHistory();
 }
-function openEditShift(id){
-  currentEditShiftId=id;
-  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-  var sh=shifts.find(function(s){return s.id===id;}); if(!sh)return;
-  document.getElementById('editShiftTitle').textContent=sh.shopName+' · '+sh.date;
-  document.getElementById('editShiftBody').innerHTML=buildShiftDetailHTML(sh);
+
+// ════ SHIFT VIEW — fullscreen accordion ════
+function openShiftView(id){
+  currentEditShiftId = id;
+  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var sh = shifts.find(function(s){ return s.id===id; }); if(!sh) return;
+  _currentShiftView = JSON.parse(JSON.stringify(sh)); // working copy
+  _renderShiftView();
   openMo('editShiftMo');
 }
 
-function buildShiftDetailHTML(sh){
-  var f=function(n){return Math.round(n||0).toLocaleString('ru-RU')+'₽';};
-  var cashRev=sh.cashRevenue||0, cardRev=sh.cardRevenue||0;
-  var disc=sh.totalDiscount||sh.discount||0;
+function _renderShiftView(){
+  var sh = _currentShiftView; if(!sh) return;
+  document.getElementById('editShiftTitle').textContent = sh.shopName + ' · ' + sh.date;
+
+  var f = function(n){ return Math.round(n||0).toLocaleString('ru-RU')+'₽'; };
+  var cashRev=sh.cashRevenue||0, cardRev=sh.cardRevenue||0, disc=sh.totalDiscount||sh.discount||0;
   var totalRev=cashRev+cardRev+disc;
-  var journal=sh.journal||[];
-  var sales=journal.filter(function(e){return e.type==='sale';});
-  var writeoffs=journal.filter(function(e){return e.type==='writeoff';});
-  var receives=journal.filter(function(e){return e.type==='receive';});
-  var expenses=journal.filter(function(e){return e.type==='expense';});
-  var staffPurch=journal.filter(function(e){return e.type==='staff';});
+  var jnl=sh.journal||[];
+  var sales=jnl.filter(function(e){return e.type==='sale';});
+  var writeoffs=jnl.filter(function(e){return e.type==='writeoff';});
+  var receives=jnl.filter(function(e){return e.type==='receive';});
+  var expenses=jnl.filter(function(e){return e.type==='expense';});
+  var staffPurch=jnl.filter(function(e){return e.type==='staff';});
+  var woodWo=sh.goodsWriteoffs||[];
+  var drWo=sh.drGoodsWriteoffs||[];
+  var woodRcv=sh.goodsReceives||[];
+  var drRcv=sh.drGoodsReceives||[];
+  var staffArr=sh.staffPurchases||staffPurch;
 
-  // — Шапка смены —
-  var headerColor = sh.hasCashDiff ? '#f06060' : '#c8f060';
-  var html = '<div style="background:#1a1a22;border:1px solid '+headerColor+';border-radius:12px;padding:12px;margin-bottom:10px">';
-  html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">';
-  html += '<div>';
-  html += '<div style="font-size:15px;font-weight:700;color:'+headerColor+'">'+f(totalRev)+'</div>';
-  html += '<div style="font-size:11px;color:#8888aa;margin-top:2px">👤 '+(sh.sellerName||'—')+'</div>';
-  html += '<div style="font-size:11px;color:#8888aa">📅 '+sh.date+(sh.backfilled?' · задним числом':'')+'</div>';
-  html += '</div>';
-  html += '<div style="text-align:right">';
-  if(sh.isArchive) html+='<div style="font-size:9px;background:#604020;color:#f0a060;border-radius:4px;padding:2px 6px;font-weight:700;margin-bottom:4px">АРХИВ</div>';
-  html += '<div style="font-size:11px;color:#60f090">💵 '+f(cashRev)+'</div>';
-  html += '<div style="font-size:11px;color:#60c8f0">💳 '+f(cardRev)+'</div>';
-  if(disc) html += '<div style="font-size:11px;color:#8888aa">🎁 '+f(disc)+'</div>';
-  html += '</div></div>';
-  if(sh.hasCashDiff) html+='<div style="background:#2e1a1a;border-radius:8px;padding:6px 8px;font-size:11px;color:#f06060;font-weight:700">⚠️ Расхождение кассы: '+f(sh.cashDiff||0)+(sh.cashDiffReason?' · '+sh.cashDiffReason:'')+'</div>';
-  if(sh.editedBy) html+='<div style="font-size:10px;color:#555568;margin-top:6px">✏️ Правки: '+sh.editedBy+(sh.editReason?' · '+sh.editReason:'')+'</div>';
-  html += '</div>';
-
-  // — Касса (открытие/закрытие) —
-  html += _shiftSection('🏦 Касса', '#f0c060');
-  html += _shiftRow('Нал утро', f(sh.cashMorning||0), '#f0f0f8');
-  html += _shiftRow('Нал вечер', f(sh.cashEvening||0), '#f0f0f8');
-  if(sh.drCashMorning||sh.drCashEvening){
-    html += _shiftRow('ДР нал утро', f(sh.drCashMorning||0), '#a060f0');
-    html += _shiftRow('ДР нал вечер', f(sh.drCashEvening||0), '#a060f0');
-  }
-  if(sh.goodsMorning!=null) html += _shiftRow('Товар утро', f(sh.goodsMorning||0), '#f0a060');
-  if(sh.goodsEvening!=null) html += _shiftRow('Товар вечер', f(sh.goodsEvening||0), '#f0a060');
-  if(sh.drGoodsMorning!=null) html += _shiftRow('ДР товар утро', f(sh.drGoodsMorning||0), '#a060f0');
-  if(sh.drGoodsEvening!=null) html += _shiftRow('ДР товар вечер', f(sh.drGoodsEvening||0), '#a060f0');
-  html += '</div>';
-
-  // — Продажи из журнала или агрегат —
-  html += _shiftSection('💰 Продажи', '#c8f060');
-  if(sales.length){
-    sales.forEach(function(s){
-      var payIcon = {cash:'💵',terminal:'💳',sbp:'📱',transfer:'🏦',qr:'🔲',mixed:'➗',rs:'🏦'}[s.payMethod]||'💰';
-      html += '<div style="padding:7px 0;border-bottom:1px solid #2e2e3e">';
-      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start">';
-      html += '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;color:#f0f0f8">'+(s.sub||s.label||'Продажа')+'</div>';
-      if(s.ts) html += '<div style="font-size:10px;color:#555568;margin-top:1px">'+new Date(s.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})+'  '+payIcon+'</div>';
-      html += '</div>';
-      html += '<div style="font-size:13px;font-weight:700;color:#60f090;white-space:nowrap;margin-left:8px">'+f(s.amount||0)+'</div>';
-      html += '</div></div>';
-    });
-    html += '<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;font-weight:700"><span>Итого</span><span style="color:#c8f060">'+f(totalRev)+'</span></div>';
-  } else {
-    // aggregate view (no journal)
-    html += _shiftRow('💵 Нал', f(cashRev), '#60f090');
-    html += _shiftRow('💳 Безнал', f(cardRev), '#60c8f0');
-    if(disc) html += _shiftRow('🎁 Скидки', f(disc), '#8888aa');
-    html += '<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:13px;font-weight:700"><span>Итого выручка</span><span style="color:#c8f060">'+f(totalRev)+'</span></div>';
-    // DR sales from aggregated fields
-    var drCashRev=sh.drCashRevenue||sh.drCashRev||0, drCardRev=sh.drCardRevenue||0, drDisc=sh.drDiscount||0;
-    var drTot=drCashRev+drCardRev+drDisc;
-    if(drTot){
-      html += '<div style="border-top:1px solid #2e2e3e;padding-top:6px;margin-top:4px"><div style="font-size:10px;color:#8888aa;margin-bottom:4px">ДР ТОВАР</div>';
-      if(drCashRev) html += _shiftRow('💵 Нал ДР', f(drCashRev), '#60f090');
-      if(drCardRev) html += _shiftRow('💳 Безнал ДР', f(drCardRev), '#60c8f0');
-      if(drDisc) html += _shiftRow('🎁 Скидки ДР', f(drDisc), '#8888aa');
-      html += '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;font-weight:700"><span>Итого ДР</span><span style="color:#a060f0">'+f(drTot)+'</span></div>';
-      html += '</div>';
-    }
-  }
-  html += '</div>';
-
-  // — Списания —
-  var woodWo=sh.goodsWriteoffs||[], drWo=sh.drGoodsWriteoffs||[];
-  var jWo=writeoffs;
-  var hasWo=woodWo.length||drWo.length||jWo.length;
-  if(hasWo){
-    html += _shiftSection('🗑 Списания', '#f06060');
-    if(jWo.length){
-      jWo.forEach(function(w){html+=_shiftRow((w.sub||w.label||'Списание'),f(w.amount||0),'#f06060');});
-    }
-    woodWo.forEach(function(w){html+=_shiftRow((w.name||'Списание')+(w.qty?' × '+w.qty:''),f(w.amt||0),'#f06060');});
-    drWo.forEach(function(w){html+=_shiftRow('ДР: '+(w.name||'Списание')+(w.qty?' × '+w.qty:''),f(w.amt||0),'#a060f0');});
-    html += '</div>';
-  }
-
-  // — Приходы —
-  var woodRcv=sh.goodsReceives||[], drRcv=sh.drGoodsReceives||[];
-  var jRcv=receives;
-  var hasRcv=woodRcv.length||drRcv.length||jRcv.length;
-  if(hasRcv){
-    html += _shiftSection('📥 Приходы товара', '#60f090');
-    if(jRcv.length){
-      jRcv.forEach(function(r){html+=_shiftRow((r.sub||r.label||'Приход'),f(r.goodsEffect||r.amount||0),'#60f090');});
-    }
-    woodRcv.forEach(function(r){html+=_shiftRow((r.name||'Приход')+(r.qty?' × '+r.qty:'')+(r.from?' от '+r.from:''),f(r.amt||0),'#60f090');});
-    drRcv.forEach(function(r){html+=_shiftRow('ДР: '+(r.name||'Приход')+(r.qty?' × '+r.qty:''),f(r.amt||0),'#a060f0');});
-    html += '</div>';
-  }
-
-  // — Расходы / инкассация / ЗП —
+  // Totals for display
+  var drCashRev=sh.drCashRevenue||0, drCardRev=sh.drCardRevenue||0, drDisc=sh.drDiscount||0;
+  var drTot=drCashRev+drCardRev+drDisc;
   var zp=sh.zp||0, inkass=sh.inkass||0, otherExp=sh.otherExp||0;
   var drInkass=sh.drInkass||0, drSupplier=sh.drSupplierAmt||0;
-  var hasExp=zp||inkass||otherExp||drInkass||drSupplier||expenses.length;
-  if(hasExp){
-    html += _shiftSection('💸 Расходы и инкассация', '#f0a060');
-    if(expenses.length){
-      expenses.forEach(function(e){
-        var etype={zp:'ЗП',travel:'Проезд',inkass:'Инкассация',supplier:'Поставщик',other:'Прочее'}[e.expType]||e.expType||'Расход';
-        html+=_shiftRow(etype+(e.comment?' · '+e.comment:''),f(e.amount||0),'#f0a060');
-      });
-    } else {
-      if(zp) html+=_shiftRow('💰 ЗП',f(zp),'#f0a060');
-      if(inkass) html+=_shiftRow('🏦 Инкассация',f(inkass),'#f0a060');
-      if(otherExp) html+=_shiftRow('📝 Прочее',f(otherExp),'#f0a060');
-      if(drInkass) html+=_shiftRow('🏦 Инкассация ДР',f(drInkass),'#a060f0');
-      if(drSupplier) html+=_shiftRow('🏭 Поставщик ДР'+(sh.drSupplierName?' ('+sh.drSupplierName+')':''),f(drSupplier),'#a060f0');
-    }
-    html += '</div>';
+
+  function acc(id, icon, title, color, count, body){
+    var badge = count ? '<span style="background:'+color+';color:#0f0f13;font-size:10px;font-weight:700;border-radius:8px;padding:1px 6px;margin-left:6px">'+count+'</span>' : '';
+    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;margin-bottom:8px;overflow:hidden">'+
+      '<div onclick="toggleShiftAcc(\'acc_'+id+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer">'+
+        '<div style="display:flex;align-items:center;gap:8px">'+
+          '<span style="font-size:16px">'+icon+'</span>'+
+          '<span style="font-size:13px;font-weight:700;color:'+color+'">'+title+'</span>'+
+          badge+
+        '</div>'+
+        '<span id="acc_'+id+'_arr" style="color:#8888aa;font-size:14px;transition:transform .2s">▼</span>'+
+      '</div>'+
+      '<div id="acc_'+id+'" style="display:none;padding:0 14px 12px">'+
+        body+
+      '</div>'+
+    '</div>';
   }
 
-  // — Покупки сотрудников —
-  var staffArr=sh.staffPurchases||staffPurch;
-  if(staffArr.length){
-    html += _shiftSection('🛒 Покупки сотрудников', '#a060f0');
-    staffArr.forEach(function(s){
-      var name=s.who||(s.label||'').replace('Покупка сотр.: ','');
-      var item=s.item||s.sub||'';
-      var amt=s.opt||s.amount||0;
-      html+=_shiftRow(name+(item?' · '+item:''),f(amt),'#a060f0');
+  function row(label, val, color, sub){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3e">'+
+      '<div><div style="font-size:12px;color:#8888aa">'+label+'</div>'+(sub?'<div style="font-size:10px;color:#555568">'+sub+'</div>':'')+'</div>'+
+      '<span style="font-size:13px;font-weight:700;color:'+(color||'#f0f0f8')+'">'+val+'</span>'+
+    '</div>';
+  }
+
+  // ── ПРОДАЖИ body ──
+  var salesBody = '';
+  if(sales.length){
+    sales.forEach(function(s, i){
+      var payIcon={cash:'💵',terminal:'💳',sbp:'📱',transfer:'🏦',qr:'🔲',mixed:'➗',rs:'🏦'}[s.payMethod]||'💰';
+      var time = s.ts ? new Date(s.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '';
+      var itemsHtml = '';
+      if(s.items && s.items.length){
+        itemsHtml = '<div style="background:#0f0f13;border-radius:8px;padding:8px;margin:6px 0">';
+        s.items.forEach(function(it){ itemsHtml += '<div style="font-size:11px;color:#8888aa;padding:2px 0">№'+(it.num||'—')+' '+it.name+' · '+f(it.price)+'</div>'; });
+        itemsHtml += '</div>';
+      }
+      salesBody +=
+        '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0" id="sv_sale_'+i+'">'+
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+            '<div style="flex:1;min-width:0">'+
+              '<div style="font-size:12px;font-weight:700">'+(s.sub||s.label||'Продажа')+'</div>'+
+              '<div style="font-size:10px;color:#555568;margin-top:1px">'+time+' '+payIcon+(s.goodsType==='dr'?' · ДР товар':'')+'</div>'+
+            '</div>'+
+            '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
+              '<span style="font-size:13px;font-weight:700;color:#60f090">'+f(s.amount||0)+'</span>'+
+              '<button onclick="svDeleteJEntry(\'sale\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
+            '</div>'+
+          '</div>'+
+          itemsHtml+
+        '</div>';
     });
-    html += '</div>';
+    salesBody += '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:700"><span>Итого</span><span style="color:#c8f060">'+f(totalRev)+'</span></div>';
+  } else {
+    // aggregate
+    salesBody += row('💵 Нал (Дерево)', f(cashRev), '#60f090');
+    salesBody += row('💳 Безнал (Дерево)', f(cardRev), '#60c8f0');
+    if(disc) salesBody += row('🎁 Скидка (Дерево)', f(disc), '#8888aa');
+    if(drTot){
+      salesBody += '<div style="font-size:10px;color:#8888aa;margin:8px 0 4px;font-weight:700">ДР ТОВАР</div>';
+      salesBody += row('💵 Нал ДР', f(drCashRev), '#60f090');
+      salesBody += row('💳 Безнал ДР', f(drCardRev), '#60c8f0');
+      if(drDisc) salesBody += row('🎁 Скидка ДР', f(drDisc), '#8888aa');
+    }
+    salesBody += '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:700"><span>Итого</span><span style="color:#c8f060">'+f(totalRev+(drTot))+'</span></div>';
+    salesBody += '<div style="font-size:11px;color:#555568;margin-top:4px">Детализация продаж недоступна — смена без журнала</div>';
   }
 
-  // — Комментарий —
-  if(sh.comment){
-    html += '<div style="background:#22222e;border:1px solid #2e2e3e;border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px;color:#8888aa">💬 '+sh.comment+'</div>';
+  // ── КАССА body ──
+  var cassaBody = row('Нал утро (Дерево)', f(sh.cashMorning||0), '#f0f0f8');
+  cassaBody += row('Нал вечер (Дерево)', f(sh.cashEvening||0), '#f0f0f8');
+  if(sh.drCashMorning!=null||sh.drCashEvening!=null){
+    cassaBody += row('Нал утро (ДР)', f(sh.drCashMorning||0), '#a060f0');
+    cassaBody += row('Нал вечер (ДР)', f(sh.drCashEvening||0), '#a060f0');
+  }
+  if(sh.hasCashDiff) cassaBody += '<div style="background:#2e1a1a;border-radius:8px;padding:8px;margin-top:8px;font-size:11px;color:#f06060;font-weight:700">⚠️ Расхождение: '+f(sh.cashDiff||0)+(sh.cashDiffReason?' · '+sh.cashDiffReason:'')+'</div>';
+  // inline edit
+  cassaBody += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #2e2e3e">'+
+    '<div style="font-size:10px;color:#8888aa;margin-bottom:6px;font-weight:700">ИСПРАВИТЬ</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">'+
+      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Нал утро</div><input class="fi" type="number" id="sv_cashMorn" value="'+(sh.cashMorning||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
+      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Нал вечер</div><input class="fi" type="number" id="sv_cashEve" value="'+(sh.cashEvening||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
+      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Выручка нал</div><input class="fi" type="number" id="sv_cashRev" value="'+cashRev+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
+      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Выручка безнал</div><input class="fi" type="number" id="sv_cardRev" value="'+cardRev+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
+    '</div>'+
+    '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">Причина правки</div>'+
+    '<input class="fi" id="sv_cashReason" placeholder="Обязательно укажите причину..." style="margin:0;padding:8px;margin-bottom:8px">'+
+    '<button onclick="svSaveCassa()" style="width:100%;padding:9px;background:#c8f060;border:none;border-radius:9px;font-weight:700;font-size:12px;color:#0f0f13;cursor:pointer">💾 Сохранить изменения кассы</button>'+
+  '</div>';
+
+  // ── ТОВАР body ──
+  var tovarBody = row('Товар утро (Дерево)', f(sh.goodsMorning||0), '#f0a060');
+  tovarBody += row('Товар вечер (Дерево)', f(sh.goodsEvening||0), '#f0a060');
+  if(sh.drGoodsMorning!=null||sh.drGoodsEvening!=null){
+    tovarBody += row('Товар утро (ДР)', f(sh.drGoodsMorning||0), '#a060f0');
+    tovarBody += row('Товар вечер (ДР)', f(sh.drGoodsEvening||0), '#a060f0');
+  }
+  tovarBody += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #2e2e3e">'+
+    '<div style="font-size:10px;color:#8888aa;margin-bottom:6px;font-weight:700">ИСПРАВИТЬ</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">'+
+      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Товар вечер (Дерево)</div><input class="fi" type="number" id="sv_goodsEve" value="'+(sh.goodsEvening||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
+      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Товар вечер (ДР)</div><input class="fi" type="number" id="sv_drGoodsEve" value="'+(sh.drGoodsEvening||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
+    '</div>'+
+    '<input class="fi" id="sv_tovarReason" placeholder="Причина правки (обязательно)..." style="margin:0;padding:8px;margin-bottom:8px">'+
+    '<button onclick="svSaveTovar()" style="width:100%;padding:9px;background:#c8f060;border:none;border-radius:9px;font-weight:700;font-size:12px;color:#0f0f13;cursor:pointer">💾 Сохранить остатки</button>'+
+  '</div>';
+
+  // ── ПРИХОДЫ body ──
+  var rcvAllLen = receives.length + woodRcv.length + drRcv.length;
+  var rcvBody = '';
+  if(receives.length){
+    receives.forEach(function(r, i){
+      rcvBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+          '<div style="flex:1;min-width:0">'+
+            '<div style="font-size:12px;font-weight:700">'+(r.sub||r.label||'Приход')+'</div>'+
+            '<div style="font-size:10px;color:#555568">'+(r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'')+'</div>'+
+          '</div>'+
+          '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
+            '<span style="font-size:12px;font-weight:700;color:#60f090">+'+f(r.goodsEffect||r.amount||0)+'</span>'+
+            '<button onclick="svDeleteJEntry(\'receive\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>';
+    });
+  }
+  // goodsReceives (from past shift manual entry)
+  woodRcv.forEach(function(r, i){
+    rcvBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div style="flex:1;min-width:0">'+
+          '<div style="font-size:12px;font-weight:700">'+(r.name||'Приход')+(r.qty?' × '+r.qty:'')+(r.from?' · от '+r.from:'')+'</div>'+
+          '<div style="font-size:10px;color:#555568">🌳 Дерево</div>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
+          '<span style="font-size:12px;font-weight:700;color:#60f090">+'+f(r.amt||0)+'</span>'+
+          '<button onclick="svDeleteWoodRcv('+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  });
+  drRcv.forEach(function(r, i){
+    rcvBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div style="flex:1;min-width:0">'+
+          '<div style="font-size:12px;font-weight:700">'+(r.name||'Приход ДР')+(r.qty?' × '+r.qty:'')+'</div>'+
+          '<div style="font-size:10px;color:#a060f0">🛍 ДР Товар</div>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
+          '<span style="font-size:12px;font-weight:700;color:#a060f0">+'+f(r.amt||0)+'</span>'+
+          '<button onclick="svDeleteDrRcv('+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  });
+  if(!rcvAllLen) rcvBody = '<div style="font-size:12px;color:#8888aa;padding:8px 0">Приходов не было</div>';
+
+  // ── СПИСАНИЯ body ──
+  var woAllLen = writeoffs.length + woodWo.length + drWo.length;
+  var woBody = '';
+  writeoffs.forEach(function(w, i){
+    woBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700">'+(w.sub||w.label||'Списание')+'</div></div>'+
+        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
+          '<span style="font-size:12px;font-weight:700;color:#f06060">'+f(w.amount||0)+'</span>'+
+          '<button onclick="svDeleteJEntry(\'writeoff\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  });
+  woodWo.forEach(function(w, i){
+    woBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div style="flex:1;min-width:0">'+
+          '<div style="font-size:12px;font-weight:700">'+(w.name||'Списание')+(w.qty?' × '+w.qty:'')+'</div>'+
+          '<div style="font-size:10px;color:#555568">🌳 Дерево'+(w.reason?' · '+w.reason:'')+'</div>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
+          '<span style="font-size:12px;font-weight:700;color:#f06060">'+f(w.amt||0)+'</span>'+
+          '<button onclick="svDeleteWoodWo('+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  });
+  drWo.forEach(function(w, i){
+    woBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div style="flex:1;min-width:0">'+
+          '<div style="font-size:12px;font-weight:700">'+(w.name||'Списание ДР')+(w.qty?' × '+w.qty:'')+'</div>'+
+          '<div style="font-size:10px;color:#a060f0">🛍 ДР Товар'+(w.reason?' · '+w.reason:'')+'</div>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
+          '<span style="font-size:12px;font-weight:700;color:#f06060">'+f(w.amt||0)+'</span>'+
+          '<button onclick="svDeleteDrWo('+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  });
+  if(!woAllLen) woBody = '<div style="font-size:12px;color:#8888aa;padding:8px 0">Списаний не было</div>';
+
+  // ── РАСХОДЫ body ──
+  var expHasData = zp||inkass||otherExp||drInkass||drSupplier||expenses.length;
+  var expBody = '';
+  if(expenses.length){
+    expenses.forEach(function(e, i){
+      var etype={zp:'💰 ЗП',travel:'🚌 Проезд',inkass:'🏦 Инкассация',supplier:'🏭 Поставщик',other:'📝 Прочее'}[e.expType]||e.expType||'Расход';
+      expBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center">'+
+          '<div><div style="font-size:12px;font-weight:700">'+etype+(e.comment?' · '+e.comment:'')+'</div></div>'+
+          '<div style="display:flex;align-items:center;gap:8px">'+
+            '<span style="font-size:12px;font-weight:700;color:#f0a060">'+f(e.amount||0)+'</span>'+
+            '<button onclick="svDeleteJEntry(\'expense\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>';
+    });
+  } else {
+    if(zp) expBody += row('💰 ЗП', f(zp), '#f0a060');
+    if(inkass) expBody += row('🏦 Инкассация (Дерево)', f(inkass), '#f0a060');
+    if(otherExp) expBody += row('📝 Прочее', f(otherExp), '#f0a060');
+    if(drInkass) expBody += row('🏦 Инкассация (ДР)', f(drInkass), '#a060f0');
+    if(drSupplier) expBody += row('🏭 Поставщик ДР'+(sh.drSupplierName?' ('+sh.drSupplierName+')':''), f(drSupplier), '#a060f0');
+    if(!expHasData) expBody = '<div style="font-size:12px;color:#8888aa;padding:8px 0">Расходов не было</div>';
   }
 
-  // — Кнопка редактирования —
-  html += '<div id="esh_editForm" style="display:none">';
-  html += '<div class="row2"><div class="fg"><label class="fl">Нал утро</label><input class="fi" type="number" id="esh_cashMorn" value="'+(sh.cashMorning||0)+'" inputmode="numeric"></div>';
-  html += '<div class="fg"><label class="fl">Нал вечер</label><input class="fi" type="number" id="esh_cashEve" value="'+(sh.cashEvening||0)+'" inputmode="numeric"></div></div>';
-  html += '<div class="row2"><div class="fg"><label class="fl">Выручка нал</label><input class="fi" type="number" id="esh_cashRev" value="'+(cashRev)+'" inputmode="numeric"></div>';
-  html += '<div class="fg"><label class="fl">Выручка безнал</label><input class="fi" type="number" id="esh_cardRev" value="'+(cardRev)+'" inputmode="numeric"></div></div>';
-  html += '<div class="fg"><label class="fl">Товар вечер</label><input class="fi" type="number" id="esh_goodsEve" value="'+(sh.goodsEvening||0)+'" inputmode="numeric"></div>';
-  html += '<div class="fg"><label class="fl">Причина правки (обязательно)</label><input class="fi" id="esh_reason" placeholder="Укажите причину..."></div>';
-  html += '</div>';
-  html += '<button type="button" id="esh_toggleBtn" onclick="toggleEditForm()" style="width:100%;padding:11px;background:#1a1e2e;border:1px solid #60c8f0;border-radius:10px;color:#60c8f0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px">✏️ Внести изменения</button>';
+  // ── ПОКУПКИ СОТРУДНИКОВ body ──
+  var staffBody = '';
+  staffArr.forEach(function(s, i){
+    var who = s.who || (s.label||'').replace('Покупка сотр.: ','');
+    var item = s.item || s.sub || '';
+    var retail = s.retail || 0;
+    var opt = s.opt || s.amount || 0;
+    staffBody += '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div style="flex:1;min-width:0">'+
+          '<div style="font-size:12px;font-weight:700">'+who+'</div>'+
+          '<div style="font-size:11px;color:#8888aa">'+(item||'')+(retail?' · розница '+f(retail):'')+'</div>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
+          '<span style="font-size:12px;font-weight:700;color:#a060f0">'+f(opt)+'</span>'+
+          (staffPurch.length?'<button onclick="svDeleteJEntry(\'staff\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>':'')+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  });
+  if(!staffArr.length) staffBody = '<div style="font-size:12px;color:#8888aa;padding:8px 0">Покупок сотрудников не было</div>';
 
-  return html;
+  // ── ШАПКА ──
+  var headerColor = sh.hasCashDiff ? '#f06060' : '#c8f060';
+  var headerHtml =
+    '<div style="background:#1e2a14;border:1px solid '+headerColor+';border-radius:12px;padding:14px;margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div>'+
+          '<div style="font-size:11px;color:#8888aa">👤 '+(sh.sellerName||'—')+'</div>'+
+          '<div style="font-size:11px;color:#8888aa">📅 '+sh.date+(sh.backfilled?' · задним числом':'')+'</div>'+
+          (sh.isArchive?'<div style="font-size:9px;background:#604020;color:#f0a060;border-radius:4px;padding:2px 5px;font-weight:700;display:inline-block;margin-top:4px">АРХИВ</div>':'')+
+        '</div>'+
+        '<div style="text-align:right">'+
+          '<div style="font-size:18px;font-weight:700;color:'+headerColor+'">'+f(totalRev)+'</div>'+
+          '<div style="font-size:11px;color:#60f090">💵 '+f(cashRev)+'</div>'+
+          '<div style="font-size:11px;color:#60c8f0">💳 '+f(cardRev)+'</div>'+
+          (disc?'<div style="font-size:11px;color:#8888aa">🎁 '+f(disc)+'</div>':'')+
+        '</div>'+
+      '</div>'+
+      (sh.hasCashDiff?'<div style="background:#2e1a1a;border-radius:8px;padding:6px 8px;margin-top:8px;font-size:11px;color:#f06060;font-weight:700">⚠️ Расхождение кассы</div>':'')+
+      (sh.editedBy?'<div style="font-size:10px;color:#555568;margin-top:6px">✏️ Правки: '+sh.editedBy+(sh.editReason?' · '+sh.editReason:'')+'</div>':'')+
+    '</div>'+
+    // Delete shift button
+    '<button onclick="svDeleteShift()" style="width:100%;padding:9px;background:#2e1a1a;border:1px solid #f06060;border-radius:9px;font-weight:700;font-size:12px;color:#f06060;cursor:pointer;margin-bottom:10px">🗑 Удалить смену целиком</button>';
+
+  // ── СБОРКА ──
+  document.getElementById('editShiftBody').innerHTML =
+    headerHtml +
+    acc('sales', '💰', 'Продажи', '#c8f060', sales.length||null, salesBody) +
+    acc('cassa', '🏦', 'Касса', '#f0c060', null, cassaBody) +
+    acc('tovar', '📦', 'Товар', '#f0a060', null, tovarBody) +
+    acc('rcv', '📥', 'Приходы', '#60f090', rcvAllLen||null, rcvBody) +
+    acc('wo', '🗑', 'Списания', '#f06060', woAllLen||null, woBody) +
+    acc('exp', '💸', 'Расходы', '#f0a060', (expenses.length||(zp||inkass||otherExp||drInkass||drSupplier?1:0))||null, expBody) +
+    acc('staff', '🛒', 'Покупки сотрудников', '#a060f0', staffArr.length||null, staffBody);
 }
 
-function _shiftSection(title, color){
-  return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">'
-    + '<div style="font-size:11px;font-weight:700;color:'+(color||'#8888aa')+';text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">'+title+'</div>';
-}
-function _shiftRow(label, val, color){
-  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:12px">'
-    + '<span style="color:#8888aa">'+label+'</span>'
-    + '<span style="font-weight:700;color:'+(color||'#f0f0f8')+'">'+val+'</span>'
-    + '</div>';
+function toggleShiftAcc(id){
+  var el=document.getElementById(id);
+  var arr=document.getElementById(id+'_arr');
+  if(!el) return;
+  var open = el.style.display!=='none';
+  el.style.display = open?'none':'block';
+  if(arr) arr.style.transform = open?'':'rotate(180deg)';
 }
 
-function toggleEditForm(){
-  var form=document.getElementById('esh_editForm');
-  var btn=document.getElementById('esh_toggleBtn');
-  var saveBtn=document.getElementById('esh_saveBtn');
-  if(!form) return;
-  var visible=form.style.display!=='none';
-  form.style.display=visible?'none':'block';
-  if(btn) btn.textContent=visible?'✏️ Внести изменения':'✕ Отменить правки';
-  if(saveBtn) saveBtn.style.display=visible?'none':'block';
-}
-function saveEditShift(){
-  const reason=((document.getElementById('esh_reason')||{}).value||'').trim();
+// ── Save helpers ──
+function svSaveCassa(){
+  var reason=((document.getElementById('sv_cashReason')||{}).value||'').trim();
   if(!reason){showToast('Укажите причину правки');return;}
-  const shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-  const idx=shifts.findIndex(s=>s.id===currentEditShiftId); if(idx<0)return;
-  shifts[idx]={...shifts[idx],cashMorning:parseFloat((document.getElementById('esh_cashMorn')||{}).value)||0,cashEvening:parseFloat((document.getElementById('esh_cashEve')||{}).value)||0,cashRevenue:parseFloat((document.getElementById('esh_cashRev')||{}).value)||0,cardRevenue:parseFloat((document.getElementById('esh_cardRev')||{}).value)||0,editedBy:session.name,editedAt:new Date().toISOString(),editReason:reason};
-  localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
-  try{ db.collection('iz_shifts').doc(currentEditShiftId).set(shifts[idx]); }catch(e){}
-  closeMo('editShiftMo'); renderShiftHistory(); showToast('✅ Смена обновлена');
+  _currentShiftView.cashMorning=parseFloat((document.getElementById('sv_cashMorn')||{}).value)||0;
+  _currentShiftView.cashEvening=parseFloat((document.getElementById('sv_cashEve')||{}).value)||0;
+  _currentShiftView.cashRevenue=parseFloat((document.getElementById('sv_cashRev')||{}).value)||0;
+  _currentShiftView.cardRevenue=parseFloat((document.getElementById('sv_cardRev')||{}).value)||0;
+  _currentShiftView.editedBy=(session&&(session.name||session.sellerName))||'admin';
+  _currentShiftView.editedAt=new Date().toISOString();
+  _currentShiftView.editReason=reason;
+  svPersist(); _renderShiftView(); showToast('✅ Касса обновлена');
 }
+function svSaveTovar(){
+  var reason=((document.getElementById('sv_tovarReason')||{}).value||'').trim();
+  if(!reason){showToast('Укажите причину правки');return;}
+  _currentShiftView.goodsEvening=parseFloat((document.getElementById('sv_goodsEve')||{}).value)||0;
+  _currentShiftView.drGoodsEvening=parseFloat((document.getElementById('sv_drGoodsEve')||{}).value)||0;
+  _currentShiftView.editedBy=(session&&(session.name||session.sellerName))||'admin';
+  _currentShiftView.editedAt=new Date().toISOString();
+  _currentShiftView.editReason=reason;
+  svPersist(); _renderShiftView(); showToast('✅ Остатки товара обновлены');
+}
+function svDeleteJEntry(type, idx){
+  if(!confirm('Удалить эту запись?')) return;
+  var jnl=_currentShiftView.journal||[];
+  var ofType=jnl.filter(function(e){return e.type===type;});
+  var target=ofType[idx]; if(!target) return;
+  _currentShiftView.journal=jnl.filter(function(e){return e!==target;});
+  svPersist(); _renderShiftView(); showToast('🗑 Удалено');
+}
+function svDeleteWoodRcv(idx){
+  if(!confirm('Удалить этот приход?')) return;
+  var arr=_currentShiftView.goodsReceives||[];
+  arr.splice(idx,1);
+  _currentShiftView.goodsReceives=arr;
+  svPersist(); _renderShiftView(); showToast('🗑 Удалено');
+}
+function svDeleteDrRcv(idx){
+  if(!confirm('Удалить этот приход?')) return;
+  var arr=_currentShiftView.drGoodsReceives||[];
+  arr.splice(idx,1);
+  _currentShiftView.drGoodsReceives=arr;
+  svPersist(); _renderShiftView(); showToast('🗑 Удалено');
+}
+function svDeleteWoodWo(idx){
+  if(!confirm('Удалить это списание?')) return;
+  var arr=_currentShiftView.goodsWriteoffs||[];
+  arr.splice(idx,1);
+  _currentShiftView.goodsWriteoffs=arr;
+  svPersist(); _renderShiftView(); showToast('🗑 Удалено');
+}
+function svDeleteDrWo(idx){
+  if(!confirm('Удалить это списание?')) return;
+  var arr=_currentShiftView.drGoodsWriteoffs||[];
+  arr.splice(idx,1);
+  _currentShiftView.drGoodsWriteoffs=arr;
+  svPersist(); _renderShiftView(); showToast('🗑 Удалено');
+}
+function svDeleteShift(){
+  if(!confirm('Удалить смену целиком? Это действие нельзя отменить.')) return;
+  var id=_currentShiftView.id;
+  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  shifts=shifts.filter(function(s){return s.id!==id;});
+  localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+  try{db.collection('iz_shifts').doc(id).delete();}catch(e){}
+  closeMo('editShiftMo'); renderShiftHistory(); showToast('🗑 Смена удалена');
+}
+function svPersist(){
+  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var idx=shifts.findIndex(function(s){return s.id===_currentShiftView.id;}); if(idx<0) return;
+  shifts[idx]=_currentShiftView;
+  localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+  try{db.collection('iz_shifts').doc(_currentShiftView.id).set(_currentShiftView);}catch(e){}
+  renderShiftHistory();
+}
+
+// keep old name as alias for backward compat
+function openEditShift(id){ openShiftView(id); }
+function toggleEditForm(){}
+function saveEditShift(){}
 function savePastShift(){
   var errEl=document.getElementById('psSaveError'); if(errEl)errEl.style.display='none';
   var shop=gv('psShop'),date=gv('psDate');
