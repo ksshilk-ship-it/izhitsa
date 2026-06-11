@@ -486,7 +486,16 @@ if ('serviceWorker' in navigator) {
   <div class="page" id="pg-settings">
     <div class="stitle">⚙️ Справочники</div>
     
-    <!-- COLLAPSIBLE REFERENCE BOOKS -->
+    <!-- SYSTEM MANAGEMENT BLOCK -->
+    <div style="background:var(--s2);border-radius:8px;margin-bottom:16px;padding:12px;border-left:3px solid var(--exp)">
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px">⚙️ Управление системой</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn sm" onclick="exportAllData()" style="background:var(--a2);flex:1;min-width:120px">📥 Экспорт данных</button>
+        <button class="btn sm" onclick="clearAllCache()" style="background:var(--exp);flex:1;min-width:120px">🗑️ Очистить кэш</button>
+      </div>
+    </div>
+    
+    <!-- REFERENCE BOOKS -->
     <div id="refBooksContainer"></div>
   </div>
 
@@ -1930,6 +1939,74 @@ function addSellerFromStaff(){ openAddStaffModal(); }
 function addWsEmployee(){ openAddStaffModal(); }
 
 // Initialize
+
+// ════ SYSTEM MANAGEMENT ════
+function exportAllData() {
+  const data = {
+    timestamp: new Date().toISOString(),
+    user: session ? session.name : 'unknown',
+    data: {
+      shops: JSON.parse(localStorage.getItem('iz_shops') || '[]'),
+      staff: JSON.parse(localStorage.getItem('iz_staff') || '[]'),
+      sources: JSON.parse(localStorage.getItem('iz_sales_sources') || '[]'),
+      accounts: JSON.parse(localStorage.getItem('iz_accounts') || '[]'),
+      payments: JSON.parse(localStorage.getItem('iz_payment_methods') || '[]'),
+      goods: JSON.parse(localStorage.getItem('iz_goods') || '[]'),
+      suppliers: JSON.parse(localStorage.getItem('iz_suppliers') || '[]'),
+      expenses: JSON.parse(localStorage.getItem('iz_expense_items') || '[]'),
+      works: JSON.parse(localStorage.getItem('iz_additional_works') || '[]'),
+      sizes: JSON.parse(localStorage.getItem('iz_sizes') || '[]'),
+      materials: JSON.parse(localStorage.getItem('iz_materials') || '[]'),
+      schedules: JSON.parse(localStorage.getItem('iz_work_schedules') || '[]'),
+      transactions: JSON.parse(localStorage.getItem('iz_transactions') || '[]'),
+      debits: JSON.parse(localStorage.getItem('iz_debits') || '[]'),
+      credits: JSON.parse(localStorage.getItem('iz_credits') || '[]'),
+      auditLog: JSON.parse(localStorage.getItem('iz_audit_log') || '[]')
+    }
+  };
+  
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json;charset=utf-8'});
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', 'izhitsa_backup_' + new Date().toISOString().split('T')[0] + '.json');
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  logAction('EXPORT_DATA', {filename: 'izhitsa_backup'});
+  alert('✅ Данные экспортированы');
+}
+
+function clearAllCache() {
+  if(!confirm('⚠️ Это удалит ВСЕ данные приложения!\n\nВы уверены?')) {
+    return;
+  }
+  
+  if(!confirm('🚨 ПОСЛЕДНЕЕ ПРЕДУПРЕЖДЕНИЕ!\n\nВсе справочники, операции и логи будут удалены.\n\nПродолжить?')) {
+    return;
+  }
+  
+  // Backup before clearing
+  const backup = {
+    timestamp: new Date().toISOString(),
+    user: session ? session.name : 'unknown'
+  };
+  localStorage.setItem('iz_last_backup_before_clear', JSON.stringify(backup));
+  
+  // Clear all data
+  const keysToKeep = ['iz_admin_users']; // Keep users for relogin
+  Object.keys(localStorage).forEach(key => {
+    if(key.startsWith('iz_') && !keysToKeep.includes(key)) {
+      localStorage.removeItem(key);
+    }
+  });
+  
+  logAction('CLEAR_CACHE', {});
+  alert('✅ Кэш очищен. Приложение перезагрузится.');
+  location.reload();
+}
 
 // ════ REFERENCE BOOKS (СПРАВОЧНИКИ) ════
 function renderRefBooks() {
