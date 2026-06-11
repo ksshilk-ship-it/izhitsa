@@ -190,14 +190,19 @@ function applyUpdate() {
       <button class="exit-btn" onclick="exitShift()">Выйти</button>
     </div>
   </div>
-  <div class="status-bar">
-    <div class="sb"><div class="sb-v" id="sbCash" style="color:#60f090">0₽</div><div class="sb-l">Нал касса</div></div>
-    <div class="sb"><div class="sb-v" id="sbCard" style="color:#60c8f0">0₽</div><div class="sb-l">Безнал</div></div>
-    <div class="sb"><div class="sb-v" id="sbStaff" style="color:#a060f0">0₽</div><div class="sb-l">Сотрудники</div></div>
-    <div class="sb"><div class="sb-v" id="sbGoods" style="color:#c8f060">0₽</div><div class="sb-l">Товар</div></div>
-  </div>
   <div class="page" id="pg-journal">
     <div id="pendingAlert"></div>
+    <!-- Расширенный бар — только на главной вкладке -->
+    <div id="mainStatusBar" style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:12px">
+      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbCash" style="color:#60f090">0₽</div><div class="sb-l">💵 Нал Дерево</div></div>
+      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbCashDr" style="color:#a060f0">0₽</div><div class="sb-l">🛍 Нал ДР Товар</div></div>
+      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbStaff" style="color:#60c8f0">0₽</div><div class="sb-l">🛒 Покупки сотр.</div></div>
+      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbGoods" style="color:#c8f060">0₽</div><div class="sb-l">📦 Товар Дерево</div></div>
+      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbGoodsDr" style="color:#f060a0">0₽</div><div class="sb-l">🛍 Остаток ДР</div></div>
+      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbRevenue" style="color:#c8f060">0₽</div><div class="sb-l">💰 Выручка</div></div>
+      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbDiscount" style="color:#f0a060">0₽</div><div class="sb-l">🏷 Скидки</div></div>
+      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbCard" style="color:#60c8f0">0₽</div><div class="sb-l">💳 Безнал</div></div>
+    </div>
     <div id="journalBtns1" style="display:flex;gap:7px;margin-bottom:8px">
       <button class="btn" style="margin:0;flex:1.2;font-size:13px" onclick="openMo('saleMo');resetSaleForm()">＋ Продажа</button>
       <button id="btnWriteoff" class="btn red" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openMo('woMo')">🗑 Списание</button>
@@ -1523,16 +1528,28 @@ function showPg(name,el){
 
 // ════ TOTALS ════
 function calcTotals(){
-  let cash=session.cashMorning||0, card=0, staff=0, goods=session.goodsMorning||0;
-  journal.forEach(e=>{ cash+=(e.cashEffect||0); card+=(e.cardEffect||0); staff+=(e.staffEffect||0); goods+=(e.goodsEffect||0); });
-  return {cash,card,staff,goods};
+  var cash=session.cashMorning||0, card=0, staff=0, goods=session.goodsMorning||0;
+  var cashDr=session.cashDrMorning||0, goodsDr=session.goodsDrMorning||0;
+  var revenue=0, discount=0;
+  journal.forEach(function(e){
+    cash+=(e.cashEffect||0); card+=(e.cardEffect||0);
+    staff+=(e.staffEffect||0); goods+=(e.goodsEffect||0);
+    cashDr+=(e.cashDrEffect||0); goodsDr+=(e.goodsDrEffect||0);
+    if(e.type==='sale'){ revenue+=(e.amount||0); discount+=(e.discount||0); }
+  });
+  return {cash,card,staff,goods,cashDr,goodsDr,revenue,discount};
 }
 function renderStatusBar(){
-  const t=calcTotals();
-  document.getElementById('sbCash').textContent=fmt(t.cash);
-  document.getElementById('sbCard').textContent=fmt(t.card);
-  document.getElementById('sbStaff').textContent=fmt(t.staff);
-  document.getElementById('sbGoods').textContent=fmt(t.goods);
+  var t=calcTotals();
+  function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=fmt(v); }
+  set('sbCash', t.cash);
+  set('sbCashDr', t.cashDr);
+  set('sbStaff', t.staff);
+  set('sbGoods', t.goods);
+  set('sbGoodsDr', t.goodsDr);
+  set('sbRevenue', t.revenue);
+  set('sbDiscount', t.discount);
+  set('sbCard', t.card);
 }
 function renderAll(){ renderStatusBar(); renderJournal(); updateInvBadge(); renderPendingAlert(); }
 
