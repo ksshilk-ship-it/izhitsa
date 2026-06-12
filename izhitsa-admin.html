@@ -486,68 +486,6 @@ if ('serviceWorker' in navigator) {
   <div class="page" id="pg-settings">
     <div class="stitle">⚙️ Настройки системы</div>
 
-    <!-- SHOPS / CHANNELS -->
-    <div class="card" style="margin-bottom:10px">
-      <div class="ctitle">🏪 Точки продаж и каналы</div>
-      <div id="setShopsList" style="margin-bottom:8px"></div>
-      <div style="display:flex;gap:6px;margin-bottom:6px">
-        <input class="fi" id="newShopName" placeholder="Роза Хутор" style="flex:2;margin:0">
-        <select class="fs" id="newShopType" style="flex:1;margin:0">
-          <option value="shop">🏪 Магазин</option>
-          <option value="online">📱 Онлайн</option>
-          <option value="offline">📦 Опт/Офлайн</option>
-          <option value="workshop">🏭 Мастерская</option>
-        </select>
-      </div>
-      <button class="btn sm" onclick="addShop()">＋ Добавить</button>
-    </div>
-
-    <!-- ACCOUNTS -->
-    <div class="card" style="margin-bottom:10px">
-      <div class="ctitle">🏦 Счета и кассы</div>
-      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Кассы магазинов, карты, РС счета</div>
-      <div id="setAccountsList" style="margin-bottom:8px"></div>
-      <div style="display:flex;gap:6px;margin-bottom:6px">
-        <input class="fi" id="newAccName" placeholder="Сбер Ксения / Касса Горки" style="flex:2;margin:0">
-        <select class="fs" id="newAccType" style="flex:1;margin:0">
-          <option value="cash">💵 Касса</option>
-          <option value="card">💳 Карта</option>
-          <option value="bank">🏦 РС счёт</option>
-          <option value="online">📱 Онлайн</option>
-        </select>
-      </div>
-      <button class="btn sm" onclick="addAccount()">＋ Добавить</button>
-    </div>
-
-    <!-- PAYMENT METHODS -->
-    <div class="card" style="margin-bottom:10px">
-      <div class="ctitle">💳 Способы оплаты</div>
-      <div id="setPayMethodsList" style="margin-bottom:8px"></div>
-      <div style="display:flex;gap:6px;margin-bottom:6px">
-        <input class="fi" id="newPayMethod" placeholder="СБП / Терминал" style="flex:1;margin:0">
-      </div>
-      <button class="btn sm" onclick="addPayMethod()">＋ Добавить</button>
-    </div>
-
-    <!-- ZP SETTINGS per shop -->
-    <div class="card" style="margin-bottom:10px">
-      <div class="ctitle">💰 Формулы ЗП по точкам</div>
-      <div id="setZpList"></div>
-    </div>
-
-    <!-- ITEMS BASE -->
-    <div class="card" style="margin-bottom:10px">
-      <div class="ctitle">📦 База товаров</div>
-      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Общий каталог — доступен в магазинах и мастерской</div>
-      <div id="setItemsList" style="margin-bottom:8px;max-height:200px;overflow-y:auto"></div>
-      <div style="display:flex;gap:6px;margin-bottom:6px">
-        <input class="fi" id="newItemName" placeholder="Столешница дуб" style="flex:2;margin:0">
-        <input class="fi" id="newItemArticle" placeholder="Арт." style="flex:0.7;margin:0">
-        <input class="fi" type="number" id="newItemPrice" placeholder="₽" style="flex:0.7;margin:0">
-      </div>
-      <button class="btn sm" onclick="addItemToBase()">＋ Добавить товар</button>
-    </div>
-
     <!-- SYSTEM -->
     <div style="background:var(--s2);border-radius:8px;margin-bottom:16px;padding:12px;border-left:3px solid var(--exp)">
       <div style="font-weight:700;font-size:13px;margin-bottom:12px;display:flex;align-items:center;gap:8px">
@@ -2042,11 +1980,27 @@ function renderRefBookItems(bookId, key) {
     return;
   }
   
+  var typeIcons = {shop: '🏪', online: '📱', offline: '📦', workshop: '🏭', cash: '💵', card: '💳', bank: '🏦'};
+  
   container.innerHTML = items.map(function(item, idx) {
     var name = item.name || item;
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">' +
-      '<div style="font-size:12px">' + name + '</div>' +
-      '<button onclick="deleteRefBookItem(\'' + bookId + '\', ' + idx + ', \'' + key + '\')" style="background:none;border:none;color:var(--exp);cursor:pointer;font-size:14px;padding:0">✕</button>' +
+    var type = item.type || '';
+    var typeIcon = typeIcons[type] || '📌';
+    var displayName = name;
+    
+    // Show type for sources
+    if(bookId === 'sources' && type) {
+      displayName = typeIcon + ' ' + name + ' <span style="color:var(--t2);font-size:10px">' + type + '</span>';
+    }
+    // Show type for accounts
+    else if(bookId === 'accounts' && type) {
+      var typeLabels = {cash: 'Касса', card: 'Карта', bank: 'РС счёт', online: 'Онлайн'};
+      displayName = typeIcon + ' ' + name + ' <span style="color:var(--t2);font-size:10px">' + (typeLabels[type] || type) + '</span>';
+    }
+    
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s1);border-radius:6px;margin-bottom:6px">' +
+      '<div style="font-size:12px;flex:1">' + displayName + '</div>' +
+      '<button onclick="deleteRefBookItem(\'' + bookId + '\', ' + idx + ', \'' + key + '\')" style="background:none;border:none;color:var(--exp);cursor:pointer;font-size:14px;padding:4px;margin-left:8px">✕</button>' +
     '</div>';
   }).join('');
 }
@@ -2061,7 +2015,22 @@ function addRefBookItem(bookId, key) {
   }
   
   var items = getRefBook(key);
-  items.push({id: uid(), name: value});
+  var newItem = {id: uid(), name: value};
+  
+  // For sources, ask for type
+  if(bookId === 'sources') {
+    var type = prompt('Выберите тип:\nshop - Магазин\nonline - Онлайн\noffline - Опт/Офлайн\nworkshop - Мастерская', 'shop');
+    if(!type) return;
+    newItem.type = type;
+  }
+  // For accounts, ask for type
+  else if(bookId === 'accounts') {
+    var type = prompt('Выберите тип:\ncash - Касса\ncard - Карта\nbank - РС счёт\nonline - Онлайн', 'cash');
+    if(!type) return;
+    newItem.type = type;
+  }
+  
+  items.push(newItem);
   saveRefBook(key, items);
   
   input.value = '';
@@ -2081,19 +2050,20 @@ function deleteRefBookItem(bookId, idx, key) {
 function initRefBooks() {
   if(!localStorage.getItem('iz_sales_sources')) {
     saveRefBook('iz_sales_sources', [
-      {id: uid(), name: 'Роза Хутор'},
-      {id: uid(), name: 'Горки'},
-      {id: uid(), name: 'ТГ канал'},
-      {id: uid(), name: 'Instagram'},
-      {id: uid(), name: 'Опт'}
+      {id: uid(), name: 'Роза Хутор', type: 'shop'},
+      {id: uid(), name: 'Горки', type: 'shop'},
+      {id: uid(), name: 'ТГ канал', type: 'online'},
+      {id: uid(), name: 'Instagram', type: 'online'},
+      {id: uid(), name: 'Опт', type: 'offline'}
     ]);
   }
   
   if(!localStorage.getItem('iz_accounts')) {
     saveRefBook('iz_accounts', [
-      {id: uid(), name: 'Касса 1'},
-      {id: uid(), name: 'Касса 2'},
-      {id: uid(), name: 'Расчётный счёт'}
+      {id: uid(), name: 'Касса 1', type: 'cash'},
+      {id: uid(), name: 'Касса 2', type: 'cash'},
+      {id: uid(), name: 'Расчётный счёт', type: 'bank'},
+      {id: uid(), name: 'Касса Роза Хутор Дерево', type: 'cash'}
     ]);
   }
   
