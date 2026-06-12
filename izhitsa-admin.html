@@ -229,9 +229,53 @@ if ('serviceWorker' in navigator) {
   <!-- DASHBOARD -->
   <div class="page active" id="pg-dash">
     <div class="stitle">📊 Главная</div>
+    <div class="pchips">
+      <div class="pc active" onclick="setDashPeriod('month',this)">Месяц</div>
+      <div class="pc" onclick="setDashPeriod('week',this)">Неделя</div>
+      <div class="pc" onclick="setDashPeriod('year',this)">Год</div>
+      <div class="pc" onclick="setDashPeriod('custom',this)">✏️ Период</div>
+    </div>
+    
+    <div id="dashCustomDates" style="display:none;margin-bottom:10px" class="row2">
+      <div><label class="fl">С даты</label><input class="fi" type="date" id="dashFrom" onchange="renderDashboard()"></div>
+      <div><label class="fl">По дату</label><input class="fi" type="date" id="dashTo" onchange="renderDashboard()"></div>
+    </div>
+    
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-l">Общий доход</div>
+        <div class="kpi-v" style="color:var(--inc)" id="dashIncome">0 ₽</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-l">Общий расход</div>
+        <div class="kpi-v" style="color:var(--exp)" id="dashExpense">0 ₽</div>
+      </div>
+      <div class="kpi full">
+        <div class="kpi-l">Чистый доход</div>
+        <div class="kpi-v" id="dashBalance">0 ₽</div>
+        <div class="kpi-sub" id="dashDiff">±0 ₽</div>
+      </div>
+    </div>
+
     <div class="card">
-      <div class="ctitle">Главная — тестовая версия</div>
-      <div style="color:var(--t2);font-size:12px;padding:8px 0">Раздел в разработке</div>
+      <div class="ctitle">Продажи по источникам</div>
+      <div id="dashBySalesSource" style="min-height:80px">
+        <div style="color:var(--t2);font-size:12px;padding:8px 0">Загрузка...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ctitle">По категориям расходов</div>
+      <div id="dashByCategory" style="min-height:80px">
+        <div style="color:var(--t2);font-size:12px;padding:8px 0">Загрузка...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ctitle">Последние операции</div>
+      <div id="dashRecentTx" style="min-height:80px">
+        <div style="color:var(--t2);font-size:12px;padding:8px 0">Загрузка...</div>
+      </div>
     </div>
   </div>
 
@@ -247,56 +291,175 @@ if ('serviceWorker' in navigator) {
   <!-- OPERATIONS -->
   <div class="page" id="pg-op">
     <div class="stitle">➕ Операция</div>
+    
+    <div class="txtype">
+      <button class="txt-btn i" id="txb-inc" onclick="setTxType('income')">＋ Доход</button>
+      <button class="txt-btn" id="txb-exp" onclick="setTxType('expense')">− Расход</button>
+      <button class="txt-btn" id="txb-tr" onclick="setTxType('transfer')">⇄ Перевод</button>
+    </div>
+    
     <div class="card">
-      <div class="ctitle">Страница в разработке</div>
+      <div class="fg">
+        <label class="fl">Сумма (₽)</label>
+        <input class="fi" type="number" id="opAmt" placeholder="0" inputmode="numeric">
+      </div>
+      
+      <div class="fg" id="opSourceFg">
+        <label class="fl">Источник продаж</label>
+        <select class="fs" id="opSource"></select>
+      </div>
+      
+      <div class="fg" id="opCategoryFg" style="display:none">
+        <label class="fl">Статья расхода</label>
+        <input class="fi" type="text" id="opCategory" placeholder="Например: Аренда, ЗП, Доставка">
+      </div>
+      
+      <div class="fg">
+        <label class="fl">Описание</label>
+        <input class="fi" id="opDesc" placeholder="Заметка об операции (опционально)">
+      </div>
+      
+      <div class="fg">
+        <label class="fl">Дата</label>
+        <input class="fi" type="date" id="opDate">
+      </div>
+      
+      <button class="btn" onclick="saveOperation()" style="margin-bottom:8px">💾 Сохранить операцию</button>
+      <button class="btn sec" onclick="clearOperationForm()" style="margin-bottom:0">Очистить форму</button>
     </div>
   </div>
 
   <!-- P&L REPORT -->
-  <div class="page" id="pg-pl">
+  <div class="page" id="pg-pl" style="background:var(--bg)">
     <div class="stitle">📈 P&L Отчёт</div>
-    <div class="card">
-      <div class="ctitle">Страница в разработке</div>
+    <div class="pchips">
+      <div class="pc active" onclick="setPLPeriod('month',this)">Месяц</div>
+      <div class="pc" onclick="setPLPeriod('week',this)">Неделя</div>
+      <div class="pc" onclick="setPLPeriod('year',this)">Год</div>
+      <div class="pc" onclick="setPLPeriod('custom',this)">✏️ Период</div>
+    </div>
+    
+    <div id="plCustomDates" style="display:none;margin-bottom:10px" class="row2">
+      <div><label class="fl">С даты</label><input class="fi" type="date" id="plFrom" onchange="renderPL()"></div>
+      <div><label class="fl">По дату</label><input class="fi" type="date" id="plTo" onchange="renderPL()"></div>
+    </div>
+    
+    <div class="card" style="background:var(--bg);border:1px solid var(--border)">
+      <div class="ctitle">📊 Прибыль и убыток</div>
+      <div id="plTable"></div>
+    </div>
+    
+    <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-top:16px">
+      <div class="ctitle">📈 План vs Факт</div>
+      <div id="plBudget"></div>
     </div>
   </div>
 
   <!-- DEBT -->
   <div class="page" id="pg-debt">
     <div class="stitle">💰 Долги</div>
-    <div class="card">
-      <div class="ctitle">Страница в разработке</div>
+    
+    <div class="pchips" style="margin-bottom:16px">
+      <div class="pc active" onclick="switchDebtTab('debit',this)">📥 Дебет (нам должны)</div>
+      <div class="pc" onclick="switchDebtTab('credit',this)">📤 Кредит (мы должны)</div>
     </div>
-  </div>
-
-  <!-- ANALYTICS -->
-  <div class="page" id="pg-analytics">
-    <div class="stitle">📊 Аналитика</div>
-    <div class="card">
-      <div class="ctitle">Страница в разработке</div>
+    
+    <!-- DEBIT - Кто нам должен -->
+    <div id="debtDebitTab">
+      <div class="card">
+        <div class="ctitle">Дебиторская задолженность</div>
+        <div id="debitList" style="color:var(--t2);font-size:12px;padding:8px 0">
+          <div style="padding:12px;text-align:center;color:var(--t2)">Нет данных о должниках</div>
+        </div>
+        <div style="margin-top:12px;padding:12px;background:var(--s2);border-radius:8px;font-size:11px;color:var(--t2)">
+          <div><strong>+ Добавить должника</strong></div>
+          <input type="text" class="fi" id="debitName" placeholder="ФИ контрагента" style="margin-top:8px;margin-bottom:8px">
+          <input type="number" class="fi" id="debitAmount" placeholder="Сумма долга" style="margin-bottom:8px">
+          <button class="btn" onclick="addDebit()" style="width:100%;margin-bottom:0">Сохранить</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- CREDIT - Кого мы должны -->
+    <div id="debtCreditTab" style="display:none">
+      <div class="card">
+        <div class="ctitle">Кредиторская задолженность</div>
+        <div id="creditList" style="color:var(--t2);font-size:12px;padding:8px 0">
+          <div style="padding:12px;text-align:center;color:var(--t2)">Нет данных о кредиторах</div>
+        </div>
+        <div style="margin-top:12px;padding:12px;background:var(--s2);border-radius:8px;font-size:11px;color:var(--t2)">
+          <div><strong>+ Добавить кредитора</strong></div>
+          <input type="text" class="fi" id="creditName" placeholder="ФИ кредитора" style="margin-top:8px;margin-bottom:8px">
+          <input type="number" class="fi" id="creditAmount" placeholder="Сумма задолженности" style="margin-bottom:8px">
+          <button class="btn" onclick="addCredit()" style="width:100%;margin-bottom:0">Сохранить</button>
+        </div>
+      </div>
     </div>
   </div>
 
   <!-- SHOPS ANALYSIS -->
   <div class="page" id="pg-shops">
     <div class="stitle">🏪 Магазины</div>
-    <div class="card">
-      <div class="ctitle">Страница в разработке</div>
+    <div class="pchips">
+      <div class="pc active" onclick="setShopPeriod('today',this)">Сегодня</div>
+      <div class="pc" onclick="setShopPeriod('week',this)">Неделя</div>
+      <div class="pc" onclick="setShopPeriod('month',this)">Месяц</div>
+      <div class="pc" onclick="setShopPeriod('custom',this)">✏️ Период</div>
     </div>
+    
+    <div id="shopCustomDates" style="display:none;margin-bottom:10px" class="row2">
+      <div><label class="fl">С даты</label><input class="fi" type="date" id="shopFrom" onchange="renderShops()"></div>
+      <div><label class="fl">По дату</label><input class="fi" type="date" id="shopTo" onchange="renderShops()"></div>
+    </div>
+    
+    <div id="shopsAnalysis"></div>
   </div>
 
   <!-- PRODUCTION -->
   <div class="page" id="pg-prod">
     <div class="stitle">🏭 Мастерская</div>
+    <div class="pchips">
+      <div class="pc active" onclick="setProdPeriod('month',this)">Месяц</div>
+      <div class="pc" onclick="setProdPeriod('week',this)">Неделя</div>
+      <div class="pc" onclick="setProdPeriod('year',this)">Год</div>
+    </div>
+    
     <div class="card">
-      <div class="ctitle">Страница в разработке</div>
+      <div class="ctitle">Сотрудники мастерской</div>
+      <div id="wsEmployeesData"></div>
     </div>
   </div>
 
   <!-- STAFF -->
   <div class="page" id="pg-staff">
     <div class="stitle">👥 Управление сотрудниками</div>
+    
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-family:'Unbounded',sans-serif;font-size:12px;font-weight:700">🏪 Продавцы магазинов</div>
+      <button class="btn sm" onclick="openMo('addSellerMo')">＋ Добавить</button>
+    </div>
+    <div class="card" id="staffShopSellers"></div>
+
+    <!-- UNIFIED STAFF LIST -->
+    <div class="stitle">👥 Все сотрудники</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:12px;color:var(--t2)" id="staffCount">0 сотрудников</div>
+      <button class="btn sm" onclick="openMo('addStaffMo')">＋ Добавить</button>
+    </div>
+    <div id="unifiedStaffList"></div>
+  </div>
+
+  <!-- ANALYTICS -->
+  <div class="page" id="pg-analytics">
+    <div class="stitle">📊 Аналитика</div>
+    <div class="pchips">
+      <div class="pc active" onclick="setAnalyticsPeriod('month',this)">Месяц</div>
+      <div class="pc" onclick="setAnalyticsPeriod('quarter',this)">Квартал</div>
+      <div class="pc" onclick="setAnalyticsPeriod('year',this)">Год</div>
+    </div>
     <div class="card">
-      <div class="ctitle">Страница в разработке</div>
+      <div class="ctitle">Ключевые показатели</div>
+      <div id="analyticsData"></div>
     </div>
   </div>
 
@@ -304,28 +467,166 @@ if ('serviceWorker' in navigator) {
   <div class="page" id="pg-audit">
     <div class="stitle">🔍 Аудит-лог</div>
     <div class="card">
-      <div class="ctitle">Страница в разработке</div>
+      <div class="ctitle">📋 История всех действий</div>
+      <div class="row2" style="margin-bottom:12px">
+        <div><label class="fl">Пользователь</label><input class="fi" type="text" id="auditFilterUser" placeholder="Имя" onkeyup="renderAuditLog()"></div>
+        <div><label class="fl">Тип</label>
+          <select class="fi" id="auditFilterAction" onchange="renderAuditLog()">
+            <option value="">Все</option><option value="LOGIN">Логин</option><option value="LOGOUT">Логаут</option>
+            <option value="ADD_OPERATION">Операция</option><option value="ADD_SELLER">Продавец</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:12px"><button onclick="downloadAuditLog()" style="background:var(--accent);border:none;border-radius:6px;padding:8px 16px;color:var(--bg);font-weight:600;cursor:pointer;font-size:12px">📥 Скачать</button></div>
+      <div id="auditLogList" style="max-height:600px;overflow-y:auto"></div>
     </div>
   </div>
 
-  <!-- SETTINGS -->
+  <!-- SETTINGS — единые справочники системы -->
   <div class="page" id="pg-settings">
-    <div class="stitle">⚙️ Справочники</div>
-    
-    <!-- SYSTEM MANAGEMENT BLOCK -->
+    <div class="stitle">⚙️ Настройки системы</div>
+
+    <!-- SHOPS / CHANNELS -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="ctitle">🏪 Точки продаж и каналы</div>
+      <div id="setShopsList" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <input class="fi" id="newShopName" placeholder="Роза Хутор" style="flex:2;margin:0">
+        <select class="fs" id="newShopType" style="flex:1;margin:0">
+          <option value="shop">🏪 Магазин</option>
+          <option value="online">📱 Онлайн</option>
+          <option value="offline">📦 Опт/Офлайн</option>
+          <option value="workshop">🏭 Мастерская</option>
+        </select>
+      </div>
+      <button class="btn sm" onclick="addShop()">＋ Добавить</button>
+    </div>
+
+    <!-- ACCOUNTS -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="ctitle">🏦 Счета и кассы</div>
+      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Кассы магазинов, карты, РС счета</div>
+      <div id="setAccountsList" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <input class="fi" id="newAccName" placeholder="Сбер Ксения / Касса Горки" style="flex:2;margin:0">
+        <select class="fs" id="newAccType" style="flex:1;margin:0">
+          <option value="cash">💵 Касса</option>
+          <option value="card">💳 Карта</option>
+          <option value="bank">🏦 РС счёт</option>
+          <option value="online">📱 Онлайн</option>
+        </select>
+      </div>
+      <button class="btn sm" onclick="addAccount()">＋ Добавить</button>
+    </div>
+
+    <!-- PAYMENT METHODS -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="ctitle">💳 Способы оплаты</div>
+      <div id="setPayMethodsList" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <input class="fi" id="newPayMethod" placeholder="СБП / Терминал" style="flex:1;margin:0">
+      </div>
+      <button class="btn sm" onclick="addPayMethod()">＋ Добавить</button>
+    </div>
+
+    <!-- ZP SETTINGS per shop -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="ctitle">💰 Формулы ЗП по точкам</div>
+      <div id="setZpList"></div>
+    </div>
+
+    <!-- ITEMS BASE -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="ctitle">📦 База товаров</div>
+      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Общий каталог — доступен в магазинах и мастерской</div>
+      <div id="setItemsList" style="margin-bottom:8px;max-height:200px;overflow-y:auto"></div>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <input class="fi" id="newItemName" placeholder="Столешница дуб" style="flex:2;margin:0">
+        <input class="fi" id="newItemArticle" placeholder="Арт." style="flex:0.7;margin:0">
+        <input class="fi" type="number" id="newItemPrice" placeholder="₽" style="flex:0.7;margin:0">
+      </div>
+      <button class="btn sm" onclick="addItemToBase()">＋ Добавить товар</button>
+    </div>
+
+    <!-- SYSTEM -->
     <div style="background:var(--s2);border-radius:8px;margin-bottom:16px;padding:12px;border-left:3px solid var(--exp)">
-      <div style="font-weight:700;font-size:13px;margin-bottom:10px">⚙️ Управление системой</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn sm" onclick="exportAllData()" style="background:var(--a2);flex:1;min-width:120px">📥 Экспорт данных</button>
-        <button class="btn sm" onclick="clearAllCache()" style="background:var(--exp);flex:1;min-width:120px">🗑️ Очистить кэш</button>
+      <div style="font-weight:700;font-size:13px;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+        <span>⚙️</span> Управление системой
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <button class="btn" onclick="exportAllData()" style="background:var(--a2);color:#fff;font-size:14px;padding:16px;border-radius:12px;font-family:'Unbounded',sans-serif;font-weight:700">📥 Экспорт данных</button>
+        <button class="btn" onclick="clearLocalCache()" style="background:#ff6b6b;color:#fff;font-size:14px;padding:16px;border-radius:12px;font-family:'Unbounded',sans-serif;font-weight:700">🗑️ Очистить кэш</button>
       </div>
     </div>
-    
-    <!-- REFERENCE BOOKS -->
-    <div id="refBooksContainer"></div>
-  </div>
 
+    <!-- 12 COLLAPSED REFERENCE BOOKS -->
+    <div style="margin-top:16px">
+      <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:12px">📚 Справочники системы</div>
+      <div id="refBooksContainer"></div>
+    </div>
+  </div>
 </div>
+
+<!-- UNIFIED ADD STAFF MODAL -->
+<div id="addStaffMo" class="mo">
+  <div class="md">
+    <div class="mh"></div>
+    <div class="mt">👤 Добавить сотрудника</div>
+
+    <div class="fg"><label class="fl">Имя</label><input class="fi" id="staffName" placeholder="Иванова Мария"></div>
+    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="staffPass" placeholder="Придумайте пароль"></div>
+
+    <div class="fg">
+      <label class="fl">Роли в системе (можно несколько)</label>
+      <div style="display:flex;flex-direction:column;gap:6px" id="staffRolesBlock">
+        <!-- Admin module roles -->
+        <div style="font-size:11px;color:var(--t2);font-weight:700;margin-top:4px">📊 Администрирование</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="admin" data-module="admin" style="width:16px;height:16px"> Администратор системы
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="owner" data-module="admin" style="width:16px;height:16px"> Владелец бизнеса
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="accountant" data-module="admin" style="width:16px;height:16px"> Бухгалтер
+        </label>
+        <!-- Shop roles -->
+        <div style="font-size:11px;color:var(--t2);font-weight:700;margin-top:8px">🏪 Продажи (выберите точки)</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="seller" data-module="shop" style="width:16px;height:16px"> Продавец
+        </label>
+        <div id="staffShopsList" style="padding-left:24px;display:flex;flex-direction:column;gap:4px"></div>
+        <!-- Workshop roles -->
+        <div style="font-size:11px;color:var(--t2);font-weight:700;margin-top:8px">🏭 Мастерская</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="мастер" data-module="workshop" style="width:16px;height:16px"> Мастер
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="заготовщик" data-module="workshop" style="width:16px;height:16px"> Заготовщик
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="кладовщик" data-module="workshop" style="width:16px;height:16px"> Кладовщик
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="управляющий" data-module="workshop" style="width:16px;height:16px"> Управляющий мастерской
+        </label>
+      </div>
+    </div>
+
+    <div class="fg">
+      <label class="fl">ЗП ставка мастерской (₽/изделие)</label>
+      <input class="fi" type="number" id="staffWsRate" placeholder="0" inputmode="numeric">
+    </div>
+
+    <button class="btn" onclick="saveUnifiedStaff()" style="margin-bottom:8px">💾 Сохранить</button>
+    <button class="btn sec" onclick="closeMo('addStaffMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- Keep old modals for compatibility but hidden -->
+<div id="addSellerMo" class="mo" style="display:none!important"></div>
+<div id="addWsMo" class="mo" style="display:none!important"></div>
+<div id="setupUsersMo" class="mo" style="display:none!important"></div>
 
 <!-- TABS BAR -->
 <div class="tabs" id="tabsBar">
@@ -337,7 +638,7 @@ if ('serviceWorker' in navigator) {
   <button class="tab" onclick="switchTab('analytics',this)"><div class="ti">📊</div>Аналитика</button>
   <button class="tab" onclick="switchTab('shops',this)"><div class="ti">🏪</div>Магазины</button>
   <button class="tab" onclick="switchTab('prod',this)"><div class="ti">🏭</div>Мастерская</button>
-  <button class="tab" onclick="switchTab('staff',this)"><div class="ti">👥</div>Сотрудники</button>
+  <button class="tab" onclick="switchTab('staff',this);renderUnifiedStaff()"><div class="ti">👥</div>Сотрудники</button>
   <button class="tab" onclick="switchTab('audit',this)"><div class="ti">🔍</div>Аудит</button>
   <button class="tab" onclick="switchTab('settings',this)"><div class="ti">⚙️</div>Настройки</button>
 </div>
@@ -359,27 +660,324 @@ firebase.initializeApp({
 const db = firebase.firestore();
 db.enablePersistence({synchronizeTabs:true}).catch(function(e){ console.log('Persist:',e.code); });
 
+var _adminSyncUnsubs = {};
+var ADMIN_SYNC_SETTINGS = {
+  'iz_admin_users':      {doc:'admins',        field:'admins'},
+  'iz_shops':            {doc:'shops',         field:'shops'},
+  'iz_sellers':          {doc:'sellers',       field:'sellers'},
+  'iz_shop_zp_settings': {doc:'zp',            field:'zp'},
+  'iz_items':            {doc:'items',         field:'items'},
+  'iz_sales_sources':    {doc:'sales_sources', field:'data'},
+  'iz_plan_data':        {doc:'plan',          field:'data'},
+  'iz_debits':           {doc:'debits',        field:'data'},
+  'iz_ws_employees':     {doc:'ws_employees',  field:'data'},
+};
+function adminSyncListen(lsKey) {
+  var m = ADMIN_SYNC_SETTINGS[lsKey]; if(!m || _adminSyncUnsubs[lsKey]) return;
+  _adminSyncUnsubs[lsKey] = db.collection('iz_settings').doc(m.doc).onSnapshot(function(snap){
+    if(!snap.exists) return;
+    var val = snap.data()[m.field];
+    if(val !== undefined) {
+      localStorage.setItem(lsKey, JSON.stringify(val));
+      // Mirror shops to iz_admin_shops for shop module
+      if(lsKey === 'iz_shops') localStorage.setItem('iz_admin_shops', JSON.stringify(val));
+    }
+  }, function(e){ console.log('adminSyncListen err', lsKey, e.code||e); });
+}
+function adminSyncSave(lsKey, data) {
+  localStorage.setItem(lsKey, JSON.stringify(data));
+  if(lsKey === 'iz_shops') localStorage.setItem('iz_admin_shops', JSON.stringify(data));
+  var m = ADMIN_SYNC_SETTINGS[lsKey]; if(!m) return;
+  var obj = {}; obj[m.field] = data; obj.updatedAt = new Date().toISOString();
+  db.collection('iz_settings').doc(m.doc).set(obj, {merge:true}).catch(function(e){ console.log('adminSyncSave err', lsKey, e.code||e); });
+}
+function adminSyncListenCollection(lsKey, colName) {
+  if(_adminSyncUnsubs[lsKey]) return;
+  _adminSyncUnsubs[lsKey] = db.collection(colName).onSnapshot(function(snap){
+    var docs = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
+    localStorage.setItem(lsKey, JSON.stringify(docs));
+  }, function(e){ console.log('adminCol sync err', colName, e.code||e); });
+}
+function startAdminSyncListeners() {
+  Object.keys(ADMIN_SYNC_SETTINGS).forEach(adminSyncListen);
+  adminSyncListenCollection('iz_shifts', 'iz_shifts');
+  adminSyncListenCollection('iz_transactions', 'iz_transactions');
+  adminSyncListenCollection('iz_admin_alerts', 'iz_admin_alerts');
+  adminSyncListenCollection('iz_invoices', 'iz_invoices');
+  adminSyncListenCollection('iz_shop_notifications', 'iz_shop_notifications');
+  adminSyncListenCollection('iz_psj', 'iz_psj');
+}
+
+var selectedRole = null;
 var session = null;
 
 function gv(id) { var el=document.getElementById(id); return el?el.value||'':''; }
+
+function getAdminUsers() {
+  try { return JSON.parse(localStorage.getItem('iz_admin_users') || '[]'); } 
+  catch(e) { return []; }
+}
+
+function saveAdminUsers(data) {
+  adminSyncSave('iz_admin_users', data);
+}
+
+function getShops() {
+  try { return JSON.parse(localStorage.getItem('iz_shops') || '[]'); } 
+  catch(e) { return []; }
+}
+
+function saveShops(data) {
+  adminSyncSave('iz_shops', data);
+}
+
+function getTransactions() {
+  try { return JSON.parse(localStorage.getItem('iz_transactions') || '[]'); } 
+  catch(e) { return []; }
+}
+
+function saveTransactions(data) {
+  adminSyncSave('iz_transactions', data);
+}
+
+function getSalesSources() {
+  try { return JSON.parse(localStorage.getItem('iz_sales_sources') || '[]'); } 
+  catch(e) { return []; }
+}
+
+function saveSalesSources(data) {
+  adminSyncSave('iz_sales_sources', data);
+}
+
+function getPlanData() {
+  try { return JSON.parse(localStorage.getItem('iz_plan_data') || '{}'); } 
+  catch(e) { return {}; }
+}
+
+function savePlanData(data) {
+  adminSyncSave('iz_plan_data', data);
+}
+
+function getDebits() {
+  try { return JSON.parse(localStorage.getItem('iz_debits') || '[]'); } 
+  catch(e) { return []; }
+}
+
+function saveDebits(data) {
+  adminSyncSave('iz_debits', data);
+}
+
+function getAuditLog() {
+  try { return JSON.parse(localStorage.getItem('iz_audit_log') || '[]'); } 
+  catch(e) { return []; }
+}
+
+function saveAuditLog(data) {
+  adminSyncSave('iz_audit_log', data);
+}
+
+function logAction(action, details = {}) {
+  if(!session) return;
+  
+  const log = getAuditLog();
+  const entry = {
+    id: uid(),
+    timestamp: new Date().toISOString(),
+    user: session.name,
+    role: session.role,
+    action: action,
+    details: details,
+    ipInfo: 'Browser: ' + navigator.userAgent.substring(0, 50),
+    hash: Math.random().toString(36).substring(2, 15) // Защита от подделки
+  };
+  
+  log.push(entry);
+  // Ограничиваем размер лога - последние 10000 записей
+  if(log.length > 10000) {
+    log.splice(0, log.length - 10000);
+  }
+  
+  saveAuditLog(log);
+}
+
+// Перехватываем основные действия
+function logAddSeller(sellerName, shops) {
+  logAction('ADD_SELLER', {entity: 'Seller', name: sellerName, shops: shops});
+}
+
+function logDeleteSeller(sellerName) {
+  logAction('DELETE_SELLER', {entity: 'Seller', name: sellerName});
+}
+
+function logChangeSellerPassword(sellerName) {
+  logAction('CHANGE_PASSWORD', {entity: 'Seller', name: sellerName});
+}
+
+function logBlockSeller(sellerName, blocked) {
+  logAction('BLOCK_SELLER', {entity: 'Seller', name: sellerName, blocked: blocked});
+}
+
+function logAddOperation(type, amount, source, category) {
+  logAction('ADD_OPERATION', {type: type, amount: amount, source: source, category: category});
+}
+
+function logAddDebt(type, name, amount) {
+  logAction('ADD_DEBT', {type: type, name: name, amount: amount});
+}
+
+function logDeleteDebt(type, name) {
+  logAction('DELETE_DEBT', {type: type, name: name});
+}
+
+function logAddWsEmployee(name, role) {
+  logAction('ADD_WS_EMPLOYEE', {name: name, role: role});
+}
+
+function logDeleteWsEmployee(name) {
+  logAction('DELETE_WS_EMPLOYEE', {name: name});
+}
+
+function logAddAdminUser(name, role) {
+  logAction('ADD_ADMIN', {name: name, role: role});
+}
+
+function logDeleteAdminUser(name) {
+  logAction('DELETE_ADMIN', {name: name});
+}
+
+function logLogin(username) {
+  logAction('LOGIN', {username: username});
+}
+
+function logLogout(username) {
+  logAction('LOGOUT', {username: username});
+}
+
+function renderAuditLog() {
+  const logs = getAuditLog();
+  const filterUser = gv('auditFilterUser').toLowerCase();
+  const filterAction = gv('auditFilterAction');
+  
+  let filtered = logs;
+  
+  if(filterUser) {
+    filtered = filtered.filter(l => l.user.toLowerCase().includes(filterUser));
+  }
+  
+  if(filterAction) {
+    filtered = filtered.filter(l => l.action === filterAction);
+  }
+  
+  // Показываем в обратном порядке (новые сверху)
+  filtered = filtered.reverse();
+  
+  const actionLabels = {
+    LOGIN: '🔐 Логин',
+    LOGOUT: '🚪 Логаут',
+    ADD_OPERATION: '➕ Операция',
+    ADD_SELLER: '👤 Добавить продавца',
+    DELETE_SELLER: '🗑️ Удалить продавца',
+    CHANGE_PASSWORD: '🔑 Смена пароля',
+    BLOCK_SELLER: '🚫 Блокировка',
+    ADD_DEBT: '💰 Добавить долг',
+    DELETE_DEBT: '🗑️ Удалить долг',
+    ADD_WS_EMPLOYEE: '👥 Добавить сотрудника',
+    DELETE_WS_EMPLOYEE: '🗑️ Удалить сотрудника',
+    ADD_ADMIN: '🔐 Добавить админа'
+  };
+  
+  let html = '';
+  
+  if(filtered.length === 0) {
+    html = '<div style="padding:20px;text-align:center;color:var(--t2);font-size:12px">Нет записей</div>';
+  } else {
+    html = filtered.map((log, i) => {
+      const date = new Date(log.timestamp);
+      const timeStr = date.toLocaleString('ru-RU', {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'});
+      const label = actionLabels[log.action] || log.action;
+      
+      return `
+        <div style="padding:12px;background:var(--s2);border-radius:8px;margin-bottom:8px;border-left:3px solid var(--a2)">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <div style="font-weight:600;font-size:12px">${label}</div>
+            <div style="font-size:11px;color:var(--t2)">${timeStr}</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:11px">
+            <div style="color:var(--a3)">👤 ${log.user} (${log.role})</div>
+            <div style="color:var(--t3);font-family:monospace;font-size:10px">ID: ${log.id.substring(0,8)}</div>
+          </div>
+          ${log.details && Object.keys(log.details).length > 0 ? `
+            <div style="padding:8px;background:var(--bg);border-radius:4px;font-size:10px;color:var(--t2);font-family:monospace;word-break:break-all">
+              ${Object.entries(log.details).map(([k,v]) => k + ': ' + (typeof v === 'object' ? JSON.stringify(v) : v)).join(' | ')}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+  
+  const el = document.getElementById('auditLogList');
+  if(el) el.innerHTML = html;
+}
+
+function downloadAuditLog() {
+  const logs = getAuditLog();
+  
+  if(logs.length === 0) {
+    alert('Логов нет');
+    return;
+  }
+  
+  // Форматируем в CSV
+  let csv = 'Дата,Пользователь,Роль,Действие,Детали,ID\n';
+  
+  logs.forEach(log => {
+    const date = new Date(log.timestamp).toLocaleString('ru-RU');
+    const details = log.details ? Object.entries(log.details).map(([k,v]) => k + '=' + v).join('; ') : '';
+    csv += `"${date}","${log.user}","${log.role}","${log.action}","${details}","${log.id}"\n`;
+  });
+  
+  // Скачиваем
+  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', 'audit_log_' + new Date().toISOString().split('T')[0] + '.csv');
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function getWsEmployees() {
+  try { return JSON.parse(localStorage.getItem('iz_ws_employees') || '[]'); } 
+  catch(e) { return []; }
+}
+
+function saveWsEmployees(data) {
+  adminSyncSave('iz_ws_employees', data);
+}
 
 function uid() { return Math.random().toString(36).substr(2,9); }
 function now() { return new Date().toISOString(); }
 
 function selectAdminRole(role, el) {
   try {
+    selectedRole = role;
     document.querySelectorAll('.role-card').forEach(function(c){ c.classList.remove('selected'); });
     if(el && el.classList) el.classList.add('selected');
     
-    var testUsers = {
-      admin: [{id:'admin_default', name:'Администратор'}, {id:'1', name:'Ксения'}, {id:'2', name:'Елена'}],
-      owner: [{id:'3', name:'Владимир'}],
-      accountant: [{id:'4', name:'Анна'}]
-    };
+    var users = getAdminUsers();
+    var filtered = users.filter(function(u){ return u.role === role; });
     
-    var users = testUsers[role] || [];
-    document.getElementById('loginUser').innerHTML = users.length
-      ? users.map(function(u){ return '<option value="'+u.id+'">'+u.name+'</option>'; }).join('')
+    // Always add hardcoded superadmin for admin role
+    if(role === 'admin') {
+      var hasSuperAdmin = filtered.some(function(u){ return u.id === 'admin_default'; });
+      if(!hasSuperAdmin) filtered.unshift({id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'});
+    }
+    
+    document.getElementById('loginUser').innerHTML = filtered.length
+      ? filtered.map(function(u){ return '<option value="'+u.id+'">'+u.name+'</option>'; }).join('')
       : '<option value="">— нет пользователей —</option>';
   } catch(e) {
     console.error('selectAdminRole error:', e);
@@ -392,35 +990,50 @@ function doLogin() {
   var errEl = document.getElementById('loginErr');
   errEl.style.display = 'none';
 
-  if(!uid_sel || !pass) {
-    errEl.style.display = 'block';
-    errEl.textContent = 'Введите пользователя и пароль';
+  // Hardcoded superadmin — always works regardless of Firestore
+  if(uid_sel === 'admin_default' && pass === 'admin123') {
+    var superAdmin = {id:'admin_default', name:'Администратор', role:'admin'};
+    session = superAdmin;
+    sessionStorage.setItem('iz_admin_session', JSON.stringify(session));
+    logLogin('Администратор', 'admin');
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appScreen').style.display = 'block';
+    document.getElementById('tabsBar').style.display = 'flex';
+    document.getElementById('hdrName').textContent = 'Администратор';
+    document.getElementById('hdrRole').textContent = 'admin';
+    populateSellers(); populateWsEmployees(); populateAdminUsers();
+    if(typeof populateSalesSourcesList==='function') populateSalesSourcesList();
+    if(typeof populateSourcesForOp==='function') populateSourcesForOp();
+    populateShopCheckboxes();
+    renderPL(); renderShops(); renderPLBudget(); renderDebts();
+    if(typeof renderDashboard==='function') renderDashboard();
     return;
   }
 
-  // Hardcoded test users
-  var testUsers = {
-    'admin_default': {id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'},
-    '1': {id:'1', name:'Ксения', role:'admin', pass:'1'},
-    '2': {id:'2', name:'Елена', role:'admin', pass:'1'},
-    '3': {id:'3', name:'Владимир', role:'owner', pass:'1'},
-    '4': {id:'4', name:'Анна', role:'accountant', pass:'1'}
-  };
+  if(!uid_sel) {
+    errEl.style.display = 'block';
+    errEl.textContent = 'Выберите пользователя';
+    return;
+  }
 
-  var user = testUsers[uid_sel];
+  var users = getAdminUsers();
+  var user = users.find(function(u){ return u.id === uid_sel; });
+
   if(!user) {
     errEl.style.display = 'block';
     errEl.textContent = 'Пользователь не найден';
     return;
   }
+
   if(user.pass !== pass) {
     errEl.style.display = 'block';
     errEl.textContent = 'Неверный пароль';
     return;
   }
-
+  
   session = {id: user.id, name: user.name, role: user.role};
   sessionStorage.setItem('iz_admin_session', JSON.stringify(session));
+  logLogin(user.name);
   errEl.style.display = 'none';
   
   document.getElementById('loginScreen').style.display = 'none';
@@ -428,9 +1041,29 @@ function doLogin() {
   document.getElementById('tabsBar').style.display = 'flex';
   document.getElementById('hdrName').textContent = user.name;
   document.getElementById('hdrRole').textContent = user.role;
+  
+  populateSellers();
+  populateWsEmployees();
+  populateAdminUsers();
+  populateSalesSourcesList();
+  populateSourcesForOp();
+  populateShopCheckboxes();
+  renderPL();
+  renderShops();
+  renderPLBudget();
+  renderDebts();
+  populateShopCheckboxes();
+  renderDashboard();
+  // setTxType('income');
+  // clearOperationForm();
+  // renderPL();
+  // renderShops();
+  // renderWsEmployeesData();
+  // renderAnalytics();
 }
 
 function doLogout() {
+  if(session) logLogout(session.name);
   session = null;
   sessionStorage.removeItem('iz_admin_session');
   document.getElementById('loginScreen').style.display = 'flex';
@@ -448,42 +1081,886 @@ function switchTab(id, btn) {
   if(page) page.classList.add('active');
   if(btn) btn.classList.add('active');
   
-  if(id === 'settings') renderRefBooks();
+  // Render specific page data when switching
+  if(id === 'shops') renderShops();
+  if(id === 'pl') { renderPL(); renderPLBudget(); }
+  if(id === 'debt') renderDebts();
+  if(id === 'audit') renderAuditLog();
+}
+
+function openMo(id) {
+  const mo = document.getElementById(id);
+  if(mo) mo.classList.add('open');
+}
+
+function closeMo(id) {
+  const mo = document.getElementById(id);
+  if(mo) mo.classList.remove('open');
+}
+
+function switchDebtTab(tab, btn) {
+  document.querySelectorAll('#pg-debt .pchips .pc').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  
+  document.getElementById('debtDebitTab').style.display = tab === 'debit' ? 'block' : 'none';
+  document.getElementById('debtCreditTab').style.display = tab === 'credit' ? 'block' : 'none';
+  
+  renderDebts();
+}
+
+function addDebit() {
+  const name = gv('debitName');
+  const amount = parseInt(gv('debitAmount')) || 0;
+  
+  if(!name || !amount) {
+    alert('Заполните все поля');
+    return;
+  }
+  
+  const debits = getDebits();
+  debits.push({id: uid(), name, amount, date: now(), createdBy: session.name});
+  saveDebits(debits);
+  logAddDebt('debit', name, amount);
+  
+  document.getElementById('debitName').value = '';
+  document.getElementById('debitAmount').value = '';
+  renderDebts();
+}
+
+function addCredit() {
+  const name = gv('creditName');
+  const amount = parseInt(gv('creditAmount')) || 0;
+  
+  if(!name || !amount) {
+    alert('Заполните все поля');
+    return;
+  }
+  
+  const credits = getCredits();
+  credits.push({id: uid(), name, amount, date: now(), createdBy: session.name});
+  saveCredits(credits);
+  logAddDebt('credit', name, amount);
+  
+  document.getElementById('creditName').value = '';
+  document.getElementById('creditAmount').value = '';
+  renderDebts();
+}
+
+function deleteDebit(id) {
+  if(!confirm('Удалить?')) return;
+  let debits = getDebits();
+  debits = debits.filter(d => d.id !== id);
+  saveDebits(debits);
+  renderDebts();
+}
+
+function deleteCredit(id) {
+  if(!confirm('Удалить?')) return;
+  let credits = getCredits();
+  credits = credits.filter(c => c.id !== id);
+  saveCredits(credits);
+  renderDebts();
+}
+
+function renderDebts() {
+  const debits = getDebits();
+  const credits = getCredits();
+  
+  // Render debits
+  let debitHtml = '';
+  if(debits.length === 0) {
+    debitHtml = '<div style="padding:12px;text-align:center;color:var(--t2)">Нет данных о должниках</div>';
+  } else {
+    const totalDebit = debits.reduce((sum, d) => sum + d.amount, 0);
+    debitHtml = `<div class="pl-row tot" style="margin-bottom:12px">
+      <div style="font-weight:600">Итого дебет:</div>
+      <div class="pl-val" style="color:var(--inc);font-weight:700">${totalDebit.toLocaleString('ru-RU')} ₽</div>
+    </div>`;
+    
+    debits.forEach(d => {
+      debitHtml += `<div class="pl-row" style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px">
+        <div>
+          <div style="font-weight:600;font-size:12px">${d.name}</div>
+          <div style="font-size:11px;color:var(--t2)">${new Date(d.date).toLocaleDateString('ru-RU')}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="color:var(--inc);font-weight:700">${d.amount.toLocaleString('ru-RU')} ₽</div>
+          <button class="txt-btn" onclick="deleteDebit('${d.id}')" style="font-size:11px;padding:4px 8px;margin-top:4px">Удалить</button>
+        </div>
+      </div>`;
+    });
+  }
+  document.getElementById('debitList').innerHTML = debitHtml;
+  
+  // Render credits
+  let creditHtml = '';
+  if(credits.length === 0) {
+    creditHtml = '<div style="padding:12px;text-align:center;color:var(--t2)">Нет данных о кредиторах</div>';
+  } else {
+    const totalCredit = credits.reduce((sum, c) => sum + c.amount, 0);
+    creditHtml = `<div class="pl-row tot" style="margin-bottom:12px">
+      <div style="font-weight:600">Итого кредит:</div>
+      <div class="pl-val" style="color:var(--exp);font-weight:700">${totalCredit.toLocaleString('ru-RU')} ₽</div>
+    </div>`;
+    
+    credits.forEach(c => {
+      creditHtml += `<div class="pl-row" style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px">
+        <div>
+          <div style="font-weight:600;font-size:12px">${c.name}</div>
+          <div style="font-size:11px;color:var(--t2)">${new Date(c.date).toLocaleDateString('ru-RU')}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="color:var(--exp);font-weight:700">${c.amount.toLocaleString('ru-RU')} ₽</div>
+          <button class="txt-btn" onclick="deleteCredit('${c.id}')" style="font-size:11px;padding:4px 8px;margin-top:4px">Удалить</button>
+        </div>
+      </div>`;
+    });
+  }
+  document.getElementById('creditList').innerHTML = creditHtml;
+}
+
+function populateShopCheckboxes() {
+  const shops = getShops();
+  const html = shops.map(s => `<label class="checkbox-label"><input type="checkbox" value="${s}"><span>${s}</span></label>`).join('');
+  document.getElementById('aSellerShopsCheckboxes').innerHTML = html;
+}
+
+function addSellerFromStaff() {
+  const name = gv('aSellerName');
+  const pass = gv('aSellerPass');
+  
+  if(!name || !pass) {
+    alert('Заполните имя и пароль');
+    return;
+  }
+  
+  const checkboxes = document.querySelectorAll('#aSellerShopsCheckboxes input:checked');
+  const shops = Array.from(checkboxes).map(cb => cb.value);
+  
+  if(!shops.length) {
+    alert('Выберите хотя бы один магазин');
+    return;
+  }
+  
+  const sellers = getSellers();
+  sellers.push({
+    id: uid(),
+    name: name,
+    shops: shops,
+    pass: pass,
+    blocked: false,
+    createdAt: now(),
+    createdBy: session.name
+  });
+  
+  saveSellers(sellers);
+  logAddSeller(name, shops);
+  document.getElementById('aSellerName').value = '';
+  document.getElementById('aSellerPass').value = '';
+  document.querySelectorAll('#aSellerShopsCheckboxes input').forEach(cb => cb.checked = false);
+  closeMo('addSellerMo');
+  populateSellers();
+  alert('✅ Продавец добавлен');
+}
+
+function populateSellers() {
+  const c = document.getElementById('staffShopSellers');
+  const sellers = getSellers();
+  
+  if(!sellers.length) {
+    c.innerHTML = '<div class="empty"><div class="ei">🏪</div>Нет продавцов</div>';
+    return;
+  }
+  
+  c.innerHTML = sellers.map((s, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--s2);border-radius:8px;margin-bottom:8px">
+      <div style="width:40px;height:40px;border-radius:50%;background:${s.blocked?'var(--border)':'#1a2e1e'};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;opacity:${s.blocked?'0.5':'1'}">${s.blocked?'🚫':'🏪'}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;color:${s.blocked?'var(--t2)':'var(--text)'}">${s.name}${s.blocked?' (заблокирован)':''}</div>
+        <div style="font-size:11px;color:var(--t2)">Магазины: ${s.shops.join(', ') || 'не выбраны'}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <button onclick="toggleSellerBlock(${i})" title="Заблокировать" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:${s.blocked?'var(--inc)':'var(--exp)'};cursor:pointer">${s.blocked?'✓ Разбл':'Блок'}</button>
+        <button onclick="changeSellerPassword(${i})" title="Сменить пароль" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:var(--a2);cursor:pointer">🔑</button>
+        <button onclick="deleteSeller(${i})" title="Удалить" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function toggleSellerBlock(idx) {
+  const sellers = getSellers();
+  sellers[idx].blocked = !sellers[idx].blocked;
+  logBlockSeller(sellers[idx].name, sellers[idx].blocked);
+  saveSellers(sellers);
+  populateSellers();
+}
+
+function changeSellerPassword(idx) {
+  const sellers = getSellers();
+  const newPass = prompt('Новый пароль для ' + sellers[idx].name + ':', sellers[idx].pass);
+  if(newPass) {
+    sellers[idx].pass = newPass;
+    logChangeSellerPassword(sellers[idx].name);
+    saveSellers(sellers);
+    alert('✅ Пароль изменён');
+  }
+}
+
+function deleteSeller(idx) {
+  if(!confirm('Удалить продавца?')) return;
+  const sellers = getSellers();
+  const sellerName = sellers[idx].name;
+  logDeleteSeller(sellerName);
+  sellers.splice(idx, 1);
+  saveSellers(sellers);
+  populateSellers();
+}
+
+function addWsEmployee() {
+  const name = gv('aWsName');
+  const role = gv('aWsRole');
+  const rate = parseFloat(gv('aWsRate')) || 0;
+  const pass = gv('aWsPass');
+  
+  if(!name || !pass) {
+    alert('Заполните имя и пароль');
+    return;
+  }
+  
+  const emps = getWsEmployees();
+  emps.push({
+    id: uid(),
+    name: name,
+    role: role,
+    rate: rate,
+    pass: pass,
+    blocked: false,
+    createdAt: now(),
+    createdBy: session.name
+  });
+  
+  saveWsEmployees(emps);
+  document.getElementById('aWsName').value = '';
+  document.getElementById('aWsRate').value = '';
+  document.getElementById('aWsPass').value = '';
+  closeMo('addWsMo');
+  populateWsEmployees();
+  alert('✅ Сотрудник добавлен');
+}
+
+function populateWsEmployees() {
+  const c = document.getElementById('staffWsEmployees');
+  const emps = getWsEmployees();
+  
+  if(!emps.length) {
+    c.innerHTML = '<div class="empty"><div class="ei">🏭</div>Нет сотрудников</div>';
+    return;
+  }
+  
+  const roleIcons = {заготовщик:'🪚', мастер:'🔨', кладовщик:'📦', управляющий:'👑'};
+  c.innerHTML = emps.map((e, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--s2);border-radius:8px;margin-bottom:8px">
+      <div style="width:40px;height:40px;border-radius:50%;background:#1a1e2e;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;opacity:${e.blocked?'0.5':'1'}">${roleIcons[e.role] || '👤'}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;color:${e.blocked?'var(--t2)':'var(--text)'}">${e.name}${e.blocked?' (заблокирован)':''}</div>
+        <div style="font-size:11px;color:var(--t2)">${e.role}${e.rate ? ' • ' + e.rate + '₽/шт' : ''}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <button onclick="toggleWsBlock(${i})" title="Заблокировать" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:${e.blocked?'var(--inc)':'var(--exp)'};cursor:pointer">${e.blocked?'✓ Разбл':'Блок'}</button>
+        <button onclick="changeWsPassword(${i})" title="Сменить пароль" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:var(--a2);cursor:pointer">🔑</button>
+        <button onclick="deleteWsEmployee(${i})" title="Удалить" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function toggleWsBlock(idx) {
+  const emps = getWsEmployees();
+  emps[idx].blocked = !emps[idx].blocked;
+  saveWsEmployees(emps);
+  populateWsEmployees();
+}
+
+function changeWsPassword(idx) {
+  const emps = getWsEmployees();
+  const newPass = prompt('Новый пароль для ' + emps[idx].name + ':', emps[idx].pass);
+  if(newPass) {
+    emps[idx].pass = newPass;
+    saveWsEmployees(emps);
+    alert('✅ Пароль изменён');
+  }
+}
+
+function deleteWsEmployee(idx) {
+  if(!confirm('Удалить сотрудника?')) return;
+  const emps = getWsEmployees();
+  emps.splice(idx, 1);
+  saveWsEmployees(emps);
+  populateWsEmployees();
+}
+
+function populateAdminUsers() {
+  const c = document.getElementById('staffAdminUsers');
+  const users = getAdminUsers();
+  const roleL = {admin:'🔐 Администратор', owner:'👑 Владелец', accountant:'📊 Бухгалтер'};
+  const roleIcons = {admin:'🔐', owner:'👑', accountant:'📊'};
+  
+  if(!users.length) {
+    c.innerHTML = '<div class="empty"><div class="ei">🔐</div>Нет пользователей</div>';
+    return;
+  }
+  
+  c.innerHTML = users.map((u, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--s2);border-radius:8px;margin-bottom:8px">
+      <div style="font-size:24px">${roleIcons[u.role] || '👤'}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${u.name}</div>
+        <div style="font-size:11px;color:var(--t2)">${roleL[u.role]}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <button onclick="changeAdminPassword(${i})" title="Сменить пароль" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:var(--a2);cursor:pointer">🔑</button>
+        <button onclick="deleteAdminUser(${i})" title="Удалить" style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function changeAdminPassword(idx) {
+  const users = getAdminUsers();
+  const newPass = prompt('Новый пароль для ' + users[idx].name + ':', users[idx].pass);
+  if(newPass) {
+    users[idx].pass = newPass;
+    saveAdminUsers(users);
+    alert('✅ Пароль изменён');
+  }
+}
+
+function deleteAdminUser(idx) {
+  if(confirm('Удалить администратора?')) {
+    const users = getAdminUsers();
+    users.splice(idx, 1);
+    saveAdminUsers(users);
+    populateAdminUsers();
+  }
+}
+
+function addAdminUser() {
+  const name = gv('newAdminName');
+  const role = gv('newAdminRole');
+  const pass = gv('newAdminPass');
+  
+  if(!name || !pass) {
+    alert('Заполните имя и пароль');
+    return;
+  }
+  
+  const users = getAdminUsers();
+  users.push({
+    id: uid(),
+    name: name,
+    role: role,
+    pass: pass
+  });
+  
+  saveAdminUsers(users);
+  document.getElementById('newAdminName').value = '';
+  document.getElementById('newAdminPass').value = '';
+  closeMo('setupUsersMo');
+  populateAdminUsers();
+  selectAdminRole(selectedRole || 'admin', document.querySelectorAll('.role-card')[0]);
+  alert('✅ Администратор добавлен');
+}
+
+function getTransactions() {
+  try { return JSON.parse(localStorage.getItem('iz_transactions') || '[]'); } 
+  catch(e) { return []; }
+}
+
+function saveTransactions(data) {
+  adminSyncSave('iz_transactions', data);
+}
+
+let currentTxType = 'income';
+
+function setTxType(type) {
+  currentTxType = type;
+  document.querySelectorAll('.txtype .txt-btn').forEach(b => b.classList.remove('i','e','t'));
+  document.getElementById('txb-inc').classList.remove('i');
+  document.getElementById('txb-exp').classList.remove('e');
+  document.getElementById('txb-tr').classList.remove('t');
+  
+  if(type === 'income') {
+    document.getElementById('txb-inc').classList.add('i');
+    document.getElementById('opSourceFg').style.display = 'block';
+    document.getElementById('opCategoryFg').style.display = 'none';
+  } else if(type === 'expense') {
+    document.getElementById('txb-exp').classList.add('e');
+    document.getElementById('opSourceFg').style.display = 'none';
+    document.getElementById('opCategoryFg').style.display = 'block';
+  } else {
+    document.getElementById('txb-tr').classList.add('t');
+    document.getElementById('opSourceFg').style.display = 'none';
+    document.getElementById('opCategoryFg').style.display = 'none';
+  }
+}
+
+function populateSourcesForOp() {
+  const sources = getSalesSources();
+  const select = document.getElementById('opSource');
+  select.innerHTML = sources.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+}
+
+function saveOperation() {
+  const amt = parseFloat(gv('opAmt'));
+  const source = gv('opSource');
+  const category = gv('opCategory');
+  const desc = gv('opDesc');
+  const date = gv('opDate');
+  
+  if(!amt || amt <= 0) {
+    alert('Введите сумму больше 0');
+    return;
+  }
+  
+  if(!date) {
+    alert('Выберите дату');
+    return;
+  }
+  
+  if(currentTxType === 'income' && !source) {
+    alert('Выберите источник продаж');
+    return;
+  }
+  
+  if(currentTxType === 'expense' && !category) {
+    alert('Введите статью расхода');
+    return;
+  }
+  
+  const txs = getTransactions();
+  txs.push({
+    id: uid(),
+    type: currentTxType,
+    amount: amt,
+    source: source,
+    category: category,
+    desc: desc,
+    date: date + 'T00:00:00',
+    createdAt: now(),
+    createdBy: session.name
+  });
+  
+  saveTransactions(txs);
+  logAddOperation(currentTxType, amt, source, category);
+  clearOperationForm();
+  renderDashboard();
+  alert('✅ Операция сохранена');
+}
+
+
+
+// ════ UNIFIED STAFF SYSTEM ════
+// Single source of truth: iz_staff in Firestore
+// Each staff member has: id, name, pass, roles[], shops[], wsRate, blocked
+
+function getStaff() {
+  return JSON.parse(localStorage.getItem('iz_staff') || '[]');
+}
+function saveStaff(data) {
+  localStorage.setItem('iz_staff', JSON.stringify(data));
+  var obj = {staff: data, updatedAt: new Date().toISOString()};
+  db.collection('iz_settings').doc('staff').set(obj, {merge:true})
+    .catch(function(e){ console.log('saveStaff err', e); });
+  // Also sync derived lists for backward compatibility
+  _syncDerivedFromStaff(data);
+}
+
+function _syncDerivedFromStaff(staff) {
+  // Derive iz_sellers for shop module
+  var sellers = staff.filter(function(s){ return s.roles && s.roles.indexOf('seller') >= 0; })
+    .map(function(s){ return {id:s.id, name:s.name, pass:s.pass, shops:s.shops||[], blocked:s.blocked||false, rate:s.wsRate||0}; });
+  adminSyncSave('iz_sellers', sellers);
+
+  // Derive ws_employees for workshop module
+  var wsRoles = ['мастер','заготовщик','кладовщик','управляющий'];
+  var wsEmps = staff.filter(function(s){
+    return s.roles && s.roles.some(function(r){ return wsRoles.indexOf(r) >= 0; });
+  }).map(function(s){
+    var wsRole = s.roles.find(function(r){ return wsRoles.indexOf(r) >= 0; }) || 'мастер';
+    return {id:s.id, name:s.name, pass:s.pass, role:wsRole, rate:s.wsRate||0, blocked:s.blocked||false};
+  });
+  adminSyncSave('iz_ws_employees', wsEmps);
+
+  // Derive iz_shop_admins / iz_admin_users
+  var adminRoles = ['admin','owner','accountant'];
+  var admins = staff.filter(function(s){ return s.roles && s.roles.some(function(r){ return adminRoles.indexOf(r) >= 0; }); })
+    .map(function(s){ return {id:s.id, name:s.name, pass:s.pass, role:s.roles.find(function(r){ return adminRoles.indexOf(r)>=0; })||'admin'}; });
+  // Also add to iz_shop_admins so shop module can log in
+  var shopAdmins = staff.filter(function(s){ return s.roles && (s.roles.indexOf('admin')>=0 || s.roles.indexOf('owner')>=0); })
+    .map(function(s){ return {id:s.id, name:s.name, pass:s.pass}; });
+  if(!shopAdmins.length) shopAdmins = [{id:'admin_default', name:'Администратор', pass:'admin123'}];
+  localStorage.setItem('iz_shop_admins', JSON.stringify(shopAdmins));
+  db.collection('iz_settings').doc('admins').set({admins:shopAdmins, updatedAt:new Date().toISOString()}, {merge:true});
+}
+
+function openAddStaffModal() {
+  // Populate shop checkboxes
+  var shops = getShops();
+  var container = document.getElementById('staffShopsList');
+  if(container) {
+    container.innerHTML = shops.map(function(s) {
+      var name = s.name || s;
+      return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">' +
+        '<input type="checkbox" value="' + name + '" data-shopcheck="1" style="width:14px;height:14px"> ' + name + '</label>';
+    }).join('');
+  }
+  // Reset form
+  ['staffName','staffPass','staffWsRate'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  document.querySelectorAll('#staffRolesBlock input[type=checkbox]').forEach(function(cb){ cb.checked=false; });
+  openMo('addStaffMo');
+}
+
+function saveUnifiedStaff() {
+  var name = gv('staffName').trim();
+  var pass = gv('staffPass').trim();
+  if(!name || !pass) { alert('Введите имя и пароль'); return; }
+
+  var roles = [];
+  document.querySelectorAll('#staffRolesBlock input[type=checkbox]:checked').forEach(function(cb){
+    roles.push(cb.value);
+  });
+  if(!roles.length) { alert('Выберите хотя бы одну роль'); return; }
+
+  var shops = [];
+  document.querySelectorAll('#staffShopsList input[type=checkbox]:checked').forEach(function(cb){
+    shops.push(cb.value);
+  });
+
+  var wsRate = parseFloat(gv('staffWsRate')) || 0;
+  var staff = getStaff();
+  var existing = staff.findIndex(function(s){ return s.name === name; });
+  var entry = {
+    id: existing >= 0 ? staff[existing].id : uid(),
+    name: name, pass: pass, roles: roles, shops: shops,
+    wsRate: wsRate, blocked: false,
+    createdAt: existing >= 0 ? staff[existing].createdAt : new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdBy: session ? session.name : 'admin'
+  };
+  if(existing >= 0) staff[existing] = entry; else staff.push(entry);
+  saveStaff(staff);
+  closeMo('addStaffMo');
+  renderUnifiedStaff();
+  logAction('ADD_STAFF', {name: name, roles: roles});
+  alert('✅ Сотрудник сохранён');
+}
+
+function renderUnifiedStaff() {
+  var c = document.getElementById('unifiedStaffList'); if(!c) return;
+  var staff = getStaff();
+  var cnt = document.getElementById('staffCount');
+  if(cnt) cnt.textContent = staff.length + ' сотрудников';
+
+  if(!staff.length) {
+    c.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)"><div style="font-size:32px;margin-bottom:8px">👥</div>Нет сотрудников</div>';
+    return;
+  }
+
+  var roleLabels = {admin:'🔐 Администратор', owner:'👑 Владелец', accountant:'📊 Бухгалтер',
+    seller:'🏪 Продавец', мастер:'🔨 Мастер', заготовщик:'🪚 Заготовщик',
+    кладовщик:'📦 Кладовщик', управляющий:'👑 Управляющий'};
+
+  c.innerHTML = staff.map(function(s, i) {
+    var roleStr = (s.roles||[]).map(function(r){ return roleLabels[r]||r; }).join(' · ');
+    var shopStr = (s.shops||[]).length ? (s.shops||[]).join(', ') : '';
+    return '<div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+        '<div style="flex:1">' +
+          '<div style="font-size:13px;font-weight:700;color:' + (s.blocked?'var(--t2)':'var(--text)') + '">' + s.name + (s.blocked?' 🚫':'') + '</div>' +
+          '<div style="font-size:11px;color:var(--t2);margin-top:3px">' + roleStr + '</div>' +
+          (shopStr ? '<div style="font-size:11px;color:var(--a2);margin-top:2px">📍 ' + shopStr + '</div>' : '') +
+          (s.wsRate ? '<div style="font-size:11px;color:var(--a4);margin-top:2px">💰 ' + s.wsRate + '₽/шт</div>' : '') +
+        '</div>' +
+        '<div style="display:flex;gap:4px">' +
+          '<button onclick="editStaff(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--a2);cursor:pointer">✏️</button>' +
+          '<button onclick="toggleStaffBlock(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:' + (s.blocked?'var(--inc)':'var(--exp)') + ';cursor:pointer">' + (s.blocked?'✓':'⛔') + '</button>' +
+          '<button onclick="changeStaffPass(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--t2);cursor:pointer">🔑</button>' +
+          '<button onclick="deleteStaff(' + i + ')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:5px 8px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function editStaff(idx) {
+  var s = getStaff()[idx];
+  if(!s) return;
+  // Populate shop checkboxes first
+  var shops = getShops();
+  var container = document.getElementById('staffShopsList');
+  if(container) {
+    container.innerHTML = shops.map(function(sh) {
+      var name = sh.name || sh;
+      var checked = s.shops && s.shops.indexOf(name) >= 0 ? 'checked' : '';
+      return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">' +
+        '<input type="checkbox" value="' + name + '" data-shopcheck="1" ' + checked + ' style="width:14px;height:14px"> ' + name + '</label>';
+    }).join('');
+  }
+  // Fill form
+  var nameEl=document.getElementById('staffName'), passEl=document.getElementById('staffPass'), rateEl=document.getElementById('staffWsRate');
+  if(nameEl) nameEl.value = s.name;
+  if(passEl) passEl.value = s.pass;
+  if(rateEl) rateEl.value = s.wsRate || '';
+  // Check roles
+  document.querySelectorAll('#staffRolesBlock input[type=checkbox]').forEach(function(cb){
+    cb.checked = s.roles && s.roles.indexOf(cb.value) >= 0;
+  });
+  openMo('addStaffMo');
+}
+
+function toggleStaffBlock(idx) {
+  var staff = getStaff();
+  staff[idx].blocked = !staff[idx].blocked;
+  saveStaff(staff);
+  renderUnifiedStaff();
+}
+
+function changeStaffPass(idx) {
+  var staff = getStaff();
+  var np = prompt('Новый пароль для ' + staff[idx].name + ':');
+  if(np && np.trim()) { staff[idx].pass = np.trim(); saveStaff(staff); alert('✅ Пароль изменён'); }
+}
+
+function deleteStaff(idx) {
+  if(!confirm('Удалить сотрудника?')) return;
+  var staff = getStaff();
+  staff.splice(idx, 1);
+  saveStaff(staff);
+  renderUnifiedStaff();
+}
+
+// ════ SETTINGS FUNCTIONS ════
+
+function getAccounts() { return JSON.parse(localStorage.getItem('iz_accounts')||'[]'); }
+function saveAccounts(d) { adminSyncSave('iz_accounts', d); }
+function getPayMethods() { return JSON.parse(localStorage.getItem('iz_pay_methods')||'["Нал","Терминал","СБП","Перевод","QR"]'); }
+function savePayMethods(d) { adminSyncSave('iz_pay_methods', d); }
+
+function renderSettingsPage() {
+  renderShopsList();
+  renderAccountsList();
+  renderPayMethodsList();
+  renderZpList();
+  renderItemsBaseList();
+}
+
+function renderShopsList() {
+  var c = document.getElementById('setShopsList'); if(!c) return;
+  var shops = getShops();
+  if(!shops.length) { c.innerHTML='<div style="color:var(--t2);font-size:12px;padding:4px">Нет точек продаж</div>'; return; }
+  var typeIcons = {shop:'🏪',online:'📱',offline:'📦',workshop:'🏭'};
+  c.innerHTML = shops.map(function(s,i) {
+    var name=s.name||s, type=s.type||'shop';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:8px;margin-bottom:5px">' +
+      '<div><span style="font-size:13px">' + (typeIcons[type]||'🏪') + ' ' + name + '</span>' +
+      '<span style="font-size:10px;color:var(--t2);margin-left:6px">' + type + '</span></div>' +
+      '<button onclick="deleteShop(' + i + ')" style="background:none;border:none;color:var(--exp);font-size:14px;cursor:pointer">✕</button>' +
+    '</div>';
+  }).join('');
+}
+function addShop() {
+  var name = (document.getElementById('newShopName')||{}).value.trim();
+  var type = (document.getElementById('newShopType')||{}).value;
+  if(!name) { alert('Введите название'); return; }
+  var shops = getShops();
+  if(shops.some(function(s){ return (s.name||s)===name; })) { alert('Уже есть'); return; }
+  shops.push({name:name, type:type});
+  adminSyncSave('iz_shops', shops);
+  document.getElementById('newShopName').value = '';
+  renderShopsList();
+  // Also sync to iz_admin_shops
+  localStorage.setItem('iz_admin_shops', JSON.stringify(shops));
+}
+function deleteShop(idx) {
+  if(!confirm('Удалить точку продаж?')) return;
+  var shops = getShops(); shops.splice(idx,1);
+  adminSyncSave('iz_shops', shops);
+  renderShopsList();
+}
+
+function renderAccountsList() {
+  var c = document.getElementById('setAccountsList'); if(!c) return;
+  var accs = getAccounts();
+  if(!accs.length) { c.innerHTML='<div style="color:var(--t2);font-size:12px;padding:4px">Нет счетов</div>'; return; }
+  var icons={cash:'💵',card:'💳',bank:'🏦',online:'📱'};
+  c.innerHTML = accs.map(function(a,i){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:8px;margin-bottom:5px">' +
+      '<span style="font-size:13px">' + (icons[a.type]||'💳') + ' ' + a.name + '</span>' +
+      '<button onclick="deleteAccount(' + i + ')" style="background:none;border:none;color:var(--exp);font-size:14px;cursor:pointer">✕</button>' +
+    '</div>';
+  }).join('');
+}
+function addAccount() {
+  var name = (document.getElementById('newAccName')||{}).value.trim();
+  var type = (document.getElementById('newAccType')||{}).value;
+  if(!name) { alert('Введите название'); return; }
+  var accs = getAccounts();
+  accs.push({id:uid(),name:name,type:type});
+  saveAccounts(accs);
+  document.getElementById('newAccName').value='';
+  renderAccountsList();
+}
+function deleteAccount(idx) {
+  var accs = getAccounts(); accs.splice(idx,1); saveAccounts(accs); renderAccountsList();
+}
+
+function renderPayMethodsList() {
+  var c = document.getElementById('setPayMethodsList'); if(!c) return;
+  var methods = getPayMethods();
+  c.innerHTML = methods.map(function(m,i){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px;background:var(--s2);border-radius:8px;margin-bottom:4px">' +
+      '<span style="font-size:13px">💳 ' + m + '</span>' +
+      '<button onclick="deletePayMethod(' + i + ')" style="background:none;border:none;color:var(--exp);font-size:14px;cursor:pointer">✕</button>' +
+    '</div>';
+  }).join('');
+}
+function addPayMethod() {
+  var name = (document.getElementById('newPayMethod')||{}).value.trim();
+  if(!name) return;
+  var methods = getPayMethods();
+  if(methods.indexOf(name)<0) { methods.push(name); savePayMethods(methods); }
+  document.getElementById('newPayMethod').value='';
+  renderPayMethodsList();
+}
+function deletePayMethod(idx) {
+  var m = getPayMethods(); m.splice(idx,1); savePayMethods(m); renderPayMethodsList();
+}
+
+function renderZpList() {
+  var c = document.getElementById('setZpList'); if(!c) return;
+  var shops = getShops().filter(function(s){ return (s.type||'shop')==='shop'; });
+  var zp = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+  if(!shops.length) { c.innerHTML='<div style="color:var(--t2);font-size:12px">Сначала добавьте магазины</div>'; return; }
+  c.innerHTML = shops.map(function(s) {
+    var name=s.name||s, sid=encodeURIComponent(name).replace(/%/g,'_');
+    var cfg = zp[name]||{base:1500,threshold:5000,pct:8,travel:0};
+    return '<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">' +
+      '<div onclick="this.nextSibling.style.display=this.nextSibling.style.display===\'none\'?\'block\':\'none\'" style="padding:10px;background:var(--s2);cursor:pointer;font-size:13px;font-weight:700">🏪 ' + name + '</div>' +
+      '<div style="display:none;padding:10px">' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+          '<div><label class="fl">База (₽)</label><input class="fi" type="number" id="zp_base_'+sid+'" value="'+(cfg.base||1500)+'" inputmode="numeric"></div>' +
+          '<div><label class="fl">Порог (₽)</label><input class="fi" type="number" id="zp_thresh_'+sid+'" value="'+(cfg.threshold||5000)+'" inputmode="numeric"></div>' +
+          '<div><label class="fl">% выручки</label><input class="fi" type="number" id="zp_pct_'+sid+'" value="'+(cfg.pct||8)+'" step="0.5" inputmode="numeric"></div>' +
+          '<div><label class="fl">Проезд (₽)</label><input class="fi" type="number" id="zp_travel_'+sid+'" value="'+(cfg.travel||0)+'" inputmode="numeric"></div>' +
+        '</div>' +
+        '<button onclick="saveZpForShop(\''+name+'\',\''+sid+'\')" style="margin-top:8px;width:100%;padding:8px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+function saveZpForShop(name, sid) {
+  var zp = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+  zp[name] = {
+    base: parseFloat((document.getElementById('zp_base_'+sid)||{}).value)||1500,
+    threshold: parseFloat((document.getElementById('zp_thresh_'+sid)||{}).value)||5000,
+    pct: parseFloat((document.getElementById('zp_pct_'+sid)||{}).value)||8,
+    travel: parseFloat((document.getElementById('zp_travel_'+sid)||{}).value)||0,
+  };
+  adminSyncSave('iz_shop_zp_settings', zp);
+  alert('✅ ЗП для ' + name + ' сохранена');
+}
+
+function getItemsBase() { return JSON.parse(localStorage.getItem('iz_items')||'[]'); }
+function renderItemsBaseList() {
+  var c = document.getElementById('setItemsList'); if(!c) return;
+  var items = getItemsBase();
+  if(!items.length) { c.innerHTML='<div style="color:var(--t2);font-size:12px;padding:4px">Нет товаров</div>'; return; }
+  c.innerHTML = items.map(function(item,i){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px;border-bottom:1px solid var(--border);font-size:12px">' +
+      '<div><span style="font-weight:600">' + item.name + '</span>' +
+      (item.num ? '<span style="color:var(--t2);margin-left:6px">№'+item.num+'</span>' : '') +
+      (item.price ? '<span style="color:var(--accent);margin-left:6px">'+item.price+'₽</span>' : '') +
+      '</div>' +
+      '<button onclick="deleteItemFromBase('+i+')" style="background:none;border:none;color:var(--exp);font-size:13px;cursor:pointer">✕</button>' +
+    '</div>';
+  }).join('');
+}
+function addItemToBase() {
+  var name = (document.getElementById('newItemName')||{}).value.trim();
+  var article = (document.getElementById('newItemArticle')||{}).value.trim();
+  var price = parseFloat((document.getElementById('newItemPrice')||{}).value)||0;
+  if(!name) { alert('Введите название'); return; }
+  var items = getItemsBase();
+  if(!items.some(function(i){ return i.name===name; })) {
+    items.push({id:uid(),name:name,num:article,price:price,addedAt:new Date().toISOString()});
+    items.sort(function(a,b){ return a.name.localeCompare(b.name,'ru'); });
+    adminSyncSave('iz_items', items);
+  }
+  document.getElementById('newItemName').value='';
+  document.getElementById('newItemArticle').value='';
+  document.getElementById('newItemPrice').value='';
+  renderItemsBaseList();
+}
+function deleteItemFromBase(idx) {
+  var items = getItemsBase(); items.splice(idx,1); adminSyncSave('iz_items',items); renderItemsBaseList();
 }
 
 function exportAllData() {
-  const data = {
-    timestamp: new Date().toISOString(),
-    user: session ? session.name : 'unknown',
-    data: {
-      test: 'Экспорт данных'
-    }
-  };
-  
-  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json;charset=utf-8'});
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  link.setAttribute('href', url);
-  link.setAttribute('download', 'izhitsa_backup_' + new Date().toISOString().split('T')[0] + '.json');
-  link.style.visibility = 'hidden';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  
-  alert('✅ Данные экспортированы');
+  var data = {};
+  ['iz_staff','iz_shops','iz_accounts','iz_pay_methods','iz_items','iz_shop_zp_settings','iz_shifts','iz_transactions'].forEach(function(k){
+    try { data[k] = JSON.parse(localStorage.getItem(k)||'null'); } catch(e){}
+  });
+  var blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'izhitsa_export_' + new Date().toISOString().split('T')[0] + '.json';
+  a.click();
+}
+function clearLocalCache() {
+  if(!confirm('Очистить локальный кеш? Данные из Firestore подгрузятся снова при появлении интернета.')) return;
+  var keep = ['iz_staff','iz_shops','iz_accounts','iz_items'];
+  Object.keys(localStorage).forEach(function(k){ if(keep.indexOf(k)<0) localStorage.removeItem(k); });
+  alert('✅ Кеш очищен');
 }
 
-function clearAllCache() {
-  if(!confirm('⚠️ Это удалит ВСЕ данные!\n\nВы уверены?')) return;
-  if(!confirm('🚨 Последнее предупреждение!\n\nПродолжить?')) return;
-  
-  Object.keys(localStorage).forEach(key => {
-    if(key.startsWith('iz_')) localStorage.removeItem(key);
+// ════ STAFF SYNC LISTENER ════
+function startStaffSyncListener() {
+  db.collection('iz_settings').doc('staff').onSnapshot(function(snap){
+    if(!snap.exists) return;
+    var val = snap.data().staff;
+    if(val) {
+      localStorage.setItem('iz_staff', JSON.stringify(val));
+      _syncDerivedFromStaff(val);
+    }
+  }, function(e){ console.log('staff sync err', e); });
+
+  // Also listen to pay_methods
+  db.collection('iz_settings').doc('pay_methods').onSnapshot(function(snap){
+    if(!snap.exists) return;
+    var val = snap.data().data;
+    if(val) localStorage.setItem('iz_pay_methods', JSON.stringify(val));
   });
-  
-  alert('✅ Кэш очищен. Приложение перезагрузится.');
-  location.reload();
 }
+
+// ════ INIT & SWITCH TAB ════
+function switchTab(tab, el) {
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+  var pg = document.getElementById('pg-'+tab);
+  if(pg) pg.classList.add('active');
+  if(el) el.classList.add('active');
+  if(tab === 'staff') { renderUnifiedStaff(); openAddStaffModal; }
+  if(tab === 'settings') { renderSettingsPage(); renderRefBooks(); }
+  if(tab === 'pl') renderPL();
+  if(tab === 'debt') renderDebts();
+  if(tab === 'analytics') renderAnalytics();
+  if(tab === 'audit') renderAuditLog();
+  if(tab === 'dash') renderDashboard();
+  if(tab === 'shops') renderShopsAnalytics && renderShopsAnalytics();
+  if(tab === 'prod') populateWsEmployees && populateWsEmployees();
+}
+
+// Override old addSellerFromStaff / addWsEmployee / addAdminUser for compatibility
+function addSellerFromStaff(){ openAddStaffModal(); }
+function addWsEmployee(){ openAddStaffModal(); }
 
 // ════ REFERENCE BOOKS (СПРАВОЧНИКИ) ════
 function getRefBook(key) {
@@ -493,22 +1970,6 @@ function getRefBook(key) {
 
 function saveRefBook(key, data) {
   localStorage.setItem(key, JSON.stringify(data));
-}
-
-function logRefBookChange(action, book, name) {
-  if(session) {
-    var log = JSON.parse(localStorage.getItem('iz_audit_log') || '[]');
-    log.push({
-      timestamp: now(),
-      user: session.name,
-      role: session.role,
-      action: action,
-      entity: 'RefBook:' + book,
-      details: name,
-      id: uid()
-    });
-    localStorage.setItem('iz_audit_log', JSON.stringify(log.slice(-10000)));
-  }
 }
 
 function renderRefBooks() {
@@ -602,7 +2063,6 @@ function addRefBookItem(bookId, key) {
   var items = getRefBook(key);
   items.push({id: uid(), name: value});
   saveRefBook(key, items);
-  logRefBookChange('ADD_REFBOOK', bookId, value);
   
   input.value = '';
   renderRefBookItems(bookId, key);
@@ -612,10 +2072,8 @@ function deleteRefBookItem(bookId, idx, key) {
   if(!confirm('Удалить?')) return;
   
   var items = getRefBook(key);
-  var name = items[idx].name || items[idx];
   items.splice(idx, 1);
   saveRefBook(key, items);
-  logRefBookChange('DELETE_REFBOOK', bookId, name);
   
   renderRefBookItems(bookId, key);
 }
@@ -721,16 +2179,90 @@ function initRefBooks() {
       {id: uid(), name: 'Сб-Вс 10-18'}
     ]);
   }
-  
-  if(!localStorage.getItem('iz_audit_log')) {
-    localStorage.setItem('iz_audit_log', JSON.stringify([]));
-  }
 }
+
+// Initialize
 
 document.addEventListener('DOMContentLoaded', function() {
   initRefBooks();
-  selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
+  renderRefBooks();
+  // Create default admin FIRST before sync listeners overwrite
+  var users = getAdminUsers();
+  var hasDefault = users.some(function(u){ return u.id === 'admin_default'; });
+  if(!hasDefault) {
+    users.unshift({id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'});
+    localStorage.setItem('iz_admin_users', JSON.stringify(users));
+  }
+  startAdminSyncListeners();
+  startStaffSyncListener();
+  // Auto-select first role card
+  var firstCard = document.querySelector('.role-card');
+  if(firstCard) firstCard.click();
+  startStaffSyncListener();
+  // Init shops if not exist
+  if(!localStorage.getItem('iz_shops')) {
+    saveShops(['ОПИТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
+  }
   
+  // Init plan data if not exist
+  if(!localStorage.getItem('iz_plan_data')) {
+    savePlanData({
+      planIncome: 130000,
+      planExpense: 68000
+    });
+  }
+  
+  // Init transactions with test data if not exist
+  if(!localStorage.getItem('iz_transactions')) {
+    const today = new Date();
+    const testTransactions = [
+      {id: uid(), type: 'income', amount: 50000, source: 'Роза Хутор', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'income', amount: 35000, source: 'Горки', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'income', amount: 20000, source: 'ТГ канал', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'income', amount: 15000, source: 'Instagram', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 30000, source: '', category: 'Закупки', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 12000, source: '', category: 'Материалы', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 15000, source: '', category: 'Аренда', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 8000, source: '', category: 'Зарплаты', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 3000, source: '', category: 'Коммунальные', date: today.toISOString(), createdAt: now(), createdBy: 'System'}
+    ];
+    saveTransactions(testTransactions);
+  }
+  
+  // Init sales sources if not exist
+  if(!localStorage.getItem('iz_sales_sources')) {
+    saveSalesSources([
+      {id: uid(), name: 'Роза Хутор', type: 'shop', createdAt: now()},
+      {id: uid(), name: 'Горки', type: 'shop', createdAt: now()},
+      {id: uid(), name: 'ТГ канал', type: 'online', createdAt: now()},
+      {id: uid(), name: 'Instagram', type: 'online', createdAt: now()},
+      {id: uid(), name: 'Мастерская', type: 'workshop', createdAt: now()},
+      {id: uid(), name: 'Опт', type: 'offline', createdAt: now()}
+    ]);
+  }
+  
+  // Init users if not exist
+  // Init admin users - CRITICAL
+  if(!localStorage.getItem('iz_admin_users')) {
+    const adminUsers = [
+      {id: '1', name: 'Ксения', role: 'admin', pass: '1'},
+      {id: '2', name: 'Елена', role: 'admin', pass: '1'},
+      {id: '3', name: 'Владимир', role: 'owner', pass: '1'},
+      {id: '4', name: 'Анна', role: 'accountant', pass: '1'}
+    ];
+    localStorage.setItem('iz_admin_users', JSON.stringify(adminUsers));
+    console.log('✅ Admin users initialized');
+  }
+  
+  // Initialize first role on page load
+  setTimeout(function() {
+    const firstCard = document.querySelector('.role-card');
+    if(firstCard && !document.querySelector('.role-card.selected')) {
+      firstCard.click();
+    }
+  }, 100);
+  
+  // Check if logged in
   const saved = sessionStorage.getItem('iz_admin_session');
   if(saved) {
     try {
@@ -740,8 +2272,493 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('tabsBar').style.display = 'flex';
       document.getElementById('hdrName').textContent = session.name;
       document.getElementById('hdrRole').textContent = session.role;
+      populateSellers();
+      populateWsEmployees();
+      populateAdminUsers();
+      populateSalesSourcesList();
+      populateSourcesForOp();
+      populateShopCheckboxes();
+      renderDashboard();
+      setTxType('income');
+      clearOperationForm();
+      renderPL();
+      renderPLBudget();
+      renderShops();
+      renderDebts();
     } catch(e) {}
   }
+  
+function getFilteredTransactionsPL() {
+  const txs = getTransactions();
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  
+  let from = new Date(today.getFullYear(), today.getMonth(), 1);
+  
+  const activePeriodBtn = document.querySelector('#pg-pl .pchips .pc.active');
+  const period = activePeriodBtn ? activePeriodBtn.textContent.trim() : 'Месяц';
+  
+  if(period === 'Неделя') {
+    from = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    from.setHours(0, 0, 0, 0);
+  } else if(period === 'Год') {
+    from = new Date(today.getFullYear(), 0, 1);
+  } else if(period.includes('Период')) {
+    const fromStr = document.getElementById('plFrom').value;
+    const toStr = document.getElementById('plTo').value;
+    if(fromStr) from = new Date(fromStr + 'T00:00:00');
+  }
+  
+  return txs.filter(tx => {
+    const txDate = new Date(tx.date);
+    return txDate >= from && txDate <= today;
+  });
+}
+
+function setPLPeriod(period, btn) {
+  const customDiv = document.getElementById('plCustomDates');
+  document.querySelectorAll('#pg-pl .pchips .pc').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  
+  if(period === 'custom') {
+    customDiv.style.display = 'grid';
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    document.getElementById('plFrom').value = firstDay.toISOString().split('T')[0];
+    document.getElementById('plTo').value = today.toISOString().split('T')[0];
+  } else {
+    customDiv.style.display = 'none';
+  }
+  
+  renderPL();
+  renderPLBudget();
+}
+
+function renderPL() {
+  const txs = getFilteredTransactionsPL();
+  
+  let income = 0, expense = 0;
+  const bySource = {};
+  const byCategory = {};
+  
+  // Calculate totals and breakdowns
+  txs.forEach(tx => {
+    if(tx.type === 'income') {
+      income += tx.amount;
+      bySource[tx.source || 'Прочее'] = (bySource[tx.source || 'Прочее'] || 0) + tx.amount;
+    }
+    if(tx.type === 'expense') {
+      expense += tx.amount;
+      byCategory[tx.category || 'Прочее'] = (byCategory[tx.category || 'Прочее'] || 0) + tx.amount;
+    }
+  });
+  
+  // Split expenses into COGS (себестоимость) and Operating (расходы)
+  // COGS: Закупки, Материалы
+  // Operating: Аренда, Зарплаты, Коммунальные, Маркетинг, Прочие
+  const cogsCategories = ['Закупки', 'Материалы', 'Производство'];
+  let cogs = 0, operatingExp = 0;
+  
+  Object.entries(byCategory).forEach(([cat, amt]) => {
+    if(cogsCategories.some(c => cat.includes(c))) {
+      cogs += amt;
+    } else {
+      operatingExp += amt;
+    }
+  });
+  
+  const grossProfit = income - cogs;
+  const ebit = grossProfit - operatingExp;
+  const margin = income > 0 ? ((ebit / income) * 100).toFixed(1) : 0;
+  
+  let html = `
+    <div style="font-size:13px;font-weight:700;margin-bottom:12px;color:var(--accent)">📊 P&L ОТЧЁТ</div>
+    
+    <!-- ДОХОД -->
+    <div class="pl-row tot" style="border-bottom:2px solid var(--border);padding-bottom:12px;margin-bottom:12px">
+      <div style="font-weight:700">ДОХОД (Revenue)</div>
+      <div class="pl-val" style="color:var(--inc);font-size:14px;font-weight:700">${income.toLocaleString('ru-RU')} ₽</div>
+    </div>
+    
+    <div style="font-size:11px;color:var(--t2);margin-bottom:6px">По источникам:</div>`;
+  
+  Object.entries(bySource)
+    .sort((a,b) => b[1] - a[1])
+    .forEach(([src, amt]) => {
+      const pct = income > 0 ? ((amt / income) * 100).toFixed(0) : 0;
+      html += `<div class="pl-row">
+        <div style="margin-left:12px;font-size:12px">├─ ${src}</div>
+        <div class="pl-val" style="color:var(--a2);font-size:12px">${amt.toLocaleString('ru-RU')} ₽ (${pct}%)</div>
+      </div>`;
+    });
+  
+  // COGS
+  html += `
+    <div class="pl-row tot" style="border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:8px 0;margin:12px 0">
+      <div style="font-weight:700">СЕБЕСТОИМОСТЬ (COGS)</div>
+      <div class="pl-val" style="color:var(--exp);font-size:14px;font-weight:700">−${cogs.toLocaleString('ru-RU')} ₽</div>
+    </div>
+    <div style="font-size:11px;color:var(--t2);margin-bottom:6px">По категориям:</div>`;
+  
+  Object.entries(byCategory)
+    .filter(([cat]) => cogsCategories.some(c => cat.includes(c)))
+    .sort((a,b) => b[1] - a[1])
+    .forEach(([cat, amt]) => {
+      html += `<div class="pl-row">
+        <div style="margin-left:12px;font-size:12px">├─ ${cat}</div>
+        <div class="pl-val" style="color:var(--t2);font-size:12px">${amt.toLocaleString('ru-RU')} ₽</div>
+      </div>`;
+    });
+  
+  // GROSS PROFIT
+  html += `
+    <div class="pl-row tot" style="background:var(--s2);border-radius:8px;padding:10px;margin:12px 0;border:1px solid var(--border)">
+      <div style="font-weight:700">ВАЛОВАЯ ПРИБЫЛЬ</div>
+      <div class="pl-val" style="color:var(--inc);font-size:13px;font-weight:700">${grossProfit.toLocaleString('ru-RU')} ₽</div>
+    </div>
+    
+    <!-- OPERATING EXPENSES -->
+    <div class="pl-row tot" style="border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:12px">
+      <div style="font-weight:700">ОПЕРАЦИОННЫЕ РАСХОДЫ</div>
+      <div class="pl-val" style="color:var(--exp);font-size:14px;font-weight:700">−${operatingExp.toLocaleString('ru-RU')} ₽</div>
+    </div>
+    <div style="font-size:11px;color:var(--t2);margin-bottom:6px">По статьям:</div>`;
+  
+  Object.entries(byCategory)
+    .filter(([cat]) => !cogsCategories.some(c => cat.includes(c)))
+    .sort((a,b) => b[1] - a[1])
+    .forEach(([cat, amt]) => {
+      html += `<div class="pl-row">
+        <div style="margin-left:12px;font-size:12px">├─ ${cat}</div>
+        <div class="pl-val" style="color:var(--t2);font-size:12px">${amt.toLocaleString('ru-RU')} ₽</div>
+      </div>`;
+    });
+  
+  // EBIT & MARGIN
+  html += `
+    <div class="pl-row tot" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border:1px solid var(--accent);border-radius:8px;padding:12px;margin:12px 0">
+      <div style="font-weight:700;font-size:13px">EBIT (Операционная прибыль)</div>
+      <div class="pl-val" style="color:var(--accent);font-size:14px;font-weight:700">${ebit >= 0 ? '+' : ''}${ebit.toLocaleString('ru-RU')} ₽</div>
+    </div>
+    
+    <div class="pl-row">
+      <div style="font-weight:600;color:var(--text)">Маржа прибыли</div>
+      <div class="pl-val" style="color:${margin >= 0 ? 'var(--inc)' : 'var(--exp)'}; font-weight:700;font-size:14px">${margin}%</div>
+    </div>
+    
+    <div class="pl-row" style="font-size:11px;color:var(--t2);margin-top:8px">
+      <div>ROI (на доход)</div>
+      <div class="pl-val">${income > 0 ? ((ebit / income) * 100).toFixed(1) : 0}%</div>
+    </div>`;
+  
+  document.getElementById('plTable').innerHTML = html;
+}
+
+function renderPLBudget() {
+  // Получим текущие фактические значения
+  const txs = getFilteredTransactionsPL();
+  let factIncome = 0, factExpense = 0;
+  
+  txs.forEach(tx => {
+    if(tx.type === 'income') factIncome += tx.amount;
+    if(tx.type === 'expense') factExpense += tx.amount;
+  });
+  
+  const factProfit = factIncome - factExpense;
+  const factMargin = factIncome > 0 ? ((factProfit / factIncome) * 100).toFixed(1) : 0;
+  
+  // Плановые значения из localStorage
+  const planData = getPlanData();
+  const planIncome = planData.planIncome || 0;
+  const planExpense = planData.planExpense || 0;
+  const planProfit = planIncome - planExpense;
+  const planMargin = planIncome > 0 ? ((planProfit / planIncome) * 100).toFixed(1) : 0;
+  
+  // Отклонения
+  const incomeVar = factIncome - planIncome;
+  const expenseVar = factExpense - planExpense;
+  const profitVar = factProfit - planProfit;
+  
+  const incomeVarPct = planIncome > 0 ? ((incomeVar / planIncome) * 100).toFixed(1) : 0;
+  const expenseVarPct = planExpense > 0 ? ((expenseVar / planExpense) * 100).toFixed(1) : 0;
+  
+  let html = `
+    <div style="font-size:12px;color:var(--t2);margin-bottom:10px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;text-align:center">
+        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">Показатель</div>
+        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">План</div>
+        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">Факт</div>
+        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">Отклон %</div>
+      </div>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;align-items:center">
+      <div style="font-weight:600;font-size:12px">Доход</div>
+      <div style="text-align:center;color:var(--t2);font-size:12px">${planIncome.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;color:var(--inc);font-weight:600;font-size:12px">${factIncome.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;font-size:12px;color:${incomeVar >= 0 ? 'var(--inc)' : 'var(--exp)'}">${incomeVar >= 0 ? '+' : ''}${incomeVarPct}%</div>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;align-items:center">
+      <div style="font-weight:600;font-size:12px">Расходы</div>
+      <div style="text-align:center;color:var(--t2);font-size:12px">${planExpense.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;color:var(--exp);font-weight:600;font-size:12px">${factExpense.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;font-size:12px;color:${expenseVar <= 0 ? 'var(--inc)' : 'var(--exp)'}">${expenseVar <= 0 ? '+' : ''}${expenseVarPct}%</div>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;background:var(--s2);border-radius:6px;padding:8px;align-items:center">
+      <div style="font-weight:700;font-size:12px">Прибыль</div>
+      <div style="text-align:center;color:var(--t2);font-size:12px">${planProfit.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;color:var(--accent);font-weight:700;font-size:12px">${factProfit.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;font-size:12px;font-weight:600;color:${profitVar >= 0 ? 'var(--inc)' : 'var(--exp)'}">${profitVar >= 0 ? '+' : ''}${profitVar.toLocaleString('ru-RU')}</div>
+    </div>
+    
+    <div style="font-size:11px;color:var(--t2);margin-top:12px;padding:8px;background:var(--s2);border-radius:6px">
+      📌 <strong>План:</strong> ${planIncome > 0 ? 'задано' : 'не задано'} - Доход ${planIncome.toLocaleString('ru-RU')} ₽, Расходы ${planExpense.toLocaleString('ru-RU')} ₽<br>
+      📌 <strong>Факт:</strong> текущие данные из операций<br>
+      📌 <strong>Отклон:</strong> разница в процентах
+    </div>`;
+  
+  document.getElementById('plBudget').innerHTML = html;
+}
+
+function getFilteredTransactionsShops() {
+  const txs = getTransactions();
+  const today = new Date();
+  today.setHours(23, 59, 59, 999); // Set to end of day
+  
+  let from = new Date(today.getFullYear(), today.getMonth(), today.getDate()); // Start of today
+  
+  const activePeriodBtn = document.querySelector('#pg-shops .pchips .pc.active');
+  const period = activePeriodBtn ? activePeriodBtn.textContent.trim() : 'Сегодня';
+  
+  if(period === 'Неделя') {
+    from = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    from.setHours(0, 0, 0, 0);
+  } else if(period === 'Месяц') {
+    from = new Date(today.getFullYear(), today.getMonth(), 1);
+  } else if(period.includes('Период')) {
+    const fromStr = document.getElementById('shopFrom').value;
+    if(fromStr) from = new Date(fromStr + 'T00:00:00');
+  }
+  
+  return txs.filter(tx => {
+    const txDate = new Date(tx.date);
+    return txDate >= from && txDate <= today && tx.type === 'income';
+  });
+}
+
+function setShopPeriod(period, btn) {
+  const customDiv = document.getElementById('shopCustomDates');
+  document.querySelectorAll('#pg-shops .pchips .pc').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  
+  if(period === 'custom') {
+    customDiv.style.display = 'grid';
+    const today = new Date();
+    document.getElementById('shopFrom').value = today.toISOString().split('T')[0];
+    document.getElementById('shopTo').value = today.toISOString().split('T')[0];
+  } else {
+    customDiv.style.display = 'none';
+  }
+  
+  renderShops();
+}
+
+function renderShops() {
+  try {
+    const el = document.getElementById('shopsAnalysis');
+    if(!el) {
+      console.error('shopsAnalysis element not found');
+      return;
+    }
+    
+    const txs = getFilteredTransactionsShops();
+    const sources = getSalesSources();
+    
+    let income = 0, totalOps = 0;
+    const bySource = {};
+    const bySeller = {};
+    const byDay = {};
+    
+    sources.forEach(s => {
+      bySource[s.name] = {amount: 0, count: 0, type: s.type};
+    });
+    
+    txs.forEach(tx => {
+      if(tx.type === 'income') {
+        income += tx.amount;
+        totalOps++;
+        
+        // By source
+        if(tx.source && bySource[tx.source]) {
+          bySource[tx.source].amount += tx.amount;
+          bySource[tx.source].count += 1;
+        }
+        
+        // By seller (from createdBy)
+        const seller = tx.createdBy || 'Неизвестно';
+        if(!bySeller[seller]) bySeller[seller] = {amount: 0, count: 0};
+        bySeller[seller].amount += tx.amount;
+        bySeller[seller].count += 1;
+        
+        // By day
+        const day = tx.date.split('T')[0];
+        if(!byDay[day]) byDay[day] = 0;
+        byDay[day] += tx.amount;
+      }
+    });
+    
+    // Calculate KPI
+    const days = Object.keys(byDay);
+    const avgPerDay = days.length > 0 ? income / days.length : 0;
+    const avgPerWeek = avgPerDay * 7;
+    const avgPerMonth = avgPerDay * 30;
+    const maxDay = days.length > 0 ? Math.max(...Object.values(byDay)) : 0;
+    const minDay = days.length > 0 ? Math.min(...Object.values(byDay)) : 0;
+    
+    // Best/Worst
+    const bestSource = Object.entries(bySource).reduce((a,b) => a[1].amount > b[1].amount ? a : b, ['Нет данных', {amount:0}]);
+    const worstSource = Object.entries(bySource).filter(([,v]) => v.amount > 0).reduce((a,b) => a[1].amount < b[1].amount ? a : b, ['', {amount:0}]);
+    const bestSeller = Object.entries(bySeller).length > 0 ? Object.entries(bySeller).reduce((a,b) => a[1].amount > b[1].amount ? a : b) : ['Нет данных', {amount:0}];
+    
+    // Avg check
+    const avgCheck = totalOps > 0 ? income / totalOps : 0;
+    
+    const sourceIcons = {shop: '🏪', online: '📱', offline: '📦', workshop: '🏭'};
+    
+    let html = `
+      <!-- СТАТИСТИКА / KPI -->
+      <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
+        <div class="ctitle">📊 Статистика</div>
+        
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+          <div style="background:var(--s2);border-radius:8px;padding:10px">
+            <div style="font-size:11px;color:var(--t2)">Ср. выручка/день</div>
+            <div style="font-size:14px;font-weight:700;color:var(--inc)">${avgPerDay.toLocaleString('ru-RU')} ₽</div>
+          </div>
+          <div style="background:var(--s2);border-radius:8px;padding:10px">
+            <div style="font-size:11px;color:var(--t2)">Ср. выручка/неделю</div>
+            <div style="font-size:14px;font-weight:700;color:var(--inc)">${avgPerWeek.toLocaleString('ru-RU')} ₽</div>
+          </div>
+          <div style="background:var(--s2);border-radius:8px;padding:10px">
+            <div style="font-size:11px;color:var(--t2)">Ср. выручка/месяц</div>
+            <div style="font-size:14px;font-weight:700;color:var(--inc)">${avgPerMonth.toLocaleString('ru-RU')} ₽</div>
+          </div>
+          <div style="background:var(--s2);border-radius:8px;padding:10px">
+            <div style="font-size:11px;color:var(--t2)">Средний чек</div>
+            <div style="font-size:14px;font-weight:700;color:var(--a2)">${avgCheck.toLocaleString('ru-RU')} ₽</div>
+          </div>
+          <div style="background:var(--s2);border-radius:8px;padding:10px">
+            <div style="font-size:11px;color:var(--t2)">Макс. за день</div>
+            <div style="font-size:14px;font-weight:700;color:var(--inc)">${maxDay.toLocaleString('ru-RU')} ₽</div>
+          </div>
+          <div style="background:var(--s2);border-radius:8px;padding:10px">
+            <div style="font-size:11px;color:var(--t2)">Мин. за день</div>
+            <div style="font-size:14px;font-weight:700;color:var(--exp)">${minDay.toLocaleString('ru-RU')} ₽</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- TOP МЕТРИКИ -->
+      <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
+        <div class="ctitle">🏆 Top метрики</div>
+        
+        <div class="pl-row" style="margin-bottom:12px;padding:10px;background:var(--s2);border-radius:8px">
+          <div>
+            <div style="font-size:11px;color:var(--t2)">Лучший источник</div>
+            <div style="font-weight:600;font-size:12px">${bestSource[0]}</div>
+          </div>
+          <div class="pl-val" style="color:var(--inc);font-weight:700">${bestSource[1].amount.toLocaleString('ru-RU')} ₽</div>
+        </div>
+        
+        <div class="pl-row" style="margin-bottom:12px;padding:10px;background:var(--s2);border-radius:8px">
+          <div>
+            <div style="font-size:11px;color:var(--t2)">Лучший продавец</div>
+            <div style="font-weight:600;font-size:12px">${bestSeller[0]}</div>
+          </div>
+          <div class="pl-val" style="color:var(--inc);font-weight:700">${bestSeller[1].amount.toLocaleString('ru-RU')} ₽</div>
+        </div>
+        
+        ${worstSource[0] ? `<div class="pl-row" style="padding:10px;background:var(--s2);border-radius:8px">
+          <div>
+            <div style="font-size:11px;color:var(--t2)">Худший источник</div>
+            <div style="font-weight:600;font-size:12px">${worstSource[0]}</div>
+          </div>
+          <div class="pl-val" style="color:var(--exp);font-weight:700">${worstSource[1].amount.toLocaleString('ru-RU')} ₽</div>
+        </div>` : ''}
+      </div>
+      
+      <!-- ПРОДАЖИ ПО ИСТОЧНИКАМ -->
+      <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
+        <div class="ctitle">📍 Продажи по источникам</div>
+        <div style="font-size:11px;color:var(--t2);margin-bottom:8px">
+          ${Object.entries(bySource).length > 0 ? 'Все источники:' : 'Нет источников'}
+        </div>
+        ${
+          Object.entries(bySource)
+            .sort((a,b) => b[1].amount - a[1].amount)
+            .map(([name, data]) => {
+              const pct = income > 0 ? ((data.amount / income) * 100).toFixed(0) : 0;
+              const avgCheckSource = data.count > 0 ? (data.amount / data.count).toFixed(0) : 0;
+              return `<div class="pl-row" style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px">
+                <div>
+                  <div style="font-weight:600;font-size:12px">${sourceIcons[data.type] || '📌'} ${name}</div>
+                  <div style="font-size:11px;color:var(--t2)">${data.count} опер. | ср.чек ${avgCheckSource}₽</div>
+                </div>
+                <div class="pl-val">
+                  <div style="color:var(--inc);font-weight:700">${data.amount.toLocaleString('ru-RU')} ₽</div>
+                  <div style="font-size:11px;color:var(--a2)">${pct}%</div>
+                </div>
+              </div>`;
+            }).join('')
+        }
+      </div>
+      
+      <!-- АНАЛИЗ ПО ПРОДАВЦАМ -->
+      <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
+        <div class="ctitle">👥 Анализ по продавцам</div>
+        ${
+          Object.entries(bySeller).length > 0 ? 
+          Object.entries(bySeller)
+            .sort((a,b) => b[1].amount - a[1].amount)
+            .map(([seller, data]) => {
+              const pct = income > 0 ? ((data.amount / income) * 100).toFixed(0) : 0;
+              const avgCheckSeller = data.count > 0 ? (data.amount / data.count).toFixed(0) : 0;
+              return `<div class="pl-row" style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px">
+                <div>
+                  <div style="font-weight:600;font-size:12px">👤 ${seller}</div>
+                  <div style="font-size:11px;color:var(--t2)">${data.count} опер. | ср.чек ${avgCheckSeller}₽</div>
+                </div>
+                <div class="pl-val">
+                  <div style="color:var(--inc);font-weight:700">${data.amount.toLocaleString('ru-RU')} ₽</div>
+                  <div style="font-size:11px;color:var(--a2)">${pct}%</div>
+                </div>
+              </div>`;
+            }).join('')
+          : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных о продавцах</div>'
+        }
+      </div>
+      
+      <!-- АНАЛИЗ ПО ВИДАМ ТОВАРОВ (структура) -->
+      <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
+        <div class="ctitle">📦 Анализ по видам товаров</div>
+        <div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">
+          <div style="margin-bottom:8px">Данные о видах товаров будут доступны когда вы</div>
+          <div style="margin-bottom:8px">загрузите товары в каталог</div>
+          <div style="font-size:11px;color:var(--t3)">(интеграция с izhitsa-shop.html)</div>
+        </div>
+      </div>`;
+    
+    el.innerHTML = html;
+  } catch(e) {
+    console.error('renderShops error:', e);
+    const el = document.getElementById('shopsAnalysis');
+    if(el) el.innerHTML = '<div style="color:var(--exp);padding:12px">Ошибка: ' + e.message + '</div>';
+  }
+}
+
+selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
 });
 </script>
 
@@ -749,6 +2766,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- PWA Service Worker Registration -->
 <script>
+// Clear old broken caches
+if ('caches' in window) {
+  caches.keys().then(names => {
+    names.forEach(name => {
+      if (name.includes('izhitsa') && !name.includes('v1')) {
+        console.log('[Cache] Clearing old cache:', name);
+        caches.delete(name);
+      }
+    });
+  });
+}
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw-admin.js', {scope: './'})
