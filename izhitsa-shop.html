@@ -1163,26 +1163,9 @@ function applyUpdate() {
 <div class="mo" id="psjSaleMo">
   <div class="md">
     <div class="mh"></div><div class="mt">Продажа (задним числом)</div>
-    <datalist id="psjSaleItemsDl"></datalist>
-    <datalist id="psjSaleSpeciesDl"></datalist>
-    <div style="display:flex;gap:5px;margin-bottom:8px">
-      <div style="flex:0 0 64px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Артикул</div>
-        <input class="fi" id="psjSaleArt" placeholder="№" oninput="psjItemLookup('psjSale')" style="margin:0;padding:8px"></div>
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Наименование</div>
-        <input class="fi" id="psjSaleName" list="psjSaleItemsDl" placeholder="Название изделия" style="margin:0;padding:8px"></div>
-      <div style="flex:0 0 90px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Порода</div>
-        <input class="fi" id="psjSaleSpecies" list="psjSaleSpeciesDl" placeholder="Порода" style="margin:0;padding:8px"></div>
-    </div>
-    <div id="psjSaleHint" style="font-size:10px;color:#8888aa;margin-bottom:8px;display:none"></div>
-    <div style="display:flex;gap:5px;margin-bottom:8px">
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Цена за ед.</div>
-        <input class="fi" type="number" id="psjSalePrice" placeholder="0" inputmode="numeric" oninput="psjCalcSale()" style="margin:0;padding:8px"></div>
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Кол-во</div>
-        <input class="fi" type="number" id="psjSaleQty" placeholder="1" value="1" inputmode="numeric" oninput="psjCalcSale()" style="margin:0;padding:8px"></div>
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Сумма (₽)</div>
-        <input class="fi" type="number" id="psjSaleAmt" placeholder="0" inputmode="numeric" oninput="psjCalcSale()" style="margin:0;padding:8px"></div>
-    </div>
-    <div class="fg"><label class="fl">Скидка (₽)</label><input class="fi" type="number" id="psjSaleDisc" placeholder="0" inputmode="numeric" oninput="psjCalcSale()"></div>
+    <div id="psjSaleItems"></div>
+    <button type="button" onclick="psjAddSaleItem()" style="width:100%;padding:9px;background:none;border:1px dashed #c8f060;border-radius:9px;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">+ Добавить позицию</button>
+    <div class="fg"><label class="fl">Скидка на всю продажу (₽)</label><input class="fi" type="number" id="psjSaleDisc" placeholder="0" inputmode="numeric" autocomplete="off" oninput="psjCalcSale()"></div>
     <div id="psjSaleTotal" style="background:#22222e;border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
       <span style="color:#8888aa;font-size:13px">К оплате:</span>
       <span style="font-family:Unbounded,sans-serif;font-size:20px;font-weight:700;color:#c8f060">0₽</span>
@@ -1197,17 +1180,14 @@ function applyUpdate() {
       </div>
     </div>
     <div id="psjMixedBlock" style="display:none" class="row2">
-      <div class="fg"><label class="fl">Нал (₽)</label><input class="fi" type="number" id="psjMixCash" placeholder="0" inputmode="numeric"></div>
-      <div class="fg"><label class="fl">Безнал (₽)</label><input class="fi" type="number" id="psjMixCard" placeholder="0" inputmode="numeric"></div>
+      <div class="fg"><label class="fl">Нал (₽)</label><input class="fi" type="number" id="psjMixCash" placeholder="0" inputmode="numeric" autocomplete="off"></div>
+      <div class="fg"><label class="fl">Безнал (₽)</label><input class="fi" type="number" id="psjMixCard" placeholder="0" inputmode="numeric" autocomplete="off"></div>
     </div>
-    <div class="fg">
-      <label class="fl">Тип товара</label>
-      <div style="display:flex;gap:8px">
-        <button type="button" id="psjGoodsDerevo" onclick="setPsjGoods('derevo',this)" style="flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">🌳 Дерево</button>
-        <button type="button" id="psjGoodsDr" onclick="setPsjGoods('dr',this)" style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;cursor:pointer">🛍 ДР Товар</button>
-      </div>
-    </div>
-    <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="psjSaleComment" placeholder="Необязательно"></div>
+    <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="psjSaleComment" placeholder="Необязательно" autocomplete="off"></div>
+    <button class="btn" onclick="savePsjEntry('sale')">✅ Добавить продажу</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('psjSaleMo')">Отмена</button>
+  </div>
+</div>
     <button class="btn" onclick="savePsjEntry('sale')">✅ Добавить продажу</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('psjSaleMo')">Отмена</button>
   </div>
@@ -1217,33 +1197,8 @@ function applyUpdate() {
 <div class="mo" id="psjWriteoffMo">
   <div class="md">
     <div class="mh"></div><div class="mt">Списание (задним числом)</div>
-    <datalist id="psjWoItemsDl"></datalist>
-    <datalist id="psjWoSpeciesDl"></datalist>
-    <div style="display:flex;gap:5px;margin-bottom:8px">
-      <div style="flex:0 0 64px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Артикул</div>
-        <input class="fi" id="psjWoArt" placeholder="№" oninput="psjItemLookup('psjWo')" style="margin:0;padding:8px"></div>
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Наименование</div>
-        <input class="fi" id="psjWoName" list="psjWoItemsDl" placeholder="Что списываем" style="margin:0;padding:8px"></div>
-      <div style="flex:0 0 90px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Порода</div>
-        <input class="fi" id="psjWoSpecies" list="psjWoSpeciesDl" placeholder="Порода" style="margin:0;padding:8px"></div>
-    </div>
-    <div id="psjWoHint" style="font-size:10px;color:#8888aa;margin-bottom:8px;display:none"></div>
-    <div style="display:flex;gap:5px;margin-bottom:8px">
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Цена за ед.</div>
-        <input class="fi" type="number" id="psjWoPrice" placeholder="0" inputmode="numeric" oninput="psjCalcWo()" style="margin:0;padding:8px"></div>
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Кол-во</div>
-        <input class="fi" type="number" id="psjWoQty" placeholder="1" value="1" inputmode="numeric" oninput="psjCalcWo()" style="margin:0;padding:8px"></div>
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Сумма (₽)</div>
-        <input class="fi" type="number" id="psjWoAmt" placeholder="0" inputmode="numeric" style="margin:0;padding:8px"></div>
-    </div>
-    <div class="fg"><label class="fl">Причина</label><input class="fi" id="psjWoReason" placeholder="Причина списания"></div>
-    <div class="fg">
-      <label class="fl">Тип товара</label>
-      <div style="display:flex;gap:8px">
-        <button type="button" id="psjWoDerevo" onclick="setPsjWoGoods('derevo',this)" style="flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">🌳 Дерево</button>
-        <button type="button" id="psjWoDr" onclick="setPsjWoGoods('dr',this)" style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;cursor:pointer">🛍 ДР Товар</button>
-      </div>
-    </div>
+    <div id="psjWoItems"></div>
+    <button type="button" onclick="psjAddWoItem()" style="width:100%;padding:9px;background:none;border:1px dashed #f06060;border-radius:9px;color:#f06060;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">+ Добавить позицию</button>
     <button class="btn red" onclick="savePsjEntry('writeoff')">🗑 Добавить списание</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('psjWriteoffMo')">Отмена</button>
   </div>
@@ -1253,33 +1208,9 @@ function applyUpdate() {
 <div class="mo" id="psjReceiveMo">
   <div class="md">
     <div class="mh"></div><div class="mt">Приход товара (задним числом)</div>
-    <datalist id="psjRcvItemsDl"></datalist>
-    <datalist id="psjRcvSpeciesDl"></datalist>
-    <div style="display:flex;gap:5px;margin-bottom:8px">
-      <div style="flex:0 0 64px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Артикул</div>
-        <input class="fi" id="psjRcvNum" placeholder="№" oninput="psjItemLookup('psjRcv')" style="margin:0;padding:8px"></div>
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Наименование</div>
-        <input class="fi" id="psjRcvName" list="psjRcvItemsDl" placeholder="Что пришло" style="margin:0;padding:8px"></div>
-      <div style="flex:0 0 90px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Порода</div>
-        <input class="fi" id="psjRcvSpecies" list="psjRcvSpeciesDl" placeholder="Порода" style="margin:0;padding:8px"></div>
-    </div>
-    <div id="psjRcvHint" style="font-size:10px;color:#8888aa;margin-bottom:8px;display:none"></div>
-    <div style="display:flex;gap:5px;margin-bottom:8px">
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Цена за ед.</div>
-        <input class="fi" type="number" id="psjRcvPrice" placeholder="0" inputmode="numeric" oninput="psjCalcRcv()" style="margin:0;padding:8px"></div>
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Кол-во</div>
-        <input class="fi" type="number" id="psjRcvQty" placeholder="1" value="1" inputmode="numeric" oninput="psjCalcRcv()" style="margin:0;padding:8px"></div>
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Сумма (₽)</div>
-        <input class="fi" type="number" id="psjRcvAmt" placeholder="0" inputmode="numeric" style="margin:0;padding:8px"></div>
-    </div>
-    <div class="fg"><label class="fl">Откуда</label><input class="fi" id="psjRcvFrom" placeholder="Мастерская / поставщик"></div>
-    <div class="fg">
-      <label class="fl">Тип товара</label>
-      <div style="display:flex;gap:8px">
-        <button type="button" id="psjRcvDerevo" onclick="setPsjRcvGoods('derevo',this)" style="flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">🌳 Дерево</button>
-        <button type="button" id="psjRcvDr" onclick="setPsjRcvGoods('dr',this)" style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;cursor:pointer">🛍 ДР Товар</button>
-      </div>
-    </div>
+    <div id="psjRcvItems"></div>
+    <button type="button" onclick="psjAddRcvItem()" style="width:100%;padding:9px;background:none;border:1px dashed #60c8f0;border-radius:9px;color:#60c8f0;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">+ Добавить позицию</button>
+    <div class="fg"><label class="fl">Откуда (для всех позиций)</label><input class="fi" id="psjRcvFrom" placeholder="Мастерская / поставщик" autocomplete="off"></div>
     <button class="btn blue" onclick="savePsjEntry('receive')">📥 Добавить приход</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('psjReceiveMo')">Отмена</button>
   </div>
@@ -1308,34 +1239,9 @@ function applyUpdate() {
 <div class="mo" id="psjStaffMo">
   <div class="md">
     <div class="mh"></div><div class="mt">Покупка сотрудника (задним числом)</div>
-    <datalist id="psjStaffItemsDl"></datalist>
-    <datalist id="psjStaffSpeciesDl"></datalist>
-    <div class="fg"><label class="fl">Кто купил</label><input class="fi" id="psjStaffWho" placeholder="Имя сотрудника"></div>
-    <div style="display:flex;gap:5px;margin-bottom:8px">
-      <div style="flex:0 0 64px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Артикул</div>
-        <input class="fi" id="psjStaffArt" placeholder="№" oninput="psjItemLookup('psjStaff')" style="margin:0;padding:8px"></div>
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Наименование</div>
-        <input class="fi" id="psjStaffItem" list="psjStaffItemsDl" placeholder="Товар" style="margin:0;padding:8px"></div>
-      <div style="flex:0 0 90px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Порода</div>
-        <input class="fi" id="psjStaffSpecies" list="psjStaffSpeciesDl" placeholder="Порода" style="margin:0;padding:8px"></div>
-    </div>
-    <div id="psjStaffHint" style="font-size:10px;color:#8888aa;margin-bottom:8px;display:none"></div>
-    <div style="display:flex;gap:5px;margin-bottom:8px">
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Цена за ед. (опт)</div>
-        <input class="fi" type="number" id="psjStaffPrice" placeholder="0" inputmode="numeric" oninput="psjCalcStaff()" style="margin:0;padding:8px"></div>
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Кол-во</div>
-        <input class="fi" type="number" id="psjStaffQty" placeholder="1" value="1" inputmode="numeric" oninput="psjCalcStaff()" style="margin:0;padding:8px"></div>
-      <div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Опт (₽)</div>
-        <input class="fi" type="number" id="psjStaffOpt" placeholder="0" inputmode="numeric" style="margin:0;padding:8px"></div>
-    </div>
-    <div class="fg"><label class="fl">Розница (₽)</label><input class="fi" type="number" id="psjStaffRetail" placeholder="0" inputmode="numeric"></div>
-    <div class="fg">
-      <label class="fl">Тип товара</label>
-      <div style="display:flex;gap:8px">
-        <button type="button" id="psjStaffDerevo" onclick="setPsjStaffGoods('derevo',this)" style="flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">🌳 Дерево</button>
-        <button type="button" id="psjStaffDr" onclick="setPsjStaffGoods('dr',this)" style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;cursor:pointer">🛍 ДР Товар</button>
-      </div>
-    </div>
+    <div class="fg"><label class="fl">Кто купил</label><input class="fi" id="psjStaffWho" placeholder="Имя сотрудника" autocomplete="off"></div>
+    <div id="psjStaffItems"></div>
+    <button type="button" onclick="psjAddStaffItem()" style="width:100%;padding:9px;background:none;border:1px dashed #a060f0;border-radius:9px;color:#a060f0;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">+ Добавить позицию</button>
     <button class="btn" style="background:#a060f0;border:none;color:#fff" onclick="savePsjEntry('staff')">🛒 Добавить покупку</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('psjStaffMo')">Отмена</button>
   </div>
@@ -5064,46 +4970,41 @@ function deletePsjEntry(id) {
 
 // Pay method for psj sale
 var psjPayMethod = 'cash';
-var psjGoodsType = 'derevo';
-var psjWoGoodsType = 'derevo';
-var psjRcvGoodsType = 'derevo';
-var psjStaffGoodsType = 'derevo';
+
+// ── Line-item arrays for each modal ──
+var _psjSaleItems = [], _psjWoItems = [], _psjRcvItems = [], _psjStaffItems = [];
+
+function _psjNewItem(extra){
+  return Object.assign({art:'', name:'', species:'', price:0, qty:1, amt:0, goodsType:'derevo'}, extra||{});
+}
 
 function openPsjMo(type) {
-  psjPayMethod = 'cash'; psjGoodsType = 'derevo'; psjWoGoodsType = 'derevo'; psjRcvGoodsType = 'derevo'; psjStaffGoodsType = 'derevo';
-  psjPopulateDatalists();
+  psjPayMethod = 'cash';
   if(type==='sale') {
-    // reset fields
-    ['psjSaleArt','psjSaleName','psjSaleSpecies','psjSalePrice','psjSaleQty','psjSaleAmt','psjSaleDisc','psjSaleComment'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
-    document.getElementById('psjSaleQty').value='1';
-    document.getElementById('psjSaleHint').style.display='none';
+    _psjSaleItems = [_psjNewItem()];
+    renderPsjItems('sale');
+    ['psjSaleDisc','psjSaleComment'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
     document.getElementById('psjMixedBlock').style.display='none';
-    setPsjGoods('derevo', document.getElementById('psjGoodsDerevo'));
-    // reset pay chips
     document.querySelectorAll('#psjSaleMo .pc').forEach(function(p){ p.classList.remove('active'); });
     var first = document.querySelector('#psjSaleMo .pc'); if(first) first.classList.add('active');
     psjCalcSale();
     openMo('psjSaleMo');
   } else if(type==='writeoff') {
-    ['psjWoArt','psjWoName','psjWoSpecies','psjWoPrice','psjWoQty','psjWoAmt','psjWoReason'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
-    document.getElementById('psjWoQty').value='1';
-    document.getElementById('psjWoHint').style.display='none';
-    setPsjWoGoods('derevo', document.getElementById('psjWoDerevo'));
+    _psjWoItems = [_psjNewItem({reason:''})];
+    renderPsjItems('wo');
     openMo('psjWriteoffMo');
   } else if(type==='receive') {
-    ['psjRcvNum','psjRcvName','psjRcvSpecies','psjRcvPrice','psjRcvQty','psjRcvAmt','psjRcvFrom'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
-    document.getElementById('psjRcvQty').value='1';
-    document.getElementById('psjRcvHint').style.display='none';
-    setPsjRcvGoods('derevo', document.getElementById('psjRcvDerevo'));
+    _psjRcvItems = [_psjNewItem()];
+    renderPsjItems('rcv');
+    var fromEl=document.getElementById('psjRcvFrom'); if(fromEl) fromEl.value='';
     openMo('psjReceiveMo');
   } else if(type==='expense') {
     ['psjExpAmt','psjExpComment'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
     openMo('psjExpenseMo');
   } else if(type==='staff') {
-    ['psjStaffWho','psjStaffArt','psjStaffItem','psjStaffSpecies','psjStaffPrice','psjStaffQty','psjStaffRetail','psjStaffOpt'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
-    document.getElementById('psjStaffQty').value='1';
-    document.getElementById('psjStaffHint').style.display='none';
-    setPsjStaffGoods('derevo', document.getElementById('psjStaffDerevo'));
+    _psjStaffItems = [_psjNewItem({retail:0})];
+    renderPsjItems('staff');
+    var whoEl=document.getElementById('psjStaffWho'); if(whoEl) whoEl.value='';
     openMo('psjStaffMo');
   }
 }
@@ -5114,94 +5015,186 @@ function setPsjPayM(method, el) {
   if(el) el.classList.add('active');
   document.getElementById('psjMixedBlock').style.display = method==='mixed' ? 'flex' : 'none';
 }
-function setPsjGoods(type, el) {
-  psjGoodsType = type;
-  ['psjGoodsDerevo','psjGoodsDr'].forEach(function(id){ var b=document.getElementById(id); if(b){ b.style.borderWidth='1px'; b.style.background='#22222e'; b.style.color='#8888aa'; b.style.borderColor='#2e2e3e'; } });
-  if(el){ el.style.borderWidth='2px'; el.style.background='#1e2a14'; el.style.color='#c8f060'; el.style.borderColor='#c8f060'; }
+
+// ── Suggestion dropdowns (replace <datalist> — unreliable on iOS) ──
+function psjSuggest(inputId, list, onPick){
+  var box = document.getElementById(inputId+'_sugg');
+  if(!box) return;
+  var val = (document.getElementById(inputId)||{}).value||'';
+  val = val.trim().toLowerCase();
+  if(!val){ box.style.display='none'; box.innerHTML=''; return; }
+  var matches = list.filter(function(s){ return s.toLowerCase().indexOf(val)>=0; }).slice(0,8);
+  if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.innerHTML = matches.map(function(m){
+    return '<div onclick="'+onPick+'(\''+m.replace(/'/g,"\\'")+'\')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m+'</div>';
+  }).join('');
+  box.style.display='block';
 }
-function setPsjWoGoods(type, el) {
-  psjWoGoodsType = type;
-  ['psjWoDerevo','psjWoDr'].forEach(function(id){ var b=document.getElementById(id); if(b){ b.style.borderWidth='1px'; b.style.background='#22222e'; b.style.color='#8888aa'; b.style.borderColor='#2e2e3e'; } });
-  if(el){ el.style.borderWidth='2px'; el.style.background='#1e2a14'; el.style.color='#c8f060'; el.style.borderColor='#c8f060'; }
-}
-function psjCalcSale() {
-  var price = parseFloat((document.getElementById('psjSalePrice')||{}).value)||0;
-  var qty = parseFloat((document.getElementById('psjSaleQty')||{}).value)||0;
-  var amtEl = document.getElementById('psjSaleAmt');
-  if(price && qty && amtEl) amtEl.value = Math.round(price*qty);
-  var amt = parseFloat((amtEl||{}).value)||0;
-  var disc = parseFloat((document.getElementById('psjSaleDisc')||{}).value)||0;
-  var total = Math.max(0, amt - disc);
-  var el = document.querySelector('#psjSaleTotal span:last-child');
-  if(el) el.textContent = Math.round(total).toLocaleString('ru-RU')+'₽';
-}
-function psjCalcWo() {
-  var price = parseFloat((document.getElementById('psjWoPrice')||{}).value)||0;
-  var qty = parseFloat((document.getElementById('psjWoQty')||{}).value)||0;
-  var amtEl = document.getElementById('psjWoAmt');
-  if(price && qty && amtEl) amtEl.value = Math.round(price*qty);
-}
-function psjCalcRcv() {
-  var price = parseFloat((document.getElementById('psjRcvPrice')||{}).value)||0;
-  var qty = parseFloat((document.getElementById('psjRcvQty')||{}).value)||0;
-  var amtEl = document.getElementById('psjRcvAmt');
-  if(price && qty && amtEl) amtEl.value = Math.round(price*qty);
-}
-function psjCalcStaff() {
-  var price = parseFloat((document.getElementById('psjStaffPrice')||{}).value)||0;
-  var qty = parseFloat((document.getElementById('psjStaffQty')||{}).value)||0;
-  var optEl = document.getElementById('psjStaffOpt');
-  if(price && qty && optEl) optEl.value = Math.round(price*qty);
+function psjHideSugg(inputId){
+  setTimeout(function(){ var box=document.getElementById(inputId+'_sugg'); if(box) box.style.display='none'; }, 150);
 }
 
-// ── Артикул lookup: подтягивает наименование/цену из iz_items ──
-function psjItemLookup(prefix){
-  var artEl = document.getElementById(prefix+'Art') || document.getElementById(prefix+'Num');
-  var nameEl = document.getElementById(prefix+'Name') || document.getElementById(prefix+'Item');
-  var priceEl = document.getElementById(prefix+'Price');
-  var hintEl = document.getElementById(prefix+'Hint');
-  if(!artEl) return;
-  var num = artEl.value.trim();
-  if(!num){ if(hintEl) hintEl.style.display='none'; return; }
-  var items = getItemsBase();
-  var found = items.find(function(it){ return String(it.num)===num; });
-  if(found){
-    if(nameEl) nameEl.value = found.name||'';
-    if(priceEl && !priceEl.value) priceEl.value = found.price||'';
-    if(hintEl){ hintEl.style.display='block'; hintEl.style.color='#60f090'; hintEl.textContent='✓ '+(found.name||''); }
-    // trigger calc if relevant
-    if(prefix==='psjSale') psjCalcSale();
-    else if(prefix==='psjWo') psjCalcWo();
-    else if(prefix==='psjRcv') psjCalcRcv();
-    else if(prefix==='psjStaff') psjCalcStaff();
+// ── Generic item row renderer ──
+function _psjItemsArr(group){
+  return group==='sale'?_psjSaleItems : group==='wo'?_psjWoItems : group==='rcv'?_psjRcvItems : _psjStaffItems;
+}
+function _psjContainerId(group){
+  return group==='sale'?'psjSaleItems' : group==='wo'?'psjWoItems' : group==='rcv'?'psjRcvItems' : 'psjStaffItems';
+}
+function _psjColor(group){
+  return group==='sale'?'#c8f060' : group==='wo'?'#f06060' : group==='rcv'?'#60c8f0' : '#a060f0';
+}
+
+function renderPsjItems(group){
+  var arr = _psjItemsArr(group);
+  var c = document.getElementById(_psjContainerId(group)); if(!c) return;
+  var color = _psjColor(group);
+  var items = getItemsBase(), species = getSpecies();
+  c.innerHTML = arr.map(function(item, i){
+    var nameId = 'psj_'+group+'_name_'+i;
+    var speciesId = 'psj_'+group+'_species_'+i;
+    var artId = 'psj_'+group+'_art_'+i;
+    var priceId = 'psj_'+group+'_price_'+i;
+    var qtyId = 'psj_'+group+'_qty_'+i;
+    var amtId = 'psj_'+group+'_amt_'+i;
+    var hintId = 'psj_'+group+'_hint_'+i;
+    var goodsDerevoId = 'psj_'+group+'_gd_'+i;
+    var goodsDrId = 'psj_'+group+'_gdr_'+i;
+    var isDerevo = item.goodsType!=='dr';
+    var html = '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:10px;margin-bottom:8px">';
+    if(arr.length>1){
+      html += '<div style="display:flex;justify-content:flex-end;margin-bottom:4px">'+
+        '<button type="button" onclick="psjDelItem(\''+group+'\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:2px 7px;color:#f06060;font-size:11px;cursor:pointer">✕ Удалить позицию</button>'+
+      '</div>';
+    }
+    html += '<div style="display:flex;gap:5px;margin-bottom:6px">'+
+      '<div style="flex:0 0 64px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Артикул</div>'+
+        '<input class="fi" id="'+artId+'" value="'+(item.art||'')+'" placeholder="№" autocomplete="off" oninput="psjItemArtInput(\''+group+'\','+i+',this.value)" style="margin:0;padding:8px"></div>'+
+      '<div style="flex:1;position:relative"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Наименование</div>'+
+        '<input class="fi" id="'+nameId+'" value="'+(item.name||'')+'" placeholder="Название изделия" autocomplete="off" '+
+          'oninput="psjItemField(\''+group+'\','+i+',\'name\',this.value);psjSuggest(\''+nameId+'\','+JSON.stringify(items.map(function(it){return it.name||'';}).filter(Boolean))+',\'psjPickName_'+group+'_'+i+'\')" '+
+          'onfocus="psjSuggest(\''+nameId+'\','+JSON.stringify(items.map(function(it){return it.name||'';}).filter(Boolean))+',\'psjPickName_'+group+'_'+i+'\')" '+
+          'onblur="psjHideSugg(\''+nameId+'\')" style="margin:0;padding:8px">'+
+        '<div id="'+nameId+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#22222e;border:1px solid #3e3e4e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>'+
+      '</div>'+
+      '<div style="flex:0 0 90px;position:relative"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Порода</div>'+
+        '<input class="fi" id="'+speciesId+'" value="'+(item.species||'')+'" placeholder="Порода" autocomplete="off" '+
+          'oninput="psjItemField(\''+group+'\','+i+',\'species\',this.value);psjSuggest(\''+speciesId+'\','+JSON.stringify(species)+',\'psjPickSpecies_'+group+'_'+i+'\')" '+
+          'onfocus="psjSuggest(\''+speciesId+'\','+JSON.stringify(species)+',\'psjPickSpecies_'+group+'_'+i+'\')" '+
+          'onblur="psjHideSugg(\''+speciesId+'\')" style="margin:0;padding:8px">'+
+        '<div id="'+speciesId+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:50;background:#22222e;border:1px solid #3e3e4e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>'+
+      '</div>'+
+    '</div>';
+    html += '<div id="'+hintId+'" style="font-size:10px;color:#8888aa;margin-bottom:6px;display:'+(item._hint?'block':'none')+'">'+(item._hint||'')+'</div>';
+    html += '<div style="display:flex;gap:5px;margin-bottom:6px">'+
+      '<div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Цена за ед.</div>'+
+        '<input class="fi" type="number" id="'+priceId+'" value="'+(item.price||'')+'" placeholder="0" inputmode="numeric" oninput="psjItemField(\''+group+'\','+i+',\'price\',this.value)" style="margin:0;padding:8px"></div>'+
+      '<div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Кол-во</div>'+
+        '<input class="fi" type="number" id="'+qtyId+'" value="'+(item.qty||1)+'" placeholder="1" inputmode="numeric" oninput="psjItemField(\''+group+'\','+i+',\'qty\',this.value)" style="margin:0;padding:8px"></div>'+
+      '<div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Сумма (₽)</div>'+
+        '<input class="fi" type="number" id="'+amtId+'" value="'+(item.amt||'')+'" placeholder="0" inputmode="numeric" oninput="psjItemField(\''+group+'\','+i+',\'amt\',this.value)" style="margin:0;padding:8px"></div>'+
+    '</div>';
+    if(group==='wo'){
+      html += '<div class="fg" style="margin-bottom:6px"><input class="fi" id="psj_wo_reason_'+i+'" value="'+(item.reason||'')+'" placeholder="Причина списания" autocomplete="off" oninput="psjItemField(\'wo\','+i+',\'reason\',this.value)" style="margin:0;padding:8px"></div>';
+    }
+    if(group==='staff'){
+      html += '<div class="fg" style="margin-bottom:6px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Розница (₽)</div><input class="fi" type="number" id="psj_staff_retail_'+i+'" value="'+(item.retail||'')+'" placeholder="0" inputmode="numeric" oninput="psjItemField(\'staff\','+i+',\'retail\',this.value)" style="margin:0;padding:8px"></div>';
+    }
+    html += '<div style="display:flex;gap:8px">'+
+      '<button type="button" id="'+goodsDerevoId+'" onclick="psjSetItemGoods(\''+group+'\','+i+',\'derevo\')" style="flex:1;padding:8px;border-radius:9px;border:'+(isDerevo?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(isDerevo?'#1e2a14':'#22222e')+';color:'+(isDerevo?'#c8f060':'#8888aa')+';font-size:12px;font-weight:'+(isDerevo?'700':'400')+';cursor:pointer">🌳 Дерево</button>'+
+      '<button type="button" id="'+goodsDrId+'" onclick="psjSetItemGoods(\''+group+'\','+i+',\'dr\')" style="flex:1;padding:8px;border-radius:9px;border:'+(!isDerevo?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(!isDerevo?'#1e2a14':'#22222e')+';color:'+(!isDerevo?'#c8f060':'#8888aa')+';font-size:12px;font-weight:'+(!isDerevo?'700':'400')+';cursor:pointer">🛍 ДР Товар</button>'+
+    '</div>';
+    html += '</div>';
+    return html;
+  }).join('');
+}
+
+function psjItemField(group, i, field, val){
+  var arr = _psjItemsArr(group);
+  if(!arr[i]) return;
+  if(field==='price'||field==='qty'||field==='amt'){
+    val = parseFloat(val)||0;
+    arr[i][field]=val;
+    // auto-calc amount from price*qty unless user is editing amt directly
+    if(field!=='amt'){
+      var price=arr[i].price||0, qty=arr[i].qty||0;
+      if(price && qty){
+        arr[i].amt = Math.round(price*qty);
+        var amtEl=document.getElementById('psj_'+group+'_amt_'+i);
+        if(amtEl) amtEl.value = arr[i].amt;
+      }
+    }
   } else {
-    if(hintEl){ hintEl.style.display='block'; hintEl.style.color='#f06060'; hintEl.textContent='⚠ Артикул не найден — заполните вручную'; }
+    arr[i][field]=val;
+  }
+  if(group==='sale') psjCalcSale();
+}
+
+function psjItemArtInput(group, i, val){
+  var arr=_psjItemsArr(group); if(!arr[i]) return;
+  arr[i].art = val;
+  var hintEl = document.getElementById('psj_'+group+'_hint_'+i);
+  if(!val.trim()){ if(hintEl) hintEl.style.display='none'; arr[i]._hint=''; return; }
+  var items = getItemsBase();
+  var found = items.find(function(it){ return String(it.num)===val.trim(); });
+  if(found){
+    arr[i].name = found.name||'';
+    if(!arr[i].price) arr[i].price = found.price||0;
+    arr[i]._hint = '✓ '+(found.name||'');
+    renderPsjItems(group);
+    if(group==='sale') psjCalcSale();
+  } else {
+    arr[i]._hint = '⚠ Артикул не найден — заполните вручную';
+    if(hintEl){ hintEl.style.display='block'; hintEl.style.color='#f06060'; hintEl.textContent=arr[i]._hint; }
   }
 }
 
-// ── Populate datalists for items/species across all PSJ modals ──
-function psjPopulateDatalists(){
-  var items = getItemsBase();
-  var species = getSpecies();
-  var itemOpts = items.slice(0,80).map(function(it){ return '<option value="'+(it.name||'')+'">'; }).join('');
-  var speciesOpts = species.slice(0,80).map(function(sp){ return '<option value="'+sp+'">'; }).join('');
-  ['psjSaleItemsDl','psjWoItemsDl','psjRcvItemsDl','psjStaffItemsDl'].forEach(function(id){
-    var el=document.getElementById(id); if(el) el.innerHTML=itemOpts;
-  });
-  ['psjSaleSpeciesDl','psjWoSpeciesDl','psjRcvSpeciesDl','psjStaffSpeciesDl'].forEach(function(id){
-    var el=document.getElementById(id); if(el) el.innerHTML=speciesOpts;
-  });
+function psjSetItemGoods(group, i, type){
+  var arr=_psjItemsArr(group); if(!arr[i]) return;
+  arr[i].goodsType = type;
+  renderPsjItems(group);
 }
 
-function setPsjRcvGoods(type, el) {
-  psjRcvGoodsType = type;
-  ['psjRcvDerevo','psjRcvDr'].forEach(function(id){ var b=document.getElementById(id); if(b){ b.style.borderWidth='1px'; b.style.background='#22222e'; b.style.color='#8888aa'; b.style.borderColor='#2e2e3e'; } });
-  if(el){ el.style.borderWidth='2px'; el.style.background='#1e2a14'; el.style.color='#c8f060'; el.style.borderColor='#c8f060'; }
+function psjAddSaleItem(){ _psjSaleItems.push(_psjNewItem()); renderPsjItems('sale'); }
+function psjAddWoItem(){ _psjWoItems.push(_psjNewItem({reason:''})); renderPsjItems('wo'); }
+function psjAddRcvItem(){ _psjRcvItems.push(_psjNewItem()); renderPsjItems('rcv'); }
+function psjAddStaffItem(){ _psjStaffItems.push(_psjNewItem({retail:0})); renderPsjItems('staff'); }
+
+function psjDelItem(group, i){
+  var arr=_psjItemsArr(group);
+  arr.splice(i,1);
+  renderPsjItems(group);
+  if(group==='sale') psjCalcSale();
 }
-function setPsjStaffGoods(type, el) {
-  psjStaffGoodsType = type;
-  ['psjStaffDerevo','psjStaffDr'].forEach(function(id){ var b=document.getElementById(id); if(b){ b.style.borderWidth='1px'; b.style.background='#22222e'; b.style.color='#8888aa'; b.style.borderColor='#2e2e3e'; } });
-  if(el){ el.style.borderWidth='2px'; el.style.background='#1e2a14'; el.style.color='#c8f060'; el.style.borderColor='#c8f060'; }
+
+// ── Pick handlers for suggestion dropdowns (called via onclick from generated HTML) ──
+['sale','wo','rcv','staff'].forEach(function(group){
+  for(var i=0;i<20;i++){
+    (function(group,i){
+      window['psjPickName_'+group+'_'+i] = function(val){
+        var arr=_psjItemsArr(group); if(!arr[i]) return;
+        arr[i].name = val;
+        // try to find matching item to fill price/article
+        var found = getItemsBase().find(function(it){ return it.name===val; });
+        if(found){ if(found.num) arr[i].art=String(found.num); if(found.price && !arr[i].price) arr[i].price=found.price; }
+        renderPsjItems(group);
+        if(group==='sale') psjCalcSale();
+      };
+      window['psjPickSpecies_'+group+'_'+i] = function(val){
+        var arr=_psjItemsArr(group); if(!arr[i]) return;
+        arr[i].species = val;
+        renderPsjItems(group);
+      };
+    })(group,i);
+  }
+});
+
+function psjCalcSale() {
+  var total = _psjSaleItems.reduce(function(s,it){ return s+(it.amt||(it.price*it.qty)||0); }, 0);
+  var disc = parseFloat((document.getElementById('psjSaleDisc')||{}).value)||0;
+  var paid = Math.max(0, total - disc);
+  var el = document.querySelector('#psjSaleTotal span:last-child');
+  if(el) el.textContent = Math.round(paid).toLocaleString('ru-RU')+'₽';
 }
 
 function savePsjEntry(type) {
@@ -5209,61 +5202,72 @@ function savePsjEntry(type) {
   var shopName = (document.getElementById('psjShop')||{}).value || '';
   var sellerEl = document.getElementById('psjSeller');
   var sellerName = sellerEl ? sellerEl.options[sellerEl.selectedIndex]&&sellerEl.options[sellerEl.selectedIndex].text : '';
-  var entry = { id: uid(), date: date, shopName: shopName, sellerName: sellerName, type: type, ts: new Date().toISOString() };
+  var entries = getPsjEntries();
+  var savedCount = 0;
+
+  function pushEntry(props){
+    var entry = Object.assign({ id: uid(), date: date, shopName: shopName, sellerName: sellerName, type: type, ts: new Date().toISOString() }, props);
+    entries.push(entry);
+    try { db.collection('iz_psj').doc(entry.id).set(entry); } catch(e) {}
+    savedCount++;
+  }
 
   if(type==='sale') {
-    var art = (document.getElementById('psjSaleArt')||{}).value||'';
-    var name = (document.getElementById('psjSaleName')||{}).value||'';
-    var species = (document.getElementById('psjSaleSpecies')||{}).value||'';
-    var price = parseFloat((document.getElementById('psjSalePrice')||{}).value)||0;
-    var qty = parseFloat((document.getElementById('psjSaleQty')||{}).value)||1;
-    var amt = parseFloat((document.getElementById('psjSaleAmt')||{}).value)||0;
+    var validItems = _psjSaleItems.filter(function(it){ return it.name && it.name.trim(); });
+    if(!validItems.length){ showToast('Добавьте хотя бы одну позицию'); return; }
+    var totalAmt = validItems.reduce(function(s,it){ return s+(it.amt||(it.price*it.qty)||0); }, 0);
     var disc = parseFloat((document.getElementById('psjSaleDisc')||{}).value)||0;
-    if(!name){ showToast('Введите наименование'); return; }
-    if(!amt){ showToast('Введите сумму'); return; }
-    if(art) autoSaveToItemBase(name, art, price, psjGoodsType);
-    if(species) saveSpecies(species);
-    var paid = Math.max(0, amt - disc);
+    var paid = Math.max(0, totalAmt - disc);
     var isCash = psjPayMethod==='cash';
     var isMixed = psjPayMethod==='mixed';
-    var cash = isCash ? paid : (isMixed ? parseFloat((document.getElementById('psjMixCash')||{}).value)||0 : 0);
-    var card = (!isCash && !isMixed) ? paid : (isMixed ? parseFloat((document.getElementById('psjMixCard')||{}).value)||0 : 0);
-    entry.label = 'Продажа'; entry.sub = (art?'№'+art+' ':'')+name+(species?' · '+species:'')+(qty?' × '+qty:'')+(disc?' · скидка '+Math.round(disc)+'₽':'') + ' · ' + (isCash?'Нал':psjPayMethod);
-    entry.amount = amt; entry.amtSign = '+'; entry.goodsType = psjGoodsType;
-    entry.article = art; entry.species = species; entry.price = price; entry.qty = qty;
-    entry.cashEffect = cash; entry.cardEffect = card; entry.discEffect = disc;
-    entry.comment = (document.getElementById('psjSaleComment')||{}).value||'';
+    var totalCash = isCash ? paid : (isMixed ? parseFloat((document.getElementById('psjMixCash')||{}).value)||0 : 0);
+    var totalCard = (!isCash && !isMixed) ? paid : (isMixed ? parseFloat((document.getElementById('psjMixCard')||{}).value)||0 : 0);
+    var comment = (document.getElementById('psjSaleComment')||{}).value||'';
+
+    validItems.forEach(function(it, idx){
+      var amt = it.amt||(it.price*it.qty)||0;
+      if(it.art) autoSaveToItemBase(it.name, it.art, it.price, it.goodsType);
+      if(it.species) saveSpecies(it.species);
+      // distribute cash/card/discount proportionally across items
+      var share = totalAmt ? amt/totalAmt : (1/validItems.length);
+      pushEntry({
+        label:'Продажа', sub:(it.art?'№'+it.art+' ':'')+it.name+(it.species?' · '+it.species:'')+(it.qty?' × '+it.qty:'')+' · '+(isCash?'Нал':psjPayMethod),
+        amount:amt, amtSign:'+', goodsType:it.goodsType,
+        article:it.art, species:it.species, price:it.price, qty:it.qty,
+        cashEffect: Math.round(totalCash*share), cardEffect: Math.round(totalCard*share), discEffect: Math.round(disc*share),
+        comment: idx===0?comment:''
+      });
+    });
     closeMo('psjSaleMo');
   } else if(type==='writeoff') {
-    var art = (document.getElementById('psjWoArt')||{}).value||'';
-    var name = (document.getElementById('psjWoName')||{}).value||'';
-    var species = (document.getElementById('psjWoSpecies')||{}).value||'';
-    var price = parseFloat((document.getElementById('psjWoPrice')||{}).value)||0;
-    var qty = parseFloat((document.getElementById('psjWoQty')||{}).value)||1;
-    var amt = parseFloat((document.getElementById('psjWoAmt')||{}).value)||0;
-    var reason = (document.getElementById('psjWoReason')||{}).value||'';
-    if(!name){ showToast('Введите наименование'); return; }
-    if(species) saveSpecies(species);
-    entry.label='Списание'; entry.sub=(art?'№'+art+' ':'')+name+(species?' · '+species:'')+(qty?' × '+qty:'')+(reason?' · '+reason:'');
-    entry.amount=amt; entry.amtSign='−'; entry.goodsType=psjWoGoodsType;
-    entry.article=art; entry.species=species; entry.price=price; entry.qty=qty;
-    entry.cashEffect=0; entry.cardEffect=0; entry.discEffect=0;
+    var validItems = _psjWoItems.filter(function(it){ return it.name && it.name.trim(); });
+    if(!validItems.length){ showToast('Добавьте хотя бы одну позицию'); return; }
+    validItems.forEach(function(it){
+      var amt = it.amt||(it.price*it.qty)||0;
+      if(it.species) saveSpecies(it.species);
+      pushEntry({
+        label:'Списание', sub:(it.art?'№'+it.art+' ':'')+it.name+(it.species?' · '+it.species:'')+(it.qty?' × '+it.qty:'')+(it.reason?' · '+it.reason:''),
+        amount:amt, amtSign:'−', goodsType:it.goodsType,
+        article:it.art, species:it.species, price:it.price, qty:it.qty,
+        cashEffect:0, cardEffect:0, discEffect:0
+      });
+    });
     closeMo('psjWriteoffMo');
   } else if(type==='receive') {
-    var art = (document.getElementById('psjRcvNum')||{}).value||'';
-    var name = (document.getElementById('psjRcvName')||{}).value||'';
-    var species = (document.getElementById('psjRcvSpecies')||{}).value||'';
-    var price = parseFloat((document.getElementById('psjRcvPrice')||{}).value)||0;
-    var qty = parseFloat((document.getElementById('psjRcvQty')||{}).value)||1;
-    var amt = parseFloat((document.getElementById('psjRcvAmt')||{}).value)||price||0;
+    var validItems = _psjRcvItems.filter(function(it){ return it.name && it.name.trim(); });
+    if(!validItems.length){ showToast('Добавьте хотя бы одну позицию'); return; }
     var from = (document.getElementById('psjRcvFrom')||{}).value||'';
-    if(!name){ showToast('Введите наименование'); return; }
-    if(art) autoSaveToItemBase(name, art, price, psjRcvGoodsType);
-    if(species) saveSpecies(species);
-    entry.label='Приход товара'; entry.sub=(art?'№'+art+' ':'')+name+(species?' · '+species:'')+(qty?' × '+qty:'')+(from?' · от '+from:'');
-    entry.amount=amt; entry.amtSign='+'; entry.goodsType=psjRcvGoodsType;
-    entry.article=art; entry.species=species; entry.price=price; entry.qty=qty;
-    entry.cashEffect=0; entry.cardEffect=0; entry.discEffect=0;
+    validItems.forEach(function(it){
+      var amt = it.amt||(it.price*it.qty)||0;
+      if(it.art) autoSaveToItemBase(it.name, it.art, it.price, it.goodsType);
+      if(it.species) saveSpecies(it.species);
+      pushEntry({
+        label:'Приход товара', sub:(it.art?'№'+it.art+' ':'')+it.name+(it.species?' · '+it.species:'')+(it.qty?' × '+it.qty:'')+(from?' · от '+from:''),
+        amount:amt, amtSign:'+', goodsType:it.goodsType,
+        article:it.art, species:it.species, price:it.price, qty:it.qty,
+        cashEffect:0, cardEffect:0, discEffect:0
+      });
+    });
     closeMo('psjReceiveMo');
   } else if(type==='expense') {
     var amt = parseFloat((document.getElementById('psjExpAmt')||{}).value)||0;
@@ -5271,36 +5275,35 @@ function savePsjEntry(type) {
     var comment = (document.getElementById('psjExpComment')||{}).value||'';
     if(!amt){ showToast('Введите сумму'); return; }
     var expLabels = {zp:'Зарплата',travel:'Дорога',inkass:'Инкассация',other:'Расход'};
-    entry.label='Расход · '+(expLabels[expType]||'Прочее'); entry.sub=comment;
-    entry.amount=amt; entry.amtSign='−';
-    entry.cashEffect=0; entry.cardEffect=0; entry.discEffect=0; entry.expType=expType;
+    pushEntry({
+      label:'Расход · '+(expLabels[expType]||'Прочее'), sub:comment,
+      amount:amt, amtSign:'−', cashEffect:0, cardEffect:0, discEffect:0, expType:expType
+    });
     closeMo('psjExpenseMo');
   } else if(type==='staff') {
     var who = (document.getElementById('psjStaffWho')||{}).value||'';
-    var art = (document.getElementById('psjStaffArt')||{}).value||'';
-    var item = (document.getElementById('psjStaffItem')||{}).value||'';
-    var species = (document.getElementById('psjStaffSpecies')||{}).value||'';
-    var price = parseFloat((document.getElementById('psjStaffPrice')||{}).value)||0;
-    var qty = parseFloat((document.getElementById('psjStaffQty')||{}).value)||1;
-    var opt = parseFloat((document.getElementById('psjStaffOpt')||{}).value)||(price*qty)||0;
-    var retail = parseFloat((document.getElementById('psjStaffRetail')||{}).value)||0;
-    if(!who||!item){ showToast('Заполните поля'); return; }
-    if(art) autoSaveToItemBase(item, art, price, psjStaffGoodsType);
-    if(species) saveSpecies(species);
-    entry.label='Покупка сотр.'; entry.sub=who+' · '+(art?'№'+art+' ':'')+item+(species?' · '+species:'')+(qty?' × '+qty:'');
-    entry.amount=retail; entry.amtSign='+'; entry.goodsType=psjStaffGoodsType;
-    entry.article=art; entry.species=species; entry.price=price; entry.qty=qty; entry.opt=opt; entry.retail=retail;
-    entry.cashEffect=0; entry.cardEffect=0; entry.discEffect=0;
+    var validItems = _psjStaffItems.filter(function(it){ return it.name && it.name.trim(); });
+    if(!who||!validItems.length){ showToast('Заполните поля'); return; }
+    validItems.forEach(function(it){
+      var opt = it.amt||(it.price*it.qty)||0;
+      var retail = it.retail||0;
+      if(it.art) autoSaveToItemBase(it.name, it.art, it.price, it.goodsType);
+      if(it.species) saveSpecies(it.species);
+      pushEntry({
+        label:'Покупка сотр.', sub:who+' · '+(it.art?'№'+it.art+' ':'')+it.name+(it.species?' · '+it.species:'')+(it.qty?' × '+it.qty:''),
+        amount:retail, amtSign:'+', goodsType:it.goodsType,
+        article:it.art, species:it.species, price:it.price, qty:it.qty, opt:opt, retail:retail,
+        cashEffect:0, cardEffect:0, discEffect:0
+      });
+    });
     closeMo('psjStaffMo');
   }
 
-  var entries = getPsjEntries();
-  entries.push(entry);
-  savePsjEntries(entries);
-  // also sync to Firestore
-  try { db.collection('iz_psj').doc(entry.id).set(entry); } catch(e) {}
-  psjLoadJournal();
-  showToast('✅ Запись добавлена');
+  if(savedCount){
+    savePsjEntries(entries);
+    psjLoadJournal();
+    showToast('✅ Добавлено: '+savedCount+(savedCount===1?' запись':' записи'));
+  }
 }
 
 function savePsjAsShift() {
