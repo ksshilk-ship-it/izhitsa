@@ -1349,6 +1349,7 @@ var SYNC_SETTINGS = {
   'iz_sellers':          {doc:'sellers',  field:'sellers'},
   'iz_shop_zp_settings': {doc:'zp',       field:'zp'},
   'iz_items':            {doc:'items',    field:'items'},
+  'iz_species':          {doc:'species',  field:'list'},
   'iz_accounts':         {doc:'accounts', field:'accounts'},
 };
 function syncListen(lsKey) {
@@ -3403,7 +3404,8 @@ function _renderShiftView(){
     woodRcvCount++;
   });
   woodRcv.forEach(function(r, i){
-    rcvBody += rcvItem((r.name||'Приход')+(r.qty?' × '+r.qty:'')+(r.from?' · от '+r.from:''), '🌳 Дерево', '#555568', r.amt||0, '#60f090', 'svDeleteWoodRcv('+i+')');
+    var lbl = (r.article?'№'+r.article+' ':'')+(r.name||'Приход')+(r.species?' · '+r.species:'')+(r.qty?' × '+r.qty:'')+(r.from?' · от '+r.from:'');
+    rcvBody += rcvItem(lbl, '🌳 Дерево'+(r.price?' · '+f(r.price)+'/шт':''), '#555568', r.amt||0, '#60f090', 'svDeleteWoodRcv('+i+')');
     woodRcvCount++;
   });
   if(!woodRcvCount) rcvBody += '<div style="font-size:11px;color:#555568;padding:6px 0 10px">Приходов не было</div>';
@@ -3411,7 +3413,8 @@ function _renderShiftView(){
   rcvBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
   var drRcvCount = 0;
   drRcv.forEach(function(r, i){
-    rcvBody += rcvItem((r.name||'Приход ДР')+(r.qty?' × '+r.qty:''), '🛍 ДР Товар', '#a060f0', r.amt||0, '#a060f0', 'svDeleteDrRcv('+i+')');
+    var lbl = (r.article?'№'+r.article+' ':'')+(r.name||'Приход ДР')+(r.species?' · '+r.species:'')+(r.qty?' × '+r.qty:'');
+    rcvBody += rcvItem(lbl, '🛍 ДР Товар'+(r.price?' · '+f(r.price)+'/шт':''), '#a060f0', r.amt||0, '#a060f0', 'svDeleteDrRcv('+i+')');
     drRcvCount++;
   });
   if(!drRcvCount) rcvBody += '<div style="font-size:11px;color:#555568;padding:6px 0">Приходов не было</div>';
@@ -3442,7 +3445,9 @@ function _renderShiftView(){
     woodWoCount++;
   });
   woodWo.forEach(function(w, i){
-    woBody += woItem((w.name||'Списание')+(w.qty?' × '+w.qty:''), '🌳 Дерево'+(w.reason?' · '+w.reason:''), '#555568', w.amt||0, 'svDeleteWoodWo('+i+')');
+    var lbl = (w.article?'№'+w.article+' ':'')+(w.name||'Списание')+(w.species?' · '+w.species:'')+(w.qty?' × '+w.qty:'');
+    var sub = '🌳 Дерево'+(w.price?' · '+f(w.price)+'/шт':'')+(w.reason?' · '+w.reason:'');
+    woBody += woItem(lbl, sub, '#555568', w.amt||0, 'svDeleteWoodWo('+i+')');
     woodWoCount++;
   });
   if(!woodWoCount) woBody += '<div style="font-size:11px;color:#555568;padding:6px 0 10px">Списаний не было</div>';
@@ -3450,7 +3455,9 @@ function _renderShiftView(){
   woBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
   var drWoCount = 0;
   drWo.forEach(function(w, i){
-    woBody += woItem((w.name||'Списание ДР')+(w.qty?' × '+w.qty:''), '🛍 ДР Товар'+(w.reason?' · '+w.reason:''), '#a060f0', w.amt||0, 'svDeleteDrWo('+i+')');
+    var lbl = (w.article?'№'+w.article+' ':'')+(w.name||'Списание ДР')+(w.species?' · '+w.species:'')+(w.qty?' × '+w.qty:'');
+    var sub = '🛍 ДР Товар'+(w.price?' · '+f(w.price)+'/шт':'')+(w.reason?' · '+w.reason:'');
+    woBody += woItem(lbl, sub, '#a060f0', w.amt||0, 'svDeleteDrWo('+i+')');
     drWoCount++;
   });
   if(!drWoCount) woBody += '<div style="font-size:11px;color:#555568;padding:6px 0">Списаний не было</div>';
@@ -3513,7 +3520,7 @@ function _renderShiftView(){
 
   function staffItem(s, realIdx){
     var who = s.who || (s.label||'').replace('Покупка сотр.: ','');
-    var item = s.item || s.sub || '';
+    var item = (s.article?'№'+s.article+' ':'')+(s.item || s.sub || '')+(s.species?' · '+s.species:'')+(s.qty?' × '+s.qty:'');
     var retail = s.retail || 0;
     var opt = s.opt || s.amount || 0;
     var canDel = staffPurch.length > 0;
@@ -3539,7 +3546,53 @@ function _renderShiftView(){
   if(drStaff.length){ drStaff.forEach(function(s){ staffBody += staffItem(s, staffArr.indexOf(s)); }); }
   else staffBody += '<div style="font-size:11px;color:#555568;padding:6px 0">Покупок не было</div>';
 
-  // helpers
+  // ── Generic item-row form: артикул / наименование / порода + цена/кол-во/сумма ──
+  function itemForm(id, color, opts){
+    opts = opts || {};
+    var items = getItemsBase();
+    var species = getSpecies();
+    var dlItems = 'dl_items_'+id, dlSpecies = 'dl_species_'+id;
+    var html = '<div id="svAddForm_'+id+'" style="display:none;background:#13131a;border:1px solid '+color+';border-radius:10px;padding:10px;margin-top:8px">';
+    html += '<datalist id="'+dlItems+'">'+items.slice(0,80).map(function(it){ return '<option value="'+(it.name||'')+'">'; }).join('')+'</datalist>';
+    html += '<datalist id="'+dlSpecies+'">'+species.slice(0,80).map(function(sp){ return '<option value="'+sp+'">'; }).join('')+'</datalist>';
+    if(opts.who){
+      html += '<div style="margin-bottom:6px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Сотрудник</div>'+
+        '<input class="fi" id="svAdd_'+id+'_who" placeholder="Имя" style="margin:0;padding:8px"></div>';
+    }
+    // Row 1: артикул / наименование / порода
+    html += '<div style="display:flex;gap:5px;margin-bottom:6px">'+
+      '<div style="flex:0 0 64px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Артикул</div>'+
+        '<input class="fi" id="svAdd_'+id+'_art" placeholder="№" oninput="svItemLookup(\''+id+'\')" style="margin:0;padding:8px"></div>'+
+      '<div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Наименование</div>'+
+        '<input class="fi" id="svAdd_'+id+'_name" list="'+dlItems+'" placeholder="Товар" style="margin:0;padding:8px"></div>'+
+      '<div style="flex:0 0 90px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Порода</div>'+
+        '<input class="fi" id="svAdd_'+id+'_species" list="'+dlSpecies+'" placeholder="Порода" style="margin:0;padding:8px"></div>'+
+    '</div>';
+    // Row 2: цена / количество / сумма
+    html += '<div style="display:flex;gap:5px;margin-bottom:6px">'+
+      '<div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Цена за ед.</div>'+
+        '<input class="fi" id="svAdd_'+id+'_price" type="number" inputmode="numeric" placeholder="0" oninput="svItemCalc(\''+id+'\')" style="margin:0;padding:8px"></div>'+
+      '<div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Кол-во</div>'+
+        '<input class="fi" id="svAdd_'+id+'_qty" type="number" inputmode="numeric" placeholder="1" value="1" oninput="svItemCalc(\''+id+'\')" style="margin:0;padding:8px"></div>'+
+      '<div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Сумма, ₽</div>'+
+        '<input class="fi" id="svAdd_'+id+'_amt" type="number" inputmode="numeric" placeholder="0" oninput="svItemCalcRev(\''+id+'\')" style="margin:0;padding:8px"></div>'+
+    '</div>';
+    if(opts.retail){
+      html += '<div style="margin-bottom:6px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Цена розница, ₽</div>'+
+        '<input class="fi" id="svAdd_'+id+'_retail" type="number" inputmode="numeric" placeholder="0" style="margin:0;padding:8px"></div>';
+    }
+    if(opts.extra){
+      html += '<div style="margin-bottom:6px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">'+opts.extra.label+'</div>'+
+        '<input class="fi" id="svAdd_'+id+'_'+opts.extra.id+'" placeholder="'+opts.extra.placeholder+'" style="margin:0;padding:8px"></div>';
+    }
+    html += '<div id="svAddHint_'+id+'" style="font-size:10px;color:#8888aa;margin-bottom:6px;display:none"></div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px">'+
+      '<button onclick="document.getElementById(\'svAddForm_'+id+'\').style.display=\'none\'" style="padding:8px;background:none;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>'+
+      '<button onclick="'+opts.saveFn+'" style="padding:8px;background:'+color+';border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
+    '</div></div>';
+    return html;
+  }
+
   function addFormBtn(color, onclick, label){
     return '<button onclick="'+onclick+'" style="width:100%;padding:8px;background:none;border:1px dashed '+color+';border-radius:9px;color:'+color+';font-size:12px;font-weight:700;cursor:pointer;margin-top:8px">+ '+label+'</button>';
   }
@@ -3566,36 +3619,17 @@ function _renderShiftView(){
   // ПРИХОДЫ — формы добавления
   rcvBody += '<div style="border-top:1px solid #2e2e3e;margin-top:8px;padding-top:8px">'+
     addFormBtn('#60f090','showAddForm(\'rcvWood\')','Добавить приход Дерево')+
-    addForm('rcvWood','#60f090',[
-      {id:'rcvWoodName',label:'Наименование',placeholder:'Что пришло'},
-      {id:'rcvWoodQty',label:'Кол-во',type:'number',inputmode:'numeric',placeholder:'0'},
-      {id:'rcvWoodAmt',label:'Сумма, ₽',type:'number',inputmode:'numeric',placeholder:'0'},
-      {id:'rcvWoodFrom',label:'Откуда / поставщик',placeholder:'необязательно'}
-    ],'svAddRcv(\'wood\')')+
+    itemForm('rcvWood','#60f090',{extra:{id:'from',label:'Откуда / поставщик',placeholder:'необязательно'},saveFn:'svAddRcv(\'wood\')'})+
     addFormBtn('#a060f0','showAddForm(\'rcvDr\')','Добавить приход ДР')+
-    addForm('rcvDr','#a060f0',[
-      {id:'rcvDrName',label:'Наименование',placeholder:'Что пришло'},
-      {id:'rcvDrQty',label:'Кол-во',type:'number',inputmode:'numeric',placeholder:'0'},
-      {id:'rcvDrAmt',label:'Сумма, ₽',type:'number',inputmode:'numeric',placeholder:'0'}
-    ],'svAddRcv(\'dr\')')+
+    itemForm('rcvDr','#a060f0',{saveFn:'svAddRcv(\'dr\')'})+
   '</div>';
 
   // СПИСАНИЯ — формы добавления
   woBody += '<div style="border-top:1px solid #2e2e3e;margin-top:8px;padding-top:8px">'+
     addFormBtn('#f06060','showAddForm(\'woWood\')','Добавить списание Дерево')+
-    addForm('woWood','#f06060',[
-      {id:'woWoodName',label:'Наименование',placeholder:'Что списать'},
-      {id:'woWoodQty',label:'Кол-во',type:'number',inputmode:'numeric',placeholder:'0'},
-      {id:'woWoodAmt',label:'Сумма, ₽',type:'number',inputmode:'numeric',placeholder:'0'},
-      {id:'woWoodReason',label:'Причина',placeholder:'необязательно'}
-    ],'svAddWo(\'wood\')')+
+    itemForm('woWood','#f06060',{extra:{id:'reason',label:'Причина',placeholder:'необязательно'},saveFn:'svAddWo(\'wood\')'})+
     addFormBtn('#c060a0','showAddForm(\'woDr\')','Добавить списание ДР')+
-    addForm('woDr','#c060a0',[
-      {id:'woDrName',label:'Наименование',placeholder:'Что списать'},
-      {id:'woDrQty',label:'Кол-во',type:'number',inputmode:'numeric',placeholder:'0'},
-      {id:'woDrAmt',label:'Сумма, ₽',type:'number',inputmode:'numeric',placeholder:'0'},
-      {id:'woDrReason',label:'Причина',placeholder:'необязательно'}
-    ],'svAddWo(\'dr\')')+
+    itemForm('woDr','#c060a0',{extra:{id:'reason',label:'Причина',placeholder:'необязательно'},saveFn:'svAddWo(\'dr\')'})+
   '</div>';
 
   // РАСХОДЫ — формы добавления
@@ -3621,19 +3655,9 @@ function _renderShiftView(){
   // ПОКУПКИ СОТРУДНИКОВ — формы добавления
   staffBody += '<div style="border-top:1px solid #2e2e3e;margin-top:8px;padding-top:8px">'+
     addFormBtn('#c8f060','showAddForm(\'staffWood\')','Добавить покупку Дерево')+
-    addForm('staffWood','#c8f060',[
-      {id:'staffWoodWho',label:'Сотрудник',placeholder:'Имя'},
-      {id:'staffWoodItem',label:'Товар',placeholder:'Наименование'},
-      {id:'staffWoodOpt',label:'Цена опт, ₽',type:'number',inputmode:'numeric',placeholder:'0'},
-      {id:'staffWoodRetail',label:'Цена розница, ₽',type:'number',inputmode:'numeric',placeholder:'0'}
-    ],'svAddStaff(\'wood\')')+
+    itemForm('staffWood','#c8f060',{who:true,retail:true,saveFn:'svAddStaff(\'wood\')'})+
     addFormBtn('#a060f0','showAddForm(\'staffDr\')','Добавить покупку ДР')+
-    addForm('staffDr','#a060f0',[
-      {id:'staffDrWho',label:'Сотрудник',placeholder:'Имя'},
-      {id:'staffDrItem',label:'Товар',placeholder:'Наименование'},
-      {id:'staffDrOpt',label:'Цена опт, ₽',type:'number',inputmode:'numeric',placeholder:'0'},
-      {id:'staffDrRetail',label:'Цена розница, ₽',type:'number',inputmode:'numeric',placeholder:'0'}
-    ],'svAddStaff(\'dr\')')+
+    itemForm('staffDr','#a060f0',{who:true,retail:true,saveFn:'svAddStaff(\'dr\')'})+
   '</div>';
   var headerColor = sh.hasCashDiff ? '#f06060' : '#c8f060';
   var headerHtml =
@@ -3681,6 +3705,51 @@ function toggleShiftAcc(id){
 function showAddForm(id){
   var el=document.getElementById('svAddForm_'+id);
   if(el) el.style.display = (el.style.display==='none'||!el.style.display) ? 'block' : 'none';
+}
+
+// ── Item-row lookup & calc (артикул → наименование/цена; цена×кол-во↔сумма) ──
+function svItemLookup(id){
+  var artEl=document.getElementById('svAdd_'+id+'_art');
+  var nameEl=document.getElementById('svAdd_'+id+'_name');
+  var priceEl=document.getElementById('svAdd_'+id+'_price');
+  var hintEl=document.getElementById('svAddHint_'+id);
+  if(!artEl) return;
+  var num=artEl.value.trim();
+  if(!num){ if(hintEl) hintEl.style.display='none'; return; }
+  var items=getItemsBase();
+  var found=items.find(function(it){ return String(it.num)===num; });
+  if(found){
+    if(nameEl) nameEl.value=found.name||'';
+    if(priceEl && !priceEl.value) priceEl.value=found.price||'';
+    if(hintEl){ hintEl.style.display='block'; hintEl.style.color='#60f090'; hintEl.textContent='✓ '+(found.name||''); }
+    svItemCalc(id);
+  } else {
+    if(hintEl){ hintEl.style.display='block'; hintEl.style.color='#f06060'; hintEl.textContent='⚠ Артикул не найден — заполните вручную'; }
+  }
+}
+function svItemCalc(id){
+  var priceEl=document.getElementById('svAdd_'+id+'_price');
+  var qtyEl=document.getElementById('svAdd_'+id+'_qty');
+  var amtEl=document.getElementById('svAdd_'+id+'_amt');
+  if(!priceEl||!qtyEl||!amtEl) return;
+  var price=parseFloat(priceEl.value)||0;
+  var qty=parseFloat(qtyEl.value)||0;
+  if(price && qty) amtEl.value = Math.round(price*qty);
+}
+function svItemCalcRev(id){
+  // when user edits amount directly, don't override — just leave price/qty as-is
+}
+
+// ── Item-row save helpers ──
+function _svItemRow(id){
+  return {
+    art: _svVal('svAdd_'+id+'_art').trim(),
+    name: _svVal('svAdd_'+id+'_name').trim(),
+    species: _svVal('svAdd_'+id+'_species').trim(),
+    price: _svNum('svAdd_'+id+'_price'),
+    qty: _svNum('svAdd_'+id+'_qty') || 1,
+    amt: _svNum('svAdd_'+id+'_amt')
+  };
 }
 
 // ── Save helpers ──
@@ -3777,40 +3846,40 @@ function _svNum(id){ return parseFloat(_svVal(id))||0; }
 
 function svAddRcv(type){
   var isWood = type==='wood';
-  var name = _svVal(isWood?'svAdd_rcvWoodName':'svAdd_rcvDrName').trim();
-  if(!name){showToast('Укажите наименование');return;}
-  var qty  = _svNum(isWood?'svAdd_rcvWoodQty':'svAdd_rcvDrQty');
-  var amt  = _svNum(isWood?'svAdd_rcvWoodAmt':'svAdd_rcvDrAmt');
-  var from = _svVal('svAdd_rcvWoodFrom');
+  var id = isWood?'rcvWood':'rcvDr';
+  var row = _svItemRow(id);
+  if(!row.name){showToast('Укажите наименование');return;}
+  if(row.art) autoSaveToItemBase(row.name, row.art, row.price, isWood?'derevo':'dr');
+  if(row.species) saveSpecies(row.species);
+  var from = isWood ? _svVal('svAdd_rcvWood_from') : '';
   if(isWood){
     var arr = _currentShiftView.goodsReceives||[];
-    arr.push({name:name,qty:qty,amt:amt,from:from});
+    arr.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, from:from});
     _currentShiftView.goodsReceives = arr;
   } else {
     var arr2 = _currentShiftView.drGoodsReceives||[];
-    arr2.push({name:name,qty:qty,amt:amt});
+    arr2.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt});
     _currentShiftView.drGoodsReceives = arr2;
   }
   svPersist(); _renderShiftView();
-  // reopen accordion
   setTimeout(function(){ toggleShiftAcc('acc_rcv'); toggleShiftAcc('acc_rcv'); },50);
   showToast('✅ Приход добавлен');
 }
 
 function svAddWo(type){
   var isWood = type==='wood';
-  var name = _svVal(isWood?'svAdd_woWoodName':'svAdd_woDrName').trim();
-  if(!name){showToast('Укажите наименование');return;}
-  var qty    = _svNum(isWood?'svAdd_woWoodQty':'svAdd_woDrQty');
-  var amt    = _svNum(isWood?'svAdd_woWoodAmt':'svAdd_woDrAmt');
-  var reason = _svVal(isWood?'svAdd_woWoodReason':'svAdd_woDrReason');
+  var id = isWood?'woWood':'woDr';
+  var row = _svItemRow(id);
+  if(!row.name){showToast('Укажите наименование');return;}
+  if(row.species) saveSpecies(row.species);
+  var reason = _svVal('svAdd_'+id+'_reason');
   if(isWood){
     var arr = _currentShiftView.goodsWriteoffs||[];
-    arr.push({name:name,qty:qty,amt:amt,reason:reason});
+    arr.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, reason:reason});
     _currentShiftView.goodsWriteoffs = arr;
   } else {
     var arr2 = _currentShiftView.drGoodsWriteoffs||[];
-    arr2.push({name:name,qty:qty,amt:amt,reason:reason});
+    arr2.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, reason:reason});
     _currentShiftView.drGoodsWriteoffs = arr2;
   }
   svPersist(); _renderShiftView();
@@ -3834,13 +3903,17 @@ function svAddExp(type){
 
 function svAddStaff(type){
   var isWood = type==='wood';
-  var who  = _svVal(isWood?'svAdd_staffWoodWho':'svAdd_staffDrWho').trim();
-  var item = _svVal(isWood?'svAdd_staffWoodItem':'svAdd_staffDrItem').trim();
-  var opt  = _svNum(isWood?'svAdd_staffWoodOpt':'svAdd_staffDrOpt');
-  var retail = _svNum(isWood?'svAdd_staffWoodRetail':'svAdd_staffDrRetail');
+  var id = isWood?'staffWood':'staffDr';
+  var row = _svItemRow(id);
+  var who = _svVal('svAdd_'+id+'_who').trim();
   if(!who){showToast('Укажите сотрудника');return;}
+  if(!row.name){showToast('Укажите товар');return;}
+  if(row.art) autoSaveToItemBase(row.name, row.art, row.price, isWood?'derevo':'dr');
+  if(row.species) saveSpecies(row.species);
+  var retail = _svNum('svAdd_'+id+'_retail');
+  var opt = row.amt || (row.price*row.qty);
   var jnl = _currentShiftView.journal||[];
-  jnl.push({type:'staff',who:who,item:item,opt:opt,retail:retail,amount:opt,goodsType:isWood?'wood':'dr',ts:new Date().toISOString()});
+  jnl.push({type:'staff',who:who,item:row.name,article:row.art,species:row.species,price:row.price,qty:row.qty,opt:opt,retail:retail,amount:opt,goodsType:isWood?'wood':'dr',ts:new Date().toISOString()});
   _currentShiftView.journal = jnl;
   svPersist(); _renderShiftView();
   setTimeout(function(){ toggleShiftAcc('acc_staff'); toggleShiftAcc('acc_staff'); },50);
@@ -6045,6 +6118,34 @@ function renderManInvAccepted() {
 
 function getItemsBase() {
   return JSON.parse(localStorage.getItem('iz_items')||'[]');
+}
+function autoSaveToItemBase(name, num, price, category){
+  if(!name||!name.trim()) return;
+  var items = getItemsBase();
+  var found = items.find(function(it){ return (num && String(it.num)===String(num)) || it.name===name; });
+  if(found){
+    if(num) found.num=num;
+    if(price) found.price=price;
+    if(category) found.category=category;
+  } else {
+    items.push({name:name.trim(), num:num||'', price:price||0, category:category||''});
+  }
+  localStorage.setItem('iz_items', JSON.stringify(items));
+  try{ db.collection('iz_settings').doc('items').set({items:items}); }catch(e){}
+}
+
+// ════ WOOD SPECIES CATALOG ════
+function getSpecies() {
+  return JSON.parse(localStorage.getItem('iz_species')||'[]');
+}
+function saveSpecies(name) {
+  if(!name||!name.trim()) return;
+  var arr = getSpecies();
+  if(arr.indexOf(name.trim())<0){
+    arr.push(name.trim());
+    localStorage.setItem('iz_species', JSON.stringify(arr));
+    try{ db.collection('iz_settings').doc('species').set({list:arr}); }catch(e){}
+  }
 }
 
 // ════ SUPPLIERS ════
