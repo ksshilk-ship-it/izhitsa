@@ -5404,7 +5404,7 @@ function savePsjEntry(type) {
   }
 
   if(type==='sale') {
-    var validItems = _psjSaleItems.filter(function(it){ return it.name && it.name.trim(); });
+    var validItems = _psjSaleItems.filter(function(it){ return (it.name && it.name.trim()) || (it.amt>0) || (it.price>0 && it.qty>0); });
     if(!validItems.length){ showToast('Добавьте хотя бы одну позицию'); return; }
     var totalAmt = validItems.reduce(function(s,it){ return s+(it.amt||(it.price*it.qty)||0); }, 0);
     var disc = parseFloat((document.getElementById('psjSaleDisc')||{}).value)||0;
@@ -5422,27 +5422,27 @@ function savePsjEntry(type) {
 
     // Save items to catalogs
     validItems.forEach(function(it){
-      if(it.art) autoSaveToItemBase(it.name, it.art, it.price, it.goodsType);
+      if(it.art && it.name) autoSaveToItemBase(it.name, it.art, it.price, it.goodsType);
       if(it.species) saveSpecies(it.species);
     });
 
     // Build a readable summary of items for sub-line
     var itemsSummary = validItems.map(function(it){
-      return (it.art?'№'+it.art+' ':'')+it.name+(it.species?' · '+it.species:'')+(it.qty?' × '+it.qty:'');
+      return (it.art?'№'+it.art+' ':'')+(it.name||'Без названия')+(it.species?' · '+it.species:'')+(it.qty?' × '+it.qty:'');
     }).join(', ');
 
     pushEntry({
       label:'Продажа', sub: itemsSummary+' · '+(isCash?'Нал':psjPayMethod),
       amount: totalAmt, amtSign:'+', goodsType: overallGoodsType,
       items: validItems.map(function(it){
-        return { art:it.art, name:it.name, species:it.species, price:it.price, qty:it.qty, amt: it.amt||(it.price*it.qty)||0, goodsType: it.goodsType };
+        return { art:it.art, name:it.name||'Без названия', species:it.species, price:it.price, qty:it.qty, amt: it.amt||(it.price*it.qty)||0, goodsType: it.goodsType };
       }),
       cashEffect: totalCash, cardEffect: totalCard, discEffect: disc,
       comment: comment
     });
     closeMo('psjSaleMo');
   } else if(type==='writeoff') {
-    var validItems = _psjWoItems.filter(function(it){ return it.name && it.name.trim(); });
+    var validItems = _psjWoItems.filter(function(it){ return (it.name && it.name.trim()) || (it.amt>0) || (it.price>0 && it.qty>0); });
     if(!validItems.length){ showToast('Добавьте хотя бы одну позицию'); return; }
     var totalAmt = validItems.reduce(function(s,it){ return s+(it.amt||(it.price*it.qty)||0); }, 0);
     var hasDerevo = validItems.some(function(it){ return it.goodsType!=='dr'; });
@@ -5450,19 +5450,19 @@ function savePsjEntry(type) {
     var overallGoodsType = (hasDerevo && hasDr) ? 'mixed' : (hasDr ? 'dr' : 'derevo');
     validItems.forEach(function(it){ if(it.species) saveSpecies(it.species); });
     var itemsSummary = validItems.map(function(it){
-      return (it.art?'№'+it.art+' ':'')+it.name+(it.species?' · '+it.species:'')+(it.qty?' × '+it.qty:'')+(it.reason?' · '+it.reason:'');
+      return (it.art?'№'+it.art+' ':'')+(it.name||'Без названия')+(it.species?' · '+it.species:'')+(it.qty?' × '+it.qty:'')+(it.reason?' · '+it.reason:'');
     }).join(', ');
     pushEntry({
       label:'Списание', sub: itemsSummary,
       amount: totalAmt, amtSign:'−', goodsType: overallGoodsType,
       items: validItems.map(function(it){
-        return { art:it.art, name:it.name, species:it.species, price:it.price, qty:it.qty, amt: it.amt||(it.price*it.qty)||0, goodsType: it.goodsType, reason: it.reason };
+        return { art:it.art, name:it.name||'Без названия', species:it.species, price:it.price, qty:it.qty, amt: it.amt||(it.price*it.qty)||0, goodsType: it.goodsType, reason: it.reason };
       }),
       cashEffect:0, cardEffect:0, discEffect:0
     });
     closeMo('psjWriteoffMo');
   } else if(type==='receive') {
-    var validItems = _psjRcvItems.filter(function(it){ return it.name && it.name.trim(); });
+    var validItems = _psjRcvItems.filter(function(it){ return (it.name && it.name.trim()) || (it.amt>0) || (it.price>0 && it.qty>0); });
     if(!validItems.length){ showToast('Добавьте хотя бы одну позицию'); return; }
     var from = (document.getElementById('psjRcvFrom')||{}).value||'';
     var totalAmt = validItems.reduce(function(s,it){ return s+(it.amt||(it.price*it.qty)||0); }, 0);
@@ -5470,17 +5470,17 @@ function savePsjEntry(type) {
     var hasDr = validItems.some(function(it){ return it.goodsType==='dr'; });
     var overallGoodsType = (hasDerevo && hasDr) ? 'mixed' : (hasDr ? 'dr' : 'derevo');
     validItems.forEach(function(it){
-      if(it.art) autoSaveToItemBase(it.name, it.art, it.price, it.goodsType);
+      if(it.art && it.name) autoSaveToItemBase(it.name, it.art, it.price, it.goodsType);
       if(it.species) saveSpecies(it.species);
     });
     var itemsSummary = validItems.map(function(it){
-      return (it.art?'№'+it.art+' ':'')+it.name+(it.species?' · '+it.species:'')+(it.qty?' × '+it.qty:'');
+      return (it.art?'№'+it.art+' ':'')+(it.name||'Без названия')+(it.species?' · '+it.species:'')+(it.qty?' × '+it.qty:'');
     }).join(', ') + (from?' · от '+from:'');
     pushEntry({
       label:'Приход товара', sub: itemsSummary,
       amount: totalAmt, amtSign:'+', goodsType: overallGoodsType,
       items: validItems.map(function(it){
-        return { art:it.art, name:it.name, species:it.species, price:it.price, qty:it.qty, amt: it.amt||(it.price*it.qty)||0, goodsType: it.goodsType };
+        return { art:it.art, name:it.name||'Без названия', species:it.species, price:it.price, qty:it.qty, amt: it.amt||(it.price*it.qty)||0, goodsType: it.goodsType };
       }),
       from: from,
       cashEffect:0, cardEffect:0, discEffect:0
@@ -5499,7 +5499,7 @@ function savePsjEntry(type) {
     closeMo('psjExpenseMo');
   } else if(type==='staff') {
     var who = (document.getElementById('psjStaffWho')||{}).value||'';
-    var validItems = _psjStaffItems.filter(function(it){ return it.name && it.name.trim(); });
+    var validItems = _psjStaffItems.filter(function(it){ return (it.name && it.name.trim()) || (it.amt>0) || (it.price>0 && it.qty>0); });
     if(!who||!validItems.length){ showToast('Заполните поля'); return; }
     var totalRetail = validItems.reduce(function(s,it){ return s+(it.retail||0); }, 0);
     var totalOpt = validItems.reduce(function(s,it){ return s+(it.amt||(it.price*it.qty)||0); }, 0);
@@ -5507,17 +5507,17 @@ function savePsjEntry(type) {
     var hasDr = validItems.some(function(it){ return it.goodsType==='dr'; });
     var overallGoodsType = (hasDerevo && hasDr) ? 'mixed' : (hasDr ? 'dr' : 'derevo');
     validItems.forEach(function(it){
-      if(it.art) autoSaveToItemBase(it.name, it.art, it.price, it.goodsType);
+      if(it.art && it.name) autoSaveToItemBase(it.name, it.art, it.price, it.goodsType);
       if(it.species) saveSpecies(it.species);
     });
     var itemsSummary = validItems.map(function(it){
-      return (it.art?'№'+it.art+' ':'')+it.name+(it.species?' · '+it.species:'')+(it.qty?' × '+it.qty:'');
+      return (it.art?'№'+it.art+' ':'')+(it.name||'Без названия')+(it.species?' · '+it.species:'')+(it.qty?' × '+it.qty:'');
     }).join(', ');
     pushEntry({
       label:'Покупка сотр.', sub: who+' · '+itemsSummary,
       amount: totalRetail, amtSign:'+', goodsType: overallGoodsType,
       items: validItems.map(function(it){
-        return { art:it.art, name:it.name, species:it.species, price:it.price, qty:it.qty, amt: it.amt||(it.price*it.qty)||0, retail: it.retail||0, goodsType: it.goodsType };
+        return { art:it.art, name:it.name||'Без названия', species:it.species, price:it.price, qty:it.qty, amt: it.amt||(it.price*it.qty)||0, retail: it.retail||0, goodsType: it.goodsType };
       }),
       who: who, opt: totalOpt, retail: totalRetail,
       cashEffect:0, cardEffect:0, discEffect:0
