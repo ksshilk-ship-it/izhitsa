@@ -790,39 +790,66 @@ function applyUpdate() {
     <div class="stitle">⚙️ Настройки</div>
 
     <!-- SHOPS MANAGEMENT -->
-    <div class="card" style="margin-bottom:12px">
-      <div class="ctitle">🏪 Магазины</div>
-      <div id="shopsManageList" style="margin-bottom:10px"></div>
-      <div style="display:flex;gap:8px;margin-bottom:8px">
-        <input class="fi" id="newShopName" placeholder="Название магазина" style="flex:1;margin:0">
-        <select class="fs" id="newShopType" style="margin:0;flex:0 0 110px">
-          <option value="shop">Магазин</option>
-          <option value="online">Онлайн</option>
-          <option value="offline">Офлайн/Опт</option>
-        </select>
+    <div class="card" style="margin-bottom:8px;padding:0;overflow:hidden">
+      <div onclick="toggleSettingsSection('shops')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:9px">
+          <span style="font-size:18px">🏪</span>
+          <div><div style="font-size:13px;font-weight:700">Магазины</div>
+          <div id="ssCount_shops" style="font-size:11px;color:#8888aa">— записей</div></div>
+        </div>
+        <div id="ssArr_shops" style="color:#c8f060">▶</div>
       </div>
-      <button class="btn" onclick="addShopAdmin()">＋ Добавить магазин</button>
+      <div id="ssBody_shops" style="display:none;padding:0 14px 14px">
+        <div id="shopsManageList" style="margin-bottom:10px"></div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <input class="fi" id="newShopName" placeholder="Название магазина" style="flex:1;margin:0">
+          <select class="fs" id="newShopType" style="margin:0;flex:0 0 110px">
+            <option value="shop">Магазин</option>
+            <option value="online">Онлайн</option>
+            <option value="offline">Офлайн/Опт</option>
+          </select>
+        </div>
+        <button class="btn" onclick="addShopAdmin()">＋ Добавить магазин</button>
+      </div>
     </div>
 
     <!-- ZP SETTINGS per shop -->
-    <div class="card" style="margin-bottom:12px">
-      <div class="ctitle">💰 Настройки ЗП по магазинам</div>
-      <div id="shopSettingsList"></div>
-      <button class="btn" style="margin-top:8px" onclick="saveShopSettings()">💾 Сохранить настройки ЗП</button>
+    <div class="card" style="margin-bottom:8px;padding:0;overflow:hidden">
+      <div onclick="toggleSettingsSection('zp')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:9px">
+          <span style="font-size:18px">💰</span>
+          <div><div style="font-size:13px;font-weight:700">Настройки ЗП по магазинам</div>
+          <div id="ssCount_zp" style="font-size:11px;color:#8888aa">— записей</div></div>
+        </div>
+        <div id="ssArr_zp" style="color:#c8f060">▶</div>
+      </div>
+      <div id="ssBody_zp" style="display:none;padding:0 14px 14px">
+        <div id="shopSettingsList"></div>
+        <button class="btn" style="margin-top:8px" onclick="saveShopSettings()">💾 Сохранить настройки ЗП</button>
+      </div>
     </div>
 
     <!-- ACCOUNTS -->
-    <div class="card" style="margin-bottom:12px">
-      <div class="ctitle">🏦 Реквизиты (карты / счета)</div>
-      <div id="accountsList" style="margin-bottom:8px"></div>
-      <div style="display:flex;gap:8px;margin-bottom:6px">
-        <input class="fi" id="newAccName" placeholder="Название (Сбер Ксения)" style="flex:1;margin:0">
-        <select class="fs" id="newAccType" style="margin:0;flex:0 0 90px">
-          <option value="card">Карта</option>
-          <option value="rs">РС счёт</option>
-        </select>
+    <div class="card" style="margin-bottom:8px;padding:0;overflow:hidden">
+      <div onclick="toggleSettingsSection('accounts')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:9px">
+          <span style="font-size:18px">🏦</span>
+          <div><div style="font-size:13px;font-weight:700">Реквизиты (карты / счета)</div>
+          <div id="ssCount_accounts" style="font-size:11px;color:#8888aa">— записей</div></div>
+        </div>
+        <div id="ssArr_accounts" style="color:#c8f060">▶</div>
       </div>
-      <button class="btn sec" onclick="addAccountAdmin()">＋ Добавить реквизит</button>
+      <div id="ssBody_accounts" style="display:none;padding:0 14px 14px">
+        <div id="accountsList" style="margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px;margin-bottom:6px">
+          <input class="fi" id="newAccName" placeholder="Название (Сбер Ксения)" style="flex:1;margin:0">
+          <select class="fs" id="newAccType" style="margin:0;flex:0 0 90px">
+            <option value="card">Карта</option>
+            <option value="rs">РС счёт</option>
+          </select>
+        </div>
+        <button class="btn sec" onclick="addAccountAdmin()">＋ Добавить реквизит</button>
+      </div>
     </div>
 
     <!-- SHARED REFBOOKS (synced with admin) -->
@@ -4628,6 +4655,7 @@ function saveShopZpSettingsData(d){
 function renderShopsManage(){
   var c=document.getElementById('shopsManageList'); if(!c) return;
   var shops=getShops();
+  updateSettingsSectionCount('shops', shops.length);
   if(!shops.length){ c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:4px">Нет магазинов — добавьте ниже</div>'; return; }
   c.innerHTML=shops.map(function(s,i){
     var typeLabel={shop:'Магазин',online:'Онлайн',offline:'Офлайн/Опт'}[s.type]||s.type||'';
@@ -4662,6 +4690,7 @@ function deleteShopAdmin(idx){
 function renderAccountsList(){
   var c=document.getElementById('accountsList'); if(!c) return;
   var accounts=sortByTypeThenName(JSON.parse(localStorage.getItem('iz_accounts')||'[]'), ACCOUNT_TYPE_ORDER);
+  updateSettingsSectionCount('accounts', accounts.length);
   if(!accounts.length){c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:4px">Нет реквизитов</div>';return;}
   c.innerHTML=accounts.map(function(a,i){
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px">'+
@@ -4742,6 +4771,17 @@ function toggleRefbookShop(id){
   body.style.display = open?'none':'block';
   if(arr) arr.style.transform = open?'':'rotate(90deg)';
 }
+function toggleSettingsSection(id){
+  var body=document.getElementById('ssBody_'+id), arr=document.getElementById('ssArr_'+id);
+  if(!body) return;
+  var open = body.style.display!=='none';
+  body.style.display = open?'none':'block';
+  if(arr) arr.style.transform = open?'':'rotate(90deg)';
+}
+function updateSettingsSectionCount(id, count){
+  var el=document.getElementById('ssCount_'+id);
+  if(el) el.textContent = count+' записей';
+}
 function renderRefbookItemsShop(bookId, key){
   var c = document.getElementById('rbItems_'+bookId); if(!c) return;
   var items = getRefBook(key);
@@ -4783,6 +4823,7 @@ function renderShopSettings(){
   renderShopsManage(); renderAccountsList(); renderRefbookSections();
   var shops = getShopNames();
   var settings = getShopZpSettings();
+  updateSettingsSectionCount('zp', shops.length);
   if(!shops.length){ c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:8px">Сначала добавьте магазины выше</div>'; return; }
 
   c.innerHTML = shops.map(function(shop){
