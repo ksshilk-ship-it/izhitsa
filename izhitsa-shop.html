@@ -824,6 +824,12 @@ function applyUpdate() {
       </div>
       <button class="btn sec" onclick="addAccountAdmin()">＋ Добавить реквизит</button>
     </div>
+
+    <!-- SHARED REFBOOKS (synced with admin) -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="ctitle">📚 Справочники системы</div>
+      <div id="refbookSections"></div>
+    </div>
   </div>
 
   <div class="tabs" id="mainTabs" style="display:none"></div>
@@ -1320,6 +1326,11 @@ var SYNC_SETTINGS = {
   'iz_items':            {doc:'items',    field:'items'},
   'iz_species':          {doc:'species',  field:'list'},
   'iz_accounts':         {doc:'accounts', field:'accounts'},
+  'iz_payment_methods':  {doc:'payment_methods', field:'data'},
+  'iz_suppliers':        {doc:'suppliers',     field:'data'},
+  'iz_goods':            {doc:'goods',         field:'data'},
+  'iz_materials':        {doc:'materials',     field:'data'},
+  'iz_work_schedules':   {doc:'work_schedules', field:'data'},
 };
 function syncListen(lsKey) {
   var m = SYNC_SETTINGS[lsKey]; if(!m || _syncUnsubs[lsKey]) return;
@@ -1329,6 +1340,21 @@ function syncListen(lsKey) {
     if(val !== undefined) {
       localStorage.setItem(lsKey, JSON.stringify(val));
       if(lsKey === 'iz_admin_shops' || lsKey === 'iz_sellers') { try { pick(loginRole); } catch(e){} }
+      if(lsKey === 'iz_admin_shops'){
+        try{ renderShopsManage(); }catch(e){}
+        try{ renderShopSettings(); }catch(e){}
+      }
+      if(lsKey === 'iz_accounts'){
+        try{ renderAccountsList(); }catch(e){}
+      }
+      // Generic shared refbooks live-refresh
+      var shopRefbookKeys = ['iz_payment_methods','iz_suppliers','iz_goods','iz_materials','iz_work_schedules'];
+      if(shopRefbookKeys.indexOf(lsKey)>=0){
+        var book = SHOP_REFBOOKS.find(function(b){ return b.key===lsKey; });
+        if(book){
+          try{ renderRefbookItemsShop(book.id, book.key); updateRefbookCountShop(book.id, book.key); }catch(e){}
+        }
+      }
     }
   }, function(e){ console.log('syncListen err', lsKey, e.code||e); });
 }
@@ -1445,8 +1471,22 @@ function getShopAdmins(){
 function saveShopAdmins(d){ syncSave('iz_shop_admins', d); }
 function getInvoices(){ return JSON.parse(localStorage.getItem('iz_invoices')||'[]'); }
 function saveInvoices(d){ localStorage.setItem('iz_invoices',JSON.stringify(d)); }
-function getShops(){ return JSON.parse(localStorage.getItem('iz_admin_shops')||'[]'); }
-function saveShops(d){ syncSave('iz_admin_shops', d); }
+// ── Sort helper: by type order, then alphabetically (matches admin) ──
+var SHOP_TYPE_ORDER = {shop:0, offline:1, online:2, workshop:3};
+var ACCOUNT_TYPE_ORDER = {cash:0, card:1, rs:2, bank:2, online:3};
+function sortByTypeThenName(arr, typeOrder){
+  return arr.slice().sort(function(a,b){
+    var ta = typeOrder[(a.type||'')] !== undefined ? typeOrder[a.type||''] : 99;
+    var tb = typeOrder[(b.type||'')] !== undefined ? typeOrder[b.type||''] : 99;
+    if(ta !== tb) return ta - tb;
+    var na = (a.name||a||'').toString();
+    var nb = (b.name||b||'').toString();
+    return na.localeCompare(nb, 'ru');
+  });
+}
+
+function getShops(){ return sortByTypeThenName(JSON.parse(localStorage.getItem('iz_admin_shops')||'[]'), SHOP_TYPE_ORDER); }
+function saveShops(d){ syncSave('iz_admin_shops', sortByTypeThenName(d, SHOP_TYPE_ORDER)); }
 function saveSellers(d){ syncSave('iz_sellers', d); }
 function getShopNames(){ var s=getShops(); return s.length?s.map(x=>x.name||x):['Дерево','ДР Товар']; }
 function getShopType(name){
@@ -4621,7 +4661,7 @@ function deleteShopAdmin(idx){
 // ── Accounts management ──
 function renderAccountsList(){
   var c=document.getElementById('accountsList'); if(!c) return;
-  var accounts=JSON.parse(localStorage.getItem('iz_accounts')||'[]');
+  var accounts=sortByTypeThenName(JSON.parse(localStorage.getItem('iz_accounts')||'[]'), ACCOUNT_TYPE_ORDER);
   if(!accounts.length){c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:4px">Нет реквизитов</div>';return;}
   c.innerHTML=accounts.map(function(a,i){
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px">'+
@@ -4637,19 +4677,110 @@ function addAccountAdmin(){
   if(!name){showToast('Введите название');return;}
   var accounts=JSON.parse(localStorage.getItem('iz_accounts')||'[]');
   accounts.push({name:name,type:type});
-  syncSave('iz_accounts',accounts);
+  syncSave('iz_accounts', sortByTypeThenName(accounts, ACCOUNT_TYPE_ORDER));
   document.getElementById('newAccName').value='';
   renderAccountsList(); showToast('✅ Реквизит добавлен');
 }
 function deleteAccountAdmin(idx){
   var accounts=JSON.parse(localStorage.getItem('iz_accounts')||'[]');
-  accounts.splice(idx,1); syncSave('iz_accounts',accounts);
+  var sorted=sortByTypeThenName(accounts, ACCOUNT_TYPE_ORDER);
+  var target=sorted[idx];
+  if(!target) return;
+  var rawIdx=accounts.indexOf(target);
+  if(rawIdx<0){
+    // fallback: match by name+type
+    rawIdx=accounts.findIndex(function(a){return a.name===target.name && a.type===target.type;});
+  }
+  if(rawIdx>=0) accounts.splice(rawIdx,1);
+  syncSave('iz_accounts', sortByTypeThenName(accounts, ACCOUNT_TYPE_ORDER));
   renderAccountsList(); showToast('🗑 Реквизит удалён');
+}
+
+// ── Shared refbooks (synced with admin via Firestore) ──
+var SHOP_REFBOOKS = [
+  {id:'payments',  icon:'💳', name:'Способы оплаты',   key:'iz_payment_methods'},
+  {id:'suppliers', icon:'🚚', name:'База поставщиков', key:'iz_suppliers'},
+  {id:'goods',     icon:'📦', name:'База товаров',     key:'iz_goods'},
+  {id:'materials', icon:'💎', name:'Породы дерева',    key:'iz_materials'},
+  {id:'schedules', icon:'⏰', name:'Графики работы',   key:'iz_work_schedules'}
+];
+function getRefBook(key){
+  try{ return JSON.parse(localStorage.getItem(key)||'[]'); } catch(e){ return []; }
+}
+function saveRefBookShop(key, data){
+  localStorage.setItem(key, JSON.stringify(data));
+  syncSave(key, data);
+}
+function renderRefbookSections(){
+  var c = document.getElementById('refbookSections'); if(!c) return;
+  c.innerHTML = SHOP_REFBOOKS.map(function(book){
+    var items = getRefBook(book.key);
+    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:8px;overflow:hidden">'+
+      '<div onclick="toggleRefbookShop(\''+book.id+'\')" style="display:flex;align-items:center;justify-content:space-between;padding:11px;cursor:pointer">'+
+        '<div style="display:flex;align-items:center;gap:9px">'+
+          '<span style="font-size:18px">'+book.icon+'</span>'+
+          '<div><div style="font-size:13px;font-weight:700">'+book.name+'</div>'+
+          '<div id="rbCount_'+book.id+'" style="font-size:11px;color:#8888aa">'+items.length+' записей</div></div>'+
+        '</div>'+
+        '<div id="rbArr_'+book.id+'" style="color:#c8f060">▶</div>'+
+      '</div>'+
+      '<div id="rbBody_'+book.id+'" style="display:none;padding:10px;border-top:1px solid #2e2e3e">'+
+        '<div id="rbItems_'+book.id+'"></div>'+
+        '<div style="display:flex;gap:8px;margin-top:8px">'+
+          '<input class="fi" id="rbNew_'+book.id+'" placeholder="Новая запись" autocomplete="off" style="flex:1;margin:0">'+
+          '<button onclick="addRefbookItemShop(\''+book.id+'\',\''+book.key+'\')" style="flex-shrink:0;padding:0 16px;background:#c8f060;border:none;border-radius:8px;color:#0f0f13;font-weight:700;font-size:16px;cursor:pointer">＋</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  SHOP_REFBOOKS.forEach(function(book){ renderRefbookItemsShop(book.id, book.key); });
+}
+function toggleRefbookShop(id){
+  var body=document.getElementById('rbBody_'+id), arr=document.getElementById('rbArr_'+id);
+  if(!body) return;
+  var open = body.style.display!=='none';
+  body.style.display = open?'none':'block';
+  if(arr) arr.style.transform = open?'':'rotate(90deg)';
+}
+function renderRefbookItemsShop(bookId, key){
+  var c = document.getElementById('rbItems_'+bookId); if(!c) return;
+  var items = getRefBook(key);
+  if(!items.length){ c.innerHTML='<div style="font-size:11px;color:#555568;padding:6px 0">Нет записей</div>'; return; }
+  c.innerHTML = items.map(function(item, idx){
+    var name = item.name||item;
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#13131a;border-radius:8px;margin-bottom:6px">'+
+      '<div style="font-size:12px">'+name+'</div>'+
+      '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+idx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer;padding:4px">✕</button>'+
+    '</div>';
+  }).join('');
+}
+function addRefbookItemShop(bookId, key){
+  var input = document.getElementById('rbNew_'+bookId);
+  var value = (input.value||'').trim();
+  if(!value){ showToast('Введите значение'); return; }
+  var items = getRefBook(key);
+  items.push({id:uid(), name:value});
+  saveRefBookShop(key, items);
+  input.value='';
+  renderRefbookItemsShop(bookId, key);
+  updateRefbookCountShop(bookId, key);
+}
+function deleteRefbookItemShop(bookId, idx, key){
+  var items = getRefBook(key);
+  items.splice(idx,1);
+  saveRefBookShop(key, items);
+  renderRefbookItemsShop(bookId, key);
+  updateRefbookCountShop(bookId, key);
+}
+function updateRefbookCountShop(bookId, key){
+  var items = getRefBook(key);
+  var el = document.getElementById('rbCount_'+bookId);
+  if(el) el.textContent = items.length+' записей';
 }
 
 function renderShopSettings(){
   var c = document.getElementById('shopSettingsList'); if(!c) return;
-  renderShopsManage(); renderAccountsList();
+  renderShopsManage(); renderAccountsList(); renderRefbookSections();
   var shops = getShopNames();
   var settings = getShopZpSettings();
   if(!shops.length){ c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:8px">Сначала добавьте магазины выше</div>'; return; }
