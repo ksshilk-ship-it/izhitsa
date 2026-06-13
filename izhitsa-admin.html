@@ -572,6 +572,11 @@ if ('serviceWorker' in navigator) {
       <input class="fi" type="number" id="staffWsRate" placeholder="0" inputmode="numeric">
     </div>
 
+    <div class="fg">
+      <label class="fl">Статус сотрудника</label>
+      <div id="staffStatusChips" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    </div>
+
     <button class="btn" onclick="saveUnifiedStaff()" style="margin-bottom:8px">💾 Сохранить</button>
     <button class="btn sec" onclick="closeMo('addStaffMo')">Отмена</button>
   </div>
@@ -1609,7 +1614,26 @@ function openAddStaffModal() {
   // Reset form
   ['staffName','staffPass','staffWsRate'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   document.querySelectorAll('#staffRolesBlock input[type=checkbox]').forEach(function(cb){ cb.checked=false; });
+  _selectedStaffStatus='';
+  renderStaffStatusChips();
   openMo('addStaffMo');
+}
+
+var _selectedStaffStatus='';
+function renderStaffStatusChips(){
+  var c=document.getElementById('staffStatusChips'); if(!c) return;
+  var statuses=getRefBook('iz_employee_statuses');
+  var options=[{name:''}].concat(statuses);
+  c.innerHTML=options.map(function(s){
+    var name=s.name||s||'';
+    var label=name||'— не указан —';
+    var active=(_selectedStaffStatus===name);
+    return '<button type="button" onclick="pickStaffStatus(\''+name+'\')" style="padding:8px 14px;border-radius:10px;font-size:12px;cursor:pointer;border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'var(--s2)':'var(--bg)')+';color:'+(active?'var(--accent)':'var(--text)')+'">'+label+'</button>';
+  }).join('');
+}
+function pickStaffStatus(name){
+  _selectedStaffStatus=name;
+  renderStaffStatusChips();
 }
 
 function saveUnifiedStaff() {
@@ -1629,12 +1653,13 @@ function saveUnifiedStaff() {
   });
 
   var wsRate = parseFloat(gv('staffWsRate')) || 0;
+  var status = _selectedStaffStatus||'';
   var staff = getStaff();
   var existing = staff.findIndex(function(s){ return s.name === name; });
   var entry = {
     id: existing >= 0 ? staff[existing].id : uid(),
     name: name, pass: pass, roles: roles, shops: shops,
-    wsRate: wsRate, blocked: false,
+    wsRate: wsRate, status: status, blocked: existing >= 0 ? (staff[existing].blocked||false) : false,
     createdAt: existing >= 0 ? staff[existing].createdAt : new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     createdBy: session ? session.name : 'admin'
@@ -1672,6 +1697,7 @@ function renderUnifiedStaff() {
           '<div style="font-size:11px;color:var(--t2);margin-top:3px">' + roleStr + '</div>' +
           (shopStr ? '<div style="font-size:11px;color:var(--a2);margin-top:2px">📍 ' + shopStr + '</div>' : '') +
           (s.wsRate ? '<div style="font-size:11px;color:var(--a4);margin-top:2px">💰 ' + s.wsRate + '₽/шт</div>' : '') +
+          (s.status ? '<div style="font-size:11px;color:#ffb060;margin-top:2px">👤 ' + s.status + '</div>' : '') +
         '</div>' +
         '<div style="display:flex;gap:4px">' +
           '<button onclick="editStaff(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--a2);cursor:pointer">✏️</button>' +
@@ -1707,6 +1733,8 @@ function editStaff(idx) {
   document.querySelectorAll('#staffRolesBlock input[type=checkbox]').forEach(function(cb){
     cb.checked = s.roles && s.roles.indexOf(cb.value) >= 0;
   });
+  _selectedStaffStatus = s.status||'';
+  renderStaffStatusChips();
   openMo('addStaffMo');
 }
 
@@ -2071,7 +2099,6 @@ function renderRefBooks() {
     {id: 'works', icon: '🛠️', name: 'Доп. работы', key: 'iz_additional_works'},
     {id: 'sizes', icon: '📏', name: 'Размеры изделий', key: 'iz_sizes'},
     {id: 'materials', icon: '💎', name: 'Породы изделий', key: 'iz_materials'},
-    {id: 'statuses', icon: '👤', name: 'Статусы сотрудников', key: 'iz_employee_statuses'},
     {id: 'schedules', icon: '⏰', name: 'Графики работы', key: 'iz_work_schedules'}
   ];
   

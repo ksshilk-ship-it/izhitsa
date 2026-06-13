@@ -1154,7 +1154,7 @@ function applyUpdate() {
 
     <div class="fg">
       <label class="fl">Статус сотрудника</label>
-      <select class="fs" id="staffStatus2"></select>
+      <div id="staffStatusChips2" style="display:flex;flex-wrap:wrap;gap:8px"></div>
     </div>
 
     <button class="btn" onclick="saveUnifiedStaffShop()" style="margin-bottom:8px">💾 Сохранить</button>
@@ -5103,13 +5103,21 @@ function renderAdminsAdminList(){
 }
 
 // ════ UNIFIED ADD/EDIT STAFF MODAL ════
-function populateStaffStatusSelect2(){
-  var sel=document.getElementById('staffStatus2'); if(!sel) return;
+var _selectedStatus2='';
+function renderStaffStatusChips2(){
+  var c=document.getElementById('staffStatusChips2'); if(!c) return;
   var statuses=getRefBook('iz_employee_statuses');
-  sel.innerHTML='<option value="">— не указан —</option>'+statuses.map(function(s){
-    var name=s.name||s;
-    return '<option value="'+name+'">'+name+'</option>';
+  var options=[{name:''}].concat(statuses);
+  c.innerHTML=options.map(function(s){
+    var name=s.name||s||'';
+    var label=name||'— не указан —';
+    var active=(_selectedStatus2===name);
+    return '<button type="button" onclick="pickStaffStatus2(\''+name+'\')" style="padding:8px 14px;border-radius:10px;font-size:12px;cursor:pointer;border:1px solid '+(active?'#c8f060':'#2e2e3e')+';background:'+(active?'#1e2a14':'#1a1a22')+';color:'+(active?'#c8f060':'#f0f0f8')+'">'+label+'</button>';
   }).join('');
+}
+function pickStaffStatus2(name){
+  _selectedStatus2=name;
+  renderStaffStatusChips2();
 }
 function openAddStaffModalShop(){
   // Populate shop checkboxes
@@ -5122,11 +5130,11 @@ function openAddStaffModalShop(){
         '<input type="checkbox" value="'+name+'" data-shopcheck="1" style="width:14px;height:14px"> '+name+'</label>';
     }).join('');
   }
-  populateStaffStatusSelect2();
+  _selectedStatus2='';
+  renderStaffStatusChips2();
   // Reset form
   ['staffName2','staffPass2','staffWsRate2'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   document.querySelectorAll('#staffRolesBlock2 input[type=checkbox]').forEach(function(cb){ cb.checked=false; });
-  var statusEl=document.getElementById('staffStatus2'); if(statusEl) statusEl.value='';
   document.getElementById('staffMo2Title').textContent='👤 Добавить сотрудника';
   _editStaffIdx=-1;
   openMo('staffMo2');
@@ -5146,11 +5154,11 @@ function editStaffShop(idx){
         '<input type="checkbox" value="'+name+'" data-shopcheck="1" '+checked+' style="width:14px;height:14px"> '+name+'</label>';
     }).join('');
   }
-  populateStaffStatusSelect2();
+  _selectedStatus2=s.status||'';
+  renderStaffStatusChips2();
   document.getElementById('staffName2').value=s.name||'';
   document.getElementById('staffPass2').value=s.pass||'';
   document.getElementById('staffWsRate2').value=s.wsRate||'';
-  document.getElementById('staffStatus2').value=s.status||'';
   document.querySelectorAll('#staffRolesBlock2 input[type=checkbox]').forEach(function(cb){
     cb.checked = s.roles && s.roles.indexOf(cb.value)>=0;
   });
@@ -5170,7 +5178,7 @@ function saveUnifiedStaffShop(){
   document.querySelectorAll('#staffShopsList2 input[type=checkbox]:checked').forEach(function(cb){ shops.push(cb.value); });
 
   var wsRate=parseFloat(gv('staffWsRate2'))||0;
-  var status=gv('staffStatus2')||'';
+  var status=_selectedStatus2||'';
   var staff=getStaff();
 
   if(_editStaffIdx>=0 && staff[_editStaffIdx]){
