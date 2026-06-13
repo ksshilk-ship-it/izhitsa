@@ -1375,6 +1375,9 @@ function syncListen(lsKey) {
       if(lsKey === 'iz_accounts'){
         try{ renderAccountsList(); }catch(e){}
       }
+      if(lsKey === 'iz_shop_zp_settings'){
+        try{ renderShopSettings(); }catch(e){}
+      }
       // Generic shared refbooks live-refresh
       var shopRefbookKeys = ['iz_payment_methods','iz_suppliers','iz_goods','iz_materials','iz_work_schedules'];
       if(shopRefbookKeys.indexOf(lsKey)>=0){
@@ -4649,7 +4652,7 @@ function getShopZpSettings(){
   return JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
 }
 function saveShopZpSettingsData(d){
-  localStorage.setItem('iz_shop_zp_settings', JSON.stringify(d));
+  syncSave('iz_shop_zp_settings', d);
 }
 
 // ── Shop management ──
@@ -4872,6 +4875,11 @@ function toggleZpAcc(sid){
   var open=body.style.display!=='none';
   body.style.display=open?'none':'block';
   if(arr) arr.textContent=open?'▶':'▼';
+}
+
+function toggleHighPct(sid, checked){
+  var block=document.getElementById('zp_highpct_block_'+sid);
+  if(block) block.style.display = checked?'block':'none';
 }
 
 function saveOneShopZp(shop, sid){

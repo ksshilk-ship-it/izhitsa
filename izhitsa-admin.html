@@ -497,6 +497,22 @@ if ('serviceWorker' in navigator) {
       </div>
     </div>
 
+    <!-- ZP SETTINGS per shop (synced with shop module) -->
+    <div style="background:var(--s2);border-radius:8px;margin-bottom:16px;padding:0;overflow:hidden">
+      <div onclick="toggleAdminSettingsSection('zp')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:9px">
+          <span style="font-size:18px">💰</span>
+          <div><div style="font-weight:700;font-size:13px">Настройки ЗП по магазинам</div>
+          <div id="asCount_zp" style="font-size:11px;color:var(--t2)">— записей</div></div>
+        </div>
+        <div id="asArr_zp" style="color:var(--accent)">▶</div>
+      </div>
+      <div id="asBody_zp" style="display:none;padding:0 14px 14px">
+        <div id="setZpList"></div>
+        <button class="btn" style="margin-top:8px" onclick="saveAllZpSettings()">💾 Сохранить настройки ЗП</button>
+      </div>
+    </div>
+
     <!-- 12 COLLAPSED REFERENCE BOOKS -->
     <div style="margin-top:16px">
       <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:12px">📚 Справочники системы</div>
@@ -632,6 +648,10 @@ function adminSyncListen(lsKey) {
       if(lsKey === 'iz_sales_sources'){
         try{ renderShopsList(); }catch(e){}
         try{ if(document.getElementById('items_sources')) renderRefBookItems('sources','iz_sales_sources'); }catch(e){}
+        try{ renderZpList(); }catch(e){}
+      }
+      if(lsKey === 'iz_shop_zp_settings'){
+        try{ renderZpList(); }catch(e){}
       }
       // Generic refbook live-refresh
       var refbookIdMap = {iz_payment_methods:'payments', iz_suppliers:'suppliers', iz_goods:'goods', iz_materials:'materials', iz_work_schedules:'schedules'};
@@ -1806,38 +1826,118 @@ function deletePayMethod(idx) {
   var m = getPayMethods(); m.splice(idx,1); savePayMethods(m); renderPayMethodsList();
 }
 
+function getShopNames(){ return getShops().map(function(x){ return x.name||x; }); }
+
+function toggleAdminSettingsSection(id){
+  var body=document.getElementById('asBody_'+id), arr=document.getElementById('asArr_'+id);
+  if(!body) return;
+  var open = body.style.display!=='none';
+  body.style.display = open?'none':'block';
+  if(arr) arr.style.transform = open?'':'rotate(90deg)';
+}
+function updateAdminSettingsSectionCount(id, count){
+  var el=document.getElementById('asCount_'+id);
+  if(el) el.textContent = count+' записей';
+}
+function toggleHighPctAdmin(sid, checked){
+  var block=document.getElementById('zp_highpct_block_'+sid);
+  if(block) block.style.display = checked?'block':'none';
+}
+
 function renderZpList() {
   var c = document.getElementById('setZpList'); if(!c) return;
-  var shops = getShops().filter(function(s){ return (s.type||'shop')==='shop'; });
-  var zp = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+  var shops = getShopNames();
+  var settings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+  updateAdminSettingsSectionCount('zp', shops.length);
   if(!shops.length) { c.innerHTML='<div style="color:var(--t2);font-size:12px">Сначала добавьте магазины</div>'; return; }
-  c.innerHTML = shops.map(function(s) {
-    var name=s.name||s, sid=encodeURIComponent(name).replace(/%/g,'_');
-    var cfg = zp[name]||{base:1500,threshold:5000,pct:8,travel:0};
-    return '<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">' +
-      '<div onclick="this.nextSibling.style.display=this.nextSibling.style.display===\'none\'?\'block\':\'none\'" style="padding:10px;background:var(--s2);cursor:pointer;font-size:13px;font-weight:700">🏪 ' + name + '</div>' +
-      '<div style="display:none;padding:10px">' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
-          '<div><label class="fl">База (₽)</label><input class="fi" type="number" id="zp_base_'+sid+'" value="'+(cfg.base||1500)+'" inputmode="numeric"></div>' +
-          '<div><label class="fl">Порог (₽)</label><input class="fi" type="number" id="zp_thresh_'+sid+'" value="'+(cfg.threshold||5000)+'" inputmode="numeric"></div>' +
-          '<div><label class="fl">% выручки</label><input class="fi" type="number" id="zp_pct_'+sid+'" value="'+(cfg.pct||8)+'" step="0.5" inputmode="numeric"></div>' +
-          '<div><label class="fl">Проезд (₽)</label><input class="fi" type="number" id="zp_travel_'+sid+'" value="'+(cfg.travel||0)+'" inputmode="numeric"></div>' +
-        '</div>' +
-        '<button onclick="saveZpForShop(\''+name+'\',\''+sid+'\')" style="margin-top:8px;width:100%;padding:8px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>' +
-      '</div>' +
+
+  c.innerHTML = shops.map(function(shop){
+    var sid = encodeURIComponent(shop).replace(/%/g,'_');
+    var s = settings[shop] || {base:1500, pct:8, threshold:5000, travel:0};
+    return '<div style="border:1px solid var(--border);border-radius:12px;margin-bottom:8px;overflow:hidden">'+
+      '<div onclick="toggleZpAccAdmin(\''+sid+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:12px;cursor:pointer;background:var(--s2)">'+
+        '<div style="font-size:13px;font-weight:700">🏪 '+shop+'</div>'+
+        '<div style="display:flex;align-items:center;gap:8px">'+
+          '<div style="font-size:11px;color:var(--t2)">база: '+(s.base||1500)+'₽ · '+(s.pct||8)+'%</div>'+
+          '<div id="zpAccA_arr_'+sid+'" style="color:var(--accent)">▶</div>'+
+        '</div>'+
+      '</div>'+
+      '<div id="zpAccA_'+sid+'" style="display:none;padding:12px;background:var(--bg)">'+
+        '<div class="fg"><label class="fl">Базовая ставка за выход (₽)</label>'+
+          '<input class="fi" type="number" id="zp_base_'+sid+'" value="'+(s.base||1500)+'" inputmode="numeric"></div>'+
+        '<div class="fg"><label class="fl">Порог выручки для % (₽)</label>'+
+          '<input class="fi" type="number" id="zp_thresh_'+sid+'" value="'+(s.threshold||5000)+'" inputmode="numeric">'+
+          '<div style="font-size:11px;color:var(--t2);margin-top:4px">Ниже порога → только базовая</div></div>'+
+        '<div class="fg"><label class="fl">Процент от выручки (%)</label>'+
+          '<input class="fi" type="number" id="zp_pct_'+sid+'" value="'+(s.pct||8)+'" inputmode="numeric" step="0.5"></div>'+
+        '<div class="fg"><label class="fl">Проезд за смену (₽)</label>'+
+          '<input class="fi" type="number" id="zp_travel_'+sid+'" value="'+(s.travel||0)+'" inputmode="numeric"></div>'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+
+          '<input type="checkbox" id="zp_has_high_'+sid+'" '+(s.highThreshold?'checked':'')+
+          ' onchange="toggleHighPctAdmin(\''+sid+'\',this.checked)" style="width:18px;height:18px;cursor:pointer">'+
+          '<label for="zp_has_high_'+sid+'" style="font-size:12px;color:var(--t2);cursor:pointer">Повышенный % при высокой выручке</label>'+
+        '</div>'+
+        '<div id="zp_highpct_block_'+sid+'" style="'+(s.highThreshold?'':'display:none')+'">'+
+          '<div class="fg"><label class="fl">Порог повышенного % (₽)</label>'+
+            '<input class="fi" type="number" id="zp_highthresh_'+sid+'" value="'+(s.highThreshold||20000)+'" inputmode="numeric"></div>'+
+          '<div class="fg"><label class="fl">Повышенный % (%)</label>'+
+            '<input class="fi" type="number" id="zp_highpct_'+sid+'" value="'+(s.highPct||10)+'" inputmode="numeric" step="0.5"></div>'+
+        '</div>'+
+        '<button onclick="saveOneShopZpAdmin(\''+shop+'\',\''+sid+'\')" style="width:100%;padding:10px;border-radius:10px;background:var(--s2);border:1px solid var(--accent);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;margin-top:4px">💾 Сохранить '+shop+'</button>'+
+      '</div>'+
     '</div>';
   }).join('');
 }
-function saveZpForShop(name, sid) {
-  var zp = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
-  zp[name] = {
+
+function toggleZpAccAdmin(sid){
+  var body=document.getElementById('zpAccA_'+sid);
+  var arr=document.getElementById('zpAccA_arr_'+sid);
+  if(!body) return;
+  var open=body.style.display!=='none';
+  body.style.display=open?'none':'block';
+  if(arr) arr.textContent=open?'▶':'▼';
+}
+
+function saveOneShopZpAdmin(shop, sid){
+  var settings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+  var hasHigh=(document.getElementById('zp_has_high_'+sid)||{}).checked;
+  settings[shop]={
     base: parseFloat((document.getElementById('zp_base_'+sid)||{}).value)||1500,
     threshold: parseFloat((document.getElementById('zp_thresh_'+sid)||{}).value)||5000,
     pct: parseFloat((document.getElementById('zp_pct_'+sid)||{}).value)||8,
     travel: parseFloat((document.getElementById('zp_travel_'+sid)||{}).value)||0,
+    highThreshold: hasHigh?(parseFloat((document.getElementById('zp_highthresh_'+sid)||{}).value)||20000):null,
+    highPct: hasHigh?(parseFloat((document.getElementById('zp_highpct_'+sid)||{}).value)||10):null,
   };
-  adminSyncSave('iz_shop_zp_settings', zp);
-  alert('✅ ЗП для ' + name + ' сохранена');
+  adminSyncSave('iz_shop_zp_settings', settings);
+  renderZpList();
+  showToast2('✅ ЗП для '+shop+' сохранена');
+}
+
+function saveAllZpSettings(){
+  var shops=getShopNames();
+  var settings=JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+  shops.forEach(function(shop){
+    var sid=encodeURIComponent(shop).replace(/%/g,'_');
+    var baseEl=document.getElementById('zp_base_'+sid);
+    if(!baseEl) return; // accordion not opened, skip
+    var hasHigh=(document.getElementById('zp_has_high_'+sid)||{}).checked;
+    settings[shop]={
+      base:parseFloat(baseEl.value)||1500,
+      threshold:parseFloat((document.getElementById('zp_thresh_'+sid)||{}).value)||5000,
+      pct:parseFloat((document.getElementById('zp_pct_'+sid)||{}).value)||8,
+      travel:parseFloat((document.getElementById('zp_travel_'+sid)||{}).value)||0,
+      highThreshold:hasHigh?(parseFloat((document.getElementById('zp_highthresh_'+sid)||{}).value)||20000):null,
+      highPct:hasHigh?(parseFloat((document.getElementById('zp_highpct_'+sid)||{}).value)||10):null,
+    };
+  });
+  adminSyncSave('iz_shop_zp_settings', settings);
+  showToast2('✅ Настройки ЗП сохранены');
+}
+
+// Fallback toast for admin (use alert if showToast not defined)
+function showToast2(msg){
+  if(typeof showToast === 'function'){ showToast(msg); } else { alert(msg); }
 }
 
 function getItemsBase() { return JSON.parse(localStorage.getItem('iz_items')||'[]'); }
