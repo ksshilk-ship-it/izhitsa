@@ -1313,7 +1313,7 @@ db.enablePersistence({synchronizeTabs:true}).catch(e=>console.log('Persist:',e.c
 // ════ FIRESTORE SYNC LAYER ════
 var _syncUnsubs = {};
 var SYNC_SETTINGS = {
-  'iz_admin_shops':      {doc:'shops',    field:'shops'},
+  'iz_admin_shops':      {doc:'sales_sources', field:'data'},
   'iz_shop_admins':      {doc:'admins',   field:'admins'},
   'iz_sellers':          {doc:'sellers',  field:'sellers'},
   'iz_shop_zp_settings': {doc:'zp',       field:'zp'},
@@ -4604,7 +4604,7 @@ function addShopAdmin(){
   if(!name){showToast('Введите название магазина');return;}
   var shops=getShops();
   if(shops.some(function(s){return (s.name||s)===name;})){showToast('Такой магазин уже есть');return;}
-  shops.push({name:name,type:type});
+  shops.push({id:uid(), name:name, type:type, createdAt:new Date().toISOString()});
   saveShops(shops);
   document.getElementById('newShopName').value='';
   renderShopsManage(); renderShopSettings();

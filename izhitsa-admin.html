@@ -601,7 +601,6 @@ db.enablePersistence({synchronizeTabs:true}).catch(function(e){ console.log('Per
 var _adminSyncUnsubs = {};
 var ADMIN_SYNC_SETTINGS = {
   'iz_admin_users':      {doc:'admins',        field:'admins'},
-  'iz_shops':            {doc:'shops',         field:'shops'},
   'iz_sellers':          {doc:'sellers',       field:'sellers'},
   'iz_shop_zp_settings': {doc:'zp',            field:'zp'},
   'iz_items':            {doc:'items',         field:'items'},
@@ -617,14 +616,14 @@ function adminSyncListen(lsKey) {
     var val = snap.data()[m.field];
     if(val !== undefined) {
       localStorage.setItem(lsKey, JSON.stringify(val));
-      // Mirror shops to iz_admin_shops for shop module
-      if(lsKey === 'iz_shops') localStorage.setItem('iz_admin_shops', JSON.stringify(val));
+      // Mirror sales sources to iz_admin_shops for shop module compatibility
+      if(lsKey === 'iz_sales_sources') localStorage.setItem('iz_admin_shops', JSON.stringify(val));
     }
   }, function(e){ console.log('adminSyncListen err', lsKey, e.code||e); });
 }
 function adminSyncSave(lsKey, data) {
   localStorage.setItem(lsKey, JSON.stringify(data));
-  if(lsKey === 'iz_shops') localStorage.setItem('iz_admin_shops', JSON.stringify(data));
+  if(lsKey === 'iz_sales_sources') localStorage.setItem('iz_admin_shops', JSON.stringify(data));
   var m = ADMIN_SYNC_SETTINGS[lsKey]; if(!m) return;
   var obj = {}; obj[m.field] = data; obj.updatedAt = new Date().toISOString();
   db.collection('iz_settings').doc(m.doc).set(obj, {merge:true}).catch(function(e){ console.log('adminSyncSave err', lsKey, e.code||e); });
@@ -661,12 +660,13 @@ function saveAdminUsers(data) {
 }
 
 function getShops() {
-  try { return JSON.parse(localStorage.getItem('iz_shops') || '[]'); } 
+  try { return JSON.parse(localStorage.getItem('iz_sales_sources') || '[]'); } 
   catch(e) { return []; }
 }
 
 function saveShops(data) {
-  adminSyncSave('iz_shops', data);
+  adminSyncSave('iz_sales_sources', data);
+  localStorage.setItem('iz_admin_shops', JSON.stringify(data));
 }
 
 function getTransactions() {
@@ -1710,17 +1710,15 @@ function addShop() {
   if(!name) { alert('Введите название'); return; }
   var shops = getShops();
   if(shops.some(function(s){ return (s.name||s)===name; })) { alert('Уже есть'); return; }
-  shops.push({name:name, type:type});
-  adminSyncSave('iz_shops', shops);
+  shops.push({id:uid(), name:name, type:type, createdAt:new Date().toISOString()});
+  saveShops(shops);
   document.getElementById('newShopName').value = '';
   renderShopsList();
-  // Also sync to iz_admin_shops
-  localStorage.setItem('iz_admin_shops', JSON.stringify(shops));
 }
 function deleteShop(idx) {
   if(!confirm('Удалить точку продаж?')) return;
   var shops = getShops(); shops.splice(idx,1);
-  adminSyncSave('iz_shops', shops);
+  saveShops(shops);
   renderShopsList();
 }
 
@@ -1908,6 +1906,8 @@ function getRefBook(key) {
 
 function saveRefBook(key, data) {
   localStorage.setItem(key, JSON.stringify(data));
+  // Sync to Firestore if this refbook is part of the sync layer (e.g. sales sources / shop list)
+  if(ADMIN_SYNC_SETTINGS[key]) adminSyncSave(key, data);
 }
 
 function renderRefBooks() {
