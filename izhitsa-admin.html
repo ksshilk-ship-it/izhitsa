@@ -619,6 +619,15 @@ function adminSyncListen(lsKey) {
       localStorage.setItem(lsKey, JSON.stringify(val));
       // Mirror sales sources to iz_admin_shops for shop module compatibility
       if(lsKey === 'iz_sales_sources') localStorage.setItem('iz_admin_shops', JSON.stringify(val));
+      // Live-refresh UI for refbooks / settings lists that depend on this data
+      if(lsKey === 'iz_accounts'){
+        try{ renderAccountsList(); }catch(e){}
+        try{ if(document.getElementById('items_accounts')) renderRefBookItems('accounts','iz_accounts'); }catch(e){}
+      }
+      if(lsKey === 'iz_sales_sources'){
+        try{ renderShopsList(); }catch(e){}
+        try{ if(document.getElementById('items_sources')) renderRefBookItems('sources','iz_sales_sources'); }catch(e){}
+      }
     }
   }, function(e){ console.log('adminSyncListen err', lsKey, e.code||e); });
 }
