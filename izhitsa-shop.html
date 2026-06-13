@@ -1430,6 +1430,13 @@ const KEY = {session:'iz_shop_session',journal:'iz_shop_journal',shifts:'iz_shif
 function getStaff() {
   return JSON.parse(localStorage.getItem('iz_staff')||'[]');
 }
+function saveStaffShop(data) {
+  localStorage.setItem('iz_staff', JSON.stringify(data));
+  var obj = {staff: data, updatedAt: new Date().toISOString()};
+  db.collection('iz_settings').doc('staff').set(obj, {merge:true})
+    .catch(function(e){ console.log('saveStaffShop err', e); });
+  syncDerivedFromStaff(data);
+}
 function getStaffBySingleRole(role) {
   return getStaff().filter(function(s){
     return !s.blocked && s.roles && s.roles.indexOf(role) >= 0;
@@ -4960,45 +4967,66 @@ function deleteSupplierAdmin(idx){
   renderSuppliersAdmin(); showToast('🗑 Поставщик удалён');
 }
 
+// Role labels matching admin's "Сотрудники" tab
+var STAFF_ROLE_LABELS = {
+  admin:'🔐 Администратор', owner:'👑 Владелец', accountant:'📊 Бухгалтер',
+  seller:'🏪 Продавец', 'мастер':'🔨 Мастер', 'заготовщик':'🪚 Заготовщик',
+  'кладовщик':'📦 Кладовщик', 'управляющий':'👑 Управляющий'
+};
+var STAFF_ADMIN_ROLES = ['admin','owner','accountant'];
+
 function renderSellersAdmin(){
   renderAdminsAdminList();
   const c=document.getElementById('sellersAdminList'); if(!c)return;
-  const sellers=getSellers(); const shops=getShops();
+  const staff=getStaff();
+  const sellers=staff.filter(function(s){ return s.roles && s.roles.indexOf('seller')>=0; });
+  const shops=getShops();
   const nss=document.getElementById('newSShop');
   if(nss) nss.innerHTML='<option value="">Универсальный</option>'+shops.map(s=>`<option value="${s.name||s}">${s.name||s}</option>`).join('');
   if(!sellers.length){c.innerHTML='<div class="empty"><div class="ei">🏪</div>Нет продавцов</div>';return;}
-  c.innerHTML=sellers.map((s,i)=>`
+  c.innerHTML=sellers.map(function(s){
+    const idx=staff.indexOf(s);
+    const roleStr=(s.roles||[]).map(function(r){return STAFF_ROLE_LABELS[r]||r;}).join(' · ');
+    const shopStr=(s.shops||[]).length?(s.shops||[]).join(', '):'';
+    return `
     <div style="background:${s.blocked?'#2e1a1a':'#1a1a22'};border:1px solid ${s.blocked?'#f06060':'#2e2e3e'};border-radius:12px;padding:10px;margin-bottom:8px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <div style="font-size:22px">${s.blocked?'🚫':'🏪'}</div>
-        <div style="flex:1"><div style="font-size:13px;font-weight:700">${s.name}${s.blocked?' (заблокирован)':''}</div><div style="font-size:11px;color:#8888aa">${s.shop||'Универсальный'}</div></div>
-        <button onclick="openBlockSeller('${s.blocked?'unblock':'block'}',${i},'${s.name}')" style="background:${s.blocked?'#1a2e1e':'#2a1e14'};border:1px solid ${s.blocked?'#60f090':'#f0a060'};border-radius:8px;padding:4px 8px;font-size:10px;color:${s.blocked?'#60f090':'#f0a060'};cursor:pointer;white-space:nowrap">${s.blocked?'Разблок.':'Блок.'}</button>
-        <button onclick="openBlockSeller('delete',${i},'${s.name}')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:10px;color:#f06060;cursor:pointer">✕</button>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700">${s.name}${s.blocked?' (заблокирован)':''}</div>
+          <div style="font-size:11px;color:#8888aa;margin-top:2px">${roleStr}</div>
+          ${shopStr?'<div style="font-size:11px;color:#60c8f0;margin-top:2px">📍 '+shopStr+'</div>':''}
+        </div>
+        <button onclick="openBlockSeller('${s.blocked?'unblock':'block'}',${idx},'${s.name}')" style="background:${s.blocked?'#1a2e1e':'#2a1e14'};border:1px solid ${s.blocked?'#60f090':'#f0a060'};border-radius:8px;padding:4px 8px;font-size:10px;color:${s.blocked?'#60f090':'#f0a060'};cursor:pointer;white-space:nowrap">${s.blocked?'Разблок.':'Блок.'}</button>
+        <button onclick="openBlockSeller('delete',${idx},'${s.name}')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:10px;color:#f06060;cursor:pointer">✕</button>
       </div>
       <div style="display:flex;gap:6px">
-        <input id="newpass_${i}" type="password" placeholder="Новый пароль..." style="flex:1;background:#0f0f13;border:1px solid #2e2e3e;border-radius:8px;padding:7px 10px;color:#f0f0f8;font-size:12px;outline:none">
-        <button onclick="changeSellerPass(${i})" style="background:#1a1e2e;border:1px solid #60c8f0;border-radius:8px;padding:7px 12px;font-size:11px;color:#60c8f0;cursor:pointer;white-space:nowrap">Сменить пароль</button>
+        <input id="newpass_${idx}" type="text" autocomplete="off" placeholder="Новый пароль..." style="flex:1;background:#0f0f13;border:1px solid #2e2e3e;border-radius:8px;padding:7px 10px;color:#f0f0f8;font-size:12px;outline:none;-webkit-text-security:disc">
+        <button onclick="changeSellerPass(${idx})" style="background:#1a1e2e;border:1px solid #60c8f0;border-radius:8px;padding:7px 12px;font-size:11px;color:#60c8f0;cursor:pointer;white-space:nowrap">Сменить пароль</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 function changeSellerPass(idx){
   var inp=document.getElementById('newpass_'+idx);
   var newPass=((inp&&inp.value)||'').trim();
   if(!newPass){showToast('Введите новый пароль');return;}
-  var sellers=getSellers();
-  if(!sellers[idx]){showToast('Ошибка');return;}
-  sellers[idx].pass=newPass;
-  saveSellers(sellers);
+  var staff=getStaff();
+  if(!staff[idx]){showToast('Ошибка');return;}
+  staff[idx].pass=newPass;
+  saveStaffShop(staff);
   inp.value='';
-  showToast('✅ Пароль продавца «'+sellers[idx].name+'» изменён');
+  showToast('✅ Пароль продавца «'+staff[idx].name+'» изменён');
+  renderSellersAdmin();
 }
 
 function addSellerAdmin(){
   const name=gv('newSName'),shop=gv('newSShop'),pass=gv('newSPass');
   if(!name||!pass){showToast('Заполните имя и пароль');return;}
-  const sellers=getSellers();
-  sellers.push({id:uid(),name,shop,pass,blocked:false,createdAt:new Date().toISOString()});
-  saveSellers(sellers);
+  const staff=getStaff();
+  if(staff.some(function(s){return s.name===name;})){showToast('Сотрудник с таким именем уже есть');return;}
+  staff.push({id:uid(),name:name,pass:pass,roles:['seller'],shops:shop?[shop]:[],blocked:false,createdAt:new Date().toISOString()});
+  saveStaffShop(staff);
   ['newSName','newSPass'].forEach(id=>document.getElementById(id).value='');
   renderSellersAdmin(); showToast('✅ Продавец добавлен');
 }
@@ -5014,11 +5042,12 @@ function openBlockSeller(type,idx,name){
 function confirmBlockSeller(){
   if(!blockSellerAction)return;
   const {type,idx}=blockSellerAction;
-  const sellers=getSellers();
-  if(type==='delete')sellers.splice(idx,1);
-  else if(type==='block')sellers[idx].blocked=true;
-  else if(type==='unblock')sellers[idx].blocked=false;
-  saveSellers(sellers);
+  const staff=getStaff();
+  if(!staff[idx]){closeMo('blockSellerMo');return;}
+  if(type==='delete')staff.splice(idx,1);
+  else if(type==='block')staff[idx].blocked=true;
+  else if(type==='unblock')staff[idx].blocked=false;
+  saveStaffShop(staff);
   closeMo('blockSellerMo'); renderSellersAdmin();
   showToast(type==='delete'?'🗑 Удалено':type==='block'?'🚫 Заблокировано':'✅ Разблокировано');
 }
@@ -5026,28 +5055,34 @@ function confirmBlockSeller(){
 // ════ ADMIN USER MANAGEMENT ════
 function renderAdminsAdminList(){
   const c=document.getElementById('adminsAdminList'); if(!c)return;
-  const admins=getShopAdmins();
+  const staff=getStaff();
+  const admins=staff.filter(function(s){ return s.roles && s.roles.some(function(r){return STAFF_ADMIN_ROLES.indexOf(r)>=0;}); });
   if(!admins.length){c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:8px">Нет администраторов</div>';return;}
-  c.innerHTML=admins.map((a,i)=>`
+  c.innerHTML=admins.map(function(a){
+    const idx=staff.indexOf(a);
+    const roleStr=(a.roles||[]).map(function(r){return STAFF_ROLE_LABELS[r]||r;}).join(' · ');
+    return `
     <div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:8px;background:#1e1a2e;border:1px solid #a060f0;border-radius:12px">
       <div style="font-size:22px">🔐</div>
       <div style="flex:1">
         <div style="font-size:13px;font-weight:700">${a.name}</div>
-        <div style="font-size:11px;color:#8888aa">Администратор магазина</div>
+        <div style="font-size:11px;color:#8888aa">${roleStr}</div>
       </div>
-      <button onclick="deleteAdmin(${i},'${a.name}')"
+      <button onclick="deleteAdmin(${idx},'${a.name}')"
         style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:11px;color:#f06060;cursor:pointer">
         ✕ Удалить
       </button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function addAdminUser(){
   const name=gv('newAName'),pass=gv('newAPass');
   if(!name||!pass){showToast('Заполните имя и пароль');return;}
-  const admins=getShopAdmins();
-  admins.push({id:uid(),name,pass});
-  saveShopAdmins(admins);
+  const staff=getStaff();
+  if(staff.some(function(s){return s.name===name;})){showToast('Сотрудник с таким именем уже есть');return;}
+  staff.push({id:uid(),name:name,pass:pass,roles:['admin'],shops:[],blocked:false,createdAt:new Date().toISOString()});
+  saveStaffShop(staff);
   ['newAName','newAPass'].forEach(id=>document.getElementById(id).value='');
   renderAdminsAdminList();
   showToast('✅ Администратор добавлен');
@@ -5055,9 +5090,10 @@ function addAdminUser(){
 
 function deleteAdmin(idx,name){
   if(!confirm('Удалить администратора «'+name+'»?')) return;
-  const admins=getShopAdmins();
-  admins.splice(idx,1);
-  saveShopAdmins(admins);
+  const staff=getStaff();
+  if(!staff[idx]) return;
+  staff.splice(idx,1);
+  saveStaffShop(staff);
   renderAdminsAdminList();
   showToast('🗑 Администратор удалён');
 }
@@ -6614,7 +6650,10 @@ function addNewSupplier() {
 
 function init(){
   startSyncListeners();
-  startStaffLiveSync(function(){ try{pick(loginRole);}catch(e){} });
+  startStaffLiveSync(function(){
+    try{pick(loginRole);}catch(e){}
+    try{ if(document.getElementById('sellersAdminList')) renderSellersAdmin(); }catch(e){}
+  });
   const shopNames=getShopNames();
   const shopSel=document.getElementById('loginShop');
   if(shopSel) shopSel.innerHTML=shopNames.map(s=>`<option>${s}</option>`).join('');
