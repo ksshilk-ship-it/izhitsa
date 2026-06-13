@@ -1656,10 +1656,21 @@ function saveUnifiedStaff() {
   var status = _selectedStaffStatus||'';
   var staff = getStaff();
   var existing = staff.findIndex(function(s){ return s.name === name; });
+  var prev = existing>=0 ? staff[existing] : null;
+  var blocked = prev ? (prev.blocked||false) : false;
+  var blockedByStatus = prev ? (prev.blockedByStatus||false) : false;
+
+  // Link status to access: "Уволен" auto-blocks; recovering from it auto-unblocks
+  if(status === 'Уволен'){
+    if(!blocked){ blocked = true; blockedByStatus = true; }
+  } else if(blockedByStatus && status !== 'Уволен'){
+    blocked = false; blockedByStatus = false;
+  }
+
   var entry = {
     id: existing >= 0 ? staff[existing].id : uid(),
     name: name, pass: pass, roles: roles, shops: shops,
-    wsRate: wsRate, status: status, blocked: existing >= 0 ? (staff[existing].blocked||false) : false,
+    wsRate: wsRate, status: status, blocked: blocked, blockedByStatus: blockedByStatus,
     createdAt: existing >= 0 ? staff[existing].createdAt : new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     createdBy: session ? session.name : 'admin'
@@ -1669,7 +1680,11 @@ function saveUnifiedStaff() {
   closeMo('addStaffMo');
   renderUnifiedStaff();
   logAction('ADD_STAFF', {name: name, roles: roles});
-  alert('✅ Сотрудник сохранён');
+  var prevBlocked = prev ? (prev.blocked||false) : false;
+  var msg='✅ Сотрудник сохранён';
+  if(blocked && !prevBlocked) msg += '\n🚫 Доступ автоматически заблокирован (статус «Уволен»)';
+  else if(!blocked && prevBlocked && blockedByStatus===false && (prev && prev.blockedByStatus)) msg += '\n✅ Доступ автоматически разблокирован';
+  alert(msg);
 }
 
 function renderUnifiedStaff() {
@@ -1741,6 +1756,7 @@ function editStaff(idx) {
 function toggleStaffBlock(idx) {
   var staff = getStaff();
   staff[idx].blocked = !staff[idx].blocked;
+  staff[idx].blockedByStatus = false;
   saveStaff(staff);
   renderUnifiedStaff();
 }

@@ -5066,8 +5066,8 @@ function confirmBlockSeller(){
   const staff=getStaff();
   if(!staff[idx]){closeMo('blockSellerMo');return;}
   if(type==='delete')staff.splice(idx,1);
-  else if(type==='block')staff[idx].blocked=true;
-  else if(type==='unblock')staff[idx].blocked=false;
+  else if(type==='block'){staff[idx].blocked=true; staff[idx].blockedByStatus=false;}
+  else if(type==='unblock'){staff[idx].blocked=false; staff[idx].blockedByStatus=false;}
   saveStaffShop(staff);
   closeMo('blockSellerMo'); renderSellersAdmin();
   showToast(type==='delete'?'🗑 Удалено':type==='block'?'🚫 Заблокировано':'✅ Разблокировано');
@@ -5181,23 +5181,43 @@ function saveUnifiedStaffShop(){
   var status=_selectedStatus2||'';
   var staff=getStaff();
 
+  var entryBase, prev=null;
   if(_editStaffIdx>=0 && staff[_editStaffIdx]){
     var existing=staff[_editStaffIdx];
+    prev=existing;
     // Check no name collision with another entry
     var collision=staff.findIndex(function(s,i){return i!==_editStaffIdx && s.name===name;});
     if(collision>=0){showToast('Сотрудник с таким именем уже есть');return;}
-    staff[_editStaffIdx]=Object.assign({}, existing, {
-      name:name, pass:pass, roles:roles, shops:shops, wsRate:wsRate, status:status,
-      updatedAt:new Date().toISOString()
-    });
+    entryBase=existing;
   } else {
     if(staff.some(function(s){return s.name===name;})){showToast('Сотрудник с таким именем уже есть');return;}
-    staff.push({id:uid(), name:name, pass:pass, roles:roles, shops:shops, wsRate:wsRate, status:status, blocked:false, createdAt:new Date().toISOString()});
+    entryBase={blocked:false,blockedByStatus:false,createdAt:new Date().toISOString()};
   }
+
+  var blocked=entryBase.blocked||false;
+  var blockedByStatus=entryBase.blockedByStatus||false;
+  // Link status to access: "Уволен" auto-blocks; recovering from it auto-unblocks
+  if(status==='Уволен'){
+    if(!blocked){ blocked=true; blockedByStatus=true; }
+  } else if(blockedByStatus && status!=='Уволен'){
+    blocked=false; blockedByStatus=false;
+  }
+
+  var entry=Object.assign({}, entryBase, {
+    id: entryBase.id||uid(), name:name, pass:pass, roles:roles, shops:shops, wsRate:wsRate, status:status,
+    blocked:blocked, blockedByStatus:blockedByStatus,
+    updatedAt:new Date().toISOString()
+  });
+  if(_editStaffIdx>=0 && staff[_editStaffIdx]) staff[_editStaffIdx]=entry; else staff.push(entry);
+
   saveStaffShop(staff);
   closeMo('staffMo2');
   renderSellersAdmin();
-  showToast('✅ Сотрудник сохранён');
+  var prevBlocked=prev?(prev.blocked||false):false;
+  var msg='✅ Сотрудник сохранён';
+  if(blocked && !prevBlocked) msg+=' · 🚫 доступ автоматически заблокирован (статус «Уволен»)';
+  else if(!blocked && prevBlocked && prev && prev.blockedByStatus) msg+=' · ✅ доступ автоматически разблокирован';
+  showToast(msg);
 }
 
 
