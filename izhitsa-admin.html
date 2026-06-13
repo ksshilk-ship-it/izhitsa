@@ -1623,7 +1623,7 @@ var _selectedStaffStatus='';
 function renderStaffStatusChips(){
   var c=document.getElementById('staffStatusChips'); if(!c) return;
   var statuses=getRefBook('iz_employee_statuses');
-  var options=[{name:''}].concat(statuses);
+  var options=[''].concat(statuses);
   c.innerHTML=options.map(function(s){
     var name=s.name||s||'';
     var label=name||'— не указан —';
@@ -2316,6 +2316,10 @@ function initRefBooks() {
       {id: uid(), name: 'Отпуск'},
       {id: uid(), name: 'Уволен'}
     ]);
+  } else if(!localStorage.getItem('_iz_employee_statuses_synced')) {
+    // Migration: push pre-existing local statuses to Firestore (added to sync layer later)
+    adminSyncSave('iz_employee_statuses', getRefBook('iz_employee_statuses'));
+    localStorage.setItem('_iz_employee_statuses_synced','1');
   }
   
   if(!localStorage.getItem('iz_work_schedules')) {
