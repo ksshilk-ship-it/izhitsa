@@ -756,12 +756,7 @@ function applyUpdate() {
       <div style="font-size:12px;font-weight:700;color:#a060f0">🔐 Администраторы магазина</div>
     </div>
     <div id="adminsAdminList" style="margin-bottom:10px"></div>
-    <div class="card" style="border-color:#a060f0;margin-bottom:16px">
-      <div class="ctitle">Добавить администратора</div>
-      <div class="fg"><label class="fl">Имя</label><input class="fi" id="newAName" placeholder="Иванова Мария"></div>
-      <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="newAPass" placeholder="Пароль"></div>
-      <button class="btn" style="background:#a060f0;color:#fff;border:none" onclick="addAdminUser()">＋ Добавить администратора</button>
-    </div>
+    <button class="btn" style="background:#a060f0;color:#fff;border:none;margin-bottom:16px" onclick="openAddStaffModalShop()">＋ Добавить сотрудника</button>
 
     <!-- SUPPLIERS SECTION -->
     <div style="font-size:12px;font-weight:700;color:#60c8f0;margin-bottom:8px;margin-top:16px">🏭 Поставщики (ДР Товар)</div>
@@ -773,17 +768,11 @@ function applyUpdate() {
     </div>
 
     <!-- SELLERS SECTION -->
-    <div style="font-size:12px;font-weight:700;color:#c8f060;margin-bottom:8px">🏪 Продавцы магазинов</div>
-    <div id="sellersAdminList" style="margin-bottom:10px"></div>
-    <div class="card">
-      <div class="ctitle">Добавить продавца</div>
-      <div class="fg"><label class="fl">Имя</label><input class="fi" id="newSName" placeholder="Иванова Мария"></div>
-      <div class="fg"><label class="fl">Магазин</label>
-        <select class="fs" id="newSShop"><option value="">Универсальный</option></select>
-      </div>
-      <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="newSPass" placeholder="Пароль"></div>
-      <button class="btn" onclick="addSellerAdmin()">＋ Добавить продавца</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:12px;font-weight:700;color:#c8f060">🏪 Продавцы магазинов</div>
     </div>
+    <div id="sellersAdminList" style="margin-bottom:10px"></div>
+    <button class="btn" onclick="openAddStaffModalShop()">＋ Добавить сотрудника</button>
   </div>
   <!-- SETTINGS PAGE -->
   <div class="page" id="pg-shopsettings">
@@ -1116,6 +1105,63 @@ function applyUpdate() {
   </div>
 </div>
 
+<!-- UNIFIED STAFF ADD/EDIT MODAL -->
+<div class="mo" id="staffMo2">
+  <div class="md"><div class="mh"></div>
+    <div class="mt" id="staffMo2Title">👤 Добавить сотрудника</div>
+
+    <div class="fg"><label class="fl">Имя</label><input class="fi" id="staffName2" placeholder="Иванова Мария" autocomplete="off"></div>
+    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="text" id="staffPass2" placeholder="Придумайте пароль" autocomplete="off" style="-webkit-text-security:disc"></div>
+
+    <div class="fg">
+      <label class="fl">Роли в системе (можно несколько)</label>
+      <div style="display:flex;flex-direction:column;gap:6px" id="staffRolesBlock2">
+        <div style="font-size:11px;color:#8888aa;font-weight:700;margin-top:4px">📊 Администрирование</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="admin" style="width:16px;height:16px"> Администратор системы
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="owner" style="width:16px;height:16px"> Владелец бизнеса
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="accountant" style="width:16px;height:16px"> Бухгалтер
+        </label>
+        <div style="font-size:11px;color:#8888aa;font-weight:700;margin-top:8px">🏪 Продажи (выберите точки)</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="seller" style="width:16px;height:16px"> Продавец
+        </label>
+        <div id="staffShopsList2" style="padding-left:24px;display:flex;flex-direction:column;gap:4px"></div>
+        <div style="font-size:11px;color:#8888aa;font-weight:700;margin-top:8px">🏭 Мастерская</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="мастер" style="width:16px;height:16px"> Мастер
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="заготовщик" style="width:16px;height:16px"> Заготовщик
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="кладовщик" style="width:16px;height:16px"> Кладовщик
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="управляющий" style="width:16px;height:16px"> Управляющий мастерской
+        </label>
+      </div>
+    </div>
+
+    <div class="fg">
+      <label class="fl">ЗП ставка мастерской (₽/изделие)</label>
+      <input class="fi" type="number" id="staffWsRate2" placeholder="0" inputmode="numeric">
+    </div>
+
+    <div class="fg">
+      <label class="fl">Статус сотрудника</label>
+      <select class="fs" id="staffStatus2"></select>
+    </div>
+
+    <button class="btn" onclick="saveUnifiedStaffShop()" style="margin-bottom:8px">💾 Сохранить</button>
+    <button class="btn sec" onclick="closeMo('staffMo2')">Отмена</button>
+  </div>
+</div>
+
 <!-- EXPENSES MODAL -->
 <div class="mo" id="expMo">
   <div class="md"><div class="mh"></div><div class="mt">💸 Расходы смены</div>
@@ -1359,6 +1405,7 @@ var SYNC_SETTINGS = {
   'iz_goods':            {doc:'goods',         field:'data'},
   'iz_materials':        {doc:'materials',     field:'data'},
   'iz_work_schedules':   {doc:'work_schedules', field:'data'},
+  'iz_employee_statuses': {doc:'employee_statuses', field:'data'},
 };
 function syncListen(lsKey) {
   var m = SYNC_SETTINGS[lsKey]; if(!m || _syncUnsubs[lsKey]) return;
@@ -2115,10 +2162,9 @@ function startAdminApp(){
   document.getElementById('hdrSeller').textContent=session.name;
   buildAdminTabs();
   const shops=getShopNames();
-  ['psShop','newSShop'].forEach(id=>{
+  ['psShop'].forEach(id=>{
     const el=document.getElementById(id); if(!el) return;
-    const isNew=id==='newSShop';
-    el.innerHTML=(isNew?'<option value="">Универсальный</option>':'')+shops.map(s=>`<option>${s}</option>`).join('');
+    el.innerHTML=shops.map(s=>`<option>${s}</option>`).join('');
   });
   document.getElementById('psDate').value=new Date().toISOString().split('T')[0];
   renderShiftHistory(); renderSellersAdmin();
@@ -4980,9 +5026,6 @@ function renderSellersAdmin(){
   const c=document.getElementById('sellersAdminList'); if(!c)return;
   const staff=getStaff();
   const sellers=staff.filter(function(s){ return s.roles && s.roles.indexOf('seller')>=0; });
-  const shops=getShops();
-  const nss=document.getElementById('newSShop');
-  if(nss) nss.innerHTML='<option value="">Универсальный</option>'+shops.map(s=>`<option value="${s.name||s}">${s.name||s}</option>`).join('');
   if(!sellers.length){c.innerHTML='<div class="empty"><div class="ei">🏪</div>Нет продавцов</div>';return;}
   c.innerHTML=sellers.map(function(s){
     const idx=staff.indexOf(s);
@@ -4990,50 +5033,28 @@ function renderSellersAdmin(){
     const shopStr=(s.shops||[]).length?(s.shops||[]).join(', '):'';
     return `
     <div style="background:${s.blocked?'#2e1a1a':'#1a1a22'};border:1px solid ${s.blocked?'#f06060':'#2e2e3e'};border-radius:12px;padding:10px;margin-bottom:8px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:10px">
         <div style="font-size:22px">${s.blocked?'🚫':'🏪'}</div>
         <div style="flex:1">
           <div style="font-size:13px;font-weight:700">${s.name}${s.blocked?' (заблокирован)':''}</div>
           <div style="font-size:11px;color:#8888aa;margin-top:2px">${roleStr}</div>
           ${shopStr?'<div style="font-size:11px;color:#60c8f0;margin-top:2px">📍 '+shopStr+'</div>':''}
+          ${s.status?'<div style="font-size:11px;color:#ffb060;margin-top:2px">👤 '+s.status+'</div>':''}
         </div>
-        <button onclick="openBlockSeller('${s.blocked?'unblock':'block'}',${idx},'${s.name}')" style="background:${s.blocked?'#1a2e1e':'#2a1e14'};border:1px solid ${s.blocked?'#60f090':'#f0a060'};border-radius:8px;padding:4px 8px;font-size:10px;color:${s.blocked?'#60f090':'#f0a060'};cursor:pointer;white-space:nowrap">${s.blocked?'Разблок.':'Блок.'}</button>
-        <button onclick="openBlockSeller('delete',${idx},'${s.name}')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:10px;color:#f06060;cursor:pointer">✕</button>
-      </div>
-      <div style="display:flex;gap:6px">
-        <input id="newpass_${idx}" type="text" autocomplete="off" placeholder="Новый пароль..." style="flex:1;background:#0f0f13;border:1px solid #2e2e3e;border-radius:8px;padding:7px 10px;color:#f0f0f8;font-size:12px;outline:none;-webkit-text-security:disc">
-        <button onclick="changeSellerPass(${idx})" style="background:#1a1e2e;border:1px solid #60c8f0;border-radius:8px;padding:7px 12px;font-size:11px;color:#60c8f0;cursor:pointer;white-space:nowrap">Сменить пароль</button>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
+          <button onclick="editStaffShop(${idx})" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:13px;color:#60c8f0;cursor:pointer">✏️</button>
+          <button onclick="openBlockSeller('${s.blocked?'unblock':'block'}',${idx},'${s.name}')" style="background:${s.blocked?'#1a2e1e':'#2a1e14'};border:1px solid ${s.blocked?'#60f090':'#f0a060'};border-radius:8px;padding:4px 8px;font-size:10px;color:${s.blocked?'#60f090':'#f0a060'};cursor:pointer;white-space:nowrap">${s.blocked?'Разблок.':'Блок.'}</button>
+          <button onclick="openBlockSeller('delete',${idx},'${s.name}')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:10px;color:#f06060;cursor:pointer">✕</button>
+        </div>
       </div>
     </div>`;
   }).join('');
 }
-function changeSellerPass(idx){
-  var inp=document.getElementById('newpass_'+idx);
-  var newPass=((inp&&inp.value)||'').trim();
-  if(!newPass){showToast('Введите новый пароль');return;}
-  var staff=getStaff();
-  if(!staff[idx]){showToast('Ошибка');return;}
-  staff[idx].pass=newPass;
-  saveStaffShop(staff);
-  inp.value='';
-  showToast('✅ Пароль продавца «'+staff[idx].name+'» изменён');
-  renderSellersAdmin();
-}
 
-function addSellerAdmin(){
-  const name=gv('newSName'),shop=gv('newSShop'),pass=gv('newSPass');
-  if(!name||!pass){showToast('Заполните имя и пароль');return;}
-  const staff=getStaff();
-  if(staff.some(function(s){return s.name===name;})){showToast('Сотрудник с таким именем уже есть');return;}
-  staff.push({id:uid(),name:name,pass:pass,roles:['seller'],shops:shop?[shop]:[],blocked:false,createdAt:new Date().toISOString()});
-  saveStaffShop(staff);
-  ['newSName','newSPass'].forEach(id=>document.getElementById(id).value='');
-  renderSellersAdmin(); showToast('✅ Продавец добавлен');
-}
 function openBlockSeller(type,idx,name){
   blockSellerAction={type,idx,name};
   document.getElementById('blockSellerTitle').textContent={block:'Заблокировать '+name+'?',unblock:'Разблокировать '+name+'?',delete:'Удалить '+name+'?'}[type];
-  document.getElementById('blockSellerBody').innerHTML={block:'<div style="font-size:13px;color:#8888aa">Продавец не сможет войти.</div>',unblock:'<div style="font-size:13px;color:#8888aa">Продавец снова сможет войти.</div>',delete:'<div style="font-size:13px;color:#f06060">⚠️ Удалится безвозвратно.</div>'}[type];
+  document.getElementById('blockSellerBody').innerHTML={block:'<div style="font-size:13px;color:#8888aa">Сотрудник не сможет войти.</div>',unblock:'<div style="font-size:13px;color:#8888aa">Сотрудник снова сможет войти.</div>',delete:'<div style="font-size:13px;color:#f06060">⚠️ Удалится безвозвратно.</div>'}[type];
   const btn=document.getElementById('blockSellerBtn');
   btn.textContent={block:'🚫 Заблокировать',unblock:'✅ Разблокировать',delete:'🗑 Удалить'}[type];
   btn.className=type==='unblock'?'btn':'btn red';
@@ -5052,7 +5073,7 @@ function confirmBlockSeller(){
   showToast(type==='delete'?'🗑 Удалено':type==='block'?'🚫 Заблокировано':'✅ Разблокировано');
 }
 
-// ════ ADMIN USER MANAGEMENT ════
+// ════ ADMIN USER LIST ════
 function renderAdminsAdminList(){
   const c=document.getElementById('adminsAdminList'); if(!c)return;
   const staff=getStaff();
@@ -5062,40 +5083,113 @@ function renderAdminsAdminList(){
     const idx=staff.indexOf(a);
     const roleStr=(a.roles||[]).map(function(r){return STAFF_ROLE_LABELS[r]||r;}).join(' · ');
     return `
-    <div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:8px;background:#1e1a2e;border:1px solid #a060f0;border-radius:12px">
-      <div style="font-size:22px">🔐</div>
+    <div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:8px;background:${a.blocked?'#2e1a1a':'#1e1a2e'};border:1px solid ${a.blocked?'#f06060':'#a060f0'};border-radius:12px">
+      <div style="font-size:22px">${a.blocked?'🚫':'🔐'}</div>
       <div style="flex:1">
-        <div style="font-size:13px;font-weight:700">${a.name}</div>
+        <div style="font-size:13px;font-weight:700">${a.name}${a.blocked?' (заблокирован)':''}</div>
         <div style="font-size:11px;color:#8888aa">${roleStr}</div>
+        ${a.status?'<div style="font-size:11px;color:#ffb060;margin-top:2px">👤 '+a.status+'</div>':''}
       </div>
-      <button onclick="deleteAdmin(${idx},'${a.name}')"
-        style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:11px;color:#f06060;cursor:pointer">
-        ✕ Удалить
-      </button>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
+        <button onclick="editStaffShop(${idx})" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:13px;color:#60c8f0;cursor:pointer">✏️</button>
+        <button onclick="openBlockSeller('${a.blocked?'unblock':'block'}',${idx},'${a.name}')" style="background:${a.blocked?'#1a2e1e':'#2a1e14'};border:1px solid ${a.blocked?'#60f090':'#f0a060'};border-radius:8px;padding:4px 8px;font-size:10px;color:${a.blocked?'#60f090':'#f0a060'};cursor:pointer;white-space:nowrap">${a.blocked?'Разблок.':'Блок.'}</button>
+        <button onclick="openBlockSeller('delete',${idx},'${a.name}')"
+          style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:11px;color:#f06060;cursor:pointer">
+          ✕ Удалить
+        </button>
+      </div>
     </div>`;
   }).join('');
 }
 
-function addAdminUser(){
-  const name=gv('newAName'),pass=gv('newAPass');
-  if(!name||!pass){showToast('Заполните имя и пароль');return;}
-  const staff=getStaff();
-  if(staff.some(function(s){return s.name===name;})){showToast('Сотрудник с таким именем уже есть');return;}
-  staff.push({id:uid(),name:name,pass:pass,roles:['admin'],shops:[],blocked:false,createdAt:new Date().toISOString()});
-  saveStaffShop(staff);
-  ['newAName','newAPass'].forEach(id=>document.getElementById(id).value='');
-  renderAdminsAdminList();
-  showToast('✅ Администратор добавлен');
+// ════ UNIFIED ADD/EDIT STAFF MODAL ════
+function populateStaffStatusSelect2(){
+  var sel=document.getElementById('staffStatus2'); if(!sel) return;
+  var statuses=getRefBook('iz_employee_statuses');
+  sel.innerHTML='<option value="">— не указан —</option>'+statuses.map(function(s){
+    var name=s.name||s;
+    return '<option value="'+name+'">'+name+'</option>';
+  }).join('');
 }
+function openAddStaffModalShop(){
+  // Populate shop checkboxes
+  var shops=getShops();
+  var container=document.getElementById('staffShopsList2');
+  if(container){
+    container.innerHTML=shops.map(function(sh){
+      var name=sh.name||sh;
+      return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">'+
+        '<input type="checkbox" value="'+name+'" data-shopcheck="1" style="width:14px;height:14px"> '+name+'</label>';
+    }).join('');
+  }
+  populateStaffStatusSelect2();
+  // Reset form
+  ['staffName2','staffPass2','staffWsRate2'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  document.querySelectorAll('#staffRolesBlock2 input[type=checkbox]').forEach(function(cb){ cb.checked=false; });
+  var statusEl=document.getElementById('staffStatus2'); if(statusEl) statusEl.value='';
+  document.getElementById('staffMo2Title').textContent='👤 Добавить сотрудника';
+  _editStaffIdx=-1;
+  openMo('staffMo2');
+}
+var _editStaffIdx=-1;
+function editStaffShop(idx){
+  var staff=getStaff();
+  var s=staff[idx]; if(!s) return;
+  _editStaffIdx=idx;
+  var shops=getShops();
+  var container=document.getElementById('staffShopsList2');
+  if(container){
+    container.innerHTML=shops.map(function(sh){
+      var name=sh.name||sh;
+      var checked=s.shops && s.shops.indexOf(name)>=0?'checked':'';
+      return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">'+
+        '<input type="checkbox" value="'+name+'" data-shopcheck="1" '+checked+' style="width:14px;height:14px"> '+name+'</label>';
+    }).join('');
+  }
+  populateStaffStatusSelect2();
+  document.getElementById('staffName2').value=s.name||'';
+  document.getElementById('staffPass2').value=s.pass||'';
+  document.getElementById('staffWsRate2').value=s.wsRate||'';
+  document.getElementById('staffStatus2').value=s.status||'';
+  document.querySelectorAll('#staffRolesBlock2 input[type=checkbox]').forEach(function(cb){
+    cb.checked = s.roles && s.roles.indexOf(cb.value)>=0;
+  });
+  document.getElementById('staffMo2Title').textContent='✏️ Редактировать сотрудника';
+  openMo('staffMo2');
+}
+function saveUnifiedStaffShop(){
+  var name=gv('staffName2').trim();
+  var pass=gv('staffPass2').trim();
+  if(!name||!pass){showToast('Введите имя и пароль');return;}
 
-function deleteAdmin(idx,name){
-  if(!confirm('Удалить администратора «'+name+'»?')) return;
-  const staff=getStaff();
-  if(!staff[idx]) return;
-  staff.splice(idx,1);
+  var roles=[];
+  document.querySelectorAll('#staffRolesBlock2 input[type=checkbox]:checked').forEach(function(cb){ roles.push(cb.value); });
+  if(!roles.length){showToast('Выберите хотя бы одну роль');return;}
+
+  var shops=[];
+  document.querySelectorAll('#staffShopsList2 input[type=checkbox]:checked').forEach(function(cb){ shops.push(cb.value); });
+
+  var wsRate=parseFloat(gv('staffWsRate2'))||0;
+  var status=gv('staffStatus2')||'';
+  var staff=getStaff();
+
+  if(_editStaffIdx>=0 && staff[_editStaffIdx]){
+    var existing=staff[_editStaffIdx];
+    // Check no name collision with another entry
+    var collision=staff.findIndex(function(s,i){return i!==_editStaffIdx && s.name===name;});
+    if(collision>=0){showToast('Сотрудник с таким именем уже есть');return;}
+    staff[_editStaffIdx]=Object.assign({}, existing, {
+      name:name, pass:pass, roles:roles, shops:shops, wsRate:wsRate, status:status,
+      updatedAt:new Date().toISOString()
+    });
+  } else {
+    if(staff.some(function(s){return s.name===name;})){showToast('Сотрудник с таким именем уже есть');return;}
+    staff.push({id:uid(), name:name, pass:pass, roles:roles, shops:shops, wsRate:wsRate, status:status, blocked:false, createdAt:new Date().toISOString()});
+  }
   saveStaffShop(staff);
-  renderAdminsAdminList();
-  showToast('🗑 Администратор удалён');
+  closeMo('staffMo2');
+  renderSellersAdmin();
+  showToast('✅ Сотрудник сохранён');
 }
 
 
