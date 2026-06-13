@@ -669,12 +669,27 @@ function saveAdminUsers(data) {
   adminSyncSave('iz_admin_users', data);
 }
 
+// ── Sort helper: by type order, then alphabetically ──
+var SHOP_TYPE_ORDER = {shop:0, offline:1, online:2, workshop:3};
+var ACCOUNT_TYPE_ORDER = {cash:0, card:1, rs:2, bank:2, online:3};
+function sortByTypeThenName(arr, typeOrder){
+  return arr.slice().sort(function(a,b){
+    var ta = typeOrder[(a.type||'')] !== undefined ? typeOrder[a.type||''] : 99;
+    var tb = typeOrder[(b.type||'')] !== undefined ? typeOrder[b.type||''] : 99;
+    if(ta !== tb) return ta - tb;
+    var na = (a.name||a||'').toString();
+    var nb = (b.name||b||'').toString();
+    return na.localeCompare(nb, 'ru');
+  });
+}
+
 function getShops() {
-  try { return JSON.parse(localStorage.getItem('iz_sales_sources') || '[]'); } 
+  try { return sortByTypeThenName(JSON.parse(localStorage.getItem('iz_sales_sources') || '[]'), SHOP_TYPE_ORDER); } 
   catch(e) { return []; }
 }
 
 function saveShops(data) {
+  data = sortByTypeThenName(data, SHOP_TYPE_ORDER);
   adminSyncSave('iz_sales_sources', data);
   localStorage.setItem('iz_admin_shops', JSON.stringify(data));
 }
@@ -1687,8 +1702,8 @@ function deleteStaff(idx) {
 
 // ════ SETTINGS FUNCTIONS ════
 
-function getAccounts() { return JSON.parse(localStorage.getItem('iz_accounts')||'[]'); }
-function saveAccounts(d) { adminSyncSave('iz_accounts', d); }
+function getAccounts() { return sortByTypeThenName(JSON.parse(localStorage.getItem('iz_accounts')||'[]'), ACCOUNT_TYPE_ORDER); }
+function saveAccounts(d) { adminSyncSave('iz_accounts', sortByTypeThenName(d, ACCOUNT_TYPE_ORDER)); }
 function getPayMethods() { return JSON.parse(localStorage.getItem('iz_pay_methods')||'["Нал","Терминал","СБП","Перевод","QR"]'); }
 function savePayMethods(d) { adminSyncSave('iz_pay_methods', d); }
 
@@ -1915,6 +1930,9 @@ function getRefBook(key) {
 }
 
 function saveRefBook(key, data) {
+  // Keep sources/accounts sorted by type then alphabetically
+  if(key === 'iz_sales_sources') data = sortByTypeThenName(data, SHOP_TYPE_ORDER);
+  else if(key === 'iz_accounts') data = sortByTypeThenName(data, ACCOUNT_TYPE_ORDER);
   localStorage.setItem(key, JSON.stringify(data));
   // Sync to Firestore if this refbook is part of the sync layer (e.g. sales sources / shop list)
   if(ADMIN_SYNC_SETTINGS[key]) adminSyncSave(key, data);
