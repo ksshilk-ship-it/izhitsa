@@ -447,6 +447,15 @@ if ('serviceWorker' in navigator) {
       <button class="btn sm" onclick="openMo('addStaffMo')">＋ Добавить</button>
     </div>
     <div id="unifiedStaffList"></div>
+
+    <!-- ARCHIVE -->
+    <div class="card" style="margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleStaffArchive()">
+        <div class="ctitle" style="margin:0">📥 Архив <span id="staffArchiveCount" style="color:var(--t2);font-weight:400"></span></div>
+        <span id="staffArchiveArrow">▶</span>
+      </div>
+      <div id="staffArchiveBody" style="display:none;margin-top:10px"></div>
+    </div>
   </div>
 
   <!-- ANALYTICS -->
@@ -1690,19 +1699,23 @@ function saveUnifiedStaff() {
 function renderUnifiedStaff() {
   var c = document.getElementById('unifiedStaffList'); if(!c) return;
   var staff = getStaff();
+  var active = staff.filter(function(s){ return !s.archived; });
+  var archived = staff.filter(function(s){ return s.archived; });
   var cnt = document.getElementById('staffCount');
-  if(cnt) cnt.textContent = staff.length + ' сотрудников';
+  if(cnt) cnt.textContent = active.length + ' сотрудников';
+  var arCnt = document.getElementById('staffArchiveCount');
+  if(arCnt) arCnt.textContent = archived.length ? '(' + archived.length + ')' : '';
 
-  if(!staff.length) {
+  if(!active.length) {
     c.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)"><div style="font-size:32px;margin-bottom:8px">👥</div>Нет сотрудников</div>';
-    return;
-  }
+  } else {
 
   var roleLabels = {admin:'🔐 Администратор', owner:'👑 Владелец', accountant:'📊 Бухгалтер',
     seller:'🏪 Продавец', мастер:'🔨 Мастер', заготовщик:'🪚 Заготовщик',
     кладовщик:'📦 Кладовщик', управляющий:'👑 Управляющий'};
 
-  c.innerHTML = staff.map(function(s, i) {
+  c.innerHTML = active.map(function(s) {
+    var i = staff.indexOf(s);
     var roleStr = (s.roles||[]).map(function(r){ return roleLabels[r]||r; }).join(' · ');
     var shopStr = (s.shops||[]).length ? (s.shops||[]).join(', ') : '';
     return '<div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px">' +
@@ -1714,15 +1727,76 @@ function renderUnifiedStaff() {
           (s.wsRate ? '<div style="font-size:11px;color:var(--a4);margin-top:2px">💰 ' + s.wsRate + '₽/шт</div>' : '') +
           (s.status ? '<div style="font-size:11px;color:#ffb060;margin-top:2px">👤 ' + s.status + '</div>' : '') +
         '</div>' +
-        '<div style="display:flex;gap:4px">' +
+        '<div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">' +
           '<button onclick="editStaff(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--a2);cursor:pointer">✏️</button>' +
           '<button onclick="toggleStaffBlock(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:' + (s.blocked?'var(--inc)':'var(--exp)') + ';cursor:pointer">' + (s.blocked?'✓':'⛔') + '</button>' +
           '<button onclick="changeStaffPass(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--t2);cursor:pointer">🔑</button>' +
+          '<button onclick="archiveStaff(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--t2);cursor:pointer">📥</button>' +
           '<button onclick="deleteStaff(' + i + ')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:5px 8px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>' +
         '</div>' +
       '</div>' +
     '</div>';
   }).join('');
+  }
+
+  renderStaffArchive();
+}
+
+function toggleStaffArchive(){
+  var body=document.getElementById('staffArchiveBody');
+  var arrow=document.getElementById('staffArchiveArrow');
+  if(!body) return;
+  var open = body.style.display!=='none';
+  body.style.display = open?'none':'block';
+  if(arrow) arrow.textContent = open?'▶':'▼';
+  if(!open) renderStaffArchive();
+}
+
+function renderStaffArchive(){
+  var body=document.getElementById('staffArchiveBody'); if(!body) return;
+  var staff = getStaff();
+  var archived = staff.filter(function(s){ return s.archived; });
+  if(!archived.length){
+    body.innerHTML='<div style="font-size:12px;color:var(--t2);padding:8px">Архив пуст</div>';
+    return;
+  }
+  var roleLabels = {admin:'🔐 Администратор', owner:'👑 Владелец', accountant:'📊 Бухгалтер',
+    seller:'🏪 Продавец', мастер:'🔨 Мастер', заготовщик:'🪚 Заготовщик',
+    кладовщик:'📦 Кладовщик', управляющий:'👑 Управляющий'};
+  body.innerHTML = archived.map(function(s){
+    var i = staff.indexOf(s);
+    var roleStr = (s.roles||[]).map(function(r){ return roleLabels[r]||r; }).join(' · ');
+    return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+        '<div style="flex:1">' +
+          '<div style="font-size:13px;font-weight:700;color:var(--t2)">' + s.name + '</div>' +
+          '<div style="font-size:11px;color:var(--t2);margin-top:3px">' + roleStr + '</div>' +
+          (s.status ? '<div style="font-size:11px;color:#ffb060;margin-top:2px">👤 ' + s.status + '</div>' : '') +
+        '</div>' +
+        '<div style="display:flex;gap:4px">' +
+          '<button onclick="unarchiveStaff(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--a2);cursor:pointer">↩️ Вернуть</button>' +
+          '<button onclick="deleteStaff(' + i + ')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:5px 8px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function archiveStaff(idx){
+  var staff=getStaff();
+  if(!staff[idx]) return;
+  if(!confirm('Перенести «'+staff[idx].name+'» в архив?')) return;
+  staff[idx].archived=true;
+  saveStaff(staff);
+  renderUnifiedStaff();
+}
+
+function unarchiveStaff(idx){
+  var staff=getStaff();
+  if(!staff[idx]) return;
+  staff[idx].archived=false;
+  saveStaff(staff);
+  renderUnifiedStaff();
 }
 
 function editStaff(idx) {
@@ -2329,13 +2403,25 @@ function initRefBooks() {
   if(!localStorage.getItem('iz_employee_statuses')) {
     saveRefBook('iz_employee_statuses', [
       {id: uid(), name: 'Активный'},
+      {id: uid(), name: 'Стажёр'},
       {id: uid(), name: 'Отпуск'},
       {id: uid(), name: 'Уволен'}
     ]);
-  } else if(!localStorage.getItem('_iz_employee_statuses_synced')) {
-    // Migration: push pre-existing local statuses to Firestore (added to sync layer later)
-    adminSyncSave('iz_employee_statuses', getRefBook('iz_employee_statuses'));
-    localStorage.setItem('_iz_employee_statuses_synced','1');
+  } else {
+    if(!localStorage.getItem('_iz_employee_statuses_synced')) {
+      // Migration: push pre-existing local statuses to Firestore (added to sync layer later)
+      adminSyncSave('iz_employee_statuses', getRefBook('iz_employee_statuses'));
+      localStorage.setItem('_iz_employee_statuses_synced','1');
+    }
+    // Migration: add "Стажёр" status if missing
+    if(!localStorage.getItem('_iz_status_intern_added')) {
+      var sts = getRefBook('iz_employee_statuses');
+      if(!sts.some(function(s){ return (s.name||s)==='Стажёр'; })){
+        sts.push({id: uid(), name: 'Стажёр'});
+        saveRefBook('iz_employee_statuses', sts);
+      }
+      localStorage.setItem('_iz_status_intern_added','1');
+    }
   }
   
   if(!localStorage.getItem('iz_work_schedules')) {

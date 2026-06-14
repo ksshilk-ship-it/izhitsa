@@ -773,6 +773,15 @@ function applyUpdate() {
     </div>
     <div id="sellersAdminList" style="margin-bottom:10px"></div>
     <button class="btn" onclick="openAddStaffModalShop()">＋ Добавить сотрудника</button>
+
+    <!-- ARCHIVE -->
+    <div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-top:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleStaffArchiveShop()">
+        <div style="font-size:12px;font-weight:700;color:#8888aa">📥 Архив <span id="staffArchiveCountShop"></span></div>
+        <span id="staffArchiveArrowShop" style="color:#8888aa">▶</span>
+      </div>
+      <div id="staffArchiveBodyShop" style="display:none;margin-top:10px"></div>
+    </div>
   </div>
   <!-- SETTINGS PAGE -->
   <div class="page" id="pg-shopsettings">
@@ -5025,7 +5034,7 @@ function renderSellersAdmin(){
   renderAdminsAdminList();
   const c=document.getElementById('sellersAdminList'); if(!c)return;
   const staff=getStaff();
-  const sellers=staff.filter(function(s){ return s.roles && s.roles.indexOf('seller')>=0; });
+  const sellers=staff.filter(function(s){ return s.roles && s.roles.indexOf('seller')>=0 && !s.archived; });
   if(!sellers.length){c.innerHTML='<div class="empty"><div class="ei">🏪</div>Нет продавцов</div>';return;}
   c.innerHTML=sellers.map(function(s){
     const idx=staff.indexOf(s);
@@ -5044,6 +5053,7 @@ function renderSellersAdmin(){
         <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
           <button onclick="editStaffShop(${idx})" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:13px;color:#60c8f0;cursor:pointer">✏️</button>
           <button onclick="openBlockSeller('${s.blocked?'unblock':'block'}',${idx},'${s.name}')" style="background:${s.blocked?'#1a2e1e':'#2a1e14'};border:1px solid ${s.blocked?'#60f090':'#f0a060'};border-radius:8px;padding:4px 8px;font-size:10px;color:${s.blocked?'#60f090':'#f0a060'};cursor:pointer;white-space:nowrap">${s.blocked?'Разблок.':'Блок.'}</button>
+          <button onclick="openBlockSeller('archive',${idx},'${s.name}')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:10px;color:#8888aa;cursor:pointer">📥</button>
           <button onclick="openBlockSeller('delete',${idx},'${s.name}')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:10px;color:#f06060;cursor:pointer">✕</button>
         </div>
       </div>
@@ -5053,11 +5063,11 @@ function renderSellersAdmin(){
 
 function openBlockSeller(type,idx,name){
   blockSellerAction={type,idx,name};
-  document.getElementById('blockSellerTitle').textContent={block:'Заблокировать '+name+'?',unblock:'Разблокировать '+name+'?',delete:'Удалить '+name+'?'}[type];
-  document.getElementById('blockSellerBody').innerHTML={block:'<div style="font-size:13px;color:#8888aa">Сотрудник не сможет войти.</div>',unblock:'<div style="font-size:13px;color:#8888aa">Сотрудник снова сможет войти.</div>',delete:'<div style="font-size:13px;color:#f06060">⚠️ Удалится безвозвратно.</div>'}[type];
+  document.getElementById('blockSellerTitle').textContent={block:'Заблокировать '+name+'?',unblock:'Разблокировать '+name+'?',delete:'Удалить '+name+'?',archive:'Перенести в архив '+name+'?'}[type];
+  document.getElementById('blockSellerBody').innerHTML={block:'<div style="font-size:13px;color:#8888aa">Сотрудник не сможет войти.</div>',unblock:'<div style="font-size:13px;color:#8888aa">Сотрудник снова сможет войти.</div>',delete:'<div style="font-size:13px;color:#f06060">⚠️ Удалится безвозвратно.</div>',archive:'<div style="font-size:13px;color:#8888aa">Сотрудник переместится в архив и пропадёт из общего списка. Доступ для входа не меняется.</div>'}[type];
   const btn=document.getElementById('blockSellerBtn');
-  btn.textContent={block:'🚫 Заблокировать',unblock:'✅ Разблокировать',delete:'🗑 Удалить'}[type];
-  btn.className=type==='unblock'?'btn':'btn red';
+  btn.textContent={block:'🚫 Заблокировать',unblock:'✅ Разблокировать',delete:'🗑 Удалить',archive:'📥 В архив'}[type];
+  btn.className=type==='unblock'?'btn':(type==='archive'?'btn sec':'btn red');
   openMo('blockSellerMo');
 }
 function confirmBlockSeller(){
@@ -5068,16 +5078,17 @@ function confirmBlockSeller(){
   if(type==='delete')staff.splice(idx,1);
   else if(type==='block'){staff[idx].blocked=true; staff[idx].blockedByStatus=false;}
   else if(type==='unblock'){staff[idx].blocked=false; staff[idx].blockedByStatus=false;}
+  else if(type==='archive'){staff[idx].archived=true;}
   saveStaffShop(staff);
   closeMo('blockSellerMo'); renderSellersAdmin();
-  showToast(type==='delete'?'🗑 Удалено':type==='block'?'🚫 Заблокировано':'✅ Разблокировано');
+  showToast(type==='delete'?'🗑 Удалено':type==='block'?'🚫 Заблокировано':type==='archive'?'📥 Перенесено в архив':'✅ Разблокировано');
 }
 
 // ════ ADMIN USER LIST ════
 function renderAdminsAdminList(){
   const c=document.getElementById('adminsAdminList'); if(!c)return;
   const staff=getStaff();
-  const admins=staff.filter(function(s){ return s.roles && s.roles.some(function(r){return STAFF_ADMIN_ROLES.indexOf(r)>=0;}); });
+  const admins=staff.filter(function(s){ return s.roles && s.roles.some(function(r){return STAFF_ADMIN_ROLES.indexOf(r)>=0;}) && !s.archived; });
   if(!admins.length){c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:8px">Нет администраторов</div>';return;}
   c.innerHTML=admins.map(function(a){
     const idx=staff.indexOf(a);
@@ -5093,6 +5104,7 @@ function renderAdminsAdminList(){
       <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
         <button onclick="editStaffShop(${idx})" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:13px;color:#60c8f0;cursor:pointer">✏️</button>
         <button onclick="openBlockSeller('${a.blocked?'unblock':'block'}',${idx},'${a.name}')" style="background:${a.blocked?'#1a2e1e':'#2a1e14'};border:1px solid ${a.blocked?'#60f090':'#f0a060'};border-radius:8px;padding:4px 8px;font-size:10px;color:${a.blocked?'#60f090':'#f0a060'};cursor:pointer;white-space:nowrap">${a.blocked?'Разблок.':'Блок.'}</button>
+        <button onclick="openBlockSeller('archive',${idx},'${a.name}')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:10px;color:#8888aa;cursor:pointer">📥</button>
         <button onclick="openBlockSeller('delete',${idx},'${a.name}')"
           style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:11px;color:#f06060;cursor:pointer">
           ✕ Удалить
@@ -5100,6 +5112,56 @@ function renderAdminsAdminList(){
       </div>
     </div>`;
   }).join('');
+}
+
+// ════ ARCHIVE ════
+function toggleStaffArchiveShop(){
+  var body=document.getElementById('staffArchiveBodyShop');
+  var arrow=document.getElementById('staffArchiveArrowShop');
+  if(!body) return;
+  var open = body.style.display!=='none';
+  body.style.display = open?'none':'block';
+  if(arrow) arrow.textContent = open?'▶':'▼';
+  if(!open) renderStaffArchiveShop();
+}
+
+function renderStaffArchiveShop(){
+  var body=document.getElementById('staffArchiveBodyShop'); if(!body) return;
+  var staff=getStaff();
+  var archived=staff.filter(function(s){ return s.archived; });
+  var cnt=document.getElementById('staffArchiveCountShop');
+  if(cnt) cnt.textContent = archived.length?'('+archived.length+')':'';
+  if(!archived.length){
+    body.innerHTML='<div style="font-size:12px;color:#8888aa;padding:8px">Архив пуст</div>';
+    return;
+  }
+  body.innerHTML=archived.map(function(s){
+    var idx=staff.indexOf(s);
+    var roleStr=(s.roles||[]).map(function(r){return STAFF_ROLE_LABELS[r]||r;}).join(' · ');
+    return `
+    <div style="background:#0f0f13;border:1px solid #2e2e3e;border-radius:12px;padding:10px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700;color:#8888aa">${s.name}</div>
+          <div style="font-size:11px;color:#8888aa;margin-top:2px">${roleStr}</div>
+          ${s.status?'<div style="font-size:11px;color:#ffb060;margin-top:2px">👤 '+s.status+'</div>':''}
+        </div>
+        <div style="display:flex;gap:4px">
+          <button onclick="unarchiveStaffShop(${idx})" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:11px;color:#60c8f0;cursor:pointer">↩️ Вернуть</button>
+          <button onclick="openBlockSeller('delete',${idx},'${s.name}')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:10px;color:#f06060;cursor:pointer">✕</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function unarchiveStaffShop(idx){
+  var staff=getStaff();
+  if(!staff[idx]) return;
+  staff[idx].archived=false;
+  saveStaffShop(staff);
+  renderSellersAdmin();
+  renderStaffArchiveShop();
 }
 
 // ════ UNIFIED ADD/EDIT STAFF MODAL ════
