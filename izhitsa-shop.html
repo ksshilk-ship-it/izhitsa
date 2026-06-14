@@ -504,6 +504,15 @@ function applyUpdate() {
     <!-- ОТКРЫТЬ СМЕНУ ВОССТАНОВЛЕНИЯ -->
     <div class="card" id="rstShiftCard" style="border-color:#c8f060;margin-bottom:14px">
       <div class="ctitle">📅 Смена восстановления</div>
+
+      <div style="display:flex;gap:5px;margin-bottom:12px">
+        <button type="button" id="rstSh_open" onclick="switchRstShTab('open')"
+          style="flex:1;padding:7px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">📂 Открыть смену</button>
+        <button type="button" id="rstSh_list" onclick="switchRstShTab('list')"
+          style="flex:1;padding:7px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">📋 Список смен</button>
+      </div>
+
+      <div id="rstSh_open_tab">
       <div id="rstShiftClosed">
         <div style="font-size:12px;color:#8888aa;margin-bottom:10px">Откройте смену — все данные, внесённые ниже (журнал, накладные, активация), будут привязаны к ней.</div>
         <div class="fg"><label class="fl">Магазин</label><select class="fs" id="rstShiftShop" onchange="rstShiftPopulateSellers()"></select></div>
@@ -519,6 +528,12 @@ function applyUpdate() {
           <div style="font-size:13px;font-weight:700" id="rstShiftSummary"></div>
         </div>
         <button class="btn sec" onclick="closeRestoreShift()">🔒 Закрыть смену</button>
+      </div>
+      </div>
+
+      <div id="rstSh_list_tab" style="display:none">
+        <div style="font-size:12px;color:#8888aa;margin-bottom:10px">Смены восстановления, в которые уже внесены данные. Не активированные — ещё не учтены в общей статистике.</div>
+        <div id="rstShiftsList"><div class="empty"><div class="ei">📋</div>Нет смен восстановления</div></div>
       </div>
     </div>
 
@@ -5482,6 +5497,100 @@ function closeRestoreShift(){
   showToast('🔒 Смена восстановления закрыта');
 }
 
+function switchRstShTab(tab){
+  var isOpen = tab==='open';
+  document.getElementById('rstSh_open_tab').style.display = isOpen?'block':'none';
+  document.getElementById('rstSh_list_tab').style.display = isOpen?'none':'block';
+  var b1=document.getElementById('rstSh_open'), b2=document.getElementById('rstSh_list');
+  if(b1){ b1.style.borderWidth=isOpen?'2px':'1px'; b1.style.background=isOpen?'#1e2a14':'#22222e'; b1.style.color=isOpen?'#c8f060':'#8888aa'; b1.style.borderColor=isOpen?'#c8f060':'#2e2e3e'; b1.style.fontWeight=isOpen?'700':'400'; }
+  if(b2){ b2.style.borderWidth=isOpen?'1px':'2px'; b2.style.background=isOpen?'#22222e':'#1e2a14'; b2.style.color=isOpen?'#8888aa':'#c8f060'; b2.style.borderColor=isOpen?'#2e2e3e':'#c8f060'; b2.style.fontWeight=isOpen?'400':'700'; }
+  if(!isOpen) renderRestoreShiftsList();
+}
+
+// Group iz_psj journal entries (restore-flow, isArchive) into per-shift summaries
+function renderRestoreShiftsList(){
+  var c=document.getElementById('rstShiftsList'); if(!c) return;
+  var entries = getPsjEntries().filter(function(e){ return e.isArchive; });
+  if(!entries.length){ c.innerHTML='<div class="empty"><div class="ei">📋</div>Нет смен восстановления</div>'; return; }
+
+  var groups = {};
+  entries.forEach(function(e){
+    var key = e.shopName+'|'+e.date;
+    if(!groups[key]) groups[key] = {shop:e.shopName, date:e.date, sellerName:e.sellerName||'', count:0, revenue:0, activated:true};
+    var g = groups[key];
+    g.count++;
+    if(e.type==='sale') g.revenue += (e.cashEffect||0)+(e.cardEffect||0)+(e.discEffect||0);
+    if(!e.activated) g.activated = false;
+    if(e.sellerName) g.sellerName = e.sellerName;
+  });
+
+  var list = Object.keys(groups).map(function(k){ return groups[k]; });
+  list.sort(function(a,b){ return b.date.localeCompare(a.date); });
+
+  c.innerHTML = list.map(function(g){
+    var statusBadge = g.activated
+      ? '<span style="font-size:10px;background:#1e2a14;color:#60f090;border:1px solid #60f090;border-radius:6px;padding:2px 6px">✅ Активировано</span>'
+      : '<span style="font-size:10px;background:#2a1e14;color:#f0a060;border:1px solid #f0a060;border-radius:6px;padding:2px 6px">🕐 Не активировано</span>';
+    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:10px;margin-bottom:8px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'+
+        '<div>'+
+          '<div style="font-size:13px;font-weight:700">🏪 '+g.shop+' · 📅 '+g.date+'</div>'+
+          '<div style="font-size:11px;color:#8888aa;margin-top:2px">👤 '+(g.sellerName||'—')+' · 📒 '+g.count+' записей'+(g.revenue?' · 💰 '+Math.round(g.revenue).toLocaleString('ru-RU')+'₽':'')+'</div>'+
+        '</div>'+
+        statusBadge+
+      '</div>'+
+      '<div style="display:flex;gap:6px">'+
+        '<button onclick="reopenRestoreShift(\''+g.shop.replace(/'/g,"\\'")+'\',\''+g.date+'\')" style="flex:1;background:none;border:1px solid #c8f060;border-radius:8px;padding:6px 8px;font-size:12px;color:#c8f060;cursor:pointer">📂 Открыть</button>'+
+        (g.activated ? '' : '<button onclick="activateRestoreShift(\''+g.shop.replace(/'/g,"\\'")+'\',\''+g.date+'\')" style="flex:1;background:none;border:1px solid #60f090;border-radius:8px;padding:6px 8px;font-size:12px;color:#60f090;cursor:pointer">✅ Активировать</button>')+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function reopenRestoreShift(shop, date){
+  var entries = getPsjEntries().filter(function(e){ return e.shopName===shop && e.date===date && e.isArchive; });
+  var sellerName = '';
+  for(var i=entries.length-1;i>=0;i--){ if(entries[i].sellerName){ sellerName=entries[i].sellerName; break; } }
+  var sellerId = '';
+  var sellers = getSellers();
+  var match = sellers.find(function(s){ return s.name===sellerName; });
+  if(match) sellerId = match.id;
+  _restoreShift = {shop:shop, sellerId:sellerId, sellerName:sellerName, date:date, openedAt:new Date().toISOString()};
+  saveRestoreShift(_restoreShift);
+  switchRstShTab('open');
+  renderRestoreShiftState();
+  switchRst('journal'); switchRstJ('manual', document.getElementById('rstj_manual'));
+  showToast('📂 Смена открыта: '+shop+' · '+date);
+}
+
+function activateRestoreShift(shop, date){
+  if(!confirm('Активировать смену '+shop+' · '+date+'? Данные войдут в общую статистику.')) return;
+  var entries = getPsjEntries();
+  var activated = 0;
+  entries.forEach(function(e){
+    if(e.shopName===shop && e.date===date && e.isArchive && !e.activated){
+      e.activated=true; e.activatedAt=new Date().toISOString(); activated++;
+    }
+  });
+  savePsjEntries(entries);
+
+  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  shifts.forEach(function(s){
+    if(s.shopName===shop && s.date===date && s.isArchive && !s.activated){
+      s.activated=true; s.activatedAt=new Date().toISOString();
+    }
+  });
+  localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+
+  var acts=JSON.parse(localStorage.getItem('iz_activations')||'[]');
+  acts.unshift({id:uid(), from:date, to:date, shopName:shop, activatedAt:new Date().toISOString(), count:activated, by:(session&&session.name)||'Admin'});
+  localStorage.setItem('iz_activations', JSON.stringify(acts));
+
+  renderRestoreShiftsList();
+  try{ renderActivatedList(); }catch(e){}
+  showToast('✅ Активировано '+activated+' записей');
+}
+
 function psjInit() {
   renderRestoreShiftState();
 }
@@ -5794,7 +5903,7 @@ function savePsjEntry(type) {
   var savedCount = 0;
 
   function pushEntry(props){
-    var entry = Object.assign({ id: uid(), date: date, shopName: shopName, sellerName: sellerName, type: type, ts: new Date().toISOString() }, props);
+    var entry = Object.assign({ id: uid(), date: date, shopName: shopName, sellerName: sellerName, type: type, ts: new Date().toISOString(), isArchive: true }, props);
     entries.push(entry);
     try { db.collection('iz_psj').doc(entry.id).set(entry); } catch(e) {}
     savedCount++;
