@@ -5544,8 +5544,9 @@ function renderRestoreShiftsList(){
 
   var groups = {};
   entries.forEach(function(e){
-    var key = e.shopName+'|'+e.date;
-    if(!groups[key]) groups[key] = {shop:e.shopName, date:e.date, sellerName:e.sellerName||'', count:0, revenue:0, activated:true};
+    var shopKey = e.shopName || '';
+    var key = shopKey+'|'+e.date;
+    if(!groups[key]) groups[key] = {shop:(e.shopName||null), date:e.date, sellerName:e.sellerName||'', count:0, revenue:0, activated:true};
     var g = groups[key];
     g.count++;
     if(e.type==='sale') g.revenue += (e.cashEffect||0)+(e.cardEffect||0)+(e.discEffect||0);
@@ -5560,44 +5561,74 @@ function renderRestoreShiftsList(){
     var statusBadge = g.activated
       ? '<span style="font-size:10px;background:#1e2a14;color:#60f090;border:1px solid #60f090;border-radius:6px;padding:2px 6px">✅ Активировано</span>'
       : '<span style="font-size:10px;background:#2a1e14;color:#f0a060;border:1px solid #f0a060;border-radius:6px;padding:2px 6px">🕐 Не активировано</span>';
+    var shopLabel = g.shop ? g.shop : '⚠ без магазина';
+    var shopArg = g.shop ? "'"+g.shop.replace(/'/g,"\\'")+"'" : 'null';
     return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:10px;margin-bottom:8px">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'+
         '<div>'+
-          '<div style="font-size:13px;font-weight:700">🏪 '+g.shop+' · 📅 '+g.date+'</div>'+
+          '<div style="font-size:13px;font-weight:700">🏪 '+shopLabel+' · 📅 '+g.date+'</div>'+
           '<div style="font-size:11px;color:#8888aa;margin-top:2px">👤 '+(g.sellerName||'—')+' · 📒 '+g.count+' записей'+(g.revenue?' · 💰 '+Math.round(g.revenue).toLocaleString('ru-RU')+'₽':'')+'</div>'+
         '</div>'+
         statusBadge+
       '</div>'+
       '<div style="display:flex;gap:6px">'+
-        '<button onclick="reopenRestoreShift(\''+g.shop.replace(/'/g,"\\'")+'\',\''+g.date+'\')" style="flex:1;background:none;border:1px solid #c8f060;border-radius:8px;padding:6px 8px;font-size:12px;color:#c8f060;cursor:pointer">📂 Открыть</button>'+
-        (g.activated ? '' : '<button onclick="activateRestoreShift(\''+g.shop.replace(/'/g,"\\'")+'\',\''+g.date+'\')" style="flex:1;background:none;border:1px solid #60f090;border-radius:8px;padding:6px 8px;font-size:12px;color:#60f090;cursor:pointer">✅ Активировать</button>')+
+        '<button onclick="reopenRestoreShift('+shopArg+',\''+g.date+'\')" style="flex:1;background:none;border:1px solid #c8f060;border-radius:8px;padding:6px 8px;font-size:12px;color:#c8f060;cursor:pointer">📂 Открыть</button>'+
+        (g.activated ? '' : '<button onclick="activateRestoreShift('+shopArg+',\''+g.date+'\')" style="flex:1;background:none;border:1px solid #60f090;border-radius:8px;padding:6px 8px;font-size:12px;color:#60f090;cursor:pointer">✅ Активировать</button>')+
+        '<button onclick="deleteRestoreShift('+shopArg+',\''+g.date+'\')" style="flex:0 0 40px;background:none;border:1px solid #f06060;border-radius:8px;padding:6px 4px;font-size:13px;color:#f06060;cursor:pointer">✕</button>'+
       '</div>'+
     '</div>';
   }).join('');
 }
 
+function deleteRestoreShift(shop, date){
+  var label = (shop===null ? '⚠ без магазина' : shop) + ' · ' + date;
+  if(!confirm('Удалить смену "'+label+'" и ВСЕ её записи журнала ('+
+    getPsjEntries().filter(function(e){ return (shop===null ? !e.shopName : e.shopName===shop) && e.date===date; }).length+
+    ')? Действие необратимо.')) return;
+
+  var toDelete = [], toKeep = [];
+  getPsjEntries().forEach(function(e){
+    var matches = (shop===null ? !e.shopName : e.shopName===shop) && e.date===date;
+    if(matches) toDelete.push(e); else toKeep.push(e);
+  });
+  savePsjEntries(toKeep);
+  toDelete.forEach(function(e){
+    try{ db.collection('iz_psj').doc(e.id).delete(); }catch(err){}
+  });
+
+  // If this was the currently open restore shift, close it
+  if(_restoreShift && (shop===null ? !_restoreShift.shop : _restoreShift.shop===shop) && _restoreShift.date===date){
+    _restoreShift = null;
+    saveRestoreShift(null);
+    renderRestoreShiftState();
+  }
+
+  renderRestoreShiftsList();
+  showToast('🗑 Смена удалена ('+toDelete.length+' записей)');
+}
+
 function reopenRestoreShift(shop, date){
-  var entries = getPsjEntries().filter(function(e){ return e.shopName===shop && e.date===date && e.isArchive; });
+  var entries = getPsjEntries().filter(function(e){ return (shop===null ? !e.shopName : e.shopName===shop) && e.date===date; });
   var sellerName = '';
   for(var i=entries.length-1;i>=0;i--){ if(entries[i].sellerName){ sellerName=entries[i].sellerName; break; } }
   var sellerId = '';
   var sellers = getSellers();
   var match = sellers.find(function(s){ return s.name===sellerName; });
   if(match) sellerId = match.id;
-  _restoreShift = {shop:shop, sellerId:sellerId, sellerName:sellerName, date:date, openedAt:new Date().toISOString()};
+  _restoreShift = {shop:(shop||''), sellerId:sellerId, sellerName:sellerName, date:date, openedAt:new Date().toISOString()};
   saveRestoreShift(_restoreShift);
   switchRstShTab('open');
   renderRestoreShiftState();
   switchRst('journal'); switchRstJ('manual', document.getElementById('rstj_manual'));
-  showToast('📂 Смена открыта: '+shop+' · '+date);
+  showToast('📂 Смена открыта: '+(shop||'(без магазина)')+' · '+date);
 }
 
 function activateRestoreShift(shop, date){
-  if(!confirm('Активировать смену '+shop+' · '+date+'? Данные войдут в общую статистику.')) return;
+  if(!confirm('Активировать смену '+(shop||'(без магазина)')+' · '+date+'? Данные войдут в общую статистику.')) return;
   var entries = getPsjEntries();
   var activated = 0;
   entries.forEach(function(e){
-    if(e.shopName===shop && e.date===date && !e.activated){
+    if((shop===null ? !e.shopName : e.shopName===shop) && e.date===date && !e.activated){
       e.activated=true; e.activatedAt=new Date().toISOString(); activated++;
     }
   });
@@ -5663,6 +5694,7 @@ function psjLoadJournal() {
       '</div>' +
       '<div style="display:flex;align-items:center;gap:8px">' +
         '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;color:'+color+'">'+e.amtSign+(Math.round(e.amount||0)).toLocaleString('ru-RU')+'₽</div>' +
+        '<button onclick="editPsjEntry(\''+e.id+'\')" style="background:none;border:1px solid #3e3e4e;border-radius:6px;padding:4px 7px;color:#c8f060;font-size:11px;cursor:pointer">✏️</button>' +
         '<button onclick="deletePsjEntry(\''+e.id+'\')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:4px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>' +
       '</div>' +
     '</div>';
@@ -5699,13 +5731,27 @@ var psjPayMethod = 'cash';
 
 // ── Line-item arrays for each modal ──
 var _psjSaleItems = [], _psjWoItems = [], _psjRcvItems = [], _psjStaffItems = [];
+var _psjEditEntryId = null, _psjEditType = null;
 
 function _psjNewItem(extra){
   return Object.assign({art:'', name:'', species:'', price:0, qty:1, amt:0, goodsType:'derevo'}, extra||{});
 }
 
+var PSJ_MO_TITLES = {
+  psjSaleMo:'Продажа (задним числом)', psjWriteoffMo:'Списание (задним числом)',
+  psjReceiveMo:'Приход товара (задним числом)', psjExpenseMo:'Расходы (задним числом)',
+  psjStaffMo:'Покупка сотрудника (задним числом)'
+};
+
 function openPsjMo(type) {
   psjPayMethod = 'cash';
+  _psjEditEntryId = null; _psjEditType = null;
+  // Reset modal chrome (title + remove any edit-delete button) from a previous edit session
+  Object.keys(PSJ_MO_TITLES).forEach(function(modalId){
+    var modal=document.getElementById(modalId); if(!modal) return;
+    var mt=modal.querySelector('.mt'); if(mt) mt.textContent = PSJ_MO_TITLES[modalId];
+    var delBtn=modal.querySelector('.psj-edit-del-btn'); if(delBtn) delBtn.remove();
+  });
   if(type==='sale') {
     _psjSaleItems = [_psjNewItem()];
     renderPsjItems('sale');
@@ -5732,6 +5778,78 @@ function openPsjMo(type) {
     renderPsjItems('staff');
     var whoEl=document.getElementById('psjStaffWho'); if(whoEl) whoEl.value='';
     openMo('psjStaffMo');
+  }
+}
+
+// Open the appropriate modal pre-filled with an existing entry's data for editing
+function editPsjEntry(id){
+  var entry = getPsjEntries().find(function(e){ return e.id===id; });
+  if(!entry){ showToast('Запись не найдена'); return; }
+  var type = entry.type;
+  openPsjMo(type); // resets arrays + opens modal
+  _psjEditEntryId = id;
+  _psjEditType = type;
+
+  var items = (entry.items||[]).map(function(it){
+    return _psjNewItem({art:it.art||'', name:(it.name==='Без названия'?'':it.name)||'', species:it.species||'', price:it.price||0, qty:it.qty||1, amt:it.amt||0, goodsType:it.goodsType||'derevo', reason:it.reason||'', retail:it.retail||0});
+  });
+  if(!items.length) items = [_psjNewItem()];
+
+  if(type==='sale'){
+    _psjSaleItems = items;
+    renderPsjItems('sale');
+    var discEl=document.getElementById('psjSaleDisc'); if(discEl) discEl.value = entry.discEffect||'';
+    var commEl=document.getElementById('psjSaleComment'); if(commEl) commEl.value = entry.comment||'';
+    // Determine payment method
+    var method = 'cash';
+    if((entry.cashEffect||0)>0 && (entry.cardEffect||0)>0) method='mixed';
+    else if((entry.cardEffect||0)>0 && !(entry.cashEffect>0)){
+      var subParts = (entry.sub||'').split(' · ');
+      var last = subParts[subParts.length-1];
+      var map = {'terminal':'terminal','sbp':'sbp','transfer':'transfer','qr':'qr'};
+      method = map[last] || 'terminal';
+    }
+    setPsjPayM(method, document.querySelector('#psjSaleMo .pc[onclick*="\''+method+'\'"]'));
+    if(method==='mixed'){
+      var mc=document.getElementById('psjMixCash'); if(mc) mc.value=entry.cashEffect||'';
+      var mcr=document.getElementById('psjMixCard'); if(mcr) mcr.value=entry.cardEffect||'';
+    }
+    psjCalcSale();
+    document.querySelector('#psjSaleMo .mt').textContent = '✏️ Редактирование продажи';
+  } else if(type==='writeoff'){
+    _psjWoItems = items;
+    renderPsjItems('wo');
+    document.querySelector('#psjWriteoffMo .mt').textContent = '✏️ Редактирование списания';
+  } else if(type==='receive'){
+    _psjRcvItems = items;
+    renderPsjItems('rcv');
+    var fromEl=document.getElementById('psjRcvFrom'); if(fromEl) fromEl.value = entry.from||'';
+    document.querySelector('#psjReceiveMo .mt').textContent = '✏️ Редактирование прихода';
+  } else if(type==='expense'){
+    var amtEl=document.getElementById('psjExpAmt'); if(amtEl) amtEl.value = entry.amount||'';
+    var typeEl=document.getElementById('psjExpType'); if(typeEl) typeEl.value = entry.expType||'other';
+    var commEl=document.getElementById('psjExpComment'); if(commEl) commEl.value = entry.sub||'';
+    document.querySelector('#psjExpenseMo .mt').textContent = '✏️ Редактирование расхода';
+  } else if(type==='staff'){
+    _psjStaffItems = items;
+    renderPsjItems('staff');
+    var whoEl=document.getElementById('psjStaffWho'); if(whoEl) whoEl.value = entry.who||'';
+    document.querySelector('#psjStaffMo .mt').textContent = '✏️ Редактирование покупки сотрудника';
+  }
+
+  // Add a delete button to the modal if not already present
+  var modalId = {sale:'psjSaleMo', writeoff:'psjWriteoffMo', receive:'psjReceiveMo', expense:'psjExpenseMo', staff:'psjStaffMo'}[type];
+  var modal = document.getElementById(modalId);
+  if(modal){
+    var existingDel = modal.querySelector('.psj-edit-del-btn');
+    if(existingDel) existingDel.remove();
+    var delBtn = document.createElement('button');
+    delBtn.className = 'btn red psj-edit-del-btn';
+    delBtn.style.marginTop = '8px';
+    delBtn.textContent = '🗑 Удалить запись';
+    delBtn.onclick = function(){ closeMo(modalId); deletePsjEntry(id); };
+    var cancelBtn = modal.querySelector('.md > .btn.sec');
+    if(cancelBtn) cancelBtn.parentNode.insertBefore(delBtn, cancelBtn);
   }
 }
 
@@ -5932,6 +6050,18 @@ function savePsjEntry(type) {
   var savedCount = 0;
 
   function pushEntry(props){
+    if(_psjEditEntryId){
+      var idx = entries.findIndex(function(e){ return e.id===_psjEditEntryId; });
+      if(idx>=0){
+        var old = entries[idx];
+        var entry = Object.assign({}, old, props, { date: date, shopName: shopName, sellerName: sellerName, type: type, id: old.id, editedAt: new Date().toISOString() });
+        entries[idx] = entry;
+        try { db.collection('iz_psj').doc(entry.id).set(entry); } catch(e) {}
+        savedCount++;
+        return;
+      }
+      // Fallback: entry not found, fall through to create new
+    }
     var entry = Object.assign({ id: uid(), date: date, shopName: shopName, sellerName: sellerName, type: type, ts: new Date().toISOString(), isArchive: true }, props);
     entries.push(entry);
     try { db.collection('iz_psj').doc(entry.id).set(entry); } catch(e) {}
@@ -6061,10 +6191,12 @@ function savePsjEntry(type) {
   }
 
   if(savedCount){
+    var wasEdit = !!_psjEditEntryId;
+    _psjEditEntryId = null; _psjEditType = null;
     savePsjEntries(entries);
     psjLoadJournal();
     try{ psSyncFromJournal(); }catch(e){}
-    showToast('✅ Запись добавлена');
+    showToast(wasEdit ? '✅ Запись обновлена' : '✅ Запись добавлена');
   }
 }
 
