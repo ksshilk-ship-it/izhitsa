@@ -449,10 +449,18 @@ function applyUpdate() {
 
   <!-- TODAY SHIFT -->
   <div class="page" id="pg-today">
-    <div class="stitle">Смена сегодня</div>
-    <div id="adminAlertsBanner" style="display:none;background:#1a0f0f;border:1px solid #f06060;border-radius:12px;margin-bottom:10px;overflow:hidden"></div>
+    <div class="stitle">Главная</div>
     <div id="todayShiftContent"></div>
-    <div style="margin-top:12px">
+  </div>
+
+  <!-- ALERTS / ТРЕВОГА -->
+  <div class="page" id="pg-alerts">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div class="stitle" style="margin:0">🚨 Тревога</div>
+      <button type="button" onclick="markAllAlertsRead()" style="padding:6px 12px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">✓ Прочитать все</button>
+    </div>
+    <div id="alertsPageContent"></div>
+    <div style="margin-top:16px">
       <button type="button" onclick="clearTestSession()"
         style="width:100%;padding:12px;background:#2e1a1a;border:1px solid #f06060;border-radius:12px;color:#f06060;font-family:Unbounded,sans-serif;font-size:12px;font-weight:700;cursor:pointer">
         🗑 Сбросить незакрытую тестовую смену
@@ -1723,7 +1731,38 @@ function renderStatusBar(){
   set('sbDiscount', t.discount);
   set('sbCard', t.card);
 }
-function renderAll(){ renderStatusBar(); renderJournal(); updateInvBadge(); renderPendingAlert(); }
+function renderAll(){ renderStatusBar(); renderJournal(); updateInvBadge(); renderPendingAlert(); syncLiveShift(); }
+
+// Keep an always-current "open shift" document in iz_shifts so the admin
+// home page can show live, in-progress shift data (cash/goods/sales totals,
+// journal entries) without waiting for the shift to be closed.
+var _liveShiftSyncTimer = null;
+function syncLiveShift(){
+  if(!session || !session.shiftId) return;
+  if(_liveShiftSyncTimer) clearTimeout(_liveShiftSyncTimer);
+  _liveShiftSyncTimer = setTimeout(function(){
+    var t = calcTotals();
+    var doc = {
+      id: session.shiftId, status:'open', source:'shop',
+      shopName: session.shopName, sellerName: session.sellerName,
+      date: new Date().toISOString().split('T')[0],
+      openedAt: session.openedAt, updatedAt: new Date().toISOString(),
+      cashMorning: session.cashMorning||0, goodsMorning: session.goodsMorning||0,
+      cashDrMorning: session.cashDrMorning||0, goodsDrMorning: session.goodsDrMorning||0,
+      cashStaffMorning: session.cashStaffMorning||0,
+      cashCurrent: t.cash, cardCurrent: t.card, staffCurrent: t.staff,
+      goodsCurrent: t.goods, cashDrCurrent: t.cashDr, goodsDrCurrent: t.goodsDr,
+      revenue: t.revenue, discount: t.discount,
+      hasCashDiff: journal.some(function(e){ return e.hasCashDiff; }),
+      journal: journal.slice()
+    };
+    try{ db.collection('iz_shifts').doc(session.shiftId).set(doc); }catch(e){}
+  }, 600);
+}
+function clearLiveShift(){
+  if(!session || !session.shiftId) return;
+  try{ db.collection('iz_shifts').doc(session.shiftId).delete(); }catch(e){}
+}
 
 // ════ LOGIN ════
 function renderLoginSellers(){
@@ -1862,6 +1901,7 @@ function confirmMorning(){
     ?(parseFloat((document.getElementById('morningGoodsDr')||{}).value)||calcGoodsDrMorning(pendingSession.shopName))
     :calcGoodsDrMorning(pendingSession.shopName);
   session=Object.assign({},pendingSession,{
+    shiftId:uid(),
     openedAt:new Date().toISOString(),
     cashMorning:cashM, cashDrMorning:cashDr, cashStaffMorning:cashStaff,
     goodsMorning:goodsM, goodsDrMorning:goodsDrM, shopType:'shop'
@@ -1890,6 +1930,7 @@ function confirmMorning(){
     cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0,hasCashDiff:hasCashDiff}];
   pendingSession=null; saveS(); saveJ();
   logShiftOpen(session.shopName, cashM);
+  syncLiveShift();
   closeMo('morningMo'); startApp();
 }
 function cancelMorning(){ closeMo('morningMo'); pendingSession=null; }
@@ -2123,7 +2164,7 @@ function buildSellerTabs(){
 
 // ════ START ADMIN APP ════
 // ════ ADMIN: REALTIME SHIFTS & ALERTS ════
-var _adminActiveShifts=[], _adminShiftUnsub=null, _adminAlertUnsub=null;
+var _adminActiveShifts=[], _adminShiftUnsub=null, _adminAlertUnsub=null, _adminAlerts=[];
 
 function startAdminShiftListener(){
   if(_adminShiftUnsub){try{_adminShiftUnsub();}catch(e){}}
@@ -2140,32 +2181,38 @@ function startAdminAlertsListener(){
   if(_adminAlertUnsub){try{_adminAlertUnsub();}catch(e){}}
   _adminAlertUnsub=db.collection('iz_admin_alerts').where('read','==',false)
     .onSnapshot(function(snap){
-      var count=snap.size;
+      _adminAlerts=[];
+      snap.forEach(function(doc){_adminAlerts.push(doc.data());});
+      var count=_adminAlerts.length;
       var badge=document.getElementById('alertsBadge');
       if(badge) badge.textContent=count>0?count:'';
-      if(count>0) renderAlertsBanner(snap);
+      renderAlertsPage();
     },function(e){console.log('alerts err',e&&e.code);});
 }
 
-function renderAlertsBanner(snap){
-  var c=document.getElementById('adminAlertsBanner'); if(!c) return;
-  var items=[];
-  snap.forEach(function(doc){items.push(doc.data());});
-  if(!items.length){c.style.display='none';return;}
-  c.style.display='block';
-  c.innerHTML=items.slice(0,5).map(function(a){
-    if(a.type==='morning_diff'){
-      var diff=a.morningDiff||0;
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid #3e2e2e">'+
-        '<div><div style="font-size:12px;font-weight:700;color:#f06060">⚠️ Расхождение нала — '+(a.shopName||'')+'</div>'+
-        '<div style="font-size:11px;color:#8888aa">'+(a.sellerName||'')+' · ввёл: '+fmt(a.cashMorning)+' · вечер был: '+fmt(a.prevCashEve||0)+
-        ' · разница: '+(diff>0?'+':'')+fmt(diff)+'</div>'+
-        '<div style="font-size:10px;color:#8888aa">'+(a.date||'')+'</div></div>'+
-        '<button onclick="markAlertRead(\''+a.id+'\')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:4px 8px;color:#8888aa;font-size:10px;cursor:pointer;flex-shrink:0;margin-left:8px">✓ Прочитано</button>'+
-      '</div>';
-    }
-    return '';
-  }).join('');
+function alertCard(a){
+  var diff = a.morningDiff!=null ? a.morningDiff : a.cashDiff;
+  var title = a.type==='cash_diff' ? '⚠️ Расхождение при закрытии — '+(a.shopName||'') : '⚠️ Расхождение нала — '+(a.shopName||'');
+  var detail = a.type==='cash_diff'
+    ? (a.sellerName||'')+' · итог не сошёлся на '+(diff>0?'+':'')+fmt(diff)
+    : (a.sellerName||'')+' · ввёл: '+fmt(a.cashMorning)+' · вечер был: '+fmt(a.prevCashEve||0)+' · разница: '+(diff>0?'+':'')+fmt(diff);
+  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #3e2e2e">'+
+    '<div><div style="font-size:12px;font-weight:700;color:#f06060">'+title+'</div>'+
+    '<div style="font-size:11px;color:#8888aa">'+detail+'</div>'+
+    '<div style="font-size:10px;color:#8888aa">'+(a.date||'')+'</div></div>'+
+    '<button onclick="markAlertRead(\''+a.id+'\')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:4px 8px;color:#8888aa;font-size:10px;cursor:pointer;flex-shrink:0;margin-left:8px">✓ Прочитано</button>'+
+  '</div>';
+}
+
+function renderAlertsPage(){
+  var c=document.getElementById('alertsPageContent'); if(!c) return;
+  if(!_adminAlerts.length){
+    c.innerHTML='<div style="text-align:center;padding:30px;color:#8888aa"><div style="font-size:36px;margin-bottom:8px">✅</div>Нет непрочитанных уведомлений</div>';
+    return;
+  }
+  c.innerHTML='<div style="background:#1a0f0f;border:1px solid #f06060;border-radius:12px;padding:0 12px">'+
+    _adminAlerts.map(alertCard).join('')+
+  '</div>';
 }
 
 function markAlertRead(id){
@@ -2173,57 +2220,209 @@ function markAlertRead(id){
   var alerts=JSON.parse(localStorage.getItem('iz_admin_alerts')||'[]');
   alerts.forEach(function(a){if(a.id===id)a.read=true;});
   localStorage.setItem('iz_admin_alerts',JSON.stringify(alerts));
+  _adminAlerts = _adminAlerts.filter(function(a){ return a.id!==id; });
+  var badge=document.getElementById('alertsBadge');
+  if(badge) badge.textContent=_adminAlerts.length>0?_adminAlerts.length:'';
+  renderAlertsPage();
 }
+
+function markAllAlertsRead(){
+  if(!_adminAlerts.length) return;
+  if(!confirm('Отметить все уведомления как прочитанные?')) return;
+  _adminAlerts.forEach(function(a){
+    try{db.collection('iz_admin_alerts').doc(a.id).update({read:true});}catch(e){}
+  });
+  var alerts=JSON.parse(localStorage.getItem('iz_admin_alerts')||'[]');
+  alerts.forEach(function(a){a.read=true;});
+  localStorage.setItem('iz_admin_alerts',JSON.stringify(alerts));
+  _adminAlerts=[];
+  var badge=document.getElementById('alertsBadge');
+  if(badge) badge.textContent='';
+  renderAlertsPage();
+}
+
+// Admin can delete a stuck "open" shift document (e.g. leftover test session)
+function clearTestSession(){
+  var openShifts = _adminActiveShifts.filter(function(s){ return s.status==='open'; });
+  if(!openShifts.length){ showToast('Нет открытых смен для сброса'); return; }
+  var labels = openShifts.map(function(s){ return s.shopName+' · '+(s.sellerName||'')+' ('+(s.id||'')+')'; }).join('\n');
+  if(!confirm('Сбросить следующие открытые смены?\n\n'+labels+'\n\nЭто удалит их без сохранения данных.')) return;
+  openShifts.forEach(function(s){
+    try{ db.collection('iz_shifts').doc(s.id).delete(); }catch(e){}
+  });
+  showToast('🗑 Открытые смены сброшены');
+}
+
+var _todayActiveShop = null;
 
 function renderTodayShift(){
   var c=document.getElementById('todayShiftContent'); if(!c) return;
-  if(!_adminActiveShifts.length){
-    c.innerHTML='<div style="text-align:center;padding:30px;color:#8888aa"><div style="font-size:36px;margin-bottom:8px">📋</div>Сегодня смен нет</div>';
-    return;
+  var shopNames = getShopNames();
+  if(!_todayActiveShop || shopNames.indexOf(_todayActiveShop)<0){
+    // Default to first shop with an open shift, else first shop
+    var openShop = _adminActiveShifts.find(function(s){ return s.status==='open'; });
+    _todayActiveShop = (openShop && openShop.shopName) || shopNames[0] || '';
   }
-  var shifts=_adminActiveShifts.slice().sort(function(a,b){
-    if(a.status==='open'&&b.status!=='open') return -1;
-    if(b.status==='open'&&a.status!=='open') return 1;
-    return 0;
+
+  var tabsHtml = '<div style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:2px">' +
+    shopNames.map(function(name){
+      var shift = _adminActiveShifts.find(function(s){ return s.shopName===name && s.status==='open'; });
+      var active = name===_todayActiveShop;
+      var hasDiff = shift && (shift.hasCashDiff || (shift.journal||[]).some(function(e){return e.hasCashDiff;}));
+      var dot = shift ? '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+(hasDiff?'#f06060':'#60f090')+';margin-right:5px"></span>' : '';
+      var border = active ? '#c8f060' : (shift ? '#60f090' : '#2e2e3e');
+      var bg = active ? '#1e2a14' : (shift ? '#142a1e' : '#1a1a22');
+      var color = active ? '#c8f060' : (shift ? '#60f090' : '#8888aa');
+      return '<button onclick="_todayActiveShop=\''+name.replace(/'/g,"\\'")+'\';renderTodayShift()" style="flex-shrink:0;padding:8px 14px;border-radius:20px;border:'+(active?'2px':'1px')+' solid '+border+';background:'+bg+';color:'+color+';font-size:12px;font-weight:'+(active?'700':'400')+';cursor:pointer;white-space:nowrap">'+dot+name+'</button>';
+    }).join('') +
+  '</div>';
+
+  var shift = _adminActiveShifts.find(function(s){ return s.shopName===_todayActiveShop && s.status==='open'; });
+  c.innerHTML = tabsHtml + (shift ? renderShiftDetail(shift) : renderNoShiftCard(_todayActiveShop));
+}
+
+function renderNoShiftCard(shopName){
+  return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:14px;padding:30px;text-align:center;color:#8888aa">'+
+    '<div style="font-size:36px;margin-bottom:8px">📋</div>'+
+    'Сейчас нет открытой смены в магазине<br><b style="color:#f0f0f8">'+shopName+'</b>'+
+  '</div>';
+}
+
+function renderShiftDetail(shift){
+  var journal = shift.journal||[];
+  var sales = journal.filter(function(e){ return e.type==='sale'; });
+  var writeoffs = journal.filter(function(e){ return e.type==='writeoff'; });
+  var receives = journal.filter(function(e){ return e.type==='receive'; });
+
+  // ── Cash & goods balances ──
+  var cashWood = (shift.cashMorning||0) + journal.reduce(function(s,e){return s+(e.cashEffect||0);},0);
+  var cashDr = (shift.cashDrMorning||0) + journal.reduce(function(s,e){return s+(e.cashDrEffect||0);},0);
+  var cashStaff = (shift.cashStaffMorning||0) + journal.reduce(function(s,e){return s+(e.staffEffect||0);},0);
+  var goodsWood = (shift.goodsMorning||0) + journal.reduce(function(s,e){return s+(e.goodsEffect||0);},0);
+  var goodsDr = (shift.goodsDrMorning||0) + journal.reduce(function(s,e){return s+(e.goodsDrEffect||0);},0);
+
+  // ── Sales totals by payment method ──
+  var revenue = sales.reduce(function(s,e){return s+(e.amount||0);},0);
+  var discount = sales.reduce(function(s,e){return s+(e.discount||0);},0);
+  var payTotals = {cash:0,terminal:0,sbp:0,transfer:0,qr:0,rs:0,mixed:0};
+  sales.forEach(function(e){
+    if(e.payMethod==='mixed'){
+      payTotals.cash += e.cashPart||0;
+      payTotals.terminal += e.cardPart||0;
+    } else {
+      var key = payTotals.hasOwnProperty(e.payMethod) ? e.payMethod : 'terminal';
+      payTotals[key] += (e.cashPart||0)+(e.cardPart||0);
+    }
   });
-  c.innerHTML=shifts.map(function(shift){
-    var journal=shift.journal||[];
-    var sales=journal.filter(function(e){return e.type==='sale';});
-    var revenue=sales.reduce(function(s,e){return s+(e.amount||0);},0);
-    var cashTotal=(shift.cashMorning||0)+journal.reduce(function(s,e){return s+(e.cashEffect||0);},0);
-    var cardTotal=journal.reduce(function(s,e){return s+(e.cardEffect||0);},0);
-    var goodsTotal=(shift.goodsMorning||0)+journal.reduce(function(s,e){return s+(e.goodsEffect||0);},0);
-    var isOpen=shift.status!=='closed';
-    var hasDiff=shift.hasCashDiff||journal.some(function(e){return e.hasCashDiff;});
-    var border=hasDiff?'#f06060':(isOpen?'#c8f060':'#2e2e3e');
-    var lastUpd=shift.updatedAt?new Date(shift.updatedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'—';
-    var sid=(shift.id||'').replace(/[^a-z0-9_]/gi,'_');
-    function sc(l,v,col){return '<div style="background:#0f0f13;border-radius:8px;padding:8px;text-align:center"><div style="font-size:9px;color:#8888aa">'+l+'</div><div style="font-size:13px;font-weight:700;color:'+col+'">'+fmt(v)+'</div></div>';}
-    return '<div style="background:#1a1a22;border:2px solid '+border+';border-radius:14px;padding:14px;margin-bottom:10px">'+
-      (hasDiff?'<div style="background:#2a0f0f;border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:#f06060;font-weight:700">⚠️ Расхождение наличных на утро!</div>':'')+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-        '<div><div style="font-size:14px;font-weight:700">'+(shift.shopName||'')+'</div>'+
-        '<div style="font-size:11px;color:#8888aa">👤 '+(shift.sellerName||'')+'</div></div>'+
-        '<div style="text-align:right"><div style="font-size:11px;font-weight:700;color:'+(isOpen?'#60f090':'#8888aa')+'">'+(isOpen?'● Открыта':'Закрыта')+'</div>'+
-        '<div style="font-size:10px;color:#8888aa">'+lastUpd+'</div></div>'+
-      '</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'+
-        sc('💰 Выручка',revenue,'#c8f060')+sc('💵 Нал',cashTotal,'#60f090')+
-        sc('💳 Безнал',cardTotal,'#60c8f0')+sc('📦 Товар',goodsTotal,'#f0c060')+
-      '</div>'+
-      '<button onclick="var d=document.getElementById(\'det_'+sid+'\');d.style.display=d.style.display===\'none\'?\'block\':\'none\'" '+
-        'style="width:100%;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;margin-bottom:6px">'+
-        '📋 Детали ('+sales.length+' продаж)</button>'+
-      '<div id="det_'+sid+'" style="display:none">'+
-        (journal.length>1?journal.slice().reverse().slice(0,8).map(function(e){
-          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:12px">'+
-            '<span style="font-size:13px">'+(e.icon||'📌')+'</span>'+
-            '<span style="flex:1;margin:0 8px;color:'+(e.hasCashDiff?'#f06060':'#f0f0f8')+'">'+(e.label||'')+'</span>'+
-            (e.amount?'<span style="color:#c8f060;font-weight:600">'+fmt(e.amount)+'</span>':'')+'</div>';
-        }).join(''):'<div style="font-size:12px;color:#8888aa;padding:8px">Нет операций</div>')+
-      '</div>'+
-    '</div>';
-  }).join('');
+
+  // ── Sold items by category (дерево / др товар) ──
+  var soldWood = {count:0, qty:0}, soldDr = {count:0, qty:0};
+  sales.forEach(function(e){
+    var target = e.goodsType==='dr' ? soldDr : soldWood;
+    target.count++;
+    var items = e.items||[];
+    if(items.length){ items.forEach(function(it){ target.qty += (it.qty||1); }); }
+    else target.qty += 1;
+  });
+
+  // ── Writeoffs / receives ──
+  var woTotal = writeoffs.reduce(function(s,e){return s+(e.amount||0);},0);
+  var woQty = writeoffs.length;
+  var rcvTotal = receives.reduce(function(s,e){return s+(e.amount||0);},0);
+  var rcvQty = receives.length;
+
+  var hasDiff = shift.hasCashDiff || journal.some(function(e){return e.hasCashDiff;});
+  var lastUpd = shift.updatedAt?new Date(shift.updatedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'—';
+
+  function block(title, rows){
+    return '<div class="card" style="margin-bottom:10px"><div class="ctitle">'+title+'</div>'+rows+'</div>';
+  }
+  function row(label, value, color){
+    return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">'+label+'</span><span style="font-weight:700;color:'+(color||'#f0f0f8')+'">'+value+'</span></div>';
+  }
+  function divider(){ return '<div style="border-top:1px solid #2e2e3e;margin:6px 0"></div>'; }
+
+  var html = '';
+
+  html += '<div style="background:#1a1a22;border:2px solid '+(hasDiff?'#f06060':'#c8f060')+';border-radius:14px;padding:14px;margin-bottom:10px">'+
+    (hasDiff?'<div style="background:#2a0f0f;border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:#f06060;font-weight:700">⚠️ Расхождение наличных на утро!</div>':'')+
+    '<div style="display:flex;justify-content:space-between;align-items:center">'+
+      '<div><div style="font-size:14px;font-weight:700">'+(shift.shopName||'')+'</div>'+
+      '<div style="font-size:11px;color:#8888aa">👤 '+(shift.sellerName||'')+'</div></div>'+
+      '<div style="text-align:right"><div style="font-size:11px;font-weight:700;color:#60f090">● Открыта</div>'+
+      '<div style="font-size:10px;color:#8888aa">обновлено '+lastUpd+'</div></div>'+
+    '</div>'+
+  '</div>';
+
+  // Cash balances
+  html += block('💵 Остаток нала', row('🌳 Дерево', fmt(cashWood), '#60f090')+row('🛍 ДР Товар', fmt(cashDr), '#60f090')+row('🛒 Покупки сотрудников', fmt(cashStaff), '#a060f0'));
+
+  // Goods balances
+  html += block('📦 Остаток товара', row('🌳 Дерево', fmt(goodsWood), '#f0c060')+row('🛍 ДР Товар', fmt(goodsDr), '#f0c060'));
+
+  // Sales totals
+  html += block('💰 Итого продаж',
+    row('Сумма', fmt(revenue), '#c8f060')+divider()+
+    row('💵 Нал', fmt(payTotals.cash))+
+    row('💳 Терминал', fmt(payTotals.terminal))+
+    row('🏦 Перевод', fmt(payTotals.transfer))+
+    row('🔲 QR / СБП', fmt(payTotals.qr+payTotals.sbp))+
+    (payTotals.rs?row('🏦 РС', fmt(payTotals.rs)):'')+
+    divider()+
+    row('🎁 Скидка', fmt(discount), '#8888aa')
+  );
+
+  // Sales count + by category
+  html += block('🧾 Итого продаж (шт.)',
+    row('Всего операций', sales.length)+divider()+
+    row('🌳 Дерево — операций / товаров', soldWood.count+' / '+soldWood.qty)+
+    row('🛍 ДР Товар — операций / товаров', soldDr.count+' / '+soldDr.qty)
+  );
+
+  // Writeoffs
+  html += '<div class="card" style="margin-bottom:10px">'+
+    '<div class="ctitle">🗑 Списания</div>'+
+    row('Сумма', fmt(woTotal), '#f06060')+row('Кол-во', woQty)+
+    (woQty?'<button onclick="toggleTodayDetail(\'wo\')" style="width:100%;margin-top:8px;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">📋 Показать списания</button>':'')+
+    '<div id="todayDetail_wo" style="display:none;margin-top:8px">'+
+      writeoffs.slice().reverse().map(function(e){
+        return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:12px"><span style="flex:1">'+(e.sub||e.label||'')+'</span><span style="color:#f06060;font-weight:700">'+fmt(e.amount)+'</span></div>';
+      }).join('')+
+    '</div>'+
+  '</div>';
+
+  // Receives
+  html += '<div class="card" style="margin-bottom:10px">'+
+    '<div class="ctitle">📥 Приходы</div>'+
+    row('Сумма', fmt(rcvTotal), '#60c8f0')+row('Кол-во', rcvQty)+
+    (rcvQty?'<button onclick="toggleTodayDetail(\'rcv\')" style="width:100%;margin-top:8px;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">📋 Показать приходы</button>':'')+
+    '<div id="todayDetail_rcv" style="display:none;margin-top:8px">'+
+      receives.slice().reverse().map(function(e){
+        return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:12px"><span style="flex:1">'+(e.sub||e.label||'')+'</span><span style="color:#60c8f0;font-weight:700">'+fmt(e.amount)+'</span></div>';
+      }).join('')+
+    '</div>'+
+  '</div>';
+
+  // Full journal toggle
+  var sid=(shift.id||'').replace(/[^a-z0-9_]/gi,'_');
+  html += '<button onclick="var d=document.getElementById(\'det_'+sid+'\');d.style.display=d.style.display===\'none\'?\'block\':\'none\'" '+
+    'style="width:100%;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;cursor:pointer;margin-bottom:6px">'+
+    '📒 Полный журнал смены ('+journal.length+')</button>'+
+  '<div id="det_'+sid+'" style="display:none">'+
+    (journal.length?journal.slice().reverse().map(function(e){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3e;font-size:12px">'+
+        '<span style="font-size:13px">'+(e.icon||'📌')+'</span>'+
+        '<span style="flex:1;margin:0 8px;color:'+(e.hasCashDiff?'#f06060':'#f0f0f8')+'">'+(e.label||'')+(e.sub?'<div style="font-size:10px;color:#8888aa">'+e.sub+'</div>':'')+'</span>'+
+        (e.amount?'<span style="color:#c8f060;font-weight:600">'+fmt(e.amount)+'</span>':'')+'</div>';
+    }).join(''):'<div style="font-size:12px;color:#8888aa;padding:8px">Нет операций</div>')+
+  '</div>';
+
+  return html;
+}
+
+function toggleTodayDetail(key){
+  var d=document.getElementById('todayDetail_'+key);
+  if(d) d.style.display = d.style.display==='none'?'block':'none';
 }
 
 function startAdminApp(){
@@ -2350,6 +2549,7 @@ function buildAdminTabs(){
   const t=document.getElementById('mainTabs'); t.style.display='flex';
   t.innerHTML=`
     <button class="tab active" onclick="showPg('today',this);renderTodayShift()"><div class="ti">📋</div><span>Смена</span></button>
+    <button class="tab" onclick="showPg('alerts',this);renderAlertsPage()"><div class="ti">🚨</div><span>Тревога</span><div class="tbadge" id="alertsBadge"></div></button>
     <button class="tab" onclick="showPg('history',this);renderShiftHistory()"><div class="ti">📁</div><span>Архив</span></button>
     <button class="tab" onclick="showPg('restore',this);initRestore()"><div class="ti">🗄</div><span>Восст.</span></button>
     <button class="tab" onclick="showPg('sellers',this);renderSellersAdmin()"><div class="ti">👥</div><span>Роли</span></button>
@@ -3273,7 +3473,7 @@ function _closeShiftReal(){
   const prev=getPrevShift(session.shopName);
   const morningDiff=(prev&&prev.cashEvening)!=null?Math.abs(session.cashMorning-prev.cashEvening):0;
   const sales=journal.filter(e=>e.type==='sale');
-  const report={id:uid(),source:'shop',shopName:session.shopName,sellerName:session.sellerName,
+  const report={id:(session.shiftId||uid()),status:'closed',source:'shop',shopName:session.shopName,sellerName:session.sellerName,
     date:new Date().toISOString().split('T')[0],openedAt:session.openedAt,closedAt:new Date().toISOString(),
     cashMorning:session.cashMorning,goodsMorning:session.goodsMorning,cashEvening:cashEve,goodsEvening:t.goods,
     inkass,cashDiff,cashDiffReason:reason,hasCashDiff:Math.abs(cashDiff)>=1,
@@ -3288,7 +3488,7 @@ function _closeShiftReal(){
   }
   const shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   shifts.unshift(report); localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
-  try{ db.collection('iz_shifts').add(report); }catch(e){}
+  try{ db.collection('iz_shifts').doc(report.id).set(report); }catch(e){}
   localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal);
   session=null; journal=[];
   document.getElementById('mainTabs').style.display='none';
