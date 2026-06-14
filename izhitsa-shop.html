@@ -1797,13 +1797,19 @@ function doLogin(){
   // the open one and its journal). The seller can close it normally once
   // they're back in the app, regardless of which day it was opened.
   var existing = JSON.parse(localStorage.getItem(KEY.session)||'null');
-  if(existing && existing.role!=='shopadmin' && existing.sellerId===sellerId && existing.shopName===shopName){
+  var sameSeller = existing && (existing.sellerId===sellerId || existing.sellerName===seller.name);
+  if(existing && existing.role!=='shopadmin' && sameSeller && existing.shopName===shopName){
     session = existing;
     journal = JSON.parse(localStorage.getItem(KEY.journal)||'[]');
     startApp();
     syncLiveShift();
     showToast('📂 Восстановлена незакрытая смена');
     return;
+  }
+  if(existing && existing.role!=='shopadmin'){
+    console.log('Найдена сохранённая смена, но она не подходит этому входу:',
+      {existingSellerId:existing.sellerId, existingSellerName:existing.sellerName, existingShop:existing.shopName,
+       loginSellerId:sellerId, loginSellerName:seller.name, loginShop:shopName});
   }
 
   pendingSession={shopName,sellerName:seller.name,sellerId};
