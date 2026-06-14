@@ -527,7 +527,8 @@ function applyUpdate() {
           <div style="font-size:11px;color:#8888aa;margin-bottom:4px">СМЕНА ОТКРЫТА</div>
           <div style="font-size:13px;font-weight:700" id="rstShiftSummary"></div>
         </div>
-        <button class="btn sec" onclick="closeRestoreShift()">🔒 Закрыть смену</button>
+        <button class="btn" style="margin-bottom:8px" onclick="goToRestoreShiftCheck()">📊 Проверить и закрыть смену</button>
+        <button class="btn sec" onclick="closeRestoreShift()">🔒 Закрыть без проверки</button>
       </div>
       </div>
 
@@ -802,6 +803,7 @@ function applyUpdate() {
         <div id="psSaveError" style="color:#f06060;font-size:13px;margin-bottom:8px;display:none"></div>
         <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="psComment" placeholder="Причина внесения задним числом..."></div>
         <button class="btn" onclick="savePastShift()">💾 Сохранить смену</button>
+        <button class="btn" style="margin-top:8px;background:#60f090;border:none;color:#0f0f13" onclick="confirmAndCloseRestoreShift()">✅ Подтвердить и закрыть смену</button>
       </div>
     </div>
 
@@ -5437,7 +5439,6 @@ function renderRestoreShiftState(){
   if(_restoreShift && _restoreShift.shop && _restoreShift.date){
     closedBlock.style.display = 'none';
     openBlock.style.display = 'block';
-    mainBlock.style.display = 'block';
     document.getElementById('rstShiftSummary').textContent =
       '🏪 ' + _restoreShift.shop + ' · 👤 ' + (_restoreShift.sellerName||'—') + ' · 📅 ' + _restoreShift.date;
     // Sync hidden psj fields and shop pickers used by накладные/активация/смены
@@ -5471,8 +5472,8 @@ function renderRestoreShiftState(){
   } else {
     closedBlock.style.display = 'block';
     openBlock.style.display = 'none';
-    mainBlock.style.display = 'none';
   }
+  updateRstMainBlockVisibility();
 }
 
 function openRestoreShift(){
@@ -5497,7 +5498,28 @@ function closeRestoreShift(){
   showToast('🔒 Смена восстановления закрыта');
 }
 
+function goToRestoreShiftCheck(){
+  switchRst('shifts');
+  try{ psSyncFromJournal(); }catch(e){}
+  showToast('📊 Сверьте кассу и остаток товара, затем нажмите «Подтвердить и закрыть смену»');
+}
+
+function confirmAndCloseRestoreShift(){
+  var cashMorn=gv('psCashMorn'), cashEve=gv('psCashEve');
+  if(cashMorn===''||cashEve===''){
+    if(!confirm('Поля кассы (нал утро/вечер) не заполнены. Закрыть смену без проверки?')) return;
+  }
+  if(!confirm('Подтвердить и закрыть смену восстановления?')) return;
+  _restoreShift = null;
+  saveRestoreShift(null);
+  renderRestoreShiftState();
+  switchRstShTab('list');
+  showToast('🔒 Смена восстановления закрыта и проверена');
+}
+
+var _rstShTab = 'open';
 function switchRstShTab(tab){
+  _rstShTab = tab;
   var isOpen = tab==='open';
   document.getElementById('rstSh_open_tab').style.display = isOpen?'block':'none';
   document.getElementById('rstSh_list_tab').style.display = isOpen?'none':'block';
@@ -5505,12 +5527,19 @@ function switchRstShTab(tab){
   if(b1){ b1.style.borderWidth=isOpen?'2px':'1px'; b1.style.background=isOpen?'#1e2a14':'#22222e'; b1.style.color=isOpen?'#c8f060':'#8888aa'; b1.style.borderColor=isOpen?'#c8f060':'#2e2e3e'; b1.style.fontWeight=isOpen?'700':'400'; }
   if(b2){ b2.style.borderWidth=isOpen?'1px':'2px'; b2.style.background=isOpen?'#22222e':'#1e2a14'; b2.style.color=isOpen?'#8888aa':'#c8f060'; b2.style.borderColor=isOpen?'#2e2e3e':'#c8f060'; b2.style.fontWeight=isOpen?'400':'700'; }
   if(!isOpen) renderRestoreShiftsList();
+  updateRstMainBlockVisibility();
+}
+
+function updateRstMainBlockVisibility(){
+  var mainBlock = document.getElementById('rstMainBlock'); if(!mainBlock) return;
+  var shouldShow = _rstShTab==='open' && !!(_restoreShift && _restoreShift.shop && _restoreShift.date);
+  mainBlock.style.display = shouldShow ? 'block' : 'none';
 }
 
 // Group iz_psj journal entries (restore-flow, isArchive) into per-shift summaries
 function renderRestoreShiftsList(){
   var c=document.getElementById('rstShiftsList'); if(!c) return;
-  var entries = getPsjEntries().filter(function(e){ return e.isArchive; });
+  var entries = getPsjEntries();
   if(!entries.length){ c.innerHTML='<div class="empty"><div class="ei">📋</div>Нет смен восстановления</div>'; return; }
 
   var groups = {};
@@ -5568,7 +5597,7 @@ function activateRestoreShift(shop, date){
   var entries = getPsjEntries();
   var activated = 0;
   entries.forEach(function(e){
-    if(e.shopName===shop && e.date===date && e.isArchive && !e.activated){
+    if(e.shopName===shop && e.date===date && !e.activated){
       e.activated=true; e.activatedAt=new Date().toISOString(); activated++;
     }
   });
@@ -5835,9 +5864,9 @@ function psjItemArtInput(group, i, val){
   var items = getItemsBase();
   var found = items.find(function(it){ return String(it.num)===val.trim(); });
   if(found){
-    arr[i].name = found.name||'';
+    if(found.name) arr[i].name = found.name;
     if(!arr[i].price) arr[i].price = found.price||0;
-    arr[i]._hint = '✓ '+(found.name||'');
+    arr[i]._hint = '✓ '+(found.name||'(без названия в базе)');
     renderPsjItems(group);
     if(group==='sale') psjCalcSale();
   } else {
