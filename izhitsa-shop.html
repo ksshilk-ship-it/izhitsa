@@ -2347,6 +2347,29 @@ function renderShiftDetail(shift){
     else target.qty += 1;
   });
 
+  // ── Sold items breakdown by name (for "Проданные товары" block) ──
+  var soldItemsWood = {}, soldItemsDr = {};
+  sales.forEach(function(e){
+    var target = e.goodsType==='dr' ? soldItemsDr : soldItemsWood;
+    var items = e.items||[];
+    if(items.length){
+      items.forEach(function(it){
+        var name = (it.name && it.name.trim()) || 'Без названия';
+        var qty = it.qty||1;
+        var amt = it.amt!=null ? it.amt : (it.price||0)*qty;
+        if(!target[name]) target[name]={qty:0, amt:0};
+        target[name].qty += qty;
+        target[name].amt += amt;
+      });
+    }
+  });
+  function soldItemsToList(map){
+    return Object.keys(map).map(function(name){ return {name:name, qty:map[name].qty, amt:map[name].amt}; })
+      .sort(function(a,b){ return b.amt-a.amt; });
+  }
+  var soldItemsWoodList = soldItemsToList(soldItemsWood);
+  var soldItemsDrList = soldItemsToList(soldItemsDr);
+
   // ── Writeoffs / receives ──
   var woTotal = writeoffs.reduce(function(s,e){return s+(e.amount||0);},0);
   var woQty = writeoffs.length;
@@ -2400,6 +2423,27 @@ function renderShiftDetail(shift){
     row('🌳 Дерево — операций / товаров', soldWood.count+' / '+soldWood.qty)+
     row('🛍 ДР Товар — операций / товаров', soldDr.count+' / '+soldDr.qty)
   );
+
+  // Sold items breakdown (only items sold in this shift)
+  function itemRow(it){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:12px">'+
+      '<span style="flex:1">'+it.name+'</span>'+
+      '<span style="color:#8888aa;margin:0 8px">× '+it.qty+'</span>'+
+      '<span style="color:#c8f060;font-weight:700">'+fmt(it.amt)+'</span>'+
+    '</div>';
+  }
+  if(soldItemsWoodList.length || soldItemsDrList.length){
+    var soldHtml = '';
+    if(soldItemsWoodList.length){
+      soldHtml += '<div style="font-size:11px;color:#60f090;font-weight:700;margin:6px 0 4px">🌳 ДЕРЕВО</div>'+
+        soldItemsWoodList.map(itemRow).join('');
+    }
+    if(soldItemsDrList.length){
+      soldHtml += '<div style="font-size:11px;color:#a060f0;font-weight:700;margin:'+(soldItemsWoodList.length?'10':'6')+'px 0 4px">🛍 ДР ТОВАР</div>'+
+        soldItemsDrList.map(itemRow).join('');
+    }
+    html += block('📦 Проданные товары', soldHtml);
+  }
 
   // Writeoffs
   html += '<div class="card" style="margin-bottom:10px">'+
