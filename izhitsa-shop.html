@@ -1812,8 +1812,40 @@ function doLogin(){
        loginSellerId:sellerId, loginSellerName:seller.name, loginShop:shopName});
   }
 
-  pendingSession={shopName,sellerName:seller.name,sellerId};
-  openMorningModal();
+  // Fallback: check Firestore for an open shift for this seller+shop, in case
+  // the local session was lost (different browser context, cleared storage,
+  // etc.) but a live shift document still exists from another device/session.
+  try{
+    db.collection('iz_shifts').where('status','==','open')
+      .get().then(function(snap){
+        var found=null;
+        snap.forEach(function(doc){
+          var d=doc.data();
+          if(d.shopName===shopName && d.sellerName===seller.name) found=d;
+        });
+        if(found){
+          session = {shopName:found.shopName, sellerName:found.sellerName, sellerId:sellerId,
+            shiftId:found.id, openedAt:found.openedAt,
+            cashMorning:found.cashMorning, goodsMorning:found.goodsMorning,
+            cashDrMorning:found.cashDrMorning, goodsDrMorning:found.goodsDrMorning,
+            cashStaffMorning:found.cashStaffMorning, shopType:'shop'};
+          journal = found.journal||[];
+          saveS(); saveJ();
+          startApp();
+          syncLiveShift();
+          showToast('📂 Восстановлена незакрытая смена (из облака)');
+        } else {
+          pendingSession={shopName,sellerName:seller.name,sellerId};
+          openMorningModal();
+        }
+      }).catch(function(){
+        pendingSession={shopName,sellerName:seller.name,sellerId};
+        openMorningModal();
+      });
+  }catch(e){
+    pendingSession={shopName,sellerName:seller.name,sellerId};
+    openMorningModal();
+  }
 }
 
 function exitShift(){
