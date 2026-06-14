@@ -501,6 +501,29 @@ function applyUpdate() {
   <div class="page" id="pg-restore">
     <div class="stitle">🗄 Восстановление данных</div>
 
+    <!-- ОТКРЫТЬ СМЕНУ ВОССТАНОВЛЕНИЯ -->
+    <div class="card" id="rstShiftCard" style="border-color:#c8f060;margin-bottom:14px">
+      <div class="ctitle">📅 Смена восстановления</div>
+      <div id="rstShiftClosed">
+        <div style="font-size:12px;color:#8888aa;margin-bottom:10px">Откройте смену — все данные, внесённые ниже (журнал, накладные, активация), будут привязаны к ней.</div>
+        <div class="fg"><label class="fl">Магазин</label><select class="fs" id="rstShiftShop" onchange="rstShiftPopulateSellers()"></select></div>
+        <div class="fg"><label class="fl">Продавец</label><select class="fs" id="rstShiftSeller"></select></div>
+        <div class="fg" style="margin-bottom:0"><label class="fl">Дата</label>
+          <input class="fi" type="date" id="rstShiftDate" style="-webkit-appearance:none;color-scheme:dark">
+        </div>
+        <button class="btn" style="margin-top:12px" onclick="openRestoreShift()">📂 Открыть смену</button>
+      </div>
+      <div id="rstShiftOpen" style="display:none">
+        <div style="background:#1e2a14;border:1px solid #c8f060;border-radius:10px;padding:10px 14px;margin-bottom:10px">
+          <div style="font-size:11px;color:#8888aa;margin-bottom:4px">СМЕНА ОТКРЫТА</div>
+          <div style="font-size:13px;font-weight:700" id="rstShiftSummary"></div>
+        </div>
+        <button class="btn sec" onclick="closeRestoreShift()">🔒 Закрыть смену</button>
+      </div>
+    </div>
+
+    <div id="rstMainBlock" style="display:none">
+
     <!-- 4 sub-tabs -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;margin-bottom:14px">
       <button type="button" id="rst_tab_invoices" onclick="switchRst('invoices')"
@@ -619,13 +642,13 @@ function applyUpdate() {
 
       <!-- ВРУЧНУЮ -->
       <div id="rstj_manual_tab" style="display:none">
-        <div class="card" style="margin-bottom:10px">
-          <div class="fg"><label class="fl">Магазин</label><select class="fs" id="psjShop" onchange="psjLoadJournal()"></select></div>
-          <div class="fg"><label class="fl">Продавец</label><select class="fs" id="psjSeller"></select></div>
-          <div class="fg" style="margin-bottom:0"><label class="fl">Дата</label>
-            <input class="fi" type="date" id="psjDate" onchange="psjLoadJournal()" style="-webkit-appearance:none;color-scheme:dark">
-          </div>
+        <div class="card" style="margin-bottom:10px;border-color:#c8f060">
+          <div style="font-size:11px;color:#8888aa;margin-bottom:4px">ЗАПИСИ ОТНОСЯТСЯ К СМЕНЕ:</div>
+          <div style="font-size:13px;font-weight:700" id="rstjShiftInfo"></div>
         </div>
+        <select class="fs" id="psjShop" style="display:none"></select>
+        <select class="fs" id="psjSeller" style="display:none"></select>
+        <input class="fi" type="date" id="psjDate" style="display:none">
         <div style="display:flex;gap:7px;margin-bottom:8px">
           <button class="btn" style="margin:0;flex:1.2;font-size:13px" onclick="openPsjMo('sale')">＋ Продажа</button>
           <button class="btn red" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openPsjMo('writeoff')">🗑 Списание</button>
@@ -717,6 +740,26 @@ function applyUpdate() {
               </div>
             </div>
           </div>
+          <div style="background:#2e1a1a;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div style="font-size:11px;color:#f06060;font-weight:700">🗑 СПИСАНИЕ (из журнала смены)</div>
+              <button type="button" onclick="openPsjMo('writeoff')" style="background:none;border:1px solid #f06060;border-radius:8px;padding:4px 8px;font-size:11px;color:#f06060;cursor:pointer">＋ Добавить</button>
+            </div>
+            <div id="psWriteoffsList" style="font-size:12px;color:#8888aa">Нет списаний за эту смену</div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-top:6px;padding-top:6px;border-top:1px solid #3e2e2e">
+              <span>Итого списано</span><span style="color:#f06060" id="psWriteoffsTotal">0₽</span>
+            </div>
+          </div>
+          <div style="background:#1e2a2e;border-radius:10px;padding:10px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div style="font-size:11px;color:#60c8f0;font-weight:700">📥 ПРИХОД (из журнала смены)</div>
+              <button type="button" onclick="openPsjMo('receive')" style="background:none;border:1px solid #60c8f0;border-radius:8px;padding:4px 8px;font-size:11px;color:#60c8f0;cursor:pointer">＋ Добавить</button>
+            </div>
+            <div id="psReceivesList" style="font-size:12px;color:#8888aa">Нет приходов за эту смену</div>
+            <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-top:6px;padding-top:6px;border-top:1px solid #2e3e3e">
+              <span>Итого принято</span><span style="color:#60c8f0" id="psReceivesTotal">0₽</span>
+            </div>
+          </div>
         </div>
         <!-- DR BLOCK -->
         <div id="acc_dr">
@@ -745,6 +788,8 @@ function applyUpdate() {
         <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="psComment" placeholder="Причина внесения задним числом..."></div>
         <button class="btn" onclick="savePastShift()">💾 Сохранить смену</button>
       </div>
+    </div>
+
     </div>
   </div>
 
@@ -4121,6 +4166,47 @@ var psWriteoffs=[], psDrWriteoffs=[], psReceives=[], psDrReceives=[], psStaffs=[
 
 function fmt2(n){ return Math.round(n||0).toLocaleString('ru-RU')+'₽'; }
 
+// Sync psWriteoffs/psReceives from journal entries (iz_psj) of the open restore shift
+function psSyncFromJournal(){
+  var shop=gv('psShop'), date=gv('psDate');
+  if(!shop||!date) return;
+  var entries=getPsjEntries().filter(function(e){ return e.shopName===shop && e.date===date; });
+
+  psWriteoffs = entries.filter(function(e){ return e.type==='writeoff' && (!e.goodsType||e.goodsType==='derevo'); })
+    .map(function(e){ return {name:e.label||'Списание', qty:'', reason:e.sub||'', amt:e.amount||0}; });
+  psDrWriteoffs = entries.filter(function(e){ return e.type==='writeoff' && e.goodsType==='dr'; })
+    .map(function(e){ return {name:e.label||'Списание', qty:'', reason:e.sub||'', amt:e.amount||0}; });
+  psReceives = entries.filter(function(e){ return e.type==='receive' && (!e.goodsType||e.goodsType==='derevo'); })
+    .map(function(e){ return {name:e.label||'Приход', num:'', qty:'', price:'', from:e.sub||'', amt:e.amount||0}; });
+  psDrReceives = entries.filter(function(e){ return e.type==='receive' && e.goodsType==='dr'; })
+    .map(function(e){ return {name:e.label||'Приход', num:'', qty:'', price:'', from:e.sub||'', amt:e.amount||0}; });
+
+  renderPsJournalLists();
+  psCalcGoods();
+}
+
+function renderPsJournalLists(){
+  var woList=document.getElementById('psWriteoffsList');
+  var woTotal=document.getElementById('psWriteoffsTotal');
+  if(woList){
+    if(!psWriteoffs.length){ woList.innerHTML='Нет списаний за эту смену'; }
+    else woList.innerHTML=psWriteoffs.map(function(w){
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid #3e2e2e"><span>'+(w.reason||w.name)+'</span><span style="color:#f06060;font-weight:700">'+fmt2(w.amt)+'</span></div>';
+    }).join('');
+  }
+  if(woTotal) woTotal.textContent=fmt2(psWriteoffs.reduce(function(s,w){return s+(w.amt||0);},0));
+
+  var rcList=document.getElementById('psReceivesList');
+  var rcTotal=document.getElementById('psReceivesTotal');
+  if(rcList){
+    if(!psReceives.length){ rcList.innerHTML='Нет приходов за эту смену'; }
+    else rcList.innerHTML=psReceives.map(function(r){
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid #2e3e3e"><span>'+(r.from||r.name)+'</span><span style="color:#60c8f0;font-weight:700">'+fmt2(r.amt)+'</span></div>';
+    }).join('');
+  }
+  if(rcTotal) rcTotal.textContent=fmt2(psReceives.reduce(function(s,r){return s+(r.amt||0);},0));
+}
+
 // Load prev shift data when shop/date changes
 function psLoadPrev(){
   var shop=gv('psShop'), date=gv('psDate');
@@ -4128,6 +4214,8 @@ function psLoadPrev(){
   var shifts=JSON.parse(localStorage.getItem('iz_shifts')||'[]');
   // Find last shift for this shop before selected date
   var prev=shifts.filter(s=>s.shopName===shop&&s.date<date).sort((a,b)=>b.date.localeCompare(a.date))[0];
+
+  psSyncFromJournal();
 
   // Nал утро hint
   var mornInfo=document.getElementById('psPrevCashInfo');
@@ -5295,17 +5383,107 @@ function switchPsTab(tab) {
   if(isJournal) psjInit();
 }
 
-function psjInit() {
-  // Populate shops
+// ════ RESTORE SHIFT (Восст.) ════
+var RESTORE_SHIFT_KEY = 'iz_restore_shift';
+var _restoreShift = null;
+
+function getRestoreShift(){
+  try{ return JSON.parse(localStorage.getItem(RESTORE_SHIFT_KEY)||'null'); }catch(e){ return null; }
+}
+function saveRestoreShift(sh){
+  if(sh) localStorage.setItem(RESTORE_SHIFT_KEY, JSON.stringify(sh));
+  else localStorage.removeItem(RESTORE_SHIFT_KEY);
+}
+
+function rstShiftPopulateSellers(){
+  var shop = (document.getElementById('rstShiftShop')||{}).value || '';
+  var sellers = getSellers().filter(function(s){ return !s.blocked && (!s.shops || !s.shops.length || s.shops.indexOf(shop)>=0); });
+  var sel = document.getElementById('rstShiftSeller');
+  if(sel) sel.innerHTML = sellers.map(function(s){ return '<option value="'+s.id+'">'+s.name+'</option>'; }).join('');
+}
+
+function initRestoreShiftUI(){
   var shops = getShopNames();
-  var shopSel = document.getElementById('psjShop');
+  var shopSel = document.getElementById('rstShiftShop');
   if(shopSel) shopSel.innerHTML = shops.map(function(s){ return '<option>'+s+'</option>'; }).join('');
-  // Populate sellers
-  psjPopulateSellers();
-  // Default date = today
-  var d = document.getElementById('psjDate');
+  rstShiftPopulateSellers();
+  var d = document.getElementById('rstShiftDate');
   if(d && !d.value) d.value = new Date().toISOString().split('T')[0];
-  psjLoadJournal();
+
+  _restoreShift = getRestoreShift();
+  renderRestoreShiftState();
+}
+
+function renderRestoreShiftState(){
+  var closedBlock = document.getElementById('rstShiftClosed');
+  var openBlock = document.getElementById('rstShiftOpen');
+  var mainBlock = document.getElementById('rstMainBlock');
+  if(!closedBlock || !openBlock || !mainBlock) return;
+  if(_restoreShift && _restoreShift.shop && _restoreShift.date){
+    closedBlock.style.display = 'none';
+    openBlock.style.display = 'block';
+    mainBlock.style.display = 'block';
+    document.getElementById('rstShiftSummary').textContent =
+      '🏪 ' + _restoreShift.shop + ' · 👤 ' + (_restoreShift.sellerName||'—') + ' · 📅 ' + _restoreShift.date;
+    // Sync hidden psj fields and shop pickers used by накладные/активация/смены
+    var psjShop = document.getElementById('psjShop');
+    if(psjShop){ psjShop.innerHTML = '<option>'+_restoreShift.shop+'</option>'; psjShop.value = _restoreShift.shop; }
+    var psjSeller = document.getElementById('psjSeller');
+    if(psjSeller){ psjSeller.innerHTML = '<option value="'+(_restoreShift.sellerId||'')+'">'+(_restoreShift.sellerName||'')+'</option>'; psjSeller.value = _restoreShift.sellerId||''; }
+    var psjDate = document.getElementById('psjDate');
+    if(psjDate){ psjDate.value = _restoreShift.date; }
+    var info = document.getElementById('rstjShiftInfo');
+    if(info) info.textContent = '🏪 ' + _restoreShift.shop + ' · 👤 ' + (_restoreShift.sellerName||'—') + ' · 📅 ' + _restoreShift.date;
+    // Pre-fill shop/date pickers in other sub-tabs for convenience
+    ['rstInvShop','rstActShop'].forEach(function(id){
+      var el=document.getElementById(id); if(el && el.tagName==='SELECT'){
+        var opt=Array.prototype.find.call(el.options, function(o){return o.value===_restoreShift.shop || o.text===_restoreShift.shop;});
+        if(opt) el.value = opt.value;
+      }
+    });
+    // Смены (rst_shifts) tab — populate shop/seller/date from restore shift
+    var psShopEl = document.getElementById('psShop');
+    if(psShopEl){ psShopEl.innerHTML = '<option>'+_restoreShift.shop+'</option>'; psShopEl.value = _restoreShift.shop; }
+    var psSellerEl = document.getElementById('psSeller');
+    if(psSellerEl){ psSellerEl.innerHTML = '<option>'+(_restoreShift.sellerName||'')+'</option>'; psSellerEl.value = _restoreShift.sellerName||''; }
+    var psDateEl = document.getElementById('psDate');
+    if(psDateEl){ psDateEl.value = _restoreShift.date; }
+    ['rstInvDate'].forEach(function(id){
+      var el=document.getElementById(id); if(el && !el.value) el.value=_restoreShift.date;
+    });
+    psjLoadJournal();
+    try{ psSyncFromJournal(); }catch(e){}
+  } else {
+    closedBlock.style.display = 'block';
+    openBlock.style.display = 'none';
+    mainBlock.style.display = 'none';
+  }
+}
+
+function openRestoreShift(){
+  var shop = gv('rstShiftShop');
+  var sellerSel = document.getElementById('rstShiftSeller');
+  var sellerId = sellerSel ? sellerSel.value : '';
+  var sellerName = sellerSel && sellerSel.selectedIndex>=0 ? sellerSel.options[sellerSel.selectedIndex].text : '';
+  var date = gv('rstShiftDate');
+  if(!shop || !date){ showToast('Выберите магазин и дату'); return; }
+  _restoreShift = {shop:shop, sellerId:sellerId, sellerName:sellerName, date:date, openedAt:new Date().toISOString()};
+  saveRestoreShift(_restoreShift);
+  renderRestoreShiftState();
+  switchRst('journal'); switchRstJ('manual', document.getElementById('rstj_manual'));
+  showToast('📂 Смена восстановления открыта');
+}
+
+function closeRestoreShift(){
+  if(!confirm('Закрыть смену восстановления? Уже внесённые записи останутся сохранёнными.')) return;
+  _restoreShift = null;
+  saveRestoreShift(null);
+  renderRestoreShiftState();
+  showToast('🔒 Смена восстановления закрыта');
+}
+
+function psjInit() {
+  renderRestoreShiftState();
 }
 
 function psjPopulateSellers() {
@@ -5316,7 +5494,7 @@ function psjPopulateSellers() {
 }
 
 // Storage key for backdate journal entries
-var PSJ_KEY = 'iz_psj_entries';
+var PSJ_KEY = 'iz_psj';
 
 function getPsjEntries() {
   return JSON.parse(localStorage.getItem(PSJ_KEY) || '[]');
@@ -5326,7 +5504,6 @@ function savePsjEntries(entries) {
 }
 
 function psjLoadJournal() {
-  psjPopulateSellers();
   var date = (document.getElementById('psjDate')||{}).value || '';
   var shop = (document.getElementById('psjShop')||{}).value || '';
   var entries = getPsjEntries().filter(function(e){ return e.date === date && e.shopName === shop; });
@@ -5375,6 +5552,7 @@ function psjLoadJournal() {
 function deletePsjEntry(id) {
   var entries = getPsjEntries().filter(function(e){ return e.id !== id; });
   savePsjEntries(entries);
+  try{ db.collection('iz_psj').doc(id).delete(); }catch(e){}
   psjLoadJournal();
 }
 
@@ -5747,6 +5925,7 @@ function savePsjEntry(type) {
   if(savedCount){
     savePsjEntries(entries);
     psjLoadJournal();
+    try{ psSyncFromJournal(); }catch(e){}
     showToast('✅ Запись добавлена');
   }
 }
@@ -6206,6 +6385,7 @@ function generatePeriodReport(){
 
 // ════ RESTORE MODULE ════
 function initRestore() {
+  initRestoreShiftUI();
   switchRst('invoices');
 }
 
