@@ -1026,6 +1026,15 @@ function applyUpdate() {
           <div id="siSpecies_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
         </div>
         <div class="fg" style="margin:0"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="siPrice" placeholder="0" inputmode="numeric" oninput="checkItemDiff()"></div>
+        <div class="fg" style="margin-top:8px;margin-bottom:0">
+          <label class="fl">Тип товара</label>
+          <div style="display:flex;gap:6px">
+            <button type="button" id="siTypeDerevo" onclick="setSiItemType('derevo')"
+              style="flex:1;padding:7px;border-radius:8px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">🌳 Дерево</button>
+            <button type="button" id="siTypeDr" onclick="setSiItemType('dr')"
+              style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
+          </div>
+        </div>
         <div id="siDiffWarn" style="display:none;margin-top:8px;padding:8px;background:#2e1a1a;border:1px solid #f06060;border-radius:8px;font-size:11px;color:#f06060"></div>
       </div>
       <div id="siManualBlock" style="display:none">
@@ -1052,6 +1061,15 @@ function applyUpdate() {
           <div id="siSpeciesM_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
         </div>
         <div class="fg" style="margin:0"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="siPriceM" placeholder="0" inputmode="numeric"></div>
+        <div class="fg" style="margin-top:8px;margin-bottom:0">
+          <label class="fl">Тип товара</label>
+          <div style="display:flex;gap:6px">
+            <button type="button" id="siTypeDerevoM" onclick="setSiItemType('derevo')"
+              style="flex:1;padding:7px;border-radius:8px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">🌳 Дерево</button>
+            <button type="button" id="siTypeDrM" onclick="setSiItemType('dr')"
+              style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="fg">
@@ -1089,20 +1107,6 @@ function applyUpdate() {
     <div id="mixedBlock" style="display:none" class="row2">
       <div class="fg"><label class="fl">Нал (₽)</label><input class="fi" type="number" id="mixCash" placeholder="0" inputmode="numeric"></div>
       <div class="fg"><label class="fl">Безнал (₽)</label><input class="fi" type="number" id="mixCard" placeholder="0" inputmode="numeric"></div>
-    </div>
-    <!-- Тип товара — Дерево или ДР Товар -->
-    <div class="fg">
-      <label class="fl">Тип товара</label>
-      <div style="display:flex;gap:8px">
-        <button type="button" id="goodsTypeDerevo" onclick="setGoodsType('derevo',this)"
-          style="flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">
-          🌳 Дерево
-        </button>
-        <button type="button" id="goodsTypeDr" onclick="setGoodsType('dr',this)"
-          style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer">
-          🛍 ДР Товар
-        </button>
-      </div>
     </div>
 
     <!-- Transfer card selector -->
@@ -1609,10 +1613,6 @@ function editJournalSale(id){
 
   saleItems = (entry.items||[]).map(function(it){ return Object.assign({}, it, {id:uid()}); });
   renderSaleItems(); calcSaleTotal();
-
-  // Goods type
-  goodsType = entry.goodsType||'derevo';
-  setGoodsType(goodsType, document.getElementById(goodsType==='dr'?'goodsTypeDr':'goodsTypeDerevo'));
 
   // Discount
   if(entry.discount){
@@ -2491,52 +2491,81 @@ function renderShiftDetail(shift){
   var goodsDr = (shift.goodsDrMorning||0) + journal.reduce(function(s,e){return s+(e.goodsDrEffect||0);},0);
 
   // ── Sales totals by payment method, split by goods type ──
-  var salesWood = sales.filter(function(e){ return e.goodsType!=='dr'; });
-  var salesDr = sales.filter(function(e){ return e.goodsType==='dr'; });
-
-  function computeSalesTotals(salesArr){
-    var revenue = salesArr.reduce(function(s,e){return s+(e.amount||0);},0);
-    var discount = salesArr.reduce(function(s,e){return s+(e.discount||0);},0);
+  // Each sale entry already carries cashEffect/cardEffect (Дерево portion)
+  // and cashDrEffect/cardDrEffect (ДР Товар portion), split proportionally
+  // at save time — use these instead of filtering whole sales, since a
+  // single sale can mix both categories.
+  function computeSalesTotalsSplit(salesArr, isDr){
+    var revenue=0, discount=0;
     var payTotals = {cash:0,terminal:0,sbp:0,transfer:0,qr:0,rs:0,mixed:0};
     salesArr.forEach(function(e){
+      var items=e.items||[];
+      if(!items.length){
+        // Legacy entries with no items[] — treat the whole sale as Дерево
+        if(isDr) return;
+        revenue += (e.amount||0);
+        discount += (e.discount||0);
+        if(e.payMethod==='mixed'){
+          payTotals.cash += e.cashEffect||0;
+          payTotals.terminal += e.cardEffect||0;
+        } else {
+          var key0 = payTotals.hasOwnProperty(e.payMethod) ? e.payMethod : 'terminal';
+          payTotals[key0] += (e.cashEffect||0)+(e.cardEffect||0);
+        }
+        return;
+      }
+      var groupItems = items.filter(function(it){ return isDr ? it.goodsType==='dr' : it.goodsType!=='dr'; });
+      if(!groupItems.length) return;
+      var groupTotal = groupItems.reduce(function(s,it){ return s+(it.price||0); },0);
+      var saleTotal = e.totalPrice || items.reduce(function(s,it){ return s+(it.price||0); },0) || 1;
+      var share = groupTotal/saleTotal;
+      revenue += (e.amount||0)*share;
+      discount += (e.discount||0)*share;
+      var cash = isDr ? (e.cashDrEffect||0) : (e.cashEffect||0);
+      var card = isDr ? (e.cardDrEffect||0) : (e.cardEffect||0);
       if(e.payMethod==='mixed'){
-        payTotals.cash += e.cashPart||0;
-        payTotals.terminal += e.cardPart||0;
+        payTotals.cash += cash;
+        payTotals.terminal += card;
       } else {
         var key = payTotals.hasOwnProperty(e.payMethod) ? e.payMethod : 'terminal';
-        payTotals[key] += (e.cashPart||0)+(e.cardPart||0);
+        payTotals[key] += cash+card;
       }
     });
-    return {revenue:revenue, discount:discount, payTotals:payTotals};
+    return {revenue:Math.round(revenue), discount:Math.round(discount), payTotals:payTotals};
   }
-  var totalsWood = computeSalesTotals(salesWood);
-  var totalsDr = computeSalesTotals(salesDr);
+  var totalsWood = computeSalesTotalsSplit(sales, false);
+  var totalsDr = computeSalesTotalsSplit(sales, true);
 
-  // ── Sold items by category (дерево / др товар) ──
+  // ── Sold items by category (дерево / др товар), per item ──
   var soldWood = {count:0, qty:0}, soldDr = {count:0, qty:0};
   sales.forEach(function(e){
-    var target = e.goodsType==='dr' ? soldDr : soldWood;
-    target.count++;
-    var items = e.items||[];
-    if(items.length){ items.forEach(function(it){ target.qty += (it.qty||1); }); }
-    else target.qty += 1;
-  });
-
-  // ── Sold items breakdown by name (for "Проданные товары" block) ──
-  var soldItemsWood = {}, soldItemsDr = {};
-  sales.forEach(function(e){
-    var target = e.goodsType==='dr' ? soldItemsDr : soldItemsWood;
     var items = e.items||[];
     if(items.length){
+      var countedWood=false, countedDr=false;
       items.forEach(function(it){
-        var name = (it.name && it.name.trim()) || 'Без названия';
-        var qty = it.qty||1;
-        var amt = it.amt!=null ? it.amt : (it.price||0)*qty;
-        if(!target[name]) target[name]={qty:0, amt:0};
-        target[name].qty += qty;
-        target[name].amt += amt;
+        if(it.goodsType==='dr'){ soldDr.qty += (it.qty||1); countedDr=true; }
+        else { soldWood.qty += (it.qty||1); countedWood=true; }
       });
+      if(countedWood) soldWood.count++;
+      if(countedDr) soldDr.count++;
+    } else {
+      soldWood.count++; soldWood.qty+=1;
     }
+  });
+
+  // ── Sold items breakdown by name (for "Проданные товары" block), per item ──
+  var soldItemsWood = {}, soldItemsDr = {};
+  sales.forEach(function(e){
+    var items = e.items||[];
+    items.forEach(function(it){
+      var target = it.goodsType==='dr' ? soldItemsDr : soldItemsWood;
+      var name = (it.name && it.name.trim()) || 'Без названия';
+      var qty = it.qty||1;
+      var amt = it.amt!=null ? it.amt : (it.price||0)*qty;
+      if(!target[name]) target[name]={qty:0, amt:0};
+      target[name].qty += qty;
+      target[name].amt += amt;
+    });
   });
   function soldItemsToList(map){
     return Object.keys(map).map(function(name){ return {name:name, qty:map[name].qty, amt:map[name].amt}; })
@@ -2861,6 +2890,21 @@ function renderJournal(){
 }
 
 // ════ ITEM LOOKUP ════
+var _siItemGoodsType = 'derevo';
+function setSiItemType(type){
+  _siItemGoodsType = type;
+  ['','M'].forEach(function(suf){
+    var db=document.getElementById('siTypeDerevo'+suf), dr=document.getElementById('siTypeDr'+suf);
+    if(type==='derevo'){
+      if(db) db.style.cssText='flex:1;padding:7px;border-radius:8px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer';
+      if(dr) dr.style.cssText='flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer';
+    } else {
+      if(dr) dr.style.cssText='flex:1;padding:7px;border-radius:8px;border:2px solid #a060f0;background:#1e1a2e;color:#a060f0;font-size:11px;font-weight:700;cursor:pointer';
+      if(db) db.style.cssText='flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer';
+    }
+  });
+}
+
 function getItemNames(){
   var names = {};
   getItemsBase().forEach(function(it){ if(it.name) names[it.name]=true; });
@@ -2931,8 +2975,8 @@ function resetSaleForm(){
   }
   var tb=document.getElementById('transferCardBlock'); if(tb)tb.style.display='none';
   var rb=document.getElementById('rsAccountBlock'); if(rb)rb.style.display='none';
-  saleItems=[]; goodsType='derevo';
-  setGoodsType('derevo', document.getElementById('goodsTypeDerevo'));
+  saleItems=[];
+  setSiItemType('derevo');
   renderSaleItems(); calcSaleTotal();
   ['siNum','siName','siPrice','siSpecies','siNameM','siPriceM','siSpeciesM','saleComment','mixCash','mixCard','discInput','saleDiscount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('siLookupResult').style.display='none';
@@ -2963,10 +3007,11 @@ function addSaleItem(){
     name=(gv('siNameM')||'').trim(); price=parseFloat(gv('siPriceM'))||0; species=(gv('siSpeciesM')||'').trim();
     if(!name){showToast('Введите наименование');return;} hasDiff=true; diffNote='⚠️ артикул не найден в базе';
   } else { showToast('Введите артикул'); return; }
-  saleItems.push({id:uid(),num,name,price,species,hasDiff,diffNote});
+  saleItems.push({id:uid(),num,name,price,species,goodsType:_siItemGoodsType,hasDiff,diffNote});
   ['siNum','siName','siPrice','siSpecies','siNameM','siPriceM','siSpeciesM'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   lr.style.display='none'; mb.style.display='none'; currentLookupItem=null;
   document.getElementById('siDiffWarn').style.display='none';
+  setSiItemType('derevo');
   renderSaleItems(); calcSaleTotal();
 }
 function renderSaleItems(){
@@ -2975,12 +3020,44 @@ function renderSaleItems(){
   c.innerHTML=saleItems.map((it,i)=>`
     <div class="sir" style="border-color:${it.hasDiff?'#f06060':'#2e2e3e'};background:${it.hasDiff?'#2e1a1a':'#22222e'}">
       <div class="sir-num" style="color:${it.hasDiff?'#f06060':'#8888aa'}">${it.num||'—'}</div>
-      <div class="sir-info"><div class="sir-name">${it.name}${it.species?` <span style="color:#f0c060;font-size:11px">· ${it.species}</span>`:''}</div>
+      <div class="sir-info"><div class="sir-name">${it.name}${it.species?` <span style="color:#f0c060;font-size:11px">· ${it.species}</span>`:''} <span style="font-size:10px;padding:1px 6px;border-radius:6px;background:${it.goodsType==='dr'?'#1e1a2e':'#1e2a14'};color:${it.goodsType==='dr'?'#a060f0':'#c8f060'}">${it.goodsType==='dr'?'🛍 ДР':'🌳 Дерево'}</span></div>
         <div class="sir-price" style="color:${it.hasDiff?'#f06060':'#c8f060'}">${fmt(it.price)}</div>
         ${it.hasDiff?`<div style="font-size:11px;color:#f06060;margin-top:2px">${it.diffNote}</div>`:''}
       </div>
-      <button class="sir-del" onclick="saleItems.splice(${i},1);renderSaleItems();calcSaleTotal()">✕</button>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button class="sir-del" onclick="siEditItem(${i})" style="border:1px solid #c8f060;border-radius:6px;color:#c8f060;font-size:13px;padding:3px 6px">✏️</button>
+        <button class="sir-del" onclick="saleItems.splice(${i},1);renderSaleItems();calcSaleTotal()">✕</button>
+      </div>
     </div>`).join('');
+}
+
+// Pull an already-added item back into the entry fields for correction.
+// Removes it from saleItems (it must be re-added via "+" after fixing).
+function siEditItem(i){
+  var it = saleItems[i]; if(!it) return;
+  saleItems.splice(i,1); renderSaleItems(); calcSaleTotal();
+  var numEl=document.getElementById('siNum');
+  if(numEl){ numEl.value = it.num||''; }
+  if(it.num){
+    lookupItem(it.num);
+    // If the article isn't in the catalog, lookupItem() shows the manual
+    // block — pre-fill it with the item's current values either way.
+  }
+  var lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
+  if(lr && lr.style.display!=='none'){
+    var nameEl=document.getElementById('siName'); if(nameEl) nameEl.value=it.name||'';
+    var priceEl=document.getElementById('siPrice'); if(priceEl) priceEl.value=it.price||'';
+    var spEl=document.getElementById('siSpecies'); if(spEl) spEl.value=it.species||'';
+    checkItemDiff();
+  } else {
+    if(mb) mb.style.display='block';
+    if(lr) lr.style.display='none';
+    var nameMEl=document.getElementById('siNameM'); if(nameMEl) nameMEl.value=it.name||'';
+    var priceMEl=document.getElementById('siPriceM'); if(priceMEl) priceMEl.value=it.price||'';
+    var spMEl=document.getElementById('siSpeciesM'); if(spMEl) spMEl.value=it.species||'';
+  }
+  showToast('✏️ Исправьте поля и нажмите ＋');
+  setSiItemType(it.goodsType==='dr'?'dr':'derevo');
 }
 function setDiscType(type){
   discType=type;
@@ -3000,20 +3077,6 @@ function calcSaleTotal(){
   const total=saleItems.reduce((s,it)=>s+it.price,0), disc=parseFloat(gv('saleDiscount'))||0;
   const el=document.getElementById('saleFinal'); if(el)el.textContent=fmt(Math.max(0,total-disc));
 }
-var goodsType = 'derevo';
-function setGoodsType(type, el){
-  goodsType = type;
-  var db = document.getElementById('goodsTypeDerevo');
-  var dr = document.getElementById('goodsTypeDr');
-  if(type==='derevo'){
-    if(db){ db.style.cssText='flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer'; }
-    if(dr){ dr.style.cssText='flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer'; }
-  } else {
-    if(dr){ dr.style.cssText='flex:1;padding:9px;border-radius:10px;border:2px solid #a060f0;background:#1e1a2e;color:#a060f0;font-size:12px;font-weight:700;cursor:pointer'; }
-    if(db){ db.style.cssText='flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer'; }
-  }
-}
-
 function setPayM(m,el){
   payMethod=m;
   document.querySelectorAll('#saleMo .pc').forEach(p=>p.classList.remove('active'));
@@ -3034,14 +3097,35 @@ function saveSale(){
   var payLabels={cash:'💵 Нал',terminal:'💳 Терминал',sbp:'📱 СБП',transfer:'🏦 Перевод'+(transferDest?' → '+transferDest:''),qr:'🔲 QR',mixed:'➗ Смешанный',rs:'🏦 РС'+(rsDest?' → '+rsDest:'')};
   const payL=payLabels[payMethod]||payMethod;
   const hasDiff=saleItems.some(i=>i.hasDiff);
+
+  // Split items by per-item goods type; discount and payment are entered
+  // once for the whole sale, so split them proportionally to each group's
+  // share of the pre-discount total — keeps cash/goods balances accurate
+  // even when one sale mixes Дерево and ДР Товар items.
+  var totalWood = saleItems.reduce(function(s,it){ return it.goodsType==='dr' ? s : s+it.price; },0);
+  var totalDr = total - totalWood;
+  var shareWood = total>0 ? totalWood/total : 0;
+  var discWood = Math.round(disc*shareWood);
+  var discDr = disc - discWood;
+  var paidWood = Math.max(0, totalWood-discWood);
+  var paidDr = Math.max(0, totalDr-discDr);
+  var sharePaidWood = paid>0 ? paidWood/paid : shareWood;
+  var cashPartWood = Math.round(cashPart*sharePaidWood);
+  var cardPartWood = Math.round(cardPart*sharePaidWood);
+  var cashPartDr = cashPart-cashPartWood;
+  var cardPartDr = cardPart-cardPartWood;
+
+  var hasWood = saleItems.some(function(it){ return it.goodsType!=='dr'; });
+  var hasDr = saleItems.some(function(it){ return it.goodsType==='dr'; });
+  var overallGoodsType = (hasWood && hasDr) ? 'mixed' : (hasDr ? 'dr' : 'derevo');
+
   var newEntryData = {ts:new Date().toISOString(),icon:hasDiff?'⚠️':'💰',
     label:hasDiff?'Продажа ⚠️':'Продажа',
-    sub:saleItems.map(i=>'№'+(i.num||'—')+' '+i.name+(i.hasDiff?' ⚠️':'')).join(', ')+(disc?' · Скидка '+fmt(disc):'')+' · '+payL,
-    items:[...saleItems],totalPrice:total,discount:disc,totalPaid:paid,payMethod,cashPart,cardPart,goodsType:goodsType,
+    sub:saleItems.map(i=>'№'+(i.num||'—')+' '+i.name+(i.goodsType==='dr'?' · ДР':'')+(i.hasDiff?' ⚠️':'')).join(', ')+(disc?' · Скидка '+fmt(disc):'')+' · '+payL,
+    items:[...saleItems],totalPrice:total,discount:disc,totalPaid:paid,payMethod,cashPart,cardPart,goodsType:overallGoodsType,
     hasDiff,comment:gv('saleComment'),amount:paid,amtCls:'inc',amtSign:'+',
-    cashEffect:(goodsType==='dr'?0:cashPart),cardEffect:(goodsType==='dr'?0:cardPart),staffEffect:0,
-    goodsEffect:(goodsType==='dr'?0:-total),
-    cashDrEffect:(goodsType==='dr'?cashPart:0),cardDrEffect:(goodsType==='dr'?cardPart:0),goodsDrEffect:(goodsType==='dr'?-total:0)};
+    cashEffect:cashPartWood,cardEffect:cardPartWood,staffEffect:0,goodsEffect:-totalWood,
+    cashDrEffect:cashPartDr,cardDrEffect:cardPartDr,goodsDrEffect:-totalDr};
 
   if(_editSaleEntryId){
     var idx = journal.findIndex(function(e){ return e.id===_editSaleEntryId; });
