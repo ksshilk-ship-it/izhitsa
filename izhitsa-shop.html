@@ -1792,14 +1792,12 @@ function doLogin(){
   if(seller.blocked){ err.style.display='block'; err.textContent='Аккаунт заблокирован'; return; }
   if(seller.pass!==pass){ err.style.display='block'; err.textContent='Неверный пароль'; return; }
 
-  // If this seller already has an open (unfinished) shift saved locally from
-  // TODAY, restore it instead of starting a brand-new shift (which would
-  // discard the open one). A stale shift from a previous day should not be
-  // silently carried forward — let the admin handle it via "Тревога".
+  // If this seller already has an open (unfinished) shift saved locally,
+  // restore it instead of starting a brand-new shift (which would discard
+  // the open one and its journal). The seller can close it normally once
+  // they're back in the app, regardless of which day it was opened.
   var existing = JSON.parse(localStorage.getItem(KEY.session)||'null');
-  var existingDate = existing && existing.openedAt ? existing.openedAt.split('T')[0] : null;
-  var today = new Date().toISOString().split('T')[0];
-  if(existing && existing.role!=='shopadmin' && existing.sellerId===sellerId && existing.shopName===shopName && existingDate===today){
+  if(existing && existing.role!=='shopadmin' && existing.sellerId===sellerId && existing.shopName===shopName){
     session = existing;
     journal = JSON.parse(localStorage.getItem(KEY.journal)||'[]');
     startApp();
@@ -2455,6 +2453,10 @@ function startAdminApp(){
     el.innerHTML=shops.map(s=>`<option>${s}</option>`).join('');
   });
   document.getElementById('psDate').value=new Date().toISOString().split('T')[0];
+  // Explicitly activate the home page (Смена/Главная)
+  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
+  var todayPg = document.getElementById('pg-today');
+  if(todayPg) todayPg.classList.add('active');
   renderShiftHistory(); renderSellersAdmin();
   startAdminShiftListener();
   startAdminAlertsListener();
