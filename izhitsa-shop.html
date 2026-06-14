@@ -5042,7 +5042,7 @@ function renderSellersAdmin(){
     const shopStr=(s.shops||[]).length?(s.shops||[]).join(', '):'';
     return `
     <div style="background:${s.blocked?'#2e1a1a':'#1a1a22'};border:1px solid ${s.blocked?'#f06060':'#2e2e3e'};border-radius:12px;padding:10px;margin-bottom:8px">
-      <div style="display:flex;align-items:center;gap:10px">
+      <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">
         <div style="font-size:22px">${s.blocked?'🚫':'🏪'}</div>
         <div style="flex:1">
           <div style="font-size:13px;font-weight:700">${s.name}${s.blocked?' (заблокирован)':''}</div>
@@ -5050,12 +5050,12 @@ function renderSellersAdmin(){
           ${shopStr?'<div style="font-size:11px;color:#60c8f0;margin-top:2px">📍 '+shopStr+'</div>':''}
           ${s.status?'<div style="font-size:11px;color:#ffb060;margin-top:2px">👤 '+s.status+'</div>':''}
         </div>
-        <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
-          <button onclick="editStaffShop(${idx})" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:13px;color:#60c8f0;cursor:pointer">✏️</button>
-          <button onclick="openBlockSeller('${s.blocked?'unblock':'block'}',${idx},'${s.name}')" style="background:${s.blocked?'#1a2e1e':'#2a1e14'};border:1px solid ${s.blocked?'#60f090':'#f0a060'};border-radius:8px;padding:4px 8px;font-size:10px;color:${s.blocked?'#60f090':'#f0a060'};cursor:pointer;white-space:nowrap">${s.blocked?'Разблок.':'Блок.'}</button>
-          <button onclick="openBlockSeller('archive',${idx},'${s.name}')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:10px;color:#8888aa;cursor:pointer">📥</button>
-          <button onclick="openBlockSeller('delete',${idx},'${s.name}')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:10px;color:#f06060;cursor:pointer">✕</button>
-        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button onclick="editStaffShop(${idx})" style="flex:1;min-width:40px;background:none;border:1px solid #2e2e3e;border-radius:8px;padding:6px 8px;font-size:13px;color:#60c8f0;cursor:pointer">✏️</button>
+        <button onclick="openBlockSeller('${s.blocked?'unblock':'block'}',${idx},'${s.name}')" style="flex:2;min-width:70px;background:${s.blocked?'#1a2e1e':'#2a1e14'};border:1px solid ${s.blocked?'#60f090':'#f0a060'};border-radius:8px;padding:6px 8px;font-size:11px;color:${s.blocked?'#60f090':'#f0a060'};cursor:pointer;white-space:nowrap">${s.blocked?'Разблок.':'Блок.'}</button>
+        <button onclick="openBlockSeller('archive',${idx},'${s.name}')" style="flex:1;min-width:40px;background:none;border:1px solid #2e2e3e;border-radius:8px;padding:6px 8px;font-size:13px;color:#8888aa;cursor:pointer">📥</button>
+        <button onclick="openBlockSeller('delete',${idx},'${s.name}')" style="flex:1;min-width:40px;background:none;border:1px solid #2e2e3e;border-radius:8px;padding:6px 8px;font-size:13px;color:#f06060;cursor:pointer">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -5094,21 +5094,20 @@ function renderAdminsAdminList(){
     const idx=staff.indexOf(a);
     const roleStr=(a.roles||[]).map(function(r){return STAFF_ROLE_LABELS[r]||r;}).join(' · ');
     return `
-    <div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:8px;background:${a.blocked?'#2e1a1a':'#1e1a2e'};border:1px solid ${a.blocked?'#f06060':'#a060f0'};border-radius:12px">
-      <div style="font-size:22px">${a.blocked?'🚫':'🔐'}</div>
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:700">${a.name}${a.blocked?' (заблокирован)':''}</div>
-        <div style="font-size:11px;color:#8888aa">${roleStr}</div>
-        ${a.status?'<div style="font-size:11px;color:#ffb060;margin-top:2px">👤 '+a.status+'</div>':''}
+    <div style="padding:10px;margin-bottom:8px;background:${a.blocked?'#2e1a1a':'#1e1a2e'};border:1px solid ${a.blocked?'#f06060':'#a060f0'};border-radius:12px">
+      <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">
+        <div style="font-size:22px">${a.blocked?'🚫':'🔐'}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700">${a.name}${a.blocked?' (заблокирован)':''}</div>
+          <div style="font-size:11px;color:#8888aa">${roleStr}</div>
+          ${a.status?'<div style="font-size:11px;color:#ffb060;margin-top:2px">👤 '+a.status+'</div>':''}
+        </div>
       </div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
-        <button onclick="editStaffShop(${idx})" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:13px;color:#60c8f0;cursor:pointer">✏️</button>
-        <button onclick="openBlockSeller('${a.blocked?'unblock':'block'}',${idx},'${a.name}')" style="background:${a.blocked?'#1a2e1e':'#2a1e14'};border:1px solid ${a.blocked?'#60f090':'#f0a060'};border-radius:8px;padding:4px 8px;font-size:10px;color:${a.blocked?'#60f090':'#f0a060'};cursor:pointer;white-space:nowrap">${a.blocked?'Разблок.':'Блок.'}</button>
-        <button onclick="openBlockSeller('archive',${idx},'${a.name}')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:10px;color:#8888aa;cursor:pointer">📥</button>
-        <button onclick="openBlockSeller('delete',${idx},'${a.name}')"
-          style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:11px;color:#f06060;cursor:pointer">
-          ✕ Удалить
-        </button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button onclick="editStaffShop(${idx})" style="flex:1;min-width:40px;background:none;border:1px solid #2e2e3e;border-radius:8px;padding:6px 8px;font-size:13px;color:#60c8f0;cursor:pointer">✏️</button>
+        <button onclick="openBlockSeller('${a.blocked?'unblock':'block'}',${idx},'${a.name}')" style="flex:2;min-width:70px;background:${a.blocked?'#1a2e1e':'#2a1e14'};border:1px solid ${a.blocked?'#60f090':'#f0a060'};border-radius:8px;padding:6px 8px;font-size:11px;color:${a.blocked?'#60f090':'#f0a060'};cursor:pointer;white-space:nowrap">${a.blocked?'Разблок.':'Блок.'}</button>
+        <button onclick="openBlockSeller('archive',${idx},'${a.name}')" style="flex:1;min-width:40px;background:none;border:1px solid #2e2e3e;border-radius:8px;padding:6px 8px;font-size:13px;color:#8888aa;cursor:pointer">📥</button>
+        <button onclick="openBlockSeller('delete',${idx},'${a.name}')" style="flex:1;min-width:40px;background:none;border:1px solid #2e2e3e;border-radius:8px;padding:6px 8px;font-size:13px;color:#f06060;cursor:pointer">✕</button>
       </div>
     </div>`;
   }).join('');
