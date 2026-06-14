@@ -1586,6 +1586,67 @@ function startSyncListeners() {
 let session = null, pendingSession = null;
 let journal = [];
 let saleItems = [], payMethod = 'cash', staffPayMethod = 'cash', discType = 'pct';
+var _editSaleEntryId = null;
+
+function deleteJournalEntryShop(id){
+  var entry = journal.find(function(e){ return e.id===id; });
+  if(!entry){ return; }
+  var label = entry.label || entry.type;
+  if(!confirm('Удалить запись "'+label+'"'+(entry.amount?' ('+fmt(entry.amount)+')':'')+'? Это действие будет зафиксировано в аудит-журнале.')) return;
+  logEntryDelete(entry);
+  journal = journal.filter(function(e){ return e.id!==id; });
+  saveJ(); renderAll();
+  showToast('🗑 Запись удалена');
+}
+
+function editJournalSale(id){
+  var entry = journal.find(function(e){ return e.id===id; });
+  if(!entry){ showToast('Запись не найдена'); return; }
+  openMo('saleMo');
+  resetSaleForm();
+  _editSaleEntryId = id;
+  var mt = document.querySelector('#saleMo .mt'); if(mt) mt.textContent = '✏️ Редактирование продажи';
+
+  saleItems = (entry.items||[]).map(function(it){ return Object.assign({}, it, {id:uid()}); });
+  renderSaleItems(); calcSaleTotal();
+
+  // Goods type
+  goodsType = entry.goodsType||'derevo';
+  setGoodsType(goodsType, document.getElementById(goodsType==='dr'?'goodsTypeDr':'goodsTypeDerevo'));
+
+  // Discount
+  if(entry.discount){
+    setDiscType('sum');
+    var di=document.getElementById('discInput'); if(di) di.value=entry.discount;
+    var sd=document.getElementById('saleDiscount'); if(sd) sd.value=entry.discount;
+  }
+
+  // Payment method
+  var pmEl = document.querySelector('#saleMo .pc[onclick*="\''+(entry.payMethod||'cash')+'\'"]');
+  setPayM(entry.payMethod||'cash', pmEl||document.querySelector('#saleMo .pc'));
+  if(entry.payMethod==='mixed'){
+    var mc=document.getElementById('mixCash'); if(mc) mc.value=entry.cashPart||'';
+    var mcr=document.getElementById('mixCard'); if(mcr) mcr.value=entry.cardPart||'';
+  }
+
+  if(entry.comment){ var ce=document.getElementById('saleComment'); if(ce) ce.value=entry.comment; }
+
+  calcSaleTotal();
+
+  // Add delete button to the modal (for full removal during edit)
+  var modal = document.getElementById('saleMo');
+  if(modal){
+    var existingDel = modal.querySelector('.sale-edit-del-btn');
+    if(existingDel) existingDel.remove();
+    var delBtn = document.createElement('button');
+    delBtn.className = 'btn red sale-edit-del-btn';
+    delBtn.style.marginTop = '8px';
+    delBtn.textContent = '🗑 Удалить эту продажу';
+    delBtn.onclick = function(){ closeMo('saleMo'); resetSaleForm(); _editSaleEntryId=null; deleteJournalEntryShop(id); };
+    var md = modal.querySelector('.md');
+    if(md) md.appendChild(delBtn);
+  }
+}
 let currentInvId = null, invCheckState = [];
 let currentLookupItem = null;
 let currentEditShiftId = null;
@@ -1715,14 +1776,18 @@ function logAction(action, details) {
   var entry = {
     id: uid(),
     timestamp: new Date().toISOString(),
-    user: session.name,
-    shopName: session.shop,
+    user: session.name||session.sellerName,
+    shopName: session.shopName,
+    shiftId: session.shiftId||null,
     action: action,
     details: details || {}
   };
   log.push(entry);
   if(log.length > 5000) log.splice(0, log.length - 5000);
   saveAuditLog(log);
+  // Sync to Firestore so admin can see (even from another device) and can't
+  // be erased by the seller — write-once per entry.
+  try{ db.collection('iz_audit_log').doc(entry.id).set(entry); }catch(e){}
 }
 function logSale(itemCount, total, shop){ logAction('SALE', {itemCount:itemCount, total:total, shop:shop}); }
 function logWriteoff(reason, amount, shop){ logAction('WRITEOFF', {reason:reason, amount:amount, shop:shop}); }
@@ -1731,6 +1796,22 @@ function logStaff(name, role, amount){ logAction('STAFF_PAYMENT', {name:name, ro
 function logExpense(category, amount, desc){ logAction('EXPENSE', {category:category, amount:amount, desc:desc}); }
 function logShiftClose(shop, revenue, cashStart, cashEnd){ logAction('SHIFT_CLOSE', {shop:shop, revenue:revenue, cashStart:cashStart, cashEnd:cashEnd}); }
 function logShiftOpen(shop, cashAmount){ logAction('SHIFT_OPEN', {shop:shop, cashAmount:cashAmount}); }
+function logEntryEdit(before, after){
+  logAction('JOURNAL_ENTRY_EDIT', {
+    entryType: before.type, entryId: before.id,
+    before: {label:before.label, sub:before.sub, amount:before.amount, discount:before.discount,
+      payMethod:before.payMethod, cashPart:before.cashPart, cardPart:before.cardPart, items:before.items, comment:before.comment},
+    after: {label:after.label, sub:after.sub, amount:after.amount, discount:after.discount,
+      payMethod:after.payMethod, cashPart:after.cashPart, cardPart:after.cardPart, items:after.items, comment:after.comment}
+  });
+}
+function logEntryDelete(entry){
+  logAction('JOURNAL_ENTRY_DELETE', {
+    entryType: entry.type, entryId: entry.id,
+    snapshot: {label:entry.label, sub:entry.sub, amount:entry.amount, discount:entry.discount,
+      payMethod:entry.payMethod, cashPart:entry.cashPart, cardPart:entry.cardPart, items:entry.items, comment:entry.comment, ts:entry.ts}
+  });
+}
 function logLogin(seller){ logAction('LOGIN', {seller:seller}); }
 function logLogout(){ logAction('LOGOUT', {user: session ? session.name : 'unknown'}); }
 
@@ -2273,6 +2354,18 @@ function startAdminShiftListener(){
     },function(e){console.log('shift err',e&&e.code);renderTodayShift();});
 }
 
+var _adminAuditLog=[], _adminAuditUnsub=null;
+function startAdminAuditListener(){
+  if(_adminAuditUnsub){try{_adminAuditUnsub();}catch(e){}}
+  var since=new Date(); since.setHours(0,0,0,0);
+  _adminAuditUnsub=db.collection('iz_audit_log').where('timestamp','>=',since.toISOString())
+    .onSnapshot(function(snap){
+      _adminAuditLog=[];
+      snap.forEach(function(doc){_adminAuditLog.push(doc.data());});
+      renderTodayShift();
+    },function(e){console.log('audit err',e&&e.code);});
+}
+
 function startAdminAlertsListener(){
   if(_adminAlertUnsub){try{_adminAlertUnsub();}catch(e){}}
   _adminAlertUnsub=db.collection('iz_admin_alerts').where('read','==',false)
@@ -2562,10 +2655,45 @@ function renderShiftDetail(shift){
     (journal.length?journal.slice().reverse().map(function(e){
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3e;font-size:12px">'+
         '<span style="font-size:13px">'+(e.icon||'📌')+'</span>'+
-        '<span style="flex:1;margin:0 8px;color:'+(e.hasCashDiff?'#f06060':'#f0f0f8')+'">'+(e.label||'')+(e.sub?'<div style="font-size:10px;color:#8888aa">'+e.sub+'</div>':'')+'</span>'+
+        '<span style="flex:1;margin:0 8px;color:'+(e.hasCashDiff?'#f06060':'#f0f0f8')+'">'+(e.label||'')+(e.sub?'<div style="font-size:10px;color:#8888aa">'+e.sub+'</div>':'')+(e.editedAt?'<div style="font-size:10px;color:#f0c060">✏️ изменено</div>':'')+'</span>'+
         (e.amount?'<span style="color:#c8f060;font-weight:600">'+fmt(e.amount)+'</span>':'')+'</div>';
     }).join(''):'<div style="font-size:12px;color:#8888aa;padding:8px">Нет операций</div>')+
   '</div>';
+
+  // Audit log: edits and deletions made by the seller during this shift
+  var auditEntries = _adminAuditLog.filter(function(a){
+    return a.shiftId===shift.id && (a.action==='JOURNAL_ENTRY_EDIT' || a.action==='JOURNAL_ENTRY_DELETE');
+  });
+  if(auditEntries.length){
+    html += '<button onclick="var d=document.getElementById(\'audit_'+sid+'\');d.style.display=d.style.display===\'none\'?\'block\':\'none\'" '+
+      'style="width:100%;padding:9px;border-radius:10px;border:1px solid #f0a060;background:#2a1e14;color:#f0a060;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:6px">'+
+      '📝 Аудит изменений ('+auditEntries.length+')</button>'+
+    '<div id="audit_'+sid+'" style="display:none;margin-bottom:10px">'+
+      auditEntries.slice().reverse().map(function(a){
+        var time=new Date(a.timestamp).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+        if(a.action==='JOURNAL_ENTRY_DELETE'){
+          var s=a.details.snapshot||{};
+          return '<div style="background:#2e1a1a;border:1px solid #f06060;border-radius:10px;padding:10px;margin-bottom:6px">'+
+            '<div style="font-size:11px;color:#f06060;font-weight:700;margin-bottom:4px">🗑 УДАЛЕНО · '+time+' · '+(a.user||'')+'</div>'+
+            '<div style="font-size:12px">'+(s.label||a.details.entryType||'')+(s.sub?'<div style="font-size:11px;color:#8888aa">'+s.sub+'</div>':'')+
+            (s.amount?'<div style="font-size:12px;color:#f0f0f8;margin-top:2px">Сумма: '+fmt(s.amount)+(s.discount?' · скидка '+fmt(s.discount):'')+'</div>':'')+'</div>'+
+          '</div>';
+        }
+        // JOURNAL_ENTRY_EDIT
+        var b=a.details.before||{}, af=a.details.after||{};
+        var changes=[];
+        if((b.amount||0)!==(af.amount||0)) changes.push('Сумма: '+fmt(b.amount)+' → '+fmt(af.amount));
+        if((b.discount||0)!==(af.discount||0)) changes.push('<span style="color:'+((af.discount||0)>(b.discount||0)?'#f06060':'#60f090')+'">Скидка: '+fmt(b.discount||0)+' → '+fmt(af.discount||0)+'</span>');
+        if((b.payMethod||'')!==(af.payMethod||'')) changes.push('Оплата: '+(b.payMethod||'—')+' → '+(af.payMethod||'—'));
+        if((b.sub||'')!==(af.sub||'')) changes.push('Состав: «'+(b.sub||'')+'» → «'+(af.sub||'')+'»');
+        if(!changes.length) changes.push('Без видимых изменений сумм');
+        return '<div style="background:#2a1e14;border:1px solid #f0a060;border-radius:10px;padding:10px;margin-bottom:6px">'+
+          '<div style="font-size:11px;color:#f0a060;font-weight:700;margin-bottom:4px">✏️ ИЗМЕНЕНО · '+time+' · '+(a.user||'')+'</div>'+
+          '<div style="font-size:12px;color:#f0f0f8">'+changes.join('<br>')+'</div>'+
+        '</div>';
+      }).join('')+
+    '</div>';
+  }
 
   return html;
 }
@@ -2594,6 +2722,7 @@ function startAdminApp(){
   renderShiftHistory(); renderSellersAdmin();
   startAdminShiftListener();
   startAdminAlertsListener();
+  startAdminAuditListener();
   renderTodayShift();
 }
 function renderAdminInvoices(){
@@ -2724,6 +2853,10 @@ function renderJournal(){
         <div class="ji-time">${new Date(e.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div>
       </div>
       ${e.amount?`<div class="ji-amt ${e.amtCls||'neu'}">${e.amtSign||''}${fmt(e.amount)}</div>`:''}
+      ${e.type!=='open'?`<div style="display:flex;gap:4px;margin-left:6px;flex-shrink:0">
+        ${e.type==='sale'?`<button onclick="editJournalSale('${e.id}')" style="background:none;border:1px solid #3e3e4e;border-radius:6px;padding:4px 7px;color:#c8f060;font-size:11px;cursor:pointer">✏️</button>`:''}
+        <button onclick="deleteJournalEntryShop('${e.id}')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:4px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>
+      </div>`:''}
     </div>`).join('');
 }
 
@@ -2814,6 +2947,10 @@ function resetSaleForm(){
   var _shopType = (session && session.shopType) || getShopType(session && session.shopName);
   var rsChip = document.getElementById('pcRS');
   if(rsChip) rsChip.style.display = (_shopType === 'shop') ? 'none' : '';
+  // Clear edit-mode state and chrome left over from editJournalSale
+  _editSaleEntryId = null;
+  var mt = document.querySelector('#saleMo .mt'); if(mt) mt.textContent = 'Оформить продажу';
+  var delBtn = document.querySelector('#saleMo .sale-edit-del-btn'); if(delBtn) delBtn.remove();
 }
 function addSaleItem(){
   const num=(gv('siNum')||'').trim(); let name,price,species,hasDiff=false,diffNote='';
@@ -2897,12 +3034,28 @@ function saveSale(){
   var payLabels={cash:'💵 Нал',terminal:'💳 Терминал',sbp:'📱 СБП',transfer:'🏦 Перевод'+(transferDest?' → '+transferDest:''),qr:'🔲 QR',mixed:'➗ Смешанный',rs:'🏦 РС'+(rsDest?' → '+rsDest:'')};
   const payL=payLabels[payMethod]||payMethod;
   const hasDiff=saleItems.some(i=>i.hasDiff);
-  journal.push({id:uid(),type:'sale',ts:new Date().toISOString(),icon:hasDiff?'⚠️':'💰',
+  var newEntryData = {ts:new Date().toISOString(),icon:hasDiff?'⚠️':'💰',
     label:hasDiff?'Продажа ⚠️':'Продажа',
     sub:saleItems.map(i=>'№'+(i.num||'—')+' '+i.name+(i.hasDiff?' ⚠️':'')).join(', ')+(disc?' · Скидка '+fmt(disc):'')+' · '+payL,
-    items:[...saleItems],totalPrice:total,discount:disc,totalPaid:paid,payMethod,cashPart,cardPart,
+    items:[...saleItems],totalPrice:total,discount:disc,totalPaid:paid,payMethod,cashPart,cardPart,goodsType:goodsType,
     hasDiff,comment:gv('saleComment'),amount:paid,amtCls:'inc',amtSign:'+',
-    cashEffect:cashPart,cardEffect:cardPart,staffEffect:0,goodsEffect:-total});
+    cashEffect:(goodsType==='dr'?0:cashPart),cardEffect:(goodsType==='dr'?0:cardPart),staffEffect:0,
+    goodsEffect:(goodsType==='dr'?0:-total),
+    cashDrEffect:(goodsType==='dr'?cashPart:0),cardDrEffect:(goodsType==='dr'?cardPart:0),goodsDrEffect:(goodsType==='dr'?-total:0)};
+
+  if(_editSaleEntryId){
+    var idx = journal.findIndex(function(e){ return e.id===_editSaleEntryId; });
+    if(idx<0){ showToast('Запись не найдена'); _editSaleEntryId=null; return; }
+    var before = Object.assign({}, journal[idx]);
+    var after = Object.assign({}, journal[idx], newEntryData, {type:'sale', id:journal[idx].id, editedAt:new Date().toISOString()});
+    journal[idx] = after;
+    logEntryEdit(before, after);
+    saveJ(); resetSaleForm(); closeMo('saleMo'); renderAll();
+    showToast('✅ Продажа обновлена');
+    return;
+  }
+
+  journal.push(Object.assign({id:uid(),type:'sale'}, newEntryData));
   // For online/offline: notify source shop to remove goods from shelf
   var shopType = session.shopType || getShopType(session.shopName);
   if(shopType !== 'shop'){
