@@ -7219,7 +7219,20 @@ function renderManInvAccepted() {
 }
 
 function getItemsBase() {
-  return JSON.parse(localStorage.getItem('iz_items')||'[]');
+  var detailed = JSON.parse(localStorage.getItem('iz_items')||'[]');
+  // Merge in simple-name entries from the "База товаров" refbook (Настройки)
+  // so they appear as suggestions even if they have no article/price yet.
+  var goods = getRefBook('iz_goods');
+  var existingNames = {};
+  detailed.forEach(function(it){ if(it.name) existingNames[it.name]=true; });
+  goods.forEach(function(g){
+    var name = (g && g.name) || (typeof g==='string' ? g : '');
+    if(name && !existingNames[name]){
+      detailed.push({name:name, num:'', price:0, category:''});
+      existingNames[name]=true;
+    }
+  });
+  return detailed;
 }
 function autoSaveToItemBase(name, num, price, category){
   if(!name||!name.trim()) return;
@@ -7238,15 +7251,22 @@ function autoSaveToItemBase(name, num, price, category){
 
 // ════ WOOD SPECIES CATALOG ════
 function getSpecies() {
-  return JSON.parse(localStorage.getItem('iz_species')||'[]');
+  // Породы дерева управляются через "Настройки → База товаров/Породы дерева" (iz_materials)
+  var materials = getRefBook('iz_materials');
+  var names = materials.map(function(m){ return (m && m.name) || (typeof m==='string' ? m : ''); }).filter(Boolean);
+  // Fallback to legacy iz_species list for any older entries not yet migrated
+  var legacy = JSON.parse(localStorage.getItem('iz_species')||'[]');
+  legacy.forEach(function(s){ if(s && names.indexOf(s)<0) names.push(s); });
+  return names;
 }
 function saveSpecies(name) {
   if(!name||!name.trim()) return;
-  var arr = getSpecies();
-  if(arr.indexOf(name.trim())<0){
-    arr.push(name.trim());
-    localStorage.setItem('iz_species', JSON.stringify(arr));
-    try{ db.collection('iz_settings').doc('species').set({list:arr}); }catch(e){}
+  name = name.trim();
+  var materials = getRefBook('iz_materials');
+  var exists = materials.some(function(m){ return ((m && m.name) || m)===name; });
+  if(!exists){
+    materials.push({id:uid(), name:name});
+    saveRefBookShop('iz_materials', materials);
   }
 }
 
