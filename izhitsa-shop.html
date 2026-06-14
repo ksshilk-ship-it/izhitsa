@@ -1738,7 +1738,8 @@ function renderAll(){ renderStatusBar(); renderJournal(); updateInvBadge(); rend
 // journal entries) without waiting for the shift to be closed.
 var _liveShiftSyncTimer = null;
 function syncLiveShift(){
-  if(!session || !session.shiftId) return;
+  if(!session) return;
+  if(!session.shiftId){ session.shiftId = uid(); saveS(); }
   if(_liveShiftSyncTimer) clearTimeout(_liveShiftSyncTimer);
   _liveShiftSyncTimer = setTimeout(function(){
     var t = calcTotals();
@@ -1790,6 +1791,23 @@ function doLogin(){
   if(!seller){ err.style.display='block'; err.textContent='Продавец не найден'; return; }
   if(seller.blocked){ err.style.display='block'; err.textContent='Аккаунт заблокирован'; return; }
   if(seller.pass!==pass){ err.style.display='block'; err.textContent='Неверный пароль'; return; }
+
+  // If this seller already has an open (unfinished) shift saved locally from
+  // TODAY, restore it instead of starting a brand-new shift (which would
+  // discard the open one). A stale shift from a previous day should not be
+  // silently carried forward — let the admin handle it via "Тревога".
+  var existing = JSON.parse(localStorage.getItem(KEY.session)||'null');
+  var existingDate = existing && existing.openedAt ? existing.openedAt.split('T')[0] : null;
+  var today = new Date().toISOString().split('T')[0];
+  if(existing && existing.role!=='shopadmin' && existing.sellerId===sellerId && existing.shopName===shopName && existingDate===today){
+    session = existing;
+    journal = JSON.parse(localStorage.getItem(KEY.journal)||'[]');
+    startApp();
+    syncLiveShift();
+    showToast('📂 Восстановлена незакрытая смена');
+    return;
+  }
+
   pendingSession={shopName,sellerName:seller.name,sellerId};
   openMorningModal();
 }
@@ -7537,7 +7555,7 @@ function init(){
   // Init role selection — seller by default
   pick('seller');
   const saved=JSON.parse(localStorage.getItem(KEY.session)||'null');
-  if(saved){ session=saved; journal=JSON.parse(localStorage.getItem(KEY.journal)||'[]'); if(session.role==='shopadmin')startAdminApp(); else startApp(); }
+  if(saved){ session=saved; journal=JSON.parse(localStorage.getItem(KEY.journal)||'[]'); if(session.role==='shopadmin')startAdminApp(); else { startApp(); syncLiveShift(); } }
 }
 init();
 </script>
