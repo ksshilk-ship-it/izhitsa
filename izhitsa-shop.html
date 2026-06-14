@@ -6042,6 +6042,27 @@ function psjCalcSale() {
 }
 
 function savePsjEntry(type) {
+  // Safeguard: re-read item fields directly from the DOM in case an oninput
+  // event was missed (e.g. mobile autofill/keyboard quirks), so whatever is
+  // visually shown in the form is what actually gets saved.
+  ['sale','wo','rcv','staff'].forEach(function(group){
+    var arr = _psjItemsArr(group);
+    arr.forEach(function(item, i){
+      var artEl = document.getElementById('psj_'+group+'_art_'+i);
+      var nameEl = document.getElementById('psj_'+group+'_name_'+i);
+      var speciesEl = document.getElementById('psj_'+group+'_species_'+i);
+      var priceEl = document.getElementById('psj_'+group+'_price_'+i);
+      var qtyEl = document.getElementById('psj_'+group+'_qty_'+i);
+      var amtEl = document.getElementById('psj_'+group+'_amt_'+i);
+      if(artEl) item.art = artEl.value;
+      if(nameEl) item.name = nameEl.value;
+      if(speciesEl) item.species = speciesEl.value;
+      if(priceEl) item.price = parseFloat(priceEl.value)||0;
+      if(qtyEl) item.qty = parseFloat(qtyEl.value)||0;
+      if(amtEl) item.amt = parseFloat(amtEl.value)||0;
+    });
+  });
+
   var date = (document.getElementById('psjDate')||{}).value || new Date().toISOString().split('T')[0];
   var shopName = (document.getElementById('psjShop')||{}).value || '';
   var sellerEl = document.getElementById('psjSeller');
