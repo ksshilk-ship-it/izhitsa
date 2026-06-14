@@ -1003,12 +1003,54 @@ function applyUpdate() {
       </div>
       <div id="siLookupResult" style="display:none;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:10px;margin-bottom:6px">
         <div style="font-size:12px;color:#8888aa;margin-bottom:6px;font-weight:600">ИЗ БАЗЫ — можно исправить</div>
-        <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label><input class="fi" id="siName" placeholder="Название" oninput="checkItemDiff()"></div>
+        <div class="fg" style="margin-bottom:8px;position:relative">
+          <label class="fl">Наименование</label>
+          <div style="display:flex;gap:6px">
+            <input class="fi" id="siName" placeholder="Название" autocomplete="off"
+              oninput="checkItemDiff();psjSuggest('siName',getItemNames(),'siPickName')"
+              onfocus="psjSuggest('siName',getItemNames(),'siPickName')"
+              onblur="psjHideSugg('siName')">
+            <button type="button" onclick="siAddToGoods('siName')" style="background:#22222e;border:1px solid #c8f060;border-radius:10px;padding:0 14px;color:#c8f060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
+          </div>
+          <div id="siName_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
+        </div>
+        <div class="fg" style="margin-bottom:8px;position:relative">
+          <label class="fl">Порода дерева</label>
+          <div style="display:flex;gap:6px">
+            <input class="fi" id="siSpecies" placeholder="Порода" autocomplete="off"
+              oninput="psjSuggest('siSpecies',getSpecies(),'siPickSpecies')"
+              onfocus="psjSuggest('siSpecies',getSpecies(),'siPickSpecies')"
+              onblur="psjHideSugg('siSpecies')">
+            <button type="button" onclick="siAddToSpecies('siSpecies')" style="background:#22222e;border:1px solid #f0c060;border-radius:10px;padding:0 14px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
+          </div>
+          <div id="siSpecies_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
+        </div>
         <div class="fg" style="margin:0"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="siPrice" placeholder="0" inputmode="numeric" oninput="checkItemDiff()"></div>
         <div id="siDiffWarn" style="display:none;margin-top:8px;padding:8px;background:#2e1a1a;border:1px solid #f06060;border-radius:8px;font-size:11px;color:#f06060"></div>
       </div>
       <div id="siManualBlock" style="display:none">
-        <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label><input class="fi" id="siNameM" placeholder="Введите вручную"></div>
+        <div class="fg" style="margin-bottom:8px;position:relative">
+          <label class="fl">Наименование</label>
+          <div style="display:flex;gap:6px">
+            <input class="fi" id="siNameM" placeholder="Введите вручную" autocomplete="off"
+              oninput="psjSuggest('siNameM',getItemNames(),'siPickNameM')"
+              onfocus="psjSuggest('siNameM',getItemNames(),'siPickNameM')"
+              onblur="psjHideSugg('siNameM')">
+            <button type="button" onclick="siAddToGoods('siNameM')" style="background:#22222e;border:1px solid #c8f060;border-radius:10px;padding:0 14px;color:#c8f060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
+          </div>
+          <div id="siNameM_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
+        </div>
+        <div class="fg" style="margin-bottom:8px;position:relative">
+          <label class="fl">Порода дерева</label>
+          <div style="display:flex;gap:6px">
+            <input class="fi" id="siSpeciesM" placeholder="Порода" autocomplete="off"
+              oninput="psjSuggest('siSpeciesM',getSpecies(),'siPickSpeciesM')"
+              onfocus="psjSuggest('siSpeciesM',getSpecies(),'siPickSpeciesM')"
+              onblur="psjHideSugg('siSpeciesM')">
+            <button type="button" onclick="siAddToSpecies('siSpeciesM')" style="background:#22222e;border:1px solid #f0c060;border-radius:10px;padding:0 14px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
+          </div>
+          <div id="siSpeciesM_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
+        </div>
         <div class="fg" style="margin:0"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="siPriceM" placeholder="0" inputmode="numeric"></div>
       </div>
     </div>
@@ -2676,13 +2718,45 @@ function renderJournal(){
 }
 
 // ════ ITEM LOOKUP ════
+function getItemNames(){
+  var names = {};
+  getItemsBase().forEach(function(it){ if(it.name) names[it.name]=true; });
+  return Object.keys(names);
+}
+function siPickName(val){ var el=document.getElementById('siName'); if(el){el.value=val;checkItemDiff();} var box=document.getElementById('siName_sugg'); if(box) box.style.display='none'; }
+function siPickNameM(val){ var el=document.getElementById('siNameM'); if(el) el.value=val; var box=document.getElementById('siNameM_sugg'); if(box) box.style.display='none'; }
+function siPickSpecies(val){ var el=document.getElementById('siSpecies'); if(el) el.value=val; var box=document.getElementById('siSpecies_sugg'); if(box) box.style.display='none'; }
+function siPickSpeciesM(val){ var el=document.getElementById('siSpeciesM'); if(el) el.value=val; var box=document.getElementById('siSpeciesM_sugg'); if(box) box.style.display='none'; }
+
+function siAddToGoods(inputId){
+  var el=document.getElementById(inputId); var val=(el&&el.value||'').trim();
+  if(!val){ showToast('Введите наименование'); return; }
+  var goods = getRefBook('iz_goods');
+  var exists = goods.some(function(g){ return ((g&&g.name)||g)===val; });
+  if(!exists){
+    goods.push({id:uid(), name:val});
+    saveRefBookShop('iz_goods', goods);
+    showToast('✅ Добавлено в базу товаров: '+val);
+  } else {
+    showToast('Уже есть в базе товаров');
+  }
+}
+function siAddToSpecies(inputId){
+  var el=document.getElementById(inputId); var val=(el&&el.value||'').trim();
+  if(!val){ showToast('Введите породу'); return; }
+  var before = getSpecies().length;
+  saveSpecies(val);
+  if(getSpecies().length>before) showToast('✅ Добавлено в породы дерева: '+val);
+  else showToast('Уже есть в породах дерева');
+}
+
 function lookupItem(num){
   const lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
   if(!num.trim()){ lr.style.display='none'; mb.style.display='none'; currentLookupItem=null; return; }
   const items=JSON.parse(localStorage.getItem('iz_items')||'[]');
   const found=items.find(i=>String(i.num)===num.trim()&&(i.status==='shop'||i.status==='warehouse'));
-  if(found){ currentLookupItem=found; document.getElementById('siName').value=found.name||''; document.getElementById('siPrice').value=found.price||''; lr.style.display='block'; mb.style.display='none'; document.getElementById('siDiffWarn').style.display='none'; }
-  else { currentLookupItem=null; lr.style.display='none'; mb.style.display='block'; }
+  if(found){ currentLookupItem=found; document.getElementById('siName').value=found.name||''; document.getElementById('siPrice').value=found.price||''; document.getElementById('siSpecies').value=found.species||''; lr.style.display='block'; mb.style.display='none'; document.getElementById('siDiffWarn').style.display='none'; }
+  else { currentLookupItem=null; lr.style.display='none'; mb.style.display='block'; var spM=document.getElementById('siSpeciesM'); if(spM) spM.value=''; }
 }
 function checkItemDiff(){
   const warn=document.getElementById('siDiffWarn'); if(!warn||!currentLookupItem) return;
@@ -2717,7 +2791,7 @@ function resetSaleForm(){
   saleItems=[]; goodsType='derevo';
   setGoodsType('derevo', document.getElementById('goodsTypeDerevo'));
   renderSaleItems(); calcSaleTotal();
-  ['siNum','siName','siPrice','siNameM','siPriceM','saleComment','mixCash','mixCard','discInput','saleDiscount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['siNum','siName','siPrice','siSpecies','siNameM','siPriceM','siSpeciesM','saleComment','mixCash','mixCard','discInput','saleDiscount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('siLookupResult').style.display='none';
   document.getElementById('siManualBlock').style.display='none';
   document.getElementById('siDiffWarn').style.display='none';
@@ -2732,18 +2806,18 @@ function resetSaleForm(){
   if(rsChip) rsChip.style.display = (_shopType === 'shop') ? 'none' : '';
 }
 function addSaleItem(){
-  const num=(gv('siNum')||'').trim(); let name,price,hasDiff=false,diffNote='';
+  const num=(gv('siNum')||'').trim(); let name,price,species,hasDiff=false,diffNote='';
   const lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
   if(lr&&lr.style.display!=='none'){
-    name=(gv('siName')||'').trim(); price=parseFloat(gv('siPrice'))||0;
+    name=(gv('siName')||'').trim(); price=parseFloat(gv('siPrice'))||0; species=(gv('siSpecies')||'').trim();
     if(!name){showToast('Введите наименование');return;} if(!price){showToast('Введите цену');return;}
     if(currentLookupItem){ const nd=name!==(currentLookupItem.name||''),pd=price!==(currentLookupItem.price||0); if(nd||pd){hasDiff=true;let m=[];if(nd)m.push('название');if(pd)m.push('цена (база: '+fmt(currentLookupItem.price)+')');diffNote='⚠️ '+m.join(', ');} }
   } else if(mb&&mb.style.display!=='none'){
-    name=(gv('siNameM')||'').trim(); price=parseFloat(gv('siPriceM'))||0;
+    name=(gv('siNameM')||'').trim(); price=parseFloat(gv('siPriceM'))||0; species=(gv('siSpeciesM')||'').trim();
     if(!name){showToast('Введите наименование');return;} hasDiff=true; diffNote='⚠️ артикул не найден в базе';
   } else { showToast('Введите артикул'); return; }
-  saleItems.push({id:uid(),num,name,price,hasDiff,diffNote});
-  ['siNum','siName','siPrice','siNameM','siPriceM'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  saleItems.push({id:uid(),num,name,price,species,hasDiff,diffNote});
+  ['siNum','siName','siPrice','siSpecies','siNameM','siPriceM','siSpeciesM'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   lr.style.display='none'; mb.style.display='none'; currentLookupItem=null;
   document.getElementById('siDiffWarn').style.display='none';
   renderSaleItems(); calcSaleTotal();
@@ -2754,7 +2828,7 @@ function renderSaleItems(){
   c.innerHTML=saleItems.map((it,i)=>`
     <div class="sir" style="border-color:${it.hasDiff?'#f06060':'#2e2e3e'};background:${it.hasDiff?'#2e1a1a':'#22222e'}">
       <div class="sir-num" style="color:${it.hasDiff?'#f06060':'#8888aa'}">${it.num||'—'}</div>
-      <div class="sir-info"><div class="sir-name">${it.name}</div>
+      <div class="sir-info"><div class="sir-name">${it.name}${it.species?` <span style="color:#f0c060;font-size:11px">· ${it.species}</span>`:''}</div>
         <div class="sir-price" style="color:${it.hasDiff?'#f06060':'#c8f060'}">${fmt(it.price)}</div>
         ${it.hasDiff?`<div style="font-size:11px;color:#f06060;margin-top:2px">${it.diffNote}</div>`:''}
       </div>
