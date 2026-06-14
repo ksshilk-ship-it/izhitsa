@@ -2397,19 +2397,27 @@ function renderShiftDetail(shift){
   var goodsWood = (shift.goodsMorning||0) + journal.reduce(function(s,e){return s+(e.goodsEffect||0);},0);
   var goodsDr = (shift.goodsDrMorning||0) + journal.reduce(function(s,e){return s+(e.goodsDrEffect||0);},0);
 
-  // ── Sales totals by payment method ──
-  var revenue = sales.reduce(function(s,e){return s+(e.amount||0);},0);
-  var discount = sales.reduce(function(s,e){return s+(e.discount||0);},0);
-  var payTotals = {cash:0,terminal:0,sbp:0,transfer:0,qr:0,rs:0,mixed:0};
-  sales.forEach(function(e){
-    if(e.payMethod==='mixed'){
-      payTotals.cash += e.cashPart||0;
-      payTotals.terminal += e.cardPart||0;
-    } else {
-      var key = payTotals.hasOwnProperty(e.payMethod) ? e.payMethod : 'terminal';
-      payTotals[key] += (e.cashPart||0)+(e.cardPart||0);
-    }
-  });
+  // ── Sales totals by payment method, split by goods type ──
+  var salesWood = sales.filter(function(e){ return e.goodsType!=='dr'; });
+  var salesDr = sales.filter(function(e){ return e.goodsType==='dr'; });
+
+  function computeSalesTotals(salesArr){
+    var revenue = salesArr.reduce(function(s,e){return s+(e.amount||0);},0);
+    var discount = salesArr.reduce(function(s,e){return s+(e.discount||0);},0);
+    var payTotals = {cash:0,terminal:0,sbp:0,transfer:0,qr:0,rs:0,mixed:0};
+    salesArr.forEach(function(e){
+      if(e.payMethod==='mixed'){
+        payTotals.cash += e.cashPart||0;
+        payTotals.terminal += e.cardPart||0;
+      } else {
+        var key = payTotals.hasOwnProperty(e.payMethod) ? e.payMethod : 'terminal';
+        payTotals[key] += (e.cashPart||0)+(e.cardPart||0);
+      }
+    });
+    return {revenue:revenue, discount:discount, payTotals:payTotals};
+  }
+  var totalsWood = computeSalesTotals(salesWood);
+  var totalsDr = computeSalesTotals(salesDr);
 
   // ── Sold items by category (дерево / др товар) ──
   var soldWood = {count:0, qty:0}, soldDr = {count:0, qty:0};
@@ -2479,17 +2487,19 @@ function renderShiftDetail(shift){
   // Goods balances
   html += block('📦 Остаток товара', row('🌳 Дерево', fmt(goodsWood), '#f0c060')+row('🛍 ДР Товар', fmt(goodsDr), '#f0c060'));
 
-  // Sales totals
-  html += block('💰 Итого продаж',
-    row('Сумма', fmt(revenue), '#c8f060')+divider()+
-    row('💵 Нал', fmt(payTotals.cash))+
-    row('💳 Терминал', fmt(payTotals.terminal))+
-    row('🏦 Перевод', fmt(payTotals.transfer))+
-    row('🔲 QR / СБП', fmt(payTotals.qr+payTotals.sbp))+
-    (payTotals.rs?row('🏦 РС', fmt(payTotals.rs)):'')+
-    divider()+
-    row('🎁 Скидка', fmt(discount), '#8888aa')
-  );
+  // Sales totals — separate for Дерево and ДР Товар
+  function salesTotalsRows(t){
+    return row('Сумма', fmt(t.revenue), '#c8f060')+divider()+
+      row('💵 Нал', fmt(t.payTotals.cash))+
+      row('💳 Терминал', fmt(t.payTotals.terminal))+
+      row('🏦 Перевод', fmt(t.payTotals.transfer))+
+      row('🔲 QR / СБП', fmt(t.payTotals.qr+t.payTotals.sbp))+
+      (t.payTotals.rs?row('🏦 РС', fmt(t.payTotals.rs)):'')+
+      divider()+
+      row('🎁 Скидка', fmt(t.discount), '#8888aa');
+  }
+  html += block('💰 Итого продаж — 🌳 Дерево', salesTotalsRows(totalsWood));
+  html += block('💰 Итого продаж — 🛍 ДР Товар', salesTotalsRows(totalsDr));
 
   // Sales count + by category
   html += block('🧾 Итого продаж (шт.)',
