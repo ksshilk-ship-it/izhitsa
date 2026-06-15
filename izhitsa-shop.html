@@ -2540,7 +2540,7 @@ function renderShiftDetail(shift){
         payTotals[key] += cash+card;
       }
     });
-    return {revenue:Math.round(revenue), discount:Math.round(discount), payTotals:payTotals};
+    return {revenue:Math.round(revenue), discount:Math.round(discount), goodsValue:Math.round(revenue+discount), payTotals:payTotals};
   }
   var totalsWood = computeSalesTotalsSplit(sales, false);
   var totalsDr = computeSalesTotalsSplit(sales, true);
@@ -2620,14 +2620,15 @@ function renderShiftDetail(shift){
 
   // Sales totals — separate for Дерево and ДР Товар
   function salesTotalsRows(t){
-    return row('Сумма', fmt(t.revenue), '#c8f060')+divider()+
+    return row('Сумма к оплате', fmt(t.revenue), '#c8f060')+divider()+
       row('💵 Нал', fmt(t.payTotals.cash))+
       row('💳 Терминал', fmt(t.payTotals.terminal))+
       row('🏦 Перевод', fmt(t.payTotals.transfer))+
       row('🔲 QR / СБП', fmt(t.payTotals.qr+t.payTotals.sbp))+
       (t.payTotals.rs?row('🏦 РС', fmt(t.payTotals.rs)):'')+
       divider()+
-      row('🎁 Скидка', fmt(t.discount), '#8888aa');
+      row('🎁 Скидка', fmt(t.discount), '#8888aa')+
+      row('📦 Списано со склада (по полной цене)', fmt(t.goodsValue), '#f0c060');
   }
   html += block('💰 Итого продаж — 🌳 Дерево', salesTotalsRows(totalsWood));
   html += block('💰 Итого продаж — 🛍 ДР Товар', salesTotalsRows(totalsDr));
