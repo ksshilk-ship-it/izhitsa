@@ -2199,6 +2199,26 @@ function clearLiveShift(){
 // shared "open shift" doc and merges in any entries added from other devices
 // (e.g. seller's phone) that aren't present locally yet, by journal entry id.
 // Safe to call repeatedly: never drops local-only entries.
+
+// Merge journal entries from a remote shift doc into the local journal,
+// adding any entries (by id) that aren't present locally yet. Returns the
+// number of entries added. Does not remove local entries (deletions on
+// another device won't propagate — see manualSync notes).
+function mergeRemoteJournal(remote){
+  if(!remote || !Array.isArray(remote.journal)) return 0;
+  var localIds = {};
+  journal.forEach(function(e){ if(e.id) localIds[e.id]=true; });
+  var added = 0;
+  remote.journal.forEach(function(e){
+    if(e.id && !localIds[e.id]){ journal.push(e); added++; }
+  });
+  if(added>0){
+    journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
+    saveJ();
+  }
+  return added;
+}
+
 var _manualSyncing = false;
 function manualSync(){
   if(!session || !session.shiftId){ showToast('Нет активной смены'); return; }
@@ -2218,18 +2238,7 @@ function manualSync(){
     })
     .then(function(snap){
       var remote = snap.exists ? snap.data() : null;
-      var added = 0;
-      if(remote && Array.isArray(remote.journal)){
-        var localIds = {};
-        journal.forEach(function(e){ if(e.id) localIds[e.id]=true; });
-        remote.journal.forEach(function(e){
-          if(e.id && !localIds[e.id]){ journal.push(e); added++; }
-        });
-        if(added>0){
-          journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
-          saveJ();
-        }
-      }
+      var added = mergeRemoteJournal(remote);
       renderAll();
       if(added>0) showToast('🔄 Обновлено: добавлено '+added+' записей');
       else showToast('🔄 Данные актуальны');
@@ -2242,6 +2251,35 @@ function manualSync(){
       if(btn) btn.textContent = '🔄';
       syncLiveShift();
     });
+}
+
+// ── Always-on realtime sync ──
+// Subscribes to the shared "open shift" document so that journal entries
+// added from other devices (e.g. seller's phone) appear automatically,
+// without needing to log out/in or tap refresh. Runs continuously while
+// the app is open (whenever there's a connection); merges new entries by id
+// and re-renders. Our own pushes also trigger this listener, but
+// mergeRemoteJournal is a no-op in that case since nothing new is added.
+var _liveShiftListenUnsub = null;
+function startLiveShiftListener(){
+  if(!session || session.isPreview) return;
+  if(!session.shiftId){ session.shiftId = uid(); saveS(); }
+  stopLiveShiftListener();
+  try{
+    _liveShiftListenUnsub = db.collection('iz_shifts').doc(session.shiftId)
+      .onSnapshot(function(snap){
+        if(!snap.exists || !session) return;
+        var remote = snap.data();
+        var added = mergeRemoteJournal(remote);
+        if(added>0){
+          renderAll();
+          showToast('🔄 Новые записи синхронизированы');
+        }
+      }, function(){ /* offline / permission errors — ignore, manual sync still works */ });
+  }catch(e){}
+}
+function stopLiveShiftListener(){
+  if(_liveShiftListenUnsub){ try{ _liveShiftListenUnsub(); }catch(e){} _liveShiftListenUnsub=null; }
 }
 
 // ════ LOGIN ════
@@ -2330,6 +2368,7 @@ function doLogin(){
 function exitShift(){
   const msg=(session&&session.role)==='shopadmin'?'Выйти из режима администратора?':'Выйти? Смена останется открытой.';
   if(confirm(msg)){
+    stopLiveShiftListener();
     if((session&&session.role)==='shopadmin'){ localStorage.removeItem(KEY.session); session=null; }
     document.getElementById('mainTabs').style.display='none';
     document.getElementById('appScreen').style.display='none';
@@ -2560,6 +2599,7 @@ function startApp(){
     updateInvBadge(); renderPendingAlert();
   },()=>{});
   document.getElementById('rcvDate').value=new Date().toISOString().split('T')[0];
+  if(!session.isPreview) startLiveShiftListener();
   renderAll();
 }
 function adaptUIForShopType(){
@@ -4567,6 +4607,7 @@ function _closeShiftReal(){
   const shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   shifts.unshift(report); localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
   try{ db.collection('iz_shifts').doc(report.id).set(report); }catch(e){}
+  stopLiveShiftListener();
   localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal);
   session=null; journal=[];
   document.getElementById('mainTabs').style.display='none';
