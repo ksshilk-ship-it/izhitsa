@@ -2623,9 +2623,56 @@ function startPreviewMode(){
   }, 100);
 }
 
+// ── One-time migration: earlier versions wrote one "Приход товара" journal
+// entry per item when accepting a manual invoice, instead of one summary
+// entry per invoice. Collapse consecutive per-item "Приход товара" entries
+// that share the same supplier ("от ...") and were created within a few
+// seconds of each other into a single "Приёмка" summary entry. ──
+function migrateLegacyReceiveEntries(){
+  if(!journal.length) return;
+  var changed = false;
+  var result = [];
+  var i = 0;
+  while(i < journal.length){
+    var e = journal[i];
+    if(e.type==='receive' && e.label==='Приход товара' && !e.invId){
+      var fromMatch = (e.sub||'').match(/от (.+)$/);
+      var from = fromMatch ? fromMatch[1] : '';
+      var group = [e];
+      var j = i+1;
+      while(j < journal.length){
+        var n = journal[j];
+        if(n.type==='receive' && n.label==='Приход товара' && !n.invId){
+          var nFromMatch = (n.sub||'').match(/от (.+)$/);
+          var nFrom = nFromMatch ? nFromMatch[1] : '';
+          var dt = Math.abs(new Date(n.ts).getTime() - new Date(group[group.length-1].ts).getTime());
+          if(nFrom===from && dt <= 5000){ group.push(n); j++; continue; }
+        }
+        break;
+      }
+      if(group.length > 1){
+        var total = group.reduce(function(s,g){ return s+(g.amount||0); },0);
+        result.push({
+          id:uid(), type:'receive', ts:group[0].ts, icon:'📥',
+          label:'Приёмка'+(from?' от '+from:''),
+          sub:group.length+' изд.'+(from?' · от '+from:''),
+          amount:total, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0, goodsEffect:total
+        });
+        changed = true;
+        i = j;
+        continue;
+      }
+    }
+    result.push(e);
+    i++;
+  }
+  if(changed){ journal = result; saveJ(); }
+}
+
 function startApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
+  if(!session.isPreview) migrateLegacyReceiveEntries();
   document.getElementById('hdrShop').textContent=(session.isPreview?'🔍 ':'')+session.shopName;
   if(session.isPreview){
     var hdrEl=document.getElementById('hdrShop');
