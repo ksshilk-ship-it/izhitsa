@@ -1994,7 +1994,11 @@ function calcSellerSummary(){
     wood: wood, dr: dr,
     totalRevenue: totalRevenue, totalDiscount: totalDiscount,
     staffWood: staffWood, staffDr: staffDr, staffTotal: t.staff,
-    cashWood: t.cash, cashDr: t.cashDr, cashTotal: t.cash+t.cashDr+t.staff,
+    // staffCashBalance = current balance of the "Покупки сотрудников" cash drawer
+    // (morning amount entered at shift open + cash payments this shift) — analogous
+    // to cashWood/cashDr which both include their respective morning balances.
+    staffCashBalance: (session.cashStaffMorning||0) + t.staff,
+    cashWood: t.cash, cashDr: t.cashDr, cashTotal: t.cash+t.cashDr+(session.cashStaffMorning||0)+t.staff,
     goodsWood: t.goods, goodsDr: t.goodsDr,
     woWood: woWood, woDr: woDr, rcvWood: rcvWood, rcvDr: rcvDr
   };
@@ -2074,7 +2078,7 @@ function renderStatusBar(){
     '<div style="background:#1a1a22;border-radius:9px;padding:8px 10px;margin-bottom:6px">'+
       '<div style="font-size:10px;color:#60f090;font-weight:700;margin-bottom:4px">💵 ФАКТ НАЛИЧНЫХ В КАССЕ</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;text-align:center">'+
-        sbCell('🌳 Дерево', s.cashWood, '#60f090')+sbCell('🛍 ДР', s.cashDr, '#60f090')+sbCell('🛒 Сотр.', s.staffTotal, '#a060f0')+sbCell('Σ Итого', s.cashTotal, '#60f090')+
+        sbCell('🌳 Дерево', s.cashWood, '#60f090')+sbCell('🛍 ДР', s.cashDr, '#60f090')+sbCell('🛒 Сотр.', s.staffCashBalance, '#a060f0')+sbCell('Σ Итого', s.cashTotal, '#60f090')+
       '</div>'+
     '</div>'+
     // Остаток / Списание / Приход товара
