@@ -4316,14 +4316,10 @@ function renderClose(){
 function validateClose(){
   // Calculate expected but DO NOT show to seller
   const t = calcTotals();
-  const expenses = journal.filter(e=>e.type==='expense');
-  const inkassExp = expenses.filter(e=>e.expType==='inkass').reduce((s,e)=>s+e.amount,0);
-  const zpExp = expenses.filter(e=>e.expType==='zp').reduce((s,e)=>s+e.amount,0);
-  const travelExp = expenses.filter(e=>e.expType==='travel').reduce((s,e)=>s+e.amount,0);
-  const otherExp = expenses.filter(e=>e.expType==='other').reduce((s,e)=>s+e.amount,0);
-
-  const cashSales = journal.filter(e=>e.type==='sale').reduce((s,e)=>s+(e.cashPart||0),0);
-  const expectedCash = session.cashMorning + cashSales - inkassExp - zpExp - travelExp - otherExp;
+  // t.cash already nets out Дерево-only sales cash and all expense deductions
+  // via cashEffect (set per journal entry) — use it directly as the expected
+  // end-of-shift cash for Дерево.
+  const expectedCash = t.cash;
 
   const cashEveVal = (document.getElementById('cashEveInput')||{}).value||'';
   const cashEve = parseFloat(cashEveVal)||0;
@@ -4380,7 +4376,10 @@ function _closeShiftReal(){
   const zpExp=expArr.filter(e=>e.expType==='zp').reduce((s,e)=>s+e.amount,0);
   const travelExp=expArr.filter(e=>e.expType==='travel').reduce((s,e)=>s+e.amount,0);
   const otherExpAmt=expArr.filter(e=>e.expType==='other').reduce((s,e)=>s+e.amount,0);
-  const expectedCash=session.cashMorning+cashSales-inkass-zpExp-travelExp-otherExpAmt;
+  // t.cash already nets out Дерево-only sales cash and all expense deductions
+  // via cashEffect (set per journal entry) — same value shown as "Дерево"
+  // in "ФАКТ НАЛИЧНЫХ В КАССЕ" on Главной.
+  const expectedCash=t.cash;
   const cashDiff=Math.round(cashEve-expectedCash);
   if(Math.abs(cashDiff)>=1){showToast('⛔ Неверный остаток наличных — пересчитайте кассу');return;}
   const reason='';
