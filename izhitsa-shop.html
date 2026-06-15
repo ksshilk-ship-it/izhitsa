@@ -988,9 +988,10 @@ function applyUpdate() {
     <div id="saleItemsDisplay" style="margin-bottom:10px"></div>
     <div style="background:#0f0f13;border-radius:12px;padding:10px;margin-bottom:12px">
       <div style="font-size:11px;color:#8888aa;margin-bottom:8px;font-weight:600">Введите артикул — данные подтянутся из базы</div>
-      <div style="display:flex;gap:7px;margin-bottom:8px">
-        <input class="fi" id="siNum" placeholder="№ артикул" oninput="lookupItem(this.value)" style="width:100px;flex-shrink:0">
+      <div style="display:flex;gap:7px;margin-bottom:8px;flex-wrap:wrap">
+        <input class="fi" id="siNum" placeholder="№ артикул" oninput="lookupItem(this.value)" style="width:90px;flex-shrink:0">
         <button onclick="addSaleItem()" style="background:#c8f060;border:none;border-radius:10px;padding:0 14px;font-weight:700;color:#0f0f13;cursor:pointer;font-family:'Unbounded',sans-serif;font-size:12px;flex-shrink:0">＋</button>
+        <button type="button" onclick="openManualNoArticle()" style="background:#22222e;border:1px solid #2e2e3e;border-radius:10px;padding:0 10px;color:#8888aa;font-size:11px;cursor:pointer;flex-shrink:0">Без артикула</button>
       </div>
       <div id="siLookupResult" style="display:none;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:10px;margin-bottom:6px">
         <div style="font-size:12px;color:#8888aa;margin-bottom:6px;font-weight:600">ИЗ БАЗЫ — можно исправить</div>
@@ -3096,7 +3097,23 @@ function siAddToSpecies(inputId){
   else showToast('Уже есть в породах дерева');
 }
 
+var _siNoArticleMode = false;
+// Open the manual entry block for items that intentionally have no article
+// (e.g. identical small items like candles sold by quantity). No "артикул
+// не найден в базе" warning is shown for these.
+function openManualNoArticle(){
+  var numEl=document.getElementById('siNum'); if(numEl) numEl.value='';
+  currentLookupItem=null;
+  var lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
+  if(lr) lr.style.display='none';
+  if(mb) mb.style.display='block';
+  var dw=document.getElementById('siDiffWarn'); if(dw) dw.style.display='none';
+  _siNoArticleMode = true;
+  var nameMEl=document.getElementById('siNameM'); if(nameMEl) nameMEl.focus();
+}
+
 function lookupItem(num){
+  _siNoArticleMode = false;
   const lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
   if(!num.trim()){ lr.style.display='none'; mb.style.display='none'; currentLookupItem=null; return; }
   const items=JSON.parse(localStorage.getItem('iz_items')||'[]');
@@ -3152,6 +3169,7 @@ function resetSaleForm(){
   if(rsChip) rsChip.style.display = (_shopType === 'shop') ? 'none' : '';
   // Clear edit-mode state and chrome left over from editJournalSale
   _editSaleEntryId = null;
+  _siNoArticleMode = false;
   var mt = document.querySelector('#saleMo .mt'); if(mt) mt.textContent = 'Оформить продажу';
   var delBtn = document.querySelector('#saleMo .sale-edit-del-btn'); if(delBtn) delBtn.remove();
 }
@@ -3164,7 +3182,13 @@ function addSaleItem(){
     if(currentLookupItem){ const nd=name!==(currentLookupItem.name||''),pd=price!==(currentLookupItem.price||0); if(nd||pd){hasDiff=true;let m=[];if(nd)m.push('название');if(pd)m.push('цена (база: '+fmt(currentLookupItem.price)+')');diffNote='⚠️ '+m.join(', ');} }
   } else if(mb&&mb.style.display!=='none'){
     name=(gv('siNameM')||'').trim(); price=parseFloat(gv('siPriceM'))||0; species=(gv('siSpeciesM')||'').trim(); qty=parseFloat(gv('siQtyM'))||1;
-    if(!name){showToast('Введите наименование');return;} hasDiff=true; diffNote='⚠️ артикул не найден в базе';
+    if(!name){showToast('Введите наименование');return;}
+    if(!num && _siNoArticleMode){
+      // Intentionally no article — e.g. identical small items (candles etc.)
+      // sold by quantity. Stock is still deducted via qty, no warning shown.
+    } else {
+      hasDiff=true; diffNote='⚠️ артикул не найден в базе';
+    }
   } else { showToast('Введите артикул'); return; }
   if(qty<=0) qty=1;
   var amt=Math.round(price*qty*100)/100;
@@ -3173,6 +3197,7 @@ function addSaleItem(){
   lr.style.display='none'; mb.style.display='none'; currentLookupItem=null;
   document.getElementById('siDiffWarn').style.display='none';
   setSiItemType('derevo');
+  _siNoArticleMode = false;
   renderSaleItems(); calcSaleTotal();
 }
 function renderSaleItems(){
@@ -3203,8 +3228,12 @@ function siEditItem(i){
     lookupItem(it.num);
     // If the article isn't in the catalog, lookupItem() shows the manual
     // block — pre-fill it with the item's current values either way.
+  } else {
+    currentLookupItem=null;
+    _siNoArticleMode = !it.hasDiff;
   }
   var lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
+  if(!it.num){ if(lr) lr.style.display='none'; if(mb) mb.style.display='block'; }
   if(lr && lr.style.display!=='none'){
     var nameEl=document.getElementById('siName'); if(nameEl) nameEl.value=it.name||'';
     var priceEl=document.getElementById('siPrice'); if(priceEl) priceEl.value=it.price||'';
