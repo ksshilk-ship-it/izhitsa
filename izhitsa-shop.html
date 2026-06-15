@@ -187,6 +187,7 @@ function applyUpdate() {
     <div class="hdr-logo">Ижица</div>
     <div style="display:flex;align-items:center;gap:8px">
       <div><div class="hdr-shop" id="hdrShop"></div><div class="hdr-seller" id="hdrSeller"></div></div>
+      <button class="exit-btn" id="syncBtn" onclick="manualSync()" title="Обновить данные" style="padding:8px 10px">🔄</button>
       <button class="exit-btn" onclick="exitShift()">Выйти</button>
     </div>
   </div>
@@ -2163,32 +2164,84 @@ function renderAll(){ renderStatusBar(); renderJournal(); renderWriteoffs(); upd
 // home page can show live, in-progress shift data (cash/goods/sales totals,
 // journal entries) without waiting for the shift to be closed.
 var _liveShiftSyncTimer = null;
+function buildLiveShiftDoc(){
+  var t = calcTotals();
+  return {
+    id: session.shiftId, status:'open', source:'shop',
+    shopName: session.shopName, sellerName: session.sellerName,
+    date: new Date().toISOString().split('T')[0],
+    openedAt: session.openedAt, updatedAt: new Date().toISOString(),
+    cashMorning: session.cashMorning||0, goodsMorning: session.goodsMorning||0,
+    cashDrMorning: session.cashDrMorning||0, goodsDrMorning: session.goodsDrMorning||0,
+    cashStaffMorning: session.cashStaffMorning||0,
+    cashCurrent: t.cash, cardCurrent: t.card, staffCurrent: t.staff,
+    goodsCurrent: t.goods, cashDrCurrent: t.cashDr, goodsDrCurrent: t.goodsDr,
+    revenue: t.revenue, discount: t.discount,
+    hasCashDiff: journal.some(function(e){ return e.hasCashDiff; }),
+    journal: journal.slice()
+  };
+}
 function syncLiveShift(){
   if(!session) return;
   if(!session.shiftId){ session.shiftId = uid(); saveS(); }
   if(_liveShiftSyncTimer) clearTimeout(_liveShiftSyncTimer);
   _liveShiftSyncTimer = setTimeout(function(){
-    var t = calcTotals();
-    var doc = {
-      id: session.shiftId, status:'open', source:'shop',
-      shopName: session.shopName, sellerName: session.sellerName,
-      date: new Date().toISOString().split('T')[0],
-      openedAt: session.openedAt, updatedAt: new Date().toISOString(),
-      cashMorning: session.cashMorning||0, goodsMorning: session.goodsMorning||0,
-      cashDrMorning: session.cashDrMorning||0, goodsDrMorning: session.goodsDrMorning||0,
-      cashStaffMorning: session.cashStaffMorning||0,
-      cashCurrent: t.cash, cardCurrent: t.card, staffCurrent: t.staff,
-      goodsCurrent: t.goods, cashDrCurrent: t.cashDr, goodsDrCurrent: t.goodsDr,
-      revenue: t.revenue, discount: t.discount,
-      hasCashDiff: journal.some(function(e){ return e.hasCashDiff; }),
-      journal: journal.slice()
-    };
-    try{ db.collection('iz_shifts').doc(session.shiftId).set(doc); }catch(e){}
+    try{ db.collection('iz_shifts').doc(session.shiftId).set(buildLiveShiftDoc()); }catch(e){}
   }, 600);
 }
 function clearLiveShift(){
   if(!session || !session.shiftId) return;
   try{ db.collection('iz_shifts').doc(session.shiftId).delete(); }catch(e){}
+}
+
+// ── Manual two-way sync ──
+// Pushes the current local journal to Firestore immediately, then pulls the
+// shared "open shift" doc and merges in any entries added from other devices
+// (e.g. seller's phone) that aren't present locally yet, by journal entry id.
+// Safe to call repeatedly: never drops local-only entries.
+var _manualSyncing = false;
+function manualSync(){
+  if(!session || !session.shiftId){ showToast('Нет активной смены'); return; }
+  if(_manualSyncing) return;
+  _manualSyncing = true;
+  var btn = document.getElementById('syncBtn');
+  if(btn) btn.textContent = '⏳';
+  if(_liveShiftSyncTimer){ clearTimeout(_liveShiftSyncTimer); _liveShiftSyncTimer=null; }
+
+  // 1) Push current local state immediately
+  var pushed = buildLiveShiftDoc();
+  db.collection('iz_shifts').doc(session.shiftId).set(pushed)
+    .then(function(){
+      // 2) Pull the latest doc (could be the one we just pushed, or a newer
+      // one from another device that wrote in the meantime)
+      return db.collection('iz_shifts').doc(session.shiftId).get();
+    })
+    .then(function(snap){
+      var remote = snap.exists ? snap.data() : null;
+      var added = 0;
+      if(remote && Array.isArray(remote.journal)){
+        var localIds = {};
+        journal.forEach(function(e){ if(e.id) localIds[e.id]=true; });
+        remote.journal.forEach(function(e){
+          if(e.id && !localIds[e.id]){ journal.push(e); added++; }
+        });
+        if(added>0){
+          journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
+          saveJ();
+        }
+      }
+      renderAll();
+      if(added>0) showToast('🔄 Обновлено: добавлено '+added+' записей');
+      else showToast('🔄 Данные актуальны');
+    })
+    .catch(function(err){
+      showToast('⚠️ Не удалось обновить — проверьте связь');
+    })
+    .finally(function(){
+      _manualSyncing = false;
+      if(btn) btn.textContent = '🔄';
+      syncLiveShift();
+    });
 }
 
 // ════ LOGIN ════
