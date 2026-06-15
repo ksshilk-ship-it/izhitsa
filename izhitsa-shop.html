@@ -2048,7 +2048,80 @@ function renderStatusBar(){
       sbCell('🗑 Списано · Дерево', s.woWood, '#f06060')+sbCell('🗑 Списано · ДР', s.woDr, '#f06060')+
       sbCell('📥 Приход · Дерево', s.rcvWood, '#60c8f0')+sbCell('📥 Приход · ДР', s.rcvDr, '#60c8f0')+
     '</div>'+
-    '</div>'; // end outer wrapper
+    '</div>'+ // end outer wrapper
+    renderZpCard();
+}
+
+// ── РАСЧЁТ ЗП за текущую смену (Главная) ──
+function calcZpForCurrentShift(){
+  var sales = journal.filter(function(e){ return e.type==='sale'; });
+  var expenses = journal.filter(function(e){ return e.type==='expense'; });
+
+  var woodSales = sales.filter(function(s){ return !s.goodsType||s.goodsType==='derevo'; });
+  var drSalesArr = sales.filter(function(s){ return s.goodsType==='dr'; });
+  var woodRev = woodSales.reduce(function(a,s){return a+(s.cashPart||0)+(s.cardPart||0)+(s.discount||0);},0);
+  var drRev = drSalesArr.reduce(function(a,s){return a+(s.cashPart||0)+(s.cardPart||0)+(s.discount||0);},0);
+  var discWood = woodSales.reduce(function(a,s){return a+(s.discount||0);},0);
+  var discDr = drSalesArr.reduce(function(a,s){return a+(s.discount||0);},0);
+  var netWood = woodRev - discWood;
+  var netDr = drRev - discDr;
+  var totalNet = netWood + netDr;
+
+  var zpFact = expenses.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
+  var travelFact = expenses.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+e.amount;},0);
+
+  var zpSettings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+  var s = zpSettings[session.shopName] || null;
+  var base = s ? numDef(s.base, 1500) : 1500;
+  var thresh = s ? numDef(s.threshold, 5000) : 5000;
+  var pctNorm = s ? (numDef(s.pct, 8)/100) : 0.08;
+  var highEnabled = s ? ((s.highEnabled !== undefined) ? s.highEnabled : !!s.highThreshold) : false;
+  var highThresh = (s && highEnabled) ? numDef(s.highThreshold, 20000) : null;
+  var pctHigh = s ? (numDef(s.highPct, 10)/100) : 0.10;
+
+  if(!s){
+    var shopN = (session.shopName||'').toLowerCase();
+    if(shopN.indexOf('горк') >= 0){
+      base=2000; thresh=0; pctNorm=0.08; highThresh=20000; pctHigh=0.10;
+    } else { base=1500; thresh=5000; pctNorm=0.08; }
+  }
+
+  var pct = (highThresh!==null && totalNet >= highThresh) ? pctHigh : pctNorm;
+  var zpCalcWood = 0, zpCalcDr = 0;
+  if(totalNet < thresh){
+    zpCalcWood = base; zpCalcDr = 0;
+  } else {
+    zpCalcWood = base + netWood * pct;
+    zpCalcDr   = netDr * pct;
+  }
+  var travelCalc = (s && s.travel) ? s.travel : 0;
+  var zpCalcTotal = zpCalcWood + zpCalcDr;
+  var zpCalcWithTravel = zpCalcTotal + travelCalc;
+  var diff = zpCalcWithTravel - (zpFact + travelFact);
+
+  return {
+    zpCalcWood: zpCalcWood, zpCalcDr: zpCalcDr, zpCalcTotal: zpCalcTotal,
+    travelCalc: travelCalc, zpFact: zpFact, travelFact: travelFact,
+    zpCalcWithTravel: zpCalcWithTravel, diff: diff, totalNet: totalNet
+  };
+}
+function renderZpCard(){
+  if(!session) return '';
+  var z = calcZpForCurrentShift();
+  var fmt2 = function(n){ return Math.round(n).toLocaleString('ru-RU')+'₽'; };
+  var diffColor = z.diff > 0 ? '#f06060' : z.diff < 0 ? '#60f090' : '#8888aa';
+  return '<div style="background:#1e2a14;border:2px solid #c8f060;border-radius:14px;padding:14px;margin-top:10px">'+
+    '<div style="font-size:11px;color:#c8f060;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">💰 РАСЧЁТ ЗП ЗА ТЕКУЩУЮ СМЕНУ</div>'+
+    '<div style="display:flex;flex-direction:column;gap:6px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#8888aa">ЗП расчётная · Дерево</span><span style="color:#c8f060;font-weight:700">'+fmt2(z.zpCalcWood)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#8888aa">ЗП расчётная · ДР</span><span style="color:#a060f0;font-weight:700">'+fmt2(z.zpCalcDr)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;padding-top:4px;border-top:1px solid #2e2e3e"><span style="color:#8888aa">Проезд (расчётный)</span><span style="color:#f0a060">'+fmt2(z.travelCalc)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding-top:4px;border-top:1px solid #2e2e3e"><span>Итого расчётная (с проездом)</span><span style="color:#c8f060">'+fmt2(z.zpCalcWithTravel)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;padding-top:8px;border-top:1px solid #2e2e3e"><span style="color:#8888aa">ЗП факт (взято)</span><span style="color:#f0a060">'+fmt(z.zpFact)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#8888aa">Проезд (факт)</span><span style="color:#f0a060">'+fmt(z.travelFact)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding-top:4px;border-top:2px solid #2e2e3e"><span>Разница итого</span><span style="color:'+diffColor+'">'+(z.diff>0?'+':'')+fmt2(z.diff)+'</span></div>'+
+    '</div>'+
+  '</div>';
 }
 function renderAll(){ renderStatusBar(); renderJournal(); renderWriteoffs(); updateInvBadge(); renderPendingAlert(); syncLiveShift(); }
 
@@ -2357,7 +2430,8 @@ function startPreviewMode(){
     openedAt: new Date().toISOString(),
     cashMorning: shopType==='shop' ? 13600 : 0,
     goodsMorning: 1391857,
-    drGoodsMorning: 59860,
+    cashDrMorning: 0,
+    goodsDrMorning: 59860,
     shopType: shopType,
     isPreview: true
   };
@@ -3923,7 +3997,7 @@ function renderClose(){
   if(nm) nm.textContent = fmt(session.cashMorning||0);
   // DR cash morning
   var drNm = document.getElementById('closeDrNalMorn');
-  if(drNm) drNm.textContent = fmt(session.drCashMorning||0);
+  if(drNm) drNm.textContent = fmt(session.cashDrMorning||0);
   var gm = document.getElementById('closeGoodsMorn');
   if(gm) gm.textContent = fmt(session.goodsMorning||0);
   var ge = document.getElementById('closeGoodsEve');
@@ -3945,7 +4019,7 @@ function renderClose(){
   var drCassaBlock = document.getElementById('closeDrCassaBlock');
   if(drCassaBlock) drCassaBlock.style.display = isShopType2 ? 'block' : 'none';
   var drNalMorn = document.getElementById('closeDrNalMorn');
-  if(drNalMorn && isShopType2) drNalMorn.textContent = fmt(session.drCashMorning||0);
+  if(drNalMorn && isShopType2) drNalMorn.textContent = fmt(session.cashDrMorning||0);
 
   // DR товар — always shown for all shop types
   var drGb = document.getElementById('closeDrGoodsBlock');
@@ -3964,7 +4038,7 @@ function renderClose(){
   var drWo = writeoffs.filter(function(e){ return e.goodsType==='dr'; });
   var drRcv = receives.filter(function(e){ return e.goodsType==='dr'; });
   // DR goods evening
-  var drMorn = session.drGoodsMorning||0;
+  var drMorn = session.goodsDrMorning||0;
   var drEveCalc = drMorn + drRcv.reduce(function(s,e){return s+(e.goodsEffect||0);},0) - drSales.reduce(function(s,e){return s+(e.totalPrice||0);},0) - drWo.reduce(function(s,e){return s+(e.amount||0);},0);
   if(drGm) drGm.textContent = fmt(drMorn);
   if(drGe) drGe.textContent = fmt(drEveCalc);
@@ -4131,8 +4205,8 @@ function renderClose(){
     var sep = '<tr><td colspan="2" style="padding:2px 8px"><div style="height:1px;background:#2e2e3e"></div></td></tr>';
     var hdr = function(label, color){ return '<tr><td colspan="2" style="padding:6px 8px 2px;font-size:11px;font-weight:700;color:'+(color||'#8888aa')+';text-transform:uppercase;letter-spacing:.5px">'+label+'</td></tr>'; };
 
-    var drGoodsEve = (session.drGoodsMorning||0)+rcvDr-drSalesArr.reduce(function(a,s){return a+(s.totalPrice||0);},0)-woDr;
-    var drCashMorn = session.drCashMorning||0;
+    var drGoodsEve = (session.goodsDrMorning||0)+rcvDr-drSalesArr.reduce(function(a,s){return a+(s.totalPrice||0);},0)-woDr;
+    var drCashMorn = session.cashDrMorning||0;
     var drCashEveEntered = parseFloat((document.getElementById('drCashEveInput')||{}).value)||0;
 
     var TH = function(label){ return '<th style="padding:6px 8px;text-align:right;font-size:11px;font-weight:700;color:'+label[1]+';border-bottom:2px solid #2e2e3e">'+label[0]+'</th>'; };
@@ -4159,7 +4233,7 @@ function renderClose(){
         TR('Выручка', woodRev, drRev, '#60c8f0', '#60c8f0') +
         TR('Кол-во', woodSales.length, drSalesArr.length, '#f0f0f8', '#f0f0f8') +
         TRS('📦 Товар') +
-        TR('Остаток утро', session.goodsMorning||0, session.drGoodsMorning||0, '#f0f0f8', '#f0f0f8') +
+        TR('Остаток утро', session.goodsMorning||0, session.goodsDrMorning||0, '#f0f0f8', '#f0f0f8') +
         TR('Остаток вечер', t.goods, drGoodsEve, '#c8f060', '#a060f0') +
         TR('Приход', rcvWood, rcvDr, '#60f090', '#60f090') +
         TR('Списание', woWood, woDr, '#f06060', '#f06060') +
@@ -4554,7 +4628,7 @@ function _renderShiftView(){
   cassaBody += row('Выручка безнал', f(cardRev), '#60c8f0');
   if(staffCashWood) cassaBody += row('🛒 Покупки сотр. нал', f(staffCashWood), '#a060f0');
   cassaBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
-  cassaBody += row('Нал утро', f(sh.drCashMorning||0), '#f0f0f8');
+  cassaBody += row('Нал утро', f(sh.cashDrMorning||0), '#f0f0f8');
   cassaBody += row('Нал вечер', f(sh.drCashEvening||0), '#f0f0f8');
   cassaBody += row('Выручка нал', f(drCashRev), '#60f090');
   cassaBody += row('Выручка безнал', f(drCardRev), '#60c8f0');
@@ -4571,7 +4645,7 @@ function _renderShiftView(){
     '</div>'+
     '<div style="font-size:10px;color:#a060f0;margin-bottom:5px;font-weight:700">🛍 ДР Товар</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'+
-      inp('sv_drCashMorn', sh.drCashMorning, 'Нал утро')+
+      inp('sv_drCashMorn', sh.cashDrMorning, 'Нал утро')+
       inp('sv_drCashEve', sh.drCashEvening, 'Нал вечер')+
       inp('sv_drCashRev', drCashRev, 'Выручка нал')+
       inp('sv_drCardRev', drCardRev, 'Выручка безнал')+
@@ -4586,7 +4660,7 @@ function _renderShiftView(){
   tovarBody += row('Товар утро', f(sh.goodsMorning||0), '#f0a060');
   tovarBody += row('Товар вечер', f(sh.goodsEvening||0), '#f0a060');
   tovarBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
-  tovarBody += row('Товар утро', f(sh.drGoodsMorning||0), '#a060f0');
+  tovarBody += row('Товар утро', f(sh.goodsDrMorning||0), '#a060f0');
   tovarBody += row('Товар вечер', f(sh.drGoodsEvening||0), '#a060f0');
   tovarBody += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #2e2e3e">'+
     '<div style="font-size:10px;color:#8888aa;margin-bottom:8px;font-weight:700">ИСПРАВИТЬ</div>'+
@@ -4597,7 +4671,7 @@ function _renderShiftView(){
     '</div>'+
     '<div style="font-size:10px;color:#a060f0;margin-bottom:5px;font-weight:700">🛍 ДР Товар</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'+
-      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Товар утро</div><input class="fi" type="number" id="sv_drGoodsMorn" value="'+(sh.drGoodsMorning||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
+      '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Товар утро</div><input class="fi" type="number" id="sv_drGoodsMorn" value="'+(sh.goodsDrMorning||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
       '<div><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Товар вечер</div><input class="fi" type="number" id="sv_drGoodsEve" value="'+(sh.drGoodsEvening||0)+'" inputmode="numeric" style="margin:0;padding:8px"></div>'+
     '</div>'+
     '<input class="fi" id="sv_tovarReason" placeholder="Причина правки (обязательно)..." style="margin:0;padding:8px;margin-bottom:8px">'+
@@ -4987,7 +5061,7 @@ function svSaveCassa(){
   _currentShiftView.cashEvening=parseFloat((document.getElementById('sv_cashEve')||{}).value)||0;
   _currentShiftView.cashRevenue=parseFloat((document.getElementById('sv_cashRev')||{}).value)||0;
   _currentShiftView.cardRevenue=parseFloat((document.getElementById('sv_cardRev')||{}).value)||0;
-  _currentShiftView.drCashMorning=parseFloat((document.getElementById('sv_drCashMorn')||{}).value)||0;
+  _currentShiftView.cashDrMorning=parseFloat((document.getElementById('sv_drCashMorn')||{}).value)||0;
   _currentShiftView.drCashEvening=parseFloat((document.getElementById('sv_drCashEve')||{}).value)||0;
   _currentShiftView.drCashRevenue=parseFloat((document.getElementById('sv_drCashRev')||{}).value)||0;
   _currentShiftView.drCardRevenue=parseFloat((document.getElementById('sv_drCardRev')||{}).value)||0;
@@ -5001,7 +5075,7 @@ function svSaveTovar(){
   if(!reason){showToast('Укажите причину правки');return;}
   _currentShiftView.goodsMorning=parseFloat((document.getElementById('sv_goodsMorn')||{}).value)||0;
   _currentShiftView.goodsEvening=parseFloat((document.getElementById('sv_goodsEve')||{}).value)||0;
-  _currentShiftView.drGoodsMorning=parseFloat((document.getElementById('sv_drGoodsMorn')||{}).value)||0;
+  _currentShiftView.goodsDrMorning=parseFloat((document.getElementById('sv_drGoodsMorn')||{}).value)||0;
   _currentShiftView.drGoodsEvening=parseFloat((document.getElementById('sv_drGoodsEve')||{}).value)||0;
   _currentShiftView.editedBy=(session&&(session.name||session.sellerName))||'admin';
   _currentShiftView.editedAt=new Date().toISOString();
