@@ -1609,6 +1609,7 @@ function syncListen(lsKey) {
       }
       if(lsKey === 'iz_shop_zp_settings'){
         try{ renderShopSettings(); }catch(e){}
+        try{ if(session && document.getElementById('mainStatusBar')) renderStatusBar(); }catch(e){}
       }
       // Generic shared refbooks live-refresh
       var shopRefbookKeys = ['iz_payment_methods','iz_suppliers','iz_goods','iz_materials','iz_work_schedules'];
@@ -2054,17 +2055,12 @@ function renderStatusBar(){
 
 // ── РАСЧЁТ ЗП за текущую смену (Главная) ──
 function calcZpForCurrentShift(){
-  var sales = journal.filter(function(e){ return e.type==='sale'; });
   var expenses = journal.filter(function(e){ return e.type==='expense'; });
 
-  var woodSales = sales.filter(function(s){ return !s.goodsType||s.goodsType==='derevo'; });
-  var drSalesArr = sales.filter(function(s){ return s.goodsType==='dr'; });
-  var woodRev = woodSales.reduce(function(a,s){return a+(s.cashPart||0)+(s.cardPart||0)+(s.discount||0);},0);
-  var drRev = drSalesArr.reduce(function(a,s){return a+(s.cashPart||0)+(s.cardPart||0)+(s.discount||0);},0);
-  var discWood = woodSales.reduce(function(a,s){return a+(s.discount||0);},0);
-  var discDr = drSalesArr.reduce(function(a,s){return a+(s.discount||0);},0);
-  var netWood = woodRev - discWood;
-  var netDr = drRev - discDr;
+  // Use the same correct, mixed-sale-aware split as the ДЕРЕВО / ДР Товар cards
+  var summary = calcSellerSummary();
+  var netWood = summary.wood.listPrice - summary.wood.discount;
+  var netDr = summary.dr.listPrice - summary.dr.discount;
   var totalNet = netWood + netDr;
 
   var zpFact = expenses.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
@@ -4172,11 +4168,15 @@ function renderClose(){
   // ══ ИТОГОВЫЙ БЛОК ══
   var sumEl = document.getElementById('closeSummary');
   if(sumEl){
-    // Wood sales (goodsType='derevo' or not set)
+    // Wood sales (goodsType='derevo' or not set) — used only for "Кол-во" count
     var woodSales = sales.filter(function(s){ return !s.goodsType||s.goodsType==='derevo'; });
     var drSalesArr = sales.filter(function(s){ return s.goodsType==='dr'; });
-    var woodRev = woodSales.reduce(function(a,s){return a+(s.cashPart||0)+(s.cardPart||0)+(s.discount||0);},0);
-    var drRev = drSalesArr.reduce(function(a,s){return a+(s.cashPart||0)+(s.cardPart||0)+(s.discount||0);},0);
+    // Revenue split: use the same mixed-sale-aware logic as the ДЕРЕВО / ДР Товар cards
+    var _sellerSummary = calcSellerSummary();
+    var woodRev = _sellerSummary.wood.listPrice;
+    var drRev = _sellerSummary.dr.listPrice;
+    var discWoodTotal = _sellerSummary.wood.discount;
+    var discDrTotal = _sellerSummary.dr.discount;
 
     // Expenses
     var zpFact = expenses.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
@@ -4247,9 +4247,9 @@ function renderClose(){
         TR('Итого расходы', totalExpWood, totalExpDr, '#f0a060', '#f0a060') +
         TRS('💰 ЗП') +
         (function(){
-          // Discount per block
-          var discWood = woodSales.reduce(function(a,s){return a+(s.discount||0);},0);
-          var discDr   = drSalesArr.reduce(function(a,s){return a+(s.discount||0);},0);
+          // Discount per block (from calcSellerSummary, correctly handles mixed sales)
+          var discWood = discWoodTotal;
+          var discDr   = discDrTotal;
           // Net revenue (выручка - скидка)
           var netWood = woodRev - discWood;
           var netDr   = drRev - discDr;
