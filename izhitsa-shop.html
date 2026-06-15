@@ -193,16 +193,7 @@ function applyUpdate() {
   <div class="page" id="pg-journal">
     <div id="pendingAlert"></div>
     <!-- Расширенный бар — только на главной вкладке -->
-    <div id="mainStatusBar" style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:12px">
-      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbCash" style="color:#60f090">0₽</div><div class="sb-l">💵 Нал Дерево</div></div>
-      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbCashDr" style="color:#a060f0">0₽</div><div class="sb-l">🛍 Нал ДР Товар</div></div>
-      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbStaff" style="color:#60c8f0">0₽</div><div class="sb-l">🛒 Покупки сотр.</div></div>
-      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbGoods" style="color:#c8f060">0₽</div><div class="sb-l">📦 Товар Дерево</div></div>
-      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbGoodsDr" style="color:#f060a0">0₽</div><div class="sb-l">🛍 Остаток ДР</div></div>
-      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbRevenue" style="color:#c8f060">0₽</div><div class="sb-l">💰 Выручка</div></div>
-      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbDiscount" style="color:#f0a060">0₽</div><div class="sb-l">🏷 Скидки</div></div>
-      <div class="sb" style="background:var(--s1);border-radius:9px;padding:9px"><div class="sb-v" id="sbCard" style="color:#60c8f0">0₽</div><div class="sb-l">💳 Безнал</div></div>
-    </div>
+    <div id="mainStatusBar" style="margin-bottom:12px"></div>
     <div id="journalBtns1" style="display:flex;gap:7px;margin-bottom:8px">
       <button class="btn" style="margin:0;flex:1.2;font-size:13px" onclick="openMo('saleMo');resetSaleForm()">＋ Продажа</button>
       <button id="btnWriteoff" class="btn red" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openMo('woMo')">🗑 Списание</button>
@@ -1850,17 +1841,150 @@ function calcTotals(){
   });
   return {cash,card,staff,goods,cashDr,goodsDr,revenue,discount};
 }
+
+// Detailed per-category (Дерево / ДР Товар) breakdown for the seller's own
+// status bar — mirrors the split used on the admin "Главная" page.
+function calcSellerSummary(){
+  var sales = journal.filter(function(e){ return e.type==='sale'; });
+  var writeoffs = journal.filter(function(e){ return e.type==='writeoff'; });
+  var receives = journal.filter(function(e){ return e.type==='receive'; });
+
+  function emptyPay(){ return {cash:0,terminal:0,sbp:0,transfer:0,qr:0,rs:0}; }
+  function group(isDr){
+    var listPrice=0, discount=0, pay=emptyPay();
+    sales.forEach(function(e){
+      var items=e.items||[];
+      var itemAmt=function(it){ return it.amt!=null?it.amt:(it.price||0)*(it.qty||1); };
+      if(!items.length){
+        if(isDr) return;
+        listPrice += (e.amount||0)+(e.discount||0);
+        discount += (e.discount||0);
+        var cash0=e.cashEffect||0, card0=e.cardEffect||0;
+        if(e.payMethod==='mixed'){ pay.cash+=cash0; pay.terminal+=card0; }
+        else { var k0=pay.hasOwnProperty(e.payMethod)?e.payMethod:'terminal'; pay[k0]+=cash0+card0; }
+        return;
+      }
+      var groupItems = items.filter(function(it){ return isDr ? it.goodsType==='dr' : it.goodsType!=='dr'; });
+      if(!groupItems.length) return;
+      var groupTotal = groupItems.reduce(function(s,it){ return s+itemAmt(it); },0);
+      var saleTotal = e.totalPrice || items.reduce(function(s,it){ return s+itemAmt(it); },0) || 1;
+      var share = groupTotal/saleTotal;
+      listPrice += groupTotal;
+      discount += (e.discount||0)*share;
+      var cash = isDr ? (e.cashDrEffect||0) : (e.cashEffect||0);
+      var card = isDr ? (e.cardDrEffect||0) : (e.cardEffect||0);
+      if(e.payMethod==='mixed'){ pay.cash+=cash; pay.terminal+=card; }
+      else { var k=pay.hasOwnProperty(e.payMethod)?e.payMethod:'terminal'; pay[k]+=cash+card; }
+    });
+    return {listPrice:listPrice, discount:discount, pay:pay};
+  }
+  var wood = group(false), dr = group(true);
+
+  var woWood = writeoffs.reduce(function(s,e){ return s-(e.goodsEffect||0); },0);
+  var woDr = writeoffs.reduce(function(s,e){ return s-(e.goodsDrEffect||0); },0);
+  var rcvWood = receives.reduce(function(s,e){ return s+(e.goodsEffect||0); },0);
+  var rcvDr = receives.reduce(function(s,e){ return s+(e.goodsDrEffect||0); },0);
+
+  var totalRevenue = wood.listPrice + dr.listPrice; // includes discounts (полная стоимость)
+  var totalDiscount = wood.discount + dr.discount;
+
+  var t = calcTotals();
+  var staffWood = journal.reduce(function(s,e){ return e.type==='staff' && (e.goodsType!=='dr') ? s+(e.staffEffect||0) : s; },0);
+  var staffDr = journal.reduce(function(s,e){ return e.type==='staff' && e.goodsType==='dr' ? s+(e.staffEffect||0) : s; },0);
+  // Fall back: if no per-entry split exists, attribute all staff purchases to Дерево
+  if(staffWood===0 && staffDr===0) staffWood = t.staff;
+
+  return {
+    wood: wood, dr: dr,
+    totalRevenue: totalRevenue, totalDiscount: totalDiscount,
+    staffWood: staffWood, staffDr: staffDr, staffTotal: t.staff,
+    cashWood: t.cash, cashDr: t.cashDr, cashTotal: t.cash+t.cashDr+t.staff,
+    goodsWood: t.goods, goodsDr: t.goodsDr,
+    woWood: woWood, woDr: woDr, rcvWood: rcvWood, rcvDr: rcvDr
+  };
+}
+
 function renderStatusBar(){
-  var t=calcTotals();
-  function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=fmt(v); }
-  set('sbCash', t.cash);
-  set('sbCashDr', t.cashDr);
-  set('sbStaff', t.staff);
-  set('sbGoods', t.goods);
-  set('sbGoodsDr', t.goodsDr);
-  set('sbRevenue', t.revenue);
-  set('sbDiscount', t.discount);
-  set('sbCard', t.card);
+  var c=document.getElementById('mainStatusBar'); if(!c) return;
+  var shopType = (session.shopType) || getShopType(session.shopName);
+  var isShop = shopType==='shop';
+
+  if(!isShop){
+    // Non-shop sellers (online/offline/workshop) don't track cash drawers —
+    // keep a minimal summary so this still renders something useful.
+    var t0=calcTotals();
+    c.innerHTML='<div style="background:#1a1a22;border-radius:12px;padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:6px">'+
+      sbCell('💰 Выручка', t0.revenue, '#c8f060')+
+      sbCell('🏷 Скидка', t0.discount, '#f0a060')+
+      sbCell('📦 Товар', t0.goods, '#f0c060')+
+      sbCell('🛍 Остаток ДР', t0.goodsDr, '#a060f0')+
+    '</div>';
+    return;
+  }
+
+  var s = calcSellerSummary();
+  var openedDate = session.openedAt ? new Date(session.openedAt) : null;
+  var dateStr = openedDate ? openedDate.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
+  var timeStr = openedDate ? openedDate.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '—';
+
+  function sbCell(label,val,color){
+    return '<div style="background:#0f0f13;border-radius:8px;padding:6px 8px"><div style="font-size:9px;color:#8888aa;line-height:1.3">'+label+'</div>'+
+      '<div style="font-size:13px;font-weight:700;color:'+(color||'#f0f0f8')+'">'+fmt(val)+'</div></div>';
+  }
+  function payRows(pay){
+    return '<div style="font-size:10px;color:#8888aa;display:flex;flex-direction:column;gap:1px;margin-top:2px">'+
+      '<div style="display:flex;justify-content:space-between"><span>💵 Нал</span><span>'+fmt(pay.cash)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between"><span>💳 Терминал</span><span>'+fmt(pay.terminal)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between"><span>🏦 Перевод</span><span>'+fmt(pay.transfer)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between"><span>🔲 QR/СБП</span><span>'+fmt(pay.qr+pay.sbp)+'</span></div>'+
+      (pay.rs?'<div style="display:flex;justify-content:space-between"><span>🏦 РС</span><span>'+fmt(pay.rs)+'</span></div>':'')+
+    '</div>';
+  }
+  function col(title, color, g){
+    return '<div style="background:#0f0f13;border-radius:9px;padding:8px">'+
+      '<div style="font-size:10px;color:'+color+';font-weight:700;margin-bottom:4px">'+title+'</div>'+
+      '<div style="font-size:14px;font-weight:700">'+fmt(g.listPrice)+'</div>'+
+      '<div style="font-size:9px;color:#8888aa;margin-bottom:2px">полная стоимость</div>'+
+      payRows(g.pay)+
+      '<div style="display:flex;justify-content:space-between;font-size:10px;color:#f0a060;margin-top:3px;padding-top:3px;border-top:1px solid #2e2e3e"><span>🎁 Скидка</span><span>'+fmt(g.discount)+'</span></div>'+
+    '</div>';
+  }
+
+  c.innerHTML =
+    // Header: date / seller / open time
+    '<div style="display:flex;justify-content:space-between;align-items:center;background:#1a1a22;border-radius:9px;padding:7px 10px;margin-bottom:6px;font-size:11px;color:#8888aa">'+
+      '<span>📅 '+dateStr+'</span><span>👤 '+(session.sellerName||'')+'</span><span>🕐 открыта '+timeStr+'</span>'+
+    '</div>'+
+    // Общая выручка
+    '<div style="background:#1a1a22;border-radius:9px;padding:8px 10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'+
+      '<span style="font-size:11px;color:#8888aa">💰 Общая выручка (полная стоимость + скидка)</span>'+
+      '<span style="font-size:15px;font-weight:700;color:#c8f060">'+fmt(s.totalRevenue)+'</span>'+
+    '</div>'+
+    // Two columns: Дерево / ДР Товар
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">'+
+      col('🌳 ДЕРЕВО','#c8f060', s.wood)+
+      col('🛍 ДР ТОВАР','#a060f0', s.dr)+
+    '</div>'+
+    // Покупки сотрудников
+    '<div style="background:#1a1a22;border-radius:9px;padding:8px 10px;margin-bottom:6px">'+
+      '<div style="font-size:10px;color:#60c8f0;font-weight:700;margin-bottom:4px">🛒 ПОКУПКИ СОТРУДНИКОВ</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center">'+
+        sbCell('🌳 Дерево', s.staffWood, '#60c8f0')+sbCell('🛍 ДР', s.staffDr, '#60c8f0')+sbCell('Σ Всего', s.staffTotal, '#60c8f0')+
+      '</div>'+
+    '</div>'+
+    // Факт наличных в кассе
+    '<div style="background:#1a1a22;border-radius:9px;padding:8px 10px;margin-bottom:6px">'+
+      '<div style="font-size:10px;color:#60f090;font-weight:700;margin-bottom:4px">💵 ФАКТ НАЛИЧНЫХ В КАССЕ</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;text-align:center">'+
+        sbCell('🌳 Дерево', s.cashWood, '#60f090')+sbCell('🛍 ДР', s.cashDr, '#60f090')+sbCell('🛒 Сотр.', s.staffTotal, '#a060f0')+sbCell('Σ Итого', s.cashTotal, '#60f090')+
+      '</div>'+
+    '</div>'+
+    // Остаток / Списание / Приход товара
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'+
+      sbCell('📦 Остаток · Дерево', s.goodsWood, '#f0c060')+sbCell('📦 Остаток · ДР', s.goodsDr, '#f0c060')+
+      sbCell('🗑 Списано · Дерево', s.woWood, '#f06060')+sbCell('🗑 Списано · ДР', s.woDr, '#f06060')+
+      sbCell('📥 Приход · Дерево', s.rcvWood, '#60c8f0')+sbCell('📥 Приход · ДР', s.rcvDr, '#60c8f0')+
+    '</div>';
 }
 function renderAll(){ renderStatusBar(); renderJournal(); updateInvBadge(); renderPendingAlert(); syncLiveShift(); }
 
@@ -2219,10 +2343,6 @@ function adaptUIForShopType(){
   var isOnline = shopType === 'online';
   var isOffline = shopType === 'offline';
 
-  // Status bar — hide cash for non-shop
-  var sbCashEl = document.getElementById('sbCash');
-  if(sbCashEl) sbCashEl.closest('.sb').style.display = isShop ? 'block' : 'none';
-
   // Header indicator
   var shopEl = document.getElementById('hdrShop');
   if(shopEl){
@@ -2260,14 +2380,6 @@ function adaptUIForShopType(){
       }
     });
   }
-
-  // Status bar: hide cash for non-shop, hide staff for opt
-  var sbCashEl = (document.getElementById('sbCash')||{closest:function(){return null}}).closest('.sb');
-  var sbStaffEl = (document.getElementById('sbStaff')||{closest:function(){return null}}).closest('.sb');
-  var isOpt = shopType==='offline';
-  var isOnl = shopType==='online';
-  if(sbCashEl) sbCashEl.style.display = (shopType==='shop') ? 'block' : 'none';
-  if(sbStaffEl) sbStaffEl.style.display = (isOpt||isOnl) ? 'none' : 'block';
 
   // Show/hide journal buttons based on type
   var isOpt = shopType==='offline';
@@ -2796,7 +2908,7 @@ function renderAdminInvoices(){
   c.innerHTML = all.map(function(inv){
     var itemsStr = (inv.items||[]).map(function(it){ return (it.name||'')+(it.qty&&it.qty!==1?' × '+it.qty:'')+(it.price?' · '+fmt(it.price):''); }).join(', ');
     var total = inv.totalAmt || (inv.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
-    return '<div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px" id="ainv_'+inv.id+'">' +
+    return '<div style="background:#1a1a22;border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px" id="ainv_'+inv.id+'">' +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">' +
         '<div>' +
           '<div style="font-size:13px;font-weight:700">'+(inv.num||'—')+'</div>' +
