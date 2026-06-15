@@ -272,7 +272,7 @@ function applyUpdate() {
   </div>
   <div class="page" id="pg-writeoffs">
     <div class="stitle">Списание</div>
-    <button class="btn red" style="margin-bottom:12px" onclick="openMo('woMo')">🗑 Списать товар</button>
+    <button class="btn red" style="margin-bottom:12px" onclick="resetWoForm();openMo('woMo')">🗑 Списать товар</button>
     <div class="card"><div class="ctitle">🌳 Дерево</div><div id="writeoffsListWood"></div></div>
     <div class="card" style="margin-top:10px"><div class="ctitle">🛍 ДР Товар</div><div id="writeoffsListDr"></div></div>
   </div>
@@ -1169,44 +1169,53 @@ function applyUpdate() {
 <!-- WRITEOFF -->
 <div class="mo" id="woMo">
   <div class="md"><div class="mh"></div><div class="mt">Списание</div>
-    <div class="fg"><label class="fl">Артикул</label><input class="fi" id="woNum" placeholder="001" oninput="lookupWoItem(this.value)"></div>
-    <div class="fg" style="margin-bottom:8px;position:relative">
-      <label class="fl">Наименование</label>
-      <div style="display:flex;gap:6px">
-        <input class="fi" id="woName" placeholder="Изделие..." autocomplete="off"
-          oninput="psjSuggest('woName',getItemNames(),'woPickName')"
-          onfocus="psjSuggest('woName',getItemNames(),'woPickName')"
-          onblur="psjHideSugg('woName')">
-        <button type="button" onclick="siAddToGoods('woName')" style="background:#22222e;border:1px solid #c8f060;border-radius:10px;padding:0 14px;color:#c8f060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
+    <div class="ctitle">Добавить позиции</div>
+    <div id="woItemsDisplay" style="margin-bottom:10px"></div>
+    <div style="background:#0f0f13;border-radius:12px;padding:10px;margin-bottom:12px">
+      <div class="fg"><label class="fl">Артикул</label><input class="fi" id="woNum" placeholder="001" oninput="lookupWoItem(this.value)"></div>
+      <div class="fg" style="margin-bottom:8px;position:relative">
+        <label class="fl">Наименование</label>
+        <div style="display:flex;gap:6px">
+          <input class="fi" id="woName" placeholder="Изделие..." autocomplete="off"
+            oninput="psjSuggest('woName',getItemNames(),'woPickName')"
+            onfocus="psjSuggest('woName',getItemNames(),'woPickName')"
+            onblur="psjHideSugg('woName')">
+          <button type="button" onclick="siAddToGoods('woName')" style="background:#22222e;border:1px solid #c8f060;border-radius:10px;padding:0 14px;color:#c8f060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
+        </div>
+        <div id="woName_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
       </div>
-      <div id="woName_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
-    </div>
-    <div class="fg" style="margin-bottom:8px;position:relative">
-      <label class="fl">Порода дерева</label>
-      <div style="display:flex;gap:6px">
-        <input class="fi" id="woSpecies" placeholder="Порода" autocomplete="off"
-          oninput="psjSuggest('woSpecies',getSpecies(),'woPickSpecies')"
-          onfocus="psjSuggest('woSpecies',getSpecies(),'woPickSpecies')"
-          onblur="psjHideSugg('woSpecies')">
-        <button type="button" onclick="siAddToSpecies('woSpecies')" style="background:#22222e;border:1px solid #f0c060;border-radius:10px;padding:0 14px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
+      <div class="fg" style="margin-bottom:8px;position:relative">
+        <label class="fl">Порода дерева</label>
+        <div style="display:flex;gap:6px">
+          <input class="fi" id="woSpecies" placeholder="Порода" autocomplete="off"
+            oninput="psjSuggest('woSpecies',getSpecies(),'woPickSpecies')"
+            onfocus="psjSuggest('woSpecies',getSpecies(),'woPickSpecies')"
+            onblur="psjHideSugg('woSpecies')">
+          <button type="button" onclick="siAddToSpecies('woSpecies')" style="background:#22222e;border:1px solid #f0c060;border-radius:10px;padding:0 14px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
+        </div>
+        <div id="woSpecies_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
       </div>
-      <div id="woSpecies_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
-    </div>
-    <div class="fg" style="margin-bottom:0">
-      <label class="fl">Тип товара</label>
-      <div style="display:flex;gap:6px">
-        <button type="button" id="woTypeDerevo" onclick="setWoItemType('derevo')"
-          style="flex:1;padding:7px;border-radius:8px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">🌳 Дерево</button>
-        <button type="button" id="woTypeDr" onclick="setWoItemType('dr')"
-          style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
+      <div class="fg" style="margin-bottom:0">
+        <label class="fl">Тип товара</label>
+        <div style="display:flex;gap:6px">
+          <button type="button" id="woTypeDerevo" onclick="setWoItemType('derevo')"
+            style="flex:1;padding:7px;border-radius:8px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">🌳 Дерево</button>
+          <button type="button" id="woTypeDr" onclick="setWoItemType('dr')"
+            style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
+        </div>
       </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <div class="fg" style="margin:0;flex:1"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="woPrice" placeholder="0" inputmode="numeric" oninput="woCalcAmt()"></div>
+        <div class="fg" style="margin:0;width:80px"><label class="fl">Кол-во</label><input class="fi" type="number" id="woQty" placeholder="1" inputmode="numeric" value="1" oninput="woCalcAmt()"></div>
+      </div>
+      <div class="fg" style="margin:6px 0 0"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="woAmt" placeholder="0" inputmode="numeric" oninput="woCalcFromAmt()" style="border-color:#f06060;color:#f06060;font-weight:700"></div>
+      <div class="fg"><label class="fl">Причина (для этой позиции, обязательно)</label><input class="fi" id="woReason" placeholder="Укажите причину..."></div>
+      <button type="button" onclick="addWoItem()" class="btn sec" style="font-size:12px;margin:8px 0 0;border-color:#f06060;color:#f06060">＋ Добавить позицию в списание</button>
     </div>
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <div class="fg" style="margin:0;flex:1"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="woPrice" placeholder="0" inputmode="numeric" oninput="woCalcAmt()"></div>
-      <div class="fg" style="margin:0;width:80px"><label class="fl">Кол-во</label><input class="fi" type="number" id="woQty" placeholder="1" inputmode="numeric" value="1" oninput="woCalcAmt()"></div>
+    <div id="woTotalDisplay" style="display:none;justify-content:space-between;align-items:center;background:#2e1a1a;border:1px solid #f06060;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-weight:700">
+      <span style="color:#8888aa;font-size:13px">Итого к списанию</span>
+      <span id="woTotalAmt" style="color:#f06060;font-size:16px"></span>
     </div>
-    <div class="fg" style="margin:6px 0 0"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="woAmt" placeholder="0" inputmode="numeric" oninput="woCalcFromAmt()" style="border-color:#f06060;color:#f06060;font-weight:700"></div>
-    <div class="fg"><label class="fl">Причина (обязательно)</label><input class="fi" id="woReason" placeholder="Укажите причину..."></div>
     <button class="btn red" onclick="saveWriteoff()">Списать</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('woMo')">Отмена</button>
   </div>
@@ -3650,24 +3659,97 @@ function woCalcFromAmt(){
   var amt=parseFloat(gv('woAmt'))||0, qty=parseFloat(gv('woQty'))||1;
   var priceEl=document.getElementById('woPrice'); if(priceEl && qty>0) priceEl.value = (amt/qty)||'';
 }
-function saveWriteoff(){
-  const reason=gv('woReason'); if(!reason){showToast('Укажите причину');return;}
-  const amt=parseFloat(gv('woAmt'))||0; if(!amt){showToast('Введите сумму');return;}
+
+// ── Staged writeoff items (multi-position, like sale items) ──
+var woItems = [];
+function addWoItem(){
+  const name=(gv('woName')||'').trim();
+  const reason=(gv('woReason')||'').trim();
+  const amt=parseFloat(gv('woAmt'))||0;
+  if(!name){ showToast('Введите наименование'); return; }
+  if(!reason){ showToast('Укажите причину для этой позиции'); return; }
+  if(!amt){ showToast('Введите сумму'); return; }
   const isDr = _woItemGoodsType==='dr';
-  const species = gv('woSpecies');
-  const price = parseFloat(gv('woPrice'))||0;
-  const qty = parseFloat(gv('woQty'))||1;
-  journal.push({id:uid(),type:'writeoff',ts:new Date().toISOString(),icon:'🗑️',label:'Списание',
-    sub:(gv('woNum')?'№'+gv('woNum')+' ':'')+gv('woName')+(species?' · '+species:'')+(qty&&qty!==1?' × '+qty:'')+' · '+reason,
-    goodsType: isDr?'dr':'derevo', species, price, qty,
-    amount:amt,amtCls:'exp',amtSign:'−',cashEffect:0,cardEffect:0,staffEffect:0,
-    goodsEffect: isDr?0:-amt, goodsDrEffect: isDr?-amt:0});
-  saveJ(); ['woNum','woName','woSpecies','woAmt','woReason'].forEach(id=>document.getElementById(id).value='');
+  const species=(gv('woSpecies')||'').trim();
+  const price=parseFloat(gv('woPrice'))||0;
+  const qty=parseFloat(gv('woQty'))||1;
+  const num=(gv('woNum')||'').trim();
+  woItems.push({id:uid(), num, name, species, price, qty, amt, reason, goodsType: isDr?'dr':'derevo'});
+  ['woNum','woName','woSpecies','woAmt','woReason'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   var qtyEl=document.getElementById('woQty'); if(qtyEl) qtyEl.value='1';
   var priceEl=document.getElementById('woPrice'); if(priceEl) priceEl.value='';
   setWoItemType('derevo');
-  logWriteoff(reason, amt, session.shopName);
-  closeMo('woMo'); renderAll(); showToast('🗑️ Списание зафиксировано');
+  renderWoItems();
+}
+function removeWoItem(i){
+  woItems.splice(i,1);
+  renderWoItems();
+}
+function renderWoItems(){
+  var c=document.getElementById('woItemsDisplay');
+  var totalEl=document.getElementById('woTotalDisplay'), totalAmtEl=document.getElementById('woTotalAmt');
+  if(!c) return;
+  if(!woItems.length){
+    c.innerHTML='';
+    if(totalEl) totalEl.style.display='none';
+    return;
+  }
+  c.innerHTML=woItems.map(function(it,i){
+    var typeBadge = it.goodsType==='dr'
+      ? '<span style="font-size:10px;padding:1px 6px;border-radius:6px;background:#1e1a2e;color:#a060f0">🛍 ДР</span>'
+      : '<span style="font-size:10px;padding:1px 6px;border-radius:6px;background:#1e2a14;color:#c8f060">🌳 Дерево</span>';
+    var priceLine = (it.qty&&it.qty!==1) ? (fmt(it.price)+' × '+it.qty+' = '+fmt(it.amt)) : fmt(it.amt);
+    return '<div class="sir" style="border-color:#f06060;background:#22222e">'+
+      '<div class="sir-num" style="color:#8888aa">'+(it.num||'—')+'</div>'+
+      '<div class="sir-info"><div class="sir-name">'+it.name+(it.species?' <span style="color:#f0c060;font-size:11px">· '+it.species+'</span>':'')+' '+typeBadge+'</div>'+
+        '<div class="sir-price" style="color:#f06060">'+priceLine+'</div>'+
+        '<div style="font-size:11px;color:#8888aa;margin-top:2px">'+it.reason+'</div>'+
+      '</div>'+
+      '<div style="display:flex;gap:4px;flex-shrink:0">'+
+        '<button class="sir-del" onclick="removeWoItem('+i+')">✕</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  var total = woItems.reduce(function(s,it){ return s+(it.amt||0); },0);
+  if(totalEl){ totalEl.style.display='flex'; }
+  if(totalAmtEl) totalAmtEl.textContent = fmt(total);
+}
+function resetWoForm(){
+  woItems=[];
+  ['woNum','woName','woSpecies','woAmt','woReason'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  var qtyEl=document.getElementById('woQty'); if(qtyEl) qtyEl.value='1';
+  var priceEl=document.getElementById('woPrice'); if(priceEl) priceEl.value='';
+  setWoItemType('derevo');
+  renderWoItems();
+}
+function saveWriteoff(){
+  // If the current fields have an unsaved item, add it first (so the seller
+  // doesn't lose data if they forget to tap "Добавить позицию").
+  var hasPendingFields = (gv('woName')||'').trim() || (gv('woAmt')||'').trim();
+  if(hasPendingFields){
+    addWoItem();
+    if(!woItems.length) return; // addWoItem already showed a validation toast
+  }
+  if(!woItems.length){ showToast('Добавьте хотя бы одну позицию'); return; }
+
+  var baseTs = Date.now();
+  woItems.forEach(function(it, idx){
+    var isDr = it.goodsType==='dr';
+    var amt = it.amt;
+    // Stagger timestamps by 1ms so entries keep their add-order in the journal
+    var ts = new Date(baseTs+idx).toISOString();
+    journal.push({id:uid(),type:'writeoff',ts:ts,icon:'🗑️',label:'Списание',
+      sub:(it.num?'№'+it.num+' ':'')+it.name+(it.species?' · '+it.species:'')+(it.qty&&it.qty!==1?' × '+it.qty:'')+' · '+it.reason,
+      goodsType: isDr?'dr':'derevo', species: it.species, price: it.price, qty: it.qty,
+      amount:amt,amtCls:'exp',amtSign:'−',cashEffect:0,cardEffect:0,staffEffect:0,
+      goodsEffect: isDr?0:-amt, goodsDrEffect: isDr?-amt:0});
+    logWriteoff(it.reason, amt, session.shopName);
+  });
+  var total = woItems.reduce(function(s,it){ return s+(it.amt||0); },0);
+  var count = woItems.length;
+  saveJ(); resetWoForm();
+  closeMo('woMo'); renderAll();
+  showToast('🗑️ Списано '+count+(count===1?' позиция':' позиций')+' на '+fmt(total));
 }
 
 // ════ RECEIVE ════
