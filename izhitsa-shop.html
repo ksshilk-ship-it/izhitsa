@@ -1847,8 +1847,39 @@ function getShopAdmins(){
   return fallback;
 }
 function saveShopAdmins(d){ syncSave('iz_shop_admins', d); }
-function getInvoices(){ return JSON.parse(localStorage.getItem('iz_invoices')||'[]'); }
+function getInvoices(){ return JSON.parse(localStorage.getItem('iz_invoices')||'[]').filter(function(i){ return !i.manual; }); }
 function saveInvoices(d){ localStorage.setItem('iz_invoices',JSON.stringify(d)); }
+
+// ── One-time migration: earlier versions saved manually-entered invoices into
+// the shared "iz_invoices" collection (meant for automatic workshop invoices),
+// causing them to show up under "Из мастерской" instead of "Вручную". Move any
+// such entries (manual:true) into iz_manual_invoices and remove them from
+// iz_invoices, both locally and in Firestore. ──
+var _manualInvMigrationDone = false;
+function migrateLegacyManualInvoices(){
+  if(_manualInvMigrationDone) return;
+  var all = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  var legacy = all.filter(function(i){ return i.manual; });
+  if(!legacy.length){ _manualInvMigrationDone = true; return; }
+  _manualInvMigrationDone = true;
+
+  var manualList = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var existingIds = {};
+  manualList.forEach(function(m){ existingIds[String(m._id!=null?m._id:m.id)]=true; });
+
+  legacy.forEach(function(inv){
+    var iid = String(inv._id!=null?inv._id:inv.id);
+    if(!existingIds[iid]){
+      manualList.unshift(inv);
+      try{ db.collection('iz_manual_invoices').doc(iid).set(inv); }catch(e){}
+    }
+    try{ db.collection('iz_invoices').doc(iid).delete(); }catch(e){}
+  });
+  localStorage.setItem('iz_manual_invoices', JSON.stringify(manualList));
+  var remaining = all.filter(function(i){ return !i.manual; });
+  localStorage.setItem('iz_invoices', JSON.stringify(remaining));
+  renderInvoices(); renderManInvAccepted();
+}
 // ── Sort helper: by type order, then alphabetically (matches admin) ──
 var SHOP_TYPE_ORDER = {shop:0, offline:1, online:2, workshop:3};
 var ACCOUNT_TYPE_ORDER = {cash:0, card:1, rs:2, bank:2, online:3};
@@ -2614,6 +2645,11 @@ function startApp(){
   db.collection('iz_invoices').onSnapshot(snap=>{
     localStorage.setItem('iz_invoices',JSON.stringify(snap.docs.map(x=>({_id:x.id,...x.data()}))));
     updateInvBadge(); renderPendingAlert();
+    migrateLegacyManualInvoices();
+  },()=>{});
+  db.collection('iz_manual_invoices').onSnapshot(snap=>{
+    localStorage.setItem('iz_manual_invoices',JSON.stringify(snap.docs.map(x=>({_id:x.id,...x.data()}))));
+    if(document.getElementById('manInvAccepted')) renderManInvAccepted();
   },()=>{});
   document.getElementById('rcvDate').value=new Date().toISOString().split('T')[0];
   if(!session.isPreview) startLiveShiftListener();
@@ -8725,8 +8761,8 @@ function saveManualInvoice() {
   var existing = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   existing.unshift(inv);
   localStorage.setItem('iz_manual_invoices', JSON.stringify(existing));
-  // Save to Firestore
-  try { db.collection('iz_invoices').doc(inv.id).set(inv); } catch(e){}
+  // Save to Firestore — own collection, separate from automatic workshop invoices (iz_invoices)
+  try { db.collection('iz_manual_invoices').doc(inv.id).set(inv); } catch(e){}
   // Add to journal as receive entries
   _manInvItems.forEach(function(item){
     autoSaveToItemBase(item.name, item.article, item.price, 'derevo');
@@ -8763,15 +8799,103 @@ function renderManInvAccepted() {
   var mine = all.filter(function(inv){ return inv.destName === session.shopName; });
   if(!mine.length) { c.innerHTML='<div class="empty"><div class="ei">📋</div>Нет</div>'; return; }
   c.innerHTML = mine.slice(0,10).map(function(inv){
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px">'+
-      '<div>'+
-        '<div style="font-size:13px;font-weight:700">'+inv.num+'</div>'+
-        '<div style="font-size:11px;color:#8888aa">'+inv.date+' · '+(inv.from||'')+'</div>'+
-        '<div style="font-size:11px;color:#8888aa">'+(inv.items||[]).length+' позиций · '+Math.round(inv.totalAmt||0).toLocaleString('ru-RU')+'₽</div>'+
+    var iid=String(inv._id!=null?inv._id:inv.id);
+    return '<div id="maninv_'+iid+'" style="padding:10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+        '<div>'+
+          '<div style="font-size:13px;font-weight:700">'+inv.num+'</div>'+
+          '<div style="font-size:11px;color:#8888aa">'+inv.date+' · '+(inv.from||'')+'</div>'+
+          '<div style="font-size:11px;color:#8888aa">'+(inv.items||[]).length+' позиций · '+Math.round(inv.totalAmt||0).toLocaleString('ru-RU')+'₽</div>'+
+        '</div>'+
+        '<div style="font-size:11px;color:#60f090;font-weight:700">✅ Принята</div>'+
       '</div>'+
-      '<div style="font-size:11px;color:#60f090;font-weight:700">✅ Принята</div>'+
+      '<div style="display:flex;gap:6px">'+
+        '<button onclick="editManualInvoice(\''+iid+'\')" style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#c8f060;font-size:11px;cursor:pointer">✏️ Исправить</button>'+
+        '<button onclick="deleteManualInvoice(\''+iid+'\')" style="padding:7px 12px;border-radius:8px;border:1px solid #3e2020;background:#2a1010;color:#f06060;font-size:11px;cursor:pointer">🗑 Удалить</button>'+
+      '</div>'+
     '</div>';
   }).join('');
+}
+
+// ── Edit / delete manually-entered invoices (separate store from iz_invoices) ──
+window._manInvEdit = window._manInvEdit || {};
+function editManualInvoice(id){
+  var all = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var inv = all.find(function(i){ return String(i._id!=null?i._id:i.id)===id; });
+  if(!inv) return;
+  var card = document.getElementById('maninv_'+id); if(!card) return;
+  window._manInvEdit[id] = JSON.parse(JSON.stringify(inv));
+
+  var itemsHtml = (inv.items||[]).map(function(item,i){
+    return '<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center">'+
+      '<input class="fi" value="'+(item.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" oninput="_manInvEditName(\''+id+'\','+i+',this.value)">'+
+      '<input class="fi" type="number" value="'+(item.qty!=null?item.qty:1)+'" inputmode="numeric" style="flex:0 0 50px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditQty(\''+id+'\','+i+',this.value)">'+
+      '<input class="fi" type="number" value="'+(item.price||0)+'" inputmode="numeric" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditPrice(\''+id+'\','+i+',this.value)">'+
+    '</div>';
+  }).join('');
+
+  card.innerHTML =
+    '<div style="font-size:11px;font-weight:700;color:#c8f060;margin-bottom:8px">✏️ Исправление: '+(inv.num||'')+'</div>'+
+    '<div class="fg" style="margin-bottom:6px"><label class="fl">Номер</label><input class="fi" id="maninv_num_'+id+'" value="'+(inv.num||'')+'" style="margin:0;padding:7px"></div>'+
+    '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата</label><input class="fi" type="date" id="maninv_date_'+id+'" value="'+(inv.date||'')+'" style="margin:0;padding:7px;-webkit-appearance:none;color-scheme:dark"></div>'+
+    '<div class="fg" style="margin-bottom:6px"><label class="fl">От кого</label><input class="fi" id="maninv_from_'+id+'" value="'+(inv.from||'')+'" style="margin:0;padding:7px"></div>'+
+    '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (наим. · кол-во · цена)</div>'+
+    itemsHtml+
+    '<div style="display:flex;gap:6px;margin-top:8px">'+
+      '<button onclick="saveManualInvoiceEdit(\''+id+'\')" style="flex:1;padding:8px;border-radius:8px;border:none;background:#c8f060;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
+      '<button onclick="renderManInvAccepted()" style="padding:8px 12px;border-radius:8px;border:1px solid #2e2e3e;background:none;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>'+
+    '</div>';
+}
+function _manInvEditName(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]) window._manInvEdit[id].items[i].name=v; }
+function _manInvEditQty(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]) window._manInvEdit[id].items[i].qty=parseFloat(v)||1; }
+function _manInvEditPrice(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]) window._manInvEdit[id].items[i].price=parseFloat(v)||0; }
+
+function saveManualInvoiceEdit(id){
+  var data = window._manInvEdit[id]; if(!data) return;
+  var all = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var idx = all.findIndex(function(i){ return String(i._id!=null?i._id:i.id)===id; });
+  if(idx<0) return;
+  var oldNum = all[idx].num;
+  data.num = (document.getElementById('maninv_num_'+id)||{}).value || data.num;
+  data.date = (document.getElementById('maninv_date_'+id)||{}).value || data.date;
+  data.from = (document.getElementById('maninv_from_'+id)||{}).value || data.from;
+  data.totalAmt = (data.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
+  data.editedAt = new Date().toISOString();
+  data.editedBy = (session&&session.sellerName)||'';
+
+  all[idx]=data;
+  localStorage.setItem('iz_manual_invoices', JSON.stringify(all));
+  try{ db.collection('iz_manual_invoices').doc(id).set(data,{merge:true}); }catch(e){}
+
+  // Recalc the linked "Приход товара" journal entries' total (goodsEffect) for this invoice
+  var newTotal = data.totalAmt;
+  var je = journal.find(function(e){ return e.type==='receive' && e.sub && e.sub.indexOf(oldNum)>=0; });
+  if(je){
+    je.sub = je.sub.split(' · '+oldNum).join(' · '+data.num).split(oldNum).join(data.num);
+  }
+  saveJ();
+  delete window._manInvEdit[id];
+  renderAll(); renderManInvAccepted();
+  showToast('✅ Накладная исправлена');
+}
+
+function deleteManualInvoice(id){
+  if(!confirm('Удалить накладную? Это действие нельзя отменить.')) return;
+  var all = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var inv = all.find(function(i){ return String(i._id!=null?i._id:i.id)===id; });
+  if(!inv) return;
+  var remaining = all.filter(function(i){ return String(i._id!=null?i._id:i.id)!==id; });
+  localStorage.setItem('iz_manual_invoices', JSON.stringify(remaining));
+  try{ db.collection('iz_manual_invoices').doc(id).delete(); }catch(e){}
+
+  // Remove linked "Приход товара" journal entries (by article+name match for this invoice's items)
+  var num = inv.num;
+  journal = journal.filter(function(e){
+    return !(e.type==='receive' && e.sub && e.sub.indexOf(num)>=0);
+  });
+  saveJ();
+  renderAll(); renderManInvAccepted();
+  showToast('✅ Накладная удалена');
 }
 
 function getItemsBase() {
