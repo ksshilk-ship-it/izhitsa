@@ -1213,11 +1213,35 @@ function applyUpdate() {
       </div>
     </div>
     <div class="fg"><label class="fl">Сотрудник</label><input class="fi" id="spWho" placeholder="Иванова Мария"></div>
-    <div class="fg"><label class="fl">Изделие</label><input class="fi" id="spItem" placeholder="Наименование / артикул"></div>
-    <div class="row2">
-      <div class="fg"><label class="fl">Цена розница (₽)</label><input class="fi" type="number" id="spRetail" placeholder="0" inputmode="numeric"></div>
-      <div class="fg"><label class="fl">К оплате (₽)</label><input class="fi" type="number" id="spPay" placeholder="0" inputmode="numeric"></div>
+    <div class="fg"><label class="fl">Артикул</label><input class="fi" id="spNum" placeholder="001" oninput="lookupSpItem(this.value)"></div>
+    <div class="fg" style="margin-bottom:8px;position:relative">
+      <label class="fl">Наименование</label>
+      <div style="display:flex;gap:6px">
+        <input class="fi" id="spItem" placeholder="Наименование" autocomplete="off"
+          oninput="psjSuggest('spItem',getItemNames(),'spPickName')"
+          onfocus="psjSuggest('spItem',getItemNames(),'spPickName')"
+          onblur="psjHideSugg('spItem')">
+        <button type="button" onclick="siAddToGoods('spItem')" style="background:#22222e;border:1px solid #c8f060;border-radius:10px;padding:0 14px;color:#c8f060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
+      </div>
+      <div id="spItem_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
     </div>
+    <div class="fg" style="margin-bottom:8px;position:relative">
+      <label class="fl">Порода дерева</label>
+      <div style="display:flex;gap:6px">
+        <input class="fi" id="spSpecies" placeholder="Порода" autocomplete="off"
+          oninput="psjSuggest('spSpecies',getSpecies(),'spPickSpecies')"
+          onfocus="psjSuggest('spSpecies',getSpecies(),'spPickSpecies')"
+          onblur="psjHideSugg('spSpecies')">
+        <button type="button" onclick="siAddToSpecies('spSpecies')" style="background:#22222e;border:1px solid #f0c060;border-radius:10px;padding:0 14px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
+      </div>
+      <div id="spSpecies_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="fg" style="margin:0;flex:1"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="spPrice" placeholder="0" inputmode="numeric" oninput="spCalcRetail()"></div>
+      <div class="fg" style="margin:0;width:80px"><label class="fl">Кол-во</label><input class="fi" type="number" id="spQty" placeholder="1" inputmode="numeric" value="1" oninput="spCalcRetail()"></div>
+    </div>
+    <div class="fg" style="margin:6px 0 0"><label class="fl">Сумма / Цена розница (₽)</label><input class="fi" type="number" id="spRetail" placeholder="0" inputmode="numeric" oninput="spCalcFromRetail()" style="border-color:#c8f060;color:#c8f060;font-weight:700"></div>
+    <div class="fg"><label class="fl">К оплате (₽)</label><input class="fi" type="number" id="spPay" placeholder="0" inputmode="numeric"></div>
     <div class="fg"><label class="fl">Способ оплаты</label>
       <div class="pay-chips">
         <div class="pc active" onclick="setStaffPayM('cash',this)">💵 Нал</div>
@@ -3492,16 +3516,44 @@ function setSpGoods(type, el){
   }
 }
 function setStaffPayM(m,el){ staffPayMethod=m; document.querySelectorAll('#staffMo .pc').forEach(p=>p.classList.remove('active')); el.classList.add('active'); }
+function spPickName(val){ var el=document.getElementById('spItem'); if(el) el.value=val; var box=document.getElementById('spItem_sugg'); if(box) box.style.display='none'; }
+function spPickSpecies(val){ var el=document.getElementById('spSpecies'); if(el) el.value=val; var box=document.getElementById('spSpecies_sugg'); if(box) box.style.display='none'; }
+function lookupSpItem(num){
+  if(!num.trim()) return;
+  var items = JSON.parse(localStorage.getItem('iz_items')||'[]');
+  var found = items.find(function(i){ return String(i.num)===num.trim(); });
+  if(found){
+    var nameEl=document.getElementById('spItem'), priceEl=document.getElementById('spPrice'), spEl=document.getElementById('spSpecies');
+    if(nameEl) nameEl.value = found.name||'';
+    if(priceEl) priceEl.value = found.price||'';
+    if(spEl) spEl.value = found.species||'';
+    if(found.category==='dr') setSpGoods('dr'); else setSpGoods('derevo');
+    spCalcRetail();
+  }
+}
+function spCalcRetail(){
+  var price=parseFloat(gv('spPrice'))||0, qty=parseFloat(gv('spQty'))||1;
+  var retEl=document.getElementById('spRetail'); if(retEl) retEl.value = (price*qty)||'';
+}
+function spCalcFromRetail(){
+  var ret=parseFloat(gv('spRetail'))||0, qty=parseFloat(gv('spQty'))||1;
+  var priceEl=document.getElementById('spPrice'); if(priceEl && qty>0) priceEl.value = (ret/qty)||'';
+}
 function saveStaff(){
   const who=gv('spWho'),item=gv('spItem'),pay=parseFloat(gv('spPay'))||0;
   if(!who||!item||!pay){showToast('Заполните поля');return;}
   const retail=parseFloat(gv('spRetail'))||0;
+  const species=gv('spSpecies'), num=gv('spNum'), qty=parseFloat(gv('spQty'))||1;
   const payL={cash:'💵 Нал',terminal:'💳 Терминал',sbp:'📱 СБП',transfer:'🏦 Перевод'}[staffPayMethod];
   const isCard=staffPayMethod!=='cash';
   journal.push({id:uid(),type:'staff',ts:new Date().toISOString(),icon:'🛒',label:'Покупка сотр.: '+who,
-    sub:item+' · '+fmt(retail)+' · '+fmt(pay)+' '+payL,amount:pay,amtCls:'neu',
-    goodsType:spGoodsType,cashEffect:0,cardEffect:isCard?pay:0,staffEffect:staffPayMethod==='cash'?pay:0,goodsEffect:-retail});
-  saveJ(); ['spWho','spItem','spRetail','spPay','spComment'].forEach(id=>document.getElementById(id).value='');
+    sub:(num?'№'+num+' ':'')+item+(species?' · '+species:'')+(qty&&qty!==1?' × '+qty:'')+' · '+fmt(retail)+' · '+fmt(pay)+' '+payL,
+    amount:pay,amtCls:'neu',
+    goodsType:spGoodsType,species,article:num,qty,price:parseFloat(gv('spPrice'))||0,
+    cashEffect:0,cardEffect:isCard?pay:0,staffEffect:staffPayMethod==='cash'?pay:0,goodsEffect:-retail});
+  saveJ(); ['spWho','spNum','spItem','spSpecies','spPrice','spRetail','spPay','spComment'].forEach(id=>{var el=document.getElementById(id); if(el) el.value='';});
+  var qtyEl=document.getElementById('spQty'); if(qtyEl) qtyEl.value='1';
+  setSpGoods('derevo');
   closeMo('staffMo'); renderAll(); renderStaff(); showToast('🛒 Покупка зафиксирована');
 }
 function renderStaff(){
@@ -3636,7 +3688,7 @@ function renderInvoices(){
   if(!sh.length) html='<div class="empty"><div class="ei">📦</div>Накладных нет</div>';
   else {
     if(pending.length){ html+='<div class="ctitle">⏳ Ожидают приёмки</div>'+pending.map(inv=>{
-      var iid=inv.id||inv._id;
+      var iid=String(inv._id!=null?inv._id:inv.id);
       return `<div class="card" style="border-color:#f0a060" id="shinv_${iid}">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
           <div><div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;color:#f0a060">${inv.num}</div><div style="font-size:11px;color:#8888aa">📅 ${inv.date} · ${inv.items.length} изд.</div></div>
@@ -3649,7 +3701,7 @@ function renderInvoices(){
       </div>`;
     }).join(''); }
     if(done.length){ html+='<div class="ctitle" style="margin-top:12px">✅ Принятые</div>'+done.map(inv=>{
-      var iid=inv.id||inv._id;
+      var iid=String(inv._id!=null?inv._id:inv.id);
       return `<div class="card" id="shinv_${iid}">
         <div style="display:flex;justify-content:space-between;margin-bottom:8px">
           <div><div style="font-weight:700;font-size:13px">${inv.num}</div><div style="font-size:11px;color:#8888aa">${inv.acceptedDate||''}</div></div>
@@ -3668,7 +3720,7 @@ function renderInvoices(){
 // ── Edit / delete invoices from the shop's "Приход" tab ──
 window._shInvEdit = window._shInvEdit || {};
 function editShopInvoice(id){
-  var inv = getInvoices().find(function(i){ return (i.id||i._id)===id; });
+  var inv = getInvoices().find(function(i){ return String(i._id!=null?i._id:i.id)===id; });
   if(!inv) return;
   var card = document.getElementById('shinv_'+id); if(!card) return;
   window._shInvEdit[id] = JSON.parse(JSON.stringify(inv));
@@ -3699,14 +3751,14 @@ function _shInvPrice(id,i,v){ if(window._shInvEdit[id]&&window._shInvEdit[id].it
 function saveShopInvoice(id){
   var data = window._shInvEdit[id]; if(!data) return;
   var wasAccepted = data.status==='accepted';
-  var oldNum = (getInvoices().find(function(i){ return (i.id||i._id)===id; })||{}).num;
+  var oldNum = (getInvoices().find(function(i){ return String(i._id!=null?i._id:i.id)===id; })||{}).num;
   data.num = (document.getElementById('shinv_num_'+id)||{}).value || data.num;
   data.date = (document.getElementById('shinv_date_'+id)||{}).value || data.date;
   data.editedAt = new Date().toISOString();
   data.editedBy = (session&&session.sellerName)||'';
 
   var invs = getInvoices();
-  var idx = invs.findIndex(function(i){ return (i.id||i._id)===id; });
+  var idx = invs.findIndex(function(i){ return String(i._id!=null?i._id:i.id)===id; });
   if(idx>=0) invs[idx]=data;
   saveInvoices(invs);
   try{ db.collection('iz_invoices').doc(id).set(data,{merge:true}); }catch(e){}
@@ -3729,11 +3781,11 @@ function saveShopInvoice(id){
 
 function deleteShopInvoice(id){
   if(!confirm('Удалить накладную? Это действие нельзя отменить.')) return;
-  var inv = getInvoices().find(function(i){ return (i.id||i._id)===id; });
+  var inv = getInvoices().find(function(i){ return String(i._id!=null?i._id:i.id)===id; });
   if(!inv) return;
   var wasAccepted = inv.status==='accepted';
 
-  var invs = getInvoices().filter(function(i){ return (i.id||i._id)!==id; });
+  var invs = getInvoices().filter(function(i){ return String(i._id!=null?i._id:i.id)!==id; });
   saveInvoices(invs);
   try{ db.collection('iz_invoices').doc(id).delete(); }catch(e){}
 
