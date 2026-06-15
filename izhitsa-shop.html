@@ -2486,6 +2486,7 @@ function renderNoShiftCard(shopName){
 }
 
 function renderShiftDetail(shift){
+  var sidBase=(shift.id||'shift').replace(/[^a-z0-9_]/gi,'_');
   var journal = shift.journal||[];
   var sales = journal.filter(function(e){ return e.type==='sale'; });
   var writeoffs = journal.filter(function(e){ return e.type==='writeoff'; });
@@ -2578,7 +2579,7 @@ function renderShiftDetail(shift){
   });
   function soldItemsToList(map){
     return Object.keys(map).map(function(name){ return {name:name, qty:map[name].qty, amt:map[name].amt}; })
-      .sort(function(a,b){ return b.amt-a.amt; });
+      .sort(function(a,b){ return b.qty-a.qty; });
   }
   var soldItemsWoodList = soldItemsToList(soldItemsWood);
   var soldItemsDrList = soldItemsToList(soldItemsDr);
@@ -2592,8 +2593,17 @@ function renderShiftDetail(shift){
   var hasDiff = shift.hasCashDiff || journal.some(function(e){return e.hasCashDiff;});
   var lastUpd = shift.updatedAt?new Date(shift.updatedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'—';
 
-  function block(title, rows){
-    return '<div class="card" style="margin-bottom:10px"><div class="ctitle">'+title+'</div>'+rows+'</div>';
+  var _blockIdx = 0;
+  function block(title, rows, startOpen){
+    _blockIdx++;
+    var bid = 'sblk_'+sidBase+'_'+_blockIdx;
+    var open = !!startOpen;
+    return '<div class="card" style="margin-bottom:10px;padding-bottom:'+(open?'14px':'0')+'" id="'+bid+'_card">'+
+      '<div class="ctitle" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;margin-bottom:'+(open?'8px':'0')+'" id="'+bid+'_hdr" onclick="toggleSBlock(\''+bid+'\')">'+
+        '<span>'+title+'</span><span id="'+bid+'_arr" style="color:#8888aa;font-size:11px">'+(open?'▾':'▸')+'</span>'+
+      '</div>'+
+      '<div id="'+bid+'" style="display:'+(open?'block':'none')+'">'+rows+'</div>'+
+    '</div>';
   }
   function row(label, value, color){
     return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">'+label+'</span><span style="font-weight:700;color:'+(color||'#f0f0f8')+'">'+value+'</span></div>';
@@ -2613,7 +2623,7 @@ function renderShiftDetail(shift){
   '</div>';
 
   // Cash balances
-  html += block('💵 Остаток нала', row('🌳 Дерево', fmt(cashWood), '#60f090')+row('🛍 ДР Товар', fmt(cashDr), '#60f090')+row('🛒 Покупки сотрудников', fmt(cashStaff), '#a060f0'));
+  html += block('💵 Остаток нала', row('🌳 Дерево', fmt(cashWood), '#60f090')+row('🛍 ДР Товар', fmt(cashDr), '#60f090')+row('🛒 Покупки сотрудников', fmt(cashStaff), '#a060f0'), true);
 
   // Goods balances
   html += block('📦 Остаток товара', row('🌳 Дерево', fmt(goodsWood), '#f0c060')+row('🛍 ДР Товар', fmt(goodsDr), '#f0c060'));
@@ -2662,31 +2672,29 @@ function renderShiftDetail(shift){
   }
 
   // Writeoffs
-  html += '<div class="card" style="margin-bottom:10px">'+
-    '<div class="ctitle">🗑 Списания</div>'+
+  html += block('🗑 Списания',
     row('Сумма', fmt(woTotal), '#f06060')+row('Кол-во', woQty)+
     (woQty?'<button onclick="toggleTodayDetail(\'wo\')" style="width:100%;margin-top:8px;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">📋 Показать списания</button>':'')+
     '<div id="todayDetail_wo" style="display:none;margin-top:8px">'+
       writeoffs.slice().reverse().map(function(e){
         return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:12px"><span style="flex:1">'+(e.sub||e.label||'')+'</span><span style="color:#f06060;font-weight:700">'+fmt(e.amount)+'</span></div>';
       }).join('')+
-    '</div>'+
-  '</div>';
+    '</div>'
+  );
 
   // Receives
-  html += '<div class="card" style="margin-bottom:10px">'+
-    '<div class="ctitle">📥 Приходы</div>'+
+  html += block('📥 Приходы',
     row('Сумма', fmt(rcvTotal), '#60c8f0')+row('Кол-во', rcvQty)+
     (rcvQty?'<button onclick="toggleTodayDetail(\'rcv\')" style="width:100%;margin-top:8px;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">📋 Показать приходы</button>':'')+
     '<div id="todayDetail_rcv" style="display:none;margin-top:8px">'+
       receives.slice().reverse().map(function(e){
         return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:12px"><span style="flex:1">'+(e.sub||e.label||'')+'</span><span style="color:#60c8f0;font-weight:700">'+fmt(e.amount)+'</span></div>';
       }).join('')+
-    '</div>'+
-  '</div>';
+    '</div>'
+  );
 
   // Full journal toggle
-  var sid=(shift.id||'').replace(/[^a-z0-9_]/gi,'_');
+  var sid=sidBase;
   html += '<button onclick="var d=document.getElementById(\'det_'+sid+'\');d.style.display=d.style.display===\'none\'?\'block\':\'none\'" '+
     'style="width:100%;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;cursor:pointer;margin-bottom:6px">'+
     '📒 Полный журнал смены ('+journal.length+')</button>'+
@@ -2740,6 +2748,16 @@ function renderShiftDetail(shift){
 function toggleTodayDetail(key){
   var d=document.getElementById('todayDetail_'+key);
   if(d) d.style.display = d.style.display==='none'?'block':'none';
+}
+function toggleSBlock(bid){
+  var b=document.getElementById(bid), a=document.getElementById(bid+'_arr'),
+      hdr=document.getElementById(bid+'_hdr'), card=document.getElementById(bid+'_card');
+  if(!b) return;
+  var open = b.style.display!=='none';
+  b.style.display = open?'none':'block';
+  if(a) a.textContent = open?'▸':'▾';
+  if(hdr) hdr.style.marginBottom = open?'0':'8px';
+  if(card) card.style.paddingBottom = open?'0':'14px';
 }
 
 function startAdminApp(){
