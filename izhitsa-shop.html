@@ -190,23 +190,21 @@ function applyUpdate() {
       <button class="exit-btn" onclick="exitShift()">Выйти</button>
     </div>
   </div>
-  <div class="page" id="pg-journal">
+  <div class="page" id="pg-home">
     <div id="pendingAlert"></div>
-    <!-- Расширенный бар — только на главной вкладке -->
     <div id="mainStatusBar" style="margin-bottom:12px"></div>
+  </div>
+  <div class="page" id="pg-journal">
     <div id="journalBtns1" style="display:flex;gap:7px;margin-bottom:8px">
-      <button class="btn" style="margin:0;flex:1.2;font-size:13px" onclick="openMo('saleMo');resetSaleForm()">＋ Продажа</button>
-      <button id="btnWriteoff" class="btn red" style="margin:0;flex:1;font-size:12px;padding:14px 4px" onclick="openMo('woMo')">🗑 Списание</button>
-      <button id="btnReceive" style="display:none;width:0;padding:0;margin:0;border:none"></button>
+      <button class="btn" style="margin:0;flex:1;font-size:13px" onclick="openMo('saleMo');resetSaleForm()">＋ Продажа</button>
     </div>
     <div id="journalBtns2" style="display:flex;gap:7px;margin-bottom:10px">
       <button id="btnExpense" class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#2a1e14;border:1px solid #f0a060;color:#f0a060" onclick="openMo('expMo')">💸 Расходы</button>
-      <button id="btnStaffPurchase" class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#1a1e2e;border:1px solid #60c8f0;color:#60c8f0" onclick="openMo('staffMo')">🛒 Покупка сотр.</button>
     </div>
     <div class="card"><div class="ctitle">Журнал смены</div><div id="journalList"></div></div>
   </div>
   <div class="page" id="pg-invoices">
-    <div class="stitle">📋 Накладные</div>
+    <div class="stitle">📥 Приход</div>
 
     <!-- Sub-tabs -->
     <div style="display:flex;gap:6px;margin-bottom:14px">
@@ -270,6 +268,12 @@ function applyUpdate() {
     <div class="al-info">💡 Деньги вне кассы — сотрудник платит отдельно</div>
     <button class="btn blue" style="margin-bottom:12px" onclick="openMo('staffMo')">＋ Покупка сотрудника</button>
     <div class="card"><div class="ctitle">За смену</div><div id="staffList"></div></div>
+  </div>
+  <div class="page" id="pg-writeoffs">
+    <div class="stitle">Списание</div>
+    <button class="btn red" style="margin-bottom:12px" onclick="openMo('woMo')">🗑 Списать товар</button>
+    <div class="card"><div class="ctitle">🌳 Дерево</div><div id="writeoffsListWood"></div></div>
+    <div class="card" style="margin-top:10px"><div class="ctitle">🛍 ДР Товар</div><div id="writeoffsListDr"></div></div>
   </div>
   <div class="page" id="pg-close">
     <div class="stitle" id="closeShiftTitle">Закрытие смены</div>
@@ -1136,6 +1140,15 @@ function applyUpdate() {
       <div class="fg"><label class="fl">Артикул</label><input class="fi" id="woNum" placeholder="001"></div>
       <div class="fg"><label class="fl">Наименование</label><input class="fi" id="woName" placeholder="Изделие..."></div>
     </div>
+    <div class="fg" style="margin-bottom:0">
+      <label class="fl">Тип товара</label>
+      <div style="display:flex;gap:6px">
+        <button type="button" id="woTypeDerevo" onclick="setWoItemType('derevo')"
+          style="flex:1;padding:7px;border-radius:8px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">🌳 Дерево</button>
+        <button type="button" id="woTypeDr" onclick="setWoItemType('dr')"
+          style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
+      </div>
+    </div>
     <div class="fg"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="woAmt" placeholder="0" inputmode="numeric"></div>
     <div class="fg"><label class="fl">Причина (обязательно)</label><input class="fi" id="woReason" placeholder="Укажите причину..."></div>
     <button class="btn red" onclick="saveWriteoff()">Списать</button>
@@ -1990,7 +2003,7 @@ function renderStatusBar(){
     '</div>'+
     '</div>'; // end outer wrapper
 }
-function renderAll(){ renderStatusBar(); renderJournal(); updateInvBadge(); renderPendingAlert(); syncLiveShift(); }
+function renderAll(){ renderStatusBar(); renderJournal(); renderWriteoffs(); updateInvBadge(); renderPendingAlert(); syncLiveShift(); }
 
 // Keep an always-current "open shift" document in iz_shifts so the admin
 // home page can show live, in-progress shift data (cash/goods/sales totals,
@@ -2326,9 +2339,9 @@ function startApp(){
   document.getElementById('hdrSeller').textContent=session.sellerName;
   buildSellerTabs();
   adaptUIForShopType();
-  // Explicitly activate journal page
+  // Explicitly activate home page
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
-  var jp = document.getElementById('pg-journal');
+  var jp = document.getElementById('pg-home');
   if(jp) jp.classList.add('active');
   var firstTab = document.querySelector('#mainTabs .tab');
   if(firstTab) firstTab.classList.add('active');
@@ -2375,48 +2388,25 @@ function adaptUIForShopType(){
   // For ONLINE: hide staff, show goods source
   // For all non-shop: hide cash-related close shift elements
   if(shopType !== 'shop'){
-    // Hide in journal: Списание, Приход, Расходы, Покупки кнопки
-    var btns = document.querySelectorAll('#pg-journal button');
-    btns.forEach(function(b){
-      var txt = b.textContent;
-      if(txt.indexOf('Списание')>=0 || txt.indexOf('Приход')>=0 || txt.indexOf('Расходы')>=0){
-        if(shopType==='online') b.style.display='none';
-      }
-    });
+    // Hide Списание/Приход tabs and Расходы button in journal for online
+    if(shopType==='online'){
+      document.querySelectorAll('#mainTabs .tab').forEach(function(b){
+        var txt = b.textContent;
+        if(txt.indexOf('Списание')>=0 || txt.indexOf('Приход')>=0) b.style.display='none';
+      });
+    }
   }
 
   // Show/hide journal buttons based on type
-  var isOpt = shopType==='offline';
-  var isOnline = shopType==='online';
-  var isShop2 = shopType==='shop';
+  // Расходы (journalBtns2) stays visible for online too
 
-  // Opt: only + Продажа
-  ['btnWriteoff','btnReceive','btnExpense','btnStaffPurchase'].forEach(function(id){
-    var el=document.getElementById(id);
-    if(el) el.style.display = isOpt ? 'none' : '';
-  });
-  var btn2 = document.getElementById('journalBtns2');
-  if(btn2) btn2.style.display = isOpt ? 'none' : 'flex';
-  // Online: hide Списание, Приход, Покупки, but keep Расходы visible
-  if(isOnline){
-    ['btnWriteoff','btnReceive','btnStaffPurchase'].forEach(function(id){
-      var el=document.getElementById(id); if(el) el.style.display='none';
-    });
-    // Show only Расходы in second row
-    var btn2el=document.getElementById('journalBtns2');
-    if(btn2el) btn2el.style.display='flex';
-    var staffBtn=document.getElementById('btnStaffPurchase');
-    if(staffBtn) staffBtn.style.display='none';
-  }
-
-  // Hide close shift sections for opt
-  // For opt: hide расходы, списание, приход, покупки in close shift
+  // Hide close shift sections for opt (unreachable here since offline returns early above; kept for safety)
   var optHide = ['clExp_arrow','clWo_arrow','clRcv_arrow','clStaff_arrow'];
   optHide.forEach(function(id){
     var el=document.getElementById(id);
     if(el){
       var block=el.closest('div[style*="border-radius:10px"]');
-      if(block) block.style.display = isOpt ? 'none' : 'block';
+      if(block) block.style.display = 'block';
     }
   });
   // DR товар visible for ALL types
@@ -2457,8 +2447,10 @@ function getRSAccounts(){
 function buildSellerTabs(){
   const t=document.getElementById('mainTabs'); t.style.display='flex';
   t.innerHTML=`
-    <button class="tab active" onclick="showPg('journal',this)"><div class="ti">📋</div><span>Журнал</span></button>
-    <button class="tab" onclick="showPg('invoices',this);switchInvTab('incoming')"><div class="ti">📦</div><span>Накладные</span><div class="tbadge" id="invBadge"></div></button>
+    <button class="tab active" onclick="showPg('home',this);renderStatusBar()"><div class="ti">🏠</div><span>Главная</span></button>
+    <button class="tab" onclick="showPg('journal',this)"><div class="ti">📋</div><span>Журнал</span></button>
+    <button class="tab" onclick="showPg('invoices',this);switchInvTab('incoming')"><div class="ti">📥</div><span>Приход</span><div class="tbadge" id="invBadge"></div></button>
+    <button class="tab" onclick="showPg('writeoffs',this);renderWriteoffs()"><div class="ti">🗑</div><span>Списание</span></button>
     <button class="tab" onclick="showPg('staff-tab',this);renderStaff()"><div class="ti">🛒</div><span>Покупки</span></button>
     <button class="tab" onclick="showPg('close',this);renderClose()"><div class="ti">🔐</div><span>Закрыть</span></button>`;
 }
@@ -3374,13 +3366,30 @@ function saveSale(){
 }
 
 // ════ WRITEOFF ════
+var _woItemGoodsType = 'derevo';
+function setWoItemType(type){
+  _woItemGoodsType = type;
+  var bD=document.getElementById('woTypeDerevo'), bDr=document.getElementById('woTypeDr');
+  if(!bD||!bDr) return;
+  if(type==='derevo'){
+    bD.style.border='2px solid #c8f060'; bD.style.background='#1e2a14'; bD.style.color='#c8f060'; bD.style.fontWeight='700';
+    bDr.style.border='1px solid #2e2e3e'; bDr.style.background='#22222e'; bDr.style.color='#8888aa'; bDr.style.fontWeight='600';
+  } else {
+    bDr.style.border='2px solid #a060f0'; bDr.style.background='#1e1a2e'; bDr.style.color='#a060f0'; bDr.style.fontWeight='700';
+    bD.style.border='1px solid #2e2e3e'; bD.style.background='#22222e'; bD.style.color='#8888aa'; bD.style.fontWeight='600';
+  }
+}
 function saveWriteoff(){
   const reason=gv('woReason'); if(!reason){showToast('Укажите причину');return;}
   const amt=parseFloat(gv('woAmt'))||0; if(!amt){showToast('Введите сумму');return;}
+  const isDr = _woItemGoodsType==='dr';
   journal.push({id:uid(),type:'writeoff',ts:new Date().toISOString(),icon:'🗑️',label:'Списание',
     sub:(gv('woNum')?'№'+gv('woNum')+' ':'')+gv('woName')+' · '+reason,
-    amount:amt,amtCls:'exp',amtSign:'−',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:-amt});
+    goodsType: isDr?'dr':'derevo',
+    amount:amt,amtCls:'exp',amtSign:'−',cashEffect:0,cardEffect:0,staffEffect:0,
+    goodsEffect: isDr?0:-amt, goodsDrEffect: isDr?-amt:0});
   saveJ(); ['woNum','woName','woAmt','woReason'].forEach(id=>document.getElementById(id).value='');
+  setWoItemType('derevo');
   logWriteoff(reason, amt, session.shopName);
   closeMo('woMo'); renderAll(); showToast('🗑️ Списание зафиксировано');
 }
@@ -3451,6 +3460,22 @@ function renderStaff(){
   c.innerHTML=items.map(e=>`<div class="ji"><div class="ji-ic staff">🛒</div><div class="ji-body"><div class="ji-title">${e.label}</div><div class="ji-sub">${e.sub}</div></div><div class="ji-amt neu">${fmt(e.amount)}</div></div>`).join('');
 }
 
+function renderWriteoffs(){
+  const cWood=document.getElementById('writeoffsListWood'), cDr=document.getElementById('writeoffsListDr');
+  if(!cWood||!cDr) return;
+  const items=journal.filter(e=>e.type==='writeoff');
+  const wood=items.filter(e=>e.goodsType!=='dr');
+  const dr=items.filter(e=>e.goodsType==='dr');
+  function row(e){
+    return `<div class="ji"><div class="ji-ic writeoff">🗑️</div><div class="ji-body"><div class="ji-title">${e.label}</div>`+
+      (e.sub?`<div class="ji-sub">${e.sub}</div>`:'')+
+      `<div class="ji-time">${new Date(e.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div></div>`+
+      `<div class="ji-amt exp">−${fmt(e.amount)}</div></div>`;
+  }
+  cWood.innerHTML = wood.length ? wood.map(row).join('') : '<div class="empty"><div class="ei">🌳</div>Списаний нет</div>';
+  cDr.innerHTML = dr.length ? dr.map(row).join('') : '<div class="empty"><div class="ei">🛍</div>Списаний нет</div>';
+}
+
 // ════ INVOICES ════
 function createInvoiceFromJournal(){
   var sales = journal.filter(function(e){ return e.type==='sale'; });
@@ -3479,7 +3504,7 @@ function renderPendingAlert(){
   let html = '';
   // Incoming invoices
   const p=getInvoices().filter(i=>i.destName===(session&&session.shopName)&&i.status==='pending');
-  if(p.length) html+=`<div class="al-warn" style="cursor:pointer" onclick="showPg('invoices',document.querySelectorAll('.tab')[1]);renderInvoices()">🔔 ${p.length} накладная ожидает приёмки</div>`;
+  if(p.length) html+=`<div class="al-warn" style="cursor:pointer" onclick="showPg('invoices',document.querySelectorAll('#mainTabs .tab')[2]);renderInvoices()">🔔 ${p.length} накладная ожидает приёмки</div>`;
   // Online sale notifications for this shop
   if(getShopType((session&&session.shopName))==='shop'){
     var notifs=JSON.parse(localStorage.getItem('iz_shop_notifications')||'[]')
