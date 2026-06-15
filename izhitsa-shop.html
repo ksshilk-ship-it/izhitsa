@@ -3777,18 +3777,35 @@ function saveWriteoff(){
   }
   if(!woItems.length){ showToast('Добавьте хотя бы одну позицию'); return; }
 
-  var baseTs = Date.now();
-  woItems.forEach(function(it, idx){
+  // Group staged items by (причина + тип товара). Items with the same reason
+  // and goods type become ONE journal entry (e.g. "Списание · ТГ канал —
+  // 5 позиций на 12 000₽"). Items with a different reason or goods type get
+  // their own entry, so mixed batches (e.g. брак + ТГ канал) still split
+  // correctly while a single shared reason collapses everything into one row.
+  var groups = []; // [{reason, goodsType, items:[...]}]
+  woItems.forEach(function(it){
     var isDr = it.goodsType==='dr';
-    var amt = it.amt;
-    // Stagger timestamps by 1ms so entries keep their add-order in the journal
+    var g = groups.find(function(g){ return g.reason===it.reason && g.isDr===isDr; });
+    if(!g){ g={reason:it.reason, isDr:isDr, items:[]}; groups.push(g); }
+    g.items.push(it);
+  });
+
+  var baseTs = Date.now();
+  groups.forEach(function(g, idx){
+    var total = g.items.reduce(function(s,it){ return s+(it.amt||0); },0);
+    var totalQty = g.items.reduce(function(s,it){ return s+(it.qty||1); },0);
+    // Stagger timestamps by 1ms so groups keep their add-order in the journal
     var ts = new Date(baseTs+idx).toISOString();
+    var namesPreview = g.items.map(function(it){ return it.name; }).join(', ');
+    var sub = g.items.length===1
+      ? ((g.items[0].num?'№'+g.items[0].num+' ':'')+g.items[0].name+(g.items[0].species?' · '+g.items[0].species:'')+(g.items[0].qty&&g.items[0].qty!==1?' × '+g.items[0].qty:'')+' · '+g.reason)
+      : (g.items.length+' позиций ('+totalQty+' шт.): '+namesPreview+' · '+g.reason);
     journal.push({id:uid(),type:'writeoff',ts:ts,icon:'🗑️',label:'Списание',
-      sub:(it.num?'№'+it.num+' ':'')+it.name+(it.species?' · '+it.species:'')+(it.qty&&it.qty!==1?' × '+it.qty:'')+' · '+it.reason,
-      goodsType: isDr?'dr':'derevo', species: it.species, price: it.price, qty: it.qty,
-      amount:amt,amtCls:'exp',amtSign:'−',cashEffect:0,cardEffect:0,staffEffect:0,
-      goodsEffect: isDr?0:-amt, goodsDrEffect: isDr?-amt:0});
-    logWriteoff(it.reason, amt, session.shopName);
+      sub:sub,
+      goodsType: g.isDr?'dr':'derevo', items: g.items,
+      amount:total,amtCls:'exp',amtSign:'−',cashEffect:0,cardEffect:0,staffEffect:0,
+      goodsEffect: g.isDr?0:-total, goodsDrEffect: g.isDr?-total:0});
+    g.items.forEach(function(it){ logWriteoff(it.reason, it.amt, session.shopName); });
   });
   var total = woItems.reduce(function(s,it){ return s+(it.amt||0); },0);
   var count = woItems.length;
@@ -8763,17 +8780,18 @@ function saveManualInvoice() {
   localStorage.setItem('iz_manual_invoices', JSON.stringify(existing));
   // Save to Firestore — own collection, separate from automatic workshop invoices (iz_invoices)
   try { db.collection('iz_manual_invoices').doc(inv.id).set(inv); } catch(e){}
-  // Add to journal as receive entries
+  // Add to journal as ONE summary "Приёмка" entry (not per-item) — timestamp
+  // is the moment the invoice is accepted ("Принять на баланс").
   _manInvItems.forEach(function(item){
     autoSaveToItemBase(item.name, item.article, item.price, 'derevo');
-    journal.push({
-      id:uid(), type:'receive', ts:new Date().toISOString(), icon:'📥',
-      label:'Приход товара',
-      sub:(item.article?'№'+item.article+' ':'')+item.name+(item.species?' · '+item.species:'')+' · '+num+(from?' от '+from:''),
-      amount:(item.qty||1)*(item.price||0),
-      amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
-      goodsEffect:(item.qty||1)*(item.price||0), article:item.article, species:item.species||'', invId:inv.id
-    });
+  });
+  journal.push({
+    id:uid(), type:'receive', ts:new Date().toISOString(), icon:'📥',
+    label:'Приёмка '+num,
+    sub:_manInvItems.length+' изд.'+(from?' · от '+from:''),
+    amount:totalAmt,
+    amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
+    goodsEffect:totalAmt, invId:inv.id
   });
   saveJ();
   // Reset form
@@ -8898,10 +8916,16 @@ function saveManualInvoiceEdit(id){
   localStorage.setItem('iz_manual_invoices', JSON.stringify(all));
   try{ db.collection('iz_manual_invoices').doc(id).set(data,{merge:true}); }catch(e){}
 
-  // Resync linked "Приход товара" journal entries: remove the old set (matched
-  // by invoice id, falling back to invoice number for legacy entries) and
-  // recreate one per current item, so added/removed/edited positions are
-  // reflected in goods totals correctly.
+  // Resync the linked "Приёмка" journal entry: find the old one (exact match
+  // by invoice id, falling back to invoice number for legacy entries),
+  // preserve its original timestamp, recompute the total, and recreate as a
+  // single summary entry reflecting the current set of items.
+  var oldEntry = journal.find(function(e){
+    if(e.type!=='receive') return false;
+    if(e.invId) return e.invId===id;
+    return e.sub && e.sub.indexOf(oldNum)>=0;
+  });
+  var preservedTs = oldEntry ? oldEntry.ts : new Date().toISOString();
   journal = journal.filter(function(e){
     if(e.type!=='receive') return true;
     if(e.invId) return e.invId!==id;
@@ -8909,14 +8933,14 @@ function saveManualInvoiceEdit(id){
   });
   (data.items||[]).forEach(function(item){
     autoSaveToItemBase(item.name, item.article, item.price, 'derevo');
-    journal.push({
-      id:uid(), type:'receive', ts:new Date().toISOString(), icon:'📥',
-      label:'Приход товара',
-      sub:(item.article?'№'+item.article+' ':'')+item.name+(item.species?' · '+item.species:'')+' · '+data.num+(data.from?' от '+data.from:''),
-      amount:(item.qty||1)*(item.price||0),
-      amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
-      goodsEffect:(item.qty||1)*(item.price||0), article:item.article, species:item.species||'', invId:id
-    });
+  });
+  journal.push({
+    id:uid(), type:'receive', ts:preservedTs, icon:'📥',
+    label:'Приёмка '+data.num,
+    sub:(data.items||[]).length+' изд.'+(data.from?' · от '+data.from:''),
+    amount:data.totalAmt,
+    amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
+    goodsEffect:data.totalAmt, invId:id, editedAt:new Date().toISOString()
   });
   saveJ();
   delete window._manInvEdit[id];
