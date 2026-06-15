@@ -8772,7 +8772,7 @@ function saveManualInvoice() {
       sub:(item.article?'№'+item.article+' ':'')+item.name+(item.species?' · '+item.species:'')+' · '+num+(from?' от '+from:''),
       amount:(item.qty||1)*(item.price||0),
       amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
-      goodsEffect:(item.qty||1)*(item.price||0), article:item.article, species:item.species||''
+      goodsEffect:(item.qty||1)*(item.price||0), article:item.article, species:item.species||'', invId:inv.id
     });
   });
   saveJ();
@@ -8826,29 +8826,60 @@ function editManualInvoice(id){
   var card = document.getElementById('maninv_'+id); if(!card) return;
   window._manInvEdit[id] = JSON.parse(JSON.stringify(inv));
 
-  var itemsHtml = (inv.items||[]).map(function(item,i){
-    return '<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center">'+
-      '<input class="fi" value="'+(item.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" oninput="_manInvEditName(\''+id+'\','+i+',this.value)">'+
-      '<input class="fi" type="number" value="'+(item.qty!=null?item.qty:1)+'" inputmode="numeric" style="flex:0 0 50px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditQty(\''+id+'\','+i+',this.value)">'+
-      '<input class="fi" type="number" value="'+(item.price||0)+'" inputmode="numeric" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditPrice(\''+id+'\','+i+',this.value)">'+
-    '</div>';
-  }).join('');
-
   card.innerHTML =
     '<div style="font-size:11px;font-weight:700;color:#c8f060;margin-bottom:8px">✏️ Исправление: '+(inv.num||'')+'</div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Номер</label><input class="fi" id="maninv_num_'+id+'" value="'+(inv.num||'')+'" style="margin:0;padding:7px"></div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата</label><input class="fi" type="date" id="maninv_date_'+id+'" value="'+(inv.date||'')+'" style="margin:0;padding:7px;-webkit-appearance:none;color-scheme:dark"></div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">От кого</label><input class="fi" id="maninv_from_'+id+'" value="'+(inv.from||'')+'" style="margin:0;padding:7px"></div>'+
     '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (наим. · кол-во · цена)</div>'+
-    itemsHtml+
+    '<div id="maninv_items_'+id+'"></div>'+
+    '<button type="button" onclick="addManInvEditItem(\''+id+'\')" class="btn sec" style="font-size:12px;margin:6px 0 0">＋ Добавить позицию</button>'+
+    '<div id="maninv_total_'+id+'" style="margin-top:8px"></div>'+
     '<div style="display:flex;gap:6px;margin-top:8px">'+
       '<button onclick="saveManualInvoiceEdit(\''+id+'\')" style="flex:1;padding:8px;border-radius:8px;border:none;background:#c8f060;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
       '<button onclick="renderManInvAccepted()" style="padding:8px 12px;border-radius:8px;border:1px solid #2e2e3e;background:none;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>'+
     '</div>';
+  renderManInvEditItems(id);
+}
+function renderManInvEditItems(id){
+  var data = window._manInvEdit[id]; if(!data) return;
+  var c = document.getElementById('maninv_items_'+id); if(!c) return;
+  c.innerHTML = (data.items||[]).map(function(item,i){
+    return '<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center">'+
+      '<input class="fi" value="'+(item.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" oninput="_manInvEditName(\''+id+'\','+i+',this.value)">'+
+      '<input class="fi" type="number" value="'+(item.qty!=null?item.qty:1)+'" inputmode="numeric" style="flex:0 0 50px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditQty(\''+id+'\','+i+',this.value)">'+
+      '<input class="fi" type="number" value="'+(item.price||0)+'" inputmode="numeric" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditPrice(\''+id+'\','+i+',this.value)">'+
+      '<button type="button" onclick="removeManInvEditItem(\''+id+'\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:8px;padding:6px 9px;color:#f06060;font-size:13px;cursor:pointer;flex-shrink:0">✕</button>'+
+    '</div>';
+  }).join('');
+  updateManInvEditTotal(id);
+}
+function addManInvEditItem(id){
+  var data = window._manInvEdit[id]; if(!data) return;
+  data.items = data.items||[];
+  data.items.push({name:'', article:'', species:'', qty:1, price:0});
+  renderManInvEditItems(id);
+}
+function removeManInvEditItem(id,i){
+  var data = window._manInvEdit[id]; if(!data) return;
+  data.items.splice(i,1);
+  renderManInvEditItems(id);
+}
+function updateManInvEditTotal(id){
+  var data = window._manInvEdit[id]; if(!data) return;
+  var total = (data.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
+  var totalQty = (data.items||[]).reduce(function(s,it){ return s+(it.qty||1); },0);
+  var el = document.getElementById('maninv_total_'+id);
+  if(el) el.innerHTML = (data.items||[]).length
+    ? '<div style="display:flex;justify-content:space-between;align-items:center;background:#1e2a14;border:1px solid #c8f060;border-radius:10px;padding:10px 14px;font-weight:700">'+
+        '<span style="color:#8888aa;font-size:13px">Итого: '+totalQty+' шт. · '+(data.items||[]).length+' '+((data.items||[]).length===1?'позиция':'позиций')+'</span>'+
+        '<span style="color:#c8f060;font-size:16px">'+Math.round(total).toLocaleString('ru-RU')+'₽</span>'+
+      '</div>'
+    : '';
 }
 function _manInvEditName(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]) window._manInvEdit[id].items[i].name=v; }
-function _manInvEditQty(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]) window._manInvEdit[id].items[i].qty=parseFloat(v)||1; }
-function _manInvEditPrice(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]) window._manInvEdit[id].items[i].price=parseFloat(v)||0; }
+function _manInvEditQty(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]){ window._manInvEdit[id].items[i].qty=parseFloat(v)||1; updateManInvEditTotal(id); } }
+function _manInvEditPrice(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]){ window._manInvEdit[id].items[i].price=parseFloat(v)||0; updateManInvEditTotal(id); } }
 
 function saveManualInvoiceEdit(id){
   var data = window._manInvEdit[id]; if(!data) return;
@@ -8867,12 +8898,26 @@ function saveManualInvoiceEdit(id){
   localStorage.setItem('iz_manual_invoices', JSON.stringify(all));
   try{ db.collection('iz_manual_invoices').doc(id).set(data,{merge:true}); }catch(e){}
 
-  // Recalc the linked "Приход товара" journal entries' total (goodsEffect) for this invoice
-  var newTotal = data.totalAmt;
-  var je = journal.find(function(e){ return e.type==='receive' && e.sub && e.sub.indexOf(oldNum)>=0; });
-  if(je){
-    je.sub = je.sub.split(' · '+oldNum).join(' · '+data.num).split(oldNum).join(data.num);
-  }
+  // Resync linked "Приход товара" journal entries: remove the old set (matched
+  // by invoice id, falling back to invoice number for legacy entries) and
+  // recreate one per current item, so added/removed/edited positions are
+  // reflected in goods totals correctly.
+  journal = journal.filter(function(e){
+    if(e.type!=='receive') return true;
+    if(e.invId) return e.invId!==id;
+    return !(e.sub && e.sub.indexOf(oldNum)>=0);
+  });
+  (data.items||[]).forEach(function(item){
+    autoSaveToItemBase(item.name, item.article, item.price, 'derevo');
+    journal.push({
+      id:uid(), type:'receive', ts:new Date().toISOString(), icon:'📥',
+      label:'Приход товара',
+      sub:(item.article?'№'+item.article+' ':'')+item.name+(item.species?' · '+item.species:'')+' · '+data.num+(data.from?' от '+data.from:''),
+      amount:(item.qty||1)*(item.price||0),
+      amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
+      goodsEffect:(item.qty||1)*(item.price||0), article:item.article, species:item.species||'', invId:id
+    });
+  });
   saveJ();
   delete window._manInvEdit[id];
   renderAll(); renderManInvAccepted();
@@ -8888,10 +8933,12 @@ function deleteManualInvoice(id){
   localStorage.setItem('iz_manual_invoices', JSON.stringify(remaining));
   try{ db.collection('iz_manual_invoices').doc(id).delete(); }catch(e){}
 
-  // Remove linked "Приход товара" journal entries (by article+name match for this invoice's items)
+  // Remove linked "Приход товара" journal entries (exact match by invId, falling back to invoice number for legacy entries)
   var num = inv.num;
   journal = journal.filter(function(e){
-    return !(e.type==='receive' && e.sub && e.sub.indexOf(num)>=0);
+    if(e.type!=='receive') return true;
+    if(e.invId) return e.invId!==id;
+    return !(e.sub && e.sub.indexOf(num)>=0);
   });
   saveJ();
   renderAll(); renderManInvAccepted();
