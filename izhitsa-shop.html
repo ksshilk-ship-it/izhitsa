@@ -1173,6 +1173,8 @@ function applyUpdate() {
 <!-- WRITEOFF -->
 <div class="mo" id="woMo">
   <div class="md"><div class="mh"></div><div class="mt">Списание</div>
+    <div class="fg"><label class="fl">Причина списания (для всех позиций ниже)</label><input class="fi" id="woReason" placeholder="Например: брак — трещина, или Покупка ТГ канал"></div>
+    <div class="al-info" style="margin-bottom:10px">Указывается один раз. Если причина другая — поменяйте её перед добавлением следующих позиций, они попадут в отдельное списание.</div>
     <div class="ctitle">Добавить позиции</div>
     <div id="woItemsDisplay" style="margin-bottom:10px"></div>
     <div style="background:#0f0f13;border-radius:12px;padding:10px;margin-bottom:12px">
@@ -1213,7 +1215,6 @@ function applyUpdate() {
         <div class="fg" style="margin:0;width:80px"><label class="fl">Кол-во</label><input class="fi" type="number" id="woQty" placeholder="1" inputmode="numeric" value="1" oninput="woCalcAmt()"></div>
       </div>
       <div class="fg" style="margin:6px 0 0"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="woAmt" placeholder="0" inputmode="numeric" oninput="woCalcFromAmt()" style="border-color:#f06060;color:#f06060;font-weight:700"></div>
-      <div class="fg"><label class="fl">Причина (для этой позиции, обязательно)</label><input class="fi" id="woReason" placeholder="Укажите причину..."></div>
       <button type="button" onclick="addWoItem()" class="btn sec" style="font-size:12px;margin:8px 0 0;border-color:#f06060;color:#f06060">＋ Добавить позицию в списание</button>
     </div>
     <div id="woTotalDisplay" style="display:none;justify-content:space-between;align-items:center;background:#2e1a1a;border:1px solid #f06060;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-weight:700">
@@ -3758,8 +3759,8 @@ function addWoItem(){
   const name=(gv('woName')||'').trim();
   const reason=(gv('woReason')||'').trim();
   const amt=parseFloat(gv('woAmt'))||0;
+  if(!reason){ showToast('Укажите причину списания (сверху формы)'); return; }
   if(!name){ showToast('Введите наименование'); return; }
-  if(!reason){ showToast('Укажите причину для этой позиции'); return; }
   if(!amt){ showToast('Введите сумму'); return; }
   const isDr = _woItemGoodsType==='dr';
   const species=(gv('woSpecies')||'').trim();
@@ -3767,7 +3768,10 @@ function addWoItem(){
   const qty=parseFloat(gv('woQty'))||1;
   const num=(gv('woNum')||'').trim();
   woItems.push({id:uid(), num, name, species, price, qty, amt, reason, goodsType: isDr?'dr':'derevo'});
-  ['woNum','woName','woSpecies','woAmt','woReason'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  // Clear item fields but KEEP the shared "Причина" — it applies to the next
+  // position too. The seller only needs to change it if the next item really
+  // has a different reason (which will then form a separate writeoff group).
+  ['woNum','woName','woSpecies','woAmt'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   var qtyEl=document.getElementById('woQty'); if(qtyEl) qtyEl.value='1';
   var priceEl=document.getElementById('woPrice'); if(priceEl) priceEl.value='';
   setWoItemType('derevo');
