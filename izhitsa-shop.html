@@ -562,27 +562,17 @@ function checkForAppUpdate() {
       <div class="stitle" style="margin:0">Архив смен</div>
       <button type="button" onclick="openPeriodReport()" style="padding:7px 12px;border-radius:10px;border:1px solid #60c8f0;background:#1a1e2e;color:#60c8f0;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📊 Отчёт</button>
     </div>
-    <!-- Archive / Live switcher -->
-    <div style="display:flex;gap:5px;margin-bottom:10px">
-      <button type="button" id="histMode_live" onclick="setHistMode('live',this)"
-        style="flex:1;padding:7px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">
-        📊 Живые
-      </button>
-      <button type="button" id="histMode_archive" onclick="setHistMode('archive',this)"
-        style="flex:1;padding:7px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">
-        🗄 Архив
-      </button>
-      <button type="button" id="histMode_all" onclick="setHistMode('all',this)"
-        style="flex:1;padding:7px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">
-        🔗 Всё
-      </button>
-    </div>
     <!-- Period filter -->
-    <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">
-      <button type="button" onclick="setHistPeriod('today',this)" style="padding:6px 12px;border-radius:20px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Сегодня</button>
-      <button type="button" onclick="setHistPeriod('week',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">Неделя</button>
-      <button type="button" onclick="setHistPeriod('month',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">Месяц</button>
-      <button type="button" onclick="setHistPeriod('all',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">Все</button>
+    <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto" id="histPeriodFilter">
+      <button type="button" id="histPeriod_today" onclick="setHistPeriod('today',this)" style="padding:6px 12px;border-radius:20px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Сегодня</button>
+      <button type="button" id="histPeriod_week" onclick="setHistPeriod('week',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">Неделя</button>
+      <button type="button" id="histPeriod_month" onclick="setHistPeriod('month',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">Месяц</button>
+      <button type="button" id="histPeriod_all" onclick="setHistPeriod('all',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">Все</button>
+      <button type="button" id="histPeriod_custom" onclick="setHistPeriod('custom',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">📅 Период</button>
+    </div>
+    <div id="histCustomRange" style="display:none;gap:8px;margin-bottom:10px">
+      <div class="fg" style="margin:0;flex:1"><label class="fl">С даты</label><input class="fi" type="date" id="histDateFrom" style="-webkit-appearance:none;color-scheme:dark" oninput="applyHistCustomRange()"></div>
+      <div class="fg" style="margin:0;flex:1"><label class="fl">По дату</label><input class="fi" type="date" id="histDateTo" style="-webkit-appearance:none;color-scheme:dark" oninput="applyHistCustomRange()"></div>
     </div>
     <div id="histShopFilter" style="display:flex;gap:8px;margin-bottom:12px;overflow-x:auto"></div>
     <div id="shiftHistoryList"></div>
@@ -5422,19 +5412,52 @@ _closeShiftReal();
 }
 
 // ════ ADMIN FUNCTIONS ════
-var histMode = 'live'; // 'live' | 'archive' | 'all'
-function setHistMode(mode, el) {
-  histMode = mode;
-  ['live','archive','all'].forEach(function(m){
-    var btn = document.getElementById('histMode_'+m);
+var _histPeriod = 'today'; // 'today' | 'week' | 'month' | 'all' | 'custom'
+
+function setHistPeriod(period, el){
+  _histPeriod = period;
+  ['today','week','month','all','custom'].forEach(function(p){
+    var btn = document.getElementById('histPeriod_'+p);
     if(!btn) return;
-    var active = m === mode;
+    var active = p === period;
     btn.style.borderWidth = active ? '2px' : '1px';
     btn.style.background = active ? '#1e2a14' : '#22222e';
     btn.style.color = active ? '#c8f060' : '#8888aa';
     btn.style.borderColor = active ? '#c8f060' : '#2e2e3e';
     btn.style.fontWeight = active ? '700' : '400';
   });
+  var rangeEl = document.getElementById('histCustomRange');
+  if(period === 'custom'){
+    if(rangeEl) rangeEl.style.display = 'flex';
+    // Don't recompute the range here — wait for the user to actually pick
+    // dates via applyHistCustomRange(), so we don't render with a stale
+    // from/to combo while they're mid-selection.
+    return;
+  }
+  if(rangeEl) rangeEl.style.display = 'none';
+
+  var today = new Date();
+  var todayStr = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  if(period === 'today'){
+    _histPeriodFrom = todayStr; _histPeriodTo = todayStr;
+  } else if(period === 'week'){
+    var weekAgo = new Date(today.getTime() - 6*86400000);
+    _histPeriodFrom = weekAgo.getFullYear()+'-'+String(weekAgo.getMonth()+1).padStart(2,'0')+'-'+String(weekAgo.getDate()).padStart(2,'0');
+    _histPeriodTo = todayStr;
+  } else if(period === 'month'){
+    var monthAgo = new Date(today.getTime() - 29*86400000);
+    _histPeriodFrom = monthAgo.getFullYear()+'-'+String(monthAgo.getMonth()+1).padStart(2,'0')+'-'+String(monthAgo.getDate()).padStart(2,'0');
+    _histPeriodTo = todayStr;
+  } else { // all
+    _histPeriodFrom = ''; _histPeriodTo = '';
+  }
+  renderShiftHistory();
+}
+
+function applyHistCustomRange(){
+  var fromEl = document.getElementById('histDateFrom'), toEl = document.getElementById('histDateTo');
+  _histPeriodFrom = fromEl ? fromEl.value : '';
+  _histPeriodTo = toEl ? toEl.value : '';
   renderShiftHistory();
 }
 
@@ -5474,29 +5497,34 @@ function migrateLegacyShiftDates(){
   }
 }
 
+var _histInited = false;
 function renderShiftHistory(){
   var c=document.getElementById('shiftHistoryList'); if(!c)return;
   migrateLegacyShiftDates();
+  if(!_histInited){
+    _histInited = true;
+    setHistPeriod('today', document.getElementById('histPeriod_today'));
+    return; // setHistPeriod() calls renderShiftHistory() again with the range applied
+  }
   var shops=getShops();
   var sf=document.getElementById('histShopFilter');
-  if(sf) sf.innerHTML='<div style="padding:5px 12px;border-radius:20px;border:2px solid #c8f060;background:#c8f060;color:#0f0f13;font-size:11px;cursor:pointer;white-space:nowrap;font-weight:700" onclick="filterHistShop(\'\',this)">Все</div>'+shops.map(function(s){return '<div style="padding:5px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#1a1a22;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap" onclick="filterHistShop(\''+(s.name||s)+'\',this)">'+(s.name||s)+'</div>';}).join('');
+  if(sf) sf.innerHTML='<div id="histShop_all" style="padding:5px 12px;border-radius:20px;border:2px solid #c8f060;background:#c8f060;color:#0f0f13;font-size:11px;cursor:pointer;white-space:nowrap;font-weight:700" onclick="filterHistShop(\'\',this)">Все</div>'+shops.map(function(s){
+    var name = (s.name||s);
+    return '<div style="padding:5px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#1a1a22;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap" onclick="filterHistShop(\''+name.replace(/'/g,"\\'")+'\',this)">'+name+'</div>';
+  }).join('');
   var allShifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-  // Never show a shift that's still genuinely open/unclosed (status:'open'),
-  // and never show a manually-restored draft (isArchive:true) until it has
-  // actually been activated via "Восст." → "Активировать". A regular shop
-  // shift only ever appears here once status is 'closed'.
+  // Only show finalized records: a regular shop shift once it's actually
+  // closed, or a manually-restored/imported record once it's been
+  // activated/confirmed. Still-open live sessions never appear here.
   allShifts = allShifts.filter(function(s){
     if(s.isArchive) return !!s.activated || s.source==='import';
     return s.status==='closed';
   });
-  if(histMode === 'live') allShifts = allShifts.filter(function(s){ return !s.isArchive; });
-  else if(histMode === 'archive') allShifts = allShifts.filter(function(s){ return !!s.isArchive; });
   if(_histShopFilter) allShifts = allShifts.filter(function(s){ return s.shopName === _histShopFilter; });
   if(_histPeriodFrom) allShifts = allShifts.filter(function(s){ return s.date >= _histPeriodFrom && (!_histPeriodTo||s.date <= _histPeriodTo); });
   allShifts.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
   if(!allShifts.length){
-    var modeLabel = histMode==='live' ? 'живых смен' : histMode==='archive' ? 'архивных смен' : 'смен';
-    c.innerHTML='<div class="empty"><div class="ei">📋</div>Нет '+modeLabel+'</div>';
+    c.innerHTML='<div class="empty"><div class="ei">📋</div>Нет смен за выбранный период</div>';
     return;
   }
   c.innerHTML=allShifts.slice(0,60).map(function(sh){
@@ -5527,7 +5555,7 @@ var _histPeriodTo = '';
 
 function filterHistShop(shop, el){
   _histShopFilter = shop;
-  document.querySelectorAll('#histShopFilter div').forEach(function(c){ c.style.background='#1a1a22'; c.style.color='#8888aa'; c.style.borderWidth='1px'; c.style.borderColor='#2e2e3e'; });
+  document.querySelectorAll('#histShopFilter > div').forEach(function(c){ c.style.background='#1a1a22'; c.style.color='#8888aa'; c.style.borderWidth='1px'; c.style.borderColor='#2e2e3e'; });
   el.style.background='#c8f060'; el.style.color='#0f0f13'; el.style.borderWidth='2px'; el.style.borderColor='#c8f060';
   renderShiftHistory();
 }
