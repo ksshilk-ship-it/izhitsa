@@ -2548,8 +2548,13 @@ function buildLiveShiftDoc(){
 }
 var _shiftForceClosedRemotely = false;
 function syncLiveShift(){
-  if(!session) return;
+  if(!session || session.isPreview) return;
   if(_shiftForceClosedRemotely) return;
+  // Don't push a live shift doc to Firestore until the shift has at least one
+  // real journal entry. A shift that was opened and then immediately
+  // abandoned (browser tab closed, no sales/actions) would otherwise still
+  // show up for everyone else as a "0₽" phantom shift in the Archive.
+  if(!journal || journal.length<=1) return; // length 1 = just the "Смена открыта" entry, nothing real yet
   if(!session.shiftId){ session.shiftId = uid(); saveS(); }
   if(_liveShiftSyncTimer) clearTimeout(_liveShiftSyncTimer);
   _liveShiftSyncTimer = setTimeout(function(){
