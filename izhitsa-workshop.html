@@ -1176,10 +1176,15 @@ function getEmployees(){
       }
     });
   }
-  // Also include ws_employees
+  // Легаси ws_employees — добавляем ТОЛЬКО тех, кого нет в iz_staff (по id),
+  // и только если их role реально входит в список ws-ролей (защита от старых
+  // битых записей, например администратора/кладовщика, ошибочно сохранённого
+  // с role:'мастер').
   var stored = JSON.parse(localStorage.getItem('ws_employees')||'[]');
   stored.forEach(function(e){
-    if(!result.some(function(r){ return r.id===e.id; })) result.push(e);
+    if(result.some(function(r){ return r.id===e.id; })) return; // уже есть из iz_staff — приоритет за ним
+    if(wsRoles.indexOf(e.role)<0) return; // некорректная/чужая роль — пропускаем
+    result.push(e);
   });
   // Superadmin
   var sup = {id:'__superadmin__', name:'Администратор', role:'администратор', rate:0, pass:'izhitsa2025', _builtin:true};
@@ -1412,6 +1417,36 @@ function startApp(){
   const blankD = document.getElementById('blankDate'); if(blankD) blankD.value = todayStr;
   const ewD = document.getElementById('ewDate'); if(ewD) ewD.value = todayStr;
   setStatsDateInputs('month');
+}
+
+// Перенос сотрудников из старой отдельной базы ws_employees в единую базу
+// iz_staff (admin.html). Запускается ТОЛЬКО вручную из раздела «Сотрудники»
+// (кнопка), чтобы не перезаписать iz_staff до того, как она реально успела
+// подгрузиться из Firebase при автологине.
+function migrateLegacyEmployeesToStaff(){
+  const legacy = JSON.parse(localStorage.getItem('ws_employees')||'[]');
+  if(!legacy.length){ showToast('Старых записей для переноса не найдено'); return; }
+  const staff = getStaff();
+  let migrated = 0;
+  legacy.forEach(e=>{
+    if(staff.some(s=>s.id===e.id)) return; // уже перенесён
+    staff.push({
+      id: e.id, name: e.name, pass: e.pass||'',
+      roles: [e.role], wsRate: e.rate||0,
+      blocked: e.blocked||false,
+      createdAt: e.addedAt||now(), updatedAt: now(),
+      createdBy: e.addedBy||'миграция'
+    });
+    migrated++;
+  });
+  if(migrated===0){ showToast('Все сотрудники уже есть в общей базе'); return; }
+  localStorage.setItem('iz_staff', JSON.stringify(staff));
+  db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}).catch(console.error);
+  // Старую базу не удаляем автоматически — getEmployees() уже игнорирует
+  // дубли по id, так что наличие легаси-копии больше не вредит.
+  showToast(`✅ ${migrated} сотрудник(ов) перенесены в общую базу. Проверьте их роли в разделе «Сотрудники».`);
+  renderEmployeeList();
+  renderAdmin();
 }
 
 function buildTabs(){
@@ -2521,7 +2556,10 @@ function renderAdmin(){
         <button class="btn" style="width:auto;padding:7px 14px;font-size:11px;margin:0" onclick="openMo('adminSetupMo')">＋ Добавить</button>
       </div>
       <div class="card" style="border-color:#6c3fc5">
-        <div class="ctitle">Сотрудники (${emps.length})</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div class="ctitle" style="margin:0">Сотрудники (${emps.length})</div>
+          <button onclick="migrateLegacyEmployeesToStaff()" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 9px;color:var(--t2);cursor:pointer;font-size:10px">🔄 Перенести старых в общую базу</button>
+        </div>
         ${emps.map((e,i)=>`
           <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
             <div style="width:34px;height:34px;border-radius:9px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:18px">${roleIcons[e.role]||'👤'}</div>
