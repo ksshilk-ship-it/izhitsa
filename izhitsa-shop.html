@@ -276,7 +276,7 @@ function applyUpdate() {
   </div>
   <div class="page" id="pg-writeoffs">
     <div class="stitle">Списание</div>
-    <button class="btn red" style="margin-bottom:12px" onclick="resetWoForm();openMo('woMo')">🗑 Списать товар</button>
+    <button class="btn red" style="margin-bottom:12px" onclick="openWoModal()">🗑 Списать товар</button>
     <div class="card"><div class="ctitle">🌳 Дерево</div><div id="writeoffsListWood"></div></div>
     <div class="card" style="margin-top:10px"><div class="ctitle">🛍 ДР Товар</div><div id="writeoffsListDr"></div></div>
   </div>
@@ -1173,7 +1173,11 @@ function applyUpdate() {
 <!-- WRITEOFF -->
 <div class="mo" id="woMo">
   <div class="md"><div class="mh"></div><div class="mt">Списание</div>
-    <div class="fg"><label class="fl">Причина списания (для всех позиций ниже)</label><input class="fi" id="woReason" placeholder="Например: брак — трещина, или Покупка ТГ канал"></div>
+    <div id="woDraftBanner" style="display:none;align-items:center;justify-content:space-between;gap:8px;background:#2e1a1a;border:1px solid #f06060;border-radius:10px;padding:10px 12px;margin-bottom:10px">
+      <div style="font-size:12px;color:#f06060">📋 Восстановлен незавершённый черновик списания</div>
+      <button type="button" onclick="discardWoDraft()" style="background:none;border:1px solid #f06060;border-radius:8px;padding:5px 10px;color:#f06060;font-size:11px;cursor:pointer;flex-shrink:0">Удалить</button>
+    </div>
+    <div class="fg"><label class="fl">Причина списания (для всех позиций ниже)</label><input class="fi" id="woReason" placeholder="Например: брак — трещина, или Покупка ТГ канал" oninput="saveWoDraft()"></div>
     <div class="al-info" style="margin-bottom:10px">Указывается один раз. Если причина другая — поменяйте её перед добавлением следующих позиций, они попадут в отдельное списание.</div>
     <div class="ctitle">Добавить позиции</div>
     <div id="woItemsDisplay" style="margin-bottom:10px"></div>
@@ -1223,6 +1227,20 @@ function applyUpdate() {
     </div>
     <button class="btn red" onclick="saveWriteoff()">Списать</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('woMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- WRITEOFF EDIT -->
+<div class="mo" id="woEditMo">
+  <div class="md"><div class="mh"></div><div class="mt">Исправить списание</div>
+    <div class="fg"><label class="fl">Причина</label><input class="fi" id="woEditReason" placeholder="Причина списания"></div>
+    <div style="font-size:10px;color:#8888aa;margin-bottom:6px">ПОЗИЦИИ (наим. · кол-во · цена)</div>
+    <div id="woEditItemsList"></div>
+    <button type="button" onclick="addWoEditItem()" class="btn sec" style="font-size:12px;margin:6px 0 4px;border-color:#f06060;color:#f06060">＋ Добавить позицию</button>
+    <div id="woEditTotal" style="margin-bottom:10px"></div>
+    <button class="btn" onclick="saveWoEdit()">💾 Сохранить изменения</button>
+    <button class="btn sec" style="margin-top:8px;border-color:#f06060;color:#f06060" onclick="deleteWoEntry()">🗑 Удалить списание</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('woEditMo')">Отмена</button>
   </div>
 </div>
 
@@ -3762,6 +3780,35 @@ function woCalcFromAmt(){
 
 // ── Staged writeoff items (multi-position, like sale items) ──
 var woItems = [];
+
+// ── Writeoff draft: autosaved on every change so the seller can switch
+// to the sales tab mid-writeoff and return without losing staged items. ──
+function _woDraftKey(){ return 'iz_wo_draft_'+(session&&session.shopName||''); }
+function saveWoDraft(){
+  if(!session) return;
+  var reason = gv('woReason')||'';
+  if(!woItems.length && !reason){ localStorage.removeItem(_woDraftKey()); return; }
+  localStorage.setItem(_woDraftKey(), JSON.stringify({reason:reason, items:woItems}));
+}
+function loadWoDraft(){
+  try{
+    var raw = localStorage.getItem(_woDraftKey());
+    if(!raw) return false;
+    var d = JSON.parse(raw);
+    if(!d) return false;
+    woItems = d.items||[];
+    var rEl=document.getElementById('woReason'); if(rEl&&d.reason) rEl.value=d.reason;
+    return woItems.length>0||!!d.reason;
+  }catch(e){ return false; }
+}
+function clearWoDraft(){ localStorage.removeItem(_woDraftKey()); }
+function discardWoDraft(){
+  if(!confirm('Удалить черновик списания? Все добавленные позиции будут потеряны.')) return;
+  clearWoDraft(); woItems=[];
+  var rEl=document.getElementById('woReason'); if(rEl) rEl.value='';
+  renderWoItems();
+  var b=document.getElementById('woDraftBanner'); if(b) b.style.display='none';
+}
 function addWoItem(){
   const name=(gv('woName')||'').trim();
   const reason=(gv('woReason')||'').trim();
@@ -3782,10 +3829,12 @@ function addWoItem(){
   var qtyEl=document.getElementById('woQty'); if(qtyEl) qtyEl.value='1';
   var priceEl=document.getElementById('woPrice'); if(priceEl) priceEl.value='';
   setWoItemType('derevo');
+  saveWoDraft();
   renderWoItems();
 }
 function removeWoItem(i){
   woItems.splice(i,1);
+  saveWoDraft();
   renderWoItems();
 }
 function renderWoItems(){
@@ -3824,6 +3873,15 @@ function resetWoForm(){
   var priceEl=document.getElementById('woPrice'); if(priceEl) priceEl.value='';
   setWoItemType('derevo');
   renderWoItems();
+}
+function openWoModal(){
+  // Try to restore a saved draft first; if no draft, start fresh
+  var hasDraft = !woItems.length ? loadWoDraft() : true;
+  var banner = document.getElementById('woDraftBanner');
+  if(banner) banner.style.display = hasDraft && woItems.length ? 'flex' : 'none';
+  if(!hasDraft) resetWoForm();
+  else renderWoItems();
+  openMo('woMo');
 }
 function saveWriteoff(){
   // If the current fields have an unsaved item, add it first (so the seller
@@ -3867,7 +3925,7 @@ function saveWriteoff(){
   });
   var total = woItems.reduce(function(s,it){ return s+(it.amt||0); },0);
   var count = woItems.length;
-  saveJ(); resetWoForm();
+  saveJ(); clearWoDraft(); resetWoForm();
   closeMo('woMo'); renderAll();
   showToast('🗑️ Списано '+count+(count===1?' позиция':' позиций')+' на '+fmt(total));
 }
@@ -3973,13 +4031,99 @@ function renderWriteoffs(){
   const wood=items.filter(e=>e.goodsType!=='dr');
   const dr=items.filter(e=>e.goodsType==='dr');
   function row(e){
-    return `<div class="ji"><div class="ji-ic writeoff">🗑️</div><div class="ji-body"><div class="ji-title">${e.label}</div>`+
-      (e.sub?`<div class="ji-sub">${e.sub}</div>`:'')+
-      `<div class="ji-time">${new Date(e.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div></div>`+
-      `<div class="ji-amt exp">−${fmt(e.amount)}</div></div>`;
+    var time = new Date(e.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+    return '<div class="ji">'+
+      '<div class="ji-ic writeoff">🗑️</div>'+
+      '<div class="ji-body">'+
+        '<div class="ji-title">'+e.label+'</div>'+
+        (e.sub?'<div class="ji-sub">'+e.sub+'</div>':'')+
+        '<div class="ji-time">'+time+'</div>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:6px">'+
+        '<div class="ji-amt exp">−'+fmt(e.amount)+'</div>'+
+        '<button onclick="editWriteoff(\''+e.id+'\')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;color:#c8f060;font-size:13px;cursor:pointer">✏️</button>'+
+      '</div>'+
+    '</div>';
   }
   cWood.innerHTML = wood.length ? wood.map(row).join('') : '<div class="empty"><div class="ei">🌳</div>Списаний нет</div>';
   cDr.innerHTML = dr.length ? dr.map(row).join('') : '<div class="empty"><div class="ei">🛍</div>Списаний нет</div>';
+}
+
+// ── Edit / delete already-submitted writeoff entries ──
+var _woEditId = null;
+var _woEditItems = [];
+
+function editWriteoff(id){
+  var e = journal.find(function(j){ return j.id===id; });
+  if(!e) return;
+  _woEditId = id;
+  // Reconstruct editable items list: use stored items[] if grouped, otherwise
+  // single-item synthetic array from top-level fields
+  _woEditItems = e.items ? JSON.parse(JSON.stringify(e.items))
+    : [{id:uid(), name:(e.sub||'').split(' · ')[0]||'', num:'', species:e.species||'', price:e.price||e.amount, qty:e.qty||1, amt:e.amount, reason:e.reason||'', goodsType:e.goodsType||'derevo'}];
+
+  var mo = document.getElementById('woEditMo');
+  if(!mo) return;
+  document.getElementById('woEditReason').value = e.reason || (_woEditItems[0]&&_woEditItems[0].reason)||'';
+  renderWoEditItems();
+  openMo('woEditMo');
+}
+
+function renderWoEditItems(){
+  var c = document.getElementById('woEditItemsList'); if(!c) return;
+  c.innerHTML = _woEditItems.map(function(it,i){
+    return '<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center">'+
+      '<input class="fi" value="'+(it.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" oninput="_woEditName('+i+',this.value)">'+
+      '<input class="fi" type="number" value="'+(it.qty||1)+'" inputmode="numeric" style="flex:0 0 50px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_woEditQty('+i+',this.value)">'+
+      '<input class="fi" type="number" value="'+(it.price||it.amt||0)+'" inputmode="numeric" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_woEditPrice('+i+',this.value)">'+
+      '<button type="button" onclick="_woEditDel('+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:8px;padding:6px 9px;color:#f06060;font-size:13px;cursor:pointer;flex-shrink:0">✕</button>'+
+    '</div>';
+  }).join('');
+  _updateWoEditTotal();
+}
+function _woEditName(i,v){ if(_woEditItems[i]) _woEditItems[i].name=v; }
+function _woEditQty(i,v){ if(_woEditItems[i]){ _woEditItems[i].qty=parseFloat(v)||1; _woEditItems[i].amt=(_woEditItems[i].qty)*(_woEditItems[i].price||0); _updateWoEditTotal(); } }
+function _woEditPrice(i,v){ if(_woEditItems[i]){ _woEditItems[i].price=parseFloat(v)||0; _woEditItems[i].amt=(_woEditItems[i].qty||1)*_woEditItems[i].price; _updateWoEditTotal(); } }
+function _woEditDel(i){ _woEditItems.splice(i,1); renderWoEditItems(); }
+function addWoEditItem(){ _woEditItems.push({id:uid(),name:'',num:'',species:'',price:0,qty:1,amt:0,reason:'',goodsType:'derevo'}); renderWoEditItems(); }
+function _updateWoEditTotal(){
+  var total=_woEditItems.reduce(function(s,it){return s+(it.amt||0);},0);
+  var qty=_woEditItems.reduce(function(s,it){return s+(it.qty||1);},0);
+  var el=document.getElementById('woEditTotal');
+  if(el) el.innerHTML=_woEditItems.length
+    ?'<div style="display:flex;justify-content:space-between;align-items:center;background:#2e1a1a;border:1px solid #f06060;border-radius:10px;padding:10px 14px;font-weight:700">'+
+      '<span style="color:#8888aa;font-size:13px">Итого: '+qty+' шт. · '+_woEditItems.length+' позиций</span>'+
+      '<span style="color:#f06060;font-size:16px">'+fmt(total)+'</span></div>':'';
+}
+function saveWoEdit(){
+  var reason=(document.getElementById('woEditReason')||{}).value||'';
+  if(!reason){ showToast('Укажите причину'); return; }
+  if(!_woEditItems.length){ showToast('Добавьте хотя бы одну позицию'); return; }
+  var idx=journal.findIndex(function(j){ return j.id===_woEditId; });
+  if(idx<0){ showToast('Запись не найдена'); return; }
+  var orig=journal[idx];
+  var isDr=orig.goodsType==='dr';
+  var total=_woEditItems.reduce(function(s,it){return s+(it.amt||0);},0);
+  var count=_woEditItems.length;
+  var totalQty=_woEditItems.reduce(function(s,it){return s+(it.qty||1);},0);
+  var namesPreview=_woEditItems.map(function(it){return it.name;}).join(', ');
+  var sub=count===1
+    ?(((_woEditItems[0].num)?'№'+_woEditItems[0].num+' ':'')+_woEditItems[0].name+(_woEditItems[0].species?' · '+_woEditItems[0].species:'')+(_woEditItems[0].qty&&_woEditItems[0].qty!==1?' × '+_woEditItems[0].qty:'')+' · '+reason)
+    :(count+' позиций ('+totalQty+' шт.): '+namesPreview+' · '+reason);
+  _woEditItems.forEach(function(it){ it.reason=reason; });
+  journal[idx]=Object.assign({},orig,{
+    sub:sub, reason:reason, items:_woEditItems,
+    amount:total, goodsEffect:isDr?0:-total, goodsDrEffect:isDr?-total:0,
+    editedAt:new Date().toISOString()
+  });
+  saveJ(); closeMo('woEditMo'); renderAll();
+  showToast('✅ Списание исправлено');
+}
+function deleteWoEntry(){
+  if(!confirm('Удалить это списание из журнала?')) return;
+  journal=journal.filter(function(j){ return j.id!==_woEditId; });
+  saveJ(); closeMo('woEditMo'); renderAll();
+  showToast('🗑 Списание удалено');
 }
 
 // ════ INVOICES ════
