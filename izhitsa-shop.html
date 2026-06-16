@@ -5481,6 +5481,14 @@ function renderShiftHistory(){
   var sf=document.getElementById('histShopFilter');
   if(sf) sf.innerHTML='<div style="padding:5px 12px;border-radius:20px;border:2px solid #c8f060;background:#c8f060;color:#0f0f13;font-size:11px;cursor:pointer;white-space:nowrap;font-weight:700" onclick="filterHistShop(\'\',this)">Все</div>'+shops.map(function(s){return '<div style="padding:5px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#1a1a22;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap" onclick="filterHistShop(\''+(s.name||s)+'\',this)">'+(s.name||s)+'</div>';}).join('');
   var allShifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  // Never show a shift that's still genuinely open/unclosed (status:'open'),
+  // and never show a manually-restored draft (isArchive:true) until it has
+  // actually been activated via "Восст." → "Активировать". A regular shop
+  // shift only ever appears here once status is 'closed'.
+  allShifts = allShifts.filter(function(s){
+    if(s.isArchive) return !!s.activated || s.source==='import';
+    return s.status==='closed';
+  });
   if(histMode === 'live') allShifts = allShifts.filter(function(s){ return !s.isArchive; });
   else if(histMode === 'archive') allShifts = allShifts.filter(function(s){ return !!s.isArchive; });
   if(_histShopFilter) allShifts = allShifts.filter(function(s){ return s.shopName === _histShopFilter; });
