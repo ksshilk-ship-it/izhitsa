@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>Ижица — Магазин</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><title>Ижица — Магазин</title>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sans-serif;min-height:100dvh;max-width:480px;margin:0 auto}
@@ -31,12 +31,12 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 .sb{background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:8px;text-align:center}
 .sb-v{font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700}
 .sb-l{font-size:10px;color:#8888aa;margin-top:2px;line-height:1.2}
-.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:62px;background:#1a1a22;border-top:1px solid #2e2e3e;display:none;z-index:100}
+.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:calc(62px + env(safe-area-inset-bottom, 0px));padding-bottom:env(safe-area-inset-bottom, 0px);background:#1a1a22;border-top:1px solid #2e2e3e;display:none;z-index:100;box-sizing:border-box}
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:#8888aa;font-size:12px;font-family:'Golos Text',sans-serif;font-weight:600;border:none;background:none;position:relative}
 .tab.active{color:#c8f060}
 .ti{font-size:20px;line-height:1}
 .tbadge{position:absolute;top:5px;right:calc(50% - 16px);background:#f06060;color:#fff;font-size:9px;font-weight:700;border-radius:8px;padding:1px 5px;display:none}
-.page{display:none;padding:12px 16px;padding-bottom:78px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.page{display:none;padding:12px 16px;padding-bottom:calc(78px + env(safe-area-inset-bottom, 0px));overflow-y:auto;-webkit-overflow-scrolling:touch}
 .page.active{display:block}
 .card{background:#1a1a22;border:1px solid #2e2e3e;border-radius:14px;padding:14px;margin-bottom:10px}
 .ctitle{font-size:12px;color:#8888aa;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:9px}
@@ -62,7 +62,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 .sir-del{background:none;border:none;color:#8888aa;cursor:pointer;font-size:16px;padding:2px 4px;flex-shrink:0}
 .mo{display:none;pointer-events:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:200;align-items:flex-end;justify-content:center}
 .mo.open{display:flex;pointer-events:auto}
-.md{background:#1a1a22;border-radius:22px 22px 0 0;width:100%;max-width:480px;max-height:93dvh;overflow-y:auto;padding:18px}
+.md{background:#1a1a22;border-radius:22px 22px 0 0;width:100%;max-width:480px;max-height:93dvh;overflow-y:auto;padding:18px;padding-bottom:calc(18px + env(safe-area-inset-bottom, 0px))}
 .mh{width:34px;height:4px;background:#2e2e3e;border-radius:2px;margin:0 auto 14px}
 .mt{font-family:'Unbounded',sans-serif;font-size:16px;font-weight:700;margin-bottom:14px}
 .sep{height:1px;background:#2e2e3e;margin:12px 0}
@@ -2126,6 +2126,10 @@ function renderStatusBar(){
   var dateStr = openedDate ? openedDate.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
   var timeStr = openedDate ? openedDate.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '—';
 
+  var expenses = journal.filter(function(e){ return e.type==='expense'; });
+  var expWood = expenses.filter(function(e){ return !e.goodsType||e.goodsType==='derevo'; }).reduce(function(a,e){ return a+(e.amount||0); },0);
+  var expDr = expenses.filter(function(e){ return e.goodsType==='dr'; }).reduce(function(a,e){ return a+(e.amount||0); },0);
+
   function sbCell(label,val,color){
     return '<div style="background:#0f0f13;border-radius:8px;padding:6px 8px"><div style="font-size:9px;color:#8888aa;line-height:1.3">'+label+'</div>'+
       '<div style="font-size:13px;font-weight:700;color:'+(color||'#f0f0f8')+'">'+fmt(val)+'</div></div>';
@@ -2178,6 +2182,13 @@ function renderStatusBar(){
       '<div style="font-size:10px;color:#60f090;font-weight:700;margin-bottom:4px">💵 ФАКТ НАЛИЧНЫХ В КАССЕ</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;text-align:center">'+
         sbCell('🌳 Дерево', s.cashWood, '#60f090')+sbCell('🛍 ДР', s.cashDr, '#60f090')+sbCell('🛒 Сотр.', s.staffCashBalance, '#a060f0')+sbCell('Σ Итого', s.cashTotal, '#60f090')+
+      '</div>'+
+    '</div>'+
+    // Расходы
+    '<div style="background:#1a1a22;border-radius:9px;padding:8px 10px;margin-bottom:6px">'+
+      '<div style="font-size:10px;color:#f0a060;font-weight:700;margin-bottom:4px">💸 РАСХОДЫ</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center">'+
+        sbCell('🌳 Дерево', expWood, '#f0a060')+sbCell('🛍 ДР', expDr, '#f0a060')+sbCell('Σ Всего', expWood+expDr, '#f0a060')+
       '</div>'+
     '</div>'+
     // Остаток / Списание / Приход товара
@@ -4601,6 +4612,15 @@ function saveExpense(){
 // ── renderClose — pull all data from journal ──
 function renderClose(){
   if(!session) return;
+  // Auto-expand the three cassa sections (Дерево / ДР Товар / Покупки
+  // сотрудников) so their "Нал вечер" input is immediately visible, instead
+  // of requiring a tap on each accordion header.
+  ['close_wood','close_dr','close_staff'].forEach(function(id){
+    var body = document.getElementById('acc_'+id+'_body');
+    var arrow = document.getElementById('acc_'+id+'_arrow');
+    if(body) body.style.display = 'block';
+    if(arrow) arrow.textContent = '▼';
+  });
   var t = calcTotals();
   var sales = journal.filter(function(e){ return e.type==='sale'; });
   var expenses = journal.filter(function(e){ return e.type==='expense'; });
@@ -4830,7 +4850,7 @@ function renderClose(){
         '<td style="padding:5px 8px;text-align:right;font-size:12px;color:'+(c2||'#f0f0f8')+'">'+fmt(v2)+'</td>'+
       '</tr>';
     };
-    var TRS = function(label){ return '<tr><td colspan="3" style="padding:4px 8px 2px;font-size:10px;font-weight:700;color:#555568;text-transform:uppercase;letter-spacing:.5px;border-top:1px solid #2e2e3e">'+label+'</td></tr>'; };
+    var TRS = function(label){ return '<tr><td colspan="3" style="padding:10px 8px 6px;font-size:14px;font-weight:800;color:#c8f060;text-transform:uppercase;letter-spacing:.5px;border-top:1px solid #2e2e3e">'+label+'</td></tr>'; };
     var TRN = function(label, v1, v2, c1, c2){
       return '<tr>'+
         '<td style="padding:5px 8px;font-size:12px;color:#8888aa">'+label+'</td>'+
