@@ -5382,7 +5382,11 @@ function _closeShiftReal(){
   const prev=getPrevShift(session.shopName);
   const morningDiff=(prev&&prev.cashEvening)!=null?Math.abs(session.cashMorning-prev.cashEvening):0;
   const sales=journal.filter(e=>e.type==='sale');
-  const openedDateStr = session.openedAt ? new Date(session.openedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+  const openedDateStr = (function(){
+    if(!session.openedAt) { var n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
+    var d = new Date(session.openedAt);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  })();
   const report={id:(session.shiftId||uid()),status:'closed',source:'shop',shopName:session.shopName,sellerName:session.sellerName,
     date:openedDateStr,openedAt:session.openedAt,closedAt:new Date().toISOString(),
     cashMorning:session.cashMorning,goodsMorning:session.goodsMorning,cashEvening:cashEve,goodsEvening:t.goods,
@@ -5432,8 +5436,42 @@ function setHistMode(mode, el) {
 // ── currentShiftView holds the working copy of shift being viewed/edited ──
 var _currentShiftView = null;
 
+// ── Fix legacy shift records: earlier versions stored "date" as the day the
+// shift was CLOSED instead of the day it was OPENED, so shifts opened late
+// at night and closed after midnight showed the wrong day in the archive.
+// Recompute "date" from openedAt for any closed, non-backfilled shift where
+// they don't match — runs once whenever the archive is opened.
+function migrateLegacyShiftDates(){
+  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  if(!shifts.length) return;
+  function localDateStr(iso){
+    var d = new Date(iso);
+    var y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+day;
+  }
+  var changed = false;
+  shifts.forEach(function(sh){
+    if(!sh.openedAt || sh.backfilled || sh.isArchive) return; // backfilled/archive shifts set their own date intentionally
+    var openedDateStr = localDateStr(sh.openedAt);
+    if(sh.date !== openedDateStr){
+      sh.date = openedDateStr;
+      changed = true;
+    }
+  });
+  if(changed){
+    localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+    try{
+      shifts.forEach(function(sh){
+        var id = sh.id||sh._id; if(!id) return;
+        db.collection('iz_shifts').doc(id).set(sh, {merge:true}).catch(function(){});
+      });
+    }catch(e){}
+  }
+}
+
 function renderShiftHistory(){
   var c=document.getElementById('shiftHistoryList'); if(!c)return;
+  migrateLegacyShiftDates();
   var shops=getShops();
   var sf=document.getElementById('histShopFilter');
   if(sf) sf.innerHTML='<div style="padding:5px 12px;border-radius:20px;border:2px solid #c8f060;background:#c8f060;color:#0f0f13;font-size:11px;cursor:pointer;white-space:nowrap;font-weight:700" onclick="filterHistShop(\'\',this)">Все</div>'+shops.map(function(s){return '<div style="padding:5px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#1a1a22;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap" onclick="filterHistShop(\''+(s.name||s)+'\',this)">'+(s.name||s)+'</div>';}).join('');
