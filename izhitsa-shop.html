@@ -85,18 +85,26 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 
 <script>
 // PWA Service Worker
+var _swReg = null;
+var _newSW = null;
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
     navigator.serviceWorker.register('./izhitsa-sw.js', {scope: './'})
       .then(function(reg) {
         console.log('[PWA] SW зарегистрирован');
-        setInterval(function() { reg.update(); }, 5 * 60 * 1000);
+        _swReg = reg;
+        // Check for a newer app version periodically AND whenever the app
+        // becomes visible again (e.g. seller switches back from another app)
+        setInterval(function() { reg.update(); }, 2 * 60 * 1000);
+        document.addEventListener('visibilitychange', function(){
+          if(document.visibilityState==='visible') reg.update();
+        });
         reg.addEventListener('updatefound', function() {
           var newWorker = reg.installing;
           newWorker.addEventListener('statechange', function() {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
               var banner = document.getElementById('updateBanner');
-              if(banner) { _newSW = newWorker; banner.style.display = 'block'; }
+              if(banner) { _newSW = newWorker; banner.style.display = 'flex'; }
             }
           });
         });
@@ -105,12 +113,31 @@ if ('serviceWorker' in navigator) {
     // НЕ используем controllerchange + reload — это вызывает бесконечный цикл на iOS
   });
 }
-var _newSW = null;
 function applyUpdate() {
   var banner = document.getElementById('updateBanner');
   if(banner) banner.innerHTML = '<div style="font-size:13px;color:#f0f0f8;padding:12px">⏳ Загружаю обновление...</div>';
   if(_newSW) { _newSW.postMessage({type:'SKIP_WAITING'}); }
   setTimeout(function(){ window.location.reload(); }, 1500);
+}
+// Fallback: forces a fresh copy of the page from the network, bypassing any
+// Service Worker cache. Useful if the regular update flow above doesn't pick
+// up a change (e.g. the SW file itself was cached without a version bump).
+function hardRefreshApp() {
+  if ('caches' in window) {
+    caches.keys().then(function(names){
+      names.forEach(function(n){ caches.delete(n); });
+    }).finally(function(){
+      window.location.href = window.location.pathname + '?v=' + Date.now();
+    });
+  } else {
+    window.location.href = window.location.pathname + '?v=' + Date.now();
+  }
+}
+// Actively asks the Service Worker to check for a newer app version right
+// now (used by the header "🔄" button, in addition to data sync), instead of
+// only relying on the periodic background check.
+function checkForAppUpdate() {
+  if(_swReg && _swReg.update) { try{ _swReg.update(); }catch(e){} }
 }
 </script>
 
@@ -187,9 +214,13 @@ function applyUpdate() {
     <div class="hdr-logo">Ижица</div>
     <div style="display:flex;align-items:center;gap:8px">
       <div><div class="hdr-shop" id="hdrShop"></div><div class="hdr-seller" id="hdrSeller"></div></div>
-      <button class="exit-btn" id="syncBtn" onclick="manualSync()" title="Обновить данные" style="padding:8px 10px">🔄</button>
+      <button class="exit-btn" id="syncBtn" onclick="manualSync()" ontouchstart="_syncPressStart()" ontouchend="_syncPressEnd()" title="Обновить данные (зажмите для полного обновления приложения)" style="padding:8px 10px">🔄</button>
       <button class="exit-btn" onclick="exitShift()">Выйти</button>
     </div>
+  </div>
+  <div id="updateBanner" style="display:none;align-items:center;justify-content:space-between;gap:10px;background:#1e2a14;border-bottom:2px solid #c8f060;padding:10px 16px">
+    <span style="font-size:13px;color:#c8f060;font-weight:600">🆕 Доступно обновление приложения</span>
+    <button onclick="applyUpdate()" style="background:#c8f060;border:none;border-radius:8px;padding:7px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Обновить</button>
   </div>
   <div class="page" id="pg-home">
     <div id="pendingAlert"></div>
@@ -1216,7 +1247,7 @@ function applyUpdate() {
       </div>
       <div style="display:flex;gap:8px;margin-top:8px">
         <div class="fg" style="margin:0;flex:1"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="woPrice" placeholder="0" inputmode="numeric" oninput="woCalcAmt()"></div>
-        <div class="fg" style="margin:0;width:80px"><label class="fl">Кол-во</label><input class="fi" type="number" id="woQty" placeholder="1" inputmode="numeric" value="1" oninput="woCalcAmt()"></div>
+        <div class="fg" style="margin:0;width:80px"><label class="fl">Кол-во</label><input class="fi" type="number" id="woQty" placeholder="1" inputmode="numeric" oninput="woCalcAmt()"></div>
       </div>
       <div class="fg" style="margin:6px 0 0"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="woAmt" placeholder="0" inputmode="numeric" oninput="woCalcFromAmt()" style="border-color:#f06060;color:#f06060;font-weight:700"></div>
       <button type="button" onclick="addWoItem()" class="btn sec" style="font-size:12px;margin:8px 0 0;border-color:#f06060;color:#f06060">＋ Добавить позицию в списание</button>
@@ -2287,10 +2318,24 @@ function mergeRemoteJournal(remote){
 }
 
 var _manualSyncing = false;
+var _syncPressTimer = null;
+var _syncLongPressed = false;
+function _syncPressStart(){
+  _syncLongPressed = false;
+  _syncPressTimer = setTimeout(function(){
+    _syncLongPressed = true;
+    if(confirm('Полностью обновить приложение? Это перезагрузит страницу и подгрузит последнюю версию.')) hardRefreshApp();
+  }, 700);
+}
+function _syncPressEnd(){
+  if(_syncPressTimer){ clearTimeout(_syncPressTimer); _syncPressTimer=null; }
+}
 function manualSync(){
+  if(_syncLongPressed){ _syncLongPressed=false; return; } // long-press already handled separately
   if(!session || !session.shiftId){ showToast('Нет активной смены'); return; }
   if(_manualSyncing) return;
   _manualSyncing = true;
+  checkForAppUpdate();
   var btn = document.getElementById('syncBtn');
   if(btn) btn.textContent = '⏳';
   if(_liveShiftSyncTimer){ clearTimeout(_liveShiftSyncTimer); _liveShiftSyncTimer=null; }
@@ -3826,7 +3871,7 @@ function addWoItem(){
   // position too. The seller only needs to change it if the next item really
   // has a different reason (which will then form a separate writeoff group).
   ['woNum','woName','woSpecies','woAmt'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
-  var qtyEl=document.getElementById('woQty'); if(qtyEl) qtyEl.value='1';
+  var qtyEl=document.getElementById('woQty'); if(qtyEl) qtyEl.value='';
   var priceEl=document.getElementById('woPrice'); if(priceEl) priceEl.value='';
   setWoItemType('derevo');
   saveWoDraft();
@@ -3869,7 +3914,7 @@ function renderWoItems(){
 function resetWoForm(){
   woItems=[];
   ['woNum','woName','woSpecies','woAmt','woReason'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
-  var qtyEl=document.getElementById('woQty'); if(qtyEl) qtyEl.value='1';
+  var qtyEl=document.getElementById('woQty'); if(qtyEl) qtyEl.value='';
   var priceEl=document.getElementById('woPrice'); if(priceEl) priceEl.value='';
   setWoItemType('derevo');
   renderWoItems();
@@ -8905,12 +8950,12 @@ function renderManInvItems() {
       '<div style="display:flex;gap:6px;align-items:center">'+
         '<div style="flex:1">'+
           '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">КОЛ-ВО</div>'+
-          '<input class="fi" type="number" value="'+item.qty+'" placeholder="1" '+
+          '<input class="fi" type="number" value="'+(item.qty&&item.qty!==1?item.qty:'')+'" placeholder="1" '+
             'oninput="_manInvQty('+i+',this.value)" style="margin:0;padding:8px" inputmode="numeric">'+
         '</div>'+
         '<div style="flex:1">'+
           '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">ЦЕНА ₽</div>'+
-          '<input class="fi" type="number" value="'+item.price+'" placeholder="0" '+
+          '<input class="fi" type="number" value="'+(item.price?item.price:'')+'" placeholder="0" '+
             'oninput="_manInvPrice('+i+',this.value)" style="margin:0;padding:8px" inputmode="numeric">'+
         '</div>'+
         '<button type="button" onclick="_manInvDel('+i+')" '+
