@@ -1588,7 +1588,8 @@ function renderDash(){
 
 // ════════ СПРАВОЧНИК НАИМЕНОВАНИЙ ИЗДЕЛИЙ ════════
 function getItemNames(){
-  return JSON.parse(localStorage.getItem('ws_item_names')||'["Столешница","Подоконник","Столешница барная","Полка","Дверь","Фасад","Панель","Тумба","Тумба прикроватная","Комод"]');
+  const arr = JSON.parse(localStorage.getItem('ws_item_names')||'["Столешница","Подоконник","Столешница барная","Полка","Дверь","Фасад","Панель","Тумба","Тумба прикроватная","Комод"]');
+  return arr.slice().sort((a,b)=>a.localeCompare(b,'ru'));
 }
 function saveItemNames(arr){ wsSyncSave('ws_item_names', arr); }
 
@@ -1643,7 +1644,8 @@ function deleteItemName(i){
 
 // ════════ СПРАВОЧНИК ПОРОД ДЕРЕВА ════════
 function getWoods(){
-  return JSON.parse(localStorage.getItem('ws_woods')||'["Дуб","Ясень","Орех","Клён","Береза","Сосна","Лиственница","Тик","Венге","Махагон"]');
+  const arr = JSON.parse(localStorage.getItem('ws_woods')||'["Дуб","Ясень","Орех","Клён","Береза","Сосна","Лиственница","Тик","Венге","Махагон"]');
+  return arr.slice().sort((a,b)=>a.localeCompare(b,'ru'));
 }
 function saveWoods(arr){ wsSyncSave('ws_woods', arr); }
 
@@ -4357,16 +4359,31 @@ function openManualAcceptMo(){
   openMo('manualAcceptMo');
 }
 
+// Следующий сквозной номер артикула по базе товаров мастерской (древесина)
+function getNextArtikulNumber(){
+  let max = 0;
+  products.forEach(p=>{
+    const n = parseInt(String(p.artikul||'').replace(/\D/g,''),10);
+    if(!isNaN(n) && n>max) max = n;
+  });
+  // Также учитываем уже добавленные в текущей форме приёмки позиции
+  _maItems.forEach(it=>{
+    const n = parseInt(String(it.artikul||'').replace(/\D/g,''),10);
+    if(!isNaN(n) && n>max) max = n;
+  });
+  return max+1;
+}
+
 function addMaItemRow(){
-  const names = [...new Set([...products.filter(p=>p.status!=='archive').map(p=>p.name), ...getItemNames()])];
-  const woods = getWoods();
-  _maItems.push({rid:uid(), artikul:'', name:names[0]||'', wood:woods[0]||'', zp:0, price:0});
+  const names = [...new Set([...products.filter(p=>p.status!=='archive').map(p=>p.name), ...getItemNames()])].sort((a,b)=>a.localeCompare(b,'ru'));
+  const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
+  _maItems.push({rid:uid(), artikul:String(getNextArtikulNumber()), artikulMode:'auto', name:names[0]||'', wood:woods[0]||'', zp:0, price:0});
   renderMaItemsList();
 }
 
 function renderMaItemsList(){
-  const names = [...new Set([...products.filter(p=>p.status!=='archive').map(p=>p.name), ...getItemNames()])];
-  const woods = getWoods();
+  const names = [...new Set([...products.filter(p=>p.status!=='archive').map(p=>p.name), ...getItemNames()])].sort((a,b)=>a.localeCompare(b,'ru'));
+  const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
   const c = document.getElementById('maItemsList'); if(!c) return;
   c.innerHTML = _maItems.map((it,i)=>`
     <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:10px;border:1px solid var(--border)">
@@ -4374,8 +4391,16 @@ function renderMaItemsList(){
         <span style="font-size:11px;color:var(--t2);font-weight:700">Позиция ${i+1}</span>
         ${_maItems.length>1?`<button onclick="removeMaItemRow('${it.rid}')" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>`:''}
       </div>
-      <div class="fg" style="margin-bottom:8px"><label class="fl">Артикул</label>
-        <input class="fi" value="${it.artikul}" oninput="updateMaItem('${it.rid}','artikul',this.value)" placeholder="СТ-001">
+      <div class="fg" style="margin-bottom:8px">
+        <label class="fl">Артикул</label>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <div onclick="setMaArtikulMode('${it.rid}','auto')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='auto'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='auto'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='auto'?'var(--accent)':'var(--border)'}">Авто</div>
+          <div onclick="setMaArtikulMode('${it.rid}','manual')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='manual'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='manual'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='manual'?'var(--accent)':'var(--border)'}">Вручную</div>
+          <div onclick="setMaArtikulMode('${it.rid}','none')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='none'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='none'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='none'?'var(--accent)':'var(--border)'}">Без артикула</div>
+        </div>
+        <input class="fi" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode!=='manual'?'disabled':''}
+          oninput="updateMaItem('${it.rid}','artikul',this.value)" placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
+          style="${it.artikulMode!=='manual'?'opacity:0.6':''}">
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label>
         <select class="fs" onchange="updateMaItem('${it.rid}','name',this.value)">
@@ -4396,6 +4421,14 @@ function renderMaItemsList(){
         </div>
       </div>
     </div>`).join('');
+}
+
+function setMaArtikulMode(rid, mode){
+  const it = _maItems.find(x=>x.rid===rid); if(!it) return;
+  it.artikulMode = mode;
+  if(mode==='auto') it.artikul = String(getNextArtikulNumber());
+  if(mode==='none') it.artikul = '';
+  renderMaItemsList();
 }
 
 function updateMaItem(rid, field, val){

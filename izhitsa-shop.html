@@ -1704,6 +1704,7 @@ var SYNC_SETTINGS = {
   'iz_suppliers':        {doc:'suppliers',     field:'data'},
   'iz_goods':            {doc:'goods',         field:'data'},
   'iz_materials':        {doc:'materials',     field:'data'},
+  'iz_sizes':            {doc:'sizes',         field:'data'},
   'iz_work_schedules':   {doc:'work_schedules', field:'data'},
   'iz_employee_statuses': {doc:'employee_statuses', field:'data'},
 };
@@ -1727,7 +1728,7 @@ function syncListen(lsKey) {
         try{ if(session && document.getElementById('mainStatusBar')) renderStatusBar(); }catch(e){}
       }
       // Generic shared refbooks live-refresh
-      var shopRefbookKeys = ['iz_payment_methods','iz_suppliers','iz_goods','iz_materials','iz_work_schedules'];
+      var shopRefbookKeys = ['iz_payment_methods','iz_suppliers','iz_goods','iz_materials','iz_sizes','iz_work_schedules'];
       if(shopRefbookKeys.indexOf(lsKey)>=0){
         var book = SHOP_REFBOOKS.find(function(b){ return b.key===lsKey; });
         if(book){
@@ -7287,6 +7288,7 @@ var SHOP_REFBOOKS = [
   {id:'suppliers', icon:'🚚', name:'База поставщиков', key:'iz_suppliers'},
   {id:'goods',     icon:'📦', name:'База товаров',     key:'iz_goods'},
   {id:'materials', icon:'💎', name:'Породы дерева',    key:'iz_materials'},
+  {id:'sizes',     icon:'📐', name:'Размеры изделий',  key:'iz_sizes'},
   {id:'schedules', icon:'⏰', name:'Графики работы',   key:'iz_work_schedules'}
 ];
 function getRefBook(key){
@@ -9876,6 +9878,23 @@ function saveSpecies(name) {
   if(!exists){
     materials.push({id:uid(), name:name});
     saveRefBookShop('iz_materials', materials);
+  }
+}
+
+// ════ SIZE CATALOG ════
+function getSizesShop() {
+  // Размеры изделий управляются через "Настройки → Размеры изделий" (iz_sizes)
+  var sizes = getRefBook('iz_sizes');
+  return sizes.map(function(s){ return (s && s.name) || (typeof s==='string' ? s : ''); }).filter(Boolean);
+}
+function saveSizeShop(name) {
+  if(!name||!name.trim()) return;
+  name = name.trim();
+  var sizes = getRefBook('iz_sizes');
+  var exists = sizes.some(function(s){ return ((s && s.name) || s)===name; });
+  if(!exists){
+    sizes.push({id:uid(), name:name});
+    saveRefBookShop('iz_sizes', sizes);
   }
 }
 
