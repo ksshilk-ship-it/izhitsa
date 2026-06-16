@@ -2546,8 +2546,10 @@ function buildLiveShiftDoc(){
     journal: journal.slice()
   };
 }
+var _shiftForceClosedRemotely = false;
 function syncLiveShift(){
   if(!session) return;
+  if(_shiftForceClosedRemotely) return;
   if(!session.shiftId){ session.shiftId = uid(); saveS(); }
   if(_liveShiftSyncTimer) clearTimeout(_liveShiftSyncTimer);
   _liveShiftSyncTimer = setTimeout(function(){
@@ -2656,6 +2658,18 @@ function startLiveShiftListener(){
       .onSnapshot(function(snap){
         if(!snap.exists || !session) return;
         var remote = snap.data();
+        // If an admin force-closed this shift remotely (e.g. it was a
+        // forgotten/stuck open session), stop pushing updates back — without
+        // this check, our own next syncLiveShift() would overwrite the
+        // admin's closed status back to "open" and the shift would never
+        // truly disappear from the live list.
+        if(remote.status==='closed' && session.shiftId===remote.id){
+          _shiftForceClosedRemotely = true;
+          stopLiveShiftListener();
+          if(_liveShiftSyncTimer) clearTimeout(_liveShiftSyncTimer);
+          showToast('🔐 Эта смена была закрыта администратором. Откройте новую смену через "Выйти".');
+          return;
+        }
         var added = mergeRemoteJournal(remote);
         if(added>0){
           renderAll();
@@ -5953,6 +5967,14 @@ function _renderShiftView(){
       (sh.hasCashDiff?'<div style="background:#2e1a1a;border-radius:8px;padding:6px 8px;margin-top:8px;font-size:11px;color:#f06060;font-weight:700">⚠️ Расхождение кассы</div>':'')+
       (sh.editedBy?'<div style="font-size:10px;color:#555568;margin-top:6px">✏️ Правки: '+sh.editedBy+(sh.editReason?' · '+sh.editReason:'')+'</div>':'')+
     '</div>'+
+    // Force-close button — only for shifts still marked "open" (a session
+    // somewhere never properly closed it via "Закрыть смену"). Converts the
+    // record into a proper closed shift instead of just deleting it, which
+    // would otherwise keep reappearing if that session is still syncing.
+    (sh.status==='open'?
+      '<div style="background:#2e2a14;border:1px solid #f0c060;border-radius:9px;padding:8px 10px;margin-bottom:8px;font-size:11px;color:#f0c060">⚠️ Эта смена ещё не закрыта продавцом (статус "открыта"). Если просто удалить, она может появиться снова, когда устройство продавца синхронизируется.</div>'+
+      '<button onclick="svForceCloseShift()" style="width:100%;padding:9px;background:#2e2a14;border:1px solid #f0c060;border-radius:9px;font-weight:700;font-size:12px;color:#f0c060;cursor:pointer;margin-bottom:10px">🔐 Принудительно закрыть смену</button>'
+      :'')+
     // Delete shift button
     '<button onclick="svDeleteShift()" style="width:100%;padding:9px;background:#2e1a1a;border:1px solid #f06060;border-radius:9px;font-weight:700;font-size:12px;color:#f06060;cursor:pointer;margin-bottom:10px">🗑 Удалить смену целиком</button>';
 
@@ -6091,6 +6113,21 @@ function svDeleteDrWo(idx){
   arr.splice(idx,1);
   _currentShiftView.drGoodsWriteoffs=arr;
   svPersist(); _renderShiftView(); showToast('🗑 Удалено');
+}
+function svForceCloseShift(){
+  if(!confirm('Принудительно закрыть эту смену? Она будет помечена как закрытая с текущими данными.')) return;
+  var id=_currentShiftView.id;
+  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var idx=shifts.findIndex(function(s){return (s.id||s._id)===id;});
+  if(idx<0) return;
+  shifts[idx].status='closed';
+  shifts[idx].closedAt=new Date().toISOString();
+  shifts[idx].forceClosedBy=(session&&session.sellerName)||'Администратор';
+  localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+  try{db.collection('iz_shifts').doc(id).set(shifts[idx]);}catch(e){}
+  _currentShiftView = shifts[idx];
+  _renderShiftView();
+  showToast('🔐 Смена принудительно закрыта. Если она снова появится как открытая, найдите устройство продавца и закройте смену там, либо выйдите из её сессии.');
 }
 function svDeleteShift(){
   if(!confirm('Удалить смену целиком? Это действие нельзя отменить.')) return;
