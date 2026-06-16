@@ -12,6 +12,7 @@
   --r:14px;--tabh:62px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{background:var(--bg)}
 body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;min-height:100dvh;overscroll-behavior:none;max-width:480px;margin:0 auto}
 
 /* LOGIN */
@@ -359,7 +360,20 @@ function applyUpdate() {
         <div class="sc"><div class="sc-v" id="whStock" style="color:var(--accent)">0</div><div class="sc-l">На складе</div></div>
         <div class="sc"><div class="sc-v" id="whShipped" style="color:var(--a2)">0</div><div class="sc-l">Отгружено</div></div>
       </div>
-      <div class="card"><div class="ctitle">📥 Ожидают приёмки</div><div id="whPendingList"></div></div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div class="ctitle" style="margin:0">📥 Ожидают приёмки</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <div id="pendSubTab1" onclick="setPendSubTab('auto')" style="flex:1;padding:8px;text-align:center;border-radius:8px;background:var(--accent);color:#000;font-weight:700;font-size:12px;cursor:pointer">От мастеров</div>
+          <div id="pendSubTab2" onclick="setPendSubTab('manual')" style="flex:1;padding:8px;text-align:center;border-radius:8px;background:var(--s2);color:var(--t2);font-size:12px;cursor:pointer;border:1px solid var(--border)">➕ Вручную</div>
+        </div>
+        <div id="pendAutoBlock"><div id="whPendingList"></div></div>
+        <div id="pendManualBlock" style="display:none">
+          <button class="btn green" style="margin-bottom:10px" onclick="openManualAcceptMo()">➕ Новая приёмка от мастера</button>
+          <div id="manualAcceptHistory"></div>
+        </div>
+      </div>
       <div class="card"><div class="ctitle">📦 На складе</div><div id="whStockList"></div></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
         <button class="btn green" onclick="openShipmentMo()">🚚 Отгрузка</button>
@@ -1395,6 +1409,11 @@ function startListeners(){
   subscribeProducts();
   // Показать каталог только администратору
   toggleAdminCatalog();
+  // Ручные приёмки от мастеров (кладовщик)
+  db.collection('ws_master_acceptances').orderBy('createdAt','desc').onSnapshot(snap=>{
+    _maHistory = snap.docs.map(d=>d.data());
+    renderManualAcceptHistory();
+  },console.error);
 }
 
 function updateBadges(){
@@ -4244,6 +4263,243 @@ function finishOTTask(id){
     .catch(e=>showToast(e.message));
 }
 
+// ════════════════════════════════
+// РУЧНАЯ ПРИЁМКА ОТ МАСТЕРА (Кладовщик)
+// ════════════════════════════════
+let _maItems = []; // временный список позиций в открытой форме
+let _maHistory = []; // загруженные из Firebase приёмки
+
+function setPendSubTab(tab){
+  const t1=document.getElementById('pendSubTab1'), t2=document.getElementById('pendSubTab2');
+  const b1=document.getElementById('pendAutoBlock'), b2=document.getElementById('pendManualBlock');
+  if(tab==='auto'){
+    t1.style.background='var(--accent)'; t1.style.color='#000'; t1.style.border='none';
+    t2.style.background='var(--s2)'; t2.style.color='var(--t2)'; t2.style.border='1px solid var(--border)';
+    b1.style.display='block'; b2.style.display='none';
+  } else {
+    t2.style.background='var(--accent)'; t2.style.color='#000'; t2.style.border='none';
+    t1.style.background='var(--s2)'; t1.style.color='var(--t2)'; t1.style.border='1px solid var(--border)';
+    b2.style.display='block'; b1.style.display='none';
+    renderManualAcceptHistory();
+  }
+}
+
+function openManualAcceptMo(){
+  const sel = document.getElementById('maMaster');
+  if(sel) sel.innerHTML = getEmployees().filter(e=>e.role==='мастер').map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+  document.getElementById('maDate').value = new Date().toISOString().slice(0,10);
+  _maItems = [];
+  addMaItemRow(); // одна строка по умолчанию
+  renderMaItemsList();
+  openMo('manualAcceptMo');
+}
+
+function addMaItemRow(){
+  const names = [...new Set([...products.filter(p=>p.status!=='archive').map(p=>p.name), ...getItemNames()])];
+  const woods = getWoods();
+  _maItems.push({rid:uid(), artikul:'', name:names[0]||'', wood:woods[0]||'', zp:0, price:0});
+  renderMaItemsList();
+}
+
+function renderMaItemsList(){
+  const names = [...new Set([...products.filter(p=>p.status!=='archive').map(p=>p.name), ...getItemNames()])];
+  const woods = getWoods();
+  const c = document.getElementById('maItemsList'); if(!c) return;
+  c.innerHTML = _maItems.map((it,i)=>`
+    <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:10px;border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:11px;color:var(--t2);font-weight:700">Позиция ${i+1}</span>
+        ${_maItems.length>1?`<button onclick="removeMaItemRow('${it.rid}')" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>`:''}
+      </div>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">Артикул</label>
+        <input class="fi" value="${it.artikul}" oninput="updateMaItem('${it.rid}','artikul',this.value)" placeholder="СТ-001">
+      </div>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label>
+        <select class="fs" onchange="updateMaItem('${it.rid}','name',this.value)">
+          ${names.map(n=>`<option ${n===it.name?'selected':''}>${n}</option>`).join('')}
+        </select>
+      </div>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">Древесина</label>
+        <select class="fs" onchange="updateMaItem('${it.rid}','wood',this.value)">
+          ${woods.map(w=>`<option ${w===it.wood?'selected':''}>${w}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="fg"><label class="fl">ЗП мастеру (₽)</label>
+          <input class="fi" type="number" inputmode="numeric" value="${it.zp||''}" oninput="updateMaItem('${it.rid}','zp',this.value)" placeholder="0">
+        </div>
+        <div class="fg"><label class="fl">Розничная цена (₽)</label>
+          <input class="fi" type="number" inputmode="numeric" value="${it.price||''}" oninput="updateMaItem('${it.rid}','price',this.value)" placeholder="0">
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function updateMaItem(rid, field, val){
+  const it = _maItems.find(x=>x.rid===rid); if(!it) return;
+  it[field] = (field==='zp'||field==='price') ? (parseFloat(val)||0) : val;
+}
+
+function removeMaItemRow(rid){
+  _maItems = _maItems.filter(x=>x.rid!==rid);
+  renderMaItemsList();
+}
+
+async function saveManualAccept(){
+  const masterId = document.getElementById('maMaster')?.value;
+  const date     = document.getElementById('maDate')?.value;
+  if(!masterId){ showToast('Выберите мастера'); return; }
+  if(!date){ showToast('Укажите дату сдачи'); return; }
+  if(!_maItems.length){ showToast('Добавьте хотя бы одно изделие'); return; }
+
+  const master = getEmployees().find(e=>e.id===masterId);
+  const batchId = uid();
+
+  const positions = _maItems.map(it=>({
+    rid: it.rid, artikul: it.artikul||'', name: it.name, wood: it.wood,
+    zp: it.zp||0, price: it.price||0, status: 'pending' // pending → accepted | defect
+  }));
+
+  try{
+    await db.collection('ws_master_acceptances').doc(batchId).set({
+      id: batchId, masterId, masterName: master?.name||'',
+      deliveredDate: date,
+      createdBy: session.name, createdById: session.id,
+      createdAt: now(),
+      status: 'open', // open → done (после "Провести")
+      positions
+    });
+    audit && audit('manual_acceptance_created',{masterName:master?.name, date, count:positions.length});
+    closeMo('manualAcceptMo');
+    showToast(`✅ Приёмка от ${master?.name||''} сохранена · ${positions.length} позиций`);
+    renderManualAcceptHistory();
+  }catch(e){ showToast('Ошибка: '+e.message); }
+}
+
+function renderManualAcceptHistory(){
+  const c = document.getElementById('manualAcceptHistory'); if(!c) return;
+  if(!_maHistory.length){
+    c.innerHTML = '<div class="empty" style="padding:10px 0"><div class="ei">📋</div>Приёмок пока нет</div>';
+    return;
+  }
+  c.innerHTML = _maHistory.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(acc=>{
+    const total = acc.positions.length;
+    const accepted = acc.positions.filter(p=>p.status==='accepted').length;
+    const defect = acc.positions.filter(p=>p.status==='defect').length;
+    const pending = total-accepted-defect;
+    const statusLabel = acc.status==='done'
+      ? `<span style="color:var(--inc)">✅ Проведена</span>`
+      : `<span style="color:var(--a4)">⏳ Открыта · ${pending} не размечено</span>`;
+    return `<div class="li" onclick="openMaDetail('${acc.id}')">
+      <div class="li-ico" style="background:#1a1e2a">📦</div>
+      <div class="li-info">
+        <div class="li-name">${acc.masterName} · ${total} шт.</div>
+        <div class="li-sub">Сдал: ${acc.deliveredDate} · Принял: ${acc.createdBy}</div>
+        <div class="li-sub">${statusLabel}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openMaDetail(accId){
+  const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
+  document.getElementById('maDetailTitle').textContent = `${acc.masterName} · сдал ${acc.deliveredDate}`;
+
+  const c = document.getElementById('maDetailItems');
+  c.innerHTML = acc.positions.map((p,i)=>`
+    <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:700">${p.name}${p.artikul?' · '+p.artikul:'':''}</div>
+      <div style="font-size:11px;color:var(--t2);margin:3px 0">🌳 ${p.wood||'—'} · ЗП: ${fmt(p.zp)} · Цена: ${fmt(p.price)}</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button onclick="setMaPosStatus('${acc.id}','${p.rid}','accepted')"
+          style="flex:1;padding:8px;border-radius:8px;border:1px solid ${p.status==='accepted'?'var(--inc)':'var(--border)'};background:${p.status==='accepted'?'rgba(80,255,150,0.15)':'var(--s1)'};color:${p.status==='accepted'?'var(--inc)':'var(--t2)'};font-size:12px;font-weight:700;cursor:pointer">
+          ✅ Принято
+        </button>
+        <button onclick="setMaPosStatus('${acc.id}','${p.rid}','defect')"
+          style="flex:1;padding:8px;border-radius:8px;border:1px solid ${p.status==='defect'?'var(--exp)':'var(--border)'};background:${p.status==='defect'?'rgba(255,90,90,0.15)':'var(--s1)'};color:${p.status==='defect'?'var(--exp)':'var(--t2)'};font-size:12px;font-weight:700;cursor:pointer">
+          ⚠️ Брак / переделка
+        </button>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('maProvedBtn').style.display = acc.status==='done' ? 'none' : 'block';
+  document.getElementById('maProvedBtn').setAttribute('data-acc-id', acc.id);
+  openMo('maDetailMo');
+}
+
+function setMaPosStatus(accId, rid, status){
+  const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
+  const pos = acc.positions.find(p=>p.rid===rid); if(!pos) return;
+  pos.status = status;
+  // Обновляем в Firebase сразу (чтобы не потерять при закрытии)
+  db.collection('ws_master_acceptances').doc(accId).update({positions: acc.positions}).catch(console.error);
+  openMaDetail(accId); // перерисовать
+}
+
+async function provedMaAccept(){
+  const accId = document.getElementById('maProvedBtn').getAttribute('data-acc-id');
+  const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
+
+  const unmarked = acc.positions.filter(p=>p.status==='pending');
+  if(unmarked.length){
+    showToast(`Сначала разметьте все позиции (осталось ${unmarked.length})`);
+    return;
+  }
+
+  const postDate = now(); // дата приёмки кладовщиком — именно сегодня
+  const accepted = acc.positions.filter(p=>p.status==='accepted');
+  const defects   = acc.positions.filter(p=>p.status==='defect');
+
+  try{
+    // 1) Принятые — на баланс склада, датой приёмки кладовщиком
+    if(accepted.length){
+      const batch = db.batch();
+      accepted.forEach(p=>{
+        const ref = db.collection('ws_items').doc();
+        batch.set(ref, {
+          id: uid(), name: p.name, itemName: p.name, wood: p.wood,
+          artikul: p.artikul||'', price: p.price||0, zp: p.zp||0, zpPaid: true,
+          masterId: acc.masterId, masterName: acc.masterName,
+          status: 'received',
+          createdAt: postDate, receivedAt: postDate, // дата кладовщика, не дата мастера
+          deliveredDate: acc.deliveredDate, // для справки — когда фактически сдал мастер
+          itemNum: 'МСТ-'+uid().toUpperCase(),
+          fromManualAcceptance: acc.id
+        });
+      });
+      await batch.commit();
+    }
+
+    // 2) Брак — в "личный кабинет" мастера (структура готова на будущее)
+    if(defects.length){
+      const batch = db.batch();
+      defects.forEach(p=>{
+        const ref = db.collection('ws_master_returns').doc();
+        batch.set(ref, {
+          id: uid(), masterId: acc.masterId, masterName: acc.masterName,
+          name: p.name, wood: p.wood, artikul: p.artikul||'',
+          zp: p.zp||0, price: p.price||0,
+          reason: 'defect', status: 'returned_to_master',
+          deliveredDate: acc.deliveredDate,
+          returnedAt: postDate,
+          returnedBy: session.name,
+          fromManualAcceptance: acc.id
+        });
+      });
+      await batch.commit();
+    }
+
+    // 3) Помечаем приёмку как проведённую
+    await db.collection('ws_master_acceptances').doc(accId).update({
+      status: 'done', provedAt: postDate, provedBy: session.name
+    });
+
+    audit && audit('manual_acceptance_processed',{masterName:acc.masterName, accepted:accepted.length, defects:defects.length});
+    closeMo('maDetailMo');
+    showToast(`✅ Проведено: +${accepted.length} на склад, ${defects.length} в брак мастеру`);
+  }catch(e){ showToast('Ошибка: '+e.message); }
+}
+
 // ════════ BOOT ════════
 document.addEventListener('DOMContentLoaded', ()=>{
   startWsSyncListeners();
@@ -4366,6 +4622,31 @@ document.addEventListener('DOMContentLoaded', ()=>{
     <div id="otDetailContent"></div>
     <div id="otDetailActions"></div>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('otTaskDetailMo')">Закрыть</button>
+  </div>
+</div>
+
+<!-- РУЧНАЯ ПРИЁМКА ОТ МАСТЕРА (Кладовщик) -->
+<div class="mo" id="manualAcceptMo">
+  <div class="md"><div class="mh"></div><div class="mt">➕ Приёмка от мастера</div>
+
+    <div class="fg"><label class="fl">Мастер</label><select class="fs" id="maMaster"></select></div>
+    <div class="fg"><label class="fl">Дата сдачи</label><input class="fi" type="date" id="maDate"></div>
+
+    <div id="maItemsList" style="margin:14px 0"></div>
+
+    <button class="btn" style="background:var(--a2);margin-bottom:10px" onclick="addMaItemRow()">➕ Добавить изделие</button>
+    <button class="btn green" onclick="saveManualAccept()">💾 Сохранить приёмку</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('manualAcceptMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- ДЕТАЛИ РУЧНОЙ ПРИЁМКИ — статусы по позициям (Кладовщик) -->
+<div class="mo" id="maDetailMo">
+  <div class="md"><div class="mh"></div>
+    <div class="mt" id="maDetailTitle">Приёмка</div>
+    <div id="maDetailItems" style="margin-bottom:14px"></div>
+    <button class="btn green" onclick="provedMaAccept()" id="maProvedBtn">✅ Провести</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('maDetailMo')">Закрыть</button>
   </div>
 </div>
 
