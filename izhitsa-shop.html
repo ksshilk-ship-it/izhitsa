@@ -2624,91 +2624,56 @@ function startPreviewMode(){
   }, 100);
 }
 
-// ── One-time migration: earlier versions wrote one "Приход товара" journal
-// entry per item when accepting a manual invoice, instead of one summary
-// entry per invoice. The old entry's "sub" does NOT reliably contain the
-// invoice number (it actually shows "№<артикул> <название> · <кол-во> от
-// <поставщик>" — the number after "·" is the item quantity, not the invoice
-// number). So instead, match each invoice's items[] (article + amount =
-// qty×price) against legacy entries with the same article + amount. If ALL
-// items of an invoice can be matched to distinct legacy entries, collapse
-// those entries into ONE "Приёмка <номер>" summary line using the invoice's
-// total/date/time (earliest matched entry's ts = when it was accepted). ──
+// ── Resync "Приёмка" journal entries from iz_manual_invoices ──
+// For each manual invoice accepted into this shop, ensure there is exactly
+// ONE journal entry "Приёмка <num>" with the correct total/count from the
+// invoice data. If a stale entry already exists (by invId), replace it.
+// If no entry exists, create one using the invoice's acceptedAt timestamp.
+// Also removes any legacy per-item "Приход товара" entries (label matches)
+// that no longer correspond to a known invoice — these were created by old
+// code that wrote one row per item.
 function migrateLegacyReceiveEntries(){
   if(!journal.length) return;
-  var legacy = journal.filter(function(e){ return e.type==='receive' && e.label==='Приход товара' && !e.invId; });
-  if(!legacy.length) return;
 
   var manualInvoices = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]')
     .filter(function(inv){ return inv.destName===session.shopName; });
   if(!manualInvoices.length) return;
 
-  function extractArticle(sub){
-    var m = (sub||'').match(/№(\S+)/);
-    return m ? m[1] : '';
-  }
-
-  // Pool of legacy entries available to be claimed, with precomputed article/amount
-  var pool = legacy.map(function(e){
-    return {entry:e, article:extractArticle(e.sub), amount:Math.round((e.amount||0))};
+  // Build set of all valid invIds from manual invoices
+  var validInvIds = {};
+  manualInvoices.forEach(function(inv){
+    var iid = String(inv._id!=null?inv._id:inv.id);
+    validInvIds[iid] = inv;
   });
 
-  // Process invoices oldest-first so earlier invoices claim their entries first
-  var sortedInvoices = manualInvoices.slice().sort(function(a,b){
-    return (a.acceptedAt||'').localeCompare(b.acceptedAt||'');
+  // Remove ALL stale receive entries that either:
+  // a) are old per-item "Приход товара" rows (no invId, label matches),
+  // b) are "Приёмка" rows with invId pointing to a known manual invoice
+  //    (we'll recreate them correctly below).
+  journal = journal.filter(function(e){
+    if(e.type!=='receive') return true;
+    if(!e.invId && e.label==='Приход товара') return false; // legacy per-item row
+    if(e.invId && validInvIds[e.invId]) return false; // will be recreated
+    return true;
   });
 
-  var claims = {}; // invoice id -> [pool entries]
-  sortedInvoices.forEach(function(inv){
-    var items = inv.items||[];
-    if(!items.length) return;
-    var matched = [];
-    var usedIdx = {};
-    var allMatched = true;
-    items.forEach(function(item){
-      var itemArticle = String(item.article||'');
-      var itemAmount = Math.round((item.qty||1)*(item.price||0));
-      var foundIdx = -1;
-      for(var i=0;i<pool.length;i++){
-        if(usedIdx[i]) continue;
-        if(pool[i].article===itemArticle && pool[i].amount===itemAmount){ foundIdx=i; break; }
-      }
-      if(foundIdx<0){ allMatched=false; return; }
-      usedIdx[foundIdx]=true;
-      matched.push(pool[foundIdx]);
-    });
-    if(allMatched && matched.length===items.length){
-      var iid = String(inv._id!=null?inv._id:inv.id);
-      claims[iid] = {inv:inv, entries:matched.map(function(m){return m.entry;})};
-      // Remove claimed entries from the pool so they aren't reused by another invoice
-      pool = pool.filter(function(p, i){ return !usedIdx[i]; });
-    }
-  });
-
-  if(!Object.keys(claims).length) return;
-
-  var claimedIds = {};
-  Object.keys(claims).forEach(function(iid){
-    claims[iid].entries.forEach(function(e){ claimedIds[e.id]=true; });
-  });
-
-  var result = journal.filter(function(e){ return !claimedIds[e.id]; });
-
-  Object.keys(claims).forEach(function(iid){
-    var c = claims[iid], inv = c.inv;
-    var total = inv.totalAmt!=null ? inv.totalAmt : c.entries.reduce(function(s,e){return s+(e.amount||0);},0);
+  // Recreate one correct entry per manual invoice
+  manualInvoices.forEach(function(inv){
+    var iid = String(inv._id!=null?inv._id:inv.id);
+    var total = inv.totalAmt!=null ? inv.totalAmt
+      : (inv.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
     var count = (inv.items||[]).length;
-    var ts = c.entries.reduce(function(min,e){ return (!min || e.ts<min) ? e.ts : min; }, null) || (inv.acceptedAt || new Date().toISOString());
-    result.push({
+    var ts = inv.acceptedAt || inv.date || new Date().toISOString();
+    journal.push({
       id:uid(), type:'receive', ts:ts, icon:'📥',
-      label:'Приёмка '+inv.num,
+      label:'Приёмка '+(inv.num||''),
       sub:count+' изд.'+(inv.from?' · от '+inv.from:''),
-      amount:total, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0, goodsEffect:total, invId:iid
+      amount:total, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
+      goodsEffect:total, invId:iid
     });
   });
 
-  result.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
-  journal = result;
+  journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
   saveJ();
 }
 
