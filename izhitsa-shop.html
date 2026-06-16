@@ -32,7 +32,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 .sb-v{font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700}
 .sb-l{font-size:10px;color:#8888aa;margin-top:2px;line-height:1.2}
 .tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:calc(62px + env(safe-area-inset-bottom, 0px));padding-bottom:env(safe-area-inset-bottom, 0px);background:#1a1a22;border-top:1px solid #2e2e3e;display:none;z-index:100;box-sizing:border-box}
-.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:#8888aa;font-size:9.5px;font-family:'Golos Text',sans-serif;font-weight:600;border:none;background:none;position:relative;padding:0 2px;white-space:nowrap;overflow:hidden}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:#8888aa;font-size:8.8px;font-family:'Golos Text',sans-serif;font-weight:600;border:none;background:none;position:relative;padding:0 1px;white-space:nowrap;overflow:hidden}
 .tab.active{color:#c8f060}
 .ti{font-size:18px;line-height:1}
 .tbadge{position:absolute;top:5px;right:calc(50% - 16px);background:#f06060;color:#fff;font-size:9px;font-weight:700;border-radius:8px;padding:1px 5px;display:none}
@@ -579,6 +579,12 @@ function checkForAppUpdate() {
     </div>
     <div id="histShopFilter" style="display:flex;gap:8px;margin-bottom:12px;overflow-x:auto"></div>
     <div id="shiftHistoryList"></div>
+  </div>
+  <!-- ════ КОРЗИНА (удалённые записи) ════ -->
+  <div class="page" id="pg-trash">
+    <div class="stitle">🗑 Корзина</div>
+    <div style="font-size:11px;color:#8888aa;margin-bottom:12px">Удалённые записи хранятся здесь 7 дней — можно восстановить или удалить навсегда.</div>
+    <div id="trashList"></div>
   </div>
   <!-- ════ ВОССТАНОВЛЕНИЕ ДАННЫХ ════ -->
   <div class="page" id="pg-restore">
@@ -1704,7 +1710,6 @@ var SYNC_SETTINGS = {
   'iz_suppliers':        {doc:'suppliers',     field:'data'},
   'iz_goods':            {doc:'goods',         field:'data'},
   'iz_materials':        {doc:'materials',     field:'data'},
-  'iz_sizes':            {doc:'sizes',         field:'data'},
   'iz_work_schedules':   {doc:'work_schedules', field:'data'},
   'iz_employee_statuses': {doc:'employee_statuses', field:'data'},
 };
@@ -1728,7 +1733,7 @@ function syncListen(lsKey) {
         try{ if(session && document.getElementById('mainStatusBar')) renderStatusBar(); }catch(e){}
       }
       // Generic shared refbooks live-refresh
-      var shopRefbookKeys = ['iz_payment_methods','iz_suppliers','iz_goods','iz_materials','iz_sizes','iz_work_schedules'];
+      var shopRefbookKeys = ['iz_payment_methods','iz_suppliers','iz_goods','iz_materials','iz_work_schedules'];
       if(shopRefbookKeys.indexOf(lsKey)>=0){
         var book = SHOP_REFBOOKS.find(function(b){ return b.key===lsKey; });
         if(book){
@@ -1773,11 +1778,13 @@ function deleteJournalEntryShop(id){
   var entry = journal.find(function(e){ return e.id===id; });
   if(!entry){ return; }
   var label = entry.label || entry.type;
-  if(!confirm('Удалить запись "'+label+'"'+(entry.amount?' ('+fmt(entry.amount)+')':'')+'? Это действие будет зафиксировано в аудит-журнале.')) return;
+  if(!confirm('Удалить запись "'+label+'"'+(entry.amount?' ('+fmt(entry.amount)+')':'')+'? Запись будет перемещена в корзину на 7 дней.')) return;
   logEntryDelete(entry);
   journal = journal.filter(function(e){ return e.id!==id; });
+  addToTrash(entry);
   saveJ(); renderAll();
-  showToast('🗑 Запись удалена');
+  syncLiveShift();
+  showToast('🗑 Перемещено в корзину');
 }
 
 function editJournalSale(id){
@@ -1830,7 +1837,147 @@ let currentEditShiftId = null;
 let blockSellerAction = null;
 
 // ════ STORAGE ════
-const KEY = {session:'iz_shop_session',journal:'iz_shop_journal',shifts:'iz_shifts'};
+const KEY = {session:'iz_shop_session',journal:'iz_shop_journal',shifts:'iz_shifts',trash:'iz_shop_trash'};
+var TRASH_RETENTION_DAYS = 7;
+
+// ── Корзина (deletion trash with 7-day recovery window) ──
+// Deleting a journal entry used to only remove it from this device's local
+// array. If another device for the SAME open shift (e.g. an admin and the
+// seller both logged in, or two of the seller's own devices) synced around
+// the same time, its full-journal push could resurrect the "deleted" entry,
+// and the merge-on-pull logic would then re-add it locally too, since by
+// itself it had no way to know the entry was deleted on purpose rather than
+// just missing.
+//
+// Now every deletion is recorded as a trash item — the full entry plus who
+// deleted it, when, and which shop/shift/seller it came from — kept for 7
+// days so an admin can review and restore it via the "Корзина" tab. The
+// trash list doubles as the tombstone set: as long as an id is in the
+// trash (not yet expired or already permanently purged), merges and
+// re-pushes from other devices can never bring it back to life.
+function getTrash(){
+  try{ return JSON.parse(localStorage.getItem(KEY.trash)||'[]'); }catch(e){ return []; }
+}
+function saveTrash(items){ localStorage.setItem(KEY.trash, JSON.stringify(items)); }
+function purgeExpiredTrash(items){
+  var cutoff = Date.now() - TRASH_RETENTION_DAYS*86400000;
+  return items.filter(function(t){ return new Date(t.deletedAt).getTime() > cutoff; });
+}
+function addToTrash(entry, meta){
+  var t = purgeExpiredTrash(getTrash());
+  if(t.some(function(x){ return x.entry && x.entry.id===entry.id; })) { saveTrash(t); return; }
+  var cleanMeta = Object.assign({}, meta); delete cleanMeta.deletedByOverride;
+  t.unshift(Object.assign({
+    trashId: uid(), entry: entry, deletedAt: new Date().toISOString(),
+    deletedBy: (meta&&meta.deletedByOverride) || (session&&session.sellerName)||'—',
+    shopName: (session&&session.shopName)||(meta&&meta.shopName)||'—',
+    shiftId: (session&&session.shiftId)||(meta&&meta.shiftId)||null
+  }, cleanMeta));
+  saveTrash(t);
+  try{ syncTrashToCloud(t); }catch(e){}
+}
+function getTombstones(){
+  // Anything still sitting in the (non-expired) trash counts as a
+  // tombstone — i.e. "don't ever resurrect this id via sync".
+  return purgeExpiredTrash(getTrash()).map(function(t){ return t.entry && t.entry.id; }).filter(Boolean);
+}
+function clearTombstones(){
+  // Called when a shift is fully closed — trash itself is intentionally
+  // NOT cleared here (it has its own independent 7-day retention and is
+  // reviewable across shifts), only kept for backward-compat naming.
+}
+function restoreFromTrash(trashId){
+  var t = getTrash();
+  var idx = t.findIndex(function(x){ return x.trashId===trashId; });
+  if(idx<0){ showToast('Запись не найдена в корзине'); return; }
+  var item = t[idx];
+  if(!confirm('Восстановить запись "'+(item.entry.label||item.entry.type)+'"?')) return;
+  var restored = false;
+  if(session && session.shiftId === item.shiftId){
+    // Currently open live shift on this device — restore straight into it
+    journal.push(item.entry);
+    journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
+    saveJ(); renderAll();
+    syncLiveShift();
+    restored = true;
+  } else if(_currentShiftView && _currentShiftView.id === item.shiftId){
+    // Viewing this (closed) shift in the admin Архив detail screen
+    _currentShiftView.journal = (_currentShiftView.journal||[]).concat([item.entry])
+      .sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
+    svPersist();
+    _renderShiftView();
+    restored = true;
+  } else {
+    // Neither the live session nor an open detail view matches this shift —
+    // just lift the trash/tombstone protection; if that shift is still open
+    // somewhere else, its own next sync will naturally bring the entry back.
+    showToast('Смена сейчас не открыта здесь — запись будет восстановлена при следующей синхронизации этой смены');
+  }
+  t.splice(idx,1);
+  saveTrash(t);
+  try{ syncTrashToCloud(t); }catch(e){}
+  renderTrash();
+  if(restored) showToast('♻️ Запись восстановлена');
+}
+function purgeFromTrashForever(trashId){
+  if(!confirm('Удалить запись из корзины навсегда? Восстановить её будет невозможно.')) return;
+  var t = getTrash().filter(function(x){ return x.trashId!==trashId; });
+  saveTrash(t);
+  try{ syncTrashToCloud(t); }catch(e){}
+  renderTrash();
+  showToast('🗑 Удалено навсегда');
+}
+function syncTrashToCloud(items){
+  // Trash is shared app-wide (like iz_shifts) so any admin device sees the
+  // same recoverable items, not just the device that performed the delete.
+  try{ db.collection('iz_settings').doc('shop_trash').set({data: items.slice(0,500), updatedAt:new Date().toISOString()}); }catch(e){}
+}
+function pullTrashFromCloud(cb){
+  try{
+    db.collection('iz_settings').doc('shop_trash').get().then(function(snap){
+      if(snap.exists && Array.isArray(snap.data().data)){
+        var remote = snap.data().data;
+        var local = getTrash();
+        var localIds = {}; local.forEach(function(t){ localIds[t.trashId]=true; });
+        var merged = local.slice();
+        remote.forEach(function(t){ if(!localIds[t.trashId]) merged.push(t); });
+        merged = purgeExpiredTrash(merged);
+        saveTrash(merged);
+      }
+      if(cb) cb();
+    }).catch(function(){ if(cb) cb(); });
+  }catch(e){ if(cb) cb(); }
+}
+function renderTrash(){
+  var c = document.getElementById('trashList'); if(!c) return;
+  pullTrashFromCloud(function(){
+    var items = purgeExpiredTrash(getTrash());
+    if(getTrash().length !== items.length){ saveTrash(items); try{ syncTrashToCloud(items); }catch(e){} }
+    if(!items.length){
+      c.innerHTML = '<div class="empty"><div class="ei">🗑</div>Корзина пуста</div>';
+      return;
+    }
+    c.innerHTML = items.map(function(t){
+      var e = t.entry||{};
+      var daysLeft = Math.max(0, TRASH_RETENTION_DAYS - Math.floor((Date.now()-new Date(t.deletedAt).getTime())/86400000));
+      return '<div class="card" style="border-color:#3e2e2e">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+          '<div style="flex:1">'+
+            '<div style="font-size:13px;font-weight:700">'+(e.label||e.type||'Запись')+'</div>'+
+            (e.sub?'<div style="font-size:11px;color:#8888aa;margin-top:2px">'+e.sub+'</div>':'')+
+            '<div style="font-size:10px;color:#555568;margin-top:4px">🏪 '+t.shopName+' · 🗑 '+t.deletedBy+' · '+new Date(t.deletedAt).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+'</div>'+
+            '<div style="font-size:10px;color:#f0a060;margin-top:2px">⏳ Осталось '+daysLeft+' дн. до окончательного удаления</div>'+
+          '</div>'+
+          (e.amount?'<div style="font-size:14px;font-weight:700;color:#8888aa;margin-left:8px">'+fmt(e.amount)+'</div>':'')+
+        '</div>'+
+        '<div style="display:flex;gap:8px;margin-top:10px">'+
+          '<button onclick="restoreFromTrash(\''+t.trashId+'\')" style="flex:1;padding:8px;border-radius:9px;border:1px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">♻️ Восстановить</button>'+
+          '<button onclick="purgeFromTrashForever(\''+t.trashId+'\')" style="flex:1;padding:8px;border-radius:9px;border:1px solid #f06060;background:#2e1a1a;color:#f06060;font-size:11px;font-weight:700;cursor:pointer">🗑 Навсегда</button>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+  });
+}
 
 // ════ ЕДИНАЯ АВТОРИЗАЦИЯ iz_staff ════
 function getStaff() {
@@ -2537,7 +2684,8 @@ function buildLiveShiftDoc(){
     goodsCurrent: t.goods, cashDrCurrent: t.cashDr, goodsDrCurrent: t.goodsDr,
     revenue: t.revenue, discount: t.discount,
     hasCashDiff: journal.some(function(e){ return e.hasCashDiff; }),
-    journal: journal.slice()
+    journal: journal.slice(),
+    tombstones: getTombstones()
   };
 }
 var _shiftForceClosedRemotely = false;
@@ -2564,6 +2712,11 @@ function syncLiveShift(){
         try{ stopLiveShiftListener(); }catch(e){}
         return;
       }
+      // Merge in whatever the remote doc already knows (tombstones from a
+      // deletion on another device, or journal entries added there) before
+      // pushing, so our push can't accidentally undo another device's
+      // deletion or drop its entries via last-write-wins overwrite.
+      if(snap.exists) mergeRemoteJournal(snap.data());
       try{ docRef.set(buildLiveShiftDoc()); }catch(e){}
     }).catch(function(){
       // Offline or read failed — fall back to pushing anyway so normal
@@ -2589,6 +2742,18 @@ function clearLiveShift(){
 // another device won't propagate — see manualSync notes).
 function mergeRemoteJournal(remote){
   if(!remote || !Array.isArray(remote.journal)) return 0;
+  // Combine our own deletion history (trash) with whatever tombstone ids the
+  // remote doc lists (ids another device deleted, that we might not have a
+  // full trash record for yet) — either way, never resurrect these ids into
+  // the local journal during a merge.
+  var remoteTombstones = Array.isArray(remote.tombstones) ? remote.tombstones : [];
+  var tombstoned = {};
+  getTombstones().forEach(function(id){ tombstoned[id]=true; });
+  remoteTombstones.forEach(function(id){ tombstoned[id]=true; });
+  var beforeLen = journal.length;
+  journal = journal.filter(function(e){ return !e.id || !tombstoned[e.id]; });
+  var purged = beforeLen - journal.length;
+
   var localIds = {};
   journal.forEach(function(e){ if(e.id) localIds[e.id]=true; });
   // Track invIds already present locally for receive entries, so a stale
@@ -2598,11 +2763,12 @@ function mergeRemoteJournal(remote){
   var added = 0;
   remote.journal.forEach(function(e){
     if(!e.id || localIds[e.id]) return;
+    if(tombstoned[e.id]) return; // was deliberately deleted on this or another device — never resurrect
     if(e.type==='receive' && e.invId && localReceiveInvIds[e.invId]) return; // already have this invoice's entry
     journal.push(e); added++;
     if(e.type==='receive' && e.invId) localReceiveInvIds[e.invId]=true;
   });
-  if(added>0){
+  if(added>0 || purged>0){
     journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
     saveJ();
   }
@@ -2632,17 +2798,19 @@ function manualSync(){
   if(btn) btn.textContent = '⏳';
   if(_liveShiftSyncTimer){ clearTimeout(_liveShiftSyncTimer); _liveShiftSyncTimer=null; }
 
-  // 1) Push current local state immediately
-  var pushed = buildLiveShiftDoc();
-  db.collection('iz_shifts').doc(session.shiftId).set(pushed)
-    .then(function(){
-      // 2) Pull the latest doc (could be the one we just pushed, or a newer
-      // one from another device that wrote in the meantime)
-      return db.collection('iz_shifts').doc(session.shiftId).get();
-    })
+  // 1) Pull the latest remote doc first and merge in anything we don't have
+  // locally yet (tombstones from a deletion elsewhere, entries added on
+  // another device) — merging BEFORE pushing prevents our push from
+  // accidentally undoing another device's deletion via last-write-wins.
+  var docRef = db.collection('iz_shifts').doc(session.shiftId);
+  docRef.get()
     .then(function(snap){
       var remote = snap.exists ? snap.data() : null;
-      var added = mergeRemoteJournal(remote);
+      var added = remote ? mergeRemoteJournal(remote) : 0;
+      // 2) Now push our reconciled state back
+      return docRef.set(buildLiveShiftDoc()).then(function(){ return added; });
+    })
+    .then(function(added){
       renderAll();
       if(added>0) showToast('🔄 Обновлено: добавлено '+added+' записей');
       else showToast('🔄 Данные актуальны');
@@ -3120,6 +3288,7 @@ function startApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
   if(!session.isPreview){ migrateLegacyReceiveEntries(); migrateLegacyDrExpenses(); }
+  try{ var tr=getTrash(), prTr=purgeExpiredTrash(tr); if(prTr.length!==tr.length){ saveTrash(prTr); syncTrashToCloud(prTr); } }catch(e){}
   document.getElementById('hdrShop').textContent=(session.isPreview?'🔍 ':'')+session.shopName;
   if(session.isPreview){
     var hdrEl=document.getElementById('hdrShop');
@@ -3807,6 +3976,7 @@ function buildAdminTabs(){
     <button class="tab active" onclick="showPg('today',this);renderTodayShift()"><div class="ti">📋</div><span>Смена</span></button>
     <button class="tab" onclick="showPg('alerts',this);renderAlertsPage()"><div class="ti">🚨</div><span>Тревога</span><div class="tbadge" id="alertsBadge"></div></button>
     <button class="tab" onclick="showPg('history',this);renderShiftHistory()"><div class="ti">📁</div><span>Архив</span></button>
+    <button class="tab" onclick="showPg('trash',this);renderTrash()"><div class="ti">🗑</div><span>Корзина</span></button>
     <button class="tab" onclick="showPg('restore',this);initRestore()"><div class="ti">🗄</div><span>Восст.</span></button>
     <button class="tab" onclick="showPg('sellers',this);renderSellersAdmin()"><div class="ti">👥</div><span>Роли</span></button>
     <button class="tab" onclick="showPg('shopsettings',this);renderShopSettings()"><div class="ti">⚙️</div><span>Настройки</span></button>
@@ -4089,8 +4259,12 @@ function setPayM(m,el){
   if(transferSel) transferSel.style.display=m==='transfer'?'block':'none';
   if(rsSel) rsSel.style.display=m==='rs'?'block':'none';
 }
+var _savingSale = false;
 function saveSale(){
+  if(_savingSale) return; // guards against double-tap / double-submit creating a duplicate sale entry
   if(!saleItems.length){showToast('Добавьте товары');return;}
+  _savingSale = true;
+  setTimeout(function(){ _savingSale = false; }, 1200);
   const total=saleItems.reduce((s,it)=>s+(it.amt!=null?it.amt:it.price*(it.qty||1)),0), disc=parseFloat(gv('saleDiscount'))||0, paid=Math.max(0,total-disc);
   let cashPart=0,cardPart=0;
   if(payMethod==='cash')cashPart=paid; else if(payMethod==='mixed'){cashPart=parseFloat(gv('mixCash'))||0;cardPart=parseFloat(gv('mixCard'))||0;} else cardPart=paid;
@@ -5450,7 +5624,7 @@ function _closeShiftReal(){
   shifts.unshift(report); localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
   try{ db.collection('iz_shifts').doc(report.id).set(report); }catch(e){}
   stopLiveShiftListener();
-  localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal);
+  localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal); clearTombstones();
   session=null; journal=[];
   document.getElementById('mainTabs').style.display='none';
   document.getElementById('appScreen').style.display='none';
@@ -6315,12 +6489,13 @@ function svSaveTovar(){
   svPersist(); _renderShiftView(); showToast('✅ Остатки товара обновлены');
 }
 function svDeleteJEntry(type, idx){
-  if(!confirm('Удалить эту запись?')) return;
+  if(!confirm('Удалить эту запись? Она будет перемещена в корзину на 7 дней.')) return;
   var jnl=_currentShiftView.journal||[];
   var ofType=jnl.filter(function(e){return e.type===type;});
   var target=ofType[idx]; if(!target) return;
   _currentShiftView.journal=jnl.filter(function(e){return e!==target;});
-  svPersist(); _renderShiftView(); showToast('🗑 Удалено');
+  addToTrash(target, {shopName:_currentShiftView.shopName, shiftId:_currentShiftView.id, deletedByOverride:(session&&session.sellerName)||'Администратор'});
+  svPersist(); _renderShiftView(); showToast('🗑 Перемещено в корзину');
 }
 function svDeleteWoodRcv(idx){
   if(!confirm('Удалить этот приход?')) return;
@@ -7288,7 +7463,6 @@ var SHOP_REFBOOKS = [
   {id:'suppliers', icon:'🚚', name:'База поставщиков', key:'iz_suppliers'},
   {id:'goods',     icon:'📦', name:'База товаров',     key:'iz_goods'},
   {id:'materials', icon:'💎', name:'Породы дерева',    key:'iz_materials'},
-  {id:'sizes',     icon:'📐', name:'Размеры изделий',  key:'iz_sizes'},
   {id:'schedules', icon:'⏰', name:'Графики работы',   key:'iz_work_schedules'}
 ];
 function getRefBook(key){
@@ -9878,23 +10052,6 @@ function saveSpecies(name) {
   if(!exists){
     materials.push({id:uid(), name:name});
     saveRefBookShop('iz_materials', materials);
-  }
-}
-
-// ════ SIZE CATALOG ════
-function getSizesShop() {
-  // Размеры изделий управляются через "Настройки → Размеры изделий" (iz_sizes)
-  var sizes = getRefBook('iz_sizes');
-  return sizes.map(function(s){ return (s && s.name) || (typeof s==='string' ? s : ''); }).filter(Boolean);
-}
-function saveSizeShop(name) {
-  if(!name||!name.trim()) return;
-  name = name.trim();
-  var sizes = getRefBook('iz_sizes');
-  var exists = sizes.some(function(s){ return ((s && s.name) || s)===name; });
-  if(!exists){
-    sizes.push({id:uid(), name:name});
-    saveRefBookShop('iz_sizes', sizes);
   }
 }
 
