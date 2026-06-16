@@ -558,9 +558,12 @@ function checkForAppUpdate() {
 
   <!-- ARCHIVE (history + edit) -->
   <div class="page" id="pg-history">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px">
       <div class="stitle" style="margin:0">Архив смен</div>
-      <button type="button" onclick="openPeriodReport()" style="padding:7px 12px;border-radius:10px;border:1px solid #60c8f0;background:#1a1e2e;color:#60c8f0;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📊 Отчёт</button>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button type="button" id="histShowOpenBtn" onclick="toggleHistShowOpen()" style="padding:7px 10px;border-radius:10px;border:1px solid #f0c060;background:#1a1a22;color:#f0c060;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">⚠️ Незакрытые</button>
+        <button type="button" onclick="openPeriodReport()" style="padding:7px 12px;border-radius:10px;border:1px solid #60c8f0;background:#1a1e2e;color:#60c8f0;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📊 Отчёт</button>
+      </div>
     </div>
     <!-- Period filter -->
     <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto" id="histPeriodFilter">
@@ -2548,7 +2551,24 @@ function syncLiveShift(){
   if(!session.shiftId){ session.shiftId = uid(); saveS(); }
   if(_liveShiftSyncTimer) clearTimeout(_liveShiftSyncTimer);
   _liveShiftSyncTimer = setTimeout(function(){
-    try{ db.collection('iz_shifts').doc(session.shiftId).set(buildLiveShiftDoc()); }catch(e){}
+    var docRef = db.collection('iz_shifts').doc(session.shiftId);
+    // Safety check: never overwrite a doc that Firestore already has marked
+    // as closed. If we get here, this local session is stale (e.g. a tab
+    // that was left open from before the shift was properly closed
+    // elsewhere) — pushing would resurrect an already-finished shift as
+    // "open" again and make it vanish from the closed-shifts archive.
+    docRef.get().then(function(snap){
+      if(snap.exists && snap.data().status==='closed'){
+        _shiftForceClosedRemotely = true;
+        try{ stopLiveShiftListener(); }catch(e){}
+        return;
+      }
+      try{ docRef.set(buildLiveShiftDoc()); }catch(e){}
+    }).catch(function(){
+      // Offline or read failed — fall back to pushing anyway so normal
+      // offline-first behavior for genuinely new/active shifts still works.
+      try{ docRef.set(buildLiveShiftDoc()); }catch(e){}
+    });
   }, 600);
 }
 function clearLiveShift(){
@@ -2711,6 +2731,35 @@ function doLogin(){
   var existing = JSON.parse(localStorage.getItem(KEY.session)||'null');
   var sameSeller = existing && (existing.sellerId===sellerId || existing.sellerName===seller.name);
   if(existing && existing.role!=='shopadmin' && sameSeller && existing.shopName===shopName){
+    // Before trusting this local session, double-check Firestore doesn't
+    // already have this exact shift marked closed — that would mean the
+    // shift genuinely finished (e.g. closed from another tab/device) and
+    // this local copy is just stale leftover state, not really still open.
+    // Restoring it as-is would resurrect a finished shift as "open" again.
+    if(existing.shiftId){
+      db.collection('iz_shifts').doc(existing.shiftId).get().then(function(snap){
+        if(snap.exists && snap.data().status==='closed'){
+          localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal);
+          showToast('Эта смена уже была закрыта. Открываем новую.');
+          // fall through to normal new-shift flow below by re-running login
+          doLogin();
+          return;
+        }
+        session = existing;
+        journal = JSON.parse(localStorage.getItem(KEY.journal)||'[]');
+        startApp();
+        syncLiveShift();
+        showToast('📂 Восстановлена незакрытая смена');
+      }).catch(function(){
+        // Offline — can't verify, fall back to old behavior (restore locally)
+        session = existing;
+        journal = JSON.parse(localStorage.getItem(KEY.journal)||'[]');
+        startApp();
+        syncLiveShift();
+        showToast('📂 Восстановлена незакрытая смена');
+      });
+      return;
+    }
     session = existing;
     journal = JSON.parse(localStorage.getItem(KEY.journal)||'[]');
     startApp();
@@ -5497,10 +5546,75 @@ function migrateLegacyShiftDates(){
   }
 }
 
+// ── Fix legacy shift records: the top-level revenue snapshot fields
+// (cashRevenue/cardRevenue/totalDiscount/drCashRevenue/etc.) were only ever
+// taken once at shift-close time and never updated again — so any shift
+// where a sale was later edited or deleted via the ✕ button in the shift
+// detail view ended up with a header total that no longer matched its own
+// itemized sales list. Recompute these fields from the journal directly for
+// every closed shift, whenever the archive is opened.
+function migrateLegacyShiftRevenue(){
+  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  if(!shifts.length) return;
+  var changed = false;
+  shifts.forEach(function(sh){
+    if(sh.isArchive || sh.status!=='closed' || !sh.journal || !sh.journal.length) return;
+    var sales = sh.journal.filter(function(e){ return e.type==='sale'; });
+    if(!sales.length) return;
+    var cashRev=0, cardRev=0, disc=0, drCashRev=0, drCardRev=0, drDisc=0;
+    sales.forEach(function(s){
+      cashRev += s.cashEffect||0;
+      cardRev += s.cardEffect||0;
+      drCashRev += s.cashDrEffect||0;
+      drCardRev += s.cardDrEffect||0;
+      if(s.goodsType==='dr'){
+        drDisc += s.discount||0;
+      } else if(s.goodsType==='mixed' && s.items && s.items.length){
+        var totalWood = s.items.reduce(function(a,it){ var amt=it.amt!=null?it.amt:it.price*(it.qty||1); return it.goodsType==='dr' ? a : a+amt; },0);
+        var totalAll = s.items.reduce(function(a,it){ return a+(it.amt!=null?it.amt:it.price*(it.qty||1)); },0);
+        var shareWood = totalAll>0 ? totalWood/totalAll : 1;
+        var dWood = Math.round((s.discount||0)*shareWood);
+        disc += dWood;
+        drDisc += (s.discount||0)-dWood;
+      } else {
+        disc += s.discount||0;
+      }
+    });
+    var fields = {cashRevenue:cashRev, cardRevenue:cardRev, totalDiscount:disc, drCashRevenue:drCashRev, drCardRevenue:drCardRev, drDiscount:drDisc};
+    Object.keys(fields).forEach(function(k){
+      if(Math.round(sh[k]||0) !== Math.round(fields[k])){
+        sh[k] = fields[k];
+        changed = true;
+      }
+    });
+  });
+  if(changed){
+    localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+    try{
+      shifts.forEach(function(sh){
+        var id = sh.id||sh._id; if(!id) return;
+        db.collection('iz_shifts').doc(id).set(sh, {merge:true}).catch(function(){});
+      });
+    }catch(e){}
+  }
+}
+
+var _histShowOpen = false;
+function toggleHistShowOpen(){
+  _histShowOpen = !_histShowOpen;
+  var btn = document.getElementById('histShowOpenBtn');
+  if(btn){
+    btn.style.background = _histShowOpen ? '#2e2a14' : '#1a1a22';
+    btn.style.borderWidth = _histShowOpen ? '2px' : '1px';
+  }
+  renderShiftHistory();
+}
+
 var _histInited = false;
 function renderShiftHistory(){
   var c=document.getElementById('shiftHistoryList'); if(!c)return;
   migrateLegacyShiftDates();
+  migrateLegacyShiftRevenue();
   if(!_histInited){
     _histInited = true;
     setHistPeriod('today', document.getElementById('histPeriod_today'));
@@ -5517,24 +5631,26 @@ function renderShiftHistory(){
   // closed, or a manually-restored/imported record once it's been
   // activated/confirmed. Still-open live sessions never appear here.
   allShifts = allShifts.filter(function(s){
+    if(_histShowOpen) return s.status==='open'; // diagnostic mode: show ONLY stuck open shifts
     if(s.isArchive) return !!s.activated || s.source==='import';
     return s.status==='closed';
   });
   if(_histShopFilter) allShifts = allShifts.filter(function(s){ return s.shopName === _histShopFilter; });
-  if(_histPeriodFrom) allShifts = allShifts.filter(function(s){ return s.date >= _histPeriodFrom && (!_histPeriodTo||s.date <= _histPeriodTo); });
+  if(_histPeriodFrom && !_histShowOpen) allShifts = allShifts.filter(function(s){ return s.date >= _histPeriodFrom && (!_histPeriodTo||s.date <= _histPeriodTo); });
   allShifts.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
   if(!allShifts.length){
     c.innerHTML='<div class="empty"><div class="ei">📋</div>Нет смен за выбранный период</div>';
     return;
   }
   c.innerHTML=allShifts.slice(0,60).map(function(sh){
-    var cashRev=sh.cashRevenue||0, cardRev=sh.cardRevenue||0, disc=sh.totalDiscount||sh.discount||0;
+    var cashRev=(sh.cashRevenue||0)+(sh.drCashRevenue||0), cardRev=(sh.cardRevenue||0)+(sh.drCardRevenue||0), disc=(sh.totalDiscount||sh.discount||0)+(sh.drDiscount||0);
     var total=cashRev+cardRev+disc;
-    return '<div class="card" style="cursor:pointer;border-color:'+(sh.hasCashDiff?'#f06060':sh.isArchive?'#604020':'#2e2e3e')+'" onclick="openShiftView(\''+(sh.id||sh._id)+'\')">'+
+    return '<div class="card" style="cursor:pointer;border-color:'+(sh.status==='open'?'#f0c060':sh.hasCashDiff?'#f06060':sh.isArchive?'#604020':'#2e2e3e')+'" onclick="openShiftView(\''+(sh.id||sh._id)+'\')">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
         '<div>'+
           '<div style="display:flex;align-items:center;gap:6px">'+
             '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700">'+sh.shopName+'</div>'+
+            (sh.status==='open'?'<div style="font-size:9px;background:#604a14;color:#f0c060;border-radius:4px;padding:2px 5px;font-weight:700">ОТКРЫТА</div>':'')+
             (sh.isArchive?'<div style="font-size:9px;background:#604020;color:#f0a060;border-radius:4px;padding:2px 5px;font-weight:700">АРХИВ</div>':'')+
           '</div>'+
           '<div style="font-size:11px;color:#8888aa;margin-top:2px">👤 '+(sh.sellerName||'—')+' · 📅 '+sh.date+'</div>'+
@@ -5585,8 +5701,6 @@ function _renderShiftView(){
   }
 
   var f = function(n){ return Math.round(n||0).toLocaleString('ru-RU')+'₽'; };
-  var cashRev=sh.cashRevenue||0, cardRev=sh.cardRevenue||0, disc=sh.totalDiscount||sh.discount||0;
-  var totalRev=cashRev+cardRev+disc;
   var jnl=sh.journal||[];
   var sales=jnl.filter(function(e){return e.type==='sale';});
   var writeoffs=jnl.filter(function(e){return e.type==='writeoff';});
@@ -5599,8 +5713,36 @@ function _renderShiftView(){
   var drRcv=sh.drGoodsReceives||[];
   var staffArr=sh.staffPurchases||staffPurch;
 
-  // Totals for display
-  var drCashRev=sh.drCashRevenue||0, drCardRev=sh.drCardRevenue||0, drDisc=sh.drDiscount||0;
+  // Totals for display — always recomputed live from the current sale
+  // entries rather than trusting the stored top-level snapshot fields
+  // (cashRevenue/cardRevenue/totalDiscount/etc). Those snapshots are only
+  // taken once at shift-close time, so if a sale is later edited or deleted
+  // from this view (✕ button), the stored fields go stale while this stays
+  // accurate regardless of which sales were touched.
+  var cashRev=0, cardRev=0, disc=0, drCashRev=0, drCardRev=0, drDisc=0;
+  sales.forEach(function(s){
+    cashRev += s.cashEffect||0;
+    cardRev += s.cardEffect||0;
+    drCashRev += s.cashDrEffect||0;
+    drCardRev += s.cardDrEffect||0;
+    // Discount isn't stored split by category — only as one total on the
+    // sale entry — so for mixed sales (Дерево + ДР Товар in one sale) we
+    // need to split it the same way saveSale() originally did: proportional
+    // to each category's share of the pre-discount item total.
+    if(s.goodsType==='dr'){
+      drDisc += s.discount||0;
+    } else if(s.goodsType==='mixed' && s.items && s.items.length){
+      var totalWood = s.items.reduce(function(a,it){ var amt=it.amt!=null?it.amt:it.price*(it.qty||1); return it.goodsType==='dr' ? a : a+amt; },0);
+      var totalAll = s.items.reduce(function(a,it){ return a+(it.amt!=null?it.amt:it.price*(it.qty||1)); },0);
+      var shareWood = totalAll>0 ? totalWood/totalAll : 1;
+      var dWood = Math.round((s.discount||0)*shareWood);
+      disc += dWood;
+      drDisc += (s.discount||0)-dWood;
+    } else {
+      disc += s.discount||0;
+    }
+  });
+  var totalRev=cashRev+cardRev+disc;
   var drTot=drCashRev+drCardRev+drDisc;
   var zp=sh.zp||0, inkass=sh.inkass||0, otherExp=sh.otherExp||0;
   var drInkass=sh.drInkass||0, drSupplier=sh.drSupplierAmt||0;
@@ -6028,6 +6170,10 @@ function _renderShiftView(){
     itemForm('staffDr','#a060f0',{who:true,retail:true,saveFn:'svAddStaff(\'dr\')'})+
   '</div>';
   var headerColor = sh.hasCashDiff ? '#f06060' : '#c8f060';
+  var grandTotal = totalRev + drTot;
+  var grandCash = cashRev + drCashRev;
+  var grandCard = cardRev + drCardRev;
+  var grandDisc = disc + drDisc;
   var headerHtml =
     '<div style="background:#1e2a14;border:1px solid '+headerColor+';border-radius:12px;padding:14px;margin-bottom:10px">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
@@ -6037,10 +6183,20 @@ function _renderShiftView(){
           (sh.isArchive?'<div style="font-size:9px;background:#604020;color:#f0a060;border-radius:4px;padding:2px 5px;font-weight:700;display:inline-block;margin-top:4px">АРХИВ</div>':'')+
         '</div>'+
         '<div style="text-align:right">'+
-          '<div style="font-size:18px;font-weight:700;color:'+headerColor+'">'+f(totalRev)+'</div>'+
-          '<div style="font-size:11px;color:#60f090">💵 '+f(cashRev)+'</div>'+
-          '<div style="font-size:11px;color:#60c8f0">💳 '+f(cardRev)+'</div>'+
-          (disc?'<div style="font-size:11px;color:#8888aa">🎁 '+f(disc)+'</div>':'')+
+          '<div style="font-size:18px;font-weight:700;color:'+headerColor+'">'+f(grandTotal)+'</div>'+
+          '<div style="font-size:11px;color:#60f090">💵 '+f(grandCash)+'</div>'+
+          '<div style="font-size:11px;color:#60c8f0">💳 '+f(grandCard)+'</div>'+
+          (grandDisc?'<div style="font-size:11px;color:#8888aa">🎁 '+f(grandDisc)+'</div>':'')+
+        '</div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #2e3a1a">'+
+        '<div>'+
+          '<div style="font-size:10px;color:#c8f060;font-weight:700;margin-bottom:3px">🌳 ДЕРЕВО · '+f(totalRev)+'</div>'+
+          '<div style="font-size:10px;color:#8888aa">💵 '+f(cashRev)+' · 💳 '+f(cardRev)+(disc?' · 🎁 '+f(disc):'')+'</div>'+
+        '</div>'+
+        '<div>'+
+          '<div style="font-size:10px;color:#a060f0;font-weight:700;margin-bottom:3px">🛍 ДР ТОВАР · '+f(drTot)+'</div>'+
+          '<div style="font-size:10px;color:#8888aa">💵 '+f(drCashRev)+' · 💳 '+f(drCardRev)+(drDisc?' · 🎁 '+f(drDisc):'')+'</div>'+
         '</div>'+
       '</div>'+
       (sh.hasCashDiff?'<div style="background:#2e1a1a;border-radius:8px;padding:6px 8px;margin-top:8px;font-size:11px;color:#f06060;font-weight:700">⚠️ Расхождение кассы</div>':'')+
