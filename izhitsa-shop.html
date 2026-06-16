@@ -2306,9 +2306,16 @@ function mergeRemoteJournal(remote){
   if(!remote || !Array.isArray(remote.journal)) return 0;
   var localIds = {};
   journal.forEach(function(e){ if(e.id) localIds[e.id]=true; });
+  // Track invIds already present locally for receive entries, so a stale
+  // remote copy with an old (different-id) duplicate doesn't get re-added.
+  var localReceiveInvIds = {};
+  journal.forEach(function(e){ if(e.type==='receive' && e.invId) localReceiveInvIds[e.invId]=true; });
   var added = 0;
   remote.journal.forEach(function(e){
-    if(e.id && !localIds[e.id]){ journal.push(e); added++; }
+    if(!e.id || localIds[e.id]) return;
+    if(e.type==='receive' && e.invId && localReceiveInvIds[e.invId]) return; // already have this invoice's entry
+    journal.push(e); added++;
+    if(e.type==='receive' && e.invId) localReceiveInvIds[e.invId]=true;
   });
   if(added>0){
     journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
@@ -2709,10 +2716,36 @@ function migrateLegacyReceiveEntries(){
     validInvIds[iid] = inv;
   });
 
+  // Use a STABLE, deterministic id per invoice (not a fresh uid() each run)
+  // so re-running this migration — or a Firestore sync bringing back an
+  // older copy of the journal — recognizes the entry already exists instead
+  // of creating a duplicate every time the app opens.
+  function stableReceiveId(iid){ return 'receive_'+iid; }
+
+  // Check whether journal already has exactly one correct, up-to-date entry
+  // per invoice; if so, there's nothing to do (avoids needless rewrites/syncs).
+  var alreadyCorrect = manualInvoices.every(function(inv){
+    var iid = String(inv._id!=null?inv._id:inv.id);
+    var total = inv.totalAmt!=null ? inv.totalAmt
+      : (inv.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
+    var existing = journal.filter(function(e){ return e.type==='receive' && e.invId===iid; });
+    return existing.length===1 && existing[0].id===stableReceiveId(iid) && Math.round(existing[0].amount||0)===Math.round(total);
+  });
+  var hasLegacyRows = journal.some(function(e){ return e.type==='receive' && e.label==='Приход товара' && !e.invId; });
+  var hasDuplicates = (function(){
+    var seen={};
+    return journal.some(function(e){
+      if(e.type!=='receive' || !e.invId) return false;
+      if(seen[e.invId]) return true;
+      seen[e.invId]=true; return false;
+    });
+  })();
+  if(alreadyCorrect && !hasLegacyRows && !hasDuplicates) return;
+
   // Remove ALL stale receive entries that either:
   // a) are old per-item "Приход товара" rows (no invId, label matches),
   // b) are "Приёмка" rows with invId pointing to a known manual invoice
-  //    (we'll recreate them correctly below).
+  //    (we'll recreate them correctly below, deduplicating multiple copies).
   journal = journal.filter(function(e){
     if(e.type!=='receive') return true;
     if(!e.invId && e.label==='Приход товара') return false; // legacy per-item row
@@ -2720,7 +2753,7 @@ function migrateLegacyReceiveEntries(){
     return true;
   });
 
-  // Recreate one correct entry per manual invoice
+  // Recreate exactly one correct entry per manual invoice, with a stable id
   manualInvoices.forEach(function(inv){
     var iid = String(inv._id!=null?inv._id:inv.id);
     var total = inv.totalAmt!=null ? inv.totalAmt
@@ -2728,7 +2761,7 @@ function migrateLegacyReceiveEntries(){
     var count = (inv.items||[]).length;
     var ts = inv.acceptedAt || inv.date || new Date().toISOString();
     journal.push({
-      id:uid(), type:'receive', ts:ts, icon:'📥',
+      id:stableReceiveId(iid), type:'receive', ts:ts, icon:'📥',
       label:'Приёмка '+(inv.num||''),
       sub:count+' изд.'+(inv.from?' · от '+inv.from:''),
       amount:total, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
@@ -2738,6 +2771,7 @@ function migrateLegacyReceiveEntries(){
 
   journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
   saveJ();
+  try{ syncLiveShift(); }catch(e){}
 }
 
 // ── Fix legacy expense entries: earlier versions always deducted ДР expenses
