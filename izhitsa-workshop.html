@@ -544,6 +544,14 @@ function applyUpdate() {
         <button onclick="startInventory()" id="invStartBtn" style="background:var(--a2);border:none;border-radius:8px;padding:6px 12px;color:#000;font-size:12px;font-weight:700;cursor:pointer">▶ Начать</button>
       </div>
       <div id="invItemsList"></div>
+      <button onclick="openFirstInventoryMo()" id="invFirstTimeBtn" style="display:none;margin-top:10px" class="btn green">🆕 Первая инвентаризация (внести остатки)</button>
+    </div>
+
+    <!-- Группы первой инвентаризации -->
+    <div id="fiGroupsSection" style="display:none">
+      <div class="stitle" style="font-size:14px;margin-top:14px">Группы инвентаризации</div>
+      <div id="fiGroupsList"></div>
+      <button onclick="openFirstInventoryMo()" class="btn" style="background:var(--a2);margin-top:6px">➕ Добавить ещё группу</button>
     </div>
 
     <!-- Расхождения -->
@@ -1303,14 +1311,24 @@ function addEmployee(){
   const rate=parseFloat(document.getElementById('empRate').value)||0;
   const pass=document.getElementById('empPass').value;
   if(!name||!pass){showToast('Заполните имя и пароль');return;}
-  const emps=getEmployees();
-  emps.push({id:uid(),name,role,rate,pass});
-  saveEmployees(emps);
+
+  // Пишем напрямую в единую базу сотрудников iz_staff (источник правды — admin.html),
+  // чтобы новый сотрудник сразу был виден везде: мастерская, shop, admin.
+  const staff = getStaff();
+  if(staff.some(s=>s.name.toLowerCase()===name.toLowerCase())){
+    showToast('Сотрудник с таким именем уже есть'); return;
+  }
+  staff.push({
+    id: uid(), name, pass, roles: [role], wsRate: rate,
+    blocked: false, createdAt: now(), updatedAt: now(), createdBy: session.name
+  });
+  localStorage.setItem('iz_staff', JSON.stringify(staff));
+  db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}).catch(console.error);
+
   logAddEmployee(name, role);
-  // Also save to Firebase
-  db.collection('ws_employees').add({id:uid(),name,role,rate,createdAt:now()}).catch(console.error);
   ['empName','empPass','empRate'].forEach(id=>document.getElementById(id).value='');
   renderEmployeeList();
+  renderAdmin();
   showToast('✅ Сотрудник добавлен');
 }
 
@@ -1394,8 +1412,17 @@ function doLogin(){
 function doLogout(){
   sessionStorage.removeItem('ws_session');
   session=null;
-  document.getElementById('appScreen').style.display='none';
-  document.getElementById('loginScreen').style.display='flex';
+  const appEl = document.getElementById('appScreen');
+  appEl.style.display='none';
+  // Скрываем все внутренние страницы явно, чтобы их остаточный рендер
+  // не просвечивал под экраном входа на iOS Safari при возврате назад
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  const loginEl = document.getElementById('loginScreen');
+  loginEl.style.display='flex';
+  // Принудительный reflow — устраняет артефакт Safari, когда старый кадр
+  // (контент роли) остаётся видимым под формой входа до следующего тика
+  void appEl.offsetHeight;
+  window.scrollTo(0,0);
 }
 
 function startApp(){
@@ -1506,6 +1533,11 @@ function startListeners(){
   db.collection('ws_master_acceptances').orderBy('createdAt','desc').onSnapshot(snap=>{
     _maHistory = snap.docs.map(d=>d.data());
     renderManualAcceptHistory();
+  },console.error);
+  // Первая инвентаризация (внесение остатков с нуля)
+  db.collection('ws_first_inventory').orderBy('createdAt','desc').onSnapshot(snap=>{
+    _fiGroups = snap.docs.map(d=>d.data());
+    renderFirstInventoryGroups();
   },console.error);
 }
 
@@ -2538,7 +2570,7 @@ function formatMonthKey(key){
 function renderAdmin(){
   const ai=document.getElementById('adminAllItems');
   if(!ai)return;
-  const isAdmin = session.role==='администратор';
+  const isAdmin = session.role==='администратор' || session.role==='управляющий';
 
   // Admin: show full employee panel
   let adminExtra = document.getElementById('adminExtraPanel');
@@ -3949,9 +3981,11 @@ function renderInventoryPage(){
   _invStarted = false;
   renderInvList();
   renderInvHistory();
+  renderFirstInventoryGroups();
   document.getElementById('invStats').style.display    = 'none';
   document.getElementById('invDiffSection').style.display = 'none';
-  document.getElementById('invStartBtn').style.display    = 'block';
+  document.getElementById('invStartBtn').style.display    = _invItems.length ? 'block' : 'none';
+  document.getElementById('invFirstTimeBtn').style.display = _invItems.length ? 'none' : 'block';
   document.getElementById('invArtInput').value = '';
   document.getElementById('invScanResult').style.display = 'none';
 }
@@ -4634,6 +4668,197 @@ async function provedMaAccept(){
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 
+// ════════════════════════════════
+// ПЕРВАЯ ИНВЕНТАРИЗАЦИЯ — внесение остатков с нуля (Кладовщик)
+// ════════════════════════════════
+let _fiItems = [];      // позиции в текущей открытой группе
+let _fiGroups = [];     // все группы (из Firebase ws_first_inventory)
+
+function openFirstInventoryMo(){
+  document.getElementById('fiGroupName').value = '';
+  _fiItems = [];
+  addFiItemRow();
+  renderFiItemsList();
+  openMo('firstInvMo');
+}
+
+function addFiItemRow(){
+  const names = [...new Set([...products.filter(p=>p.status!=='archive').map(p=>p.name), ...getItemNames()])];
+  const woods = getWoods();
+  _fiItems.push({rid:uid(), artikul:String(getNextArtikulNumber()), artikulMode:'auto', name:names[0]||'', wood:woods[0]||'', price:0, qty:1});
+  renderFiItemsList();
+}
+
+function removeFiItemRow(rid){
+  _fiItems = _fiItems.filter(x=>x.rid!==rid);
+  renderFiItemsList();
+}
+
+function updateFiItem(rid, field, val){
+  const it = _fiItems.find(x=>x.rid===rid); if(!it) return;
+  it[field] = (field==='price'||field==='qty') ? (parseFloat(val)||0) : val;
+  renderFiTotals();
+}
+
+function setFiArtikulMode(rid, mode){
+  const it = _fiItems.find(x=>x.rid===rid); if(!it) return;
+  it.artikulMode = mode;
+  if(mode==='auto') it.artikul = String(getNextArtikulNumber());
+  if(mode==='none') it.artikul = '';
+  renderFiItemsList();
+}
+
+function renderFiItemsList(){
+  const names = getItemNames();
+  const woods = getWoods();
+  const c = document.getElementById('fiItemsList'); if(!c) return;
+  c.innerHTML = _fiItems.map((it,i)=>`
+    <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:10px;border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:11px;color:var(--t2);font-weight:700">Товар ${i+1}</span>
+        ${_fiItems.length>1?`<button onclick="removeFiItemRow('${it.rid}')" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>`:''}
+      </div>
+      <div class="fg" style="margin-bottom:8px">
+        <label class="fl">Артикул</label>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <div onclick="setFiArtikulMode('${it.rid}','auto')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='auto'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='auto'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='auto'?'var(--accent)':'var(--border)'}">Авто</div>
+          <div onclick="setFiArtikulMode('${it.rid}','manual')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='manual'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='manual'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='manual'?'var(--accent)':'var(--border)'}">Вручную</div>
+          <div onclick="setFiArtikulMode('${it.rid}','none')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='none'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='none'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='none'?'var(--accent)':'var(--border)'}">Без артикула</div>
+        </div>
+        <input class="fi" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode!=='manual'?'disabled':''}
+          oninput="updateFiItem('${it.rid}','artikul',this.value)" placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
+          style="${it.artikulMode!=='manual'?'opacity:0.6':''}">
+      </div>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label>
+        <select class="fs" onchange="updateFiItem('${it.rid}','name',this.value)">
+          ${names.map(n=>`<option ${n===it.name?'selected':''}>${n}</option>`).join('')}
+        </select>
+      </div>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">Порода дерева</label>
+        <select class="fs" onchange="updateFiItem('${it.rid}','wood',this.value)">
+          ${woods.map(w=>`<option ${w===it.wood?'selected':''}>${w}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="fg"><label class="fl">Цена (₽)</label>
+          <input class="fi" type="number" inputmode="numeric" value="${it.price||''}" oninput="updateFiItem('${it.rid}','price',this.value)" placeholder="0">
+        </div>
+        <div class="fg"><label class="fl">Количество</label>
+          <input class="fi" type="number" inputmode="numeric" value="${it.qty||1}" oninput="updateFiItem('${it.rid}','qty',this.value)" placeholder="1">
+        </div>
+      </div>
+      <div style="text-align:right;font-size:12px;color:var(--t2);margin-top:6px">Сумма: <span style="color:var(--accent);font-weight:700">${fmt((it.price||0)*(it.qty||0))}</span></div>
+    </div>`).join('');
+  renderFiTotals();
+}
+
+function renderFiTotals(){
+  const totalQty = _fiItems.reduce((s,it)=>s+(it.qty||0),0);
+  const totalSum = _fiItems.reduce((s,it)=>s+(it.price||0)*(it.qty||0),0);
+  const qtyEl = document.getElementById('fiTotalQty'); if(qtyEl) qtyEl.textContent = totalQty;
+  const sumEl = document.getElementById('fiTotalSum'); if(sumEl) sumEl.textContent = fmt(totalSum);
+}
+
+async function saveFirstInvGroup(){
+  const groupName = document.getElementById('fiGroupName')?.value.trim();
+  if(!groupName){ showToast('Укажите название группы товаров'); return; }
+  if(!_fiItems.length){ showToast('Добавьте хотя бы один товар'); return; }
+
+  const groupId = uid();
+  const positions = _fiItems.map(it=>({
+    rid: it.rid, artikul: it.artikul||'', name: it.name, wood: it.wood,
+    price: it.price||0, qty: it.qty||1
+  }));
+
+  try{
+    await db.collection('ws_first_inventory').doc(groupId).set({
+      id: groupId, groupName, positions,
+      status: 'draft', // draft → active | archived
+      createdBy: session.name, createdById: session.id,
+      createdAt: now()
+    });
+    audit && audit('first_inventory_group_created',{groupName, count:positions.length});
+    closeMo('firstInvMo');
+    showToast(`✅ Группа «${groupName}» сохранена · ${positions.length} товаров`);
+  }catch(e){ showToast('Ошибка: '+e.message); }
+}
+
+function renderFirstInventoryGroups(){
+  const section = document.getElementById('fiGroupsSection');
+  const c = document.getElementById('fiGroupsList');
+  if(!section || !c) return;
+
+  if(!_fiGroups.length){ section.style.display='none'; return; }
+  section.style.display='block';
+
+  c.innerHTML = _fiGroups.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(g=>{
+    const totalQty = g.positions.reduce((s,p)=>s+(p.qty||0),0);
+    const totalSum = g.positions.reduce((s,p)=>s+(p.price||0)*(p.qty||0),0);
+    const statusBadge = {
+      draft:    '<span style="color:var(--a4)">⏳ Черновик</span>',
+      active:   '<span style="color:var(--inc)">✅ На балансе склада</span>',
+      archived: '<span style="color:var(--t2)">🗄 В архиве</span>'
+    }[g.status] || g.status;
+    return `<div class="card" style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:13px;font-weight:700">${g.groupName}</div>
+          <div style="font-size:11px;color:var(--t2);margin:3px 0">${g.positions.length} позиций · ${totalQty} шт. · ${fmt(totalSum)}</div>
+          <div style="font-size:11px">${statusBadge}</div>
+        </div>
+      </div>
+      ${g.status==='draft'?`
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button onclick="activateFirstInvGroup('${g.id}')" class="btn green" style="margin:0;flex:1;font-size:12px;padding:9px">✅ Активировать</button>
+          <button onclick="archiveFirstInvGroup('${g.id}')" class="btn sec" style="margin:0;flex:1;font-size:12px;padding:9px">🗄 Архив</button>
+        </div>`:''}
+      ${g.status==='active'?`
+        <button onclick="archiveFirstInvGroup('${g.id}')" class="btn sec" style="margin-top:10px;font-size:12px;padding:9px">🗄 Перенести в архив</button>`:''}
+    </div>`;
+  }).join('');
+}
+
+async function activateFirstInvGroup(groupId){
+  const g = _fiGroups.find(x=>x.id===groupId); if(!g) return;
+  try{
+    const batch = db.batch();
+    g.positions.forEach(p=>{
+      for(let q=0; q<(p.qty||1); q++){
+        const ref = db.collection('ws_items').doc();
+        batch.set(ref, {
+          id: uid(), name: p.name, itemName: p.name, wood: p.wood,
+          artikul: p.artikul||'', price: p.price||0, zp: 0, zpPaid: false,
+          masterId: '', masterName: 'Начальный остаток',
+          status: 'received',
+          createdAt: now(), receivedAt: now(),
+          isManual: true, fromFirstInventory: g.id,
+          itemNum: 'НАЧ-'+uid().toUpperCase()
+        });
+      }
+    });
+    await batch.commit();
+    await db.collection('ws_first_inventory').doc(groupId).update({status:'active', activatedAt: now(), activatedBy: session.name});
+    audit && audit('first_inventory_group_activated',{groupName:g.groupName, count:g.positions.length});
+    showToast(`✅ Группа «${g.groupName}» поставлена на баланс склада`);
+  }catch(e){ showToast('Ошибка: '+e.message); }
+}
+
+async function archiveFirstInvGroup(groupId){
+  const g = _fiGroups.find(x=>x.id===groupId); if(!g) return;
+  try{
+    await db.collection('ws_first_inventory').doc(groupId).update({status:'archived', archivedAt: now(), archivedBy: session.name});
+    // Если товары уже были поставлены на баланс — помечаем их как архивные
+    // (товар остаётся на складе, просто не отгружается в магазины)
+    if(g.status==='active'){
+      const snap = await db.collection('ws_items').where('fromFirstInventory','==',groupId).get();
+      const batch = db.batch();
+      snap.docs.forEach(d=>batch.update(d.ref,{isShopArchived:true}));
+      await batch.commit();
+    }
+    showToast(`🗄 Группа «${g.groupName}» перенесена в архив`);
+  }catch(e){ showToast('Ошибка: '+e.message); }
+}
+
 // ════════ BOOT ════════
 document.addEventListener('DOMContentLoaded', ()=>{
   startWsSyncListeners();
@@ -4781,6 +5006,29 @@ document.addEventListener('DOMContentLoaded', ()=>{
     <div id="maDetailItems" style="margin-bottom:14px"></div>
     <button class="btn green" onclick="provedMaAccept()" id="maProvedBtn">✅ Провести</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('maDetailMo')">Закрыть</button>
+  </div>
+</div>
+
+<!-- ПЕРВАЯ ИНВЕНТАРИЗАЦИЯ — ВНЕСЕНИЕ ОСТАТКОВ (Кладовщик) -->
+<div class="mo" id="firstInvMo">
+  <div class="md"><div class="mh"></div><div class="mt">🆕 Первая инвентаризация</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:12px">Внесите фактические остатки на складе группами товаров. После заполнения каждую группу нужно будет активировать отдельно.</div>
+
+    <div class="fg"><label class="fl">Группа товаров</label>
+      <input class="fi" id="fiGroupName" placeholder="Например: Столешницы дубовые">
+    </div>
+
+    <div id="fiItemsList" style="margin:14px 0"></div>
+
+    <button class="btn" style="background:var(--a2);margin-bottom:10px" onclick="addFiItemRow()">➕ Добавить товар в группу</button>
+
+    <div class="card" style="background:var(--s2);margin:10px 0">
+      <div class="at-row"><span class="at-lbl">Количество товаров</span><span class="at-val" id="fiTotalQty">0</span></div>
+      <div class="at-row"><span class="at-lbl">Общая сумма</span><span class="at-val" style="color:var(--accent)" id="fiTotalSum">0 ₽</span></div>
+    </div>
+
+    <button class="btn green" onclick="saveFirstInvGroup()">💾 Сохранить группу</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('firstInvMo')">Отмена</button>
   </div>
 </div>
 
