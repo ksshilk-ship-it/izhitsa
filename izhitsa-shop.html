@@ -2740,10 +2740,26 @@ function migrateLegacyReceiveEntries(){
   saveJ();
 }
 
+// ── Fix legacy expense entries: earlier versions always deducted ДР expenses
+// (e.g. "Инкассация (ДР)") from the Дерево cash pool (cashEffect) instead of
+// the ДР cash pool (cashDrEffect). Move the deduction to the correct pool. ──
+function migrateLegacyDrExpenses(){
+  if(!journal.length) return;
+  var changed = false;
+  journal.forEach(function(e){
+    if(e.type==='expense' && e.goodsType==='dr' && e.cashEffect && !e.cashDrEffect){
+      e.cashDrEffect = e.cashEffect;
+      e.cashEffect = 0;
+      changed = true;
+    }
+  });
+  if(changed) saveJ();
+}
+
 function startApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
-  if(!session.isPreview) migrateLegacyReceiveEntries();
+  if(!session.isPreview){ migrateLegacyReceiveEntries(); migrateLegacyDrExpenses(); }
   document.getElementById('hdrShop').textContent=(session.isPreview?'🔍 ':'')+session.shopName;
   if(session.isPreview){
     var hdrEl=document.getElementById('hdrShop');
@@ -4526,13 +4542,15 @@ function saveExpense(){
   var supplier = (document.getElementById('expSupplierName')||{}).value||'';
   var labels = {zp:'💰 ЗП',travel:'🚌 Проезд',inkass:'🏦 Инкассация',other:'📝 Прочее',supplier:'🏭 Поставщику'};
   var label = labels[expType] + (expGoodsType==='dr'?' (ДР)':'');
+  var isDr = expGoodsType==='dr';
   journal.push({
     id:uid(), type:'expense', ts:new Date().toISOString(),
     icon:'💸', label:'Расход: '+label,
     sub:fmt(amt)+(supplier?' · '+supplier:'')+(comment?' · '+comment:''),
     expType, goodsType:expGoodsType, amount:amt, comment, supplier,
     amtCls:'exp', amtSign:'−',
-    cashEffect: -amt,
+    cashEffect: isDr?0:-amt,
+    cashDrEffect: isDr?-amt:0,
     cardEffect:0, staffEffect:0, goodsEffect:0
   });
   saveJ();
