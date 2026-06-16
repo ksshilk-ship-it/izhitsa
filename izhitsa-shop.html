@@ -508,6 +508,25 @@ function checkForAppUpdate() {
     <div id="closeSummary"></div>
     <button class="btn red" id="closeShiftBtn" style="margin-bottom:16px;opacity:.5" disabled onclick="closeShift()">🔐 Закрыть смену</button>
   </div>
+
+  <!-- PERSONAL ANALYTICS (СЕЛЛЕР) -->
+  <div class="page" id="pg-personal">
+    <div class="stitle">Личное</div>
+    <div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px" id="personalPeriodChips">
+      <div style="padding:6px 13px;border-radius:20px;border:2px solid #c8f060;background:#c8f060;color:#0f0f13;font-size:12px;cursor:pointer;white-space:nowrap;font-weight:700" onclick="setPersonalPeriod('30',this)">30 дней</div>
+      <div style="padding:6px 13px;border-radius:20px;border:1px solid #2e2e3e;background:#1a1a22;color:#8888aa;font-size:12px;cursor:pointer;white-space:nowrap" onclick="setPersonalPeriod('7',this)">7 дней</div>
+      <div style="padding:6px 13px;border-radius:20px;border:1px solid #2e2e3e;background:#1a1a22;color:#8888aa;font-size:12px;cursor:pointer;white-space:nowrap" onclick="setPersonalPeriod('90',this)">3 месяца</div>
+      <div style="padding:6px 13px;border-radius:20px;border:1px solid #2e2e3e;background:#1a1a22;color:#8888aa;font-size:12px;cursor:pointer;white-space:nowrap" onclick="setPersonalPeriod('all',this)">Всё время</div>
+    </div>
+    <div class="row2" style="margin-bottom:12px">
+      <div class="fg" style="margin:0"><label class="fl">С даты</label><input class="fi" type="date" id="personalDateFrom" style="-webkit-appearance:none;color-scheme:dark" oninput="setPersonalPeriod('custom')"></div>
+      <div class="fg" style="margin:0"><label class="fl">По дату</label><input class="fi" type="date" id="personalDateTo" style="-webkit-appearance:none;color-scheme:dark" oninput="setPersonalPeriod('custom')"></div>
+    </div>
+    <div id="personalSummary"></div>
+    <div class="ctitle" style="margin-top:14px">Смены за период</div>
+    <div id="personalShiftsList"></div>
+  </div>
+
   <!-- ADMIN PAGES -->
 
   <!-- TODAY SHIFT -->
@@ -2269,6 +2288,206 @@ function renderZpCard(){
 }
 function renderAll(){ renderStatusBar(); renderJournal(); renderWriteoffs(); updateInvBadge(); renderPendingAlert(); syncLiveShift(); }
 
+// ════ PERSONAL TAB (СЕЛЛЕР) — per-seller shift history & analytics ════
+// Computes "ЗП расчётная" for an arbitrary (possibly historical) shift, using
+// the exact same formula as calcZpForCurrentShift(), but operating on a
+// static journal array + shopName instead of the live globals. This lets us
+// recompute the calculated ЗП for any closed shift stored in iz_shifts.
+function calcShiftZpStandalone(shopName, shiftJournal){
+  var sales = shiftJournal.filter(function(e){ return e.type==='sale'; });
+  var expenses = shiftJournal.filter(function(e){ return e.type==='expense'; });
+
+  // Mixed-sale-aware net revenue split by goods type (mirrors calcSellerSummary's group())
+  function itemAmt(it){ return it.amt!=null?it.amt:(it.price||0)*(it.qty||1); }
+  function netFor(isDr){
+    var listPrice=0, discount=0;
+    sales.forEach(function(e){
+      var items=e.items||[];
+      if(!items.length){
+        if(isDr) return;
+        listPrice += (e.amount||0)+(e.discount||0);
+        discount += (e.discount||0);
+        return;
+      }
+      var groupItems = items.filter(function(it){ return isDr ? it.goodsType==='dr' : it.goodsType!=='dr'; });
+      if(!groupItems.length) return;
+      var groupTotal = groupItems.reduce(function(s,it){ return s+itemAmt(it); },0);
+      var saleTotal = e.totalPrice || items.reduce(function(s,it){ return s+itemAmt(it); },0) || 1;
+      var share = groupTotal/saleTotal;
+      listPrice += groupTotal;
+      discount += (e.discount||0)*share;
+    });
+    return listPrice-discount;
+  }
+  var netWood = netFor(false), netDr = netFor(true);
+  var totalNet = netWood+netDr;
+
+  var zpFact = expenses.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
+  var travelFact = expenses.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+e.amount;},0);
+
+  var zpSettings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+  var s = zpSettings[shopName] || null;
+  var base = s ? numDef(s.base, 1500) : 1500;
+  var thresh = s ? numDef(s.threshold, 5000) : 5000;
+  var pctNorm = s ? (numDef(s.pct, 8)/100) : 0.08;
+  var highEnabled = s ? ((s.highEnabled !== undefined) ? s.highEnabled : !!s.highThreshold) : false;
+  var highThresh = (s && highEnabled) ? numDef(s.highThreshold, 20000) : null;
+  var pctHigh = s ? (numDef(s.highPct, 10)/100) : 0.10;
+
+  if(!s){
+    var shopN = (shopName||'').toLowerCase();
+    if(shopN.indexOf('горк') >= 0){
+      base=2000; thresh=0; pctNorm=0.08; highThresh=20000; pctHigh=0.10;
+    } else { base=1500; thresh=5000; pctNorm=0.08; }
+  }
+
+  var pct = (highThresh!==null && totalNet >= highThresh) ? pctHigh : pctNorm;
+  var zpCalcWood = 0, zpCalcDr = 0;
+  if(totalNet < thresh){
+    zpCalcWood = base; zpCalcDr = 0;
+  } else {
+    zpCalcWood = base + netWood * pct;
+    zpCalcDr   = netDr * pct;
+  }
+  var travelCalc = (s && s.travel) ? s.travel : 0;
+  var zpCalcTotal = zpCalcWood + zpCalcDr;
+  var zpCalcWithTravel = zpCalcTotal + travelCalc;
+  var diff = zpCalcWithTravel - (zpFact + travelFact);
+
+  return {
+    zpCalcWood: zpCalcWood, zpCalcDr: zpCalcDr, zpCalcTotal: zpCalcTotal,
+    travelCalc: travelCalc, zpFact: zpFact, travelFact: travelFact,
+    zpCalcWithTravel: zpCalcWithTravel, diff: diff, totalNet: totalNet
+  };
+}
+
+var _personalPeriod = '30'; // '7' | '30' | '90' | 'all' | 'custom'
+
+function setPersonalPeriod(period, el){
+  _personalPeriod = period;
+  var fromEl = document.getElementById('personalDateFrom'), toEl = document.getElementById('personalDateTo');
+  if(period !== 'custom'){
+    document.querySelectorAll('#personalPeriodChips div').forEach(function(c){
+      c.style.background='#1a1a22'; c.style.color='#8888aa'; c.style.borderWidth='1px'; c.style.borderColor='#2e2e3e';
+    });
+    if(el){ el.style.background='#c8f060'; el.style.color='#0f0f13'; el.style.borderWidth='2px'; el.style.borderColor='#c8f060'; }
+    var today = new Date();
+    var toStr = today.toISOString().split('T')[0];
+    var fromStr = '';
+    if(period !== 'all'){
+      var days = parseInt(period,10)||30;
+      var fromDate = new Date(today.getTime() - days*86400000);
+      fromStr = fromDate.toISOString().split('T')[0];
+    }
+    if(fromEl) fromEl.value = fromStr;
+    if(toEl) toEl.value = period==='all' ? '' : toStr;
+  } else {
+    // Custom dates entered directly — deselect the quick-period chips
+    document.querySelectorAll('#personalPeriodChips div').forEach(function(c){
+      c.style.background='#1a1a22'; c.style.color='#8888aa'; c.style.borderWidth='1px'; c.style.borderColor='#2e2e3e';
+    });
+  }
+  renderPersonalTab();
+}
+
+function renderPersonalTab(){
+  if(!session) return;
+  var sumEl = document.getElementById('personalSummary');
+  var listEl = document.getElementById('personalShiftsList');
+  if(!sumEl || !listEl) return;
+
+  var fromStr = (document.getElementById('personalDateFrom')||{}).value || '';
+  var toStr = (document.getElementById('personalDateTo')||{}).value || '';
+
+  var allShifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var mine = allShifts.filter(function(sh){
+    if(sh.status && sh.status!=='closed') return false; // skip the live/open shift
+    if(sh.sellerName !== session.sellerName) return false;
+    if(fromStr && sh.date < fromStr) return false;
+    if(toStr && sh.date > toStr) return false;
+    return true;
+  });
+  mine.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+
+  if(!mine.length){
+    sumEl.innerHTML = '<div class="empty"><div class="ei">📈</div>Нет закрытых смен за выбранный период</div>';
+    listEl.innerHTML = '';
+    return;
+  }
+
+  // Per-shift computed figures
+  var rows = mine.map(function(sh){
+    var shJournal = sh.journal || [];
+    var z = calcShiftZpStandalone(sh.shopName, shJournal);
+    var revenue = (sh.totalRevenue!=null ? sh.totalRevenue : (sh.cashRevenue||0)+(sh.cardRevenue||0)+(sh.totalDiscount||0));
+    var salesCount = sh.salesCount!=null ? sh.salesCount : shJournal.filter(function(e){return e.type==='sale';}).length;
+    return {
+      shift: sh, z: z, revenue: revenue, salesCount: salesCount,
+      zpFactWithTravel: z.zpFact + z.travelFact
+    };
+  });
+
+  var shiftsCount = rows.length;
+  var totalRevenue = rows.reduce(function(s,r){ return s+r.revenue; },0);
+  var totalSalesCount = rows.reduce(function(s,r){ return s+r.salesCount; },0);
+  var avgRevenuePerShift = shiftsCount ? totalRevenue/shiftsCount : 0;
+  var avgCheck = totalSalesCount ? totalRevenue/totalSalesCount : 0;
+  var totalZpCalcNoTravel = rows.reduce(function(s,r){ return s+r.z.zpCalcTotal; },0);
+  var totalZpCalcWithTravel = rows.reduce(function(s,r){ return s+r.z.zpCalcWithTravel; },0);
+  var avgZpNoTravel = shiftsCount ? totalZpCalcNoTravel/shiftsCount : 0;
+  var avgZpWithTravel = shiftsCount ? totalZpCalcWithTravel/shiftsCount : 0;
+  var totalDiff = rows.reduce(function(s,r){ return s+r.z.diff; },0);
+
+  var fmt2 = function(n){ return Math.round(n).toLocaleString('ru-RU')+'₽'; };
+  function sCell(label,val,color){
+    return '<div style="background:#0f0f13;border-radius:8px;padding:8px"><div style="font-size:9px;color:#8888aa;line-height:1.3;margin-bottom:2px">'+label+'</div>'+
+      '<div style="font-size:14px;font-weight:700;color:'+(color||'#f0f0f8')+'">'+val+'</div></div>';
+  }
+  var diffColorTotal = totalDiff > 0 ? '#f06060' : totalDiff < 0 ? '#60f090' : '#8888aa';
+
+  sumEl.innerHTML =
+    '<div style="background:#1e2a14;border:2px solid #c8f060;border-radius:14px;padding:14px;margin-bottom:14px">'+
+      '<div style="font-size:11px;color:#c8f060;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">📊 СВОДКА ЗА ПЕРИОД</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'+
+        sCell('📅 Смен отработано', shiftsCount+'', '#c8f060')+
+        sCell('💰 Выручка средняя/смену', fmt2(avgRevenuePerShift), '#60c8f0')+
+        sCell('🧾 Средний чек', fmt2(avgCheck), '#f0c060')+
+        sCell('Σ Выручка всего', fmt2(totalRevenue), '#60c8f0')+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'+
+        sCell('💵 Заработок/смену (без проезда)', fmt2(avgZpNoTravel), '#a060f0')+
+        sCell('💵 Заработок/смену (с проездом)', fmt2(avgZpWithTravel), '#a060f0')+
+      '</div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;background:#0f0f13;border-radius:8px;padding:10px 12px;margin-top:4px">'+
+        '<span style="font-size:11px;color:#8888aa">Итог за период: расчётная ЗП минус фактически взятая</span>'+
+        '<span style="font-size:15px;font-weight:800;color:'+diffColorTotal+'">'+(totalDiff>0?'+':'')+fmt2(totalDiff)+'</span>'+
+      '</div>'+
+      '<div style="font-size:10px;color:#555568;margin-top:6px">'+(totalDiff>0?'Положительное значение — взято меньше расчётной ЗП':totalDiff<0?'Отрицательное значение — взято больше расчётной ЗП':'Расчётная ЗП и фактически взятая совпадают')+'</div>'+
+    '</div>';
+
+  listEl.innerHTML = rows.map(function(r){
+    var sh = r.shift, z = r.z;
+    var diffColor = z.diff > 0 ? '#f06060' : z.diff < 0 ? '#60f090' : '#8888aa';
+    return '<div class="card" style="margin-bottom:8px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'+
+        '<div>'+
+          '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700">'+(sh.shopName||'')+'</div>'+
+          '<div style="font-size:11px;color:#8888aa;margin-top:2px">📅 '+(sh.date||'')+' · 🧾 '+r.salesCount+' продаж · 💰 '+fmt(r.revenue)+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;padding-top:6px;border-top:1px solid #2e2e3e">'+
+        '<span style="color:#8888aa">ЗП расчётная (с проездом)</span><span style="color:#c8f060;font-weight:700">'+fmt(z.zpCalcWithTravel)+'</span>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-top:3px">'+
+        '<span style="color:#8888aa">ЗП факт + проезд (взято)</span><span style="color:#f0a060;font-weight:700">'+fmt(r.zpFactWithTravel)+'</span>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-top:5px;padding-top:5px;border-top:1px solid #2e2e3e">'+
+        '<span>Разница</span><span style="color:'+diffColor+'">'+(z.diff>0?'+':'')+fmt(z.diff)+'</span>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
 // Keep an always-current "open shift" document in iz_shifts so the admin
 // home page can show live, in-progress shift data (cash/goods/sales totals,
 // journal entries) without waiting for the shift to be closed.
@@ -2932,7 +3151,17 @@ function buildSellerTabs(){
     <button class="tab" onclick="showPg('invoices',this);switchInvTab('incoming')"><div class="ti">📥</div><span>Приход</span><div class="tbadge" id="invBadge"></div></button>
     <button class="tab" onclick="showPg('writeoffs',this);renderWriteoffs()"><div class="ti">🗑</div><span>Списание</span></button>
     <button class="tab" onclick="showPg('staff-tab',this);renderStaff()"><div class="ti">🛒</div><span>Покупки</span></button>
-    <button class="tab" onclick="showPg('close',this);renderClose()"><div class="ti">🔐</div><span>Закрыть</span></button>`;
+    <button class="tab" onclick="showPg('close',this);renderClose()"><div class="ti">🔐</div><span>Закрыть</span></button>
+    <button class="tab" onclick="showPg('personal',this);initPersonalTab()"><div class="ti">📈</div><span>Личное</span></button>`;
+}
+var _personalTabInited = false;
+function initPersonalTab(){
+  if(!_personalTabInited){
+    _personalTabInited = true;
+    setPersonalPeriod('30', document.querySelector('#personalPeriodChips div'));
+  } else {
+    renderPersonalTab();
+  }
 }
 
 // ════ START ADMIN APP ════
