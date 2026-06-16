@@ -22,7 +22,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 .btn.sm{padding:8px 14px;font-size:11px;width:auto}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 #appScreen{display:none}
-.hdr{padding:11px 16px;display:flex;justify-content:space-between;align-items:center;background:#1a1a22;border-bottom:1px solid #2e2e3e}
+.hdr{padding:11px 16px;padding-top:calc(11px + env(safe-area-inset-top, 0px));display:flex;justify-content:space-between;align-items:center;background:#1a1a22;border-bottom:1px solid #2e2e3e}
 .hdr-logo{font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;color:#c8f060}
 .hdr-shop{font-size:14px;font-weight:700;color:#60c8f0}
 .hdr-seller{font-size:12px;color:#8888aa}
@@ -32,9 +32,9 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 .sb-v{font-family:'Unbounded',sans-serif;font-size:13px;font-weight:700}
 .sb-l{font-size:10px;color:#8888aa;margin-top:2px;line-height:1.2}
 .tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:calc(62px + env(safe-area-inset-bottom, 0px));padding-bottom:env(safe-area-inset-bottom, 0px);background:#1a1a22;border-top:1px solid #2e2e3e;display:none;z-index:100;box-sizing:border-box}
-.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:#8888aa;font-size:12px;font-family:'Golos Text',sans-serif;font-weight:600;border:none;background:none;position:relative}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:#8888aa;font-size:9.5px;font-family:'Golos Text',sans-serif;font-weight:600;border:none;background:none;position:relative;padding:0 2px;white-space:nowrap;overflow:hidden}
 .tab.active{color:#c8f060}
-.ti{font-size:20px;line-height:1}
+.ti{font-size:18px;line-height:1}
 .tbadge{position:absolute;top:5px;right:calc(50% - 16px);background:#f06060;color:#fff;font-size:9px;font-weight:700;border-radius:8px;padding:1px 5px;display:none}
 .page{display:none;padding:12px 16px;padding-bottom:calc(78px + env(safe-area-inset-bottom, 0px));overflow-y:auto;-webkit-overflow-scrolling:touch}
 .page.active{display:block}
@@ -160,7 +160,7 @@ function checkForAppUpdate() {
 <body>
 
 <!-- LOGIN -->
-<div id="loginScreen" style="display:flex;flex-direction:column;min-height:100dvh;padding:32px 20px 24px;background:#0f0f13">
+<div id="loginScreen" style="display:flex;flex-direction:column;min-height:100dvh;padding:32px 20px 24px;padding-top:calc(32px + env(safe-area-inset-top, 0px));background:#0f0f13">
   <div style="font-family:Unbounded,sans-serif;font-size:26px;font-weight:700;color:#c8f060;margin-bottom:4px">Ижица</div>
   <div style="font-size:12px;color:#8888aa;margin-bottom:20px">Модуль магазина</div>
 
@@ -1389,9 +1389,12 @@ function checkForAppUpdate() {
 <!-- EDIT SHIFT -->
 <div class="mo" id="editShiftMo">
   <div class="md"><div class="mh"></div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <div class="mt" style="margin:0" id="editShiftTitle">Редактировать смену</div>
-      <button onclick="closeMo('editShiftMo')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:5px 10px;color:#8888aa;cursor:pointer;font-size:12px">✕</button>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+      <div>
+        <div class="mt" style="margin:0" id="editShiftTitle">Редактировать смену</div>
+        <div id="editShiftSubtitle" style="font-size:11px;color:#8888aa;margin-top:3px"></div>
+      </div>
+      <button onclick="closeMo('editShiftMo')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:5px 10px;color:#8888aa;cursor:pointer;font-size:12px;flex-shrink:0">✕</button>
     </div>
     <div id="editShiftBody"></div>
     <button class="btn" id="esh_saveBtn" onclick="saveEditShift()" style="display:none">💾 Сохранить изменения</button>
@@ -2141,6 +2144,8 @@ function renderStatusBar(){
   }
 
   var s = calcSellerSummary();
+  var salesTxCount = journal.filter(function(e){ return e.type==='sale'; }).length;
+  var avgCheckCurrent = salesTxCount ? s.totalRevenue/salesTxCount : 0;
   var openedDate = session.openedAt ? new Date(session.openedAt) : null;
   var dateStr = openedDate ? openedDate.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
   var timeStr = openedDate ? openedDate.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '—';
@@ -2180,9 +2185,15 @@ function renderStatusBar(){
     // ══ Outer wrapper: whole shift-stats block, highlighted in Chive ══
     '<div style="background:#1c1f12;border:1px solid #4B5320;border-radius:12px;padding:10px;margin-bottom:10px;box-shadow:0 2px 6px rgba(0,0,0,.3)">'+
     // Общая выручка
-    '<div style="background:linear-gradient(135deg,#3a3f1a,#2a2e14);border:1px solid #4B5320;border-radius:10px;padding:10px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">'+
-      '<span style="font-size:11px;color:#c8d4a0">💰 Общая выручка (полная стоимость + скидка)</span>'+
-      '<span style="font-size:17px;font-weight:800;color:#c8f060">'+fmt(s.totalRevenue)+'</span>'+
+    '<div style="background:linear-gradient(135deg,#3a3f1a,#2a2e14);border:1px solid #4B5320;border-radius:10px;padding:10px 12px;margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<span style="font-size:11px;color:#c8d4a0">💰 Общая выручка (полная стоимость + скидка)</span>'+
+        '<span style="font-size:17px;font-weight:800;color:#c8f060">'+fmt(s.totalRevenue)+'</span>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid #3a3f1a">'+
+        '<span style="font-size:10px;color:#c8d4a0">🧾 Кол-во продаж: <b style="color:#f0f0f8">'+salesTxCount+'</b></span>'+
+        '<span style="font-size:10px;color:#c8d4a0">📊 Средний чек: <b style="color:#f0f0f8">'+fmt(avgCheckCurrent)+'</b></span>'+
+      '</div>'+
     '</div>'+
     // Two columns: Дерево / ДР Товар
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
@@ -5357,8 +5368,9 @@ function _closeShiftReal(){
   const prev=getPrevShift(session.shopName);
   const morningDiff=(prev&&prev.cashEvening)!=null?Math.abs(session.cashMorning-prev.cashEvening):0;
   const sales=journal.filter(e=>e.type==='sale');
+  const openedDateStr = session.openedAt ? new Date(session.openedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
   const report={id:(session.shiftId||uid()),status:'closed',source:'shop',shopName:session.shopName,sellerName:session.sellerName,
-    date:new Date().toISOString().split('T')[0],openedAt:session.openedAt,closedAt:new Date().toISOString(),
+    date:openedDateStr,openedAt:session.openedAt,closedAt:new Date().toISOString(),
     cashMorning:session.cashMorning,goodsMorning:session.goodsMorning,cashEvening:cashEve,goodsEvening:t.goods,
     cashStaffMorning:(session.cashStaffMorning||0),cashStaffEvening:staffCashEve,
     inkass,cashDiff,cashDiffReason:reason,hasCashDiff:Math.abs(cashDiff)>=1,
@@ -5469,6 +5481,15 @@ function openShiftView(id){
 function _renderShiftView(){
   var sh = _currentShiftView; if(!sh) return;
   document.getElementById('editShiftTitle').textContent = sh.shopName + ' · ' + sh.date;
+  var subtitleEl = document.getElementById('editShiftSubtitle');
+  if(subtitleEl){
+    var fmtDT = function(iso){
+      if(!iso) return '—';
+      var d = new Date(iso);
+      return d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+    };
+    subtitleEl.innerHTML = '🕐 Открыта: '+fmtDT(sh.openedAt)+'<br>🔐 Закрыта: '+fmtDT(sh.closedAt);
+  }
 
   var f = function(n){ return Math.round(n||0).toLocaleString('ru-RU')+'₽'; };
   var cashRev=sh.cashRevenue||0, cardRev=sh.cardRevenue||0, disc=sh.totalDiscount||sh.discount||0;

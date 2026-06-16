@@ -649,7 +649,15 @@ var ADMIN_SYNC_SETTINGS = {
 function adminSyncListen(lsKey) {
   var m = ADMIN_SYNC_SETTINGS[lsKey]; if(!m || _adminSyncUnsubs[lsKey]) return;
   _adminSyncUnsubs[lsKey] = db.collection('iz_settings').doc(m.doc).onSnapshot(function(snap){
-    if(!snap.exists) return;
+    if(!snap.exists){
+      // Safe one-time seed: only fires when Firestore itself confirms there is
+      // truly no sales_sources document anywhere (first-ever app run), so it
+      // can never overwrite real data that simply hasn't loaded yet locally.
+      if(lsKey === 'iz_sales_sources' && !localStorage.getItem('iz_sales_sources')){
+        saveShops(['ОПТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
+      }
+      return;
+    }
     var val = snap.data()[m.field];
     if(val !== undefined) {
       localStorage.setItem(lsKey, JSON.stringify(val));
@@ -2448,10 +2456,11 @@ document.addEventListener('DOMContentLoaded', function() {
   var firstCard = document.querySelector('.role-card');
   if(firstCard) firstCard.click();
   startStaffSyncListener();
-  // Init shops if not exist
-  if(!localStorage.getItem('iz_shops')) {
-    saveShops(['ОПИТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
-  }
+  // NOTE: shops/sales-sources are no longer seeded synchronously here — doing so
+  // raced with the async Firestore listener (adminSyncListen) and could overwrite
+  // real synced data with the hardcoded defaults before the real data arrived.
+  // Seeding now only happens inside startAdminSyncListeners() when Firestore
+  // itself confirms the sales_sources document doesn't exist yet (see below).
   
   // Init plan data if not exist
   if(!localStorage.getItem('iz_plan_data')) {
