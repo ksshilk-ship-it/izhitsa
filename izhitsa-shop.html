@@ -2293,7 +2293,14 @@ function renderAll(){ renderStatusBar(); renderJournal(); renderWriteoffs(); upd
 // the exact same formula as calcZpForCurrentShift(), but operating on a
 // static journal array + shopName instead of the live globals. This lets us
 // recompute the calculated ЗП for any closed shift stored in iz_shifts.
-function calcShiftZpStandalone(shopName, shiftJournal){
+// Accepts the full report object (not just its journal) so it can fall back
+// to top-level fields (report.zp, report.travel, report.totalRevenue, etc.)
+// when report.journal is missing or incomplete — this happens for shifts
+// closed by an older app version, before the full journal snapshot was
+// saved on close. Falling back keeps analytics accurate for older history
+// instead of silently showing 0 for ЗП факт / выручка.
+function calcShiftZpStandalone(shopName, report){
+  var shiftJournal = (report && report.journal) || [];
   var sales = shiftJournal.filter(function(e){ return e.type==='sale'; });
   var expenses = shiftJournal.filter(function(e){ return e.type==='expense'; });
 
@@ -2319,11 +2326,30 @@ function calcShiftZpStandalone(shopName, shiftJournal){
     });
     return listPrice-discount;
   }
-  var netWood = netFor(false), netDr = netFor(true);
+  var hasJournalSales = sales.length>0;
+  var netWood, netDr;
+  if(hasJournalSales){
+    netWood = netFor(false); netDr = netFor(true);
+  } else {
+    // No per-sale journal data available — fall back to the report's own
+    // top-level totals (revenue/discount), attributing it all to Дерево
+    // since older report records didn't split revenue by goods type.
+    var revFallback = (report && (report.totalRevenue!=null ? report.totalRevenue : (report.cashRevenue||0)+(report.cardRevenue||0)))||0;
+    var discFallback = (report && report.totalDiscount)||0;
+    netWood = revFallback - discFallback; netDr = 0;
+  }
   var totalNet = netWood+netDr;
 
-  var zpFact = expenses.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
-  var travelFact = expenses.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+e.amount;},0);
+  var zpFact, travelFact;
+  if(expenses.length){
+    zpFact = expenses.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
+    travelFact = expenses.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+e.amount;},0);
+  } else {
+    // No per-expense journal data — fall back to the report's own top-level
+    // zp/travel totals (saved separately on every shift close).
+    zpFact = (report && report.zp)||0;
+    travelFact = (report && report.travel)||0;
+  }
 
   var zpSettings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
   var s = zpSettings[shopName] || null;
@@ -2418,7 +2444,7 @@ function renderPersonalTab(){
   // Per-shift computed figures
   var rows = mine.map(function(sh){
     var shJournal = sh.journal || [];
-    var z = calcShiftZpStandalone(sh.shopName, shJournal);
+    var z = calcShiftZpStandalone(sh.shopName, sh);
     var revenue = (sh.totalRevenue!=null ? sh.totalRevenue : (sh.cashRevenue||0)+(sh.cardRevenue||0)+(sh.totalDiscount||0));
     var salesCount = sh.salesCount!=null ? sh.salesCount : shJournal.filter(function(e){return e.type==='sale';}).length;
     return {
@@ -4841,15 +4867,6 @@ function saveExpense(){
 // ── renderClose — pull all data from journal ──
 function renderClose(){
   if(!session) return;
-  // Auto-expand the three cassa sections (Дерево / ДР Товар / Покупки
-  // сотрудников) so their "Нал вечер" input is immediately visible, instead
-  // of requiring a tap on each accordion header.
-  ['close_wood','close_dr','close_staff'].forEach(function(id){
-    var body = document.getElementById('acc_'+id+'_body');
-    var arrow = document.getElementById('acc_'+id+'_arrow');
-    if(body) body.style.display = 'block';
-    if(arrow) arrow.textContent = '▼';
-  });
   var t = calcTotals();
   var sales = journal.filter(function(e){ return e.type==='sale'; });
   var expenses = journal.filter(function(e){ return e.type==='expense'; });
@@ -5103,7 +5120,7 @@ function renderClose(){
         TRN('Кол-во', _sellerSummary.wood.count, _sellerSummary.dr.count, '#f0f0f8', '#f0f0f8') +
         TRS('📦 Товар') +
         TR('Остаток утро', session.goodsMorning||0, session.goodsDrMorning||0, '#f0f0f8', '#f0f0f8') +
-        TR('Остаток вечер', t.goods, drGoodsEve, '#c8f060', '#a060f0') +
+        TR('Остаток вечер', t.goods, drGoodsEve, '#c8f060', '#c8f060') +
         TR('Приход', rcvWood, rcvDr, '#60f090', '#60f090') +
         TR('Списание', woWood, woDr, '#f06060', '#f06060') +
         TRS('💵 Касса') +
