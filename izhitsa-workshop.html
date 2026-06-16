@@ -1027,25 +1027,45 @@ db.enablePersistence({synchronizeTabs:true}).catch(e=>console.log('Persist:',e.c
 var _wsSyncUnsubs = {};
 var WS_SYNC_SETTINGS = {
   'ws_employees':   {doc:'ws_employees', field:'data'},
-  'ws_item_names':  {doc:'ws_item_names',field:'data'},
-  'ws_woods':       {doc:'ws_woods',     field:'data'},
-  'ws_sizes':       {doc:'ws_sizes',     field:'data'},
+  'ws_item_names':  {doc:'goods',        field:'data', shared:true},   // ↔ shop/admin "iz_goods"
+  'ws_woods':       {doc:'materials',    field:'data', shared:true},   // ↔ shop/admin "iz_materials"
+  'ws_sizes':       {doc:'sizes',        field:'data', shared:true},   // ↔ shop/admin "iz_sizes"
   'ws_extra_cats':  {doc:'ws_extra_cats',field:'data'},
   'iz_items':       {doc:'items',        field:'items'},
   'iz_admin_shops': {doc:'shops',        field:'shops'},
 };
+// Общие справочники (goods/materials/sizes) в shop/admin хранятся как [{id,name}],
+// а в workshop как простой массив строк ["Дуб","Ясень"]. Конвертируем туда-обратно.
+function _wsNormalizeShared(val){
+  if(!Array.isArray(val)) return [];
+  return val.map(function(v){ return (v && typeof v==='object') ? v.name : v; }).filter(Boolean);
+}
+function _wsDenormalizeShared(names){
+  return names.map(function(n){ return {id: n, name: n}; });
+}
 function wsSyncListen(lsKey) {
   var m = WS_SYNC_SETTINGS[lsKey]; if(!m || _wsSyncUnsubs[lsKey]) return;
   _wsSyncUnsubs[lsKey] = db.collection('iz_settings').doc(m.doc).onSnapshot(function(snap){
     if(!snap.exists) return;
     var val = snap.data()[m.field];
-    if(val !== undefined) localStorage.setItem(lsKey, JSON.stringify(val));
+    if(val !== undefined){
+      var stored = m.shared ? _wsNormalizeShared(val) : val;
+      localStorage.setItem(lsKey, JSON.stringify(stored));
+      // Обновить открытые селекты сразу, если функции рендера уже определены
+      try{
+        if(lsKey==='ws_item_names' && typeof renderItemNameSelect==='function') renderItemNameSelect();
+        if(lsKey==='ws_woods' && typeof renderWoodSelect==='function') renderWoodSelect();
+        if(lsKey==='ws_sizes' && typeof renderSizeSelect==='function') renderSizeSelect();
+      }catch(e){}
+    }
   }, function(e){ console.log('ws sync err', lsKey, e.code||e); });
 }
 function wsSyncSave(lsKey, data) {
   localStorage.setItem(lsKey, JSON.stringify(data));
   var m = WS_SYNC_SETTINGS[lsKey]; if(!m) return;
-  var obj = {}; obj[m.field] = data; obj.updatedAt = new Date().toISOString();
+  var obj = {};
+  obj[m.field] = m.shared ? _wsDenormalizeShared(data) : data;
+  obj.updatedAt = new Date().toISOString();
   db.collection('iz_settings').doc(m.doc).set(obj, {merge:true}).catch(function(e){ console.log('ws save err', lsKey, e.code||e); });
 }
 function startWsSyncListeners() {
@@ -1168,6 +1188,33 @@ function getEmployees(){
 }
 function saveEmployees(d){ wsSyncSave('ws_employees', d); }
 
+// Универсальное сохранение изменений сотрудника: если он пришёл из единой базы
+// iz_staff (admin.html) — пишем туда же, чтобы не плодить раздельные базы.
+// Если это легаси-запись из ws_employees — сохраняем по-старому.
+function saveEmployeeChange(emp){
+  const staff = getStaff();
+  const idx = staff.findIndex(s=>s.id===emp.id);
+  if(idx>=0){
+    // Обновляем запись в iz_staff, сохраняя её формат (roles[], wsRate)
+    staff[idx] = {
+      ...staff[idx],
+      name: emp.name,
+      roles: [emp.role],
+      wsRate: emp.rate,
+      pass: emp.pass!==undefined ? emp.pass : staff[idx].pass,
+      blocked: emp.blocked
+    };
+    localStorage.setItem('iz_staff', JSON.stringify(staff));
+    db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}).catch(console.error);
+    return;
+  }
+  // Легаси fallback — отдельная база ws_employees
+  const legacy = JSON.parse(localStorage.getItem('ws_employees')||'[]');
+  const lidx = legacy.findIndex(e=>e.id===emp.id);
+  if(lidx>=0) legacy[lidx]=emp; else legacy.push(emp);
+  saveEmployees(legacy);
+}
+
 function startWsStaffSync() {
   if(typeof db==='undefined') return;
   db.collection('iz_settings').doc('staff').onSnapshot(function(snap){
@@ -1277,8 +1324,19 @@ function renderEmployeeList(){
 function delEmployee(i){
   const emps=getEmployees();
   if((emps[i]&&emps[i]._builtin)){showToast('Нельзя удалить встроенного администратора');return;}
-  emps.splice(i,1);
-  saveEmployees(emps);
+  const target = emps[i];
+  // Удаляем из единой базы iz_staff если сотрудник там, иначе из легаси ws_employees
+  const staff = getStaff();
+  const staffIdx = staff.findIndex(s=>s.id===target.id);
+  if(staffIdx>=0){
+    staff.splice(staffIdx,1);
+    localStorage.setItem('iz_staff', JSON.stringify(staff));
+    db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}).catch(console.error);
+  } else {
+    const legacy = JSON.parse(localStorage.getItem('ws_employees')||'[]');
+    const lidx = legacy.findIndex(e=>e.id===target.id);
+    if(lidx>=0){ legacy.splice(lidx,1); saveEmployees(legacy); }
+  }
   renderEmployeeList();
   renderAdmin();
 }
@@ -1712,17 +1770,22 @@ function quickAddMaster(){
     showToast('Мастер с таким именем уже есть'); return;
   }
 
-  // Добавляем без пароля — мастер не сможет войти пока управляющий не установит пароль
-  const newMaster = {id:uid(), name, role:'мастер', rate:0, pass:'', needsSetup:true, addedBy:session.name, addedAt:now()};
-  emps.push(newMaster);
-  saveEmployees(emps);
+  // Пишем напрямую в единую базу сотрудников iz_staff (источник правды — admin.html)
+  const newId = uid();
+  const staff = getStaff();
+  staff.push({
+    id: newId, name, roles: ['мастер'], wsRate: 0, pass: '', needsSetup: true,
+    blocked: false, addedBy: session.name, addedAt: now()
+  });
+  localStorage.setItem('iz_staff', JSON.stringify(staff));
+  db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}).catch(console.error);
 
   // Уведомление — в Firebase и localStorage
   const notifData = {
     type: 'new_master',
     text: `Заготовщик ${session.name} добавил нового мастера: ${name}`,
     masterName: name,
-    masterId: newMaster.id,
+    masterId: newId,
     addedBy: session.name,
     createdAt: now(),
     read: false
@@ -1734,7 +1797,7 @@ function quickAddMaster(){
 
   renderMasterSelect();
   const sel = document.getElementById('blankMaster');
-  if(sel) sel.value = newMaster.id;
+  if(sel) sel.value = newId;
 
   closeMo('quickAddMasterMo');
   document.getElementById('qmName').value='';
@@ -2495,7 +2558,7 @@ function adminToggleBlock(i){
   const emps=getEmployees();
   if((emps[i]&&emps[i]._builtin)) return;
   emps[i].blocked=!emps[i].blocked;
-  saveEmployees(emps);
+  saveEmployeeChange(emps[i]);
   renderAdmin();
   showToast(emps[i].blocked?`🔒 ${emps[i].name} заблокирован`:`✅ ${emps[i].name} разблокирован`);
 }
@@ -2518,7 +2581,7 @@ function saveEditEmp(){
   e.rate=parseFloat(document.getElementById('editEmpRate').value)||0;
   const p=document.getElementById('editEmpPass').value;
   if(p) e.pass=p;
-  saveEmployees(emps);
+  saveEmployeeChange(e);
   closeMo('editEmpMo');
   renderAdmin();
   showToast('✅ Сотрудник обновлён');
