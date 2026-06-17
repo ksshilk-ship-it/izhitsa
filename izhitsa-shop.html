@@ -5970,10 +5970,14 @@ function renderShiftHistory(){
   }
   var shops=getShops();
   var sf=document.getElementById('histShopFilter');
-  if(sf) sf.innerHTML='<div id="histShop_all" style="padding:5px 12px;border-radius:20px;border:2px solid #c8f060;background:#c8f060;color:#0f0f13;font-size:11px;cursor:pointer;white-space:nowrap;font-weight:700" onclick="filterHistShop(\'\',this)">Все</div>'+shops.map(function(s){
-    var name = (s.name||s);
-    return '<div style="padding:5px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#1a1a22;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap" onclick="filterHistShop(\''+name.replace(/'/g,"\\'")+'\',this)">'+name+'</div>';
-  }).join('');
+  if(sf){
+    var allActive = !_histShopFilter;
+    sf.innerHTML='<div id="histShop_all" style="padding:5px 12px;border-radius:20px;border:'+(allActive?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(allActive?'#c8f060':'#1a1a22')+';color:'+(allActive?'#0f0f13':'#8888aa')+';font-size:11px;cursor:pointer;white-space:nowrap;font-weight:'+(allActive?'700':'400')+'" onclick="filterHistShop(\'\',this)">Все</div>'+shops.map(function(s){
+      var name = (s.name||s);
+      var active = _histShopFilter === name;
+      return '<div style="padding:5px 12px;border-radius:20px;border:'+(active?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(active?'#c8f060':'#1a1a22')+';color:'+(active?'#0f0f13':'#8888aa')+';font-size:11px;cursor:pointer;white-space:nowrap;font-weight:'+(active?'700':'400')+'" onclick="filterHistShop(\''+name.replace(/'/g,"\\'")+'\',this)">'+name+'</div>';
+    }).join('');
+  }
   var allShifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   // Only show finalized records: a regular shop shift once it's actually
   // closed, or a manually-restored/imported record once it's been
@@ -5987,7 +5991,9 @@ function renderShiftHistory(){
   if(_histPeriodFrom && !_histShowOpen) allShifts = allShifts.filter(function(s){ return s.date >= _histPeriodFrom && (!_histPeriodTo||s.date <= _histPeriodTo); });
   allShifts.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
   if(!allShifts.length){
-    c.innerHTML='<div class="empty"><div class="ei">📋</div>Нет смен за выбранный период</div>';
+    var periodLabel = {today:'Сегодня',week:'Неделя',month:'Месяц',all:'Все',custom:(_histPeriodFrom||'…')+' — '+(_histPeriodTo||'…')}[_histPeriod] || 'Сегодня';
+    var shopLabel = _histShopFilter || 'Все магазины';
+    c.innerHTML='<div class="empty"><div class="ei">📋</div>Нет смен за выбранный период<div style="font-size:11px;color:#555568;margin-top:6px">Период: '+periodLabel+' · Магазин: '+shopLabel+'</div></div>';
     return;
   }
   c.innerHTML=allShifts.slice(0,60).map(function(sh){
