@@ -9274,11 +9274,11 @@ function validateAndPreviewImport(data, filename){
     });
   });
   pendingImportData=valid;
-  var res=document.getElementById('fileParseResult'), html='';
+  var res=document.getElementById('rstjFileResult'), html='';
   if(errors.length) html+='<div class="al-warn" style="margin-bottom:8px">⚠️ Пропущено '+errors.length+' строк: '+errors.slice(0,3).join('; ')+'</div>';
   if(!valid.length){
     html+='<div class="al-err">❌ Нет корректных данных.</div>';
-    pendingImportData=null; document.getElementById('importConfirmBtn').style.display='none';
+    pendingImportData=null; document.getElementById('rstjFileConfirmBtn').style.display='none';
   } else {
     var byShop={};
     valid.forEach(function(s){(byShop[s.shopName]=byShop[s.shopName]||[]).push(s);});
@@ -9290,13 +9290,13 @@ function validateAndPreviewImport(data, filename){
         '<div style="font-weight:700">🏪 '+shop+'</div>'+
         '<div style="color:#8888aa">Смен: '+rows.length+' · Выручка: <span style="color:#c8f060">'+Math.round(rev).toLocaleString('ru-RU')+'₽</span></div></div>';
     });
-    document.getElementById('importConfirmBtn').style.display='block';
+    document.getElementById('rstjFileConfirmBtn').style.display='block';
   }
-  document.getElementById('importCancelBtn').style.display='block';
+  document.getElementById('rstjFileCancelBtn').style.display='block';
   res.style.display='block'; res.innerHTML=html;
 }
 function showImportError(msg){
-  var res=document.getElementById('fileParseResult');
+  var res=document.getElementById('rstjFileResult');
   res.style.display='block'; res.innerHTML='<div class="al-err">❌ '+msg+'</div>';
   document.getElementById('importConfirmBtn').style.display='none';
   document.getElementById('importCancelBtn').style.display='block';
@@ -9312,21 +9312,23 @@ function confirmImport(){
   merged.sort(function(a,b){return b.date.localeCompare(a.date);});
   localStorage.setItem(KEY.shifts,JSON.stringify(merged));
   deduped.forEach(function(s){try{db.collection('iz_shifts').doc(s.id).set(s);}catch(e){}});
-  var history=JSON.parse(localStorage.getItem('iz_import_history')||'[]');
-  history.unshift({id:uid(),date:new Date().toISOString().split('T')[0],
-    filename:(pendingImportData[0]&&pendingImportData[0].importFile)||'файл',count:deduped.length,dupes:dupes,
-    importedAt:new Date().toISOString(),importedBy:(session&&session.name)||'Admin'});
-  localStorage.setItem('iz_import_history',JSON.stringify(history.slice(0,20)));
-  cancelImport(); renderImportHistory();
+  // renderRstjHistory() reads from 'iz_photo_imports' (shared history feed
+  // with the photo-recognition import flow), so log file imports there too
+  // — otherwise a successful import would never show up in "Восст." history.
+  var hist=JSON.parse(localStorage.getItem('iz_photo_imports')||'[]');
+  hist.unshift({date:new Date().toISOString().split('T')[0],count:deduped.length,
+    shopName:(pendingImportData[0]&&pendingImportData[0].shopName)||'разные магазины',
+    importedAt:new Date().toISOString()});
+  localStorage.setItem('iz_photo_imports',JSON.stringify(hist.slice(0,30)));
+  cancelImport(); renderRstjHistory();
   showToast('✅ Импортировано '+deduped.length+' смен'+(dupes?' ('+dupes+' дублей пропущено)':''));
 }
 function cancelImport(){
   pendingImportData=null;
-  document.getElementById('fileParseResult').style.display='none';
-  document.getElementById('fileParseResult').innerHTML='';
-  document.getElementById('importConfirmBtn').style.display='none';
-  document.getElementById('importCancelBtn').style.display='none';
-  document.getElementById('fileInput').value='';
+  var res=document.getElementById('rstjFileResult'); if(res){ res.style.display='none'; res.innerHTML=''; }
+  var cb=document.getElementById('rstjFileConfirmBtn'); if(cb) cb.style.display='none';
+  var xb=document.getElementById('rstjFileCancelBtn'); if(xb) xb.style.display='none';
+  var fi=document.getElementById('rstjFileInput'); if(fi) fi.value='';
 }
 function renderImportHistory(){
   var c=document.getElementById('importHistoryList'); if(!c) return;
