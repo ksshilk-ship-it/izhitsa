@@ -3311,7 +3311,32 @@ function migrateLegacyReceiveEntries(){
     .filter(function(inv){ return inv.destName===session.shopName; });
   if(!manualInvoices.length) return;
 
-  // Build set of all valid invIds from manual invoices
+  // Build the set of invoice ids whose "Приёмка" entry is already saved
+  // inside an EARLIER, CLOSED shift for this shop (closeShift() snapshots
+  // the whole journal into iz_shifts). Those invoices are already accounted
+  // for in shift history — once a shift closes, its journal is cleared, so
+  // without this check every old invoice looked "missing" from the fresh
+  // (empty) journal and got recreated with today's timestamp, making old,
+  // already-closed приходы reappear in the current shift. Never resurrect them.
+  var archivedInvIds = {};
+  try{
+    JSON.parse(localStorage.getItem(KEY.shifts)||'[]')
+      .filter(function(s){ return s.shopName===session.shopName; })
+      .forEach(function(s){
+        (s.journal||[]).forEach(function(e){
+          if(e.type==='receive' && e.invId) archivedInvIds[e.invId]=true;
+        });
+      });
+  }catch(e){}
+
+  // From here on, only reason about invoices that are NOT already accounted
+  // for in a past closed shift.
+  manualInvoices = manualInvoices.filter(function(inv){
+    var iid = String(inv._id!=null?inv._id:inv.id);
+    return !archivedInvIds[iid];
+  });
+
+  // Build set of all valid invIds from (still-live) manual invoices
   var validInvIds = {};
   manualInvoices.forEach(function(inv){
     var iid = String(inv._id!=null?inv._id:inv.id);
@@ -3334,6 +3359,10 @@ function migrateLegacyReceiveEntries(){
     return existing.length===1 && existing[0].id===stableReceiveId(iid) && Math.round(existing[0].amount||0)===Math.round(total);
   });
   var hasLegacyRows = journal.some(function(e){ return e.type==='receive' && e.label==='Приход товара' && !e.invId; });
+  // Any receive entry still sitting in the live journal but pointing at an
+  // invoice already archived in a past shift is a ghost duplicate from the
+  // bug above — it must be purged from the current shift.
+  var hasArchivedGhosts = journal.some(function(e){ return e.type==='receive' && e.invId && archivedInvIds[e.invId]; });
   var hasDuplicates = (function(){
     var seen={};
     return journal.some(function(e){
@@ -3342,15 +3371,17 @@ function migrateLegacyReceiveEntries(){
       seen[e.invId]=true; return false;
     });
   })();
-  if(alreadyCorrect && !hasLegacyRows && !hasDuplicates) return;
+  if(alreadyCorrect && !hasLegacyRows && !hasDuplicates && !hasArchivedGhosts) return;
 
   // Remove ALL stale receive entries that either:
   // a) are old per-item "Приход товара" rows (no invId, label matches),
-  // b) are "Приёмка" rows with invId pointing to a known manual invoice
+  // b) point at an invoice already archived in a past shift (ghost — drop, don't recreate),
+  // c) are "Приёмка" rows with invId pointing to a known, still-live manual invoice
   //    (we'll recreate them correctly below, deduplicating multiple copies).
   journal = journal.filter(function(e){
     if(e.type!=='receive') return true;
     if(!e.invId && e.label==='Приход товара') return false; // legacy per-item row
+    if(e.invId && archivedInvIds[e.invId]) return false; // ghost from an already-archived invoice
     if(e.invId && validInvIds[e.invId]) return false; // will be recreated
     return true;
   });
@@ -5061,6 +5092,7 @@ function editShopInvoice(id){
 
   var itemsHtml = (inv.items||[]).map(function(item,i){
     return '<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center">'+
+      '<input class="fi" value="'+(item.num||'')+'" placeholder="Арт." style="flex:0 0 56px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvNum(\''+id+'\','+i+',this.value)">'+
       '<input class="fi" value="'+(item.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" oninput="_shInvName(\''+id+'\','+i+',this.value)">'+
       '<input class="fi" type="number" value="'+(item.qty!=null?item.qty:1)+'" inputmode="numeric" style="flex:0 0 50px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvQty(\''+id+'\','+i+',this.value)">'+
       '<input class="fi" type="number" value="'+(item.price||0)+'" inputmode="numeric" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvPrice(\''+id+'\','+i+',this.value)">'+
@@ -5071,13 +5103,14 @@ function editShopInvoice(id){
     '<div style="font-size:11px;font-weight:700;color:#c8f060;margin-bottom:8px">✏️ Исправление: '+(inv.num||'')+'</div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Номер</label><input class="fi" id="shinv_num_'+id+'" value="'+(inv.num||'')+'" style="margin:0;padding:7px"></div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата</label><input class="fi" type="date" id="shinv_date_'+id+'" value="'+(inv.date||'')+'" style="margin:0;padding:7px;-webkit-appearance:none;color-scheme:dark"></div>'+
-    '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (наим. · кол-во · цена)</div>'+
+    '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (арт. · наим. · кол-во · цена)</div>'+
     itemsHtml+
     '<div style="display:flex;gap:6px;margin-top:8px">'+
       '<button onclick="saveShopInvoice(\''+id+'\')" style="flex:1;padding:8px;border-radius:8px;border:none;background:#c8f060;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
       '<button onclick="renderInvoices()" style="padding:8px 12px;border-radius:8px;border:1px solid #2e2e3e;background:none;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>'+
     '</div>';
 }
+function _shInvNum(id,i,v){ if(window._shInvEdit[id]&&window._shInvEdit[id].items[i]) window._shInvEdit[id].items[i].num=v; }
 function _shInvName(id,i,v){ if(window._shInvEdit[id]&&window._shInvEdit[id].items[i]) window._shInvEdit[id].items[i].name=v; }
 function _shInvQty(id,i,v){ if(window._shInvEdit[id]&&window._shInvEdit[id].items[i]) window._shInvEdit[id].items[i].qty=parseFloat(v)||1; }
 function _shInvPrice(id,i,v){ if(window._shInvEdit[id]&&window._shInvEdit[id].items[i]) window._shInvEdit[id].items[i].price=parseFloat(v)||0; }
@@ -10315,7 +10348,7 @@ function editManualInvoice(id){
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Номер</label><input class="fi" id="maninv_num_'+id+'" value="'+(inv.num||'')+'" style="margin:0;padding:7px"></div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата</label><input class="fi" type="date" id="maninv_date_'+id+'" value="'+(inv.date||'')+'" style="margin:0;padding:7px;-webkit-appearance:none;color-scheme:dark"></div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">От кого</label><input class="fi" id="maninv_from_'+id+'" value="'+(inv.from||'')+'" style="margin:0;padding:7px"></div>'+
-    '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (наим. · кол-во · цена)</div>'+
+    '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (арт. · наим. · кол-во · цена)</div>'+
     '<div id="maninv_items_'+id+'"></div>'+
     '<button type="button" onclick="addManInvEditItem(\''+id+'\')" class="btn sec" style="font-size:12px;margin:6px 0 0">＋ Добавить позицию</button>'+
     '<div id="maninv_total_'+id+'" style="margin-top:8px"></div>'+
@@ -10330,6 +10363,7 @@ function renderManInvEditItems(id){
   var c = document.getElementById('maninv_items_'+id); if(!c) return;
   c.innerHTML = (data.items||[]).map(function(item,i){
     return '<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center">'+
+      '<input class="fi" value="'+(item.article||'')+'" placeholder="Арт." style="flex:0 0 56px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditArt(\''+id+'\','+i+',this.value)">'+
       '<input class="fi" value="'+(item.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" oninput="_manInvEditName(\''+id+'\','+i+',this.value)">'+
       '<input class="fi" type="number" value="'+(item.qty!=null?item.qty:1)+'" inputmode="numeric" style="flex:0 0 50px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditQty(\''+id+'\','+i+',this.value)">'+
       '<input class="fi" type="number" value="'+(item.price||0)+'" inputmode="numeric" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditPrice(\''+id+'\','+i+',this.value)">'+
@@ -10362,6 +10396,7 @@ function updateManInvEditTotal(id){
     : '';
 }
 function _manInvEditName(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]) window._manInvEdit[id].items[i].name=v; }
+function _manInvEditArt(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]) window._manInvEdit[id].items[i].article=v; }
 function _manInvEditQty(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]){ window._manInvEdit[id].items[i].qty=parseFloat(v)||1; updateManInvEditTotal(id); } }
 function _manInvEditPrice(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]){ window._manInvEdit[id].items[i].price=parseFloat(v)||0; updateManInvEditTotal(id); } }
 
