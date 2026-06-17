@@ -2403,6 +2403,9 @@ function calcZpForCurrentShift(){
   var netWood = summary.wood.listPrice - summary.wood.discount;
   var netDr = summary.dr.listPrice - summary.dr.discount;
   var totalNet = netWood + netDr;
+  // Повышенный % считается от суммы продаж ДО вычета скидки (валовая
+  // выручка), тогда как сам % применяется к чистой сумме (после скидки).
+  var totalGross = summary.wood.listPrice + summary.dr.listPrice;
 
   var zpFact = expenses.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
   var travelFact = expenses.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+e.amount;},0);
@@ -2423,7 +2426,7 @@ function calcZpForCurrentShift(){
     } else { base=1500; thresh=5000; pctNorm=0.08; }
   }
 
-  var pct = (highThresh!==null && totalNet >= highThresh) ? pctHigh : pctNorm;
+  var pct = (highThresh!==null && totalGross >= highThresh) ? pctHigh : pctNorm;
   var zpCalcWood = 0, zpCalcDr = 0;
   if(totalNet < thresh){
     zpCalcWood = base; zpCalcDr = 0;
@@ -2439,7 +2442,7 @@ function calcZpForCurrentShift(){
   return {
     zpCalcWood: zpCalcWood, zpCalcDr: zpCalcDr, zpCalcTotal: zpCalcTotal,
     travelCalc: travelCalc, zpFact: zpFact, travelFact: travelFact,
-    zpCalcWithTravel: zpCalcWithTravel, diff: diff, totalNet: totalNet
+    zpCalcWithTravel: zpCalcWithTravel, diff: diff, totalNet: totalNet, totalGross: totalGross
   };
 }
 function renderZpCard(){
@@ -2500,10 +2503,26 @@ function calcShiftZpStandalone(shopName, report){
     });
     return listPrice-discount;
   }
+  function grossFor(isDr){
+    var listPrice=0;
+    sales.forEach(function(e){
+      var items=e.items||[];
+      if(!items.length){
+        if(isDr) return;
+        listPrice += (e.amount||0)+(e.discount||0);
+        return;
+      }
+      var groupItems = items.filter(function(it){ return isDr ? it.goodsType==='dr' : it.goodsType!=='dr'; });
+      if(!groupItems.length) return;
+      listPrice += groupItems.reduce(function(s,it){ return s+itemAmt(it); },0);
+    });
+    return listPrice;
+  }
   var hasJournalSales = sales.length>0;
-  var netWood, netDr;
+  var netWood, netDr, grossWood, grossDr;
   if(hasJournalSales){
     netWood = netFor(false); netDr = netFor(true);
+    grossWood = grossFor(false); grossDr = grossFor(true);
   } else {
     // No per-sale journal data available — fall back to the report's own
     // top-level totals (revenue/discount), attributing it all to Дерево
@@ -2511,8 +2530,11 @@ function calcShiftZpStandalone(shopName, report){
     var revFallback = (report && (report.totalRevenue!=null ? report.totalRevenue : (report.cashRevenue||0)+(report.cardRevenue||0)))||0;
     var discFallback = (report && report.totalDiscount)||0;
     netWood = revFallback - discFallback; netDr = 0;
+    grossWood = revFallback; grossDr = 0;
   }
   var totalNet = netWood+netDr;
+  // Повышенный % считается от суммы продаж ДО вычета скидки.
+  var totalGross = grossWood+grossDr;
 
   var zpFact, travelFact;
   if(expenses.length){
@@ -2541,7 +2563,7 @@ function calcShiftZpStandalone(shopName, report){
     } else { base=1500; thresh=5000; pctNorm=0.08; }
   }
 
-  var pct = (highThresh!==null && totalNet >= highThresh) ? pctHigh : pctNorm;
+  var pct = (highThresh!==null && totalGross >= highThresh) ? pctHigh : pctNorm;
   var zpCalcWood = 0, zpCalcDr = 0;
   if(totalNet < thresh){
     zpCalcWood = base; zpCalcDr = 0;
@@ -5443,6 +5465,8 @@ function renderClose(){
           var netWood = woodRev - discWood;
           var netDr   = drRev - discDr;
           var totalNet = netWood + netDr;
+          // Повышенный % считается от суммы продаж ДО вычета скидки.
+          var totalGross = woodRev + drRev;
           // ЗП расчётная by shop
           var zpCalcWood = 0, zpCalcDr = 0, zpCalcTotal = 0;
           // Load settings from admin
@@ -5463,7 +5487,7 @@ function renderClose(){
             } else { base=1500; thresh=5000; pctNorm=0.08; }
           }
 
-          var pct = (highThresh!==null && totalNet >= highThresh) ? pctHigh : pctNorm;
+          var pct = (highThresh!==null && totalGross >= highThresh) ? pctHigh : pctNorm;
           if(totalNet < thresh){
             zpCalcWood = base; zpCalcDr = 0;
           } else {
