@@ -1784,6 +1784,7 @@ let session = null, pendingSession = null;
 let journal = [];
 let saleItems = [], payMethod = 'cash', staffPayMethod = 'cash', discType = 'pct', discCategory = 'auto';
 var _editSaleEntryId = null;
+var _svArchiveEditId = null;
 
 function deleteJournalEntryShop(id){
   var entry = journal.find(function(e){ return e.id===id; });
@@ -1839,6 +1840,52 @@ function editJournalSale(id){
     delBtn.style.marginTop = '8px';
     delBtn.textContent = '🗑 Удалить эту продажу';
     delBtn.onclick = function(){ closeMo('saleMo'); resetSaleForm(); _editSaleEntryId=null; deleteJournalEntryShop(id); };
+    var md = modal.querySelector('.md');
+    if(md) md.appendChild(delBtn);
+  }
+}
+
+// Edit a sale that belongs to an already-CLOSED shift, opened from the
+// admin's Архив detail view (_currentShiftView). Mirrors editJournalSale()
+// above but reads from the closed shift's own stored journal instead of
+// the live seller session, and routes saving/deleting accordingly.
+function svEditSale(idx){
+  if(!_currentShiftView) return;
+  var sales = (_currentShiftView.journal||[]).filter(function(e){ return e.type==='sale'; });
+  var entry = sales[idx]; if(!entry){ showToast('Запись не найдена'); return; }
+  openMo('saleMo');
+  resetSaleForm();
+  _svArchiveEditId = entry.id;
+  var mt = document.querySelector('#saleMo .mt'); if(mt) mt.textContent = '✏️ Редактирование продажи (архив)';
+
+  saleItems = (entry.items||[]).map(function(it){ return Object.assign({}, it, {id:uid()}); });
+  renderSaleItems(); calcSaleTotal();
+
+  if(entry.discount){
+    setDiscType('sum');
+    var di=document.getElementById('discInput'); if(di) di.value=entry.discount;
+    var sd=document.getElementById('saleDiscount'); if(sd) sd.value=entry.discount;
+  }
+  setDiscCategory(entry.discCategory||'auto');
+
+  var pmEl = document.querySelector('#saleMo .pc[onclick*="\''+(entry.payMethod||'cash')+'\'"]');
+  setPayM(entry.payMethod||'cash', pmEl||document.querySelector('#saleMo .pc'));
+  if(entry.payMethod==='mixed'){
+    var mc=document.getElementById('mixCash'); if(mc) mc.value=entry.cashPart||'';
+    var mcr=document.getElementById('mixCard'); if(mcr) mcr.value=entry.cardPart||'';
+  }
+  if(entry.comment){ var ce=document.getElementById('saleComment'); if(ce) ce.value=entry.comment; }
+  calcSaleTotal();
+
+  var modal = document.getElementById('saleMo');
+  if(modal){
+    var existingDel = modal.querySelector('.sale-edit-del-btn');
+    if(existingDel) existingDel.remove();
+    var delBtn = document.createElement('button');
+    delBtn.className = 'btn red sale-edit-del-btn';
+    delBtn.style.marginTop = '8px';
+    delBtn.textContent = '🗑 Удалить эту продажу';
+    delBtn.onclick = function(){ closeMo('saleMo'); resetSaleForm(); _svArchiveEditId=null; svDeleteJEntry('sale', idx); };
     var md = modal.querySelector('.md');
     if(md) md.appendChild(delBtn);
   }
@@ -4195,6 +4242,7 @@ function resetSaleForm(){
   if(rsChip) rsChip.style.display = (_shopType === 'shop') ? 'none' : '';
   // Clear edit-mode state and chrome left over from editJournalSale
   _editSaleEntryId = null;
+  _svArchiveEditId = null;
   _siNoArticleMode = false;
   var mt = document.querySelector('#saleMo .mt'); if(mt) mt.textContent = 'Оформить продажу';
   var delBtn = document.querySelector('#saleMo .sale-edit-del-btn'); if(delBtn) delBtn.remove();
@@ -4388,6 +4436,25 @@ function saveSale(){
     hasDiff,comment:gv('saleComment'),amount:paid,amtCls:'inc',amtSign:'+',
     cashEffect:cashPartWood,cardEffect:cardPartWood,staffEffect:0,goodsEffect:-totalWood,
     cashDrEffect:cashPartDr,cardDrEffect:cardPartDr,goodsDrEffect:-totalDr};
+
+  // Editing a sale that belongs to an already-CLOSED shift, opened from the
+  // admin's Архив detail view — write back into that shift's own stored
+  // journal (via svPersist) instead of the live seller session/journal.
+  if(_svArchiveEditId && _currentShiftView){
+    var jnlArch = _currentShiftView.journal||[];
+    var idxArch = jnlArch.findIndex(function(e){ return e.id===_svArchiveEditId; });
+    if(idxArch<0){ showToast('Запись не найдена'); _svArchiveEditId=null; _savingSale=false; return; }
+    var beforeArch = Object.assign({}, jnlArch[idxArch]);
+    var afterArch = Object.assign({}, jnlArch[idxArch], newEntryData, {type:'sale', id:jnlArch[idxArch].id, ts:jnlArch[idxArch].ts, editedAt:new Date().toISOString()});
+    jnlArch[idxArch] = afterArch;
+    _currentShiftView.journal = jnlArch;
+    try{ logEntryEdit(beforeArch, afterArch); }catch(e){}
+    svPersist();
+    _svArchiveEditId = null;
+    resetSaleForm(); closeMo('saleMo'); _renderShiftView();
+    showToast('✅ Продажа обновлена');
+    return;
+  }
 
   if(_editSaleEntryId){
     var idx = journal.findIndex(function(e){ return e.id===_editSaleEntryId; });
@@ -6076,6 +6143,7 @@ function _renderShiftView(){
             '</div>'+
             '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
               '<span style="font-size:13px;font-weight:700;color:#60f090">'+f(s.amount||0)+'</span>'+
+              '<button onclick="svEditSale('+i+')" style="background:none;border:1px solid #c8f060;border-radius:6px;padding:3px 7px;color:#c8f060;font-size:11px;cursor:pointer">✏️</button>'+
               '<button onclick="svDeleteJEntry(\'sale\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
             '</div>'+
           '</div>'+
@@ -6096,6 +6164,43 @@ function _renderShiftView(){
     salesBody += '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:700;border-top:1px solid #2e2e3e;margin-top:4px"><span>Итого</span><span style="color:#c8f060">'+f(totalRev+drTot)+'</span></div>';
     salesBody += '<div style="font-size:11px;color:#555568;margin-top:4px">Детализация продаж недоступна — смена без журнала</div>';
   }
+
+  // ── ПРОДАННЫЕ ТОВАРЫ body (aggregated by item name, same as live shift view) ──
+  var soldItemsWood = {}, soldItemsDr = {};
+  sales.forEach(function(e){
+    (e.items||[]).forEach(function(it){
+      var target = it.goodsType==='dr' ? soldItemsDr : soldItemsWood;
+      var name = (it.name && it.name.trim()) || 'Без названия';
+      var qty = it.qty||1;
+      var amt = it.amt!=null ? it.amt : (it.price||0)*qty;
+      if(!target[name]) target[name]={qty:0, amt:0};
+      target[name].qty += qty;
+      target[name].amt += amt;
+    });
+  });
+  function soldItemsToList(map){
+    return Object.keys(map).map(function(name){ return {name:name, qty:map[name].qty, amt:map[name].amt}; })
+      .sort(function(a,b){ return b.qty-a.qty; });
+  }
+  var soldItemsWoodList = soldItemsToList(soldItemsWood);
+  var soldItemsDrList = soldItemsToList(soldItemsDr);
+  function itemRowSv(it){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:12px">'+
+      '<span style="flex:1">'+it.name+'</span>'+
+      '<span style="color:#8888aa;margin:0 8px">× '+it.qty+'</span>'+
+      '<span style="color:#c8f060;font-weight:700">'+f(it.amt)+'</span>'+
+    '</div>';
+  }
+  var soldItemsBody = '';
+  if(soldItemsWoodList.length){
+    soldItemsBody += '<div style="font-size:10px;color:#c8f060;margin:6px 0 4px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>'+
+      soldItemsWoodList.map(itemRowSv).join('');
+  }
+  if(soldItemsDrList.length){
+    soldItemsBody += '<div style="font-size:10px;color:#a060f0;margin:'+(soldItemsWoodList.length?'10':'6')+'px 0 4px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>'+
+      soldItemsDrList.map(itemRowSv).join('');
+  }
+  if(!soldItemsBody) soldItemsBody = '<div style="font-size:11px;color:#555568;padding:8px 0">Нет данных по товарам — смена без журнала</div>';
 
   // ── КАССА body ──
   function inp(id, val, label){
@@ -6498,6 +6603,7 @@ function _renderShiftView(){
   document.getElementById('editShiftBody').innerHTML =
     headerHtml +
     acc('sales', '💰', 'Продажи', '#c8f060', sales.length||null, salesBody) +
+    acc('solditems', '📦', 'Проданные товары', '#f0c060', (soldItemsWoodList.length+soldItemsDrList.length)||null, soldItemsBody) +
     acc('cassa', '🏦', 'Касса', '#f0c060', null, cassaBody) +
     acc('tovar', '📦', 'Товар', '#f0a060', null, tovarBody) +
     acc('rcv', '📥', 'Приходы', '#60f090', rcvAllLen||null, rcvBody) +
