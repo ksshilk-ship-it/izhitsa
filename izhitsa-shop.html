@@ -294,7 +294,11 @@ function checkForAppUpdate() {
 
       <!-- Accepted manual invoices -->
       <div class="card">
-        <div class="ctitle">Принятые накладные</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div class="ctitle" style="margin:0">Принятые накладные</div>
+          <button type="button" onclick="checkDuplicateReceives()" style="font-size:11px;padding:5px 9px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;cursor:pointer;white-space:nowrap">🔍 Проверить задвоения</button>
+        </div>
+        <div id="dupCheckResult" style="margin-bottom:6px"></div>
         <div id="manInvAccepted"><div class="empty"><div class="ei">📋</div>Нет</div></div>
       </div>
     </div>
@@ -3310,7 +3314,15 @@ function startPreviewMode(){
 // Firestore — see migrateLegacyReceiveEntries below for why both are used).
 function _archivedReceiveInvIds(shiftsArr){
   var ids = {};
-  (shiftsArr||[]).filter(function(s){ return s.shopName===session.shopName; })
+  (shiftsArr||[])
+    .filter(function(s){ return s.shopName===session.shopName; })
+    // iz_shifts holds BOTH closed shift archives AND a live mirror of the
+    // currently open shift (same collection, status:'open'/'closed'). Only
+    // CLOSED shifts represent "already accounted for" history — including
+    // the live doc here would make every invId in TODAY's own journal look
+    // archived (since it mirrors today's journal back at itself) and wipe
+    // out legitimate, current-day приходы along with the real ghosts.
+    .filter(function(s){ return s.status==='closed' && s.id!==session.shiftId; })
     .forEach(function(s){
       (s.journal||[]).forEach(function(e){
         if(e.type==='receive' && e.invId) ids[e.invId]=true;
@@ -3420,7 +3432,62 @@ function migrateLegacyReceiveEntries(){
   }catch(e){}
 }
 
-// ── Fix legacy expense entries: earlier versions always deducted ДР expenses
+// ── Manual diagnostic tool ("🔍 Проверить задвоения" button in the Приход
+// tab): does the SAME check as migrateLegacyReceiveEntries above, but shows
+// the user exactly what it found before touching anything, and only acts on
+// confirmation. Use this when the automatic background fix didn't seem to
+// take effect (e.g. due to a network hiccup) — it's the same logic but
+// visible and user-confirmed instead of silent.
+window._dupReceiveIds = [];
+function checkDuplicateReceives(){
+  var resEl = document.getElementById('dupCheckResult');
+  if(resEl) resEl.innerHTML = '<div style="font-size:12px;color:#8888aa;padding:6px 0">⏳ Проверяю…</div>';
+  db.collection('iz_shifts').where('shopName','==',session.shopName).get().then(function(snap){
+    var allShifts = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
+    var closedShifts = allShifts.filter(function(s){ return s.status==='closed' && s.id!==session.shiftId; });
+    var archived = {}; // invId -> info about the closed shift it's already counted in
+    closedShifts.forEach(function(s){
+      (s.journal||[]).forEach(function(e){
+        if(e.type==='receive' && e.invId) archived[e.invId] = {date:s.date, amount:e.amount, label:e.label};
+      });
+    });
+    var dupes = journal.filter(function(e){ return e.type==='receive' && e.invId && archived[e.invId]; });
+    if(!dupes.length){
+      if(resEl) resEl.innerHTML = '<div style="font-size:12px;color:#60f090;padding:6px 0">✅ Задвоений не найдено — текущая смена чистая</div>';
+      window._dupReceiveIds = [];
+      return;
+    }
+    var total = dupes.reduce(function(s,e){ return s+(e.amount||0); },0);
+    var listHtml = dupes.map(function(e){
+      var info = archived[e.invId] || {};
+      return '<div style="font-size:12px;padding:5px 0;border-bottom:1px solid #2e2e3e">'+
+        '<b>'+(e.label||'Приёмка')+'</b> — '+Math.round(e.amount||0).toLocaleString('ru-RU')+'₽'+
+        '<br><span style="color:#8888aa">уже учтена в закрытой смене от '+(info.date||'?')+'</span>'+
+      '</div>';
+    }).join('');
+    if(resEl) resEl.innerHTML =
+      '<div style="font-size:12px;color:#f0a060;margin-bottom:4px;font-weight:700">⚠️ Найдено '+dupes.length+' задвоенных записей на '+Math.round(total).toLocaleString('ru-RU')+'₽:</div>'+
+      listHtml+
+      '<button onclick="removeDuplicateReceives()" style="margin-top:8px;width:100%;padding:9px;border-radius:8px;border:none;background:#f06060;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Убрать из текущей смены</button>'+
+      '<div style="font-size:10px;color:#8888aa;margin-top:4px">Сами накладные и их учёт в смене от '+(closedShifts[0]?closedShifts[0].date:'')+' не удаляются — убирается только повторная запись в сегодняшней смене.</div>';
+    window._dupReceiveIds = dupes.map(function(e){ return e.id; });
+  }).catch(function(err){
+    if(resEl) resEl.innerHTML = '<div style="font-size:12px;color:#f06060;padding:6px 0">⛔ Не удалось проверить (нет сети?). Попробуйте ещё раз.</div>';
+  });
+}
+function removeDuplicateReceives(){
+  var ids = window._dupReceiveIds||[];
+  if(!ids.length) return;
+  if(!confirm('Убрать '+ids.length+' задвоенных приходов из текущей смены?')) return;
+  journal = journal.filter(function(e){ return ids.indexOf(e.id)<0; });
+  saveJ();
+  try{ syncLiveShift(); }catch(e){}
+  renderAll();
+  window._dupReceiveIds = [];
+  var resEl = document.getElementById('dupCheckResult');
+  if(resEl) resEl.innerHTML = '<div style="font-size:12px;color:#60f090;padding:6px 0">✅ Убрано из текущей смены</div>';
+  showToast('✅ Задвоения убраны');
+}
 // (e.g. "Инкассация (ДР)") from the Дерево cash pool (cashEffect) instead of
 // the ДР cash pool (cashDrEffect). Move the deduction to the correct pool. ──
 function migrateLegacyDrExpenses(){
