@@ -6121,6 +6121,57 @@ function _renderShiftView(){
   var zp=sh.zp||0, inkass=sh.inkass||0, otherExp=sh.otherExp||0;
   var drInkass=sh.drInkass||0, drSupplier=sh.drSupplierAmt||0;
 
+  // ── СВОДНАЯ ТАБЛИЦА со всеми несовпадениями (показывается выше аккордеонов) ──
+  // Expected cash = morning balance + sales cash (already split per goods
+  // type via cashEffect/cashDrEffect) + all journal cash effects from other
+  // entry types (expenses, staff purchases, receives, writeoffs) — same
+  // pattern as calcTotals()/t.cash, just recomputed here from the shift's
+  // own stored journal instead of the live session.
+  var otherCashEffect = jnl.reduce(function(s,e){ return (e.type!=='sale') ? s+(e.cashEffect||0) : s; }, 0);
+  var otherCashDrEffect = jnl.reduce(function(s,e){ return (e.type!=='sale') ? s+(e.cashDrEffect||0) : s; }, 0);
+  var expCash = (sh.cashMorning||0) + cashRev + otherCashEffect;
+  var actCash = sh.cashEvening!=null ? sh.cashEvening : null;
+  var cashDiffVal = actCash!=null ? Math.round(actCash-expCash) : null;
+  var expCashDr = (sh.cashDrMorning||0) + drCashRev + otherCashDrEffect;
+  var actCashDr = sh.drCashEvening!=null ? sh.drCashEvening : null;
+  var cashDrDiffVal = actCashDr!=null ? Math.round(actCashDr-expCashDr) : null;
+  var zpStandalone = calcShiftZpStandalone(sh.shopName, sh);
+  var zpFactTotal = (zpStandalone.zpFact||0)+(zpStandalone.travelFact||0);
+  var zpDiff = Math.round(zpStandalone.zpCalcWithTravel - zpFactTotal);
+
+  function diffChip(val, okLabel){
+    if(val==null) return '<span style="font-size:10px;color:#555568">не введено</span>';
+    if(Math.abs(val)<1) return '<span style="font-size:10px;color:#60f090;font-weight:700">✅ '+(okLabel||'сходится')+'</span>';
+    return '<span style="font-size:10px;color:#f06060;font-weight:700">⚠️ '+(val>0?'+':'')+f(val)+'</span>';
+  }
+  var anyDiff = (cashDiffVal!=null && Math.abs(cashDiffVal)>=1) || (cashDrDiffVal!=null && Math.abs(cashDrDiffVal)>=1) || Math.abs(zpDiff)>=1 || !!sh.hasCashDiff || actCash==null || (sh.forceClosedBy && actCashDr==null);
+
+  var summaryRows =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;font-size:10px;color:#8888aa;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px"><div>🌳 Дерево</div><div>🛍 ДР Товар</div></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;margin-bottom:8px">'+
+      '<div style="font-size:13px;font-weight:700;color:#c8f060">'+f(totalRev)+'</div><div style="font-size:13px;font-weight:700;color:#a060f0">'+f(drTot)+'</div>'+
+    '</div>'+
+    '<div style="border-top:1px solid #2e2e3e;margin:6px 0 8px"></div>'+
+    '<div style="font-size:10px;color:#8888aa;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">💵 КАССА — расчётная / факт</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;margin-bottom:4px">'+
+      '<div style="font-size:12px">'+f(expCash)+' / <b>'+(actCash!=null?f(actCash):'—')+'</b></div>'+
+      '<div style="font-size:12px">'+f(expCashDr)+' / <b>'+(actCashDr!=null?f(actCashDr):'—')+'</b></div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;margin-bottom:8px">'+
+      '<div>'+diffChip(cashDiffVal)+'</div><div>'+diffChip(cashDrDiffVal)+'</div>'+
+    '</div>'+
+    '<div style="border-top:1px solid #2e2e3e;margin:6px 0 8px"></div>'+
+    '<div style="font-size:10px;color:#8888aa;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">💰 ЗП — расчётная / факт</div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center">'+
+      '<div style="font-size:12px">'+f(zpStandalone.zpCalcWithTravel)+' / <b>'+f(zpFactTotal)+'</b></div>'+
+      diffChip(zpDiff)+
+    '</div>';
+
+  var summaryHtml = '<div style="background:'+(anyDiff?'#2e1a1a':'#1a2e1a')+';border:2px solid '+(anyDiff?'#f06060':'#60f090')+';border-radius:14px;padding:14px;margin-bottom:12px">'+
+    '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;color:'+(anyDiff?'#f06060':'#60f090')+'">'+(anyDiff?'⚠️ ЕСТЬ НЕСОВПАДЕНИЯ':'✅ ВСЁ СХОДИТСЯ')+'</div>'+
+    summaryRows+
+  '</div>';
+
   function acc(id, icon, title, color, count, body){
     var badge = count ? '<span style="background:'+color+';color:#0f0f13;font-size:10px;font-weight:700;border-radius:8px;padding:1px 6px;margin-left:6px">'+count+'</span>' : '';
     return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;margin-bottom:8px;overflow:hidden">'+
@@ -6628,6 +6679,7 @@ function _renderShiftView(){
   // ── СБОРКА ──
   document.getElementById('editShiftBody').innerHTML =
     headerHtml +
+    summaryHtml +
     acc('sales', '💰', 'Продажи', '#c8f060', sales.length||null, salesBody) +
     acc('solditems', '📦', 'Проданные товары', '#f0c060', (soldItemsWoodList.length+soldItemsDrList.length)||null, soldItemsBody) +
     acc('cassa', '🏦', 'Касса', '#f0c060', null, cassaBody) +
@@ -7633,7 +7685,10 @@ function renderShopsManage(){
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px">'+
       '<div><div style="font-size:13px;font-weight:700">🏪 '+(s.name||s)+'</div>'+
       '<div style="font-size:11px;color:#8888aa">'+typeLabel+'</div></div>'+
-      '<button onclick="deleteShopAdmin('+i+')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:11px;color:#f06060;cursor:pointer">✕</button>'+
+      '<div style="display:flex;gap:6px">'+
+        '<button onclick="renameShopAdmin('+i+')" style="background:none;border:1px solid #c8f060;border-radius:8px;padding:4px 8px;font-size:11px;color:#c8f060;cursor:pointer">✏️</button>'+
+        '<button onclick="deleteShopAdmin('+i+')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:4px 8px;font-size:11px;color:#f06060;cursor:pointer">✕</button>'+
+      '</div>'+
     '</div>';
   }).join('');
 }
@@ -7655,6 +7710,77 @@ function deleteShopAdmin(idx){
   saveShops(shops);
   renderShopsManage(); renderShopSettings();
   showToast('🗑 Магазин удалён');
+}
+
+// Renaming a shop only in the shops list wouldn't update the name already
+// frozen into every closed shift, trash item, alert, ЗП setting, and staff
+// shop-assignment record — those store shopName as a plain string snapshot,
+// not a reference, so they'd silently stop matching the renamed shop (e.g.
+// archive filters, ЗП calc, "Покупки сотрудников" lookups). This cascades
+// the rename everywhere a matching shopName string is found.
+function renameShopAdmin(idx){
+  var shops=getShops();
+  var shop=shops[idx]; if(!shop) return;
+  var oldName=shop.name||shop;
+  var newName=prompt('Новое название магазина «'+oldName+'»:', oldName);
+  if(newName==null) return;
+  newName=newName.trim();
+  if(!newName || newName===oldName) return;
+  if(shops.some(function(s,i){ return i!==idx && (s.name||s)===newName; })){ showToast('Магазин с таким названием уже есть'); return; }
+  if(!confirm('Переименовать «'+oldName+'» → «'+newName+'»?\n\nЭто обновит название во всех уже закрытых сменах, корзине, тревогах, настройках ЗП и привязках сотрудников.')) return;
+
+  shops[idx] = Object.assign({}, shop, {name:newName});
+  saveShops(shops);
+
+  var renamed = 0;
+
+  // Closed/archived shifts
+  try{
+    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    shifts.forEach(function(s){ if(s.shopName===oldName){ s.shopName=newName; renamed++; } });
+    localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+    shifts.forEach(function(s){ if(s.shopName===newName){ try{ db.collection('iz_shifts').doc(s.id).set(s); }catch(e){} } });
+  }catch(e){}
+
+  // Корзина (shared trash, local + cloud)
+  try{
+    var trash = getTrash();
+    trash.forEach(function(t){ if(t.shopName===oldName) t.shopName=newName; });
+    saveTrash(trash);
+    syncTrashToCloud(trash);
+  }catch(e){}
+
+  // Admin alerts (cash discrepancy notices etc.)
+  try{
+    var alerts = JSON.parse(localStorage.getItem('iz_admin_alerts')||'[]');
+    var touchedAlerts = [];
+    alerts.forEach(function(a){ if(a.shopName===oldName){ a.shopName=newName; touchedAlerts.push(a); } });
+    localStorage.setItem('iz_admin_alerts', JSON.stringify(alerts));
+    touchedAlerts.forEach(function(a){ if(a.id){ try{ db.collection('iz_admin_alerts').doc(a.id).set(a); }catch(e){} } });
+  }catch(e){}
+
+  // ЗП settings — keyed by shop name
+  try{
+    var zpSettings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+    if(zpSettings[oldName]!==undefined){ zpSettings[newName]=zpSettings[oldName]; delete zpSettings[oldName]; }
+    localStorage.setItem('iz_shop_zp_settings', JSON.stringify(zpSettings));
+  }catch(e){}
+
+  // Staff shop assignments (checkboxes) — array of shop name strings
+  try{
+    var staff = getStaff();
+    var staffChanged = false;
+    staff.forEach(function(st){
+      if(Array.isArray(st.shops)){
+        var i2 = st.shops.indexOf(oldName);
+        if(i2>=0){ st.shops[i2]=newName; staffChanged=true; }
+      }
+    });
+    if(staffChanged) saveStaffShop(staff);
+  }catch(e){}
+
+  renderShopsManage(); renderShopSettings();
+  showToast('✅ Переименовано: «'+oldName+'» → «'+newName+'» (затронуто записей: '+renamed+')');
 }
 
 // ── Accounts management ──
