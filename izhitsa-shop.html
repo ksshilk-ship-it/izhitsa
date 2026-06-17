@@ -3187,26 +3187,40 @@ function confirmMorning(){
   });
   var prev=getPrevShift(pendingSession.shopName);
   var hasCashDiff=false;
-  if(prev&&prev.cashEvening!=null&&Math.abs(cashM-prev.cashEvening)>1){
-    hasCashDiff=true;
-    var diff=cashM-prev.cashEvening;
+  var diffParts=[];
+  if(prev){
+    if(prev.cashEvening!=null && Math.abs(cashM-prev.cashEvening)>1){
+      hasCashDiff=true;
+      diffParts.push({label:'🌳 Дерево', morning:cashM, prevEvening:prev.cashEvening, diff:cashM-prev.cashEvening});
+    }
+    if(prev.drCashEvening!=null && Math.abs(cashDr-prev.drCashEvening)>1){
+      hasCashDiff=true;
+      diffParts.push({label:'🛍 ДР Товар', morning:cashDr, prevEvening:prev.drCashEvening, diff:cashDr-prev.drCashEvening});
+    }
+    if(prev.cashStaffEvening!=null && Math.abs(cashStaff-prev.cashStaffEvening)>1){
+      hasCashDiff=true;
+      diffParts.push({label:'🛒 Покупки сотрудников', morning:cashStaff, prevEvening:prev.cashStaffEvening, diff:cashStaff-prev.cashStaffEvening});
+    }
+  }
+  if(hasCashDiff){
+    var detailLines = diffParts.map(function(p){
+      return p.label+': ввёл '+fmt(p.morning)+', вечер был '+fmt(p.prevEvening)+' ('+(p.diff>0?'+':'')+fmt(p.diff)+')';
+    });
     saveAdminAlert({
       type:'morning_diff',
       shopName:session.shopName,
       sellerName:session.sellerName,
       date:new Date().toISOString().split('T')[0],
-      cashMorning:cashM,
-      prevCashEve:prev.cashEvening,
-      morningDiff:diff,
-      forRoles:['admin','owner'],
-      message:'⚠️ Расхождение нала: ввёл '+fmt(cashM)+', вечер был '+fmt(prev.cashEvening)+' ('+( diff>0?'+':'')+fmt(diff)+')'
+      diffParts:diffParts,
+      message:'⚠️ Расхождение нала на утро — '+detailLines.join(' · '),
+      forRoles:['admin','owner']
     });
   }
   journal=[{id:uid(),type:'open',ts:new Date().toISOString(),icon: hasCashDiff?'⚠️':'🔓',
     label:'Смена открыта'+(hasCashDiff?' ⚠️ Расхождение нала':''),
     sub:'🌳 '+fmt(cashM)+(cashDr?' 🛍 '+fmt(cashDr):'')+(cashStaff?' 🛒 '+fmt(cashStaff):'')+
         ' | 📦 '+fmt(goodsM)+' 🛍 '+fmt(goodsDrM),
-    cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0,hasCashDiff:hasCashDiff}];
+    cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0,hasCashDiff:hasCashDiff,cashDiffParts:diffParts}];
   pendingSession=null; saveS(); saveJ();
   logShiftOpen(session.shopName, cashM);
   syncLiveShift();
@@ -3768,6 +3782,8 @@ function renderShiftDetail(shift){
   var rcvQty = receives.length;
 
   var hasDiff = shift.hasCashDiff || journal.some(function(e){return e.hasCashDiff;});
+  var diffEntry = journal.find(function(e){ return e.hasCashDiff && e.cashDiffParts && e.cashDiffParts.length; });
+  var diffParts = diffEntry ? diffEntry.cashDiffParts : [];
   var lastUpd = shift.updatedAt?new Date(shift.updatedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'—';
 
   var _blockIdx = 0;
@@ -3790,7 +3806,14 @@ function renderShiftDetail(shift){
   var html = '';
 
   html += '<div style="background:#1a1a22;border:2px solid '+(hasDiff?'#f06060':'#c8f060')+';border-radius:14px;padding:14px;margin-bottom:10px">'+
-    (hasDiff?'<div style="background:#2a0f0f;border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:#f06060;font-weight:700">⚠️ Расхождение наличных на утро!</div>':'')+
+    (hasDiff?(
+      '<div style="background:#2a0f0f;border-radius:8px;padding:8px 10px;margin-bottom:8px">'+
+        '<div style="font-size:11px;color:#f06060;font-weight:700;margin-bottom:'+(diffParts.length?'6px':'0')+'">⚠️ Расхождение наличных на утро!</div>'+
+        diffParts.map(function(p){
+          return '<div style="font-size:10.5px;color:#f0a060;margin-top:2px">'+p.label+': ввёл <b>'+fmt(p.morning)+'</b>, вечер был <b>'+fmt(p.prevEvening)+'</b> ('+(p.diff>0?'+':'')+fmt(p.diff)+')</div>';
+        }).join('')+
+      '</div>'
+    ):'')+
     '<div style="display:flex;justify-content:space-between;align-items:center">'+
       '<div><div style="font-size:14px;font-weight:700">'+(shift.shopName||'')+'</div>'+
       '<div style="font-size:11px;color:#8888aa">👤 '+(shift.sellerName||'')+'</div></div>'+
@@ -6149,6 +6172,15 @@ function _renderShiftView(){
   var zp=sh.zp||0, inkass=sh.inkass||0, otherExp=sh.otherExp||0;
   var drInkass=sh.drInkass||0, drSupplier=sh.drSupplierAmt||0;
 
+  var woodRcvTotal = woodRcv.reduce(function(s,r){return s+(r.amount||0);},0);
+  var drRcvTotal = drRcv.reduce(function(s,r){return s+(r.amount||0);},0);
+  var woodWoTotal = woodWo.reduce(function(s,w){return s+(w.amount||0);},0);
+  var drWoTotal = drWo.reduce(function(s,w){return s+(w.amount||0);},0);
+  var woodSaleQty = sales.reduce(function(s,e){ return s+(e.items||[]).filter(function(it){return it.goodsType!=='dr';}).reduce(function(a,it){return a+(it.qty||1);},0); },0);
+  var drSaleQty = sales.reduce(function(s,e){ return s+(e.items||[]).filter(function(it){return it.goodsType==='dr';}).reduce(function(a,it){return a+(it.qty||1);},0); },0);
+  var expWoodTotal = expenses.filter(function(e){return e.goodsType!=='dr';}).reduce(function(s,e){return s+(e.amount||0);},0);
+  var expDrTotal = expenses.filter(function(e){return e.goodsType==='dr';}).reduce(function(s,e){return s+(e.amount||0);},0);
+
   // ── СВОДНАЯ ТАБЛИЦА со всеми несовпадениями (показывается выше аккордеонов) ──
   // Expected cash = morning balance + sales cash (already split per goods
   // type via cashEffect/cashDrEffect) + all journal cash effects from other
@@ -6167,38 +6199,78 @@ function _renderShiftView(){
   var zpFactTotal = (zpStandalone.zpFact||0)+(zpStandalone.travelFact||0);
   var zpDiff = Math.round(zpStandalone.zpCalcWithTravel - zpFactTotal);
 
+  // Previous shift for this shop — used to flag values the seller entered
+  // at shift-open that don't match what was recorded as "вечер" last time,
+  // the same comparison confirmMorning() does live when opening a shift.
+  var allShiftsForPrev = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var prevShiftForThis = allShiftsForPrev.filter(function(s){ return s.shopName===sh.shopName && s.id!==sh.id && (s.closedAt||0) < (sh.openedAt||sh.closedAt||''); })
+    .sort(function(a,b){ return new Date(b.closedAt||0)-new Date(a.closedAt||0); })[0] || null;
+  function enteredMismatch(enteredVal, prevVal){
+    return enteredVal!=null && prevVal!=null && Math.abs(enteredVal-prevVal)>=1;
+  }
+  var morningWoodMismatch = prevShiftForThis ? enteredMismatch(sh.cashMorning, prevShiftForThis.cashEvening) : false;
+  var morningDrMismatch = prevShiftForThis ? enteredMismatch(sh.cashDrMorning, prevShiftForThis.drCashEvening) : false;
+
   function diffChip(val, okLabel){
     if(val==null) return '<span style="font-size:10px;color:#555568">не введено</span>';
     if(Math.abs(val)<1) return '<span style="font-size:10px;color:#60f090;font-weight:700">✅ '+(okLabel||'сходится')+'</span>';
     return '<span style="font-size:10px;color:#f06060;font-weight:700">⚠️ '+(val>0?'+':'')+f(val)+'</span>';
   }
-  var anyDiff = (cashDiffVal!=null && Math.abs(cashDiffVal)>=1) || (cashDrDiffVal!=null && Math.abs(cashDrDiffVal)>=1) || Math.abs(zpDiff)>=1 || !!sh.hasCashDiff || actCash==null || (sh.forceClosedBy && actCashDr==null);
+  var anyDiff = (cashDiffVal!=null && Math.abs(cashDiffVal)>=1) || (cashDrDiffVal!=null && Math.abs(cashDrDiffVal)>=1) || Math.abs(zpDiff)>=1 || !!sh.hasCashDiff || actCash==null || (sh.forceClosedBy && actCashDr==null) || morningWoodMismatch || morningDrMismatch;
+
+  // Seller-entered values that disagree with what's expected (recalculated
+  // from the journal, or carried over from the previous shift's вечер) are
+  // wrapped in this highlight so they're immediately visually distinct from
+  // values the system itself computed.
+  function enteredVal(val, mismatch){
+    var v = val!=null ? f(val) : '—';
+    return mismatch ? '<span style="color:#f0a060;text-decoration:underline wavy #f06060">'+v+'</span>' : '<b>'+v+'</b>';
+  }
+  function tblRow(label, woodVal, drVal, opts){
+    opts = opts||{};
+    return '<div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:0 8px;padding:'+(opts.pad||'4px')+' 0;'+(opts.border?'border-top:1px solid #2e2e3e;margin-top:4px;padding-top:8px':'')+'">'+
+      '<div style="font-size:'+(opts.bold?'12.5px':'11.5px')+';color:'+(opts.bold?'#f0f0f8':'#8888aa')+';font-weight:'+(opts.bold?'700':'400')+'">'+label+'</div>'+
+      '<div style="font-size:'+(opts.bold?'12.5px':'11.5px')+';font-weight:'+(opts.bold?'700':'600')+';color:'+(opts.color||'#f0f0f8')+'">'+woodVal+'</div>'+
+      '<div style="font-size:'+(opts.bold?'12.5px':'11.5px')+';font-weight:'+(opts.bold?'700':'600')+';color:'+(opts.color||'#f0f0f8')+'">'+drVal+'</div>'+
+    '</div>';
+  }
 
   var summaryRows =
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;font-size:10px;color:#8888aa;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px"><div>🌳 Дерево</div><div>🛍 ДР Товар</div></div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;margin-bottom:8px">'+
-      '<div style="font-size:13px;font-weight:700;color:#c8f060">'+f(totalRev)+'</div><div style="font-size:13px;font-weight:700;color:#a060f0">'+f(drTot)+'</div>'+
+    '<div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:0 8px;margin-bottom:6px">'+
+      '<div></div><div style="font-size:10px;color:#c8f060;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 Дерево</div><div style="font-size:10px;color:#a060f0;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР Товар</div>'+
     '</div>'+
-    '<div style="border-top:1px solid #2e2e3e;margin:6px 0 8px"></div>'+
-    '<div style="font-size:10px;color:#8888aa;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">💵 КАССА — расчётная / факт</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;margin-bottom:4px">'+
-      '<div style="font-size:12px">'+f(expCash)+' / <b>'+(actCash!=null?f(actCash):'—')+'</b></div>'+
-      '<div style="font-size:12px">'+f(expCashDr)+' / <b>'+(actCashDr!=null?f(actCashDr):'—')+'</b></div>'+
-    '</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;margin-bottom:8px">'+
-      '<div>'+diffChip(cashDiffVal)+'</div><div>'+diffChip(cashDrDiffVal)+'</div>'+
-    '</div>'+
-    '<div style="border-top:1px solid #2e2e3e;margin:6px 0 8px"></div>'+
-    '<div style="font-size:10px;color:#8888aa;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">💰 ЗП — расчётная / факт</div>'+
-    '<div style="display:flex;justify-content:space-between;align-items:center">'+
-      '<div style="font-size:12px">'+f(zpStandalone.zpCalcWithTravel)+' / <b>'+f(zpFactTotal)+'</b></div>'+
-      diffChip(zpDiff)+
-    '</div>';
+    '<div style="font-size:10px;color:#60f090;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">💰 ПРОДАЖИ</div>'+
+    tblRow('Выручка', f(totalRev), f(drTot), {bold:true,color:'#c8f060'})+
+    tblRow('Кол-во', woodSaleQty+' шт.', drSaleQty+' шт.')+
+    '<div style="font-size:10px;color:#f0a060;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:8px 0 2px">📦 ТОВАР</div>'+
+    tblRow('Остаток утро', f(sh.goodsMorning||0), f(sh.goodsDrMorning||0))+
+    tblRow('Остаток вечер', f(sh.goodsEvening||0), f(sh.drGoodsEvening||0))+
+    tblRow('Приход', f(woodRcvTotal), f(drRcvTotal))+
+    tblRow('Списание', f(woodWoTotal), f(drWoTotal))+
+    '<div style="font-size:10px;color:#60c8f0;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:8px 0 2px">💵 КАССА</div>'+
+    tblRow('Нал утро', enteredVal(sh.cashMorning, morningWoodMismatch), enteredVal(sh.cashDrMorning, morningDrMismatch))+
+    tblRow('Нал вечер (расч./факт)', f(expCash)+' / '+enteredVal(actCash, cashDiffVal!=null && Math.abs(cashDiffVal)>=1), f(expCashDr)+' / '+enteredVal(actCashDr, cashDrDiffVal!=null && Math.abs(cashDrDiffVal)>=1))+
+    tblRow('', diffChip(cashDiffVal), diffChip(cashDrDiffVal))+
+    tblRow('Выручка нал', f(cashRev), f(drCashRev))+
+    tblRow('Выручка безнал', f(cardRev), f(drCardRev))+
+    '<div style="font-size:10px;color:#f06060;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:8px 0 2px">💸 РАСХОДЫ</div>'+
+    tblRow('Итого расходы', f(expWoodTotal), f(expDrTotal))+
+    '<div style="font-size:10px;color:#f0c060;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:8px 0 2px">💰 ЗП</div>'+
+    tblRow('Расчётная', f(zpStandalone.zpCalcWood), f(zpStandalone.zpCalcDr))+
+    tblRow('Проезд расчётный', f(zpStandalone.travelCalc), '—')+
+    tblRow('Факт (взято)', enteredVal(zpStandalone.zpFact, false), '—')+
+    tblRow('Проезд факт', enteredVal(zpStandalone.travelFact, false), '—')+
+    tblRow('Разница ЗП+проезд', diffChip(zpDiff), '', {border:true});
 
   var summaryHtml = '<div style="background:'+(anyDiff?'#2e1a1a':'#1a2e1a')+';border:2px solid '+(anyDiff?'#f06060':'#60f090')+';border-radius:14px;padding:14px;margin-bottom:12px">'+
-    '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;color:'+(anyDiff?'#f06060':'#60f090')+'">'+(anyDiff?'⚠️ ЕСТЬ НЕСОВПАДЕНИЯ':'✅ ВСЁ СХОДИТСЯ')+'</div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:'+(anyDiff?'#f06060':'#60f090')+'">'+(anyDiff?'⚠️ ЕСТЬ НЕСОВПАДЕНИЯ':'✅ ВСЁ СХОДИТСЯ')+'</div>'+
+      '<div style="font-size:10.5px;color:#8888aa">👤 '+(sh.sellerName||'—')+'</div>'+
+    '</div>'+
     summaryRows+
+    (sh.editedBy?'<div style="font-size:10px;color:#555568;margin-top:10px;padding-top:8px;border-top:1px solid #2e2e3e">✏️ Правки: '+sh.editedBy+(sh.editReason?' · '+sh.editReason:'')+'</div>':'')+
   '</div>';
+
 
   function acc(id, icon, title, color, count, body){
     var badge = count ? '<span style="background:'+color+';color:#0f0f13;font-size:10px;font-weight:700;border-radius:8px;padding:1px 6px;margin-left:6px">'+count+'</span>' : '';
@@ -6243,8 +6315,7 @@ function _renderShiftView(){
         '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0" id="sv_sale_'+i+'">'+
           '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
             '<div style="flex:1;min-width:0">'+
-              '<div style="font-size:12px;font-weight:700">'+(s.sub||s.label||'Продажа')+'</div>'+
-              '<div style="font-size:10px;color:#555568;margin-top:1px">'+time+' '+payIcon+(s.goodsType==='dr'?' · ДР товар':s.goodsType==='mixed'?' · Дерево+ДР':'')+'</div>'+
+              '<div style="font-size:11px;color:#8888aa">'+time+' '+payIcon+(s.goodsType==='dr'?' · ДР товар':s.goodsType==='mixed'?' · Дерево+ДР':'')+(s.discount?' · 🎁 Скидка '+f(s.discount):'')+'</div>'+
             '</div>'+
             '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
               '<span style="font-size:13px;font-weight:700;color:#60f090">'+f(s.amount||0)+'</span>'+
@@ -6335,20 +6406,17 @@ function _renderShiftView(){
   if(staffCashDr) cassaBody += row('🛒 Покупки сотр. нал', f(staffCashDr), '#a060f0');
   if(sh.hasCashDiff) cassaBody += '<div style="background:#2e1a1a;border-radius:8px;padding:8px;margin-top:8px;font-size:11px;color:#f06060;font-weight:700">⚠️ Расхождение: '+f(sh.cashDiff||0)+(sh.cashDiffReason?' · '+sh.cashDiffReason:'')+'</div>';
   cassaBody += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #2e2e3e">'+
-    '<div style="font-size:10px;color:#8888aa;margin-bottom:8px;font-weight:700">ИСПРАВИТЬ</div>'+
+    '<div style="font-size:10px;color:#8888aa;margin-bottom:8px;font-weight:700">ИСПРАВИТЬ ФАКТИЧЕСКИЕ НАЛИЧНЫЕ</div>'+
+    '<div style="font-size:10.5px;color:#555568;margin-bottom:8px">Выручка считается из журнала продаж и не редактируется здесь — правьте только если неверно посчитан физический остаток нала.</div>'+
     '<div style="font-size:10px;color:#c8f060;margin-bottom:5px;font-weight:700">🌳 Дерево</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'+
       inp('sv_cashMorn', sh.cashMorning, 'Нал утро')+
       inp('sv_cashEve', sh.cashEvening, 'Нал вечер')+
-      inp('sv_cashRev', cashRev, 'Выручка нал')+
-      inp('sv_cardRev', cardRev, 'Выручка безнал')+
     '</div>'+
     '<div style="font-size:10px;color:#a060f0;margin-bottom:5px;font-weight:700">🛍 ДР Товар</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'+
       inp('sv_drCashMorn', sh.cashDrMorning, 'Нал утро')+
       inp('sv_drCashEve', sh.drCashEvening, 'Нал вечер')+
-      inp('sv_drCashRev', drCashRev, 'Выручка нал')+
-      inp('sv_drCardRev', drCardRev, 'Выручка безнал')+
     '</div>'+
     '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">Причина правки</div>'+
     '<input class="fi" id="sv_cashReason" placeholder="Обязательно укажите причину..." style="margin:0;padding:8px;margin-bottom:8px">'+
@@ -6661,38 +6729,8 @@ function _renderShiftView(){
     itemForm('staffDr','#a060f0',{who:true,retail:true,saveFn:'svAddStaff(\'dr\')'})+
   '</div>';
   var headerColor = sh.hasCashDiff ? '#f06060' : '#c8f060';
-  var grandTotal = totalRev + drTot;
-  var grandCash = cashRev + drCashRev;
-  var grandCard = cardRev + drCardRev;
-  var grandDisc = disc + drDisc;
   var headerHtml =
-    '<div style="background:#1e2a14;border:1px solid '+headerColor+';border-radius:12px;padding:14px;margin-bottom:10px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
-        '<div>'+
-          '<div style="font-size:11px;color:#8888aa">👤 '+(sh.sellerName||'—')+'</div>'+
-          '<div style="font-size:11px;color:#8888aa">📅 '+sh.date+(sh.backfilled?' · задним числом':'')+'</div>'+
-          (sh.isArchive?'<div style="font-size:9px;background:#604020;color:#f0a060;border-radius:4px;padding:2px 5px;font-weight:700;display:inline-block;margin-top:4px">АРХИВ</div>':'')+
-        '</div>'+
-        '<div style="text-align:right">'+
-          '<div style="font-size:18px;font-weight:700;color:'+headerColor+'">'+f(grandTotal)+'</div>'+
-          '<div style="font-size:11px;color:#60f090">💵 '+f(grandCash)+'</div>'+
-          '<div style="font-size:11px;color:#60c8f0">💳 '+f(grandCard)+'</div>'+
-          (grandDisc?'<div style="font-size:11px;color:#8888aa">🎁 '+f(grandDisc)+'</div>':'')+
-        '</div>'+
-      '</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #2e3a1a">'+
-        '<div>'+
-          '<div style="font-size:10px;color:#c8f060;font-weight:700;margin-bottom:3px">🌳 ДЕРЕВО · '+f(totalRev)+'</div>'+
-          '<div style="font-size:10px;color:#8888aa">💵 '+f(cashRev)+' · 💳 '+f(cardRev)+(disc?' · 🎁 '+f(disc):'')+'</div>'+
-        '</div>'+
-        '<div>'+
-          '<div style="font-size:10px;color:#a060f0;font-weight:700;margin-bottom:3px">🛍 ДР ТОВАР · '+f(drTot)+'</div>'+
-          '<div style="font-size:10px;color:#8888aa">💵 '+f(drCashRev)+' · 💳 '+f(drCardRev)+(drDisc?' · 🎁 '+f(drDisc):'')+'</div>'+
-        '</div>'+
-      '</div>'+
-      (sh.hasCashDiff?'<div style="background:#2e1a1a;border-radius:8px;padding:6px 8px;margin-top:8px;font-size:11px;color:#f06060;font-weight:700">⚠️ Расхождение кассы</div>':'')+
-      (sh.editedBy?'<div style="font-size:10px;color:#555568;margin-top:6px">✏️ Правки: '+sh.editedBy+(sh.editReason?' · '+sh.editReason:'')+'</div>':'')+
-    '</div>'+
+    (sh.isArchive?'<div style="font-size:9px;background:#604020;color:#f0a060;border-radius:4px;padding:2px 5px;font-weight:700;display:inline-block;margin-bottom:8px">АРХИВ'+(sh.backfilled?' · ЗАДНИМ ЧИСЛОМ':'')+'</div>':'')+
     // Force-close button — only for shifts still marked "open" (a session
     // somewhere never properly closed it via "Закрыть смену"). Converts the
     // record into a proper closed shift instead of just deleting it, which
@@ -6704,10 +6742,11 @@ function _renderShiftView(){
     // Delete shift button
     '<button onclick="svDeleteShift()" style="width:100%;padding:9px;background:#2e1a1a;border:1px solid #f06060;border-radius:9px;font-weight:700;font-size:12px;color:#f06060;cursor:pointer;margin-bottom:10px">🗑 Удалить смену целиком</button>';
 
+
   // ── СБОРКА ──
   document.getElementById('editShiftBody').innerHTML =
-    headerHtml +
     summaryHtml +
+    headerHtml +
     acc('sales', '💰', 'Продажи', '#c8f060', sales.length||null, salesBody) +
     acc('solditems', '📦', 'Проданные товары', '#f0c060', (soldItemsWoodList.length+soldItemsDrList.length)||null, soldItemsBody) +
     acc('cassa', '🏦', 'Касса', '#f0c060', null, cassaBody) +
@@ -6783,12 +6822,8 @@ function svSaveCassa(){
   if(!reason){showToast('Укажите причину правки');return;}
   _currentShiftView.cashMorning=parseFloat((document.getElementById('sv_cashMorn')||{}).value)||0;
   _currentShiftView.cashEvening=parseFloat((document.getElementById('sv_cashEve')||{}).value)||0;
-  _currentShiftView.cashRevenue=parseFloat((document.getElementById('sv_cashRev')||{}).value)||0;
-  _currentShiftView.cardRevenue=parseFloat((document.getElementById('sv_cardRev')||{}).value)||0;
   _currentShiftView.cashDrMorning=parseFloat((document.getElementById('sv_drCashMorn')||{}).value)||0;
   _currentShiftView.drCashEvening=parseFloat((document.getElementById('sv_drCashEve')||{}).value)||0;
-  _currentShiftView.drCashRevenue=parseFloat((document.getElementById('sv_drCashRev')||{}).value)||0;
-  _currentShiftView.drCardRevenue=parseFloat((document.getElementById('sv_drCardRev')||{}).value)||0;
   _currentShiftView.editedBy=(session&&(session.name||session.sellerName))||'admin';
   _currentShiftView.editedAt=new Date().toISOString();
   _currentShiftView.editReason=reason;
