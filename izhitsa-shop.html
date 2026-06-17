@@ -3304,64 +3304,56 @@ function startPreviewMode(){
 // Also removes any legacy per-item "Приход товара" entries (label matches)
 // that no longer correspond to a known invoice — these were created by old
 // code that wrote one row per item.
-function migrateLegacyReceiveEntries(){
-  if(!journal.length) return;
+// Build the set of invoice ids whose "Приёмка" entry is already saved inside
+// an EARLIER, CLOSED shift for this shop, given an array of shift records
+// (either the locally cached copy, or a fresh authoritative read from
+// Firestore — see migrateLegacyReceiveEntries below for why both are used).
+function _archivedReceiveInvIds(shiftsArr){
+  var ids = {};
+  (shiftsArr||[]).filter(function(s){ return s.shopName===session.shopName; })
+    .forEach(function(s){
+      (s.journal||[]).forEach(function(e){
+        if(e.type==='receive' && e.invId) ids[e.invId]=true;
+      });
+    });
+  return ids;
+}
 
+// Use a STABLE, deterministic id per invoice (not a fresh uid() each run) so
+// re-running this migration recognizes the entry already exists instead of
+// creating a duplicate every time the app opens.
+function _stableReceiveId(iid){ return 'receive_'+iid; }
+
+// Reconcile the live journal's "Приёмка" entries against manual invoices,
+// given an already-known set of invoice ids accounted for in shift history
+// (archivedInvIds). Returns true if it changed anything.
+function _reconcileReceiveEntries(archivedInvIds){
+  if(!journal.length) return false;
   var manualInvoices = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]')
     .filter(function(inv){ return inv.destName===session.shopName; });
-  if(!manualInvoices.length) return;
 
-  // Build the set of invoice ids whose "Приёмка" entry is already saved
-  // inside an EARLIER, CLOSED shift for this shop (closeShift() snapshots
-  // the whole journal into iz_shifts). Those invoices are already accounted
-  // for in shift history — once a shift closes, its journal is cleared, so
-  // without this check every old invoice looked "missing" from the fresh
-  // (empty) journal and got recreated with today's timestamp, making old,
-  // already-closed приходы reappear in the current shift. Never resurrect them.
-  var archivedInvIds = {};
-  try{
-    JSON.parse(localStorage.getItem(KEY.shifts)||'[]')
-      .filter(function(s){ return s.shopName===session.shopName; })
-      .forEach(function(s){
-        (s.journal||[]).forEach(function(e){
-          if(e.type==='receive' && e.invId) archivedInvIds[e.invId]=true;
-        });
-      });
-  }catch(e){}
-
-  // From here on, only reason about invoices that are NOT already accounted
-  // for in a past closed shift.
+  // Only reason about invoices NOT already accounted for in a past closed shift.
   manualInvoices = manualInvoices.filter(function(inv){
     var iid = String(inv._id!=null?inv._id:inv.id);
     return !archivedInvIds[iid];
   });
 
-  // Build set of all valid invIds from (still-live) manual invoices
   var validInvIds = {};
   manualInvoices.forEach(function(inv){
     var iid = String(inv._id!=null?inv._id:inv.id);
     validInvIds[iid] = inv;
   });
 
-  // Use a STABLE, deterministic id per invoice (not a fresh uid() each run)
-  // so re-running this migration — or a Firestore sync bringing back an
-  // older copy of the journal — recognizes the entry already exists instead
-  // of creating a duplicate every time the app opens.
-  function stableReceiveId(iid){ return 'receive_'+iid; }
-
-  // Check whether journal already has exactly one correct, up-to-date entry
-  // per invoice; if so, there's nothing to do (avoids needless rewrites/syncs).
   var alreadyCorrect = manualInvoices.every(function(inv){
     var iid = String(inv._id!=null?inv._id:inv.id);
     var total = inv.totalAmt!=null ? inv.totalAmt
       : (inv.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
     var existing = journal.filter(function(e){ return e.type==='receive' && e.invId===iid; });
-    return existing.length===1 && existing[0].id===stableReceiveId(iid) && Math.round(existing[0].amount||0)===Math.round(total);
+    return existing.length===1 && existing[0].id===_stableReceiveId(iid) && Math.round(existing[0].amount||0)===Math.round(total);
   });
   var hasLegacyRows = journal.some(function(e){ return e.type==='receive' && e.label==='Приход товара' && !e.invId; });
   // Any receive entry still sitting in the live journal but pointing at an
-  // invoice already archived in a past shift is a ghost duplicate from the
-  // bug above — it must be purged from the current shift.
+  // invoice already archived in a past shift is a ghost duplicate — purge it.
   var hasArchivedGhosts = journal.some(function(e){ return e.type==='receive' && e.invId && archivedInvIds[e.invId]; });
   var hasDuplicates = (function(){
     var seen={};
@@ -3371,13 +3363,8 @@ function migrateLegacyReceiveEntries(){
       seen[e.invId]=true; return false;
     });
   })();
-  if(alreadyCorrect && !hasLegacyRows && !hasDuplicates && !hasArchivedGhosts) return;
+  if(alreadyCorrect && !hasLegacyRows && !hasDuplicates && !hasArchivedGhosts) return false;
 
-  // Remove ALL stale receive entries that either:
-  // a) are old per-item "Приход товара" rows (no invId, label matches),
-  // b) point at an invoice already archived in a past shift (ghost — drop, don't recreate),
-  // c) are "Приёмка" rows with invId pointing to a known, still-live manual invoice
-  //    (we'll recreate them correctly below, deduplicating multiple copies).
   journal = journal.filter(function(e){
     if(e.type!=='receive') return true;
     if(!e.invId && e.label==='Приход товара') return false; // legacy per-item row
@@ -3386,7 +3373,6 @@ function migrateLegacyReceiveEntries(){
     return true;
   });
 
-  // Recreate exactly one correct entry per manual invoice, with a stable id
   manualInvoices.forEach(function(inv){
     var iid = String(inv._id!=null?inv._id:inv.id);
     var total = inv.totalAmt!=null ? inv.totalAmt
@@ -3394,7 +3380,7 @@ function migrateLegacyReceiveEntries(){
     var count = (inv.items||[]).length;
     var ts = inv.acceptedAt || inv.date || new Date().toISOString();
     journal.push({
-      id:stableReceiveId(iid), type:'receive', ts:ts, icon:'📥',
+      id:_stableReceiveId(iid), type:'receive', ts:ts, icon:'📥',
       label:'Приёмка '+(inv.num||''),
       sub:count+' изд.'+(inv.from?' · от '+inv.from:''),
       amount:total, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
@@ -3405,6 +3391,33 @@ function migrateLegacyReceiveEntries(){
   journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
   saveJ();
   try{ syncLiveShift(); }catch(e){}
+  return true;
+}
+
+function migrateLegacyReceiveEntries(){
+  if(!journal.length) return;
+
+  // PASS 1 (immediate, synchronous): use whatever shift history is cached
+  // locally right now, so the UI is correct as fast as possible.
+  var localShifts = [];
+  try{ localShifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]'); }catch(e){}
+  _reconcileReceiveEntries(_archivedReceiveInvIds(localShifts));
+
+  // PASS 2 (authoritative, async): re-check directly against Firestore a
+  // moment later. The local iz_shifts cache is filled by an onSnapshot
+  // listener that only updates asynchronously — on a device that wasn't the
+  // one that actually closed an earlier shift (e.g. a different seller's
+  // phone, or this device after clearing storage), pass 1 above can run
+  // with an empty/incomplete cache and miss an already-archived invoice,
+  // letting its приход reappear in the current shift. This direct Firestore
+  // read fixes that shortly after load and re-renders if it changed anything.
+  try{
+    db.collection('iz_shifts').where('shopName','==',session.shopName).get().then(function(snap){
+      var remoteShifts = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
+      var changed = _reconcileReceiveEntries(_archivedReceiveInvIds(remoteShifts));
+      if(changed) renderAll();
+    }).catch(function(){});
+  }catch(e){}
 }
 
 // ── Fix legacy expense entries: earlier versions always deducted ДР expenses
