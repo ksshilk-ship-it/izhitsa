@@ -3377,6 +3377,21 @@ function _reconcileReceiveEntries(archivedInvIds){
   })();
   if(alreadyCorrect && !hasLegacyRows && !hasDuplicates && !hasArchivedGhosts) return false;
 
+  // Entries permanently removed below (ghosts / legacy rows, as opposed to
+  // ones being recreated with a fresh stable id) must be tombstoned —
+  // otherwise the real-time "open shift" listener's mergeRemoteJournal sees
+  // them "missing locally" a moment later and silently restores them from
+  // the stale remote mirror, undoing this cleanup right after it ran.
+  journal.forEach(function(e){
+    if(e.type!=='receive') return;
+    var isLegacyRow = !e.invId && e.label==='Приход товара';
+    var isArchivedGhost = e.invId && archivedInvIds[e.invId];
+    if(isLegacyRow || isArchivedGhost){
+      try{ logEntryDelete(e); }catch(err){}
+      addToTrash(e, {reason:'receive_reconcile_cleanup'});
+    }
+  });
+
   journal = journal.filter(function(e){
     if(e.type!=='receive') return true;
     if(!e.invId && e.label==='Приход товара') return false; // legacy per-item row
@@ -3479,6 +3494,19 @@ function removeDuplicateReceives(){
   var ids = window._dupReceiveIds||[];
   if(!ids.length) return;
   if(!confirm('Убрать '+ids.length+' задвоенных приходов из текущей смены?')) return;
+  // CRITICAL: just filtering these out of `journal` is not enough — the
+  // real-time "open shift" listener (startLiveShiftListener) periodically
+  // re-merges anything present in the remote Firestore mirror but "missing"
+  // locally, with no way to tell a deliberate deletion apart from an entry
+  // it just hasn't synced yet. Without registering a tombstone for each one
+  // via addToTrash(), the very next snapshot from that listener would
+  // silently bring these right back — which is exactly why they kept
+  // reappearing after being "removed". Tombstoning first prevents that.
+  var toRemove = journal.filter(function(e){ return ids.indexOf(e.id)>=0; });
+  toRemove.forEach(function(entry){
+    try{ logEntryDelete(entry); }catch(e){}
+    addToTrash(entry, {reason:'duplicate_receive_cleanup'});
+  });
   journal = journal.filter(function(e){ return ids.indexOf(e.id)<0; });
   saveJ();
   try{ syncLiveShift(); }catch(e){}
