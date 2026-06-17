@@ -10272,18 +10272,31 @@ function updateManInvTotal() {
 function saveManualInvoice() {
   if(!_manInvItems.length) { showToast('Добавьте позиции'); return; }
   var num = (document.getElementById('manInvNum')||{}).value || 'НАК-???';
-  var date = (document.getElementById('manInvDate')||{}).value || new Date().toISOString().split('T')[0];
+  // docDate = the накладная's OWN date, as written on the paper document and
+  // typed in by the seller (usually the date it shipped from the workshop).
+  // It is kept purely for reference — it must NOT be used as the record's
+  // filing date, since that has to reflect when the goods actually landed
+  // on the shop's balance (see note on inv.date below).
+  var docDate = (document.getElementById('manInvDate')||{}).value || new Date().toISOString().split('T')[0];
   var from = (document.getElementById('manInvFrom')||{}).value || '';
   var totalAmt = _manInvItems.reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); }, 0);
   if(from) saveSupplier(from);
+  var now = new Date();
+  // inv.date is the накладная's FILING date — i.e. when the seller actually
+  // pressed "Принять на баланс" — NOT the docDate above. Накладные are
+  // shipped from the workshop on one date but often physically counted in
+  // and accepted at the shop on a later one; everywhere this накладная is
+  // listed/grouped by date, it must show up under the day it was accepted,
+  // not the day it was written.
+  var acceptedDateStr = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
   var inv = {
-    id: uid(), num: num, date: date, from: from,
+    id: uid(), num: num, date: acceptedDateStr, docDate: docDate, from: from,
     destName: session.shopName,
     items: _manInvItems.map(function(it){ return Object.assign({},it); }),
     totalAmt: totalAmt,
     status: 'accepted',
-    acceptedAt: new Date().toISOString(),
-    acceptedDate: new Date().toLocaleDateString('ru-RU'),
+    acceptedAt: now.toISOString(),
+    acceptedDate: now.toLocaleDateString('ru-RU'),
     createdBy: session.sellerName || session.name || '',
     manual: true
   };
@@ -10334,7 +10347,7 @@ function renderManInvAccepted() {
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
         '<div>'+
           '<div style="font-size:13px;font-weight:700">'+inv.num+'</div>'+
-          '<div style="font-size:11px;color:#8888aa">'+inv.date+' · '+(inv.from||'')+'</div>'+
+          '<div style="font-size:11px;color:#8888aa">Принято '+inv.date+(inv.docDate&&inv.docDate!==inv.date?' · накл. от '+inv.docDate:'')+' · '+(inv.from||'')+'</div>'+
           '<div style="font-size:11px;color:#8888aa">'+(inv.items||[]).length+' позиций · '+Math.round(inv.totalAmt||0).toLocaleString('ru-RU')+'₽</div>'+
         '</div>'+
         '<div style="font-size:11px;color:#60f090;font-weight:700">✅ Принята</div>'+
@@ -10359,7 +10372,8 @@ function editManualInvoice(id){
   card.innerHTML =
     '<div style="font-size:11px;font-weight:700;color:#c8f060;margin-bottom:8px">✏️ Исправление: '+(inv.num||'')+'</div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Номер</label><input class="fi" id="maninv_num_'+id+'" value="'+(inv.num||'')+'" style="margin:0;padding:7px"></div>'+
-    '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата</label><input class="fi" type="date" id="maninv_date_'+id+'" value="'+(inv.date||'')+'" style="margin:0;padding:7px;-webkit-appearance:none;color-scheme:dark"></div>'+
+    '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата приёмки</label><input class="fi" type="date" id="maninv_date_'+id+'" value="'+(inv.date||'')+'" style="margin:0;padding:7px;-webkit-appearance:none;color-scheme:dark"></div>'+
+    '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата накладной</label><input class="fi" type="date" id="maninv_docdate_'+id+'" value="'+(inv.docDate||inv.date||'')+'" style="margin:0;padding:7px;-webkit-appearance:none;color-scheme:dark"></div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">От кого</label><input class="fi" id="maninv_from_'+id+'" value="'+(inv.from||'')+'" style="margin:0;padding:7px"></div>'+
     '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (арт. · наим. · кол-во · цена)</div>'+
     '<div id="maninv_items_'+id+'"></div>'+
@@ -10418,9 +10432,11 @@ function saveManualInvoiceEdit(id){
   var all = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   var idx = all.findIndex(function(i){ return String(i._id!=null?i._id:i.id)===id; });
   if(idx<0) return;
+  var oldDate = all[idx].date;
   var oldNum = all[idx].num;
   data.num = (document.getElementById('maninv_num_'+id)||{}).value || data.num;
   data.date = (document.getElementById('maninv_date_'+id)||{}).value || data.date;
+  data.docDate = (document.getElementById('maninv_docdate_'+id)||{}).value || data.docDate;
   data.from = (document.getElementById('maninv_from_'+id)||{}).value || data.from;
   data.totalAmt = (data.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
   data.editedAt = new Date().toISOString();
@@ -10432,14 +10448,22 @@ function saveManualInvoiceEdit(id){
 
   // Resync the linked "Приёмка" journal entry: find the old one (exact match
   // by invoice id, falling back to invoice number for legacy entries),
-  // preserve its original timestamp, recompute the total, and recreate as a
-  // single summary entry reflecting the current set of items.
+  // preserve its original time-of-day, recompute the total, and recreate as
+  // a single summary entry reflecting the current set of items.
   var oldEntry = journal.find(function(e){
     if(e.type!=='receive') return false;
     if(e.invId) return e.invId===id;
     return e.sub && e.sub.indexOf(oldNum)>=0;
   });
   var preservedTs = oldEntry ? oldEntry.ts : new Date().toISOString();
+  // If "Дата приёмки" was corrected, move the journal entry onto that day
+  // too (keeping the original time-of-day) — otherwise the накладная would
+  // show one date in the list but its приход would still sit in whichever
+  // shift the old date pointed to.
+  if(data.date && data.date!==oldDate){
+    var tod = preservedTs.indexOf('T')>=0 ? preservedTs.slice(preservedTs.indexOf('T')) : 'T12:00:00.000Z';
+    preservedTs = data.date+tod;
+  }
   journal = journal.filter(function(e){
     if(e.type!=='receive') return true;
     if(e.invId) return e.invId!==id;
