@@ -1215,12 +1215,12 @@ function acSuggest(inputId, onPick, extraArg){
   if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
   box.innerHTML = matches.map(m=>{
     const args = extraArg!==undefined ? `'${String(m).replace(/'/g,"\\'")}', ${JSON.stringify(extraArg)}` : `'${String(m).replace(/'/g,"\\'")}'`;
-    return `<div onmousedown="${onPick}(${args})" style="padding:8px 10px;font-size:12px;color:var(--text);border-bottom:1px solid var(--border);cursor:pointer">${m}</div>`;
+    return `<div onpointerdown="event.preventDefault();${onPick}(${args})" style="padding:8px 10px;font-size:12px;color:var(--text);border-bottom:1px solid var(--border);cursor:pointer">${m}</div>`;
   }).join('');
   box.style.display='block';
 }
 function acHideSugg(inputId){
-  setTimeout(()=>{ const box=document.getElementById(inputId+'_sugg'); if(box) box.style.display='none'; }, 150);
+  setTimeout(()=>{ const box=document.getElementById(inputId+'_sugg'); if(box) box.style.display='none'; }, 250);
 }
 function acPickBlankName(val){ const el=document.getElementById('blankName'); if(el) el.value=val; acHideSugg('blankName'); }
 function acPickBlankWood(val){ const el=document.getElementById('blankWood'); if(el) el.value=val; acHideSugg('blankWood'); }
@@ -4564,10 +4564,14 @@ function getNextArtikulNumber(){
     const n = parseInt(String(p.artikul||'').replace(/\D/g,''),10);
     if(!isNaN(n) && n>max) max = n;
   });
-  // Также учитываем уже добавленные в текущей форме приёмки позиции
+  // Также учитываем уже добавленные в текущей форме приёмки позиции —
+  // каждая позиция с qty>1 резервирует диапазон последовательных номеров
   _maItems.forEach(it=>{
     const n = parseInt(String(it.artikul||'').replace(/\D/g,''),10);
-    if(!isNaN(n) && n>max) max = n;
+    if(!isNaN(n)){
+      const reserved = n + (parseInt(it.qty,10)||1) - 1;
+      if(reserved>max) max = reserved;
+    }
   });
   return max+1;
 }
@@ -4575,7 +4579,8 @@ function getNextArtikulNumber(){
 function addMaItemRow(){
   const names = [...new Set([...products.filter(p=>p.status!=='archive').map(p=>p.name), ...getItemNames()])].sort((a,b)=>a.localeCompare(b,'ru'));
   const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
-  _maItems.push({rid:uid(), artikul:String(getNextArtikulNumber()), artikulMode:'auto', name:names[0]||'', wood:woods[0]||'', zp:0, price:0});
+  _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', name:names[0]||'', wood:woods[0]||'', zp:0, price:0, qty:1});
+  recalcMaAutoArtikuls();
   renderMaItemsList();
 }
 
@@ -4603,6 +4608,11 @@ function renderMaItemsList(){
         <input class="fi" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode!=='manual'?'disabled':''}
           oninput="updateMaItem('${it.rid}','artikul',this.value)" placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
           style="${it.artikulMode!=='manual'?'opacity:0.6':''}">
+        ${(parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto' ? `<div style="font-size:11px;color:var(--accent);margin-top:5px">Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}</div>` : ''}
+      </div>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">Количество одинаковых изделий</label>
+        <input class="fi" type="number" inputmode="numeric" min="1" value="${it.qty||1}" oninput="updateMaItem('${it.rid}','qty',this.value)" placeholder="1">
+        <div style="font-size:11px;color:var(--t2);margin-top:4px">Если сдано несколько одинаковых изделий по одной цене — укажите количество, остальные поля заполните один раз</div>
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label>
         <div style="display:flex;gap:8px">
@@ -4640,18 +4650,43 @@ function renderMaItemsList(){
 function setMaArtikulMode(rid, mode){
   const it = _maItems.find(x=>x.rid===rid); if(!it) return;
   it.artikulMode = mode;
-  if(mode==='auto') it.artikul = String(getNextArtikulNumber());
   if(mode==='none') it.artikul = '';
+  recalcMaAutoArtikuls();
   renderMaItemsList();
 }
 
 function updateMaItem(rid, field, val){
   const it = _maItems.find(x=>x.rid===rid); if(!it) return;
+  if(field==='qty'){
+    it.qty = Math.max(1, parseInt(val,10)||1);
+    recalcMaAutoArtikuls();
+    renderMaItemsList();
+    return;
+  }
   it[field] = (field==='zp'||field==='price') ? (parseFloat(val)||0) : val;
+}
+
+// Пересчитывает артикулы для всех позиций в режиме "авто" последовательно,
+// учитывая что позиция с qty>1 занимает диапазон из qty номеров подряд.
+// Нужно при изменении количества штук в любой строке, чтобы не было коллизий.
+function recalcMaAutoArtikuls(){
+  let base = 0;
+  products.forEach(p=>{
+    const n = parseInt(String(p.artikul||'').replace(/\D/g,''),10);
+    if(!isNaN(n) && n>base) base = n;
+  });
+  _maItems.forEach(it=>{
+    if(it.artikulMode==='auto'){
+      base += 1;
+      it.artikul = String(base);
+      base += (parseInt(it.qty,10)||1) - 1;
+    }
+  });
 }
 
 function removeMaItemRow(rid){
   _maItems = _maItems.filter(x=>x.rid!==rid);
+  recalcMaAutoArtikuls();
   renderMaItemsList();
 }
 
@@ -4665,10 +4700,19 @@ async function saveManualAccept(){
   const master = getEmployees().find(e=>e.id===masterId);
   const batchId = uid();
 
-  const positions = _maItems.map(it=>({
-    rid: it.rid, artikul: it.artikul||'', name: it.name, wood: it.wood,
-    zp: it.zp||0, price: it.price||0, status: 'pending' // pending → accepted | defect
-  }));
+  const positions = [];
+  _maItems.forEach(it=>{
+    const qty = parseInt(it.qty,10)||1;
+    const baseArtikul = parseInt(it.artikul,10);
+    for(let i=0;i<qty;i++){
+      let artikul = it.artikul||'';
+      if(it.artikulMode==='auto' && !isNaN(baseArtikul)) artikul = String(baseArtikul+i);
+      positions.push({
+        rid: qty>1 ? uid() : it.rid, artikul, name: it.name, wood: it.wood,
+        zp: it.zp||0, price: it.price||0, status: 'pending' // pending → accepted | defect
+      });
+    }
+  });
 
   try{
     await db.collection('ws_master_acceptances').doc(batchId).set({
