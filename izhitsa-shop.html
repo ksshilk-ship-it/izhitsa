@@ -1178,6 +1178,15 @@ function checkForAppUpdate() {
         <span style="font-size:12px;color:#8888aa">₽</span>
       </div>
       <div style="font-size:12px;color:#8888aa;margin-top:4px" id="discHint">Введите % → посчитается сумма</div>
+      <div id="discCategoryBlock" style="display:none;margin-top:10px">
+        <label class="fl">К какой категории относится скидка?</label>
+        <div style="display:flex;gap:6px;margin-top:4px">
+          <button type="button" id="discCat_auto" onclick="setDiscCategory('auto')" style="flex:1;padding:7px 4px;border-radius:9px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:10.5px;font-weight:700;cursor:pointer">⚖️ Авто (поровну)</button>
+          <button type="button" id="discCat_derevo" onclick="setDiscCategory('derevo')" style="flex:1;padding:7px 4px;border-radius:9px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:10.5px;font-weight:600;cursor:pointer">🌳 Дерево</button>
+          <button type="button" id="discCat_dr" onclick="setDiscCategory('dr')" style="flex:1;padding:7px 4px;border-radius:9px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:10.5px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
+        </div>
+        <div style="font-size:10.5px;color:#8888aa;margin-top:4px">Например, если вместо скидки подарили товар ДР — выберите "ДР Товар", чтобы вся скидка ушла именно туда, а не делилась пропорционально.</div>
+      </div>
     </div>
     <div style="background:#22222e;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
       <span style="font-size:14px;color:#8888aa">К оплате:</span>
@@ -1771,7 +1780,7 @@ function startSyncListeners() {
 // ════ STATE ════
 let session = null, pendingSession = null;
 let journal = [];
-let saleItems = [], payMethod = 'cash', staffPayMethod = 'cash', discType = 'pct';
+let saleItems = [], payMethod = 'cash', staffPayMethod = 'cash', discType = 'pct', discCategory = 'auto';
 var _editSaleEntryId = null;
 
 function deleteJournalEntryShop(id){
@@ -1804,6 +1813,7 @@ function editJournalSale(id){
     var di=document.getElementById('discInput'); if(di) di.value=entry.discount;
     var sd=document.getElementById('saleDiscount'); if(sd) sd.value=entry.discount;
   }
+  setDiscCategory(entry.discCategory||'auto');
 
   // Payment method
   var pmEl = document.querySelector('#saleMo .pc[onclick*="\''+(entry.payMethod||'cash')+'\'"]');
@@ -4131,6 +4141,7 @@ function resetSaleForm(){
   var rb=document.getElementById('rsAccountBlock'); if(rb)rb.style.display='none';
   saleItems=[];
   setSiItemType('derevo');
+  setDiscCategory('auto');
   renderSaleItems(); calcSaleTotal();
   ['siNum','siName','siPrice','siQty','siAmt','siSpecies','siNameM','siPriceM','siQtyM','siAmtM','siSpeciesM','saleComment','mixCash','mixCard','discInput','saleDiscount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('siLookupResult').style.display='none';
@@ -4180,6 +4191,7 @@ function addSaleItem(){
 }
 function renderSaleItems(){
   const c=document.getElementById('saleItemsDisplay');
+  updateDiscCategoryVisibility();
   if(!saleItems.length){c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:4px 0">Добавьте товары ↑</div>';return;}
   c.innerHTML=saleItems.map((it,i)=>`
     <div class="sir" style="border-color:${it.hasDiff?'#f06060':'#2e2e3e'};background:${it.hasDiff?'#2e1a1a':'#22222e'}">
@@ -4230,6 +4242,29 @@ function siEditItem(i){
   showToast('✏️ Исправьте поля и нажмите ＋');
   setSiItemType(it.goodsType==='dr'?'dr':'derevo');
 }
+function setDiscCategory(cat){
+  discCategory = cat;
+  ['auto','derevo','dr'].forEach(function(c){
+    var btn = document.getElementById('discCat_'+c);
+    if(!btn) return;
+    var active = c===cat;
+    btn.style.borderWidth = active ? '2px' : '1px';
+    btn.style.background = active ? '#1e2a14' : '#22222e';
+    btn.style.color = active ? '#c8f060' : '#8888aa';
+    btn.style.borderColor = active ? '#c8f060' : '#2e2e3e';
+    btn.style.fontWeight = active ? '700' : '600';
+  });
+}
+// Shows the category selector only when the current sale actually mixes
+// Дерево and ДР Товар items — for a single-category sale there's nothing
+// to choose, the discount can only apply to that one category anyway.
+function updateDiscCategoryVisibility(){
+  var block = document.getElementById('discCategoryBlock'); if(!block) return;
+  var hasWood = saleItems.some(function(it){ return it.goodsType!=='dr'; });
+  var hasDr = saleItems.some(function(it){ return it.goodsType==='dr'; });
+  block.style.display = (hasWood && hasDr) ? 'block' : 'none';
+  if(!(hasWood && hasDr)) setDiscCategory('auto');
+}
 function setDiscType(type){
   discType=type;
   const pb=document.getElementById('discTypePct'),sb=document.getElementById('discTypeSum'),u=document.getElementById('discUnit');
@@ -4274,17 +4309,29 @@ function saveSale(){
   const hasDiff=saleItems.some(i=>i.hasDiff);
 
   // Split items by per-item goods type; discount and payment are entered
-  // once for the whole sale, so split them proportionally to each group's
-  // share of the pre-discount total — keeps cash/goods balances accurate
-  // even when one sale mixes Дерево and ДР Товар items.
+  // once for the whole sale. By default the discount is split proportional
+  // to each group's share of the pre-discount total — but if the seller
+  // explicitly marked the discount as belonging to one category (e.g. a
+  // "gift instead of discount" scenario where a ДР item was given for free
+  // to compensate, while the rest of the sale is Дерево), respect that
+  // instead of diluting it across both categories.
   var totalWood = saleItems.reduce(function(s,it){ var a=it.amt!=null?it.amt:it.price*(it.qty||1); return it.goodsType==='dr' ? s : s+a; },0);
   var totalDr = total - totalWood;
-  var shareWood = total>0 ? totalWood/total : 0;
-  var discWood = Math.round(disc*shareWood);
-  var discDr = disc - discWood;
+  var discWood, discDr;
+  if(discCategory==='derevo'){
+    discWood = Math.min(disc, totalWood);
+    discDr = disc - discWood;
+  } else if(discCategory==='dr'){
+    discDr = Math.min(disc, totalDr);
+    discWood = disc - discDr;
+  } else {
+    var shareWood = total>0 ? totalWood/total : 0;
+    discWood = Math.round(disc*shareWood);
+    discDr = disc - discWood;
+  }
   var paidWood = Math.max(0, totalWood-discWood);
   var paidDr = Math.max(0, totalDr-discDr);
-  var sharePaidWood = paid>0 ? paidWood/paid : shareWood;
+  var sharePaidWood = paid>0 ? paidWood/paid : (total>0?totalWood/total:0);
   var cashPartWood = Math.round(cashPart*sharePaidWood);
   var cardPartWood = Math.round(cardPart*sharePaidWood);
   var cashPartDr = cashPart-cashPartWood;
@@ -4297,7 +4344,7 @@ function saveSale(){
   var newEntryData = {ts:new Date().toISOString(),icon:'💰',
     label:'Продажа',
     sub:saleItems.map(i=>'№'+(i.num||'—')+' '+i.name+(i.goodsType==='dr'?' · ДР':'')+(i.hasDiff?' ⚠️':'')).join(', ')+(disc?' · Скидка '+fmt(disc):'')+' · '+payL,
-    items:[...saleItems],totalPrice:total,discount:disc,totalPaid:paid,payMethod,cashPart,cardPart,goodsType:overallGoodsType,
+    items:[...saleItems],totalPrice:total,discount:disc,discCategory:discCategory,totalPaid:paid,payMethod,cashPart,cardPart,goodsType:overallGoodsType,
     hasDiff,comment:gv('saleComment'),amount:paid,amtCls:'inc',amtSign:'+',
     cashEffect:cashPartWood,cardEffect:cardPartWood,staffEffect:0,goodsEffect:-totalWood,
     cashDrEffect:cashPartDr,cardDrEffect:cardPartDr,goodsDrEffect:-totalDr};
@@ -5745,10 +5792,18 @@ function migrateLegacyShiftRevenue(){
       if(s.goodsType==='dr'){
         drDisc += s.discount||0;
       } else if(s.goodsType==='mixed' && s.items && s.items.length){
-        var totalWood = s.items.reduce(function(a,it){ var amt=it.amt!=null?it.amt:it.price*(it.qty||1); return it.goodsType==='dr' ? a : a+amt; },0);
-        var totalAll = s.items.reduce(function(a,it){ return a+(it.amt!=null?it.amt:it.price*(it.qty||1)); },0);
-        var shareWood = totalAll>0 ? totalWood/totalAll : 1;
-        var dWood = Math.round((s.discount||0)*shareWood);
+        var totalWoodM = s.items.reduce(function(a,it){ var amt=it.amt!=null?it.amt:it.price*(it.qty||1); return it.goodsType==='dr' ? a : a+amt; },0);
+        var totalAllM = s.items.reduce(function(a,it){ return a+(it.amt!=null?it.amt:it.price*(it.qty||1)); },0);
+        var totalDrM = totalAllM - totalWoodM;
+        var dWood;
+        if(s.discCategory==='derevo'){
+          dWood = Math.min(s.discount||0, totalWoodM);
+        } else if(s.discCategory==='dr'){
+          dWood = (s.discount||0) - Math.min(s.discount||0, totalDrM);
+        } else {
+          var shareWood = totalAllM>0 ? totalWoodM/totalAllM : 1;
+          dWood = Math.round((s.discount||0)*shareWood);
+        }
         disc += dWood;
         drDisc += (s.discount||0)-dWood;
       } else {
@@ -5900,17 +5955,26 @@ function _renderShiftView(){
     cardRev += s.cardEffect||0;
     drCashRev += s.cashDrEffect||0;
     drCardRev += s.cardDrEffect||0;
-    // Discount isn't stored split by category — only as one total on the
-    // sale entry — so for mixed sales (Дерево + ДР Товар in one sale) we
-    // need to split it the same way saveSale() originally did: proportional
-    // to each category's share of the pre-discount item total.
+    // Discount isn't always split by category — only as one total on the
+    // sale entry, unless the seller explicitly chose a category (gift
+    // scenario) — so for mixed sales without an explicit choice we fall
+    // back to splitting proportionally to each category's share of the
+    // pre-discount item total, same as saveSale() does at entry time.
     if(s.goodsType==='dr'){
       drDisc += s.discount||0;
     } else if(s.goodsType==='mixed' && s.items && s.items.length){
       var totalWood = s.items.reduce(function(a,it){ var amt=it.amt!=null?it.amt:it.price*(it.qty||1); return it.goodsType==='dr' ? a : a+amt; },0);
       var totalAll = s.items.reduce(function(a,it){ return a+(it.amt!=null?it.amt:it.price*(it.qty||1)); },0);
-      var shareWood = totalAll>0 ? totalWood/totalAll : 1;
-      var dWood = Math.round((s.discount||0)*shareWood);
+      var totalDrItm = totalAll - totalWood;
+      var dWood;
+      if(s.discCategory==='derevo'){
+        dWood = Math.min(s.discount||0, totalWood);
+      } else if(s.discCategory==='dr'){
+        dWood = (s.discount||0) - Math.min(s.discount||0, totalDrItm);
+      } else {
+        var shareWood = totalAll>0 ? totalWood/totalAll : 1;
+        dWood = Math.round((s.discount||0)*shareWood);
+      }
       disc += dWood;
       drDisc += (s.discount||0)-dWood;
     } else {
