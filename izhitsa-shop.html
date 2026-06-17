@@ -2235,9 +2235,21 @@ function calcSellerSummary(){
       if(!groupItems.length) return;
       var groupTotal = groupItems.reduce(function(s,it){ return s+itemAmt(it); },0);
       var saleTotal = e.totalPrice || items.reduce(function(s,it){ return s+itemAmt(it); },0) || 1;
-      var share = groupTotal/saleTotal;
       listPrice += groupTotal;
-      discount += (e.discount||0)*share;
+      // Respect an explicit discount-category choice (e.g. "gift instead of
+      // discount" scenario) instead of always splitting proportionally.
+      if(e.discCategory==='derevo'){
+        var woodTotalForSale = items.reduce(function(s,it){ return it.goodsType==='dr'?s:s+itemAmt(it); },0);
+        var discWoodForSale = Math.min(e.discount||0, woodTotalForSale);
+        discount += isDr ? (e.discount||0)-discWoodForSale : discWoodForSale;
+      } else if(e.discCategory==='dr'){
+        var drTotalForSale = items.reduce(function(s,it){ return it.goodsType==='dr'?s+itemAmt(it):s; },0);
+        var discDrForSale = Math.min(e.discount||0, drTotalForSale);
+        discount += isDr ? discDrForSale : (e.discount||0)-discDrForSale;
+      } else {
+        var share = groupTotal/saleTotal;
+        discount += (e.discount||0)*share;
+      }
       count += groupItems.reduce(function(s,it){ return s+(it.qty||1); },0);
       var cash = isDr ? (e.cashDrEffect||0) : (e.cashEffect||0);
       var card = isDr ? (e.cardDrEffect||0) : (e.cardEffect||0);
