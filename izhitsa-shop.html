@@ -578,6 +578,7 @@ function checkForAppUpdate() {
       <div class="fg" style="margin:0;flex:1"><label class="fl">По дату</label><input class="fi" type="date" id="histDateTo" style="-webkit-appearance:none;color-scheme:dark" oninput="applyHistCustomRange()"></div>
     </div>
     <div id="histShopFilter" style="display:flex;gap:8px;margin-bottom:12px;overflow-x:auto"></div>
+    <div id="histShowOpenBanner" style="display:none;background:#2e2a14;border:1px solid #f0c060;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:#f0c060">⚠️ Режим диагностики: показаны ТОЛЬКО незакрытые смены, фильтры периода и магазина временно не действуют. Нажмите «Незакрытые» ещё раз, чтобы вернуться к обычному архиву.</div>
     <div id="shiftHistoryList"></div>
   </div>
   <!-- ════ КОРЗИНА (удалённые записи) ════ -->
@@ -4070,7 +4071,7 @@ function buildAdminTabs(){
   t.innerHTML=`
     <button class="tab active" onclick="showPg('today',this);renderTodayShift()"><div class="ti">📋</div><span>Смена</span></button>
     <button class="tab" onclick="showPg('alerts',this);renderAlertsPage()"><div class="ti">🚨</div><span>Тревога</span><div class="tbadge" id="alertsBadge"></div></button>
-    <button class="tab" onclick="showPg('history',this);renderShiftHistory()"><div class="ti">📁</div><span>Архив</span></button>
+    <button class="tab" onclick="_histShowOpen=false;showPg('history',this);renderShiftHistory()"><div class="ti">📁</div><span>Архив</span></button>
     <button class="tab" onclick="showPg('trash',this);renderTrash()"><div class="ti">🗑</div><span>Корзина</span></button>
     <button class="tab" onclick="showPg('restore',this);initRestore()"><div class="ti">🗄</div><span>Восст.</span></button>
     <button class="tab" onclick="showPg('sellers',this);renderSellersAdmin()"><div class="ti">👥</div><span>Роли</span></button>
@@ -5944,9 +5945,16 @@ function toggleHistShowOpen(){
   _histShowOpen = !_histShowOpen;
   var btn = document.getElementById('histShowOpenBtn');
   if(btn){
-    btn.style.background = _histShowOpen ? '#2e2a14' : '#1a1a22';
+    btn.style.background = _histShowOpen ? '#604a14' : '#1a1a22';
     btn.style.borderWidth = _histShowOpen ? '2px' : '1px';
+    btn.style.color = _histShowOpen ? '#0f0f13' : '#f0c060';
   }
+  var banner = document.getElementById('histShowOpenBanner');
+  if(banner) banner.style.display = _histShowOpen ? 'block' : 'none';
+  var periodFilter = document.getElementById('histPeriodFilter');
+  if(periodFilter) periodFilter.style.opacity = _histShowOpen ? '0.35' : '1';
+  var shopFilter = document.getElementById('histShopFilter');
+  if(shopFilter) shopFilter.style.opacity = _histShowOpen ? '0.35' : '1';
   renderShiftHistory();
 }
 
@@ -5983,7 +5991,18 @@ function renderShiftHistory(){
     return;
   }
   c.innerHTML=allShifts.slice(0,60).map(function(sh){
-    var cashRev=(sh.cashRevenue||0)+(sh.drCashRevenue||0), cardRev=(sh.cardRevenue||0)+(sh.drCardRevenue||0), disc=(sh.totalDiscount||sh.discount||0)+(sh.drDiscount||0);
+    var cashRev, cardRev, disc;
+    if(sh.journal && sh.journal.length){
+      var jSales = sh.journal.filter(function(e){ return e.type==='sale'; });
+      cashRev=0; cardRev=0; disc=0;
+      jSales.forEach(function(s){
+        cashRev += (s.cashEffect||0)+(s.cashDrEffect||0);
+        cardRev += (s.cardEffect||0)+(s.cardDrEffect||0);
+        disc += s.discount||0;
+      });
+    } else {
+      cashRev=(sh.cashRevenue||0)+(sh.drCashRevenue||0); cardRev=(sh.cardRevenue||0)+(sh.drCardRevenue||0); disc=(sh.totalDiscount||sh.discount||0)+(sh.drDiscount||0);
+    }
     var total=cashRev+cardRev+disc;
     return '<div class="card" style="cursor:pointer;border-color:'+(sh.status==='open'?'#f0c060':sh.hasCashDiff?'#f06060':sh.isArchive?'#604020':'#2e2e3e')+'" onclick="openShiftView(\''+(sh.id||sh._id)+'\')">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
@@ -6944,6 +6963,7 @@ function savePastShift(){
   ['psCashCalc','psWoodEveBlock','psDrCashCalc','psDrEveBlock','psTotalRevBlock','psDrTotalRevBlock','psStaffTotal'].forEach(id=>{var el=document.getElementById(id);if(el)el.style.display='none';});
   ['psCashCheck','psDrCashCheck','psSaveError','psMornCheck','psDrMornCheck','psPrevCashInfo','psPrevGoodsInfo','psWriteoffList','psReceiveList','psDrWriteoffList','psDrReceiveList','psStaffList'].forEach(id=>{var el=document.getElementById(id);if(el)el.innerHTML='';});
   showToast('✅ Смена внесена задним числом');
+  _histShowOpen = false;
   showPg('history',document.querySelector('.tab')); renderShiftHistory();
 }
 // ════ PAST SHIFT AUTO-CALC ════
