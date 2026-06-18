@@ -447,15 +447,6 @@ if ('serviceWorker' in navigator) {
       <button class="btn sm" onclick="openMo('addStaffMo')">＋ Добавить</button>
     </div>
     <div id="unifiedStaffList"></div>
-
-    <!-- ARCHIVE -->
-    <div class="card" style="margin-top:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleStaffArchive()">
-        <div class="ctitle" style="margin:0">📥 Архив <span id="staffArchiveCount" style="color:var(--t2);font-weight:400"></span></div>
-        <span id="staffArchiveArrow">▶</span>
-      </div>
-      <div id="staffArchiveBody" style="display:none;margin-top:10px"></div>
-    </div>
   </div>
 
   <!-- ANALYTICS -->
@@ -503,22 +494,6 @@ if ('serviceWorker' in navigator) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <button class="btn" onclick="exportAllData()" style="background:var(--a2);color:#fff;font-size:14px;padding:16px;border-radius:12px;font-family:'Unbounded',sans-serif;font-weight:700">📥 Экспорт данных</button>
         <button class="btn" onclick="clearLocalCache()" style="background:#ff6b6b;color:#fff;font-size:14px;padding:16px;border-radius:12px;font-family:'Unbounded',sans-serif;font-weight:700">🗑️ Очистить кэш</button>
-      </div>
-    </div>
-
-    <!-- ZP SETTINGS per shop (synced with shop module) -->
-    <div style="background:var(--s2);border-radius:8px;margin-bottom:16px;padding:0;overflow:hidden">
-      <div onclick="toggleAdminSettingsSection('zp')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
-        <div style="display:flex;align-items:center;gap:9px">
-          <span style="font-size:18px">💰</span>
-          <div><div style="font-weight:700;font-size:13px">Настройки ЗП по магазинам</div>
-          <div id="asCount_zp" style="font-size:11px;color:var(--t2)">— записей</div></div>
-        </div>
-        <div id="asArr_zp" style="color:var(--accent)">▶</div>
-      </div>
-      <div id="asBody_zp" style="display:none;padding:0 14px 14px">
-        <div id="setZpList"></div>
-        <button class="btn" style="margin-top:8px" onclick="saveAllZpSettings()">💾 Сохранить настройки ЗП</button>
       </div>
     </div>
 
@@ -581,11 +556,6 @@ if ('serviceWorker' in navigator) {
       <input class="fi" type="number" id="staffWsRate" placeholder="0" inputmode="numeric">
     </div>
 
-    <div class="fg">
-      <label class="fl">Статус сотрудника</label>
-      <div id="staffStatusChips" style="display:flex;flex-wrap:wrap;gap:8px"></div>
-    </div>
-
     <button class="btn" onclick="saveUnifiedStaff()" style="margin-bottom:8px">💾 Сохранить</button>
     <button class="btn sec" onclick="closeMo('addStaffMo')">Отмена</button>
   </div>
@@ -631,64 +601,30 @@ db.enablePersistence({synchronizeTabs:true}).catch(function(e){ console.log('Per
 var _adminSyncUnsubs = {};
 var ADMIN_SYNC_SETTINGS = {
   'iz_admin_users':      {doc:'admins',        field:'admins'},
+  'iz_shops':            {doc:'shops',         field:'shops'},
   'iz_sellers':          {doc:'sellers',       field:'sellers'},
   'iz_shop_zp_settings': {doc:'zp',            field:'zp'},
   'iz_items':            {doc:'items',         field:'items'},
   'iz_sales_sources':    {doc:'sales_sources', field:'data'},
-  'iz_accounts':         {doc:'accounts',      field:'accounts'},
-  'iz_payment_methods':  {doc:'payment_methods', field:'data'},
-  'iz_suppliers':        {doc:'suppliers',     field:'data'},
-  'iz_goods':            {doc:'goods',         field:'data'},
-  'iz_materials':        {doc:'materials',     field:'data'},
-  'iz_sizes':            {doc:'sizes',         field:'data'},
-  'iz_work_schedules':   {doc:'work_schedules', field:'data'},
   'iz_plan_data':        {doc:'plan',          field:'data'},
   'iz_debits':           {doc:'debits',        field:'data'},
   'iz_ws_employees':     {doc:'ws_employees',  field:'data'},
-  'iz_employee_statuses': {doc:'employee_statuses', field:'data'},
 };
 function adminSyncListen(lsKey) {
   var m = ADMIN_SYNC_SETTINGS[lsKey]; if(!m || _adminSyncUnsubs[lsKey]) return;
   _adminSyncUnsubs[lsKey] = db.collection('iz_settings').doc(m.doc).onSnapshot(function(snap){
-    if(!snap.exists){
-      // Safe one-time seed: only fires when Firestore itself confirms there is
-      // truly no sales_sources document anywhere (first-ever app run), so it
-      // can never overwrite real data that simply hasn't loaded yet locally.
-      if(lsKey === 'iz_sales_sources' && !localStorage.getItem('iz_sales_sources')){
-        saveShops(['ОПТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
-      }
-      return;
-    }
+    if(!snap.exists) return;
     var val = snap.data()[m.field];
     if(val !== undefined) {
       localStorage.setItem(lsKey, JSON.stringify(val));
-      // Mirror sales sources to iz_admin_shops for shop module compatibility
-      if(lsKey === 'iz_sales_sources') localStorage.setItem('iz_admin_shops', JSON.stringify(val));
-      // Live-refresh UI for refbooks / settings lists that depend on this data
-      if(lsKey === 'iz_accounts'){
-        try{ renderAccountsList(); }catch(e){}
-        try{ if(document.getElementById('items_accounts')) renderRefBookItems('accounts','iz_accounts'); }catch(e){}
-      }
-      if(lsKey === 'iz_sales_sources'){
-        try{ renderShopsList(); }catch(e){}
-        try{ if(document.getElementById('items_sources')) renderRefBookItems('sources','iz_sales_sources'); }catch(e){}
-        try{ renderZpList(); }catch(e){}
-      }
-      if(lsKey === 'iz_shop_zp_settings'){
-        try{ renderZpList(); }catch(e){}
-      }
-      // Generic refbook live-refresh
-      var refbookIdMap = {iz_payment_methods:'payments', iz_suppliers:'suppliers', iz_goods:'goods', iz_materials:'materials', iz_sizes:'sizes', iz_work_schedules:'schedules'};
-      if(refbookIdMap[lsKey]){
-        var rbId = refbookIdMap[lsKey];
-        try{ if(document.getElementById('items_'+rbId)) renderRefBookItems(rbId, lsKey); }catch(e){}
-      }
+      // Mirror shops to iz_admin_shops for shop module
+      if(lsKey === 'iz_shops') localStorage.setItem('iz_admin_shops', JSON.stringify(val));
     }
   }, function(e){ console.log('adminSyncListen err', lsKey, e.code||e); });
 }
 function adminSyncSave(lsKey, data) {
   localStorage.setItem(lsKey, JSON.stringify(data));
-  if(lsKey === 'iz_sales_sources') localStorage.setItem('iz_admin_shops', JSON.stringify(data));
+  if(lsKey === 'iz_shops') localStorage.setItem('iz_admin_shops', JSON.stringify(data));
   var m = ADMIN_SYNC_SETTINGS[lsKey]; if(!m) return;
   var obj = {}; obj[m.field] = data; obj.updatedAt = new Date().toISOString();
   db.collection('iz_settings').doc(m.doc).set(obj, {merge:true}).catch(function(e){ console.log('adminSyncSave err', lsKey, e.code||e); });
@@ -724,29 +660,13 @@ function saveAdminUsers(data) {
   adminSyncSave('iz_admin_users', data);
 }
 
-// ── Sort helper: by type order, then alphabetically ──
-var SHOP_TYPE_ORDER = {shop:0, offline:1, online:2, workshop:3};
-var ACCOUNT_TYPE_ORDER = {cash:0, card:1, rs:2, bank:2, online:3};
-function sortByTypeThenName(arr, typeOrder){
-  return arr.slice().sort(function(a,b){
-    var ta = typeOrder[(a.type||'')] !== undefined ? typeOrder[a.type||''] : 99;
-    var tb = typeOrder[(b.type||'')] !== undefined ? typeOrder[b.type||''] : 99;
-    if(ta !== tb) return ta - tb;
-    var na = (a.name||a||'').toString();
-    var nb = (b.name||b||'').toString();
-    return na.localeCompare(nb, 'ru');
-  });
-}
-
 function getShops() {
-  try { return sortByTypeThenName(JSON.parse(localStorage.getItem('iz_sales_sources') || '[]'), SHOP_TYPE_ORDER); } 
+  try { return JSON.parse(localStorage.getItem('iz_shops') || '[]'); } 
   catch(e) { return []; }
 }
 
 function saveShops(data) {
-  data = sortByTypeThenName(data, SHOP_TYPE_ORDER);
-  adminSyncSave('iz_sales_sources', data);
-  localStorage.setItem('iz_admin_shops', JSON.stringify(data));
+  adminSyncSave('iz_shops', data);
 }
 
 function getTransactions() {
@@ -985,8 +905,15 @@ function selectAdminRole(role, el) {
     document.querySelectorAll('.role-card').forEach(function(c){ c.classList.remove('selected'); });
     if(el && el.classList) el.classList.add('selected');
     
-    var users = getAdminUsers();
-    var filtered = users.filter(function(u){ return u.role === role; });
+    // Get staff from iz_staff (new system)
+    var staff = JSON.parse(localStorage.getItem('iz_staff') || '[]');
+    var filtered = [];
+    
+    staff.forEach(function(s) {
+      if(s.roles && s.roles.includes(role)) {
+        filtered.push({id: s.id, name: s.name, role: role, pass: s.pass});
+      }
+    });
     
     // Always add hardcoded superadmin for admin role
     if(role === 'admin') {
@@ -1008,7 +935,7 @@ function doLogin() {
   var errEl = document.getElementById('loginErr');
   errEl.style.display = 'none';
 
-  // Hardcoded superadmin — always works regardless of Firestore
+  // Hardcoded superadmin — always works regardless of localStorage
   if(uid_sel === 'admin_default' && pass === 'admin123') {
     var superAdmin = {id:'admin_default', name:'Администратор', role:'admin'};
     session = superAdmin;
@@ -1034,8 +961,9 @@ function doLogin() {
     return;
   }
 
-  var users = getAdminUsers();
-  var user = users.find(function(u){ return u.id === uid_sel; });
+  // Get user from iz_staff (new system)
+  var staff = JSON.parse(localStorage.getItem('iz_staff') || '[]');
+  var user = staff.find(function(u){ return u.id === uid_sel; });
 
   if(!user) {
     errEl.style.display = 'block';
@@ -1049,7 +977,10 @@ function doLogin() {
     return;
   }
   
-  session = {id: user.id, name: user.name, role: user.role};
+  // Get first role from roles array
+  var role = user.roles && user.roles.length > 0 ? user.roles[0] : 'admin';
+  
+  session = {id: user.id, name: user.name, role: role};
   sessionStorage.setItem('iz_admin_session', JSON.stringify(session));
   logLogin(user.name);
   errEl.style.display = 'none';
@@ -1058,7 +989,7 @@ function doLogin() {
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('tabsBar').style.display = 'flex';
   document.getElementById('hdrName').textContent = user.name;
-  document.getElementById('hdrRole').textContent = user.role;
+  document.getElementById('hdrRole').textContent = role;
   
   populateSellers();
   populateWsEmployees();
@@ -1633,26 +1564,7 @@ function openAddStaffModal() {
   // Reset form
   ['staffName','staffPass','staffWsRate'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   document.querySelectorAll('#staffRolesBlock input[type=checkbox]').forEach(function(cb){ cb.checked=false; });
-  _selectedStaffStatus='';
-  renderStaffStatusChips();
   openMo('addStaffMo');
-}
-
-var _selectedStaffStatus='';
-function renderStaffStatusChips(){
-  var c=document.getElementById('staffStatusChips'); if(!c) return;
-  var statuses=getRefBook('iz_employee_statuses');
-  var options=[''].concat(statuses);
-  c.innerHTML=options.map(function(s){
-    var name=s.name||s||'';
-    var label=name||'— не указан —';
-    var active=(_selectedStaffStatus===name);
-    return '<button type="button" onclick="pickStaffStatus(\''+name+'\')" style="padding:8px 14px;border-radius:10px;font-size:12px;cursor:pointer;border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'var(--s2)':'var(--bg)')+';color:'+(active?'var(--accent)':'var(--text)')+'">'+label+'</button>';
-  }).join('');
-}
-function pickStaffStatus(name){
-  _selectedStaffStatus=name;
-  renderStaffStatusChips();
 }
 
 function saveUnifiedStaff() {
@@ -1672,24 +1584,12 @@ function saveUnifiedStaff() {
   });
 
   var wsRate = parseFloat(gv('staffWsRate')) || 0;
-  var status = _selectedStaffStatus||'';
   var staff = getStaff();
   var existing = staff.findIndex(function(s){ return s.name === name; });
-  var prev = existing>=0 ? staff[existing] : null;
-  var blocked = prev ? (prev.blocked||false) : false;
-  var blockedByStatus = prev ? (prev.blockedByStatus||false) : false;
-
-  // Link status to access: "Уволен" auto-blocks; recovering from it auto-unblocks
-  if(status === 'Уволен'){
-    if(!blocked){ blocked = true; blockedByStatus = true; }
-  } else if(blockedByStatus && status !== 'Уволен'){
-    blocked = false; blockedByStatus = false;
-  }
-
   var entry = {
     id: existing >= 0 ? staff[existing].id : uid(),
     name: name, pass: pass, roles: roles, shops: shops,
-    wsRate: wsRate, status: status, blocked: blocked, blockedByStatus: blockedByStatus,
+    wsRate: wsRate, blocked: false,
     createdAt: existing >= 0 ? staff[existing].createdAt : new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     createdBy: session ? session.name : 'admin'
@@ -1699,114 +1599,44 @@ function saveUnifiedStaff() {
   closeMo('addStaffMo');
   renderUnifiedStaff();
   logAction('ADD_STAFF', {name: name, roles: roles});
-  var prevBlocked = prev ? (prev.blocked||false) : false;
-  var msg='✅ Сотрудник сохранён';
-  if(blocked && !prevBlocked) msg += '\n🚫 Доступ автоматически заблокирован (статус «Уволен»)';
-  else if(!blocked && prevBlocked && blockedByStatus===false && (prev && prev.blockedByStatus)) msg += '\n✅ Доступ автоматически разблокирован';
-  alert(msg);
+  alert('✅ Сотрудник сохранён');
 }
 
 function renderUnifiedStaff() {
   var c = document.getElementById('unifiedStaffList'); if(!c) return;
   var staff = getStaff();
-  var active = staff.filter(function(s){ return !s.archived; });
-  var archived = staff.filter(function(s){ return s.archived; });
   var cnt = document.getElementById('staffCount');
-  if(cnt) cnt.textContent = active.length + ' сотрудников';
-  var arCnt = document.getElementById('staffArchiveCount');
-  if(arCnt) arCnt.textContent = archived.length ? '(' + archived.length + ')' : '';
+  if(cnt) cnt.textContent = staff.length + ' сотрудников';
 
-  if(!active.length) {
+  if(!staff.length) {
     c.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)"><div style="font-size:32px;margin-bottom:8px">👥</div>Нет сотрудников</div>';
-  } else {
+    return;
+  }
 
   var roleLabels = {admin:'🔐 Администратор', owner:'👑 Владелец', accountant:'📊 Бухгалтер',
     seller:'🏪 Продавец', мастер:'🔨 Мастер', заготовщик:'🪚 Заготовщик',
     кладовщик:'📦 Кладовщик', управляющий:'👑 Управляющий'};
 
-  c.innerHTML = active.map(function(s) {
-    var i = staff.indexOf(s);
+  c.innerHTML = staff.map(function(s, i) {
     var roleStr = (s.roles||[]).map(function(r){ return roleLabels[r]||r; }).join(' · ');
     var shopStr = (s.shops||[]).length ? (s.shops||[]).join(', ') : '';
     return '<div style="background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px">' +
-      '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
         '<div style="flex:1">' +
           '<div style="font-size:13px;font-weight:700;color:' + (s.blocked?'var(--t2)':'var(--text)') + '">' + s.name + (s.blocked?' 🚫':'') + '</div>' +
           '<div style="font-size:11px;color:var(--t2);margin-top:3px">' + roleStr + '</div>' +
           (shopStr ? '<div style="font-size:11px;color:var(--a2);margin-top:2px">📍 ' + shopStr + '</div>' : '') +
           (s.wsRate ? '<div style="font-size:11px;color:var(--a4);margin-top:2px">💰 ' + s.wsRate + '₽/шт</div>' : '') +
-          (s.status ? '<div style="font-size:11px;color:#ffb060;margin-top:2px">👤 ' + s.status + '</div>' : '') +
-        '</div>' +
-      '</div>' +
-      '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
-        '<button onclick="editStaff(' + i + ')" style="flex:1;min-width:40px;background:none;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;color:var(--a2);cursor:pointer">✏️</button>' +
-        '<button onclick="toggleStaffBlock(' + i + ')" style="flex:1;min-width:40px;background:none;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;color:' + (s.blocked?'var(--inc)':'var(--exp)') + ';cursor:pointer">' + (s.blocked?'✓':'⛔') + '</button>' +
-        '<button onclick="changeStaffPass(' + i + ')" style="flex:1;min-width:40px;background:none;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;color:var(--t2);cursor:pointer">🔑</button>' +
-        '<button onclick="archiveStaff(' + i + ')" style="flex:1;min-width:40px;background:none;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;color:var(--t2);cursor:pointer">📥</button>' +
-        '<button onclick="deleteStaff(' + i + ')" style="flex:1;min-width:40px;background:none;border:1px solid #3e2e2e;border-radius:6px;padding:6px 8px;font-size:13px;color:var(--exp);cursor:pointer">✕</button>' +
-      '</div>' +
-    '</div>';
-  }).join('');
-  }
-
-  renderStaffArchive();
-}
-
-function toggleStaffArchive(){
-  var body=document.getElementById('staffArchiveBody');
-  var arrow=document.getElementById('staffArchiveArrow');
-  if(!body) return;
-  var open = body.style.display!=='none';
-  body.style.display = open?'none':'block';
-  if(arrow) arrow.textContent = open?'▶':'▼';
-  if(!open) renderStaffArchive();
-}
-
-function renderStaffArchive(){
-  var body=document.getElementById('staffArchiveBody'); if(!body) return;
-  var staff = getStaff();
-  var archived = staff.filter(function(s){ return s.archived; });
-  if(!archived.length){
-    body.innerHTML='<div style="font-size:12px;color:var(--t2);padding:8px">Архив пуст</div>';
-    return;
-  }
-  var roleLabels = {admin:'🔐 Администратор', owner:'👑 Владелец', accountant:'📊 Бухгалтер',
-    seller:'🏪 Продавец', мастер:'🔨 Мастер', заготовщик:'🪚 Заготовщик',
-    кладовщик:'📦 Кладовщик', управляющий:'👑 Управляющий'};
-  body.innerHTML = archived.map(function(s){
-    var i = staff.indexOf(s);
-    var roleStr = (s.roles||[]).map(function(r){ return roleLabels[r]||r; }).join(' · ');
-    return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px">' +
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
-        '<div style="flex:1">' +
-          '<div style="font-size:13px;font-weight:700;color:var(--t2)">' + s.name + '</div>' +
-          '<div style="font-size:11px;color:var(--t2);margin-top:3px">' + roleStr + '</div>' +
-          (s.status ? '<div style="font-size:11px;color:#ffb060;margin-top:2px">👤 ' + s.status + '</div>' : '') +
         '</div>' +
         '<div style="display:flex;gap:4px">' +
-          '<button onclick="unarchiveStaff(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--a2);cursor:pointer">↩️ Вернуть</button>' +
+          '<button onclick="editStaff(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--a2);cursor:pointer">✏️</button>' +
+          '<button onclick="toggleStaffBlock(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:' + (s.blocked?'var(--inc)':'var(--exp)') + ';cursor:pointer">' + (s.blocked?'✓':'⛔') + '</button>' +
+          '<button onclick="changeStaffPass(' + i + ')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:11px;color:var(--t2);cursor:pointer">🔑</button>' +
           '<button onclick="deleteStaff(' + i + ')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:5px 8px;font-size:11px;color:var(--exp);cursor:pointer">✕</button>' +
         '</div>' +
       '</div>' +
     '</div>';
   }).join('');
-}
-
-function archiveStaff(idx){
-  var staff=getStaff();
-  if(!staff[idx]) return;
-  if(!confirm('Перенести «'+staff[idx].name+'» в архив?')) return;
-  staff[idx].archived=true;
-  saveStaff(staff);
-  renderUnifiedStaff();
-}
-
-function unarchiveStaff(idx){
-  var staff=getStaff();
-  if(!staff[idx]) return;
-  staff[idx].archived=false;
-  saveStaff(staff);
-  renderUnifiedStaff();
 }
 
 function editStaff(idx) {
@@ -1832,15 +1662,12 @@ function editStaff(idx) {
   document.querySelectorAll('#staffRolesBlock input[type=checkbox]').forEach(function(cb){
     cb.checked = s.roles && s.roles.indexOf(cb.value) >= 0;
   });
-  _selectedStaffStatus = s.status||'';
-  renderStaffStatusChips();
   openMo('addStaffMo');
 }
 
 function toggleStaffBlock(idx) {
   var staff = getStaff();
   staff[idx].blocked = !staff[idx].blocked;
-  staff[idx].blockedByStatus = false;
   saveStaff(staff);
   renderUnifiedStaff();
 }
@@ -1861,8 +1688,8 @@ function deleteStaff(idx) {
 
 // ════ SETTINGS FUNCTIONS ════
 
-function getAccounts() { return sortByTypeThenName(JSON.parse(localStorage.getItem('iz_accounts')||'[]'), ACCOUNT_TYPE_ORDER); }
-function saveAccounts(d) { adminSyncSave('iz_accounts', sortByTypeThenName(d, ACCOUNT_TYPE_ORDER)); }
+function getAccounts() { return JSON.parse(localStorage.getItem('iz_accounts')||'[]'); }
+function saveAccounts(d) { adminSyncSave('iz_accounts', d); }
 function getPayMethods() { return JSON.parse(localStorage.getItem('iz_pay_methods')||'["Нал","Терминал","СБП","Перевод","QR"]'); }
 function savePayMethods(d) { adminSyncSave('iz_pay_methods', d); }
 
@@ -1894,15 +1721,17 @@ function addShop() {
   if(!name) { alert('Введите название'); return; }
   var shops = getShops();
   if(shops.some(function(s){ return (s.name||s)===name; })) { alert('Уже есть'); return; }
-  shops.push({id:uid(), name:name, type:type, createdAt:new Date().toISOString()});
-  saveShops(shops);
+  shops.push({name:name, type:type});
+  adminSyncSave('iz_shops', shops);
   document.getElementById('newShopName').value = '';
   renderShopsList();
+  // Also sync to iz_admin_shops
+  localStorage.setItem('iz_admin_shops', JSON.stringify(shops));
 }
 function deleteShop(idx) {
   if(!confirm('Удалить точку продаж?')) return;
   var shops = getShops(); shops.splice(idx,1);
-  saveShops(shops);
+  adminSyncSave('iz_shops', shops);
   renderShopsList();
 }
 
@@ -1954,127 +1783,38 @@ function deletePayMethod(idx) {
   var m = getPayMethods(); m.splice(idx,1); savePayMethods(m); renderPayMethodsList();
 }
 
-function getShopNames(){ return getShops().map(function(x){ return x.name||x; }); }
-// Returns val if it's a defined finite number (including 0), otherwise def.
-function numDef(val, def){
-  return (val===undefined || val===null || val==='' || isNaN(val)) ? def : val;
-}
-
-function toggleAdminSettingsSection(id){
-  var body=document.getElementById('asBody_'+id), arr=document.getElementById('asArr_'+id);
-  if(!body) return;
-  var open = body.style.display!=='none';
-  body.style.display = open?'none':'block';
-  if(arr) arr.style.transform = open?'':'rotate(90deg)';
-}
-function updateAdminSettingsSectionCount(id, count){
-  var el=document.getElementById('asCount_'+id);
-  if(el) el.textContent = count+' записей';
-}
-function toggleHighPctAdmin(sid, checked){
-  var block=document.getElementById('zp_highpct_block_'+sid);
-  if(block) block.style.display = checked?'block':'none';
-}
-
 function renderZpList() {
   var c = document.getElementById('setZpList'); if(!c) return;
-  var shops = getShopNames();
-  var settings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
-  updateAdminSettingsSectionCount('zp', shops.length);
+  var shops = getShops().filter(function(s){ return (s.type||'shop')==='shop'; });
+  var zp = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
   if(!shops.length) { c.innerHTML='<div style="color:var(--t2);font-size:12px">Сначала добавьте магазины</div>'; return; }
-
-  c.innerHTML = shops.map(function(shop){
-    var sid = encodeURIComponent(shop).replace(/%/g,'_');
-    var s = settings[shop] || {base:1500, pct:8, threshold:5000, travel:0};
-    var base = numDef(s.base, 1500), pct = numDef(s.pct, 8), threshold = numDef(s.threshold, 5000), travel = numDef(s.travel, 0);
-    var highThresh = numDef(s.highThreshold, 20000), highPct = numDef(s.highPct, 10);
-    var highEnabled = (s.highEnabled !== undefined) ? s.highEnabled : !!s.highThreshold;
-    return '<div style="border:1px solid var(--border);border-radius:12px;margin-bottom:8px;overflow:hidden">'+
-      '<div onclick="toggleZpAccAdmin(\''+sid+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:12px;cursor:pointer;background:var(--s2)">'+
-        '<div style="font-size:13px;font-weight:700">🏪 '+shop+'</div>'+
-        '<div style="display:flex;align-items:center;gap:8px">'+
-          '<div style="font-size:11px;color:var(--t2)">база: '+base+'₽ · '+pct+'%</div>'+
-          '<div id="zpAccA_arr_'+sid+'" style="color:var(--accent)">▶</div>'+
-        '</div>'+
-      '</div>'+
-      '<div id="zpAccA_'+sid+'" style="display:none;padding:12px;background:var(--bg)">'+
-        '<div class="fg"><label class="fl">Базовая ставка за выход (₽)</label>'+
-          '<input class="fi" type="number" id="zp_base_'+sid+'" value="'+base+'" inputmode="numeric"></div>'+
-        '<div class="fg"><label class="fl">Порог выручки для % (₽)</label>'+
-          '<input class="fi" type="number" id="zp_thresh_'+sid+'" value="'+threshold+'" inputmode="numeric">'+
-          '<div style="font-size:11px;color:var(--t2);margin-top:4px">Ниже порога → только базовая</div></div>'+
-        '<div class="fg"><label class="fl">Процент от выручки (%)</label>'+
-          '<input class="fi" type="number" id="zp_pct_'+sid+'" value="'+pct+'" inputmode="numeric" step="0.5"></div>'+
-        '<div class="fg"><label class="fl">Проезд за смену (₽)</label>'+
-          '<input class="fi" type="number" id="zp_travel_'+sid+'" value="'+travel+'" inputmode="numeric"></div>'+
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+
-          '<input type="checkbox" id="zp_has_high_'+sid+'" '+(highEnabled?'checked':'')+
-          ' onchange="toggleHighPctAdmin(\''+sid+'\',this.checked)" style="width:18px;height:18px;cursor:pointer">'+
-          '<label for="zp_has_high_'+sid+'" style="font-size:12px;color:var(--t2);cursor:pointer">Повышенный % при высокой выручке</label>'+
-        '</div>'+
-        '<div id="zp_highpct_block_'+sid+'" style="'+(highEnabled?'':'display:none')+'">'+
-          '<div class="fg"><label class="fl">Порог повышенного % (₽)</label>'+
-            '<input class="fi" type="number" id="zp_highthresh_'+sid+'" value="'+highThresh+'" inputmode="numeric"></div>'+
-          '<div class="fg"><label class="fl">Повышенный % (%)</label>'+
-            '<input class="fi" type="number" id="zp_highpct_'+sid+'" value="'+highPct+'" inputmode="numeric" step="0.5"></div>'+
-        '</div>'+
-        '<button onclick="saveOneShopZpAdmin(\''+shop+'\',\''+sid+'\')" style="width:100%;padding:10px;border-radius:10px;background:var(--s2);border:1px solid var(--accent);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;margin-top:4px">💾 Сохранить '+shop+'</button>'+
-      '</div>'+
+  c.innerHTML = shops.map(function(s) {
+    var name=s.name||s, sid=encodeURIComponent(name).replace(/%/g,'_');
+    var cfg = zp[name]||{base:1500,threshold:5000,pct:8,travel:0};
+    return '<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">' +
+      '<div onclick="this.nextSibling.style.display=this.nextSibling.style.display===\'none\'?\'block\':\'none\'" style="padding:10px;background:var(--s2);cursor:pointer;font-size:13px;font-weight:700">🏪 ' + name + '</div>' +
+      '<div style="display:none;padding:10px">' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+          '<div><label class="fl">База (₽)</label><input class="fi" type="number" id="zp_base_'+sid+'" value="'+(cfg.base||1500)+'" inputmode="numeric"></div>' +
+          '<div><label class="fl">Порог (₽)</label><input class="fi" type="number" id="zp_thresh_'+sid+'" value="'+(cfg.threshold||5000)+'" inputmode="numeric"></div>' +
+          '<div><label class="fl">% выручки</label><input class="fi" type="number" id="zp_pct_'+sid+'" value="'+(cfg.pct||8)+'" step="0.5" inputmode="numeric"></div>' +
+          '<div><label class="fl">Проезд (₽)</label><input class="fi" type="number" id="zp_travel_'+sid+'" value="'+(cfg.travel||0)+'" inputmode="numeric"></div>' +
+        '</div>' +
+        '<button onclick="saveZpForShop(\''+name+'\',\''+sid+'\')" style="margin-top:8px;width:100%;padding:8px;border-radius:8px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>' +
+      '</div>' +
     '</div>';
   }).join('');
 }
-
-function toggleZpAccAdmin(sid){
-  var body=document.getElementById('zpAccA_'+sid);
-  var arr=document.getElementById('zpAccA_arr_'+sid);
-  if(!body) return;
-  var open=body.style.display!=='none';
-  body.style.display=open?'none':'block';
-  if(arr) arr.textContent=open?'▶':'▼';
-}
-
-function saveOneShopZpAdmin(shop, sid){
-  var settings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
-  var hasHigh=(document.getElementById('zp_has_high_'+sid)||{}).checked;
-  settings[shop]={
-    base: numDef(parseFloat((document.getElementById('zp_base_'+sid)||{}).value), 1500),
-    threshold: numDef(parseFloat((document.getElementById('zp_thresh_'+sid)||{}).value), 5000),
-    pct: numDef(parseFloat((document.getElementById('zp_pct_'+sid)||{}).value), 8),
-    travel: numDef(parseFloat((document.getElementById('zp_travel_'+sid)||{}).value), 0),
-    highThreshold: hasHigh?numDef(parseFloat((document.getElementById('zp_highthresh_'+sid)||{}).value), 20000):null,
-    highPct: hasHigh?numDef(parseFloat((document.getElementById('zp_highpct_'+sid)||{}).value), 10):null,
-    highEnabled: !!hasHigh,
+function saveZpForShop(name, sid) {
+  var zp = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+  zp[name] = {
+    base: parseFloat((document.getElementById('zp_base_'+sid)||{}).value)||1500,
+    threshold: parseFloat((document.getElementById('zp_thresh_'+sid)||{}).value)||5000,
+    pct: parseFloat((document.getElementById('zp_pct_'+sid)||{}).value)||8,
+    travel: parseFloat((document.getElementById('zp_travel_'+sid)||{}).value)||0,
   };
-  adminSyncSave('iz_shop_zp_settings', settings);
-  renderZpList();
-  showToast2('✅ ЗП для '+shop+' сохранена');
-}
-
-function saveAllZpSettings(){
-  var shops=getShopNames();
-  var settings=JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
-  shops.forEach(function(shop){
-    var sid=encodeURIComponent(shop).replace(/%/g,'_');
-    var baseEl=document.getElementById('zp_base_'+sid);
-    if(!baseEl) return; // accordion not opened, skip
-    var hasHigh=(document.getElementById('zp_has_high_'+sid)||{}).checked;
-    settings[shop]={
-      base: numDef(parseFloat(baseEl.value), 1500),
-      threshold: numDef(parseFloat((document.getElementById('zp_thresh_'+sid)||{}).value), 5000),
-      pct: numDef(parseFloat((document.getElementById('zp_pct_'+sid)||{}).value), 8),
-      travel: numDef(parseFloat((document.getElementById('zp_travel_'+sid)||{}).value), 0),
-      highThreshold: hasHigh?numDef(parseFloat((document.getElementById('zp_highthresh_'+sid)||{}).value), 20000):null,
-      highPct: hasHigh?numDef(parseFloat((document.getElementById('zp_highpct_'+sid)||{}).value), 10):null,
-      highEnabled: !!hasHigh,
-    };
-  });
-  adminSyncSave('iz_shop_zp_settings', settings);
-  showToast2('✅ Настройки ЗП сохранены');
-}
-
-// Fallback toast for admin (use alert if showToast not defined)
-function showToast2(msg){
-  if(typeof showToast === 'function'){ showToast(msg); } else { alert(msg); }
+  adminSyncSave('iz_shop_zp_settings', zp);
+  alert('✅ ЗП для ' + name + ' сохранена');
 }
 
 function getItemsBase() { return JSON.parse(localStorage.getItem('iz_items')||'[]'); }
@@ -2138,7 +1878,6 @@ function startStaffSyncListener() {
     if(val) {
       localStorage.setItem('iz_staff', JSON.stringify(val));
       _syncDerivedFromStaff(val);
-      try{ if(document.getElementById('unifiedStaffList')) renderUnifiedStaff(); }catch(e){}
     }
   }, function(e){ console.log('staff sync err', e); });
 
@@ -2179,12 +1918,7 @@ function getRefBook(key) {
 }
 
 function saveRefBook(key, data) {
-  // Keep sources/accounts sorted by type then alphabetically
-  if(key === 'iz_sales_sources') data = sortByTypeThenName(data, SHOP_TYPE_ORDER);
-  else if(key === 'iz_accounts') data = sortByTypeThenName(data, ACCOUNT_TYPE_ORDER);
   localStorage.setItem(key, JSON.stringify(data));
-  // Sync to Firestore if this refbook is part of the sync layer (e.g. sales sources / shop list)
-  if(ADMIN_SYNC_SETTINGS[key]) adminSyncSave(key, data);
 }
 
 function renderRefBooks() {
@@ -2199,6 +1933,7 @@ function renderRefBooks() {
     {id: 'works', icon: '🛠️', name: 'Доп. работы', key: 'iz_additional_works'},
     {id: 'sizes', icon: '📏', name: 'Размеры изделий', key: 'iz_sizes'},
     {id: 'materials', icon: '💎', name: 'Породы изделий', key: 'iz_materials'},
+    {id: 'statuses', icon: '👤', name: 'Статусы сотрудников', key: 'iz_employee_statuses'},
     {id: 'schedules', icon: '⏰', name: 'Графики работы', key: 'iz_work_schedules'}
   ];
   
@@ -2413,21 +2148,9 @@ function initRefBooks() {
   if(!localStorage.getItem('iz_employee_statuses')) {
     saveRefBook('iz_employee_statuses', [
       {id: uid(), name: 'Активный'},
-      {id: uid(), name: 'Стажёр'},
       {id: uid(), name: 'Отпуск'},
       {id: uid(), name: 'Уволен'}
     ]);
-  } else {
-    var sts = getRefBook('iz_employee_statuses');
-    var changed = false;
-    if(!sts.some(function(s){ return (s.name||s)==='Стажёр'; })){
-      sts.push({id: uid(), name: 'Стажёр'});
-      changed = true;
-    }
-    if(changed) localStorage.setItem('iz_employee_statuses', JSON.stringify(sts));
-    // Always (re)push to Firestore so other devices (e.g. shop) receive it,
-    // covering cases where this key existed before it was added to the sync layer.
-    if(typeof adminSyncSave === 'function') adminSyncSave('iz_employee_statuses', sts);
   }
   
   if(!localStorage.getItem('iz_work_schedules')) {
@@ -2457,11 +2180,10 @@ document.addEventListener('DOMContentLoaded', function() {
   var firstCard = document.querySelector('.role-card');
   if(firstCard) firstCard.click();
   startStaffSyncListener();
-  // NOTE: shops/sales-sources are no longer seeded synchronously here — doing so
-  // raced with the async Firestore listener (adminSyncListen) and could overwrite
-  // real synced data with the hardcoded defaults before the real data arrived.
-  // Seeding now only happens inside startAdminSyncListeners() when Firestore
-  // itself confirms the sales_sources document doesn't exist yet (see below).
+  // Init shops if not exist
+  if(!localStorage.getItem('iz_shops')) {
+    saveShops(['ОПИТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
+  }
   
   // Init plan data if not exist
   if(!localStorage.getItem('iz_plan_data')) {

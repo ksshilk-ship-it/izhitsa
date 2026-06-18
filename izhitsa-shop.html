@@ -205,6 +205,10 @@ function checkForAppUpdate() {
       style="width:100%;padding:14px;background:#c8f060;color:#0f0f13;border:none;border-radius:12px;font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;cursor:pointer">
       Открыть смену →
     </button>
+    <button id="restoreLoginBtn" type="button" onclick="doSellerRestoreLogin()"
+      style="display:none;width:100%;margin-top:8px;padding:11px;background:none;color:#8888aa;border:1px solid #2e2e3e;border-radius:12px;font-family:Unbounded,sans-serif;font-size:12px;cursor:pointer">
+      📝 Внести смену за прошлый день
+    </button>
   </div>
 </div>
 
@@ -653,7 +657,7 @@ function checkForAppUpdate() {
     <div id="rstMainBlock" style="display:none">
 
     <!-- 4 sub-tabs -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;margin-bottom:14px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;margin-bottom:14px" id="rstTabsGrid">
       <button type="button" id="rst_tab_invoices" onclick="switchRst('invoices')"
         style="padding:8px 4px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer;text-align:center">
         📋<br>Накладные
@@ -1701,6 +1705,7 @@ function pick(role) {
     if(shopFg) shopFg.style.display='none';
     if(label) label.textContent='Администратор';
     if(lb){ lb.textContent='Войти →'; lb.style.background='#a060f0'; lb.style.color='#fff'; }
+    var rb = document.getElementById('restoreLoginBtn'); if(rb) rb.style.display='none';
     var admins = JSON.parse(localStorage.getItem('iz_shop_admins')||'[]');
     if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; saveShopAdmins(admins); }
     if(selEl) selEl.innerHTML = admins.map(function(a){ return '<option value="'+a.id+'">'+a.name+'</option>'; }).join('');
@@ -1715,6 +1720,7 @@ function pick(role) {
     if(lb){ lb.textContent='Открыть смену →'; lb.style.background='#c8f060'; lb.style.color='#0f0f13'; }
     var prevBtn = document.getElementById('previewModeBtn');
     if(prevBtn) prevBtn.style.display='none';
+    var rb = document.getElementById('restoreLoginBtn'); if(rb) rb.style.display='block';
     renderLoginSellers();
   }
 }
@@ -1805,6 +1811,25 @@ function startSyncListeners() {
 // ════ STATE ════
 let session = null, pendingSession = null;
 let journal = [];
+// ── Backfill-aware "current date/time" helpers ──
+// When a seller is restoring a past shift (session.isBackfill), every place
+// that would normally stamp "today" should instead file under the chosen
+// backfillDate, so the shift and its журнал/накладные land on the right day
+// in Архив/statistics — while still using the real time-of-day for ordering
+// entries within the session. Outside backfill mode these are identical to
+// new Date()/today, so all existing call sites stay correct unchanged.
+function _workingDateStr(){
+  if(session && session.isBackfill && session.backfillDate) return session.backfillDate;
+  var n=new Date();
+  return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+}
+function _workingNowISO(){
+  if(session && session.isBackfill && session.backfillDate){
+    var t=new Date();
+    return session.backfillDate+'T'+String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0')+':'+String(t.getSeconds()).padStart(2,'0')+'.000Z';
+  }
+  return new Date().toISOString();
+}
 let saleItems = [], payMethod = 'cash', staffPayMethod = 'cash', discType = 'pct', discCategory = 'auto';
 var _editSaleEntryId = null;
 var _svArchiveEditId = null;
@@ -2744,9 +2769,7 @@ function renderPersonalTab(){
       '<div style="font-size:11px;color:#c8f060;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">📊 СВОДКА ЗА ПЕРИОД</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'+
         sCell('📅 Смен отработано', shiftsCount+'', '#c8f060')+
-        sCell('💰 Выручка средняя/смену', fmt2(avgRevenuePerShift), '#60c8f0')+
         sCell('🧾 Средний чек', fmt2(avgCheck), '#f0c060')+
-        sCell('Σ Выручка всего', fmt2(totalRevenue), '#60c8f0')+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'+
         sCell('💵 Заработок/смену (без проезда)', fmt2(avgZpNoTravel), '#a060f0')+
@@ -2766,7 +2789,7 @@ function renderPersonalTab(){
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'+
         '<div>'+
           '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700">'+(sh.shopName||'')+'</div>'+
-          '<div style="font-size:11px;color:#8888aa;margin-top:2px">📅 '+(sh.date||'')+' · 🧾 '+r.salesCount+' продаж · 💰 '+fmt(r.revenue)+'</div>'+
+          '<div style="font-size:11px;color:#8888aa;margin-top:2px">📅 '+(sh.date||'')+' · 🧾 '+r.salesCount+' продаж</div>'+
         '</div>'+
       '</div>'+
       '<div style="display:flex;justify-content:space-between;font-size:12px;padding-top:6px;border-top:1px solid #2e2e3e">'+
@@ -3058,32 +3081,51 @@ function doLogin(){
        loginSellerId:sellerId, loginSellerName:seller.name, loginShop:shopName});
   }
 
-  // Fallback: check Firestore for an open shift for this seller+shop, in case
-  // the local session was lost (different browser context, cleared storage,
+  // Fallback: check Firestore for an open shift for this shop, in case the
+  // local session was lost (different browser context, cleared storage,
   // etc.) but a live shift document still exists from another device/session.
+  // This same check also guards against two DIFFERENT sellers ending up
+  // with two separate, conflicting open shifts for one physical shop (e.g.
+  // one seller on the till, another opening the app from home) — for
+  // offline/till-based shops only one person may run a shift at a time;
+  // online shops aren't tied to a single physical register so this doesn't
+  // apply there.
   try{
     db.collection('iz_shifts').where('status','==','open')
       .get().then(function(snap){
-        var found=null;
+        var sameSellerShift=null, otherSellerShift=null;
         snap.forEach(function(doc){
           var d=doc.data();
-          if(d.shopName===shopName && d.sellerName===seller.name) found=d;
+          if(d.shopName!==shopName) return;
+          if(d.sellerName===seller.name) sameSellerShift=d;
+          else if(!otherSellerShift) otherSellerShift=d;
         });
-        if(found){
-          session = {shopName:found.shopName, sellerName:found.sellerName, sellerId:sellerId,
-            shiftId:found.id, openedAt:found.openedAt,
-            cashMorning:found.cashMorning, goodsMorning:found.goodsMorning,
-            cashDrMorning:found.cashDrMorning, goodsDrMorning:found.goodsDrMorning,
-            cashStaffMorning:found.cashStaffMorning, shopType:'shop'};
-          journal = found.journal||[];
+        if(sameSellerShift){
+          session = {shopName:sameSellerShift.shopName, sellerName:sameSellerShift.sellerName, sellerId:sellerId,
+            shiftId:sameSellerShift.id, openedAt:sameSellerShift.openedAt,
+            cashMorning:sameSellerShift.cashMorning, goodsMorning:sameSellerShift.goodsMorning,
+            cashDrMorning:sameSellerShift.cashDrMorning, goodsDrMorning:sameSellerShift.goodsDrMorning,
+            cashStaffMorning:sameSellerShift.cashStaffMorning, shopType:'shop'};
+          journal = sameSellerShift.journal||[];
           saveS(); saveJ();
           startApp();
           syncLiveShift();
           showToast('📂 Восстановлена незакрытая смена (из облака)');
-        } else {
-          pendingSession={shopName,sellerName:seller.name,sellerId};
-          openMorningModal();
+          return;
         }
+        var shopTypeNow = getShopType(shopName);
+        if(otherSellerShift && shopTypeNow!=='online'){
+          err.style.display='block';
+          err.textContent='⛔ Смена для «'+shopName+'» уже открыта продавцом '+(otherSellerShift.sellerName||'—')+'. Одновременно вести смену в одном магазине может только один человек.';
+          try{
+            saveAdminAlert({type:'shift_conflict', shopName:shopName,
+              blockedSellerName:seller.name, activeSellerName:otherSellerShift.sellerName,
+              date:new Date().toISOString().split('T')[0]});
+          }catch(e){}
+          return;
+        }
+        pendingSession={shopName,sellerName:seller.name,sellerId};
+        openMorningModal();
       }).catch(function(){
         pendingSession={shopName,sellerName:seller.name,sellerId};
         openMorningModal();
@@ -3092,6 +3134,58 @@ function doLogin(){
     pendingSession={shopName,sellerName:seller.name,sellerId};
     openMorningModal();
   }
+}
+
+// Restricted self-service entry point: lets a seller log in with their own
+// credentials to back-fill a past shift via the existing admin "Восст."
+// tooling, without giving them admin power over other sellers' data.
+// Deliberately NOT persisted via saveS()/KEY.session — that slot may hold a
+// real live shift session for this device, and entering restore mode must
+// never overwrite or clobber it. Restore progress itself is saved
+// independently (saveRestoreShift()/iz_psj), so nothing is lost anyway.
+function doSellerRestoreLogin(){
+  const sellerId=gv('loginSeller'), pass=gv('loginPass');
+  const err=document.getElementById('loginErr');
+  err.style.display='none';
+  const seller=getSellers().find(s=>s.id===sellerId);
+  if(!seller){ err.style.display='block'; err.textContent='Продавец не найден'; return; }
+  if(seller.blocked){ err.style.display='block'; err.textContent='Аккаунт заблокирован'; return; }
+  if(seller.pass!==pass){ err.style.display='block'; err.textContent='Неверный пароль'; return; }
+  session = {id:seller.id, name:seller.name, role:'shopadmin', shopName:'Все магазины',
+    sellerRestoreMode:true, restrictedSellerId:seller.id, restrictedSellerName:seller.name,
+    restrictedShops:(seller.shops&&seller.shops.length)?seller.shops:null};
+  startSellerRestoreApp();
+}
+function buildSellerRestoreTabs(){
+  const t=document.getElementById('mainTabs'); t.style.display='flex';
+  t.innerHTML=
+    '<button class="tab active"><div class="ti">🗄</div><span>Восст. смены</span></button>'+
+    '<button class="tab" onclick="exitSellerRestore()"><div class="ti">🚪</div><span>Выйти</span></button>';
+}
+function startSellerRestoreApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appScreen').style.display='block';
+  document.getElementById('hdrShop').textContent='📝 Восстановление смены';
+  document.getElementById('hdrSeller').textContent=session.restrictedSellerName||session.name;
+  buildSellerRestoreTabs();
+  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
+  var rPg = document.getElementById('pg-restore');
+  if(rPg) rPg.classList.add('active');
+  initRestore();
+}
+// Separate from exitShift() on purpose — that function clears KEY.session
+// whenever role==='shopadmin', which would delete a real live shift session
+// saved under that same slot earlier on this device. Restore mode never
+// writes to KEY.session, so exiting it must never touch that key either.
+function exitSellerRestore(){
+  if(_restoreShift && _restoreShift.shop && _restoreShift.date){
+    if(!confirm('Выйти? Незакрытая смена восстановления останется сохранённой — вернётесь к ней этой же кнопкой.')) return;
+  } else if(!confirm('Выйти из восстановления смены?')) return;
+  session=null;
+  document.getElementById('mainTabs').style.display='none';
+  document.getElementById('appScreen').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+  pick('seller');
 }
 
 function exitShift(){
@@ -3149,7 +3243,7 @@ function openMorningModal(){
     var goodsM=calcGoodsMorning(shopName);
     session={...pendingSession,openedAt:new Date().toISOString(),cashMorning:0,goodsMorning:goodsM,shopType:shopType};
     pendingSession=null;
-    journal=[{id:uid(),type:'open',ts:new Date().toISOString(),icon:'🔓',
+    journal=[{id:uid(),type:'open',ts:_workingNowISO(),icon:'🔓',
       label:'Смена открыта · '+(shopType==='online'?'📱 Онлайн':'🏭 Офлайн'),
       sub:'📦 Товар: '+fmt(goodsM),cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0}];
     saveS(); saveJ(); startApp(); return;
@@ -3238,7 +3332,7 @@ function confirmMorning(){
       forRoles:['admin','owner']
     });
   }
-  journal=[{id:uid(),type:'open',ts:new Date().toISOString(),icon: hasCashDiff?'⚠️':'🔓',
+  journal=[{id:uid(),type:'open',ts:_workingNowISO(),icon: hasCashDiff?'⚠️':'🔓',
     label:'Смена открыта'+(hasCashDiff?' ⚠️ Расхождение нала':''),
     sub:'🌳 '+fmt(cashM)+(cashDr?' 🛍 '+fmt(cashDr):'')+(cashStaff?' 🛒 '+fmt(cashStaff):'')+
         ' | 📦 '+fmt(goodsM)+' 🛍 '+fmt(goodsDrM),
@@ -3305,7 +3399,7 @@ function startPreviewMode(){
     isPreview: true
   };
   journal = [{
-    id:uid(), type:'open', ts:new Date().toISOString(),
+    id:uid(), type:'open', ts:_workingNowISO(),
     icon:'🔍', label:'Режим просмотра — данные не сохраняются',
     sub:'🏪 '+shopName+' · тип: '+shopType,
     cashEffect:0, cardEffect:0, staffEffect:0, goodsEffect:0
@@ -3736,6 +3830,14 @@ function startAdminAlertsListener(){
 }
 
 function alertCard(a){
+  if(a.type==='shift_conflict'){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #3e2e2e">'+
+      '<div><div style="font-size:12px;font-weight:700;color:#f06060">⛔ Попытка открыть занятую смену — '+(a.shopName||'')+'</div>'+
+      '<div style="font-size:11px;color:#8888aa">'+(a.blockedSellerName||'—')+' пытался(ась) открыть смену, но она уже была открыта продавцом '+(a.activeSellerName||'—')+'</div>'+
+      '<div style="font-size:10px;color:#8888aa">'+(a.date||'')+'</div></div>'+
+      '<button onclick="markAlertRead(\''+a.id+'\')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:4px 8px;color:#8888aa;font-size:10px;cursor:pointer;flex-shrink:0;margin-left:8px">✓ Прочитано</button>'+
+    '</div>';
+  }
   var diff = a.morningDiff!=null ? a.morningDiff : a.cashDiff;
   var title = a.type==='cash_diff' ? '⚠️ Расхождение при закрытии — '+(a.shopName||'') : '⚠️ Расхождение нала — '+(a.shopName||'');
   var detail = a.type==='cash_diff'
@@ -3831,6 +3933,39 @@ function renderNoShiftCard(shopName){
     '<div style="font-size:36px;margin-bottom:8px">📋</div>'+
     'Сейчас нет открытой смены в магазине<br><b style="color:#f0f0f8">'+shopName+'</b>'+
   '</div>';
+}
+
+// ── Построчная история движения товара за смену: остаток на утро, затем
+// каждая операция (продажа/списание/приход/...), которая меняет товарный
+// остаток, в хронологическом порядке — с суммой эффекта и остатком ПОСЛЕ
+// этой операции. drMode=true — ветка ДР Товар, иначе — Дерево. ──
+function goodsMovementLedger(shift, drMode){
+  var morning = drMode ? (shift.goodsDrMorning||0) : (shift.goodsMorning||0);
+  var effField = drMode ? 'goodsDrEffect' : 'goodsEffect';
+  var entries = (shift.journal||[]).filter(function(e){ return (e[effField]||0)!==0; })
+    .slice().sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
+  var running = morning;
+  var rows = '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #2e2e3e;font-size:12px">'+
+    '<span style="color:#8888aa">🌅 Утро (остаток)</span><span style="font-weight:700">'+fmt(running)+'</span></div>';
+  if(!entries.length){
+    rows += '<div style="font-size:12px;color:#8888aa;padding:8px 0">Движений не было</div>';
+    return rows;
+  }
+  entries.forEach(function(e){
+    var eff = e[effField]||0;
+    running += eff;
+    var icon = e.icon || (e.type==='sale'?'💰':e.type==='writeoff'?'🗑':e.type==='receive'?'📥':e.type==='staff'?'🛒':e.type==='expense'?'💸':'📌');
+    var time = e.ts ? new Date(e.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '';
+    var label = (e.label||e.sub||e.type||'').toString().replace(/\s*⚠️\s*$/,'');
+    rows += '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:6px 0;border-bottom:1px solid #2e2e3e;font-size:12px">'+
+      '<div style="flex:1;padding-right:8px"><span style="color:#8888aa">'+time+'</span> '+icon+' '+label+'</div>'+
+      '<div style="text-align:right;white-space:nowrap">'+
+        '<div style="color:'+(eff>=0?'#60f090':'#f06060')+';font-weight:700">'+(eff>=0?'+':'−')+fmt(eff)+'</div>'+
+        '<div style="font-size:10px;color:#8888aa">→ '+fmt(running)+'</div>'+
+      '</div>'+
+    '</div>';
+  });
+  return rows;
 }
 
 function renderShiftDetail(shift){
@@ -4611,7 +4746,7 @@ function saveSale(){
   var hasDr = saleItems.some(function(it){ return it.goodsType==='dr'; });
   var overallGoodsType = (hasWood && hasDr) ? 'mixed' : (hasDr ? 'dr' : 'derevo');
 
-  var newEntryData = {ts:new Date().toISOString(),icon:'💰',
+  var newEntryData = {ts:_workingNowISO(),icon:'💰',
     label:'Продажа',
     sub:saleItems.map(i=>'№'+(i.num||'—')+' '+i.name+(i.goodsType==='dr'?' · ДР':'')+(i.hasDiff?' ⚠️':'')).join(', ')+(disc?' · Скидка '+fmt(disc):'')+' · '+payL,
     items:[...saleItems],totalPrice:total,discount:disc,discCategory:discCategory,totalPaid:paid,payMethod,cashPart,cardPart,goodsType:overallGoodsType,
@@ -4664,7 +4799,7 @@ function saveSale(){
         sourceShop: sourceShop,
         items: [...saleItems],
         date: new Date().toISOString().split('T')[0],
-        ts: new Date().toISOString(),
+        ts: _workingNowISO(),
         read: false
       };
       var alerts = JSON.parse(localStorage.getItem('iz_shop_notifications')||'[]');
@@ -4894,7 +5029,7 @@ function saveReceive(){
   const name=gv('rcvName'),price=parseFloat(gv('rcvPrice'))||0;
   if(!name){showToast('Введите наименование');return;} if(!price){showToast('Введите цену');return;}
   const article=gv('rcvArticle');
-  journal.push({id:uid(),type:'receive',ts:new Date().toISOString(),icon:'📥',label:'Приход товара',
+  journal.push({id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',label:'Приход товара',
     sub:(article?'№'+article+' ':'')+name+(gv('rcvQty')?' · '+gv('rcvQty'):'')+' · '+gv('rcvFrom')+' · '+gv('rcvDate'),
     amount:price,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:price,
     article:article});
@@ -4948,7 +5083,7 @@ function saveStaff(){
   const species=gv('spSpecies'), num=gv('spNum'), qty=parseFloat(gv('spQty'))||1;
   const payL={cash:'💵 Нал',terminal:'💳 Терминал',sbp:'📱 СБП',transfer:'🏦 Перевод'}[staffPayMethod];
   const isCard=staffPayMethod!=='cash';
-  journal.push({id:uid(),type:'staff',ts:new Date().toISOString(),icon:'🛒',label:'Покупка сотр.: '+who,
+  journal.push({id:uid(),type:'staff',ts:_workingNowISO(),icon:'🛒',label:'Покупка сотр.: '+who,
     sub:(num?'№'+num+' ':'')+item+(species?' · '+species:'')+(qty&&qty!==1?' × '+qty:'')+' · '+fmt(retail)+' · '+fmt(pay)+' '+payL,
     amount:pay,amtCls:'neu',
     goodsType:spGoodsType,species,article:num,qty,price:parseFloat(gv('spPrice'))||0,
@@ -5367,7 +5502,7 @@ function acceptInvoice(){
   inv2.status='accepted'; inv2.acceptedBy=who; inv2.acceptedDate=new Date().toISOString().split('T')[0]; inv2.acceptedItems=accepted;
   const idx=invs.findIndex(i=>(i.id||i._id)===currentInvId); invs[idx]=inv2; saveInvoices(invs);
   const goodsTotal=accepted.reduce((s,a)=>s+a.factPrice,0);
-  journal.push({id:uid(),type:'receive',ts:new Date().toISOString(),icon:'📥',label:'Приёмка '+inv2.num,
+  journal.push({id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',label:'Приёмка '+inv2.num,
     sub:inv2.items.length+' изд. · принял: '+who,amount:goodsTotal,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:goodsTotal});
   saveJ(); try{ db.collection('iz_invoices').doc(currentInvId).set(inv2); }catch(e){}
   clearInvProgress(currentInvId);
@@ -5418,7 +5553,7 @@ function saveExpense(){
   var label = labels[expType] + (expGoodsType==='dr'?' (ДР)':'');
   var isDr = expGoodsType==='dr';
   journal.push({
-    id:uid(), type:'expense', ts:new Date().toISOString(),
+    id:uid(), type:'expense', ts:_workingNowISO(),
     icon:'💸', label:'Расход: '+label,
     sub:fmt(amt)+(supplier?' · '+supplier:'')+(comment?' · '+comment:''),
     expType, goodsType:expGoodsType, amount:amt, comment, supplier,
@@ -7121,7 +7256,7 @@ function svAddExp(type){
   var comment = _svVal(isWood?'svAdd_expWoodComment':'svAdd_expDrComment');
   if(!amt){showToast('Укажите сумму');return;}
   var jnl = _currentShiftView.journal||[];
-  jnl.push({id:uid(),type:'expense',expType:expType,amount:amt,comment:comment,goodsType:isWood?'wood':'dr',ts:new Date().toISOString(),
+  jnl.push({id:uid(),type:'expense',expType:expType,amount:amt,comment:comment,goodsType:isWood?'wood':'dr',ts:_workingNowISO(),
     cashEffect: isWood?-amt:0, cashDrEffect: isWood?0:-amt, cardEffect:0, staffEffect:0, goodsEffect:0});
   _currentShiftView.journal = jnl;
   svPersist(); _renderShiftView();
@@ -7141,7 +7276,7 @@ function svAddStaff(type){
   var retail = _svNum('svAdd_'+id+'_retail');
   var opt = row.amt || (row.price*row.qty);
   var jnl = _currentShiftView.journal||[];
-  jnl.push({id:uid(),type:'staff',who:who,item:row.name,article:row.art,species:row.species,price:row.price,qty:row.qty,opt:opt,retail:retail,amount:opt,goodsType:isWood?'wood':'dr',ts:new Date().toISOString(),
+  jnl.push({id:uid(),type:'staff',who:who,item:row.name,article:row.art,species:row.species,price:row.price,qty:row.qty,opt:opt,retail:retail,amount:opt,goodsType:isWood?'wood':'dr',ts:_workingNowISO(),
     cashEffect:0, cardEffect:0, staffEffect:opt, goodsEffect:-retail});
   _currentShiftView.journal = jnl;
   svPersist(); _renderShiftView();
@@ -7874,8 +8009,17 @@ function toggleSub(id){
 }
 
 function populatePastShiftSellers(){
-  const sellers=getSellers(); const el=document.getElementById('psSeller'); if(!el)return;
+  const el=document.getElementById('psSeller'); if(!el)return;
+  if(session && session.sellerRestoreMode){
+    el.innerHTML = '<option>'+session.restrictedSellerName+'</option>';
+    el.value = session.restrictedSellerName;
+    el.disabled = true;
+    return;
+  }
+  el.disabled = false;
+  const sellers=getSellers();
   el.innerHTML=sellers.map(s=>`<option>${s.name}</option>`).join('');
+  if(_restoreShift && _restoreShift.sellerName) el.value = _restoreShift.sellerName;
 }
 // ── Shop ZP Settings ──
 function getShopZpSettings(){
@@ -8550,21 +8694,61 @@ function saveRestoreShift(sh){
 
 function rstShiftPopulateSellers(){
   var shop = (document.getElementById('rstShiftShop')||{}).value || '';
-  var sellers = getSellers().filter(function(s){ return !s.blocked && (!s.shops || !s.shops.length || s.shops.indexOf(shop)>=0); });
   var sel = document.getElementById('rstShiftSeller');
-  if(sel) sel.innerHTML = sellers.map(function(s){ return '<option value="'+s.id+'">'+s.name+'</option>'; }).join('');
+  if(session && session.sellerRestoreMode){
+    if(sel){ sel.innerHTML = '<option value="'+session.restrictedSellerId+'">'+session.restrictedSellerName+'</option>'; sel.disabled=true; }
+    return;
+  }
+  var sellers = getSellers().filter(function(s){ return !s.blocked && (!s.shops || !s.shops.length || s.shops.indexOf(shop)>=0); });
+  if(sel){ sel.disabled=false; sel.innerHTML = sellers.map(function(s){ return '<option value="'+s.id+'">'+s.name+'</option>'; }).join(''); }
 }
 
 function initRestoreShiftUI(){
   var shops = getShopNames();
+  if(session && session.sellerRestoreMode && session.restrictedShops){
+    shops = shops.filter(function(s){ return session.restrictedShops.indexOf(s)>=0; });
+  }
   var shopSel = document.getElementById('rstShiftShop');
-  if(shopSel) shopSel.innerHTML = shops.map(function(s){ return '<option>'+s+'</option>'; }).join('');
+  if(shopSel){
+    shopSel.innerHTML = shops.map(function(s){ return '<option>'+s+'</option>'; }).join('');
+    shopSel.disabled = !!(session && session.sellerRestoreMode && shops.length<=1);
+  }
   rstShiftPopulateSellers();
   var d = document.getElementById('rstShiftDate');
   if(d && !d.value) d.value = new Date().toISOString().split('T')[0];
+  if(d) d.max = new Date().toISOString().split('T')[0]; // a "past" shift can't be in the future
 
-  _restoreShift = getRestoreShift();
-  renderRestoreShiftState();
+  // Entering data (накладные/журнал — Фото/Файл/Вручную) lives ONLY in the
+  // seller's own restricted self-service flow now, so it's never built
+  // twice. Admin's "Восст." keeps just the review side: the cross-seller
+  // "Список смен" (to see what's been entered and spot differences) and
+  // "Активация" (the only way that data ever reaches real statistics) —
+  // "Смены" stays too since it's the cash comparison used to review/close,
+  // not raw sale entry.
+  var restricted = !!(session && session.sellerRestoreMode);
+  var invBtn = document.getElementById('rst_tab_invoices');
+  var jrnBtn = document.getElementById('rst_tab_journal');
+  var actBtn = document.getElementById('rst_tab_activate');
+  var openToggleBtn = document.getElementById('rstSh_open');
+  var listToggleBtn = document.getElementById('rstSh_list');
+  if(invBtn) invBtn.style.display = restricted ? '' : 'none';
+  if(jrnBtn) jrnBtn.style.display = restricted ? '' : 'none';
+  if(actBtn) actBtn.style.display = restricted ? 'none' : '';
+  var visibleTabCount = restricted ? 3 : 2; // (накл+журнал+смены) vs (активация+смены)
+  var grid = document.getElementById('rstTabsGrid');
+  if(grid) grid.style.gridTemplateColumns = Array(visibleTabCount).fill('1fr').join(' ');
+  if(openToggleBtn) openToggleBtn.style.display = restricted ? '' : 'none';
+  if(listToggleBtn) listToggleBtn.style.display = restricted ? 'none' : '';
+
+  _restoreShift = restricted ? getRestoreShift() : null;
+  if(!restricted){
+    // Admin never creates a new draft here — just review what sellers
+    // already entered, so land straight on the list instead of an "open a
+    // new shift" form admin doesn't need anymore.
+    switchRstShTab('list');
+  } else {
+    renderRestoreShiftState();
+  }
 }
 
 function renderRestoreShiftState(){
@@ -8619,6 +8803,11 @@ function openRestoreShift(){
   var sellerName = sellerSel && sellerSel.selectedIndex>=0 ? sellerSel.options[sellerSel.selectedIndex].text : '';
   var date = gv('rstShiftDate');
   if(!shop || !date){ showToast('Выберите магазин и дату'); return; }
+  if(session && session.sellerRestoreMode){
+    if(sellerId!==session.restrictedSellerId){ showToast('⛔ Можно вносить только свою смену'); return; }
+    if(session.restrictedShops && session.restrictedShops.indexOf(shop)<0){ showToast('⛔ Этот магазин недоступен'); return; }
+    if(date>=new Date().toISOString().split('T')[0]){ showToast('⛔ Можно восстановить только прошедший день'); return; }
+  }
   _restoreShift = {shop:shop, sellerId:sellerId, sellerName:sellerName, date:date, openedAt:new Date().toISOString()};
   saveRestoreShift(_restoreShift);
   renderRestoreShiftState();
@@ -8646,11 +8835,18 @@ function confirmAndCloseRestoreShift(){
     if(!confirm('Поля кассы (нал утро/вечер) не заполнены. Закрыть смену без проверки?')) return;
   }
   if(!confirm('Подтвердить и закрыть смену восстановления?')) return;
+  var wasRestricted = !!(session && session.sellerRestoreMode);
   _restoreShift = null;
   saveRestoreShift(null);
   renderRestoreShiftState();
-  switchRstShTab('list');
-  showToast('🔒 Смена восстановления закрыта и проверена');
+  if(wasRestricted){
+    // Never route a restricted seller into the cross-seller "Список смен" —
+    // that view exposes (and lets them act on) everyone else's entries.
+    showToast('🔒 Смена сохранена. Администратор проверит и подтвердит её в общей статистике.');
+  } else {
+    switchRstShTab('list');
+    showToast('🔒 Смена восстановления закрыта и проверена');
+  }
 }
 
 var _rstShTab = 'open';
@@ -8755,8 +8951,8 @@ function reopenRestoreShift(shop, date){
   saveRestoreShift(_restoreShift);
   switchRstShTab('open');
   renderRestoreShiftState();
-  switchRst('journal'); switchRstJ('manual', document.getElementById('rstj_manual'));
-  showToast('📂 Смена открыта: '+(shop||'(без магазина)')+' · '+date);
+  switchRst('shifts');
+  showToast('📂 Смена открыта для проверки: '+(shop||'(без магазина)')+' · '+date);
 }
 
 function activateRestoreShift(shop, date){
@@ -9219,7 +9415,7 @@ function savePsjEntry(type) {
       }
       // Fallback: entry not found, fall through to create new
     }
-    var entry = Object.assign({ id: uid(), date: date, shopName: shopName, sellerName: sellerName, type: type, ts: new Date().toISOString(), isArchive: true }, props);
+    var entry = Object.assign({ id: uid(), date: date, shopName: shopName, sellerName: sellerName, type: type, ts: _workingNowISO(), isArchive: true }, props);
     entries.push(entry);
     try { db.collection('iz_psj').doc(entry.id).set(entry); } catch(e) {}
     savedCount++;
@@ -9545,7 +9741,7 @@ function confirmPhotoImport() {
   duPendingRecognized.forEach(function(e){
     var date = normalizeDate(e.date);
     var entry = { id:uid(), date:date, shopName:shopName, sellerName:e.sellerName||'',
-      type:e.type||'sale', ts:new Date().toISOString(),
+      type:e.type||'sale', ts:_workingNowISO(),
       label:{sale:'Продажа',expense:'Расход',writeoff:'Списание',receive:'Приход товара'}[e.type||'sale'],
       sub:(e.name||'')+(e.article?' №'+e.article:'')+(e.payMethod?' · '+e.payMethod:''),
       amount:e.amount||0, amtSign:e.type==='expense'||e.type==='writeoff'?'−':'+',
@@ -9815,7 +10011,10 @@ function generatePeriodReport(){
 // ════ RESTORE MODULE ════
 function initRestore() {
   initRestoreShiftUI();
-  switchRst('invoices');
+  if(session && session.sellerRestoreMode) switchRst('invoices');
+  // For admin, initRestoreShiftUI() already routes to the cross-seller list;
+  // rstMainBlock (and its tabs) only appears once a specific shift is
+  // reopened from there, defaulting to 'shifts' at that point.
 }
 
 function switchRst(tab) {
@@ -9842,8 +10041,16 @@ function switchRst(tab) {
 var rstInvItems = [];
 function rstInitInvoices() {
   var shops = getShopNames();
+  var restricted = !!(session && session.sellerRestoreMode);
+  if(restricted && session.restrictedShops){
+    shops = shops.filter(function(s){ return session.restrictedShops.indexOf(s)>=0; });
+  }
   var sel = document.getElementById('rstInvShop');
-  if(sel) sel.innerHTML = shops.map(function(s){return '<option>'+s+'</option>';}).join('');
+  if(sel){
+    sel.innerHTML = shops.map(function(s){return '<option>'+s+'</option>';}).join('');
+    if(restricted && _restoreShift && _restoreShift.shop){ sel.value = _restoreShift.shop; sel.disabled = true; }
+    else sel.disabled = false;
+  }
   var d = document.getElementById('rstInvDate');
   if(d && !d.value) d.value = new Date().toISOString().split('T')[0];
   rstInvItems = [];
@@ -9899,7 +10106,7 @@ function saveRstInvoice() {
   var entries = getPsjEntries();
   inv.items.forEach(function(item){
     entries.push({id:uid(),date:date,shopName:shop,sellerName:'',type:'receive',
-      ts:new Date().toISOString(),label:'Приход товара',
+      ts:_workingNowISO(),label:'Приход товара',
       sub:item.name+(item.article?' №'+item.article:'')+'· накл. '+num+' от '+from,
       amount:(item.qty||1)*(item.price||0),amtSign:'+',
       cashEffect:0,cardEffect:0,discEffect:0,isArchive:true,source:'invoice_restore'
@@ -9946,7 +10153,7 @@ function acceptPendingInvoice(docId) {
   var entries=getPsjEntries();
   (inv.items||[]).forEach(function(item){
     entries.push({id:uid(),date:date,shopName:shop,sellerName:'',type:'receive',
-      ts:new Date().toISOString(),label:'Приход товара',
+      ts:_workingNowISO(),label:'Приход товара',
       sub:item.name+(item.article?' №'+item.article:'')+' · накл. '+(inv.num||''),
       amount:(item.qty||1)*(item.price||0),amtSign:'+',cashEffect:0,cardEffect:0,discEffect:0,isArchive:true});
   });
@@ -10047,7 +10254,7 @@ function rstjSaveAll(){
   var existing=getPsjEntries(); var added=0;
   rstjPending.forEach(function(e){
     var entry={id:uid(),date:normalizeDate(e.date),shopName:shopName,sellerName:e.sellerName||'',
-      type:e.type||'sale',ts:new Date().toISOString(),
+      type:e.type||'sale',ts:_workingNowISO(),
       label:{sale:'Продажа',expense:'Расход',writeoff:'Списание',receive:'Приход товара'}[e.type||'sale'],
       sub:(e.name||'')+(e.article?' №'+e.article:'')+' · '+(e.payMethod||''),
       amount:e.amount||0,amtSign:e.type==='expense'||e.type==='writeoff'?'−':'+',
@@ -10542,7 +10749,7 @@ function saveManualInvoice() {
     autoSaveToItemBase(item.name, item.article, item.price, 'derevo');
   });
   journal.push({
-    id:uid(), type:'receive', ts:new Date().toISOString(), icon:'📥',
+    id:uid(), type:'receive', ts:_workingNowISO(), icon:'📥',
     label:'Приёмка '+num,
     sub:_manInvItems.length+' изд.'+(from?' · от '+from:''),
     amount:totalAmt,
