@@ -196,7 +196,13 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </div>
   </div>
   
-  <div class="fg"><label class="fl">Пользователь</label><select class="fs" id="loginUser"><option value="">— выберите роль —</option></select></div>
+  <div class="fg">
+    <label class="fl">Пользователь</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select class="fs" id="loginUser" style="flex:1"><option value="">— выберите роль —</option></select>
+      <button type="button" onclick="refreshLoginStaff(this)" title="Обновить список" style="flex-shrink:0;width:38px;height:38px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--t1);font-size:16px;cursor:pointer">↻</button>
+    </div>
+  </div>
   <div class="fg"><label class="fl">Пароль</label><input class="fi" type="text" inputmode="text" autocomplete="current-password" id="loginPass" placeholder="••••" style="-webkit-text-security:disc"></div>
   <div id="loginErr" style="color:var(--exp);font-size:12px;margin-bottom:8px;display:none"></div>
   <button class="btn" onclick="doLogin()">Войти →</button>
@@ -1928,6 +1934,25 @@ function clearLocalCache() {
 }
 
 // ════ STAFF SYNC LISTENER ════
+function refreshLoginStaff(btn) {
+  if(btn) { btn.disabled = true; btn.textContent = '…'; }
+  db.collection('iz_settings').doc('staff').get({source: 'server'}).then(function(snap){
+    if(snap.exists) {
+      var val = snap.data().staff;
+      if(val) {
+        localStorage.setItem('iz_staff', JSON.stringify(val));
+        _syncDerivedFromStaff(val);
+      }
+    }
+  }).catch(function(e){
+    console.log('refreshLoginStaff err', e);
+  }).then(function(){
+    var activeCard = document.querySelector('.role-card.selected') || document.querySelector('.role-card');
+    selectAdminRole(selectedRole || 'admin', activeCard);
+    if(btn) { btn.disabled = false; btn.textContent = '↻'; }
+  });
+}
+
 function startStaffSyncListener() {
   db.collection('iz_settings').doc('staff').onSnapshot(function(snap){
     if(!snap.exists) return;
@@ -2666,7 +2691,6 @@ document.addEventListener('DOMContentLoaded', function() {
   // Auto-select first role card
   var firstCard = document.querySelector('.role-card');
   if(firstCard) firstCard.click();
-  startStaffSyncListener();
   // Init shops if not exist
   if(!localStorage.getItem('iz_shops')) {
     saveShops(['ОПИТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
