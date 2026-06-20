@@ -2282,7 +2282,18 @@ function fmt(n){ return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+'₽'
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function gv(id){ return (document.getElementById(id)||{}).value||''; }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
-function openMo(id){ document.getElementById(id).classList.add('open'); }
+function openMo(id){
+  var el = document.getElementById(id);
+  if(!el) return;
+  // Re-parent to the end of <body> so this modal stacks above any other
+  // currently-open .mo overlay (all share the same z-index, so DOM order
+  // decides who's actually on top/clickable) — without this, opening one
+  // modal from inside another (e.g. editing a sale from the admin's closed
+  // shift archive) could leave the new modal visually and functionally
+  // buried under the one it was opened from.
+  document.body.appendChild(el);
+  el.classList.add('open');
+}
 function closeMo(id){ document.getElementById(id).classList.remove('open'); }
 function showPg(name,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -6142,11 +6153,12 @@ function _closeShiftReal(){
   // ДР касса — only required if the ДР cassa block is visible (shop type)
   const drBlock=document.getElementById('closeDrCassaBlock');
   const drBlockVisible=drBlock && drBlock.style.display!=='none';
+  var drCashEve=null, drCashDiff=0;
   if(drBlockVisible){
     const drCashEveVal=(document.getElementById('drCashEveInput')||{}).value||'';
     if(!drCashEveVal){showToast('Введите остаток наличных ДР вечер');return;}
-    const drCashEve=parseFloat(drCashEveVal)||0;
-    const drCashDiff=Math.round(drCashEve-t.cashDr);
+    drCashEve=parseFloat(drCashEveVal)||0;
+    drCashDiff=Math.round(drCashEve-t.cashDr);
     if(Math.abs(drCashDiff)>=1){showToast('⛔ Неверный остаток наличных ДР — пересчитайте кассу');return;}
   }
 
@@ -6169,6 +6181,7 @@ function _closeShiftReal(){
   const report={id:(session.shiftId||uid()),status:'closed',source:'shop',shopName:session.shopName,sellerName:session.sellerName,
     date:openedDateStr,openedAt:session.openedAt,closedAt:new Date().toISOString(),
     cashMorning:session.cashMorning,goodsMorning:session.goodsMorning,cashEvening:cashEve,goodsEvening:t.goods,
+    cashDrMorning:(session.cashDrMorning||0),drCashEvening:drCashEve,goodsDrMorning:(session.goodsDrMorning||0),drGoodsEvening:t.goodsDr,drCashDiff:drCashDiff,
     cashStaffMorning:(session.cashStaffMorning||0),cashStaffEvening:staffCashEve,
     inkass,cashDiff,cashDiffReason:reason,hasCashDiff:Math.abs(cashDiff)>=1,
     terminalEvening:termEve,terminalDiff:termEve-t.card,staffEvening:staffEve,staffDiff:staffEve-t.staff,
@@ -6247,6 +6260,106 @@ function applyHistCustomRange(){
 
 // ── currentShiftView holds the working copy of shift being viewed/edited ──
 var _currentShiftView = null;
+// Tracks which single Приход/Списание/Покупка row (if any) currently has its
+// inline edit form expanded in the admin archive view — {kind, idx} or null.
+var _svEditTarget = null;
+function svToggleEdit(kind, idx){
+  if(_svEditTarget && _svEditTarget.kind===kind && _svEditTarget.idx===idx) _svEditTarget=null;
+  else _svEditTarget={kind:kind, idx:idx};
+  _renderShiftView();
+}
+
+// ── Inline edit-form builders for entries inside the admin's closed-shift
+// Архив view (приходы/списания/покупки). These must be GLOBAL — they're
+// invoked both from inline oninput="" HTML attributes (which always execute
+// in global scope, never inside whatever closure rendered the markup) and
+// from svSaveArrItemEdit()/svSaveStaffEdit(), which live outside
+// _renderShiftView() entirely. Previously these were nested inside
+// _renderShiftView() and silently threw ReferenceError the moment anyone
+// tried to use them from those two access points — which is to say, they
+// never actually worked.
+function editItemForm(id, color, opts){
+  opts = opts || {};
+  var items = getItemsBase();
+  var species = getSpecies();
+  var p = opts.prefill || {};
+  var dlItems = 'dl_eitems_'+id, dlSpecies = 'dl_especies_'+id;
+  var html = '<div style="background:#13131a;border:2px solid '+color+';border-radius:10px;padding:10px;margin-top:6px">';
+  html += '<div style="font-size:10px;color:'+color+';font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">✏️ Исправление записи</div>';
+  html += '<datalist id="'+dlItems+'">'+items.slice(0,80).map(function(it){ return '<option value="'+(it.name||'')+'">'; }).join('')+'</datalist>';
+  html += '<datalist id="'+dlSpecies+'">'+species.slice(0,80).map(function(sp){ return '<option value="'+sp+'">'; }).join('')+'</datalist>';
+  if(opts.who){
+    html += '<div style="margin-bottom:6px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Сотрудник</div>'+
+      '<input class="fi" id="svEdit_'+id+'_who" value="'+(p.who||'')+'" placeholder="Имя" style="margin:0;padding:8px"></div>';
+  }
+  html += '<div style="display:flex;gap:5px;margin-bottom:6px">'+
+    '<div style="flex:0 0 64px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Артикул</div>'+
+      '<input class="fi" id="svEdit_'+id+'_art" value="'+(p.art||'')+'" placeholder="№" style="margin:0;padding:8px"></div>'+
+    '<div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Наименование</div>'+
+      '<input class="fi" id="svEdit_'+id+'_name" value="'+(p.name||'')+'" list="'+dlItems+'" placeholder="Товар" style="margin:0;padding:8px"></div>'+
+    '<div style="flex:0 0 90px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Порода</div>'+
+      '<input class="fi" id="svEdit_'+id+'_species" value="'+(p.species||'')+'" list="'+dlSpecies+'" placeholder="Порода" style="margin:0;padding:8px"></div>'+
+  '</div>';
+  html += '<div style="display:flex;gap:5px;margin-bottom:6px">'+
+    '<div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Цена за ед.</div>'+
+      '<input class="fi" id="svEdit_'+id+'_price" type="number" inputmode="numeric" value="'+(p.price||0)+'" oninput="svEditItemCalc(\''+id+'\')" style="margin:0;padding:8px"></div>'+
+    '<div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Кол-во</div>'+
+      '<input class="fi" id="svEdit_'+id+'_qty" type="number" inputmode="numeric" value="'+(p.qty||1)+'" oninput="svEditItemCalc(\''+id+'\')" style="margin:0;padding:8px"></div>'+
+    '<div style="flex:1"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Сумма, ₽</div>'+
+      '<input class="fi" id="svEdit_'+id+'_amt" type="number" inputmode="numeric" value="'+(p.amt||0)+'" style="margin:0;padding:8px"></div>'+
+  '</div>';
+  if(opts.retail){
+    html += '<div style="margin-bottom:6px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Цена розница, ₽</div>'+
+      '<input class="fi" id="svEdit_'+id+'_retail" type="number" inputmode="numeric" value="'+(p.retail||0)+'" style="margin:0;padding:8px"></div>';
+  }
+  if(opts.extra){
+    html += '<div style="margin-bottom:6px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">'+opts.extra.label+'</div>'+
+      '<input class="fi" id="svEdit_'+id+'_'+opts.extra.id+'" value="'+(p[opts.extra.valueKey||opts.extra.id]||'')+'" placeholder="'+opts.extra.placeholder+'" style="margin:0;padding:8px"></div>';
+  }
+  html += '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">Причина правки</div>'+
+    '<input class="fi" id="svEdit_'+id+'_reason" placeholder="Обязательно укажите причину..." style="margin:0;padding:8px;margin-bottom:8px">';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'+
+    '<button onclick="svToggleEdit(\''+opts.kind+'\','+opts.idx+')" style="padding:8px;background:none;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>'+
+    '<button onclick="'+opts.saveFn+'" style="padding:8px;background:'+color+';border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
+  '</div></div>';
+  return html;
+}
+function svEditItemCalc(id){
+  var price=_svNum('svEdit_'+id+'_price'), qty=_svNum('svEdit_'+id+'_qty')||1;
+  var amtEl=document.getElementById('svEdit_'+id+'_amt'); if(amtEl) amtEl.value = price*qty;
+}
+function _svEditItemRow(id, extraKey){
+  return {
+    art: (document.getElementById('svEdit_'+id+'_art')||{}).value || '',
+    name: ((document.getElementById('svEdit_'+id+'_name')||{}).value||'').trim(),
+    species: ((document.getElementById('svEdit_'+id+'_species')||{}).value||'').trim(),
+    price: parseFloat((document.getElementById('svEdit_'+id+'_price')||{}).value)||0,
+    qty: parseFloat((document.getElementById('svEdit_'+id+'_qty')||{}).value)||1,
+    amt: parseFloat((document.getElementById('svEdit_'+id+'_amt')||{}).value)||0,
+    extra: extraKey ? ((document.getElementById('svEdit_'+id+'_'+extraKey)||{}).value||'').trim() : '',
+    reason: ((document.getElementById('svEdit_'+id+'_reason')||{}).value||'').trim()
+  };
+}
+// Simple two-field edit (description + amount) for entries that arrived
+// via the live journal (e.g. an accepted накладная) rather than as a
+// manually-added array row — these don't carry separate name/qty/price.
+function simpleEditForm(id, color, opts){
+  opts = opts || {};
+  var p = opts.prefill || {};
+  var html = '<div style="background:#13131a;border:2px solid '+color+';border-radius:10px;padding:10px;margin-top:6px">';
+  html += '<div style="font-size:10px;color:'+color+';font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">✏️ Исправление записи</div>';
+  html += '<div style="margin-bottom:6px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Описание</div>'+
+    '<input class="fi" id="svEdit_'+id+'_sub" value="'+(p.sub||'')+'" style="margin:0;padding:8px"></div>';
+  html += '<div style="margin-bottom:6px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Сумма, ₽</div>'+
+    '<input class="fi" id="svEdit_'+id+'_amt" type="number" inputmode="numeric" value="'+(p.amt||0)+'" style="margin:0;padding:8px"></div>';
+  html += '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">Причина правки</div>'+
+    '<input class="fi" id="svEdit_'+id+'_reason" placeholder="Обязательно укажите причину..." style="margin:0;padding:8px;margin-bottom:8px">';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'+
+    '<button onclick="svToggleEdit(\''+opts.kind+'\','+opts.idx+')" style="padding:8px;background:none;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>'+
+    '<button onclick="'+opts.saveFn+'" style="padding:8px;background:'+color+';border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
+  '</div></div>';
+  return html;
+}
 
 // ── Fix legacy shift records: earlier versions stored "date" as the day the
 // shift was CLOSED instead of the day it was OPENED, so shifts opened late
@@ -6771,18 +6884,31 @@ function _renderShiftView(){
     staffCashDr   = staffArr.filter(function(s){ return s.goodsType==='dr'; }).reduce(function(sum,s){ return sum+(s.opt||s.amount||0); }, 0);
   }
 
-  var cassaBody = '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
+  var cassaBody = '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:10px;padding:10px;margin-bottom:10px">'+
+    '<div style="font-size:10px;color:#f0f0f8;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Σ ОБЩИЕ ИТОГИ СМЕНЫ</div>'+
+    row('Продажи всего (Дерево+ДР+скидка)', f(totalRev+drTot), '#c8f060')+
+    row('Нал всего (Дерево+ДР)', f(cashRev+drCashRev), '#60f090')+
+    row('Безнал всего (Дерево+ДР)', f(cardRev+drCardRev), '#60c8f0')+
+  '</div>';
+  cassaBody += '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
+  cassaBody += row('Общая сумма за смену', f(totalRev), '#c8f060');
   cassaBody += row('Нал утро', f(sh.cashMorning||0), '#f0f0f8');
   cassaBody += row('Нал вечер', f(sh.cashEvening||0), '#f0f0f8');
-  cassaBody += row('Выручка нал', f(cashRev), '#60f090');
-  cassaBody += row('Выручка безнал', f(cardRev), '#60c8f0');
+  cassaBody += row('Выручка наличные', f(cashRev), '#60f090');
+  cassaBody += row('Выручка безнал (терминал+перевод+QR)', f(cardRev), '#60c8f0');
+  cassaBody += row('Скидка', f(disc), '#8888aa');
   if(staffCashWood) cassaBody += row('🛒 Покупки сотр. нал', f(staffCashWood), '#a060f0');
   cassaBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
+  cassaBody += row('Общая сумма за смену', f(drTot), '#a060f0');
   cassaBody += row('Нал утро', f(sh.cashDrMorning||0), '#f0f0f8');
   cassaBody += row('Нал вечер', f(sh.drCashEvening||0), '#f0f0f8');
-  cassaBody += row('Выручка нал', f(drCashRev), '#60f090');
-  cassaBody += row('Выручка безнал', f(drCardRev), '#60c8f0');
+  cassaBody += row('Выручка наличные', f(drCashRev), '#60f090');
+  cassaBody += row('Выручка безнал (терминал+перевод+QR)', f(drCardRev), '#60c8f0');
+  cassaBody += row('Скидка', f(drDisc), '#8888aa');
   if(staffCashDr) cassaBody += row('🛒 Покупки сотр. нал', f(staffCashDr), '#a060f0');
+  cassaBody += '<div style="font-size:10px;color:#60c8f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛒 ПОКУПКИ СОТРУДНИКОВ</div>';
+  cassaBody += row('Нал утро', f(sh.cashStaffMorning||0), '#f0f0f8');
+  cassaBody += row('Нал вечер', f(sh.cashStaffEvening||0), '#f0f0f8');
   if(sh.hasCashDiff) cassaBody += '<div style="background:#2e1a1a;border-radius:8px;padding:8px;margin-top:8px;font-size:11px;color:#f06060;font-weight:700">⚠️ Расхождение: '+f(sh.cashDiff||0)+(sh.cashDiffReason?' · '+sh.cashDiffReason:'')+'</div>';
   cassaBody += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #2e2e3e">'+
     '<div style="font-size:10px;color:#8888aa;margin-bottom:8px;font-weight:700">ИСПРАВИТЬ ФАКТИЧЕСКИЕ НАЛИЧНЫЕ</div>'+
@@ -6796,6 +6922,11 @@ function _renderShiftView(){
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'+
       inp('sv_drCashMorn', sh.cashDrMorning, 'Нал утро')+
       inp('sv_drCashEve', sh.drCashEvening, 'Нал вечер')+
+    '</div>'+
+    '<div style="font-size:10px;color:#60c8f0;margin-bottom:5px;font-weight:700">🛒 Покупки сотрудников</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'+
+      inp('sv_staffCashMorn', sh.cashStaffMorning, 'Нал утро')+
+      inp('sv_staffCashEve', sh.cashStaffEvening, 'Нал вечер')+
     '</div>'+
     '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">Причина правки</div>'+
     '<input class="fi" id="sv_cashReason" placeholder="Обязательно укажите причину..." style="margin:0;padding:8px;margin-bottom:8px">'+
@@ -6830,7 +6961,10 @@ function _renderShiftView(){
   var woodRcvItems = receives.concat(woodRcv); // journal receives + manual wood receives
   var rcvBody = '';
 
-  function rcvItem(name, sub, subColor, amt, amtColor, deleteFn){
+  // ── Generic item-row EDIT form — same shape as itemForm() above, but
+  // pre-filled with the entry's current values and requiring a reason,
+  // matching the pattern already used for Касса/Товар corrections. ──
+  function rcvItem(name, sub, subColor, amt, amtColor, deleteFn, editFn){
     return '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
         '<div style="flex:1;min-width:0">'+
@@ -6839,6 +6973,7 @@ function _renderShiftView(){
         '</div>'+
         '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
           '<span style="font-size:12px;font-weight:700;color:'+(amtColor||'#60f090')+'">+'+f(amt)+'</span>'+
+          (editFn?'<button onclick="'+editFn+'" style="background:none;border:1px solid #c8f060;border-radius:6px;padding:3px 7px;color:#c8f060;font-size:11px;cursor:pointer">✏️</button>':'')+
           '<button onclick="'+deleteFn+'" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
         '</div>'+
       '</div>'+
@@ -6848,12 +6983,18 @@ function _renderShiftView(){
   rcvBody += '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
   var woodRcvCount = 0;
   receives.forEach(function(r, i){
-    rcvBody += rcvItem(r.sub||r.label||'Приход', r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#555568', r.goodsEffect||r.amount||0, '#60f090', 'svDeleteJEntry(\'receive\','+i+')');
+    rcvBody += rcvItem(r.sub||r.label||'Приход', r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#555568', r.goodsEffect||r.amount||0, '#60f090', 'svDeleteJEntry(\'receive\','+i+')', 'svToggleEdit(\'jrcv\','+i+')');
+    if(_svEditTarget && _svEditTarget.kind==='jrcv' && _svEditTarget.idx===i){
+      rcvBody += simpleEditForm('jrcv'+i, '#60f090', {kind:'jrcv', idx:i, saveFn:'svSaveJEntrySimple(\'receive\','+i+')', prefill:{sub:r.sub||r.label||'', amt:r.goodsEffect||r.amount||0}});
+    }
     woodRcvCount++;
   });
   woodRcv.forEach(function(r, i){
     var lbl = (r.article?'№'+r.article+' ':'')+(r.name||'Приход')+(r.species?' · '+r.species:'')+(r.qty?' × '+r.qty:'')+(r.from?' · от '+r.from:'');
-    rcvBody += rcvItem(lbl, '🌳 Дерево'+(r.price?' · '+f(r.price)+'/шт':''), '#555568', r.amt||0, '#60f090', 'svDeleteWoodRcv('+i+')');
+    rcvBody += rcvItem(lbl, '🌳 Дерево'+(r.price?' · '+f(r.price)+'/шт':''), '#555568', r.amt||0, '#60f090', 'svDeleteWoodRcv('+i+')', 'svToggleEdit(\'rcvWoodArr\','+i+')');
+    if(_svEditTarget && _svEditTarget.kind==='rcvWoodArr' && _svEditTarget.idx===i){
+      rcvBody += editItemForm('eRcvWood'+i, '#60f090', {kind:'rcvWoodArr', idx:i, extra:{id:'from',label:'Откуда / поставщик',placeholder:'необязательно'}, saveFn:'svSaveArrItemEdit(\'goodsReceives\','+i+',\'eRcvWood'+i+'\')', prefill:r});
+    }
     woodRcvCount++;
   });
   if(!woodRcvCount) rcvBody += '<div style="font-size:11px;color:#555568;padding:6px 0 10px">Приходов не было</div>';
@@ -6862,7 +7003,10 @@ function _renderShiftView(){
   var drRcvCount = 0;
   drRcv.forEach(function(r, i){
     var lbl = (r.article?'№'+r.article+' ':'')+(r.name||'Приход ДР')+(r.species?' · '+r.species:'')+(r.qty?' × '+r.qty:'');
-    rcvBody += rcvItem(lbl, '🛍 ДР Товар'+(r.price?' · '+f(r.price)+'/шт':''), '#a060f0', r.amt||0, '#a060f0', 'svDeleteDrRcv('+i+')');
+    rcvBody += rcvItem(lbl, '🛍 ДР Товар'+(r.price?' · '+f(r.price)+'/шт':''), '#a060f0', r.amt||0, '#a060f0', 'svDeleteDrRcv('+i+')', 'svToggleEdit(\'rcvDrArr\','+i+')');
+    if(_svEditTarget && _svEditTarget.kind==='rcvDrArr' && _svEditTarget.idx===i){
+      rcvBody += editItemForm('eRcvDr'+i, '#a060f0', {kind:'rcvDrArr', idx:i, saveFn:'svSaveArrItemEdit(\'drGoodsReceives\','+i+',\'eRcvDr'+i+'\')', prefill:r});
+    }
     drRcvCount++;
   });
   if(!drRcvCount) rcvBody += '<div style="font-size:11px;color:#555568;padding:6px 0">Приходов не было</div>';
@@ -6871,7 +7015,7 @@ function _renderShiftView(){
   var woAllLen = writeoffs.length + woodWo.length + drWo.length;
   var woBody = '';
 
-  function woItem(name, sub, subColor, amt, deleteFn){
+  function woItem(name, sub, subColor, amt, deleteFn, editFn){
     return '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
         '<div style="flex:1;min-width:0">'+
@@ -6880,6 +7024,7 @@ function _renderShiftView(){
         '</div>'+
         '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
           '<span style="font-size:12px;font-weight:700;color:#f06060">'+f(amt)+'</span>'+
+          (editFn?'<button onclick="'+editFn+'" style="background:none;border:1px solid #c8f060;border-radius:6px;padding:3px 7px;color:#c8f060;font-size:11px;cursor:pointer">✏️</button>':'')+
           '<button onclick="'+deleteFn+'" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
         '</div>'+
       '</div>'+
@@ -6889,13 +7034,19 @@ function _renderShiftView(){
   woBody += '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
   var woodWoCount = 0;
   writeoffs.forEach(function(w, i){
-    woBody += woItem(w.sub||w.label||'Списание', '', '', w.amount||0, 'svDeleteJEntry(\'writeoff\','+i+')');
+    woBody += woItem(w.sub||w.label||'Списание', '', '', w.amount||0, 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwo\','+i+')');
+    if(_svEditTarget && _svEditTarget.kind==='jwo' && _svEditTarget.idx===i){
+      woBody += simpleEditForm('jwo'+i, '#f06060', {kind:'jwo', idx:i, saveFn:'svSaveJEntrySimple(\'writeoff\','+i+')', prefill:{sub:w.sub||w.label||'', amt:w.amount||0}});
+    }
     woodWoCount++;
   });
   woodWo.forEach(function(w, i){
     var lbl = (w.article?'№'+w.article+' ':'')+(w.name||'Списание')+(w.species?' · '+w.species:'')+(w.qty?' × '+w.qty:'');
     var sub = '🌳 Дерево'+(w.price?' · '+f(w.price)+'/шт':'')+(w.reason?' · '+w.reason:'');
-    woBody += woItem(lbl, sub, '#555568', w.amt||0, 'svDeleteWoodWo('+i+')');
+    woBody += woItem(lbl, sub, '#555568', w.amt||0, 'svDeleteWoodWo('+i+')', 'svToggleEdit(\'woWoodArr\','+i+')');
+    if(_svEditTarget && _svEditTarget.kind==='woWoodArr' && _svEditTarget.idx===i){
+      woBody += editItemForm('eWoWood'+i, '#f06060', {kind:'woWoodArr', idx:i, extra:{id:'wreason',valueKey:'reason',label:'Причина списания',placeholder:'необязательно'}, saveFn:'svSaveArrItemEdit(\'goodsWriteoffs\','+i+',\'eWoWood'+i+'\')', prefill:w});
+    }
     woodWoCount++;
   });
   if(!woodWoCount) woBody += '<div style="font-size:11px;color:#555568;padding:6px 0 10px">Списаний не было</div>';
@@ -6905,7 +7056,10 @@ function _renderShiftView(){
   drWo.forEach(function(w, i){
     var lbl = (w.article?'№'+w.article+' ':'')+(w.name||'Списание ДР')+(w.species?' · '+w.species:'')+(w.qty?' × '+w.qty:'');
     var sub = '🛍 ДР Товар'+(w.price?' · '+f(w.price)+'/шт':'')+(w.reason?' · '+w.reason:'');
-    woBody += woItem(lbl, sub, '#a060f0', w.amt||0, 'svDeleteDrWo('+i+')');
+    woBody += woItem(lbl, sub, '#a060f0', w.amt||0, 'svDeleteDrWo('+i+')', 'svToggleEdit(\'woDrArr\','+i+')');
+    if(_svEditTarget && _svEditTarget.kind==='woDrArr' && _svEditTarget.idx===i){
+      woBody += editItemForm('eWoDr'+i, '#a060f0', {kind:'woDrArr', idx:i, extra:{id:'wreason',valueKey:'reason',label:'Причина списания',placeholder:'необязательно'}, saveFn:'svSaveArrItemEdit(\'drGoodsWriteoffs\','+i+',\'eWoDr'+i+'\')', prefill:w});
+    }
     drWoCount++;
   });
   if(!drWoCount) woBody += '<div style="font-size:11px;color:#555568;padding:6px 0">Списаний не было</div>';
@@ -6972,7 +7126,7 @@ function _renderShiftView(){
     var retail = s.retail || 0;
     var opt = s.opt || s.amount || 0;
     var canDel = staffPurch.length > 0;
-    return '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
+    var html = '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
         '<div style="flex:1;min-width:0">'+
           '<div style="font-size:12px;font-weight:700">'+who+'</div>'+
@@ -6980,10 +7134,17 @@ function _renderShiftView(){
         '</div>'+
         '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
           '<span style="font-size:12px;font-weight:700;color:#a060f0">'+f(opt)+'</span>'+
+          '<button onclick="svToggleEdit(\'staff\','+realIdx+')" style="background:none;border:1px solid #c8f060;border-radius:6px;padding:3px 7px;color:#c8f060;font-size:11px;cursor:pointer">✏️</button>'+
           (canDel?'<button onclick="svDeleteJEntry(\'staff\','+realIdx+')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>':'')+
         '</div>'+
       '</div>'+
     '</div>';
+    if(_svEditTarget && _svEditTarget.kind==='staff' && _svEditTarget.idx===realIdx){
+      html += editItemForm('eStaff'+realIdx, '#a060f0', {kind:'staff', idx:realIdx, who:true, retail:true,
+        saveFn:'svSaveStaffEdit('+realIdx+',\'eStaff'+realIdx+'\')',
+        prefill:{who:who, art:s.article||'', name:s.item||s.sub||'', species:s.species||'', price:0, qty:s.qty||1, amt:opt, retail:retail}});
+    }
+    return html;
   }
 
   staffBody += '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
@@ -7107,7 +7268,6 @@ function _renderShiftView(){
     addFormBtn('#a060f0','showAddForm(\'staffDr\')','Добавить покупку ДР')+
     itemForm('staffDr','#a060f0',{who:true,retail:true,saveFn:'svAddStaff(\'dr\')'})+
   '</div>';
-  var headerColor = sh.hasCashDiff ? '#f06060' : '#c8f060';
   var headerHtml =
     (sh.isArchive?'<div style="font-size:9px;background:#604020;color:#f0a060;border-radius:4px;padding:2px 5px;font-weight:700;display:inline-block;margin-bottom:8px">АРХИВ'+(sh.backfilled?' · ЗАДНИМ ЧИСЛОМ':'')+'</div>':'')+
     // Force-close button — only for shifts still marked "open" (a session
@@ -7117,10 +7277,13 @@ function _renderShiftView(){
     (sh.status==='open'?
       '<div style="background:#2e2a14;border:1px solid #f0c060;border-radius:9px;padding:8px 10px;margin-bottom:8px;font-size:11px;color:#f0c060">⚠️ Эта смена ещё не закрыта продавцом (статус "открыта"). Если просто удалить, она может появиться снова, когда устройство продавца синхронизируется.</div>'+
       '<button onclick="svForceCloseShift()" style="width:100%;padding:9px;background:#2e2a14;border:1px solid #f0c060;border-radius:9px;font-weight:700;font-size:12px;color:#f0c060;cursor:pointer;margin-bottom:10px">🔐 Принудительно закрыть смену</button>'
-      :'')+
-    // Delete shift button
-    '<button onclick="svDeleteShift()" style="width:100%;padding:9px;background:#2e1a1a;border:1px solid #f06060;border-radius:9px;font-weight:700;font-size:12px;color:#f06060;cursor:pointer;margin-bottom:10px">🗑 Удалить смену целиком</button>';
+      :'');
 
+  // Delete-shift button — deliberately placed at the very bottom, below all
+  // accordions, and made larger/more prominent than the rest of the
+  // controls, so it isn't sitting right next to routine editing actions
+  // near the top where an accidental tap is far more likely.
+  var deleteShiftHtml = '<button onclick="svDeleteShift()" style="width:100%;padding:16px;background:#2e1a1a;border:2px solid #f06060;border-radius:12px;font-weight:700;font-size:14px;color:#f06060;cursor:pointer;margin-top:14px">🗑 Удалить смену целиком</button>';
 
   // ── СБОРКА ──
   document.getElementById('editShiftBody').innerHTML =
@@ -7133,7 +7296,8 @@ function _renderShiftView(){
     acc('rcv', '📥', 'Приходы', '#60f090', rcvAllLen||null, rcvBody) +
     acc('wo', '🗑', 'Списания', '#f06060', woAllLen||null, woBody) +
     acc('exp', '💸', 'Расходы', '#f0a060', (expenses.length||(zp||inkass||otherExp||drInkass||drSupplier?1:0))||null, expBody) +
-    acc('staff', '🛒', 'Покупки сотрудников', '#a060f0', staffArr.length||null, staffBody);
+    acc('staff', '🛒', 'Покупки сотрудников', '#a060f0', staffArr.length||null, staffBody) +
+    deleteShiftHtml;
 }
 
 function toggleShiftAcc(id){
@@ -7203,6 +7367,8 @@ function svSaveCassa(){
   _currentShiftView.cashEvening=parseFloat((document.getElementById('sv_cashEve')||{}).value)||0;
   _currentShiftView.cashDrMorning=parseFloat((document.getElementById('sv_drCashMorn')||{}).value)||0;
   _currentShiftView.drCashEvening=parseFloat((document.getElementById('sv_drCashEve')||{}).value)||0;
+  _currentShiftView.cashStaffMorning=parseFloat((document.getElementById('sv_staffCashMorn')||{}).value)||0;
+  _currentShiftView.cashStaffEvening=parseFloat((document.getElementById('sv_staffCashEve')||{}).value)||0;
   _currentShiftView.editedBy=(session&&(session.name||session.sellerName))||'admin';
   _currentShiftView.editedAt=new Date().toISOString();
   _currentShiftView.editReason=reason;
@@ -7219,6 +7385,84 @@ function svSaveTovar(){
   _currentShiftView.editedAt=new Date().toISOString();
   _currentShiftView.editReason=reason;
   svPersist(); _renderShiftView(); showToast('✅ Остатки товара обновлены');
+}
+// Saves an edit to a "simple" journal-derived entry (an accepted накладная
+// or a списание that arrived via the live shift journal, not a manually
+// added row) — these only carry a description + amount, no item breakdown.
+function svSaveJEntrySimple(type, idx){
+  var jnl = _currentShiftView.journal||[];
+  var ofType = jnl.filter(function(e){ return e.type===type; });
+  var target = ofType[idx]; if(!target){ showToast('Запись не найдена'); return; }
+  var sub = ((document.getElementById('svEdit_'+(type==='receive'?'jrcv':'jwo')+idx+'_sub')||{}).value||'').trim();
+  var amt = parseFloat((document.getElementById('svEdit_'+(type==='receive'?'jrcv':'jwo')+idx+'_amt')||{}).value);
+  var reason = ((document.getElementById('svEdit_'+(type==='receive'?'jrcv':'jwo')+idx+'_reason')||{}).value||'').trim();
+  if(isNaN(amt)){ showToast('Введите сумму'); return; }
+  if(!reason){ showToast('Укажите причину правки'); return; }
+  var before = Object.assign({}, target);
+  if(sub) target.sub = sub;
+  target.amount = amt;
+  target.goodsEffect = type==='receive' ? amt : -Math.abs(amt);
+  target.editedBy=(session&&(session.name||session.sellerName))||'admin';
+  target.editedAt=new Date().toISOString();
+  target.editReason=reason;
+  try{ logEntryEdit(before, target); }catch(e){}
+  _svEditTarget = null;
+  svPersist(); _renderShiftView();
+  showToast('✅ Запись обновлена');
+}
+// Saves an edit to a manually-added item-shaped entry: goodsReceives,
+// drGoodsReceives, goodsWriteoffs, or drGoodsWriteoffs.
+function svSaveArrItemEdit(arrKey, idx, formId){
+  var extraKey = arrKey==='goodsReceives' ? 'from' : (arrKey==='goodsWriteoffs'||arrKey==='drGoodsWriteoffs') ? 'wreason' : null;
+  var d = _svEditItemRow(formId, extraKey);
+  if(!d.name){ showToast('Укажите наименование'); return; }
+  if(!d.reason){ showToast('Укажите причину правки'); return; }
+  var arr = _currentShiftView[arrKey]||[];
+  var target = arr[idx]; if(!target){ showToast('Запись не найдена'); return; }
+  var before = Object.assign({}, target);
+  target.name = d.name; target.article = d.art; target.species = d.species;
+  target.price = d.price; target.qty = d.qty; target.amt = d.amt;
+  if(arrKey==='goodsReceives') target.from = d.extra;
+  if(arrKey==='goodsWriteoffs' || arrKey==='drGoodsWriteoffs') target.reason = d.extra;
+  target.editedBy=(session&&(session.name||session.sellerName))||'admin';
+  target.editedAt=new Date().toISOString();
+  target.editReason=d.reason;
+  _currentShiftView[arrKey]=arr;
+  try{ logEntryEdit(before, target); }catch(e){}
+  _svEditTarget = null;
+  svPersist(); _renderShiftView();
+  showToast('✅ Запись обновлена');
+}
+// Saves an edit to a "покупка сотрудника" entry — these live either in
+// _currentShiftView.staffPurchases (manually added / already split out) or,
+// if that array is empty, as type:'staff' entries inside the live journal —
+// mirrors the same either/or source svDeleteJEntry('staff', idx) relies on.
+function svSaveStaffEdit(idx, formId){
+  var d = _svEditItemRow(formId);
+  if(!d.reason){ showToast('Укажите причину правки'); return; }
+  var who = ((document.getElementById('svEdit_'+formId+'_who')||{}).value||'').trim();
+  var retail = parseFloat((document.getElementById('svEdit_'+formId+'_retail')||{}).value)||0;
+  var usingArr = !!(_currentShiftView.staffPurchases && _currentShiftView.staffPurchases.length);
+  var target;
+  if(usingArr){
+    target = (_currentShiftView.staffPurchases||[])[idx];
+  } else {
+    var jnl = _currentShiftView.journal||[];
+    var ofType = jnl.filter(function(e){ return e.type==='staff'; });
+    target = ofType[idx];
+  }
+  if(!target){ showToast('Запись не найдена'); return; }
+  var before = Object.assign({}, target);
+  if(who) target.who = who;
+  target.article = d.art; target.item = d.name; target.species = d.species;
+  target.qty = d.qty; target.opt = d.amt; target.amount = d.amt; target.retail = retail;
+  target.editedBy=(session&&(session.name||session.sellerName))||'admin';
+  target.editedAt=new Date().toISOString();
+  target.editReason=d.reason;
+  try{ logEntryEdit(before, target); }catch(e){}
+  _svEditTarget = null;
+  svPersist(); _renderShiftView();
+  showToast('✅ Запись обновлена');
 }
 function svDeleteJEntry(type, idx){
   if(!confirm('Удалить эту запись? Она будет перемещена в корзину на 7 дней.')) return;

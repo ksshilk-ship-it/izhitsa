@@ -155,19 +155,6 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .checkbox-label input{width:16px;height:16px;cursor:pointer}
 </style>
 
-<script>
-// PWA Service Worker — офлайн кеш
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function() {
-    navigator.serviceWorker.register('./izhitsa-sw.js', {scope: './'})
-      .then(function(reg) {
-        console.log('[PWA] SW зарегистрирован');
-      })
-      .catch(function(e) { /* SW не поддерживается в этом контексте */ });
-  });
-}
-</script>
-
   <!-- PWA manifest -->
   <link rel="manifest" href="manifest-admin.json">
   
@@ -1948,13 +1935,12 @@ function startStaffSyncListener() {
     if(val) {
       localStorage.setItem('iz_staff', JSON.stringify(val));
       _syncDerivedFromStaff(val);
-      // Если экран входа ещё открыт — перерисовать список пользователей,
-      // т.к. на первом запуске устройства localStorage мог быть пуст
+      // Если экран логина ещё открыт — перерисовать список пользователей с новыми данными
       var loginUserEl = document.getElementById('loginUser');
-      if(loginUserEl) {
-        var activeCard = document.querySelector('.role-card.selected');
-        var roleToShow = selectedRole || 'admin';
-        selectAdminRole(roleToShow, activeCard || document.querySelector('.role-card'));
+      var loginScreen = document.getElementById('loginScreen');
+      if(loginUserEl && loginScreen && loginScreen.style.display !== 'none') {
+        var activeCard = document.querySelector('.role-card.selected') || document.querySelector('.role-card');
+        selectAdminRole(selectedRole || 'admin', activeCard);
       }
     }
   }, function(e){ console.log('staff sync err', e); });
@@ -3265,10 +3251,33 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw-admin.js', {scope: './'})
       .then(reg => {
         console.log('✅ Service Worker registered');
+        // Принудительно проверяем наличие новой версии при каждом запуске
+        reg.update();
+        // Если уже есть ожидающий новый SW — активируем его сразу
+        if (reg.waiting) {
+          reg.waiting.postMessage({type: 'SKIP_WAITING'});
+        }
+        reg.addEventListener('updatefound', () => {
+          var newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              newWorker.postMessage({type: 'SKIP_WAITING'});
+            }
+          });
+        });
       })
       .catch(err => {
         console.warn('⚠️ Service Worker registration failed:', err);
       });
+
+    // Когда новый SW взял управление страницей — перезагружаем один раз, чтобы подтянуть свежий код
+    var _reloadedForSw = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (_reloadedForSw) return;
+      _reloadedForSw = true;
+      window.location.reload();
+    });
   });
 }
 </script>
