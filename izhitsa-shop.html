@@ -1210,11 +1210,10 @@ function checkForAppUpdate() {
       <div id="discCategoryBlock" style="display:none;margin-top:10px">
         <label class="fl">К какой категории относится скидка?</label>
         <div style="display:flex;gap:6px;margin-top:4px">
-          <button type="button" id="discCat_auto" onclick="setDiscCategory('auto')" style="flex:1;padding:7px 4px;border-radius:9px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:10.5px;font-weight:700;cursor:pointer">⚖️ Авто (поровну)</button>
-          <button type="button" id="discCat_derevo" onclick="setDiscCategory('derevo')" style="flex:1;padding:7px 4px;border-radius:9px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:10.5px;font-weight:600;cursor:pointer">🌳 Дерево</button>
+          <button type="button" id="discCat_derevo" onclick="setDiscCategory('derevo')" style="flex:1;padding:7px 4px;border-radius:9px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:10.5px;font-weight:700;cursor:pointer">🌳 Дерево</button>
           <button type="button" id="discCat_dr" onclick="setDiscCategory('dr')" style="flex:1;padding:7px 4px;border-radius:9px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:10.5px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
         </div>
-        <div style="font-size:10.5px;color:#8888aa;margin-top:4px">Например, если вместо скидки подарили товар ДР — выберите "ДР Товар", чтобы вся скидка ушла именно туда, а не делилась пропорционально.</div>
+        <div style="font-size:10.5px;color:#8888aa;margin-top:4px">Скидка целиком относится к одной категории — выберите, к какой именно.</div>
       </div>
     </div>
     <div style="background:#22222e;border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
@@ -1842,7 +1841,7 @@ function _workingNowISO(){
   }
   return new Date().toISOString();
 }
-let saleItems = [], payMethod = 'cash', staffPayMethod = 'cash', discType = 'pct', discCategory = 'auto';
+let saleItems = [], payMethod = 'cash', staffPayMethod = 'cash', discType = 'pct', discCategory = 'derevo';
 var _editSaleEntryId = null;
 var _svArchiveEditId = null;
 
@@ -1876,7 +1875,7 @@ function editJournalSale(id){
     var di=document.getElementById('discInput'); if(di) di.value=entry.discount;
     var sd=document.getElementById('saleDiscount'); if(sd) sd.value=entry.discount;
   }
-  setDiscCategory(entry.discCategory||'auto');
+  setDiscCategory(entry.discCategory||'derevo');
 
   // Payment method
   var pmEl = document.querySelector('#saleMo .pc[onclick*="\''+(entry.payMethod||'cash')+'\'"]');
@@ -1926,7 +1925,7 @@ function svEditSale(idx){
     var di=document.getElementById('discInput'); if(di) di.value=entry.discount;
     var sd=document.getElementById('saleDiscount'); if(sd) sd.value=entry.discount;
   }
-  setDiscCategory(entry.discCategory||'auto');
+  setDiscCategory(entry.discCategory||'derevo');
 
   var pmEl = document.querySelector('#saleMo .pc[onclick*="\''+(entry.payMethod||'cash')+'\'"]');
   setPayM(entry.payMethod||'cash', pmEl||document.querySelector('#saleMo .pc'));
@@ -4649,7 +4648,7 @@ function resetSaleForm(){
   var rb=document.getElementById('rsAccountBlock'); if(rb)rb.style.display='none';
   saleItems=[];
   setSiItemType('derevo');
-  setDiscCategory('auto');
+  setDiscCategory('derevo');
   renderSaleItems(); calcSaleTotal();
   ['siNum','siName','siPrice','siQty','siAmt','siSpecies','siNameM','siPriceM','siQtyM','siAmtM','siSpeciesM','saleComment','mixCash','mixCard','discInput','saleDiscount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('siLookupResult').style.display='none';
@@ -4756,7 +4755,7 @@ function siEditItem(i){
 }
 function setDiscCategory(cat){
   discCategory = cat;
-  ['auto','derevo','dr'].forEach(function(c){
+  ['derevo','dr'].forEach(function(c){
     var btn = document.getElementById('discCat_'+c);
     if(!btn) return;
     var active = c===cat;
@@ -4775,7 +4774,7 @@ function updateDiscCategoryVisibility(){
   var hasWood = saleItems.some(function(it){ return it.goodsType!=='dr'; });
   var hasDr = saleItems.some(function(it){ return it.goodsType==='dr'; });
   block.style.display = (hasWood && hasDr) ? 'block' : 'none';
-  if(!(hasWood && hasDr)) setDiscCategory('auto');
+  if(!(hasWood && hasDr)) setDiscCategory('derevo');
 }
 function setDiscType(type){
   discType=type;
@@ -7405,7 +7404,7 @@ function svSaveTovar(){
   _currentShiftView.editedBy=(session&&(session.name||session.sellerName))||'admin';
   _currentShiftView.editedAt=new Date().toISOString();
   _currentShiftView.editReason=reason;
-  svPersist(); _renderShiftView(); showToast('✅ Остатки товара обновлены');
+  svPersist(true); _renderShiftView(); showToast('✅ Остатки товара обновлены');
 }
 // Saves an edit to a "simple" journal-derived entry (an accepted накладная
 // or a списание that arrived via the live shift journal, not a manually
@@ -7662,7 +7661,65 @@ function svDeleteShift(){
   try{db.collection('iz_shifts').doc(id).delete();}catch(e){}
   closeMo('editShiftMo'); renderShiftHistory(); showToast('🗑 Смена удалена');
 }
-function svPersist(){
+// Пересчитывает «Остаток вечер» (Дерево и ДР Товар) у просматриваемой
+// архивной смены заново, от утреннего остатка + всех приходов/списаний/
+// продаж, которые сейчас реально есть в её журнале и в ручных
+// приход/списание-массивах. Раньше это поле было «заморожённым» снимком,
+// сделанным один раз при закрытии смены, и не обновлялось, если приход,
+// списание или продажу потом правили из архива администратора — отсюда
+// несовпадение «приход подгрузился верно, а остаток товара — нет».
+// Не трогает «Нал вечер» (это фактически пересчитанные наличные, которые
+// либо введены продавцом по факту, либо правятся отдельно через Кассу) —
+// только товарный остаток, который всегда должен быть выводим из данных,
+// а не вводиться вручную (кроме явной правки через «📦 Товар»/ИСПРАВИТЬ,
+// которая, в свою очередь, перезапишется этим пересчётом при следующей
+// правке прихода/списания/продажи — это осознанно: если меняются исходные
+// данные, посчитанное от них значение важнее старой ручной поправки).
+function svRecalcGoodsTotals(){
+  var sh = _currentShiftView; if(!sh) return;
+  var jnl = sh.journal||[];
+  var goods = sh.goodsMorning||0;
+  var goodsDr = sh.goodsDrMorning||0;
+  jnl.forEach(function(e){
+    goods += (e.goodsEffect||0);
+    goodsDr += (e.goodsDrEffect||0);
+  });
+  // Ручные приход/списание, добавленные администратором кнопками «+
+  // Добавить приход/списание» — отдельные массивы, не часть журнала.
+  (sh.goodsReceives||[]).forEach(function(r){ goods += (r.amt||r.amount||0); });
+  (sh.drGoodsReceives||[]).forEach(function(r){ goodsDr += (r.amt||r.amount||0); });
+  (sh.goodsWriteoffs||[]).forEach(function(w){ goods -= (w.amt||w.amount||0); });
+  (sh.drGoodsWriteoffs||[]).forEach(function(w){ goodsDr -= (w.amt||w.amount||0); });
+  sh.goodsEvening = Math.max(0, Math.round(goods));
+  sh.drGoodsEvening = Math.max(0, Math.round(goodsDr));
+}
+
+// Пересчитывает «Остаток вечер» (Дерево и ДР Товар) с нуля — от утреннего
+// остатка плюс эффект каждой записи в журнале этой смены (продажи, приходы,
+// списания, расходы), плюс отдельно добавленные admin'ом приходы/списания
+// (которые не были частью живого журнала продавца). Раньше «Остаток вечер»
+// был просто застывшим снимком, посчитанным один раз в момент закрытия
+// смены — и если потом, уже в архиве, исправляли накладную, продажу или
+// списание, сама цифра остатка не обновлялась, хотя строки «Приход»/
+// «Списание»/«Выручка» в сводке уже считались заново при каждом рендере.
+function svRecalcGoodsEvening(){
+  var sh = _currentShiftView; if(!sh) return;
+  var goods = sh.goodsMorning||0, goodsDr = sh.goodsDrMorning||0;
+  (sh.journal||[]).forEach(function(e){
+    goods += (e.goodsEffect||0);
+    goodsDr += (e.goodsDrEffect||0);
+  });
+  (sh.goodsReceives||[]).forEach(function(r){ goods += (r.amt!=null?r.amt:(r.amount||0)); });
+  (sh.drGoodsReceives||[]).forEach(function(r){ goodsDr += (r.amt!=null?r.amt:(r.amount||0)); });
+  (sh.goodsWriteoffs||[]).forEach(function(w){ goods -= (w.amt!=null?w.amt:(w.amount||0)); });
+  (sh.drGoodsWriteoffs||[]).forEach(function(w){ goodsDr -= (w.amt!=null?w.amt:(w.amount||0)); });
+  sh.goodsEvening = goods;
+  sh.drGoodsEvening = goodsDr;
+}
+// skipGoodsRecalc=true только для svSaveTovar() — там admin вписывает
+// «Остаток вечер» вручную и сознательно, пересчитывать поверх него нельзя.
+function svPersist(skipGoodsRecalc){
+  if(!skipGoodsRecalc) svRecalcGoodsEvening();
   var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   var idx=shifts.findIndex(function(s){return (s.id||s._id)===_currentShiftView.id;}); if(idx<0) return;
   shifts[idx]=_currentShiftView;
