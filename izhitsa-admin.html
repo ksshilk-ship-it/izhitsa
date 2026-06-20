@@ -258,6 +258,34 @@ if ('serviceWorker' in navigator) {
     </div>
 
     <div class="card">
+      <div class="ctitle">📈 Сегодня: Магазины</div>
+      <div id="dashShopsToday" style="display:flex;flex-direction:column;gap:8px">
+        <div style="color:var(--t2);font-size:12px;padding:8px 0">Загрузка...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ctitle">👥 Сегодня: Продавцы</div>
+      <div id="dashSellersToday" style="display:flex;flex-direction:column;gap:8px">
+        <div style="color:var(--t2);font-size:12px;padding:8px 0">Загрузка...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ctitle">🏭 Мастерская (сегодня)</div>
+      <div id="dashWorkshopToday" style="display:flex;flex-direction:column;gap:8px">
+        <div style="color:var(--t2);font-size:12px;padding:8px 0">Загрузка...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ctitle">⚠️ Внимание</div>
+      <div id="dashAlerts" style="display:flex;flex-direction:column;gap:8px">
+        <div style="color:var(--t2);font-size:12px;padding:8px 0">✅ Все в порядке</div>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="ctitle">Продажи по источникам</div>
       <div id="dashBySalesSource" style="min-height:80px">
         <div style="color:var(--t2);font-size:12px;padding:8px 0">Загрузка...</div>
@@ -412,7 +440,27 @@ if ('serviceWorker' in navigator) {
       <div><label class="fl">По дату</label><input class="fi" type="date" id="shopTo" onchange="renderShops()"></div>
     </div>
     
-    <div id="shopsAnalysis"></div>
+    <div id="shopsAnalysis">
+      <div class="card">
+        <div class="ctitle">📊 По точкам продаж</div>
+        <div id="shopsTable"></div>
+      </div>
+      
+      <div class="card">
+        <div class="ctitle">👥 По продавцам</div>
+        <div id="sellersTable"></div>
+      </div>
+      
+      <div class="card">
+        <div class="ctitle">📈 Методы оплаты</div>
+        <div id="paymentMethods"></div>
+      </div>
+      
+      <div class="card">
+        <div class="ctitle">💰 Топ товары</div>
+        <div id="topProducts"></div>
+      </div>
+    </div>
   </div>
 
   <!-- PRODUCTION -->
@@ -1903,8 +1951,8 @@ function switchTab(tab, el) {
   if(tab === 'analytics') renderAnalytics();
   if(tab === 'audit') renderAuditLog();
   if(tab === 'dash') renderDashboard();
-  if(tab === 'shops') renderShopsAnalytics && renderShopsAnalytics();
-  if(tab === 'prod') populateWsEmployees && populateWsEmployees();
+  if(tab === 'shops') renderShops();
+  if(tab === 'prod') renderProduction();
 }
 
 // Override old addSellerFromStaff / addWsEmployee / addAdminUser for compatibility
@@ -2162,10 +2210,384 @@ function initRefBooks() {
   }
 }
 
+// ════ ANALYTICS & DASHBOARD ════
+function getTodayKey() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function getDateRange(period) {
+  var today = new Date();
+  var from, to = new Date(today);
+  
+  if(period === 'today') {
+    from = new Date(today);
+  } else if(period === 'week') {
+    from = new Date(today);
+    from.setDate(from.getDate() - 7);
+  } else if(period === 'month') {
+    from = new Date(today);
+    from.setMonth(from.getMonth() - 1);
+  } else if(period === 'year') {
+    from = new Date(today);
+    from.setFullYear(from.getFullYear() - 1);
+  }
+  
+  return {
+    from: from.getFullYear() + '-' + String(from.getMonth()+1).padStart(2,'0') + '-' + String(from.getDate()).padStart(2,'0'),
+    to: to.getFullYear() + '-' + String(to.getMonth()+1).padStart(2,'0') + '-' + String(to.getDate()).padStart(2,'0')
+  };
+}
+
+function getShiftsInRange(from, to) {
+  try {
+    var shifts = JSON.parse(localStorage.getItem('iz_shifts') || '[]');
+    return shifts.filter(function(s) { return s.date >= from && s.date <= to; });
+  } catch(e) { return []; }
+}
+
+function getShiftsForDate(dateKey) {
+  try {
+    var shifts = JSON.parse(localStorage.getItem('iz_shifts') || '[]');
+    return shifts.filter(function(s) { return s.date === dateKey; });
+  } catch(e) { return []; }
+}
+
+function getTodayShifts() {
+  return getShiftsForDate(getTodayKey());
+}
+
+function renderShops() {
+  var period = document.querySelector('#pg-shops .pchips .pc.active');
+  var periodKey = period ? period.textContent.toLowerCase().replace(/[^a-z]/g,'') : 'today';
+  var range = getDateRange(periodKey);
+  var shifts = getShiftsInRange(range.from, range.to);
+  
+  // By shop
+  var shopStats = {};
+  var sellerStats = {};
+  var paymentStats = {cash: 0, card: 0, sbp: 0, other: 0};
+  var topProducts = {};
+  
+  shifts.forEach(function(s) {
+    // Shop stats
+    if(!shopStats[s.shopName]) shopStats[s.shopName] = {revenue:0, sales:0, cashDisc:0, shifts:0, sellers:{}};
+    shopStats[s.shopName].revenue += (s.netRevenue || 0);
+    shopStats[s.shopName].sales += (s.salesCount || 0);
+    shopStats[s.shopName].cashDisc += Math.abs(s.cashDisc || 0);
+    shopStats[s.shopName].shifts += 1;
+    
+    // Seller in shop
+    if(s.seller) {
+      if(!shopStats[s.shopName].sellers[s.seller]) shopStats[s.shopName].sellers[s.seller] = {revenue:0, sales:0};
+      shopStats[s.shopName].sellers[s.seller].revenue += (s.netRevenue || 0);
+      shopStats[s.shopName].sellers[s.seller].sales += (s.salesCount || 0);
+    }
+    
+    // Seller overall
+    if(s.seller) {
+      if(!sellerStats[s.seller]) sellerStats[s.seller] = {revenue:0, sales:0, shop: s.shopName};
+      sellerStats[s.seller].revenue += (s.netRevenue || 0);
+      sellerStats[s.seller].sales += (s.salesCount || 0);
+    }
+    
+    // Payment methods
+    var journal = s.journal || [];
+    journal.forEach(function(entry) {
+      if(entry.type === 'sale') {
+        var pm = entry.payMethod || 'cash';
+        if(pm === 'cash') paymentStats.cash += (entry.amount || 0);
+        else if(pm === 'card') paymentStats.card += (entry.amount || 0);
+        else if(pm === 'sbp') paymentStats.sbp += (entry.amount || 0);
+        else paymentStats.other += (entry.amount || 0);
+        
+        // Top products
+        if(entry.label) {
+          if(!topProducts[entry.label]) topProducts[entry.label] = {count: 0, revenue: 0};
+          topProducts[entry.label].count += 1;
+          topProducts[entry.label].revenue += (entry.amount || 0);
+        }
+      }
+    });
+  });
+  
+  // Render shops table
+  var shopsHtml = '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+    '<tr style="border-bottom:1px solid var(--border);text-align:left;color:var(--t2)">' +
+      '<th style="padding:6px;text-align:left">Точка</th><th style="padding:6px;text-align:right">Выручка</th><th style="padding:6px;text-align:right">Продажи</th><th style="padding:6px;text-align:right">Касса</th>' +
+    '</tr>';
+  
+  Object.keys(shopStats).sort().forEach(function(shop) {
+    var stat = shopStats[shop];
+    shopsHtml += '<tr style="border-bottom:1px solid var(--border)">' +
+      '<td style="padding:8px;font-weight:600">🏪 ' + shop + '</td>' +
+      '<td style="padding:8px;text-align:right;color:var(--inc)">₽ ' + stat.revenue.toLocaleString('ru-RU') + '</td>' +
+      '<td style="padding:8px;text-align:right">' + stat.sales + '</td>' +
+      '<td style="padding:8px;text-align:right;color:' + (stat.cashDisc > 500 ? 'var(--exp)' : 'var(--t2)') + '">₽ ' + stat.cashDisc.toLocaleString('ru-RU') + '</td>' +
+    '</tr>';
+  });
+  shopsHtml += '</table>';
+  document.getElementById('shopsTable').innerHTML = shopsHtml;
+  
+  // Render sellers table
+  var sellersHtml = '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+    '<tr style="border-bottom:1px solid var(--border);text-align:left;color:var(--t2)">' +
+      '<th style="padding:6px;text-align:left">Продавец</th><th style="padding:6px;text-align:right">Выручка</th><th style="padding:6px;text-align:right">Продажи</th><th style="padding:6px;text-align:right">Средний чек</th>' +
+    '</tr>';
+  
+  Object.keys(sellerStats).sort().forEach(function(seller) {
+    var stat = sellerStats[seller];
+    var avgCheck = stat.sales > 0 ? Math.round(stat.revenue / stat.sales) : 0;
+    sellersHtml += '<tr style="border-bottom:1px solid var(--border)">' +
+      '<td style="padding:8px;font-weight:600">👤 ' + seller + '</td>' +
+      '<td style="padding:8px;text-align:right;color:var(--inc)">₽ ' + stat.revenue.toLocaleString('ru-RU') + '</td>' +
+      '<td style="padding:8px;text-align:right">' + stat.sales + '</td>' +
+      '<td style="padding:8px;text-align:right">₽ ' + avgCheck + '</td>' +
+    '</tr>';
+  });
+  sellersHtml += '</table>';
+  document.getElementById('sellersTable').innerHTML = sellersHtml;
+  
+  // Render payment methods
+  var totalPayments = paymentStats.cash + paymentStats.card + paymentStats.sbp + paymentStats.other;
+  var pmHtml = '<div style="display:flex;flex-direction:column;gap:8px">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s1);border-radius:6px">' +
+      '<span>💵 Наличные</span><span style="font-weight:700">₽ ' + paymentStats.cash.toLocaleString('ru-RU') + ' (' + (totalPayments > 0 ? Math.round(100*paymentStats.cash/totalPayments) : 0) + '%)</span>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s1);border-radius:6px">' +
+      '<span>💳 Карта</span><span style="font-weight:700">₽ ' + paymentStats.card.toLocaleString('ru-RU') + ' (' + (totalPayments > 0 ? Math.round(100*paymentStats.card/totalPayments) : 0) + '%)</span>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s1);border-radius:6px">' +
+      '<span>📱 СБП</span><span style="font-weight:700">₽ ' + paymentStats.sbp.toLocaleString('ru-RU') + ' (' + (totalPayments > 0 ? Math.round(100*paymentStats.sbp/totalPayments) : 0) + '%)</span>' +
+    '</div>' +
+  '</div>';
+  document.getElementById('paymentMethods').innerHTML = pmHtml;
+  
+  // Top products
+  var topProdsArray = Object.keys(topProducts).map(function(name) {
+    return {name: name, count: topProducts[name].count, revenue: topProducts[name].revenue};
+  }).sort(function(a,b) { return b.revenue - a.revenue; }).slice(0, 5);
+  
+  var tpHtml = '<div style="display:flex;flex-direction:column;gap:6px">';
+  topProdsArray.forEach(function(prod, idx) {
+    tpHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s1);border-radius:6px">' +
+      '<div><div style="font-weight:600">' + (idx+1) + '. ' + prod.name + '</div><div style="font-size:10px;color:var(--t2)">' + prod.count + ' шт</div></div>' +
+      '<div style="text-align:right;font-weight:700;color:var(--inc)">₽ ' + prod.revenue.toLocaleString('ru-RU') + '</div>' +
+    '</div>';
+  });
+  tpHtml += '</div>';
+  document.getElementById('topProducts').innerHTML = tpHtml || '<div style="color:var(--t2);font-size:12px">Нет товаров</div>';
+}
+
+function setShopPeriod(period, el) {
+  document.querySelectorAll('#pg-shops .pchips .pc').forEach(function(c) { c.classList.remove('active'); });
+  if(el) el.classList.add('active');
+  
+  var dateInputs = document.getElementById('shopCustomDates');
+  if(period === 'custom') {
+    dateInputs.style.display = 'flex';
+  } else {
+    dateInputs.style.display = 'none';
+  }
+  
+  renderShops();
+}
+
+function renderDashboard() {
+  var today = getTodayKey();
+  var shifts = getTodayShifts();
+  
+  // KPI calculations
+  var totalRevenue = 0, totalSales = 0, totalCashDisc = 0;
+  var shopStats = {}, sellerStats = {};
+  
+  shifts.forEach(function(s) {
+    totalRevenue += (s.netRevenue || 0);
+    totalSales += (s.salesCount || 0);
+    totalCashDisc += Math.abs(s.cashDisc || 0);
+    
+    // By shop
+    if(!shopStats[s.shopName]) shopStats[s.shopName] = {revenue:0, sales:0, sellers:[]};
+    shopStats[s.shopName].revenue += (s.netRevenue || 0);
+    shopStats[s.shopName].sales += (s.salesCount || 0);
+    if(s.seller && !shopStats[s.shopName].sellers.includes(s.seller)) {
+      shopStats[s.shopName].sellers.push(s.seller);
+    }
+    
+    // By seller
+    if(s.seller) {
+      if(!sellerStats[s.seller]) sellerStats[s.seller] = {revenue:0, sales:0, zp:0, shop:s.shopName};
+      sellerStats[s.seller].revenue += (s.netRevenue || 0);
+      sellerStats[s.seller].sales += (s.salesCount || 0);
+      sellerStats[s.seller].zp += (s.zpCalc || 0);
+    }
+  });
+  
+  // Update KPI
+  document.getElementById('dashIncome').textContent = '₽ ' + totalRevenue.toLocaleString('ru-RU');
+  document.getElementById('dashExpense').textContent = '₽ ' + totalCashDisc.toLocaleString('ru-RU');
+  document.getElementById('dashBalance').textContent = '₽ ' + (totalRevenue - totalCashDisc).toLocaleString('ru-RU');
+  
+  // Shops
+  var shopsHtml = '';
+  Object.keys(shopStats).forEach(function(shop) {
+    var stat = shopStats[shop];
+    shopsHtml += '<div style="background:var(--s1);padding:10px;border-radius:8px;display:flex;justify-content:space-between;align-items:center">' +
+      '<div><div style="font-weight:600">🏪 ' + shop + '</div><div style="font-size:11px;color:var(--t2)">Продавцов: ' + stat.sellers.length + '</div></div>' +
+      '<div style="text-align:right"><div style="font-weight:700;color:var(--inc)">₽ ' + stat.revenue.toLocaleString('ru-RU') + '</div><div style="font-size:11px;color:var(--t2)">' + stat.sales + ' продаж</div></div>' +
+    '</div>';
+  });
+  document.getElementById('dashShopsToday').innerHTML = shopsHtml || '<div style="color:var(--t2);font-size:12px">Нет смен сегодня</div>';
+  
+  // Sellers
+  var sellersHtml = '';
+  Object.keys(sellerStats).forEach(function(seller) {
+    var stat = sellerStats[seller];
+    sellersHtml += '<div style="background:var(--s1);padding:10px;border-radius:8px;display:flex;justify-content:space-between;align-items:center">' +
+      '<div><div style="font-weight:600">👤 ' + seller + '</div><div style="font-size:11px;color:var(--t2)">' + stat.shop + '</div></div>' +
+      '<div style="text-align:right"><div style="font-weight:700;color:var(--inc)">₽ ' + stat.revenue.toLocaleString('ru-RU') + '</div><div style="font-size:11px;color:var(--a4)">ЗП: ₽ ' + stat.zp.toLocaleString('ru-RU') + '</div></div>' +
+    '</div>';
+  });
+  document.getElementById('dashSellersToday').innerHTML = sellersHtml || '<div style="color:var(--t2);font-size:12px">Нет продавцов</div>';
+  
+  // Workshop
+  try {
+    var wsItems = JSON.parse(localStorage.getItem('ws_items') || '[]');
+    var todayItems = wsItems.filter(function(it) {
+      var itemDate = it.createdAt ? it.createdAt.split('T')[0] : '';
+      return itemDate === today;
+    });
+    
+    var wsTotal = 0;
+    todayItems.forEach(function(it) { wsTotal += (it.price || 0); });
+    
+    var wsHtml = '<div style="background:var(--s1);padding:12px;border-radius:8px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+        '<span>🔨 Изделий сделано</span><span style="font-weight:700;font-size:16px">' + todayItems.length + ' шт</span>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span>💎 Стоимость</span><span style="font-weight:700;color:var(--inc)">₽ ' + wsTotal.toLocaleString('ru-RU') + '</span>' +
+      '</div>' +
+    '</div>';
+    document.getElementById('dashWorkshopToday').innerHTML = wsHtml;
+  } catch(e) {
+    document.getElementById('dashWorkshopToday').innerHTML = '<div style="color:var(--t2);font-size:12px">Ошибка загрузки</div>';
+  }
+  
+  // Alerts
+  var alertsHtml = '';
+  var hasAlerts = false;
+  
+  // Check for cash discrepancies
+  shifts.forEach(function(s) {
+    if(Math.abs(s.cashDisc || 0) > 500) {
+      alertsHtml += '<div style="background:#2e1a1a;border:1px solid #f06060;border-radius:8px;padding:10px;color:#f06060;font-size:12px">' +
+        '⚠️ ' + s.shopName + ': Расхождение в кассе ₽ ' + (s.cashDisc || 0) +
+      '</div>';
+      hasAlerts = true;
+    }
+  });
+  
+  if(!hasAlerts) alertsHtml = '<div style="color:var(--t2);font-size:12px">✅ Все в порядке</div>';
+  document.getElementById('dashAlerts').innerHTML = alertsHtml;
+}
+
+function setDashPeriod(period, el) {
+  document.querySelectorAll('.pchips .pc').forEach(function(c) { c.classList.remove('active'); });
+  if(el) el.classList.add('active');
+  
+  var dateInputs = document.getElementById('dashCustomDates');
+  if(period === 'custom') {
+    dateInputs.style.display = 'flex';
+  } else {
+    dateInputs.style.display = 'none';
+  }
+  
+  renderDashboard();
+}
+
 // Initialize
+
+function setProdPeriod(period, el) {
+  document.querySelectorAll('#pg-prod .pchips .pc').forEach(function(c) { c.classList.remove('active'); });
+  if(el) el.classList.add('active');
+  renderProduction();
+}
+
+function renderProduction() {
+  var period = document.querySelector('#pg-prod .pchips .pc.active');
+  var periodKey = period ? period.textContent.toLowerCase().replace(/[^a-z]/g,'') : 'month';
+  var range = getDateRange(periodKey);
+  
+  try {
+    var wsItems = JSON.parse(localStorage.getItem('ws_items') || '[]');
+    var wsShipments = JSON.parse(localStorage.getItem('ws_shipments') || '[]');
+    var wsOtherTasks = JSON.parse(localStorage.getItem('ws_other_tasks') || '[]');
+    var staff = JSON.parse(localStorage.getItem('iz_staff') || '[]');
+    
+    // Filter by period
+    var items = wsItems.filter(function(it) {
+      var itemDate = it.createdAt ? it.createdAt.split('T')[0] : '';
+      return itemDate >= range.from && itemDate <= range.to;
+    });
+    
+    var shipments = wsShipments.filter(function(sh) {
+      return sh.date >= range.from && sh.date <= range.to;
+    });
+    
+    // Stats by master
+    var masterStats = {};
+    var typeStats = {};
+    var statusStats = {ready: 0, shipped: 0, processing: 0, blank: 0, returned: 0};
+    
+    items.forEach(function(it) {
+      var masterId = it.masterId;
+      if(!masterStats[masterId]) masterStats[masterId] = {items: 0, revenue: 0};
+      masterStats[masterId].items += 1;
+      masterStats[masterId].revenue += (it.price || 0);
+      
+      var type = it.name || 'Неизвестно';
+      if(!typeStats[type]) typeStats[type] = {count: 0, revenue: 0};
+      typeStats[type].count += 1;
+      typeStats[type].revenue += (it.price || 0);
+      
+      var status = it.status || 'processing';
+      if(statusStats[status] !== undefined) statusStats[status] += 1;
+    });
+    
+    // Update wsEmployeesData with master stats
+    var wsHtml = '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+      '<tr style="border-bottom:1px solid var(--border);text-align:left;color:var(--t2)">' +
+        '<th style="padding:6px;text-align:left">Мастер</th><th style="padding:6px;text-align:right">Изделий</th><th style="padding:6px;text-align:right">Стоимость</th><th style="padding:6px;text-align:right">Темп (шт/дн)</th>' +
+      '</tr>';
+    
+    Object.keys(masterStats).forEach(function(masterId) {
+      var stat = masterStats[masterId];
+      var masterName = 'Мастер #' + masterId.substring(0, 4);
+      staff.forEach(function(s) { if(s.id === masterId) masterName = s.name; });
+      
+      var daysCount = range.to === range.from ? 1 : Math.ceil((new Date(range.to) - new Date(range.from)) / (1000 * 60 * 60 * 24));
+      var pace = Math.round(100 * stat.items / Math.max(daysCount, 1)) / 100;
+      
+      wsHtml += '<tr style="border-bottom:1px solid var(--border)">' +
+        '<td style="padding:8px;font-weight:600">🔨 ' + masterName + '</td>' +
+        '<td style="padding:8px;text-align:right">' + stat.items + '</td>' +
+        '<td style="padding:8px;text-align:right;color:var(--inc)">₽ ' + stat.revenue.toLocaleString('ru-RU') + '</td>' +
+        '<td style="padding:8px;text-align:right">' + pace + '</td>' +
+      '</tr>';
+    });
+    wsHtml += '</table>';
+    document.getElementById('wsEmployeesData').innerHTML = wsHtml;
+    
+  } catch(e) {
+    console.error('renderProduction error:', e);
+    document.getElementById('wsEmployeesData').innerHTML = '<div style="color:var(--t2);font-size:12px">Ошибка загрузки данных</div>';
+  }
+}
 
 document.addEventListener('DOMContentLoaded', function() {
   initRefBooks();
+  initStaff();
   renderRefBooks();
   // Create default admin FIRST before sync listeners overwrite
   var users = getAdminUsers();
