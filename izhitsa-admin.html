@@ -1948,6 +1948,13 @@ function startStaffSyncListener() {
     if(val) {
       localStorage.setItem('iz_staff', JSON.stringify(val));
       _syncDerivedFromStaff(val);
+      // Если экран логина ещё открыт — перерисовать список пользователей с новыми данными
+      var loginUserEl = document.getElementById('loginUser');
+      var loginScreen = document.getElementById('loginScreen');
+      if(loginUserEl && loginScreen && loginScreen.style.display !== 'none') {
+        var activeCard = document.querySelector('.role-card.selected') || document.querySelector('.role-card');
+        selectAdminRole(selectedRole || 'admin', activeCard);
+      }
     }
   }, function(e){ console.log('staff sync err', e); });
 
