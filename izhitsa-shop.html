@@ -3579,7 +3579,23 @@ function checkDuplicateReceives(){
       });
     });
     var dupes = journal.filter(function(e){ return e.type==='receive' && e.invId && archived[e.invId]; });
-    if(!dupes.length){
+
+    // Orphans: a "Приёмка" entry whose накладная was deleted (e.g. the
+    // seller fixed a data-entry mistake — entered each item as its own
+    // накладная instead of one накладная with many positions, then deleted
+    // the wrong ones). Before the fix, deletion didn't tombstone the
+    // journal entry, so the live sync silently resurrected it even though
+    // its накладная was gone for good — it'll never show in archived{} above
+    // since it was never part of a closed shift's snapshot either.
+    var manualIds = {}; JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]').forEach(function(i){ manualIds[String(i._id!=null?i._id:i.id)]=true; });
+    var autoIds = {}; getInvoices().forEach(function(i){ autoIds[String(i._id!=null?i._id:i.id)]=true; });
+    var orphans = journal.filter(function(e){
+      if(e.type!=='receive' || !e.invId) return false;
+      if(archived[e.invId]) return false; // already counted as a cross-shift dupe above
+      return !manualIds[e.invId] && !autoIds[e.invId];
+    });
+
+    if(!dupes.length && !orphans.length){
       if(resEl) resEl.innerHTML = '<div style="font-size:12px;color:#60f090;padding:6px 0">✅ Задвоений не найдено — текущая смена чистая</div>';
       window._dupReceiveIds = [];
       return;
@@ -3592,12 +3608,19 @@ function checkDuplicateReceives(){
         '<br><span style="color:#8888aa">уже учтена в закрытой смене от '+(info.date||'?')+'</span>'+
       '</div>';
     }).join('');
+    var orphanTotal = orphans.reduce(function(s,e){ return s+(e.amount||0); },0);
+    var orphanHtml = orphans.map(function(e){
+      return '<div style="font-size:12px;padding:5px 0;border-bottom:1px solid #2e2e3e">'+
+        '<b>'+(e.label||'Приёмка')+'</b> — '+Math.round(e.amount||0).toLocaleString('ru-RU')+'₽'+
+        '<br><span style="color:#8888aa">накладная удалена, но запись осталась в журнале</span>'+
+      '</div>';
+    }).join('');
     if(resEl) resEl.innerHTML =
-      '<div style="font-size:12px;color:#f0a060;margin-bottom:4px;font-weight:700">⚠️ Найдено '+dupes.length+' задвоенных записей на '+Math.round(total).toLocaleString('ru-RU')+'₽:</div>'+
-      listHtml+
+      (dupes.length ? '<div style="font-size:12px;color:#f0a060;margin-bottom:4px;font-weight:700">⚠️ Найдено '+dupes.length+' задвоенных записей на '+Math.round(total).toLocaleString('ru-RU')+'₽:</div>'+listHtml : '')+
+      (orphans.length ? '<div style="font-size:12px;color:#f0a060;margin:8px 0 4px;font-weight:700">⚠️ Найдено '+orphans.length+' записей от удалённых накладных на '+Math.round(orphanTotal).toLocaleString('ru-RU')+'₽:</div>'+orphanHtml : '')+
       '<button onclick="removeDuplicateReceives()" style="margin-top:8px;width:100%;padding:9px;border-radius:8px;border:none;background:#f06060;color:#fff;font-size:12px;font-weight:700;cursor:pointer">🗑 Убрать из текущей смены</button>'+
-      '<div style="font-size:10px;color:#8888aa;margin-top:4px">Сами накладные и их учёт в смене от '+(closedShifts[0]?closedShifts[0].date:'')+' не удаляются — убирается только повторная запись в сегодняшней смене.</div>';
-    window._dupReceiveIds = dupes.map(function(e){ return e.id; });
+      (dupes.length ? '<div style="font-size:10px;color:#8888aa;margin-top:4px">Сами накладные и их учёт в смене от '+(closedShifts[0]?closedShifts[0].date:'')+' не удаляются — убирается только повторная запись в сегодняшней смене.</div>' : '');
+    window._dupReceiveIds = dupes.concat(orphans).map(function(e){ return e.id; });
   }).catch(function(err){
     if(resEl) resEl.innerHTML = '<div style="font-size:12px;color:#f06060;padding:6px 0">⛔ Не удалось проверить (нет сети?). Попробуйте ещё раз.</div>';
   });
@@ -3605,7 +3628,7 @@ function checkDuplicateReceives(){
 function removeDuplicateReceives(){
   var ids = window._dupReceiveIds||[];
   if(!ids.length) return;
-  if(!confirm('Убрать '+ids.length+' задвоенных приходов из текущей смены?')) return;
+  if(!confirm('Убрать '+ids.length+' записей (задвоения и/или записи от удалённых накладных) из текущей смены?')) return;
   // CRITICAL: just filtering these out of `journal` is not enough — the
   // real-time "open shift" listener (startLiveShiftListener) periodically
   // re-merges anything present in the remote Firestore mirror but "missing"
@@ -5434,10 +5457,19 @@ function deleteShopInvoice(id){
   try{ db.collection('iz_invoices').doc(id).delete(); }catch(e){}
   clearInvProgress(id);
 
-  // If accepted, also remove the linked "Приёмка" journal entry so goods totals stay correct
+  // If accepted, also remove the linked "Приёмка" journal entry so goods totals stay correct.
+  // Must tombstone via addToTrash() before removing — otherwise the live
+  // open-shift listener's mergeRemoteJournal() sees it "missing locally"
+  // and silently restores it from the stale remote mirror.
   if(wasAccepted){
     var jIdx = journal.findIndex(function(e){ return e.type==='receive' && e.label==='Приёмка '+inv.num; });
-    if(jIdx>=0){ journal.splice(jIdx,1); saveJ(); }
+    if(jIdx>=0){
+      try{ logEntryDelete(journal[jIdx]); }catch(err){}
+      addToTrash(journal[jIdx], {reason:'shop_invoice_deleted'});
+      journal.splice(jIdx,1);
+      saveJ();
+      try{ syncLiveShift(); }catch(e){}
+    }
   }
   renderAll(); renderInvoices(); renderReceiveArchive();
   showToast('✅ Накладная удалена');
@@ -11010,14 +11042,28 @@ function deleteManualInvoice(id){
   localStorage.setItem('iz_manual_invoices', JSON.stringify(remaining));
   try{ db.collection('iz_manual_invoices').doc(id).delete(); }catch(e){}
 
-  // Remove linked "Приход товара" journal entries (exact match by invId, falling back to invoice number for legacy entries)
+  // Remove linked "Приход товара" journal entries (exact match by invId, falling back to invoice number for legacy entries).
+  // These must be tombstoned via addToTrash() before filtering — otherwise
+  // the real-time open-shift listener's mergeRemoteJournal() sees them
+  // "missing locally" a moment later and silently restores them from the
+  // stale remote mirror, undoing this deletion right after it ran (same
+  // root cause as the earlier duplicate-приход bug).
   var num = inv.num;
+  journal.forEach(function(e){
+    if(e.type!=='receive') return;
+    var matches = e.invId ? e.invId===id : (e.sub && e.sub.indexOf(num)>=0);
+    if(matches){
+      try{ logEntryDelete(e); }catch(err){}
+      addToTrash(e, {reason:'manual_invoice_deleted'});
+    }
+  });
   journal = journal.filter(function(e){
     if(e.type!=='receive') return true;
     if(e.invId) return e.invId!==id;
     return !(e.sub && e.sub.indexOf(num)>=0);
   });
   saveJ();
+  try{ syncLiveShift(); }catch(e){}
   renderAll(); renderReceiveArchive();
   showToast('✅ Накладная удалена');
 }
