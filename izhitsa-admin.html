@@ -684,6 +684,25 @@ function adminSyncListenCollection(lsKey, colName) {
     localStorage.setItem(lsKey, JSON.stringify(docs));
   }, function(e){ console.log('adminCol sync err', colName, e.code||e); });
 }
+function pullAdminUsersFromFirebase() {
+  // Force pull iz_admin_users from Firestore
+  try {
+    db.collection('iz_settings').doc('admins').get().then(function(snap) {
+      if(snap.exists && snap.data().admins) {
+        var users = snap.data().admins;
+        localStorage.setItem('iz_admin_users', JSON.stringify(users));
+        console.log('✅ Loaded', users.length, 'admin users from Firebase');
+        // Refresh role selector
+        selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
+      }
+    }).catch(function(e) {
+      console.warn('⚠️ Could not pull admin users from Firebase:', e);
+    });
+  } catch(e) {
+    console.error('pullAdminUsersFromFirebase error:', e);
+  }
+}
+
 function startAdminSyncListeners() {
   Object.keys(ADMIN_SYNC_SETTINGS).forEach(adminSyncListen);
   adminSyncListenCollection('iz_shifts', 'iz_shifts');
@@ -692,6 +711,9 @@ function startAdminSyncListeners() {
   adminSyncListenCollection('iz_invoices', 'iz_invoices');
   adminSyncListenCollection('iz_shop_notifications', 'iz_shop_notifications');
   adminSyncListenCollection('iz_psj', 'iz_psj');
+  
+  // Also pull admin users explicitly
+  pullAdminUsersFromFirebase();
 }
 
 var selectedRole = null;
@@ -2508,6 +2530,54 @@ function setDashPeriod(period, el) {
 
 // Initialize
 
+// ════ SYNC LISTENERS (Firestore → localStorage) ════
+function startSyncListeners() {
+  // Listen to iz_shifts collection and sync to localStorage
+  try {
+    db.collection('iz_shifts').onSnapshot(function(snap) {
+      var shifts = [];
+      snap.forEach(function(doc) {
+        shifts.push(Object.assign({id: doc.id}, doc.data()));
+      });
+      localStorage.setItem('iz_shifts', JSON.stringify(shifts));
+      console.log('✅ iz_shifts synced:', shifts.length, 'shifts');
+    }, function(err) {
+      console.error('❌ iz_shifts sync error:', err);
+    });
+  } catch(e) {
+    console.error('❌ startSyncListeners error:', e);
+  }
+  
+  // Listen to ws_items (workshop items)
+  try {
+    db.collection('ws_items').onSnapshot(function(snap) {
+      var items = [];
+      snap.forEach(function(doc) {
+        items.push(Object.assign({id: doc.id}, doc.data()));
+      });
+      localStorage.setItem('ws_items', JSON.stringify(items));
+      console.log('✅ ws_items synced:', items.length, 'items');
+    }, function(err) {
+      console.error('❌ ws_items sync error:', err);
+    });
+  } catch(e) {
+    console.error('❌ ws_items sync error:', e);
+  }
+  
+  // Listen to ws_shipments
+  try {
+    db.collection('ws_shipments').onSnapshot(function(snap) {
+      var shipments = [];
+      snap.forEach(function(doc) {
+        shipments.push(Object.assign({id: doc.id}, doc.data()));
+      });
+      localStorage.setItem('ws_shipments', JSON.stringify(shipments));
+    }, function(err) {
+      console.error('❌ ws_shipments sync error:', err);
+    });
+  } catch(e) {}
+}
+
 function setProdPeriod(period, el) {
   document.querySelectorAll('#pg-prod .pchips .pc').forEach(function(c) { c.classList.remove('active'); });
   if(el) el.classList.add('active');
@@ -2589,6 +2659,7 @@ document.addEventListener('DOMContentLoaded', function() {
   initRefBooks();
   initStaff();
   renderRefBooks();
+  startSyncListeners();
   // Create default admin FIRST before sync listeners overwrite
   var users = getAdminUsers();
   var hasDefault = users.some(function(u){ return u.id === 'admin_default'; });
