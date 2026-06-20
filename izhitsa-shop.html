@@ -4277,6 +4277,30 @@ function startAdminApp(){
   startAdminAlertsListener();
   startAdminAuditListener();
   renderTodayShift();
+  migrateOrphanItemNamesToGoods();
+}
+// One-time backfill: names that were already sitting in the raw iz_items
+// database (auto-saved from past sales/накладные) before autoSaveToItemBase
+// started mirroring into iz_goods. Surfaces them in Настройки → База
+// товаров so the admin can see exactly what's been suggestible at
+// point-of-sale and remove anything that doesn't belong (idempotent —
+// only ever adds entries, never deletes, so it's safe to run every login).
+function migrateOrphanItemNamesToGoods(){
+  var items = getItemsBase();
+  if(!items.length) return;
+  var goods = getRefBook('iz_goods');
+  var goodsNames = {};
+  goods.forEach(function(g){ var n=(g&&g.name)||g; if(n) goodsNames[n]=true; });
+  var added = 0;
+  items.forEach(function(it){
+    var n = it && it.name && it.name.trim();
+    if(n && !goodsNames[n]){
+      goods.push({id:uid(), name:n});
+      goodsNames[n] = true;
+      added++;
+    }
+  });
+  if(added) saveRefBookShop('iz_goods', goods);
 }
 function renderAdminInvoices(){
   var c = document.getElementById('adminInvoicesList'); if(!c) return;
@@ -10813,7 +10837,7 @@ function editManualInvoice(id){
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата приёмки</label><input class="fi" type="date" id="maninv_date_'+id+'" value="'+(inv.date||'')+'" style="margin:0;padding:7px;-webkit-appearance:none;color-scheme:dark"></div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата накладной</label><input class="fi" type="date" id="maninv_docdate_'+id+'" value="'+(inv.docDate||inv.date||'')+'" style="margin:0;padding:7px;-webkit-appearance:none;color-scheme:dark"></div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">От кого</label><input class="fi" id="maninv_from_'+id+'" value="'+(inv.from||'')+'" style="margin:0;padding:7px"></div>'+
-    '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (арт. · наим. · кол-во · цена)</div>'+
+    '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (арт. · наим. · порода · кол-во · цена)</div>'+
     '<div id="maninv_items_'+id+'"></div>'+
     '<button type="button" onclick="addManInvEditItem(\''+id+'\')" class="btn sec" style="font-size:12px;margin:6px 0 0">＋ Добавить позицию</button>'+
     '<div id="maninv_total_'+id+'" style="margin-top:8px"></div>'+
@@ -10823,16 +10847,41 @@ function editManualInvoice(id){
     '</div>';
   renderManInvEditItems(id);
 }
+var _manInvEditActive = {id:null, i:null};
+function _manInvNameOptions(){ return getItemsBase().map(function(it){ return it.name; }).filter(Boolean); }
 function renderManInvEditItems(id){
   var data = window._manInvEdit[id]; if(!data) return;
   var c = document.getElementById('maninv_items_'+id); if(!c) return;
   c.innerHTML = (data.items||[]).map(function(item,i){
-    return '<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center">'+
-      '<input class="fi" value="'+(item.article||'')+'" placeholder="Арт." style="flex:0 0 56px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditArt(\''+id+'\','+i+',this.value)">'+
-      '<input class="fi" value="'+(item.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" oninput="_manInvEditName(\''+id+'\','+i+',this.value)">'+
-      '<input class="fi" type="number" value="'+(item.qty!=null?item.qty:1)+'" inputmode="numeric" style="flex:0 0 50px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditQty(\''+id+'\','+i+',this.value)">'+
-      '<input class="fi" type="number" value="'+(item.price||0)+'" inputmode="numeric" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditPrice(\''+id+'\','+i+',this.value)">'+
-      '<button type="button" onclick="removeManInvEditItem(\''+id+'\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:8px;padding:6px 9px;color:#f06060;font-size:13px;cursor:pointer;flex-shrink:0">✕</button>'+
+    var nameId = 'maninv_name_'+id+'_'+i;
+    var spId = 'maninv_species_'+id+'_'+i;
+    return '<div style="background:#1a1a22;border-radius:10px;padding:8px;margin-bottom:6px">'+
+      '<div style="display:flex;gap:5px;margin-bottom:6px;align-items:flex-end">'+
+        '<input class="fi" value="'+(item.article||'')+'" placeholder="Арт." style="flex:0 0 56px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditArt(\''+id+'\','+i+',this.value)">'+
+        '<div style="flex:2;position:relative">'+
+          '<input class="fi" id="'+nameId+'" value="'+(item.name||'')+'" placeholder="Наименование" autocomplete="off" style="margin:0;padding:6px;font-size:12px" '+
+            'oninput="_manInvEditActive={id:\''+id+'\',i:'+i+'};_manInvEditName(\''+id+'\','+i+',this.value);psjSuggest(\''+nameId+'\',_manInvNameOptions(),\'_manInvEditPickNameIdx\')" '+
+            'onfocus="_manInvEditActive={id:\''+id+'\',i:'+i+'};psjSuggest(\''+nameId+'\',_manInvNameOptions(),\'_manInvEditPickNameIdx\')" '+
+            'onblur="psjHideSugg(\''+nameId+'\')">'+
+          '<div id="'+nameId+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>'+
+        '</div>'+
+        '<button type="button" onclick="removeManInvEditItem(\''+id+'\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:8px;padding:6px 9px;color:#f06060;font-size:13px;cursor:pointer;flex-shrink:0">✕</button>'+
+      '</div>'+
+      '<div style="margin-bottom:6px;position:relative">'+
+        '<div style="font-size:9px;color:#8888aa;margin-bottom:3px">ПОРОДА ДЕРЕВА</div>'+
+        '<div style="display:flex;gap:5px">'+
+          '<input class="fi" id="'+spId+'" value="'+(item.species||'')+'" placeholder="Порода" autocomplete="off" style="margin:0;padding:6px;font-size:12px;flex:1" '+
+            'oninput="_manInvEditActive={id:\''+id+'\',i:'+i+'};_manInvEditSpecies(\''+id+'\','+i+',this.value);psjSuggest(\''+spId+'\',getSpecies(),\'_manInvEditPickSpeciesIdx\')" '+
+            'onfocus="_manInvEditActive={id:\''+id+'\',i:'+i+'};psjSuggest(\''+spId+'\',getSpecies(),\'_manInvEditPickSpeciesIdx\')" '+
+            'onblur="psjHideSugg(\''+spId+'\')">'+
+          '<button type="button" onclick="_manInvEditAddSpecies(\''+id+'\','+i+')" style="background:#22222e;border:1px solid #f0c060;border-radius:8px;padding:0 12px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>'+
+        '</div>'+
+        '<div id="'+spId+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>'+
+      '</div>'+
+      '<div style="display:flex;gap:5px">'+
+        '<input class="fi" type="number" value="'+(item.qty!=null?item.qty:1)+'" inputmode="numeric" placeholder="Кол-во" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditQty(\''+id+'\','+i+',this.value)">'+
+        '<input class="fi" type="number" value="'+(item.price||0)+'" inputmode="numeric" placeholder="Цена" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditPrice(\''+id+'\','+i+',this.value)">'+
+      '</div>'+
     '</div>';
   }).join('');
   updateManInvEditTotal(id);
@@ -10862,8 +10911,36 @@ function updateManInvEditTotal(id){
 }
 function _manInvEditName(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]) window._manInvEdit[id].items[i].name=v; }
 function _manInvEditArt(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]) window._manInvEdit[id].items[i].article=v; }
+function _manInvEditSpecies(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]) window._manInvEdit[id].items[i].species=v; }
 function _manInvEditQty(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]){ window._manInvEdit[id].items[i].qty=parseFloat(v)||1; updateManInvEditTotal(id); } }
 function _manInvEditPrice(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]){ window._manInvEdit[id].items[i].price=parseFloat(v)||0; updateManInvEditTotal(id); } }
+function _manInvEditPickNameIdx(val){
+  var id=_manInvEditActive.id, i=_manInvEditActive.i;
+  if(id==null||i==null) return;
+  var el = document.getElementById('maninv_name_'+id+'_'+i);
+  if(el) el.value = val;
+  if(window._manInvEdit[id] && window._manInvEdit[id].items[i]) window._manInvEdit[id].items[i].name = val;
+  var box = document.getElementById('maninv_name_'+id+'_'+i+'_sugg');
+  if(box) box.style.display='none';
+}
+function _manInvEditPickSpeciesIdx(val){
+  var id=_manInvEditActive.id, i=_manInvEditActive.i;
+  if(id==null||i==null) return;
+  var el = document.getElementById('maninv_species_'+id+'_'+i);
+  if(el) el.value = val;
+  if(window._manInvEdit[id] && window._manInvEdit[id].items[i]) window._manInvEdit[id].items[i].species = val;
+  var box = document.getElementById('maninv_species_'+id+'_'+i+'_sugg');
+  if(box) box.style.display='none';
+}
+function _manInvEditAddSpecies(id,i){
+  var el = document.getElementById('maninv_species_'+id+'_'+i);
+  var val = (el && el.value || '').trim();
+  if(!val){ showToast('Введите породу'); return; }
+  var before = getSpecies().length;
+  saveSpecies(val);
+  if(getSpecies().length>before) showToast('✅ Добавлено в породы дерева: '+val);
+  else showToast('Уже есть в породах дерева');
+}
 
 function saveManualInvoiceEdit(id){
   var data = window._manInvEdit[id]; if(!data) return;
@@ -10974,6 +11051,17 @@ function autoSaveToItemBase(name, num, price, category){
   }
   localStorage.setItem('iz_items', JSON.stringify(items));
   try{ db.collection('iz_settings').doc('items').set({items:items}); }catch(e){}
+  // Mirror into the curated "База товаров" refbook too. Previously a name
+  // could end up suggested at point-of-sale (pulled from this raw iz_items
+  // list) without ever appearing in admin's Настройки → База товаров —
+  // because that screen only ever showed iz_goods. Now every name that can
+  // be suggested is guaranteed to be visible (and removable) there too.
+  var goods = getRefBook('iz_goods');
+  var existsInGoods = goods.some(function(g){ return ((g&&g.name)||g)===name.trim(); });
+  if(!existsInGoods){
+    goods.push({id:uid(), name:name.trim()});
+    saveRefBookShop('iz_goods', goods);
+  }
 }
 
 // ════ WOOD SPECIES CATALOG ════
