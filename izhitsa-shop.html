@@ -1056,11 +1056,11 @@ function checkForAppUpdate() {
     </div>
     <div style="background:#0f0a1a;border:1px solid #a060f0;border-radius:10px;padding:10px;margin-bottom:6px">
       <label style="font-size:10px;color:#a060f0;font-weight:700">🛍 ДР Товар (наличные)</label>
-      <input class="fi" type="number" id="morningCashDr" placeholder="0" inputmode="numeric" style="font-size:18px;font-weight:700;text-align:center;border-color:#a060f0;margin-top:4px">
+      <input class="fi" type="number" id="morningCashDr" placeholder="0" inputmode="numeric" style="font-size:18px;font-weight:700;text-align:center;border-color:#a060f0;margin-top:4px" oninput="checkMorningValid()">
     </div>
     <div style="background:#0a0f13;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:10px">
       <label style="font-size:10px;color:#60c8f0;font-weight:700">🛒 Покупки сотрудников</label>
-      <input class="fi" type="number" id="morningCashStaff" placeholder="0" inputmode="numeric" style="font-size:18px;font-weight:700;text-align:center;border-color:#60c8f0;margin-top:4px">
+      <input class="fi" type="number" id="morningCashStaff" placeholder="0" inputmode="numeric" style="font-size:18px;font-weight:700;text-align:center;border-color:#60c8f0;margin-top:4px" oninput="checkMorningValid()">
     </div>
     <div style="font-size:10px;font-weight:700;color:#f0c060;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">📦 Остаток товара на утро</div>
     <div style="background:#1a150a;border:1px solid #f0c060;border-radius:10px;padding:10px;margin-bottom:6px">
@@ -1074,7 +1074,7 @@ function checkForAppUpdate() {
         <div style="font-size:16px;font-weight:700;color:#f0c060" id="goodsAutoVal">—</div>
       </div>
       <div id="goodsManualBlock" style="display:none;margin-top:6px">
-        <input class="fi" type="number" id="morningGoods" placeholder="0" inputmode="numeric" style="font-size:16px;font-weight:700;text-align:center;border-color:#f0c060">
+        <input class="fi" type="number" id="morningGoods" placeholder="0" inputmode="numeric" style="font-size:16px;font-weight:700;text-align:center;border-color:#f0c060" oninput="checkMorningValid()">
       </div>
     </div>
     <div style="background:#1a0f1a;border:1px solid #f060a0;border-radius:10px;padding:10px;margin-bottom:12px">
@@ -1088,7 +1088,7 @@ function checkForAppUpdate() {
         <div style="font-size:16px;font-weight:700;color:#f060a0" id="goodsDrAutoVal">—</div>
       </div>
       <div id="goodsDrManualBlock" style="display:none;margin-top:6px">
-        <input class="fi" type="number" id="morningGoodsDr" placeholder="0" inputmode="numeric" style="font-size:16px;font-weight:700;text-align:center;border-color:#f060a0">
+        <input class="fi" type="number" id="morningGoodsDr" placeholder="0" inputmode="numeric" style="font-size:16px;font-weight:700;text-align:center;border-color:#f060a0" oninput="checkMorningValid()">
       </div>
     </div>
     <div id="morningCompare" style="margin-bottom:10px"></div>
@@ -3217,6 +3217,7 @@ function setGoodsMornMode(mode) {
     if(ab){ab.style.borderWidth='1px';ab.style.borderColor='#2e2e3e';ab.style.background='#22222e';ab.style.color='#8888aa';ab.style.fontWeight='400';}
     if(mbl)mbl.style.display='block'; if(abl)abl.style.display='none';
   }
+  checkMorningValid();
 }
 
 function setGoodsDrMode(mode) {
@@ -3232,6 +3233,7 @@ function setGoodsDrMode(mode) {
     if(ab){ab.style.borderWidth='1px';ab.style.borderColor='#2e2e3e';ab.style.background='#22222e';ab.style.color='#8888aa';ab.style.fontWeight='400';}
     if(mbl)mbl.style.display='block'; if(abl)abl.style.display='none';
   }
+  checkMorningValid();
 }
 
 function openMorningModal(){
@@ -3272,28 +3274,63 @@ function openMorningModal(){
   openMo('morningMo');
 }
 function checkMorningValid(){
-  const val=document.getElementById('morningCash').value, num=parseFloat(val);
   const btn=document.getElementById('morningConfirmBtn'), hint=document.getElementById('morningCashHint');
-  if(val!==''&&!isNaN(num)&&num>=0){
-    btn.disabled=false; btn.style.opacity='1';
+
+  // Каждое из трёх полей наличных должно быть осознанно заполнено —
+  // пустое поле (даже с placeholder "0") не считается заполненным.
+  // Само число 0 — это валидный ввод (например, в кассе действительно
+  // пусто), но его нужно набрать самостоятельно, а не оставить пустым.
+  function filledNonNeg(id){
+    var el = document.getElementById(id);
+    var v = el ? el.value : '';
+    var n = parseFloat(v);
+    return v!=='' && !isNaN(n) && n>=0;
+  }
+  var cashOk = filledNonNeg('morningCash');
+  var cashDrOk = filledNonNeg('morningCashDr');
+  var cashStaffOk = filledNonNeg('morningCashStaff');
+
+  // Остаток товара на утро — либо осознанно оставлен "Авто" (тогда
+  // подставится расчёт с прошлой смены), либо выбрано "Вручную" и при
+  // этом поле реально заполнено — пустое поле в режиме "Вручную" больше
+  // не подставляет авто-значение втихую.
+  var goodsOk = _goodsMornMode==='auto' || filledNonNeg('morningGoods');
+  var goodsDrOk = _goodsDrMode==='auto' || filledNonNeg('morningGoodsDr');
+
+  var allOk = cashOk && cashDrOk && cashStaffOk && goodsOk && goodsDrOk;
+
+  if(cashOk){
+    const num = parseFloat(document.getElementById('morningCash').value);
     hint.style.display='block'; hint.textContent='✓ '+fmt(num)+' — принято'; hint.style.color='#60f090';
     const prev=getPrevShift((pendingSession&&pendingSession.shopName)||'');
     if((prev&&prev.cashEvening)!=null&&Math.abs(num-prev.cashEvening)>1){
       hint.style.color='#f0a060';
       hint.textContent='⚠️ Отличается от вечера прошлой смены ('+fmt(prev.cashEvening)+')';
     }
-  } else { btn.disabled=true; btn.style.opacity='.4'; hint.style.display='none'; }
+  } else { hint.style.display='none'; }
+
+  if(allOk){ btn.disabled=false; btn.style.opacity='1'; }
+  else { btn.disabled=true; btn.style.opacity='.4'; }
 }
 function confirmMorning(){
-  const val=document.getElementById('morningCash').value, cashM=parseFloat(val);
-  if(val===''||isNaN(cashM)||cashM<0) return;
-  var cashDr=parseFloat((document.getElementById('morningCashDr')||{}).value)||0;
-  var cashStaff=parseFloat((document.getElementById('morningCashStaff')||{}).value)||0;
+  function filledNonNeg(id){
+    var el = document.getElementById(id);
+    var v = el ? el.value : '';
+    var n = parseFloat(v);
+    return v!=='' && !isNaN(n) && n>=0;
+  }
+  if(!filledNonNeg('morningCash') || !filledNonNeg('morningCashDr') || !filledNonNeg('morningCashStaff')) return;
+  if(_goodsMornMode==='manual' && !filledNonNeg('morningGoods')) return;
+  if(_goodsDrMode==='manual' && !filledNonNeg('morningGoodsDr')) return;
+
+  const cashM=parseFloat(document.getElementById('morningCash').value);
+  var cashDr=parseFloat(document.getElementById('morningCashDr').value);
+  var cashStaff=parseFloat(document.getElementById('morningCashStaff').value);
   var goodsM=_goodsMornMode==='manual'
-    ?(parseFloat((document.getElementById('morningGoods')||{}).value)||calcGoodsMorning(pendingSession.shopName))
+    ?parseFloat(document.getElementById('morningGoods').value)
     :calcGoodsMorning(pendingSession.shopName);
   var goodsDrM=_goodsDrMode==='manual'
-    ?(parseFloat((document.getElementById('morningGoodsDr')||{}).value)||calcGoodsDrMorning(pendingSession.shopName))
+    ?parseFloat(document.getElementById('morningGoodsDr').value)
     :calcGoodsDrMorning(pendingSession.shopName);
   session=Object.assign({},pendingSession,{
     shiftId:uid(),
