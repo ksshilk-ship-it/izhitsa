@@ -1684,6 +1684,18 @@ function checkForAppUpdate() {
   </div>
 </div>
 
+<!-- Admin: просмотр/правка настоящей накладной (с позициями) из архива закрытой смены -->
+<div class="mo" id="adminInvMo">
+  <div class="md" style="max-height:95dvh">
+    <div class="mh"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="mt" style="margin:0" id="adminInvTitle">📋 Накладная</div>
+      <button onclick="closeMo('adminInvMo')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:5px 10px;color:#8888aa;cursor:pointer;font-size:12px">✕</button>
+    </div>
+    <div id="adminInvBody"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -6964,7 +6976,7 @@ function _renderShiftView(){
   // ── Generic item-row EDIT form — same shape as itemForm() above, but
   // pre-filled with the entry's current values and requiring a reason,
   // matching the pattern already used for Касса/Товар corrections. ──
-  function rcvItem(name, sub, subColor, amt, amtColor, deleteFn, editFn){
+  function rcvItem(name, sub, subColor, amt, amtColor, deleteFn, editFn, invFn){
     return '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
         '<div style="flex:1;min-width:0">'+
@@ -6973,6 +6985,7 @@ function _renderShiftView(){
         '</div>'+
         '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
           '<span style="font-size:12px;font-weight:700;color:'+(amtColor||'#60f090')+'">+'+f(amt)+'</span>'+
+          (invFn?'<button onclick="'+invFn+'" style="background:none;border:1px solid #60c8f0;border-radius:6px;padding:3px 7px;color:#60c8f0;font-size:11px;cursor:pointer">📋</button>':'')+
           (editFn?'<button onclick="'+editFn+'" style="background:none;border:1px solid #c8f060;border-radius:6px;padding:3px 7px;color:#c8f060;font-size:11px;cursor:pointer">✏️</button>':'')+
           '<button onclick="'+deleteFn+'" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
         '</div>'+
@@ -6983,7 +6996,8 @@ function _renderShiftView(){
   rcvBody += '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
   var woodRcvCount = 0;
   receives.forEach(function(r, i){
-    rcvBody += rcvItem(r.sub||r.label||'Приход', r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#555568', r.goodsEffect||r.amount||0, '#60f090', 'svDeleteJEntry(\'receive\','+i+')', 'svToggleEdit(\'jrcv\','+i+')');
+    var invFn = r.invId ? 'svOpenInvoiceFromReceive(\''+r.invId+'\')' : null;
+    rcvBody += rcvItem(r.sub||r.label||'Приход', r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#555568', r.goodsEffect||r.amount||0, '#60f090', 'svDeleteJEntry(\'receive\','+i+')', r.invId?null:'svToggleEdit(\'jrcv\','+i+')', invFn);
     if(_svEditTarget && _svEditTarget.kind==='jrcv' && _svEditTarget.idx===i){
       rcvBody += simpleEditForm('jrcv'+i, '#60f090', {kind:'jrcv', idx:i, saveFn:'svSaveJEntrySimple(\'receive\','+i+')', prefill:{sub:r.sub||r.label||'', amt:r.goodsEffect||r.amount||0}});
     }
@@ -7464,6 +7478,122 @@ function svSaveStaffEdit(idx, formId){
   svPersist(); _renderShiftView();
   showToast('✅ Запись обновлена');
 }
+// ── Admin: открыть настоящую накладную (с позициями) по ссылке из записи
+// «Приходы» в архиве закрытой смены — раньше админ видел только агрегат
+// («18 изд. · от Мастерская Ижица · +37 150₽»), без доступа к самой
+// накладной: её номеру, позициям, артикулам. Переиспользует тот же
+// построчный редактор позиций, что уже работает в архиве продавца
+// (renderManInvEditItems/addManInvEditItem/_manInvEdit* — все они уже
+// глобальные и работают чисто по id, так что им всё равно, в какой
+// модалке лежит контейнер с нужным id). ──
+function svOpenInvoiceFromReceive(invId){
+  if(!invId){ showToast('У этой записи нет привязанной накладной'); return; }
+  var manualAll = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var inv = manualAll.find(function(i){ return String(i._id!=null?i._id:i.id)===invId; });
+  var isManual = !!inv;
+  if(!inv){
+    var autoAll = getInvoices();
+    inv = autoAll.find(function(i){ return String(i._id!=null?i._id:i.id)===invId; });
+  }
+  if(!inv){ showToast('Накладная не найдена — возможно, удалена'); return; }
+
+  document.getElementById('adminInvTitle').textContent = '📋 Накладная '+(inv.num||'');
+  var body = document.getElementById('adminInvBody');
+
+  if(isManual){
+    window._manInvEdit[invId] = JSON.parse(JSON.stringify(inv));
+    body.innerHTML =
+      '<div class="fg" style="margin-bottom:6px"><label class="fl">Номер</label><input class="fi" id="adminInv_num_'+invId+'" value="'+(inv.num||'')+'" style="margin:0;padding:7px"></div>'+
+      '<div class="fg" style="margin-bottom:6px"><label class="fl">От кого</label><input class="fi" id="adminInv_from_'+invId+'" value="'+(inv.from||'')+'" style="margin:0;padding:7px"></div>'+
+      '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (арт. · наим. · порода · кол-во · цена)</div>'+
+      '<div id="maninv_items_'+invId+'"></div>'+
+      '<button type="button" onclick="addManInvEditItem(\''+invId+'\')" class="btn sec" style="font-size:12px;margin:6px 0 0">＋ Добавить позицию</button>'+
+      '<div id="maninv_total_'+invId+'" style="margin-top:8px"></div>'+
+      '<div style="font-size:10px;color:#8888aa;margin:8px 0 3px">Причина правки</div>'+
+      '<input class="fi" id="adminInv_reason_'+invId+'" placeholder="Обязательно укажите причину..." style="margin:0;padding:7px;margin-bottom:8px">'+
+      '<div style="display:flex;gap:6px">'+
+        '<button onclick="svSaveInvoiceFromArchive(\''+invId+'\',true)" style="flex:1;padding:9px;border-radius:8px;border:none;background:#c8f060;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
+        '<button onclick="closeMo(\'adminInvMo\')" style="padding:9px 14px;border-radius:8px;border:1px solid #2e2e3e;background:none;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>'+
+      '</div>';
+    renderManInvEditItems(invId);
+  } else {
+    window._shInvEdit[invId] = JSON.parse(JSON.stringify(inv));
+    var itemsHtml = (inv.items||[]).map(function(item,i){
+      return '<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center">'+
+        '<input class="fi" value="'+(item.num||'')+'" placeholder="Арт." style="flex:0 0 56px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvNum(\''+invId+'\','+i+',this.value)">'+
+        '<input class="fi" value="'+(item.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" oninput="_shInvName(\''+invId+'\','+i+',this.value)">'+
+        '<input class="fi" type="number" value="'+(item.qty!=null?item.qty:1)+'" inputmode="numeric" style="flex:0 0 50px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvQty(\''+invId+'\','+i+',this.value)">'+
+        '<input class="fi" type="number" value="'+(item.price||0)+'" inputmode="numeric" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvPrice(\''+invId+'\','+i+',this.value)">'+
+      '</div>';
+    }).join('');
+    body.innerHTML =
+      '<div class="fg" style="margin-bottom:6px"><label class="fl">Номер</label><input class="fi" id="adminInv_num_'+invId+'" value="'+(inv.num||'')+'" style="margin:0;padding:7px"></div>'+
+      '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (арт. · наим. · кол-во · цена)</div>'+
+      itemsHtml+
+      '<div style="font-size:10px;color:#8888aa;margin:8px 0 3px">Причина правки</div>'+
+      '<input class="fi" id="adminInv_reason_'+invId+'" placeholder="Обязательно укажите причину..." style="margin:0;padding:7px;margin-bottom:8px">'+
+      '<div style="display:flex;gap:6px">'+
+        '<button onclick="svSaveInvoiceFromArchive(\''+invId+'\',false)" style="flex:1;padding:9px;border-radius:8px;border:none;background:#c8f060;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
+        '<button onclick="closeMo(\'adminInvMo\')" style="padding:9px 14px;border-radius:8px;border:1px solid #2e2e3e;background:none;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>'+
+      '</div>';
+  }
+  openMo('adminInvMo');
+}
+
+// Saves edits made in adminInvMo back to the real накладная record
+// (iz_manual_invoices or iz_invoices) AND keeps the linked "Приёмка"
+// journal entry inside the currently-viewed ARCHIVED shift (_currentShiftView,
+// not the live session) in sync — same resync logic saveManualInvoiceEdit()
+// uses for a live shift, just targeting the archive snapshot instead.
+function svSaveInvoiceFromArchive(id, isManual){
+  var reason = ((document.getElementById('adminInv_reason_'+id)||{}).value||'').trim();
+  if(!reason){ showToast('Укажите причину правки'); return; }
+  var storeKey = isManual ? 'iz_manual_invoices' : 'iz_invoices';
+  var all = JSON.parse(localStorage.getItem(storeKey)||'[]');
+  var idx = all.findIndex(function(i){ return String(i._id!=null?i._id:i.id)===id; });
+  if(idx<0){ showToast('Накладная не найдена'); return; }
+  var oldNum = all[idx].num;
+  var data = isManual ? window._manInvEdit[id] : window._shInvEdit[id];
+  if(!data){ showToast('Данные не загружены'); return; }
+
+  data.num = (document.getElementById('adminInv_num_'+id)||{}).value || data.num;
+  if(isManual) data.from = (document.getElementById('adminInv_from_'+id)||{}).value || data.from;
+  data.totalAmt = (data.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
+  data.editedAt = new Date().toISOString();
+  data.editedBy = (session&&(session.name||session.sellerName))||'admin';
+  data.editReason = reason;
+
+  all[idx] = data;
+  localStorage.setItem(storeKey, JSON.stringify(all));
+  try{ db.collection(storeKey).doc(id).set(data,{merge:true}); }catch(e){}
+
+  // Resync the linked "Приёмка" entry inside this archived shift's own
+  // stored journal — preserve its original time-of-day, just refresh the
+  // label/sum so it reflects the corrected накладная.
+  var jnl = _currentShiftView.journal||[];
+  var jIdx = jnl.findIndex(function(e){
+    if(e.type!=='receive') return false;
+    if(e.invId) return e.invId===id;
+    return e.sub && e.sub.indexOf(oldNum)>=0;
+  });
+  var newTotal = data.totalAmt!=null ? data.totalAmt : (data.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
+  if(jIdx>=0){
+    var before = Object.assign({}, jnl[jIdx]);
+    jnl[jIdx] = Object.assign({}, jnl[jIdx], {
+      label:'Приёмка '+data.num,
+      sub:(data.items||[]).length+' изд.'+(data.from?' · от '+data.from:''),
+      amount:newTotal, goodsEffect:newTotal, invId:id,
+      editedAt:new Date().toISOString()
+    });
+    try{ logEntryEdit(before, jnl[jIdx]); }catch(e){}
+  }
+  _currentShiftView.journal = jnl;
+  if(isManual) delete window._manInvEdit[id]; else delete window._shInvEdit[id];
+  closeMo('adminInvMo');
+  svPersist(); _renderShiftView();
+  showToast('✅ Накладная исправлена');
+}
+
 function svDeleteJEntry(type, idx){
   if(!confirm('Удалить эту запись? Она будет перемещена в корзину на 7 дней.')) return;
   var jnl=_currentShiftView.journal||[];
