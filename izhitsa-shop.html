@@ -6536,6 +6536,91 @@ function toggleHistShowOpen(){
 }
 
 var _histInited = false;
+
+// ── Единая проверка смены на ошибки/несовпадения ──
+// Раньше карточка в списке архива показывала только sh.hasCashDiff —
+// зафиксированный при закрытии флаг расхождения нала, который не учитывал
+// остатки товара вовсе. Из-за этого незаполненный (0) или неверно
+// пересчитанный остаток товара был виден только если открыть подробный
+// отчёт смены — в общем списке всё выглядело нормально. Эта функция считает
+// полный набор проверок один раз и используется и в карточке списка
+// (compact-сигнал), и в подробном отчёте (anyDiff), чтобы они не расходились.
+// Возвращает {hasIssues:boolean, issues:[{code,label}]}.
+function evaluateShiftIssues(sh){
+  var issues = [];
+  var jnl = sh.journal||[];
+  var sales = jnl.filter(function(e){ return e.type==='sale'; });
+
+  // ── Остаток товара утро: 0/не задано — всегда ошибка, без исключений ──
+  if(!sh.goodsMorning || sh.goodsMorning<=0){
+    issues.push({code:'morn_wood_zero', label:'🌳 Остаток товара (Дерево) на утро не занесён'});
+  }
+  if(!sh.goodsDrMorning || sh.goodsDrMorning<=0){
+    issues.push({code:'morn_dr_zero', label:'🛍 Остаток товара (ДР Товар) на утро не занесён'});
+  }
+
+  // ── Остаток товара вечер: 0/не задано, либо расчёт расходится с сохранённым ──
+  // Расчёт = утро + приход − списание − выручка по полной (доскидочной) цене,
+  // та же модель, что использует история движения товара (goodsMovementLedger)
+  // и пересчёт при сохранении правки (svSaveTovar/svRecalcGoodsEvening).
+  function itemAmt(it){ return it.amt!=null?it.amt:(it.price||0)*(it.qty||1); }
+  function grossSold(isDr){
+    var total=0;
+    sales.forEach(function(e){
+      var items=e.items||[];
+      if(!items.length){ if(!isDr) total += (e.amount||0)+(e.discount||0); return; }
+      items.filter(function(it){ return isDr ? it.goodsType==='dr' : it.goodsType!=='dr'; })
+        .forEach(function(it){ total += itemAmt(it); });
+    });
+    return total;
+  }
+  var jRcvWood = jnl.filter(function(e){ return e.type==='receive' && e.goodsType!=='dr'; }).reduce(function(s,e){return s+(e.goodsEffect||e.amount||0);},0);
+  var jWoWood = jnl.filter(function(e){ return e.type==='writeoff' && e.goodsType!=='dr'; }).reduce(function(s,e){return s+Math.abs(e.amount||0);},0);
+  var jRcvDr = jnl.filter(function(e){ return e.type==='receive' && e.goodsType==='dr'; }).reduce(function(s,e){return s+(e.goodsEffect||e.amount||0);},0);
+  var jWoDr = jnl.filter(function(e){ return e.type==='writeoff' && e.goodsType==='dr'; }).reduce(function(s,e){return s+Math.abs(e.amount||0);},0);
+  var manRcvWood = (sh.goodsReceives||[]).reduce(function(s,r){return s+(r.amt!=null?r.amt:(r.amount||0));},0);
+  var manWoWood = (sh.goodsWriteoffs||[]).reduce(function(s,w){return s+(w.amt!=null?w.amt:(w.amount||0));},0);
+  var manRcvDr = (sh.drGoodsReceives||[]).reduce(function(s,r){return s+(r.amt!=null?r.amt:(r.amount||0));},0);
+  var manWoDr = (sh.drGoodsWriteoffs||[]).reduce(function(s,w){return s+(w.amt!=null?w.amt:(w.amount||0));},0);
+
+  var calcEveWood = (sh.goodsMorning||0) + jRcvWood + manRcvWood - jWoWood - manWoWood - grossSold(false);
+  var calcEveDr = (sh.goodsDrMorning||0) + jRcvDr + manRcvDr - jWoDr - manWoDr - grossSold(true);
+
+  if(sh.goodsEvening==null || sh.goodsEvening<=0){
+    issues.push({code:'eve_wood_zero', label:'🌳 Остаток товара (Дерево) на вечер не занесён'});
+  } else if(Math.abs((sh.goodsEvening||0) - calcEveWood) >= 1){
+    issues.push({code:'eve_wood_mismatch', label:'🌳 Остаток товара (Дерево) на вечер не совпадает с расчётным ('+Math.round(calcEveWood).toLocaleString('ru-RU')+'₽)'});
+  }
+  if(sh.drGoodsEvening==null || sh.drGoodsEvening<=0){
+    issues.push({code:'eve_dr_zero', label:'🛍 Остаток товара (ДР Товар) на вечер не занесён'});
+  } else if(Math.abs((sh.drGoodsEvening||0) - calcEveDr) >= 1){
+    issues.push({code:'eve_dr_mismatch', label:'🛍 Остаток товара (ДР Товар) на вечер не совпадает с расчётным ('+Math.round(calcEveDr).toLocaleString('ru-RU')+'₽)'});
+  }
+
+  // ── Нал вечер: расчётный vs фактический ──
+  var cashRev=0, drCashRev=0;
+  sales.forEach(function(s){
+    cashRev += (s.cashEffect||0);
+    drCashRev += (s.cashDrEffect||0);
+  });
+  var otherCashEffect = jnl.reduce(function(s,e){ return (e.type!=='sale') ? s+(e.cashEffect||0) : s; }, 0);
+  var otherCashDrEffect = jnl.reduce(function(s,e){ return (e.type!=='sale') ? s+(e.cashDrEffect||0) : s; }, 0);
+  var expCash = (sh.cashMorning||0) + cashRev + otherCashEffect;
+  var expCashDr = (sh.cashDrMorning||0) + drCashRev + otherCashDrEffect;
+  if(sh.cashEvening==null){
+    issues.push({code:'eve_cash_missing', label:'💵 Нал вечер (Дерево) не введён'});
+  } else if(Math.abs((sh.cashEvening||0) - expCash) >= 1){
+    issues.push({code:'eve_cash_mismatch', label:'💵 Нал вечер (Дерево) не сходится с расчётным ('+Math.round(expCash).toLocaleString('ru-RU')+'₽)'});
+  }
+  if(sh.drCashEvening==null){
+    if((sh.drGoodsMorning||sh.goodsDrMorning)) issues.push({code:'eve_cash_dr_missing', label:'💵 Нал вечер (ДР Товар) не введён'});
+  } else if(Math.abs((sh.drCashEvening||0) - expCashDr) >= 1){
+    issues.push({code:'eve_cash_dr_mismatch', label:'💵 Нал вечер (ДР Товар) не сходится с расчётным ('+Math.round(expCashDr).toLocaleString('ru-RU')+'₽)'});
+  }
+
+  return {hasIssues: issues.length>0, issues: issues};
+}
+
 function renderShiftHistory(){
   var c=document.getElementById('shiftHistoryList'); if(!c)return;
   migrateLegacyShiftDates();
@@ -6587,7 +6672,9 @@ function renderShiftHistory(){
       cashRev=(sh.cashRevenue||0)+(sh.drCashRevenue||0); cardRev=(sh.cardRevenue||0)+(sh.drCardRevenue||0); disc=(sh.totalDiscount||sh.discount||0)+(sh.drDiscount||0);
     }
     var total=cashRev+cardRev+disc;
-    return '<div class="card" style="cursor:pointer;border-color:'+(sh.status==='open'?'#f0c060':sh.hasCashDiff?'#f06060':sh.isArchive?'#604020':'#2e2e3e')+'" onclick="openShiftView(\''+(sh.id||sh._id)+'\')">'+
+    var issuesResult = evaluateShiftIssues(sh);
+    var hasIssues = issuesResult.hasIssues;
+    return '<div class="card" style="cursor:pointer;border-color:'+(sh.status==='open'?'#f0c060':hasIssues?'#f06060':sh.isArchive?'#604020':'#2e2e3e')+'" onclick="openShiftView(\''+(sh.id||sh._id)+'\')">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
         '<div>'+
           '<div style="display:flex;align-items:center;gap:6px">'+
@@ -6596,7 +6683,7 @@ function renderShiftHistory(){
             (sh.isArchive?'<div style="font-size:9px;background:#604020;color:#f0a060;border-radius:4px;padding:2px 5px;font-weight:700">АРХИВ</div>':'')+
           '</div>'+
           '<div style="font-size:11px;color:#8888aa;margin-top:2px">👤 '+(sh.sellerName||'—')+' · 📅 '+sh.date+'</div>'+
-          (sh.hasCashDiff?'<div style="font-size:10px;color:#f06060;margin-top:3px">⚠️ Расхождение кассы</div>':'')+
+          (hasIssues?'<div style="font-size:10px;color:#f06060;margin-top:3px;font-weight:700">⚠️ Есть несовпадения ('+issuesResult.issues.length+')</div>':'<div style="font-size:10px;color:#60f090;margin-top:3px">✅ Всё сходится</div>')+
         '</div>'+
         '<div style="text-align:right">'+
           '<div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700;color:#c8f060">'+fmt(total)+'</div>'+
@@ -6751,6 +6838,8 @@ function _renderShiftView(){
     return '<span style="font-size:10px;color:#f06060;font-weight:700">⚠️ '+(val>0?'+':'')+f(val)+'</span>';
   }
   var anyDiff = (cashDiffVal!=null && Math.abs(cashDiffVal)>=1) || (cashDrDiffVal!=null && Math.abs(cashDrDiffVal)>=1) || Math.abs(zpDiff)>=1 || !!sh.hasCashDiff || actCash==null || (sh.forceClosedBy && actCashDr==null) || morningWoodMismatch || morningDrMismatch;
+  var _goodsIssues = evaluateShiftIssues(sh).issues.filter(function(i){ return i.code.indexOf('wood')>=0 || i.code.indexOf('_dr_')>=0; });
+  if(_goodsIssues.length) anyDiff = true;
 
   // Seller-entered values that disagree with what's expected (recalculated
   // from the journal, or carried over from the previous shift's вечер) are
@@ -6797,11 +6886,19 @@ function _renderShiftView(){
     tblRow('Проезд факт', enteredVal(zpStandalone.travelFact, false), '—')+
     tblRow('Разница ЗП+проезд', diffChip(zpDiff), '', {border:true});
 
+  var _allShiftIssues = evaluateShiftIssues(sh).issues;
+  var issuesListHtml = _allShiftIssues.length
+    ? '<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #4a2a2a">'+
+        _allShiftIssues.map(function(i){ return '<div style="font-size:11px;color:#f0a0a0;padding:3px 0">• '+i.label+'</div>'; }).join('')+
+      '</div>'
+    : '';
+
   var summaryHtml = '<div style="background:'+(anyDiff?'#2e1a1a':'#1a2e1a')+';border:2px solid '+(anyDiff?'#f06060':'#60f090')+';border-radius:14px;padding:14px;margin-bottom:12px">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
       '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:'+(anyDiff?'#f06060':'#60f090')+'">'+(anyDiff?'⚠️ ЕСТЬ НЕСОВПАДЕНИЯ':'✅ ВСЁ СХОДИТСЯ')+'</div>'+
       '<div style="font-size:10.5px;color:#8888aa">👤 '+(sh.sellerName||'—')+'</div>'+
     '</div>'+
+    issuesListHtml+
     summaryRows+
     (sh.editedBy?'<div style="font-size:10px;color:#555568;margin-top:10px;padding-top:8px;border-top:1px solid #2e2e3e">✏️ Правки: '+sh.editedBy+(sh.editReason?' · '+sh.editReason:'')+'</div>':'')+
   '</div>';
