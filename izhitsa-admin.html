@@ -434,25 +434,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </div>
     
     <div id="shopsAnalysis">
-      <div class="card">
-        <div class="ctitle">📊 По точкам продаж</div>
-        <div id="shopsTable"></div>
-      </div>
-      
-      <div class="card">
-        <div class="ctitle">👥 По продавцам</div>
-        <div id="sellersTable"></div>
-      </div>
-      
-      <div class="card">
-        <div class="ctitle">📈 Методы оплаты</div>
-        <div id="paymentMethods"></div>
-      </div>
-      
-      <div class="card">
-        <div class="ctitle">💰 Топ товары</div>
-        <div id="topProducts"></div>
-      </div>
+      <div style="padding:24px;text-align:center;color:var(--t2);font-size:12px">Загрузка аналитики…</div>
     </div>
   </div>
 
@@ -1481,15 +1463,6 @@ function addAdminUser() {
   alert('✅ Администратор добавлен');
 }
 
-function getTransactions() {
-  try { return JSON.parse(localStorage.getItem('iz_transactions') || '[]'); } 
-  catch(e) { return []; }
-}
-
-function saveTransactions(data) {
-  adminSyncSave('iz_transactions', data);
-}
-
 let currentTxType = 'income';
 
 function setTxType(type) {
@@ -2298,141 +2271,7 @@ function getTodayShifts() {
   return getShiftsForDate(getTodayKey());
 }
 
-function renderShops() {
-  var period = document.querySelector('#pg-shops .pchips .pc.active');
-  var periodKey = period ? period.textContent.toLowerCase().replace(/[^a-z]/g,'') : 'today';
-  var range = getDateRange(periodKey);
-  var shifts = getShiftsInRange(range.from, range.to);
-  
-  // By shop
-  var shopStats = {};
-  var sellerStats = {};
-  var paymentStats = {cash: 0, card: 0, sbp: 0, other: 0};
-  var topProducts = {};
-  
-  shifts.forEach(function(s) {
-    // Shop stats
-    if(!shopStats[s.shopName]) shopStats[s.shopName] = {revenue:0, sales:0, cashDisc:0, shifts:0, sellers:{}};
-    shopStats[s.shopName].revenue += (s.netRevenue || 0);
-    shopStats[s.shopName].sales += (s.salesCount || 0);
-    shopStats[s.shopName].cashDisc += Math.abs(s.cashDisc || 0);
-    shopStats[s.shopName].shifts += 1;
-    
-    // Seller in shop
-    if(s.seller) {
-      if(!shopStats[s.shopName].sellers[s.seller]) shopStats[s.shopName].sellers[s.seller] = {revenue:0, sales:0};
-      shopStats[s.shopName].sellers[s.seller].revenue += (s.netRevenue || 0);
-      shopStats[s.shopName].sellers[s.seller].sales += (s.salesCount || 0);
-    }
-    
-    // Seller overall
-    if(s.seller) {
-      if(!sellerStats[s.seller]) sellerStats[s.seller] = {revenue:0, sales:0, shop: s.shopName};
-      sellerStats[s.seller].revenue += (s.netRevenue || 0);
-      sellerStats[s.seller].sales += (s.salesCount || 0);
-    }
-    
-    // Payment methods
-    var journal = s.journal || [];
-    journal.forEach(function(entry) {
-      if(entry.type === 'sale') {
-        var pm = entry.payMethod || 'cash';
-        if(pm === 'cash') paymentStats.cash += (entry.amount || 0);
-        else if(pm === 'card') paymentStats.card += (entry.amount || 0);
-        else if(pm === 'sbp') paymentStats.sbp += (entry.amount || 0);
-        else paymentStats.other += (entry.amount || 0);
-        
-        // Top products
-        if(entry.label) {
-          if(!topProducts[entry.label]) topProducts[entry.label] = {count: 0, revenue: 0};
-          topProducts[entry.label].count += 1;
-          topProducts[entry.label].revenue += (entry.amount || 0);
-        }
-      }
-    });
-  });
-  
-  // Render shops table
-  var shopsHtml = '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
-    '<tr style="border-bottom:1px solid var(--border);text-align:left;color:var(--t2)">' +
-      '<th style="padding:6px;text-align:left">Точка</th><th style="padding:6px;text-align:right">Выручка</th><th style="padding:6px;text-align:right">Продажи</th><th style="padding:6px;text-align:right">Касса</th>' +
-    '</tr>';
-  
-  Object.keys(shopStats).sort().forEach(function(shop) {
-    var stat = shopStats[shop];
-    shopsHtml += '<tr style="border-bottom:1px solid var(--border)">' +
-      '<td style="padding:8px;font-weight:600">🏪 ' + shop + '</td>' +
-      '<td style="padding:8px;text-align:right;color:var(--inc)">₽ ' + stat.revenue.toLocaleString('ru-RU') + '</td>' +
-      '<td style="padding:8px;text-align:right">' + stat.sales + '</td>' +
-      '<td style="padding:8px;text-align:right;color:' + (stat.cashDisc > 500 ? 'var(--exp)' : 'var(--t2)') + '">₽ ' + stat.cashDisc.toLocaleString('ru-RU') + '</td>' +
-    '</tr>';
-  });
-  shopsHtml += '</table>';
-  document.getElementById('shopsTable').innerHTML = shopsHtml;
-  
-  // Render sellers table
-  var sellersHtml = '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
-    '<tr style="border-bottom:1px solid var(--border);text-align:left;color:var(--t2)">' +
-      '<th style="padding:6px;text-align:left">Продавец</th><th style="padding:6px;text-align:right">Выручка</th><th style="padding:6px;text-align:right">Продажи</th><th style="padding:6px;text-align:right">Средний чек</th>' +
-    '</tr>';
-  
-  Object.keys(sellerStats).sort().forEach(function(seller) {
-    var stat = sellerStats[seller];
-    var avgCheck = stat.sales > 0 ? Math.round(stat.revenue / stat.sales) : 0;
-    sellersHtml += '<tr style="border-bottom:1px solid var(--border)">' +
-      '<td style="padding:8px;font-weight:600">👤 ' + seller + '</td>' +
-      '<td style="padding:8px;text-align:right;color:var(--inc)">₽ ' + stat.revenue.toLocaleString('ru-RU') + '</td>' +
-      '<td style="padding:8px;text-align:right">' + stat.sales + '</td>' +
-      '<td style="padding:8px;text-align:right">₽ ' + avgCheck + '</td>' +
-    '</tr>';
-  });
-  sellersHtml += '</table>';
-  document.getElementById('sellersTable').innerHTML = sellersHtml;
-  
-  // Render payment methods
-  var totalPayments = paymentStats.cash + paymentStats.card + paymentStats.sbp + paymentStats.other;
-  var pmHtml = '<div style="display:flex;flex-direction:column;gap:8px">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s1);border-radius:6px">' +
-      '<span>💵 Наличные</span><span style="font-weight:700">₽ ' + paymentStats.cash.toLocaleString('ru-RU') + ' (' + (totalPayments > 0 ? Math.round(100*paymentStats.cash/totalPayments) : 0) + '%)</span>' +
-    '</div>' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s1);border-radius:6px">' +
-      '<span>💳 Карта</span><span style="font-weight:700">₽ ' + paymentStats.card.toLocaleString('ru-RU') + ' (' + (totalPayments > 0 ? Math.round(100*paymentStats.card/totalPayments) : 0) + '%)</span>' +
-    '</div>' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s1);border-radius:6px">' +
-      '<span>📱 СБП</span><span style="font-weight:700">₽ ' + paymentStats.sbp.toLocaleString('ru-RU') + ' (' + (totalPayments > 0 ? Math.round(100*paymentStats.sbp/totalPayments) : 0) + '%)</span>' +
-    '</div>' +
-  '</div>';
-  document.getElementById('paymentMethods').innerHTML = pmHtml;
-  
-  // Top products
-  var topProdsArray = Object.keys(topProducts).map(function(name) {
-    return {name: name, count: topProducts[name].count, revenue: topProducts[name].revenue};
-  }).sort(function(a,b) { return b.revenue - a.revenue; }).slice(0, 5);
-  
-  var tpHtml = '<div style="display:flex;flex-direction:column;gap:6px">';
-  topProdsArray.forEach(function(prod, idx) {
-    tpHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s1);border-radius:6px">' +
-      '<div><div style="font-weight:600">' + (idx+1) + '. ' + prod.name + '</div><div style="font-size:10px;color:var(--t2)">' + prod.count + ' шт</div></div>' +
-      '<div style="text-align:right;font-weight:700;color:var(--inc)">₽ ' + prod.revenue.toLocaleString('ru-RU') + '</div>' +
-    '</div>';
-  });
-  tpHtml += '</div>';
-  document.getElementById('topProducts').innerHTML = tpHtml || '<div style="color:var(--t2);font-size:12px">Нет товаров</div>';
-}
-
-function setShopPeriod(period, el) {
-  document.querySelectorAll('#pg-shops .pchips .pc').forEach(function(c) { c.classList.remove('active'); });
-  if(el) el.classList.add('active');
-  
-  var dateInputs = document.getElementById('shopCustomDates');
-  if(period === 'custom') {
-    dateInputs.style.display = 'flex';
-  } else {
-    dateInputs.style.display = 'none';
-  }
-  
-  renderShops();
-}
+// (старые renderShops/setShopPeriod удалены — единственная актуальная версия ниже, в конце файла)
 
 function renderDashboard() {
   var today = getTodayKey();
@@ -3064,166 +2903,243 @@ function renderShops() {
       console.error('shopsAnalysis element not found');
       return;
     }
-    
+
+    // ── Период ──
+    const activePeriodBtn = document.querySelector('#pg-shops .pchips .pc.active');
+    const periodLabel = activePeriodBtn ? activePeriodBtn.textContent.trim() : 'Сегодня';
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    let from = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    if(periodLabel === 'Неделя') {
+      from = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      from.setHours(0,0,0,0);
+    } else if(periodLabel === 'Месяц') {
+      from = new Date(today.getFullYear(), today.getMonth(), 1);
+    } else if(periodLabel.includes('Период')) {
+      const fromStr = document.getElementById('shopFrom').value;
+      const toStr = document.getElementById('shopTo').value;
+      if(fromStr) from = new Date(fromStr + 'T00:00:00');
+      if(toStr) { var customTo = new Date(toStr + 'T23:59:59'); }
+    }
+    const periodTo = (typeof customTo !== 'undefined' && customTo) ? customTo : today;
+    const fromKey = from.getFullYear() + '-' + String(from.getMonth()+1).padStart(2,'0') + '-' + String(from.getDate()).padStart(2,'0');
+    const toKey = periodTo.getFullYear() + '-' + String(periodTo.getMonth()+1).padStart(2,'0') + '-' + String(periodTo.getDate()).padStart(2,'0');
+
+    // ── Источник 1: реальные смены продавцов (iz_shifts) ──
+    const shifts = getShiftsInRange(fromKey, toKey);
+
+    let income = 0, totalOps = 0;
+    const bySource = {};   // по точкам/магазинам
+    const bySeller = {};   // по продавцам
+    const byDay = {};
+    const byPayMethod = {};
+    const byProduct = {};
+
+    shifts.forEach(function(s) {
+      const rev = s.netRevenue || 0;
+      const cnt = s.salesCount || 0;
+      income += rev;
+      totalOps += cnt;
+
+      const shopKey = s.shopName || 'Без точки';
+      if(!bySource[shopKey]) bySource[shopKey] = {amount: 0, count: 0, type: 'shop'};
+      bySource[shopKey].amount += rev;
+      bySource[shopKey].count += cnt;
+
+      const sellerKey = s.seller || 'Неизвестно';
+      if(!bySeller[sellerKey]) bySeller[sellerKey] = {amount: 0, count: 0};
+      bySeller[sellerKey].amount += rev;
+      bySeller[sellerKey].count += cnt;
+
+      if(s.date) {
+        if(!byDay[s.date]) byDay[s.date] = 0;
+        byDay[s.date] += rev;
+      }
+
+      (s.journal || []).forEach(function(entry) {
+        if(entry.type === 'sale') {
+          const pm = entry.payMethod || 'cash';
+          if(!byPayMethod[pm]) byPayMethod[pm] = 0;
+          byPayMethod[pm] += (entry.amount || 0);
+
+          if(entry.label) {
+            if(!byProduct[entry.label]) byProduct[entry.label] = {count: 0, revenue: 0};
+            byProduct[entry.label].count += 1;
+            byProduct[entry.label].revenue += (entry.amount || 0);
+          }
+        }
+      });
+    });
+
+    // ── Источник 2: ручные операции (iz_transactions) ──
     const txs = getFilteredTransactionsShops();
     const sources = getSalesSources();
-    
-    let income = 0, totalOps = 0;
-    const bySource = {};
-    const bySeller = {};
-    const byDay = {};
-    
-    sources.forEach(s => {
-      bySource[s.name] = {amount: 0, count: 0, type: s.type};
+    sources.forEach(function(s) {
+      if(!bySource[s.name]) bySource[s.name] = {amount: 0, count: 0, type: s.type};
     });
-    
-    txs.forEach(tx => {
+
+    txs.forEach(function(tx) {
       if(tx.type === 'income') {
         income += tx.amount;
         totalOps++;
-        
-        // By source
-        if(tx.source && bySource[tx.source]) {
-          bySource[tx.source].amount += tx.amount;
-          bySource[tx.source].count += 1;
-        }
-        
-        // By seller (from createdBy)
+
+        const srcKey = tx.source || 'Прочее';
+        if(!bySource[srcKey]) bySource[srcKey] = {amount: 0, count: 0, type: 'offline'};
+        bySource[srcKey].amount += tx.amount;
+        bySource[srcKey].count += 1;
+
         const seller = tx.createdBy || 'Неизвестно';
         if(!bySeller[seller]) bySeller[seller] = {amount: 0, count: 0};
         bySeller[seller].amount += tx.amount;
         bySeller[seller].count += 1;
-        
-        // By day
-        const day = tx.date.split('T')[0];
-        if(!byDay[day]) byDay[day] = 0;
-        byDay[day] += tx.amount;
+
+        const day = (tx.date || '').split('T')[0];
+        if(day) {
+          if(!byDay[day]) byDay[day] = 0;
+          byDay[day] += tx.amount;
+        }
+
+        const pm = tx.payMethod || 'other';
+        if(!byPayMethod[pm]) byPayMethod[pm] = 0;
+        byPayMethod[pm] += tx.amount;
       }
     });
-    
-    // Calculate KPI
+
+    // ── KPI ──
     const days = Object.keys(byDay);
     const avgPerDay = days.length > 0 ? income / days.length : 0;
     const avgPerWeek = avgPerDay * 7;
     const avgPerMonth = avgPerDay * 30;
-    const maxDay = days.length > 0 ? Math.max(...Object.values(byDay)) : 0;
-    const minDay = days.length > 0 ? Math.min(...Object.values(byDay)) : 0;
-    
-    // Best/Worst
-    const bestSource = Object.entries(bySource).reduce((a,b) => a[1].amount > b[1].amount ? a : b, ['Нет данных', {amount:0}]);
-    const worstSource = Object.entries(bySource).filter(([,v]) => v.amount > 0).reduce((a,b) => a[1].amount < b[1].amount ? a : b, ['', {amount:0}]);
-    const bestSeller = Object.entries(bySeller).length > 0 ? Object.entries(bySeller).reduce((a,b) => a[1].amount > b[1].amount ? a : b) : ['Нет данных', {amount:0}];
-    
-    // Avg check
+    const dayValues = Object.values(byDay);
+    const maxDay = dayValues.length > 0 ? Math.max(...dayValues) : 0;
+    const minDay = dayValues.length > 0 ? Math.min(...dayValues) : 0;
     const avgCheck = totalOps > 0 ? income / totalOps : 0;
-    
+
+    const sourceEntries = Object.entries(bySource).filter(function(e){ return e[1].amount > 0 || e[1].count > 0; });
+    const bestSource = sourceEntries.length > 0 ? sourceEntries.reduce(function(a,b){ return a[1].amount > b[1].amount ? a : b; }) : ['Нет данных', {amount:0}];
+    const worstSourcePool = sourceEntries.filter(function(e){ return e[1].amount > 0; });
+    const worstSource = worstSourcePool.length > 0 ? worstSourcePool.reduce(function(a,b){ return a[1].amount < b[1].amount ? a : b; }) : ['', {amount:0}];
+    const sellerEntries = Object.entries(bySeller);
+    const bestSeller = sellerEntries.length > 0 ? sellerEntries.reduce(function(a,b){ return a[1].amount > b[1].amount ? a : b; }) : ['Нет данных', {amount:0}];
+
     const sourceIcons = {shop: '🏪', online: '📱', offline: '📦', workshop: '🏭'};
-    
+    const payMethodNames = {cash: '💵 Наличные', card: '💳 Карта', sbp: '📱 СБП', other: '🔘 Другое'};
+    const totalPayments = Object.values(byPayMethod).reduce(function(a,b){ return a+b; }, 0);
+    const topProductsArr = Object.entries(byProduct).map(function(e){
+      return {name: e[0], count: e[1].count, revenue: e[1].revenue};
+    }).sort(function(a,b){ return b.revenue - a.revenue; }).slice(0, 5);
+
     let html = `
       <!-- СТАТИСТИКА / KPI -->
       <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
         <div class="ctitle">📊 Статистика</div>
-        
+
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
           <div style="background:var(--s2);border-radius:8px;padding:10px">
             <div style="font-size:11px;color:var(--t2)">Ср. выручка/день</div>
-            <div style="font-size:14px;font-weight:700;color:var(--inc)">${avgPerDay.toLocaleString('ru-RU')} ₽</div>
+            <div style="font-size:14px;font-weight:700;color:var(--inc)">${Math.round(avgPerDay).toLocaleString('ru-RU')} ₽</div>
           </div>
           <div style="background:var(--s2);border-radius:8px;padding:10px">
             <div style="font-size:11px;color:var(--t2)">Ср. выручка/неделю</div>
-            <div style="font-size:14px;font-weight:700;color:var(--inc)">${avgPerWeek.toLocaleString('ru-RU')} ₽</div>
+            <div style="font-size:14px;font-weight:700;color:var(--inc)">${Math.round(avgPerWeek).toLocaleString('ru-RU')} ₽</div>
           </div>
           <div style="background:var(--s2);border-radius:8px;padding:10px">
             <div style="font-size:11px;color:var(--t2)">Ср. выручка/месяц</div>
-            <div style="font-size:14px;font-weight:700;color:var(--inc)">${avgPerMonth.toLocaleString('ru-RU')} ₽</div>
+            <div style="font-size:14px;font-weight:700;color:var(--inc)">${Math.round(avgPerMonth).toLocaleString('ru-RU')} ₽</div>
           </div>
           <div style="background:var(--s2);border-radius:8px;padding:10px">
             <div style="font-size:11px;color:var(--t2)">Средний чек</div>
-            <div style="font-size:14px;font-weight:700;color:var(--a2)">${avgCheck.toLocaleString('ru-RU')} ₽</div>
+            <div style="font-size:14px;font-weight:700;color:var(--a2)">${Math.round(avgCheck).toLocaleString('ru-RU')} ₽</div>
           </div>
           <div style="background:var(--s2);border-radius:8px;padding:10px">
             <div style="font-size:11px;color:var(--t2)">Макс. за день</div>
-            <div style="font-size:14px;font-weight:700;color:var(--inc)">${maxDay.toLocaleString('ru-RU')} ₽</div>
+            <div style="font-size:14px;font-weight:700;color:var(--inc)">${Math.round(maxDay).toLocaleString('ru-RU')} ₽</div>
           </div>
           <div style="background:var(--s2);border-radius:8px;padding:10px">
             <div style="font-size:11px;color:var(--t2)">Мин. за день</div>
-            <div style="font-size:14px;font-weight:700;color:var(--exp)">${minDay.toLocaleString('ru-RU')} ₽</div>
+            <div style="font-size:14px;font-weight:700;color:var(--exp)">${Math.round(minDay).toLocaleString('ru-RU')} ₽</div>
           </div>
         </div>
+
+        <div style="display:flex;justify-content:space-between;padding:10px;background:var(--s1);border-radius:8px;font-size:12px">
+          <span style="color:var(--t2)">Всего операций</span>
+          <span style="font-weight:700">${totalOps}</span>
+        </div>
       </div>
-      
+
       <!-- TOP МЕТРИКИ -->
       <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
         <div class="ctitle">🏆 Top метрики</div>
-        
+
         <div class="pl-row" style="margin-bottom:12px;padding:10px;background:var(--s2);border-radius:8px">
           <div>
-            <div style="font-size:11px;color:var(--t2)">Лучший источник</div>
+            <div style="font-size:11px;color:var(--t2)">Лучшая точка/источник</div>
             <div style="font-weight:600;font-size:12px">${bestSource[0]}</div>
           </div>
-          <div class="pl-val" style="color:var(--inc);font-weight:700">${bestSource[1].amount.toLocaleString('ru-RU')} ₽</div>
+          <div class="pl-val" style="color:var(--inc);font-weight:700">${Math.round(bestSource[1].amount).toLocaleString('ru-RU')} ₽</div>
         </div>
-        
+
         <div class="pl-row" style="margin-bottom:12px;padding:10px;background:var(--s2);border-radius:8px">
           <div>
             <div style="font-size:11px;color:var(--t2)">Лучший продавец</div>
             <div style="font-weight:600;font-size:12px">${bestSeller[0]}</div>
           </div>
-          <div class="pl-val" style="color:var(--inc);font-weight:700">${bestSeller[1].amount.toLocaleString('ru-RU')} ₽</div>
+          <div class="pl-val" style="color:var(--inc);font-weight:700">${Math.round(bestSeller[1].amount).toLocaleString('ru-RU')} ₽</div>
         </div>
-        
+
         ${worstSource[0] ? `<div class="pl-row" style="padding:10px;background:var(--s2);border-radius:8px">
           <div>
-            <div style="font-size:11px;color:var(--t2)">Худший источник</div>
+            <div style="font-size:11px;color:var(--t2)">Худшая точка/источник</div>
             <div style="font-weight:600;font-size:12px">${worstSource[0]}</div>
           </div>
-          <div class="pl-val" style="color:var(--exp);font-weight:700">${worstSource[1].amount.toLocaleString('ru-RU')} ₽</div>
+          <div class="pl-val" style="color:var(--exp);font-weight:700">${Math.round(worstSource[1].amount).toLocaleString('ru-RU')} ₽</div>
         </div>` : ''}
       </div>
-      
-      <!-- ПРОДАЖИ ПО ИСТОЧНИКАМ -->
+
+      <!-- ПО ТОЧКАМ ПРОДАЖ -->
       <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
-        <div class="ctitle">📍 Продажи по источникам</div>
-        <div style="font-size:11px;color:var(--t2);margin-bottom:8px">
-          ${Object.entries(bySource).length > 0 ? 'Все источники:' : 'Нет источников'}
-        </div>
+        <div class="ctitle">🏪 По точкам продаж</div>
         ${
-          Object.entries(bySource)
-            .sort((a,b) => b[1].amount - a[1].amount)
-            .map(([name, data]) => {
-              const pct = income > 0 ? ((data.amount / income) * 100).toFixed(0) : 0;
-              const avgCheckSource = data.count > 0 ? (data.amount / data.count).toFixed(0) : 0;
+          sourceEntries.length > 0 ?
+          sourceEntries
+            .sort(function(a,b){ return b[1].amount - a[1].amount; })
+            .map(function(e){
+              var name = e[0], data = e[1];
+              var pct = income > 0 ? ((data.amount / income) * 100).toFixed(0) : 0;
+              var avgCheckSource = data.count > 0 ? Math.round(data.amount / data.count) : 0;
               return `<div class="pl-row" style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px">
                 <div>
                   <div style="font-weight:600;font-size:12px">${sourceIcons[data.type] || '📌'} ${name}</div>
                   <div style="font-size:11px;color:var(--t2)">${data.count} опер. | ср.чек ${avgCheckSource}₽</div>
                 </div>
                 <div class="pl-val">
-                  <div style="color:var(--inc);font-weight:700">${data.amount.toLocaleString('ru-RU')} ₽</div>
+                  <div style="color:var(--inc);font-weight:700">${Math.round(data.amount).toLocaleString('ru-RU')} ₽</div>
                   <div style="font-size:11px;color:var(--a2)">${pct}%</div>
                 </div>
               </div>`;
             }).join('')
+          : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных за выбранный период</div>'
         }
       </div>
-      
-      <!-- АНАЛИЗ ПО ПРОДАВЦАМ -->
+
+      <!-- ПО ПРОДАВЦАМ -->
       <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
-        <div class="ctitle">👥 Анализ по продавцам</div>
+        <div class="ctitle">👥 По продавцам</div>
         ${
-          Object.entries(bySeller).length > 0 ? 
-          Object.entries(bySeller)
-            .sort((a,b) => b[1].amount - a[1].amount)
-            .map(([seller, data]) => {
-              const pct = income > 0 ? ((data.amount / income) * 100).toFixed(0) : 0;
-              const avgCheckSeller = data.count > 0 ? (data.amount / data.count).toFixed(0) : 0;
+          sellerEntries.length > 0 ?
+          sellerEntries
+            .sort(function(a,b){ return b[1].amount - a[1].amount; })
+            .map(function(e){
+              var seller = e[0], data = e[1];
+              var pct = income > 0 ? ((data.amount / income) * 100).toFixed(0) : 0;
+              var avgCheckSeller = data.count > 0 ? Math.round(data.amount / data.count) : 0;
               return `<div class="pl-row" style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px">
                 <div>
                   <div style="font-weight:600;font-size:12px">👤 ${seller}</div>
                   <div style="font-size:11px;color:var(--t2)">${data.count} опер. | ср.чек ${avgCheckSeller}₽</div>
                 </div>
                 <div class="pl-val">
-                  <div style="color:var(--inc);font-weight:700">${data.amount.toLocaleString('ru-RU')} ₽</div>
+                  <div style="color:var(--inc);font-weight:700">${Math.round(data.amount).toLocaleString('ru-RU')} ₽</div>
                   <div style="font-size:11px;color:var(--a2)">${pct}%</div>
                 </div>
               </div>`;
@@ -3231,17 +3147,44 @@ function renderShops() {
           : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных о продавцах</div>'
         }
       </div>
-      
-      <!-- АНАЛИЗ ПО ВИДАМ ТОВАРОВ (структура) -->
+
+      <!-- МЕТОДЫ ОПЛАТЫ -->
       <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
-        <div class="ctitle">📦 Анализ по видам товаров</div>
-        <div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">
-          <div style="margin-bottom:8px">Данные о видах товаров будут доступны когда вы</div>
-          <div style="margin-bottom:8px">загрузите товары в каталог</div>
-          <div style="font-size:11px;color:var(--t3)">(интеграция с izhitsa-shop.html)</div>
-        </div>
+        <div class="ctitle">📈 Методы оплаты</div>
+        ${
+          totalPayments > 0 ?
+          Object.entries(byPayMethod)
+            .sort(function(a,b){ return b[1] - a[1]; })
+            .map(function(e){
+              var pm = e[0], amount = e[1];
+              var pct = totalPayments > 0 ? Math.round(100*amount/totalPayments) : 0;
+              return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:6px;margin-bottom:8px">
+                <span style="font-size:12px">${payMethodNames[pm] || ('🔘 ' + pm)}</span>
+                <span style="font-weight:700;font-size:12px">₽ ${Math.round(amount).toLocaleString('ru-RU')} (${pct}%)</span>
+              </div>`;
+            }).join('')
+          : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных по методам оплаты</div>'
+        }
+      </div>
+
+      <!-- ТОП ТОВАРЫ -->
+      <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
+        <div class="ctitle">💰 Топ товары</div>
+        ${
+          topProductsArr.length > 0 ?
+          topProductsArr.map(function(prod, idx){
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px">
+              <div><div style="font-weight:600;font-size:12px">${idx+1}. ${prod.name}</div><div style="font-size:10px;color:var(--t2)">${prod.count} шт</div></div>
+              <div style="text-align:right;font-weight:700;color:var(--inc);font-size:12px">₽ ${Math.round(prod.revenue).toLocaleString('ru-RU')}</div>
+            </div>`;
+          }).join('')
+          : `<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">
+              <div style="margin-bottom:8px">Нет данных о товарах за период</div>
+              <div style="font-size:11px;color:var(--t3)">Заполняется из журнала смен продавцов</div>
+            </div>`
+        }
       </div>`;
-    
+
     el.innerHTML = html;
   } catch(e) {
     console.error('renderShops error:', e);
