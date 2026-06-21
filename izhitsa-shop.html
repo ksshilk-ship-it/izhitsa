@@ -11329,10 +11329,35 @@ function rstjSaveAll(){
         label:typeLabel,
         sub:(e.name||'')+(e.article?' №'+e.article:'')+(e.sellerName?' · '+e.sellerName:'')+' · '+(e.payMethod||''),
         amount:amt, amtSign:(e.type==='expense'||e.type==='writeoff')?'−':'+',
+        amtCls:(e.type==='expense'||e.type==='writeoff')?'exp':'inc',
         comment:(e.comment||'')+(e.uncertain?' ⚠️ требует проверки':''),
         source:'chatgpt_restore',
         goodsType:isDr?'dr':'derevo'
       };
+      // Для продаж — заполняем те же поля, что строит обычная форма "+ Продажа"
+      // (saveSale()), иначе при открытии "✏️ Редактирование продажи" форма
+      // окажется пустой: editJournalSale() читает именно entry.items,
+      // entry.totalPrice, entry.payMethod и т.д., а не amount/sub напрямую.
+      if((e.type||'sale')==='sale'){
+        // Группа товаров под одной скобкой (name/article через запятую) —
+        // раскладываем обратно в отдельные items, чтобы их было видно и
+        // можно было редактировать по отдельности, как в обычной продаже.
+        var names = (e.name||'Товар').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+        var articles = (e.article||'').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+        if(!names.length) names = ['Товар'];
+        var perItemAmt = Math.round((amt/names.length)*100)/100;
+        entry.items = names.map(function(nm, idx){
+          return {id:uid(), num:articles[idx]||'', name:nm, price:perItemAmt, qty:1, amt:perItemAmt,
+            species:'', goodsType:isDr?'dr':'derevo', hasDiff:!!e.uncertain,
+            diffNote:e.uncertain?'⚠️ распознано через ChatGPT, проверьте':''};
+        });
+        entry.totalPrice = amt + (e.discount||0);
+        entry.totalPaid = amt;
+        entry.payMethod = e.payMethod || (cashAmt>0 && cardAmt>0 ? 'mixed' : cashAmt>0 ? 'cash' : 'terminal');
+        entry.cashPart = cashAmt;
+        entry.cardPart = cardAmt;
+        entry.discCategory = isDr ? 'dr' : 'derevo';
+      }
       // Эффекты на кассу/товар — те же поля, что использует calcTotals() для
       // обычного журнала живой смены (cashEffect/cardEffect/goodsEffect и их
       // ДР-аналоги), иначе сумма в "Закрыть смену" не сойдётся с журналом.
