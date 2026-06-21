@@ -3371,7 +3371,7 @@ function confirmMorning(){
     cashMorning:cashM, cashDrMorning:cashDr, cashStaffMorning:cashStaff,
     goodsMorning:goodsM, goodsDrMorning:goodsDrM, shopType:'shop'
   });
-  var prev=getPrevShift(pendingSession.shopName);
+  var prev=getPrevShiftByOpenOrder(pendingSession.shopName, session.openedAt);
   var hasCashDiff=false;
   var diffParts=[];
   if(prev){
@@ -3417,13 +3417,25 @@ function getPrevShift(shopName){
   var all=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   return all.filter(function(s){return s.shopName===shopName;}).sort(function(a,b){return new Date(b.closedAt||0)-new Date(a.closedAt||0);})[0]||null;
 }
+// Тот же поиск «предыдущей смены», что и getPrevShift(), но по порядку
+// ОТКРЫТИЯ, а не закрытия. Используется специально для сверки нал утро —
+// если смены закрываются с опозданием (вчерашняя закрыта только сегодня
+// утром, уже после открытия сегодняшней), сортировка по closedAt подставляет
+// не ту смену и даёт ложное расхождение кассы.
+function getPrevShiftByOpenOrder(shopName, beforeOpenedAt){
+  var all = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var candidates = all.filter(function(s){
+    return s.shopName===shopName && s.openedAt && beforeOpenedAt && s.openedAt < beforeOpenedAt;
+  });
+  return candidates.sort(function(a,b){ return new Date(b.openedAt)-new Date(a.openedAt); })[0] || null;
+}
 // Расхождение «нал утро» текущей сессии относительно «нал вечер» предыдущей
 // закрытой смены того же магазина. Используется при открытии смены, в
 // постоянном баннере на главном экране и на экране закрытия — единая
 // проверка, чтобы расчёт нигде не разъезжался.
 function getMorningCashDiff(){
   if(!session) return {hasDiff:false, parts:[]};
-  var prev = getPrevShift(session.shopName);
+  var prev = getPrevShiftByOpenOrder(session.shopName, session.openedAt);
   if(!prev) return {hasDiff:false, parts:[]};
   var parts = [];
   if(prev.cashEvening!=null && Math.abs((session.cashMorning||0)-prev.cashEvening)>=1){
@@ -6293,7 +6305,7 @@ function _closeShiftReal(){
   const staffCashDiff=Math.round(staffCashEve-expectedCashStaff);
   if(Math.abs(staffCashDiff)>=1){showToast('⛔ Неверный остаток наличных (Покупки сотрудников) — пересчитайте кассу');return;}
   const reason='';
-  const prev=getPrevShift(session.shopName);
+  const prev=getPrevShiftByOpenOrder(session.shopName, session.openedAt);
   const morningDiff=(prev&&prev.cashEvening)!=null?Math.abs(session.cashMorning-prev.cashEvening):0;
   const sales=journal.filter(e=>e.type==='sale');
   const openedDateStr = (function(){
@@ -6639,14 +6651,17 @@ function evaluateShiftIssues(sh){
   var jnl = sh.journal||[];
   var sales = jnl.filter(function(e){ return e.type==='sale'; });
 
-  // ── Нал утро не сходится с нал вечер предыдущей закрытой смены этого
-  // магазина. Раньше это расхождение сохранялось (hasCashDiff/cashDiffParts
-  // на момент открытия) и попадало только в алерт администратору — продавец
-  // его нигде не видел, и смена закрывалась как ни в чём не бывало.
+  // ── Нал утро не сходится с нал вечер предыдущей смены этого магазина.
+  // «Предыдущая» определяется по моменту ОТКРЫТИЯ (openedAt), а не закрытия —
+  // если смены закрываются с опозданием (продавец закрыл вчерашнюю смену
+  // только сегодня утром, уже после открытия следующей), сравнение по
+  // closedAt подставляет не ту смену и даёт ложное расхождение.
   (function(){
     var allShiftsChk = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-    var prevChk = allShiftsChk.filter(function(s){ return s.shopName===sh.shopName && s.id!==sh.id && (s.closedAt||0) < (sh.openedAt||sh.closedAt||''); })
-      .sort(function(a,b){ return new Date(b.closedAt||0)-new Date(a.closedAt||0); })[0] || null;
+    var candidatesChk = allShiftsChk.filter(function(s){
+      return s.shopName===sh.shopName && s.id!==sh.id && s.openedAt && sh.openedAt && s.openedAt < sh.openedAt;
+    });
+    var prevChk = candidatesChk.sort(function(a,b){ return new Date(b.openedAt)-new Date(a.openedAt); })[0] || null;
     if(!prevChk) return;
     if(prevChk.cashEvening!=null && Math.abs((sh.cashMorning||0)-prevChk.cashEvening)>=1){
       issues.push({code:'morn_cash_diff_t', label:'💵 Нал утро (Дерево) не сходится с вечером пред. смены ('+fmt(prevChk.cashEvening)+')'});
@@ -6956,9 +6971,8 @@ function _renderShiftView(){
   // Previous shift for this shop — used to flag values the seller entered
   // at shift-open that don't match what was recorded as "вечер" last time,
   // the same comparison confirmMorning() does live when opening a shift.
-  var allShiftsForPrev = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-  var prevShiftForThis = allShiftsForPrev.filter(function(s){ return s.shopName===sh.shopName && s.id!==sh.id && (s.closedAt||0) < (sh.openedAt||sh.closedAt||''); })
-    .sort(function(a,b){ return new Date(b.closedAt||0)-new Date(a.closedAt||0); })[0] || null;
+  // Matched by openedAt order (not closedAt) — see getPrevShiftByOpenOrder.
+  var prevShiftForThis = getPrevShiftByOpenOrder(sh.shopName, sh.openedAt);
   function enteredMismatch(enteredVal, prevVal){
     return enteredVal!=null && prevVal!=null && Math.abs(enteredVal-prevVal)>=1;
   }
