@@ -2272,6 +2272,26 @@ function getTodayShifts() {
   return getShiftsForDate(getTodayKey());
 }
 
+// Реальная выручка смены. При обычном закрытии смены (closeShift) сохраняется
+// готовое поле totalRevenue = сумма всех продаж (Дерево + ДР Товар вместе).
+// При ручном добавлении архивной смены (isArchive) Дерево и ДР Товар считаются
+// раздельно — totalRevenue (только Дерево) + drTotalRevenue (только ДР) —
+// поэтому drTotalRevenue нужно прибавлять отдельно, когда оно есть. Старое
+// предположение о полях cashRevenue+cardRevenue+totalDiscount без totalRevenue
+// почти всегда давало 0, потому что в реальных сменах эти суммы либо не
+// заполнены отдельно, либо названы иначе в зависимости от пути сохранения.
+function shiftRevenue(s){
+  if(s.totalRevenue!=null || s.drTotalRevenue!=null){
+    return (s.totalRevenue||0) + (s.drTotalRevenue||0);
+  }
+  // Запасной вариант для очень старых/нестандартных записей без totalRevenue
+  var wood = (s.cashRevenue||0) + (s.cardRevenue||0) + (s.totalDiscount||s.discount||0);
+  var dr = (s.drCashRevenue||0) + (s.drCardRevenue||0) + (s.drDiscount||0);
+  return wood + dr;
+}
+// Продавец смены хранится в поле sellerName, не seller.
+function shiftSeller(s){ return s.sellerName || ''; }
+
 // (старые renderShops/setShopPeriod удалены — единственная актуальная версия ниже, в конце файла)
 
 function renderDashboard() {
@@ -2301,30 +2321,32 @@ function renderDashboard() {
   var shopStats = {}, sellerStats = {};
   
   shifts.forEach(function(s) {
-    totalRevenue += (s.netRevenue || 0);
+    var rev = shiftRevenue(s);
+    var seller = shiftSeller(s);
+    totalRevenue += rev;
     totalSales += (s.salesCount || 0);
-    totalCashDisc += Math.abs(s.cashDisc || 0);
+    if(s.hasCashDiff) totalCashDisc += 1;
     
     // By shop
     if(!shopStats[s.shopName]) shopStats[s.shopName] = {revenue:0, sales:0, sellers:[]};
-    shopStats[s.shopName].revenue += (s.netRevenue || 0);
+    shopStats[s.shopName].revenue += rev;
     shopStats[s.shopName].sales += (s.salesCount || 0);
-    if(s.seller && !shopStats[s.shopName].sellers.includes(s.seller)) {
-      shopStats[s.shopName].sellers.push(s.seller);
+    if(seller && !shopStats[s.shopName].sellers.includes(seller)) {
+      shopStats[s.shopName].sellers.push(seller);
     }
     
     // By seller
-    if(s.seller) {
-      if(!sellerStats[s.seller]) sellerStats[s.seller] = {revenue:0, sales:0, zp:0, shop:s.shopName};
-      sellerStats[s.seller].revenue += (s.netRevenue || 0);
-      sellerStats[s.seller].sales += (s.salesCount || 0);
-      sellerStats[s.seller].zp += (s.zpCalc || 0);
+    if(seller) {
+      if(!sellerStats[seller]) sellerStats[seller] = {revenue:0, sales:0, zp:0, shop:s.shopName};
+      sellerStats[seller].revenue += rev;
+      sellerStats[seller].sales += (s.salesCount || 0);
+      sellerStats[seller].zp += (s.zp || 0);
     }
   });
 
   // Расходы за период берём из ручных операций (iz_transactions) — та же
-  // модель данных, что использует P&L, потому что cashDisc смен — это
-  // расхождение кассы, а не реальные расходы бизнеса.
+  // модель данных, что использует P&L. Расхождения кассы (hasCashDiff) — это
+  // флаг проблемы в смене, а не денежная сумма расхода.
   var txsForPeriod = getTransactions().filter(function(tx){
     var day = (tx.date||'').split('T')[0];
     return day >= range.from && day <= range.to;
@@ -2355,7 +2377,7 @@ function renderDashboard() {
   if(diffEl) {
     var prevRange = getPrevDateRange(range.from, range.to);
     var prevShifts = getShiftsInRange(prevRange.from, prevRange.to);
-    var prevRevenue = prevShifts.reduce(function(s,sh){return s+(sh.netRevenue||0);},0);
+    var prevRevenue = prevShifts.reduce(function(s,sh){return s+shiftRevenue(sh);},0);
     var prevTxs = getTransactions().filter(function(tx){ var d=(tx.date||'').split('T')[0]; return d>=prevRange.from && d<=prevRange.to; });
     var prevExpense = prevTxs.filter(function(t){return t.type==='expense';}).reduce(function(s,t){return s+(t.amount||0);},0);
     var prevIncomeManual = prevTxs.filter(function(t){return t.type==='income';}).reduce(function(s,t){return s+(t.amount||0);},0);
@@ -2369,10 +2391,11 @@ function renderDashboard() {
   // Shops (сегодня — отдельный быстрый снимок дня, как и было)
   var shopStatsToday = {};
   todayShifts.forEach(function(s){
+    var seller = shiftSeller(s);
     if(!shopStatsToday[s.shopName]) shopStatsToday[s.shopName] = {revenue:0, sales:0, sellers:[]};
-    shopStatsToday[s.shopName].revenue += (s.netRevenue||0);
+    shopStatsToday[s.shopName].revenue += shiftRevenue(s);
     shopStatsToday[s.shopName].sales += (s.salesCount||0);
-    if(s.seller && !shopStatsToday[s.shopName].sellers.includes(s.seller)) shopStatsToday[s.shopName].sellers.push(s.seller);
+    if(seller && !shopStatsToday[s.shopName].sellers.includes(seller)) shopStatsToday[s.shopName].sellers.push(seller);
   });
   var shopsHtml = '';
   Object.keys(shopStatsToday).forEach(function(shop) {
@@ -2387,11 +2410,12 @@ function renderDashboard() {
   // Sellers (сегодня)
   var sellerStatsToday = {};
   todayShifts.forEach(function(s){
-    if(!s.seller) return;
-    if(!sellerStatsToday[s.seller]) sellerStatsToday[s.seller] = {revenue:0, sales:0, zp:0, shop:s.shopName};
-    sellerStatsToday[s.seller].revenue += (s.netRevenue||0);
-    sellerStatsToday[s.seller].sales += (s.salesCount||0);
-    sellerStatsToday[s.seller].zp += (s.zpCalc||0);
+    var seller = shiftSeller(s);
+    if(!seller) return;
+    if(!sellerStatsToday[seller]) sellerStatsToday[seller] = {revenue:0, sales:0, zp:0, shop:s.shopName};
+    sellerStatsToday[seller].revenue += shiftRevenue(s);
+    sellerStatsToday[seller].sales += (s.salesCount||0);
+    sellerStatsToday[seller].zp += (s.zp||0);
   });
   var sellersHtml = '';
   Object.keys(sellerStatsToday).forEach(function(seller) {
@@ -2431,9 +2455,9 @@ function renderDashboard() {
   var alertsHtml = '';
   var hasAlerts = false;
   shifts.forEach(function(s) {
-    if(Math.abs(s.cashDisc || 0) > 500) {
+    if(s.hasCashDiff) {
       alertsHtml += '<div style="background:#2e1a1a;border:1px solid #f06060;border-radius:8px;padding:10px;color:#f06060;font-size:12px">' +
-        '⚠️ ' + s.shopName + ' (' + s.date + '): Расхождение в кассе ₽ ' + (s.cashDisc || 0) +
+        '⚠️ ' + s.shopName + ' (' + s.date + '): Расхождение в кассе у ' + (shiftSeller(s)||'—') +
       '</div>';
       hasAlerts = true;
     }
@@ -2498,13 +2522,13 @@ function renderAnalytics() {
     var txs = getTransactions().filter(function(tx){ var d=(tx.date||'').split('T')[0]; return d>=range.from && d<=range.to; });
     var prevTxs = getTransactions().filter(function(tx){ var d=(tx.date||'').split('T')[0]; return d>=prevRange.from && d<=prevRange.to; });
 
-    var shopRevenue = shifts.reduce(function(s,sh){return s+(sh.netRevenue||0);},0);
+    var shopRevenue = shifts.reduce(function(s,sh){return s+shiftRevenue(sh);},0);
     var manualIncome = txs.filter(function(t){return t.type==='income';}).reduce(function(s,t){return s+(t.amount||0);},0);
     var manualExpense = txs.filter(function(t){return t.type==='expense';}).reduce(function(s,t){return s+(t.amount||0);},0);
     var totalIncome = shopRevenue + manualIncome;
     var netProfit = totalIncome - manualExpense;
 
-    var prevShopRevenue = prevShifts.reduce(function(s,sh){return s+(sh.netRevenue||0);},0);
+    var prevShopRevenue = prevShifts.reduce(function(s,sh){return s+shiftRevenue(sh);},0);
     var prevManualIncome = prevTxs.filter(function(t){return t.type==='income';}).reduce(function(s,t){return s+(t.amount||0);},0);
     var prevManualExpense = prevTxs.filter(function(t){return t.type==='expense';}).reduce(function(s,t){return s+(t.amount||0);},0);
     var prevTotalIncome = prevShopRevenue + prevManualIncome;
@@ -2523,13 +2547,15 @@ function renderAnalytics() {
     // По магазинам/продавцам за период
     var byShop = {}, bySeller = {};
     shifts.forEach(function(s){
+      var seller = shiftSeller(s);
+      var rev = shiftRevenue(s);
       if(!byShop[s.shopName]) byShop[s.shopName] = {revenue:0, sales:0};
-      byShop[s.shopName].revenue += (s.netRevenue||0);
+      byShop[s.shopName].revenue += rev;
       byShop[s.shopName].sales += (s.salesCount||0);
-      if(s.seller){
-        if(!bySeller[s.seller]) bySeller[s.seller] = {revenue:0, sales:0, shop:s.shopName};
-        bySeller[s.seller].revenue += (s.netRevenue||0);
-        bySeller[s.seller].sales += (s.salesCount||0);
+      if(seller){
+        if(!bySeller[seller]) bySeller[seller] = {revenue:0, sales:0, shop:s.shopName};
+        bySeller[seller].revenue += rev;
+        bySeller[seller].sales += (s.salesCount||0);
       }
     });
     var shopEntries = Object.entries(byShop).sort(function(a,b){return b[1].revenue-a[1].revenue;});
@@ -2796,7 +2822,7 @@ function renderShops() {
     const byProduct = {};
 
     shifts.forEach(function(s) {
-      const rev = s.netRevenue || 0;
+      const rev = shiftRevenue(s);
       const cnt = s.salesCount || 0;
       income += rev;
       totalOps += cnt;
@@ -2806,7 +2832,7 @@ function renderShops() {
       bySource[shopKey].amount += rev;
       bySource[shopKey].count += cnt;
 
-      const sellerKey = s.seller || 'Неизвестно';
+      const sellerKey = shiftSeller(s) || 'Неизвестно';
       if(!bySeller[sellerKey]) bySeller[sellerKey] = {amount: 0, count: 0};
       bySeller[sellerKey].amount += rev;
       bySeller[sellerKey].count += cnt;
@@ -2822,11 +2848,18 @@ function renderShops() {
           if(!byPayMethod[pm]) byPayMethod[pm] = 0;
           byPayMethod[pm] += (entry.amount || 0);
 
-          if(entry.label) {
-            if(!byProduct[entry.label]) byProduct[entry.label] = {count: 0, revenue: 0};
-            byProduct[entry.label].count += 1;
-            byProduct[entry.label].revenue += (entry.amount || 0);
-          }
+          // Топ-товары считаются по реальным позициям продажи (entry.items[]),
+          // а не по entry.label — label всегда буквально равен слову «Продажа»
+          // для любой продажи независимо от состава, это не наименование товара.
+          // Группируем по «Наименование · Порода», как и просила Ксения.
+          const items = entry.items || [];
+          items.forEach(function(it){
+            const key = it.name ? (it.name + (it.species ? ' · ' + it.species : '')) : null;
+            if(!key) return;
+            if(!byProduct[key]) byProduct[key] = {count: 0, revenue: 0};
+            byProduct[key].count += (it.qty || 1);
+            byProduct[key].revenue += (it.amt!=null ? it.amt : (it.price||0)*(it.qty||1));
+          });
         }
       });
     });
