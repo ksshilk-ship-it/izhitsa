@@ -228,6 +228,7 @@ function checkForAppUpdate() {
   </div>
   <div class="page" id="pg-home">
     <div id="pendingAlert"></div>
+    <div id="morningCashDiffBanner"></div>
     <div id="mainStatusBar" style="margin-bottom:12px"></div>
   </div>
   <div class="page" id="pg-journal">
@@ -1327,6 +1328,16 @@ function checkForAppUpdate() {
     <button class="btn" onclick="saveWoEdit()">💾 Сохранить изменения</button>
     <button class="btn sec" style="margin-top:8px;border-color:#f06060;color:#f06060" onclick="deleteWoEntry()">🗑 Удалить списание</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('woEditMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- FIX MORNING CASH (расхождение нал утро vs вечер предыдущей смены) -->
+<div class="mo" id="fixMorningCashMo">
+  <div class="md"><div class="mh"></div><div class="mt">⚠️ Исправить нал утро</div>
+    <div style="font-size:11.5px;color:#8888aa;margin-bottom:10px">Введите верную сумму наличных, которая была в кассе на начало смены.</div>
+    <div id="fixMorningCashFields"></div>
+    <button class="btn" style="background:#f06060;color:#1a0808" onclick="saveFixMorningCash()">💾 Сохранить верную сумму</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('fixMorningCashMo')">Отмена</button>
   </div>
 </div>
 
@@ -2582,7 +2593,7 @@ function renderZpCard(){
     '</div>'+
   '</div>';
 }
-function renderAll(){ renderStatusBar(); renderJournal(); renderWriteoffs(); updateInvBadge(); renderPendingAlert(); syncLiveShift(); }
+function renderAll(){ renderStatusBar(); renderJournal(); renderWriteoffs(); updateInvBadge(); renderPendingAlert(); renderMorningCashDiffBanner(); syncLiveShift(); }
 
 // ════ PERSONAL TAB (СЕЛЛЕР) — per-seller shift history & analytics ════
 // Computes "ЗП расчётная" for an arbitrary (possibly historical) shift, using
@@ -3405,6 +3416,26 @@ function cancelMorning(){ closeMo('morningMo'); pendingSession=null; }
 function getPrevShift(shopName){
   var all=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   return all.filter(function(s){return s.shopName===shopName;}).sort(function(a,b){return new Date(b.closedAt||0)-new Date(a.closedAt||0);})[0]||null;
+}
+// Расхождение «нал утро» текущей сессии относительно «нал вечер» предыдущей
+// закрытой смены того же магазина. Используется при открытии смены, в
+// постоянном баннере на главном экране и на экране закрытия — единая
+// проверка, чтобы расчёт нигде не разъезжался.
+function getMorningCashDiff(){
+  if(!session) return {hasDiff:false, parts:[]};
+  var prev = getPrevShift(session.shopName);
+  if(!prev) return {hasDiff:false, parts:[]};
+  var parts = [];
+  if(prev.cashEvening!=null && Math.abs((session.cashMorning||0)-prev.cashEvening)>=1){
+    parts.push({label:'🌳 Дерево', morning:session.cashMorning||0, prevEvening:prev.cashEvening, diff:Math.round((session.cashMorning||0)-prev.cashEvening)});
+  }
+  if(prev.drCashEvening!=null && Math.abs((session.cashDrMorning||0)-prev.drCashEvening)>=1){
+    parts.push({label:'🛍 ДР Товар', morning:session.cashDrMorning||0, prevEvening:prev.drCashEvening, diff:Math.round((session.cashDrMorning||0)-prev.drCashEvening)});
+  }
+  if(prev.cashStaffEvening!=null && Math.abs((session.cashStaffMorning||0)-prev.cashStaffEvening)>=1){
+    parts.push({label:'🛒 Покупки сотрудников', morning:session.cashStaffMorning||0, prevEvening:prev.cashStaffEvening, diff:Math.round((session.cashStaffMorning||0)-prev.cashStaffEvening)});
+  }
+  return {hasDiff: parts.length>0, parts: parts};
 }
 function calcGoodsMorning(shopName){
   var prev=getPrevShift(shopName); if(!prev) return 0;
@@ -5357,6 +5388,50 @@ function updateInvBadge(){
   const tb=document.getElementById('pendingInvBadge');
   if(tb) tb.innerHTML = p.length ? ' <span style="background:#f0a060;color:#1a1206;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:700">'+p.length+'</span>' : '';
 }
+// Постоянный баннер на главном экране продавца: показывается всю смену,
+// пока расхождение нал утро vs вечер предыдущей смены не будет исправлено.
+// Не путать с renderPendingAlert (накладные/онлайн-продажи) — это отдельный,
+// более тревожный блок, т.к. влияет на возможность закрыть смену.
+function renderMorningCashDiffBanner(){
+  var c = document.getElementById('morningCashDiffBanner'); if(!c) return;
+  if(!session || session.isPreview){ c.innerHTML=''; return; }
+  var chk = getMorningCashDiff();
+  if(!chk.hasDiff){ c.innerHTML=''; return; }
+  c.innerHTML = '<div style="background:#2e1a1a;border:2px solid #f06060;border-radius:14px;padding:14px;margin-bottom:12px">'+
+    '<div style="font-size:12px;font-weight:700;color:#f06060;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">⚠️ Расхождение нала на утро</div>'+
+    chk.parts.map(function(p){
+      return '<div style="font-size:12.5px;color:#f0f0f8;padding:4px 0;border-bottom:1px solid #3e2e2e">'+
+        p.label+': введено <b>'+fmt(p.morning)+'</b>, было на вечер вчера <b>'+fmt(p.prevEvening)+'</b> ('+(p.diff>0?'+':'')+fmt(p.diff)+')'+
+      '</div>';
+    }).join('')+
+    '<div style="font-size:11.5px;color:#f0a0a0;margin:8px 0">Если это опечатка — исправьте сумму ниже. Если расхождение реальное (недостача/излишек) — сообщите управляющему, причина будет видна в отчёте.</div>'+
+    '<button class="btn" style="margin:0;background:#f06060;color:#1a0808" onclick="openMo(\'fixMorningCashMo\');renderFixMorningCashForm()">✏️ Исправить нал утро</button>'+
+  '</div>';
+}
+function renderFixMorningCashForm(){
+  var chk = getMorningCashDiff();
+  var c = document.getElementById('fixMorningCashFields'); if(!c) return;
+  c.innerHTML = chk.parts.map(function(p){
+    var fieldId = p.label.indexOf('Дерево')>=0 ? 'fixCashMorningWood' : p.label.indexOf('ДР')>=0 ? 'fixCashMorningDr' : 'fixCashMorningStaff';
+    return '<div style="margin-bottom:10px">'+
+      '<div style="font-size:11px;color:#8888aa;margin-bottom:4px">'+p.label+' — было на вечер вчера: '+fmt(p.prevEvening)+'</div>'+
+      '<input class="fi" type="number" id="'+fieldId+'" value="'+p.morning+'" inputmode="numeric" style="margin:0">'+
+    '</div>';
+  }).join('');
+}
+function saveFixMorningCash(){
+  var w = document.getElementById('fixCashMorningWood');
+  var d = document.getElementById('fixCashMorningDr');
+  var s = document.getElementById('fixCashMorningStaff');
+  if(w) session.cashMorning = parseFloat(w.value)||0;
+  if(d) session.cashDrMorning = parseFloat(d.value)||0;
+  if(s) session.cashStaffMorning = parseFloat(s.value)||0;
+  saveS(); syncLiveShift();
+  closeMo('fixMorningCashMo');
+  renderMorningCashDiffBanner();
+  renderClose();
+  showToast('✅ Нал утро обновлён');
+}
 function renderPendingAlert(){
   const c=document.getElementById('pendingAlert'); if(!c)return;
   let html = '';
@@ -5920,66 +5995,68 @@ function renderClose(){
 
     var cashEveEntered = parseFloat((document.getElementById('cashEveInput')||{}).value)||0;
 
-    var R2 = function(label, val, color, bold){
-      return '<tr><td style="padding:5px 8px;color:#8888aa;font-size:12px">'+label+'</td>'+
-             '<td style="padding:5px 8px;text-align:right;color:'+(color||'#f0f0f8')+';font-size:12px;'+(bold?'font-weight:700':'')+'">'+fmt(val)+'</td></tr>';
-    };
-    var R2c = function(label, val1, val2, color){
-      return '<tr><td style="padding:5px 8px;color:#8888aa;font-size:12px">'+label+'</td>'+
-             '<td style="padding:5px 8px;text-align:right;font-size:12px"><span style="color:'+(color||'#f0f0f8')+'">'+fmt(val1)+'</span>'+
-             (val2!==undefined?'<span style="color:#555568;font-size:10px"> / '+val2+'шт.</span>':'')+'</td></tr>';
-    };
-    var sep = '<tr><td colspan="2" style="padding:2px 8px"><div style="height:1px;background:#2e2e3e"></div></td></tr>';
-    var hdr = function(label, color){ return '<tr><td colspan="2" style="padding:6px 8px 2px;font-size:11px;font-weight:700;color:'+(color||'#8888aa')+';text-transform:uppercase;letter-spacing:.5px">'+label+'</td></tr>'; };
-
     var drGoodsEve = (session.goodsDrMorning||0)+rcvDr-_sellerSummary.dr.listPrice-woDr;
     var drCashMorn = session.cashDrMorning||0;
     var drCashEveEntered = parseFloat((document.getElementById('drCashEveInput')||{}).value)||0;
 
-    var TH = function(label){ return '<th style="padding:6px 8px;text-align:right;font-size:11px;font-weight:700;color:'+label[1]+';border-bottom:2px solid #2e2e3e">'+label[0]+'</th>'; };
-    var TR = function(label, v1, v2, c1, c2){
-      return '<tr>'+
-        '<td style="padding:5px 8px;font-size:12px;color:#8888aa">'+label+'</td>'+
-        '<td style="padding:5px 8px;text-align:right;font-size:12px;color:'+(c1||'#f0f0f8')+'">'+fmt(v1)+'</td>'+
-        '<td style="padding:5px 8px;text-align:right;font-size:12px;color:'+(c2||'#f0f0f8')+'">'+fmt(v2)+'</td>'+
-      '</tr>';
-    };
-    var TRS = function(label){ return '<tr><td colspan="3" style="padding:10px 8px 6px;font-size:14px;font-weight:800;color:#c8f060;text-transform:uppercase;letter-spacing:.5px;border-top:1px solid #2e2e3e">'+label+'</td></tr>'; };
-    var TRN = function(label, v1, v2, c1, c2){
-      return '<tr>'+
-        '<td style="padding:5px 8px;font-size:12px;color:#8888aa">'+label+'</td>'+
-        '<td style="padding:5px 8px;text-align:right;font-size:12px;color:'+(c1||'#f0f0f8')+'">'+v1+' шт.</td>'+
-        '<td style="padding:5px 8px;text-align:right;font-size:12px;color:'+(c2||'#f0f0f8')+'">'+v2+' шт.</td>'+
-      '</tr>';
-    };
+    // ── Статус сходимости (стиль карточки админа) ──
+    // "Сходится" только когда оба значения нал вечер уже введены продавцом —
+    // до этого момента показываем нейтральный статус, а не ложное расхождение.
+    var drCassaBlockEl2 = document.getElementById('closeDrCassaBlock');
+    var isShopType2DrCassa = drCassaBlockEl2 && drCassaBlockEl2.style.display !== 'none';
+    var _bothEveEntered = !!cashEveEntered && (!isShopType2DrCassa || !!drCashEveEntered);
+    var _cashDiffNow = _bothEveEntered ? Math.round(cashEveEntered - t.cash) : null;
+    var _cashDrDiffNow = (_bothEveEntered && isShopType2DrCassa) ? Math.round(drCashEveEntered - t.cashDr) : null;
+    var _morningChk = getMorningCashDiff();
+    var _statusDiff = (_cashDiffNow!=null && Math.abs(_cashDiffNow)>=1) || (_cashDrDiffNow!=null && Math.abs(_cashDrDiffNow)>=1) || _morningChk.hasDiff;
+    var _statusUnknown = !_bothEveEntered && !_morningChk.hasDiff;
+    var _issuesListHtml = _morningChk.hasDiff
+      ? '<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #4a2a2a">'+
+          _morningChk.parts.map(function(p){ return '<div style="font-size:11px;color:#f0a0a0;padding:3px 0">• '+p.label+': нал утро не сходится с вечером пред. смены</div>'; }).join('')+
+        '</div>'
+      : '';
+
+    function _tblRow(label, woodVal, drVal, opts){
+      opts = opts||{};
+      return '<div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:0 8px;padding:'+(opts.pad||'5px')+' 0;'+(opts.border?'border-top:1px solid #2e2e3e;margin-top:4px;padding-top:8px':'')+'">'+
+        '<div style="font-size:'+(opts.bold?'12.5px':'12px')+';color:'+(opts.bold?'#f0f0f8':'#8888aa')+';font-weight:'+(opts.bold?'700':'400')+'">'+label+'</div>'+
+        '<div style="font-size:'+(opts.bold?'12.5px':'12px')+';font-weight:'+(opts.bold?'700':'600')+';color:'+(opts.color||'#f0f0f8')+'">'+woodVal+'</div>'+
+        '<div style="font-size:'+(opts.bold?'12.5px':'12px')+';font-weight:'+(opts.bold?'700':'600')+';color:'+(opts.color||'#f0f0f8')+'">'+drVal+'</div>'+
+      '</div>';
+    }
+    function _sectHdr(label, color){
+      return '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:'+color+';margin:10px 0 4px">'+label+'</div>';
+    }
 
     sumEl.innerHTML =
       '<div style="background:#1e2a14;border:2px solid #c8f060;border-radius:14px;padding:14px;margin-bottom:16px">' +
-      '<div style="font-size:11px;color:#c8f060;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">📊 ИТОГИ СМЕНЫ — '+session.shopName+'</div>'+
-      '<table style="width:100%;border-collapse:collapse">'+
-        '<thead><tr>'+
-          '<th style="padding:6px 8px;text-align:left;font-size:11px;color:#555568;border-bottom:2px solid #2e2e3e"></th>'+
-          '<th style="padding:6px 8px;text-align:right;font-size:11px;font-weight:700;color:#c8f060;border-bottom:2px solid #2e2e3e">🌳 Дерево</th>'+
-          '<th style="padding:6px 8px;text-align:right;font-size:11px;font-weight:700;color:#a060f0;border-bottom:2px solid #2e2e3e">🛍 ДР Товар</th>'+
-        '</tr></thead>'+
-        '<tbody>'+
-        TRS('💰 Продажи') +
-        TR('Выручка', woodRev, drRev, '#60c8f0', '#60c8f0') +
-        TRN('Кол-во', _sellerSummary.wood.count, _sellerSummary.dr.count, '#f0f0f8', '#f0f0f8') +
-        TRS('📦 Товар') +
-        TR('Остаток утро', session.goodsMorning||0, session.goodsDrMorning||0, '#f0f0f8', '#f0f0f8') +
-        TR('Остаток вечер', t.goods, drGoodsEve, '#c8f060', '#c8f060') +
-        TR('Приход', rcvWood, rcvDr, '#60f090', '#60f090') +
-        TR('Списание', woWood, woDr, '#f06060', '#f06060') +
-        TRS('💵 Касса') +
-        TR('Нал утро', session.cashMorning||0, drCashMorn, '#f0f0f8', '#f0f0f8') +
-        '<tr><td style="padding:5px 8px;font-size:12px;color:#8888aa">Нал вечер</td>'+
-          '<td style="padding:5px 8px;text-align:right;font-size:12px;color:#c8f060">'+(cashEveEntered?fmt(cashEveEntered):'<span style="color:#555568">не введён</span>')+'</td>'+
-          '<td style="padding:5px 8px;text-align:right;font-size:12px;color:#a060f0">'+(drCashEveEntered?fmt(drCashEveEntered):'<span style="color:#555568">не введён</span>')+'</td>'+
-        '</tr>'+
-        TRS('💸 Расходы') +
-        TR('Итого расходы', totalExpWood, totalExpDr, '#f0a060', '#f0a060') +
-        TRS('💰 ЗП') +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:'+(_statusUnknown?'#8888aa':(_statusDiff?'#f06060':'#60f090'))+'">'+
+          (_statusUnknown?'⏳ ОЖИДАЕТ ВВОДА':(_statusDiff?'⚠️ ЕСТЬ НЕСОВПАДЕНИЯ':'✅ ВСЁ СХОДИТСЯ'))+
+        '</div>'+
+        '<div style="font-size:10.5px;color:#8888aa">📊 '+session.shopName+'</div>'+
+      '</div>'+
+      _issuesListHtml +
+      '<div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:0 8px;margin-bottom:4px">'+
+        '<div></div><div style="font-size:10px;color:#c8f060;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 Дерево</div><div style="font-size:10px;color:#a060f0;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР Товар</div>'+
+      '</div>'+
+        _sectHdr('💰 Продажи', '#60c8f0') +
+        _tblRow('Выручка', fmt(woodRev), fmt(drRev), {bold:true,color:'#60c8f0'}) +
+        _tblRow('Кол-во', _sellerSummary.wood.count+' шт.', _sellerSummary.dr.count+' шт.') +
+        _sectHdr('📦 Товар', '#f0a060') +
+        _tblRow('Остаток утро', fmt(session.goodsMorning||0), fmt(session.goodsDrMorning||0)) +
+        _tblRow('Остаток вечер', fmt(t.goods), fmt(drGoodsEve), {color:'#c8f060'}) +
+        _tblRow('Приход', fmt(rcvWood), fmt(rcvDr), {color:'#60f090'}) +
+        _tblRow('Списание', fmt(woWood), fmt(woDr), {color:'#f06060'}) +
+        _sectHdr('💵 Касса', '#60c8f0') +
+        _tblRow('Нал утро', fmt(session.cashMorning||0), fmt(drCashMorn), _morningChk.hasDiff?{color:'#f06060'}:{}) +
+        _tblRow('Нал вечер',
+          cashEveEntered?fmt(cashEveEntered):'<span style="color:#555568">не введён</span>',
+          drCashEveEntered?fmt(drCashEveEntered):'<span style="color:#555568">не введён</span>',
+          {color:'#c8f060'}) +
+        _sectHdr('💸 Расходы', '#f06060') +
+        _tblRow('Итого расходы', fmt(totalExpWood), fmt(totalExpDr), {color:'#f0a060'}) +
+        _sectHdr('💰 ЗП', '#f0c060') +
         (function(){
           // Discount per block (from calcSellerSummary, correctly handles mixed sales)
           var discWood = discWoodTotal;
@@ -6028,47 +6105,50 @@ function renderClose(){
           var diff = zpCalcWithTravel - (zpFactTotal + travelFact);
           var diffColor = diff > 0 ? '#f06060' : diff < 0 ? '#60f090' : '#8888aa';
 
-          // Helper: center cell spanning 2 columns
-          var C2 = function(val, color, bold){ 
-            return '<td colspan="2" style="padding:5px 8px;text-align:center;font-size:12px;color:'+(color||'#f0f0f8')+';'+(bold?'font-weight:700;font-size:13px':'')+'">'+(typeof val==='string'?val:fmt2(val))+'</td>';
+          // Helper: значение по центру, занимающее обе колонки (Дерево+ДР)
+          var _C2 = function(val, color, bold){
+            return '<div style="grid-column:2 / span 2;text-align:center;font-size:'+(bold?'13px':'12px')+';font-weight:'+(bold?'700':'600')+';color:'+(color||'#f0f0f8')+'">'+(typeof val==='string'?val:fmt2(val))+'</div>';
+          };
+          var _rowC2 = function(label, val, color, bold, opts){
+            opts = opts||{};
+            return '<div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:0 8px;padding:'+(opts.pad||'5px')+' 0;'+(opts.border?'border-top:'+(opts.border)+' solid #2e2e3e;margin-top:4px;padding-top:8px':'')+'">'+
+              '<div style="font-size:'+(bold?'13px':'12px')+';color:'+(bold?'#f0f0f8':'#8888aa')+';font-weight:'+(bold?'700':'400')+'">'+label+'</div>'+
+              _C2(val, color, bold)+
+            '</div>';
           };
 
-          return [
-            // 1. ЗП расчётная — в каждом столбце
-            '<tr>'+
-              '<td style="padding:5px 8px;font-size:12px;color:#8888aa">ЗП расчётная</td>'+
-              '<td style="padding:5px 8px;text-align:right;font-size:12px;color:#c8f060">'+fmt2(zpCalcWood)+'</td>'+
-              '<td style="padding:5px 8px;text-align:right;font-size:12px;color:#a060f0">'+fmt2(zpCalcDr)+'</td>'+
-            '</tr>',
-            // 2. Проезд расчётный — из настроек администратора
-            '<tr>'+
-              '<td style="padding:5px 8px;font-size:12px;color:#8888aa">Проезд (расчётный)</td>'+
-              C2(fmt2(travelCalc), '#f0a060', false)+
-            '</tr>',
-            // 3. ЗП факт — общий по центру
-            '<tr style="border-top:1px solid #2e2e3e">'+
-              '<td style="padding:6px 8px;font-size:12px;color:#8888aa">ЗП факт (взято)</td>'+
-              C2(fmt(zpFactTotal), '#f0a060', false)+
-            '</tr>',
-            // 4. Проезд факт — общий по центру (из расходов дерево)
-            '<tr>'+
-              '<td style="padding:5px 8px;font-size:12px;color:#8888aa">Проезд (факт)</td>'+
-              C2(fmt(travelFact), '#f0a060', false)+
-            '</tr>',
-            // 5. Разница итого — общий по центру
-            '<tr style="border-top:2px solid #2e2e3e">'+
-              '<td style="padding:6px 8px;font-size:13px;font-weight:700">Разница итого</td>'+
-              C2((diff>0?'+':'')+fmt2(diff), diffColor, true)+
-            '</tr>',
-          ].join('');
+          return (
+            _tblRow('Расчётная', fmt2(zpCalcWood), fmt2(zpCalcDr), {color:'#c8f060'}) +
+            _rowC2('Проезд расчётный', fmt2(travelCalc), '#f0a060') +
+            _rowC2('Факт (взято)', fmt(zpFactTotal), '#f0a060', false, {border:'1px'}) +
+            _rowC2('Проезд факт', fmt(travelFact), '#f0a060') +
+            _rowC2('Разница ЗП+проезд', (diff>0?'+':'')+fmt2(diff), diffColor, true, {border:'2px'})
+          );
         })() +
-        '</tbody>'+
-      '</table></div>';
+      '</div>';
   }
 }
 
 
 function validateClose(){
+  // ── Жёсткий стоп: расхождение нал утро vs вечер предыдущей смены ──
+  // Проверяется первой и перекрывает остальную логику — пока продавец не
+  // исправит нал утро через баннер/модалку «Исправить нал утро», кнопка
+  // закрытия остаётся заблокированной независимо от вечерней кассы.
+  const morningChk = getMorningCashDiff();
+  const btn0 = document.getElementById('closeShiftBtn');
+  const cv0 = document.getElementById('cashValidation');
+  if(morningChk.hasDiff){
+    if(cv0) cv0.innerHTML = '<div style="background:#2e1a1a;border:2px solid #f06060;border-radius:12px;padding:14px;text-align:center">'+
+      '<div style="font-size:15px;font-weight:700;color:#f06060;margin-bottom:8px">⛔ Нал утро не сходится с вечером пред. смены</div>'+
+      '<div style="font-size:12.5px;color:#f0f0f8;margin-bottom:10px">'+morningChk.parts.map(function(p){return p.label;}).join(', ')+'</div>'+
+      '<button class="btn" style="margin:0;background:#f06060;color:#1a0808" onclick="openMo(\'fixMorningCashMo\');renderFixMorningCashForm()">✏️ Исправить нал утро</button>'+
+    '</div>';
+    if(btn0){ btn0.disabled=true; btn0.style.opacity='.5'; }
+    renderClose();
+    return;
+  }
+
   // Calculate expected but DO NOT show to seller
   const t = calcTotals();
   // t.cash / t.cashDr already net out sales cash (per goods type) and all
@@ -6167,6 +6247,14 @@ function closeShift(){
     return;
   }
 function _closeShiftReal(){
+  // Дублирующая защита от обхода UI-блокировки в validateClose() — смена
+  // не должна закрываться программно, даже если кнопка как-то оказалась активна.
+  const morningChkReal = getMorningCashDiff();
+  if(morningChkReal.hasDiff){
+    showToast('⛔ Нал утро не сходится с вечером пред. смены — исправьте сумму');
+    openMo('fixMorningCashMo'); renderFixMorningCashForm();
+    return;
+  }
   const cashEveVal=(document.getElementById('cashEveInput')||{}).value||'';
   if(!cashEveVal){showToast('Введите остаток наличных вечер');return;}
   const cashEve=parseFloat(cashEveVal)||0;
@@ -6550,6 +6638,26 @@ function evaluateShiftIssues(sh){
   var issues = [];
   var jnl = sh.journal||[];
   var sales = jnl.filter(function(e){ return e.type==='sale'; });
+
+  // ── Нал утро не сходится с нал вечер предыдущей закрытой смены этого
+  // магазина. Раньше это расхождение сохранялось (hasCashDiff/cashDiffParts
+  // на момент открытия) и попадало только в алерт администратору — продавец
+  // его нигде не видел, и смена закрывалась как ни в чём не бывало.
+  (function(){
+    var allShiftsChk = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var prevChk = allShiftsChk.filter(function(s){ return s.shopName===sh.shopName && s.id!==sh.id && (s.closedAt||0) < (sh.openedAt||sh.closedAt||''); })
+      .sort(function(a,b){ return new Date(b.closedAt||0)-new Date(a.closedAt||0); })[0] || null;
+    if(!prevChk) return;
+    if(prevChk.cashEvening!=null && Math.abs((sh.cashMorning||0)-prevChk.cashEvening)>=1){
+      issues.push({code:'morn_cash_diff_t', label:'💵 Нал утро (Дерево) не сходится с вечером пред. смены ('+fmt(prevChk.cashEvening)+')'});
+    }
+    if(prevChk.drCashEvening!=null && Math.abs((sh.cashDrMorning||0)-prevChk.drCashEvening)>=1){
+      issues.push({code:'morn_cash_diff_g', label:'💵 Нал утро (ДР Товар) не сходится с вечером пред. смены ('+fmt(prevChk.drCashEvening)+')'});
+    }
+    if(prevChk.cashStaffEvening!=null && Math.abs((sh.cashStaffMorning||0)-prevChk.cashStaffEvening)>=1){
+      issues.push({code:'morn_cash_diff_s', label:'💵 Нал утро (Покупки сотрудников) не сходится с вечером пред. смены ('+fmt(prevChk.cashStaffEvening)+')'});
+    }
+  })();
 
   // ── Остаток товара утро: 0/не задано — всегда ошибка, без исключений ──
   if(!sh.goodsMorning || sh.goodsMorning<=0){
