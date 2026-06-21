@@ -2668,7 +2668,8 @@ function setProdPeriod(period, el) {
 
 function renderProduction() {
   var period = document.querySelector('#pg-prod .pchips .pc.active');
-  var periodKey = period ? period.textContent.toLowerCase().replace(/[^a-z]/g,'') : 'month';
+  var periodLabel = period ? period.textContent.trim() : 'Месяц';
+  var periodKey = {'Месяц':'month','Неделя':'week','Год':'year'}[periodLabel] || 'month';
   var range = getDateRange(periodKey);
   
   try {
@@ -2737,371 +2738,6 @@ function renderProduction() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-  initRefBooks();
-  initStaff();
-  renderRefBooks();
-  startSyncListeners();
-  // Create default admin FIRST before sync listeners overwrite
-  var users = getAdminUsers();
-  var hasDefault = users.some(function(u){ return u.id === 'admin_default'; });
-  if(!hasDefault) {
-    users.unshift({id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'});
-    localStorage.setItem('iz_admin_users', JSON.stringify(users));
-  }
-  startAdminSyncListeners();
-  startStaffSyncListener();
-  // Auto-select first role card
-  var firstCard = document.querySelector('.role-card');
-  if(firstCard) firstCard.click();
-  // Init shops if not exist
-  if(!localStorage.getItem('iz_shops')) {
-    saveShops(['ОПИТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
-  }
-  
-  // Init plan data if not exist
-  if(!localStorage.getItem('iz_plan_data')) {
-    savePlanData({
-      planIncome: 130000,
-      planExpense: 68000
-    });
-  }
-  
-  // Init transactions with test data if not exist
-  if(!localStorage.getItem('iz_transactions')) {
-    const today = new Date();
-    const testTransactions = [
-      {id: uid(), type: 'income', amount: 50000, source: 'Роза Хутор', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'income', amount: 35000, source: 'Горки', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'income', amount: 20000, source: 'ТГ канал', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'income', amount: 15000, source: 'Instagram', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'expense', amount: 30000, source: '', category: 'Закупки', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'expense', amount: 12000, source: '', category: 'Материалы', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'expense', amount: 15000, source: '', category: 'Аренда', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'expense', amount: 8000, source: '', category: 'Зарплаты', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'expense', amount: 3000, source: '', category: 'Коммунальные', date: today.toISOString(), createdAt: now(), createdBy: 'System'}
-    ];
-    saveTransactions(testTransactions);
-  }
-  
-  // Init sales sources if not exist
-  if(!localStorage.getItem('iz_sales_sources')) {
-    saveSalesSources([
-      {id: uid(), name: 'Роза Хутор', type: 'shop', createdAt: now()},
-      {id: uid(), name: 'Горки', type: 'shop', createdAt: now()},
-      {id: uid(), name: 'ТГ канал', type: 'online', createdAt: now()},
-      {id: uid(), name: 'Instagram', type: 'online', createdAt: now()},
-      {id: uid(), name: 'Мастерская', type: 'workshop', createdAt: now()},
-      {id: uid(), name: 'Опт', type: 'offline', createdAt: now()}
-    ]);
-  }
-  
-  // Init users if not exist
-  // Init admin users - CRITICAL
-  if(!localStorage.getItem('iz_admin_users')) {
-    const adminUsers = [
-      {id: '1', name: 'Ксения', role: 'admin', pass: '1'},
-      {id: '2', name: 'Елена', role: 'admin', pass: '1'},
-      {id: '3', name: 'Владимир', role: 'owner', pass: '1'},
-      {id: '4', name: 'Анна', role: 'accountant', pass: '1'}
-    ];
-    localStorage.setItem('iz_admin_users', JSON.stringify(adminUsers));
-    console.log('✅ Admin users initialized');
-  }
-  
-  // Initialize first role on page load
-  setTimeout(function() {
-    const firstCard = document.querySelector('.role-card');
-    if(firstCard && !document.querySelector('.role-card.selected')) {
-      firstCard.click();
-    }
-  }, 100);
-  
-  // Check if logged in
-  const saved = sessionStorage.getItem('iz_admin_session');
-  if(saved) {
-    try {
-      session = JSON.parse(saved);
-      document.getElementById('loginScreen').style.display = 'none';
-      document.getElementById('appScreen').style.display = 'block';
-      document.getElementById('tabsBar').style.display = 'flex';
-      document.getElementById('hdrName').textContent = session.name;
-      document.getElementById('hdrRole').textContent = session.role;
-      populateSellers();
-      populateWsEmployees();
-      populateAdminUsers();
-      populateSalesSourcesList();
-      populateSourcesForOp();
-      populateShopCheckboxes();
-      renderDashboard();
-      setTxType('income');
-      clearOperationForm();
-      renderPL();
-      renderPLBudget();
-      renderShops();
-      renderDebts();
-    } catch(e) {}
-  }
-  
-function getFilteredTransactionsPL() {
-  const txs = getTransactions();
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  
-  let from = new Date(today.getFullYear(), today.getMonth(), 1);
-  
-  const activePeriodBtn = document.querySelector('#pg-pl .pchips .pc.active');
-  const period = activePeriodBtn ? activePeriodBtn.textContent.trim() : 'Месяц';
-  
-  if(period === 'Неделя') {
-    from = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-    from.setHours(0, 0, 0, 0);
-  } else if(period === 'Год') {
-    from = new Date(today.getFullYear(), 0, 1);
-  } else if(period.includes('Период')) {
-    const fromStr = document.getElementById('plFrom').value;
-    const toStr = document.getElementById('plTo').value;
-    if(fromStr) from = new Date(fromStr + 'T00:00:00');
-  }
-  
-  return txs.filter(tx => {
-    const txDate = new Date(tx.date);
-    return txDate >= from && txDate <= today;
-  });
-}
-
-function setPLPeriod(period, btn) {
-  const customDiv = document.getElementById('plCustomDates');
-  document.querySelectorAll('#pg-pl .pchips .pc').forEach(p => p.classList.remove('active'));
-  btn.classList.add('active');
-  
-  if(period === 'custom') {
-    customDiv.style.display = 'grid';
-    const today = new Date();
-    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-    document.getElementById('plFrom').value = firstDay.toISOString().split('T')[0];
-    document.getElementById('plTo').value = today.toISOString().split('T')[0];
-  } else {
-    customDiv.style.display = 'none';
-  }
-  
-  renderPL();
-  renderPLBudget();
-}
-
-function renderPL() {
-  const txs = getFilteredTransactionsPL();
-  
-  let income = 0, expense = 0;
-  const bySource = {};
-  const byCategory = {};
-  
-  // Calculate totals and breakdowns
-  txs.forEach(tx => {
-    if(tx.type === 'income') {
-      income += tx.amount;
-      bySource[tx.source || 'Прочее'] = (bySource[tx.source || 'Прочее'] || 0) + tx.amount;
-    }
-    if(tx.type === 'expense') {
-      expense += tx.amount;
-      byCategory[tx.category || 'Прочее'] = (byCategory[tx.category || 'Прочее'] || 0) + tx.amount;
-    }
-  });
-  
-  // Split expenses into COGS (себестоимость) and Operating (расходы)
-  // COGS: Закупки, Материалы
-  // Operating: Аренда, Зарплаты, Коммунальные, Маркетинг, Прочие
-  const cogsCategories = ['Закупки', 'Материалы', 'Производство'];
-  let cogs = 0, operatingExp = 0;
-  
-  Object.entries(byCategory).forEach(([cat, amt]) => {
-    if(cogsCategories.some(c => cat.includes(c))) {
-      cogs += amt;
-    } else {
-      operatingExp += amt;
-    }
-  });
-  
-  const grossProfit = income - cogs;
-  const ebit = grossProfit - operatingExp;
-  const margin = income > 0 ? ((ebit / income) * 100).toFixed(1) : 0;
-  
-  let html = `
-    <div style="font-size:13px;font-weight:700;margin-bottom:12px;color:var(--accent)">📊 P&L ОТЧЁТ</div>
-    
-    <!-- ДОХОД -->
-    <div class="pl-row tot" style="border-bottom:2px solid var(--border);padding-bottom:12px;margin-bottom:12px">
-      <div style="font-weight:700">ДОХОД (Revenue)</div>
-      <div class="pl-val" style="color:var(--inc);font-size:14px;font-weight:700">${income.toLocaleString('ru-RU')} ₽</div>
-    </div>
-    
-    <div style="font-size:11px;color:var(--t2);margin-bottom:6px">По источникам:</div>`;
-  
-  Object.entries(bySource)
-    .sort((a,b) => b[1] - a[1])
-    .forEach(([src, amt]) => {
-      const pct = income > 0 ? ((amt / income) * 100).toFixed(0) : 0;
-      html += `<div class="pl-row">
-        <div style="margin-left:12px;font-size:12px">├─ ${src}</div>
-        <div class="pl-val" style="color:var(--a2);font-size:12px">${amt.toLocaleString('ru-RU')} ₽ (${pct}%)</div>
-      </div>`;
-    });
-  
-  // COGS
-  html += `
-    <div class="pl-row tot" style="border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:8px 0;margin:12px 0">
-      <div style="font-weight:700">СЕБЕСТОИМОСТЬ (COGS)</div>
-      <div class="pl-val" style="color:var(--exp);font-size:14px;font-weight:700">−${cogs.toLocaleString('ru-RU')} ₽</div>
-    </div>
-    <div style="font-size:11px;color:var(--t2);margin-bottom:6px">По категориям:</div>`;
-  
-  Object.entries(byCategory)
-    .filter(([cat]) => cogsCategories.some(c => cat.includes(c)))
-    .sort((a,b) => b[1] - a[1])
-    .forEach(([cat, amt]) => {
-      html += `<div class="pl-row">
-        <div style="margin-left:12px;font-size:12px">├─ ${cat}</div>
-        <div class="pl-val" style="color:var(--t2);font-size:12px">${amt.toLocaleString('ru-RU')} ₽</div>
-      </div>`;
-    });
-  
-  // GROSS PROFIT
-  html += `
-    <div class="pl-row tot" style="background:var(--s2);border-radius:8px;padding:10px;margin:12px 0;border:1px solid var(--border)">
-      <div style="font-weight:700">ВАЛОВАЯ ПРИБЫЛЬ</div>
-      <div class="pl-val" style="color:var(--inc);font-size:13px;font-weight:700">${grossProfit.toLocaleString('ru-RU')} ₽</div>
-    </div>
-    
-    <!-- OPERATING EXPENSES -->
-    <div class="pl-row tot" style="border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:12px">
-      <div style="font-weight:700">ОПЕРАЦИОННЫЕ РАСХОДЫ</div>
-      <div class="pl-val" style="color:var(--exp);font-size:14px;font-weight:700">−${operatingExp.toLocaleString('ru-RU')} ₽</div>
-    </div>
-    <div style="font-size:11px;color:var(--t2);margin-bottom:6px">По статьям:</div>`;
-  
-  Object.entries(byCategory)
-    .filter(([cat]) => !cogsCategories.some(c => cat.includes(c)))
-    .sort((a,b) => b[1] - a[1])
-    .forEach(([cat, amt]) => {
-      html += `<div class="pl-row">
-        <div style="margin-left:12px;font-size:12px">├─ ${cat}</div>
-        <div class="pl-val" style="color:var(--t2);font-size:12px">${amt.toLocaleString('ru-RU')} ₽</div>
-      </div>`;
-    });
-  
-  // EBIT & MARGIN
-  html += `
-    <div class="pl-row tot" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border:1px solid var(--accent);border-radius:8px;padding:12px;margin:12px 0">
-      <div style="font-weight:700;font-size:13px">EBIT (Операционная прибыль)</div>
-      <div class="pl-val" style="color:var(--accent);font-size:14px;font-weight:700">${ebit >= 0 ? '+' : ''}${ebit.toLocaleString('ru-RU')} ₽</div>
-    </div>
-    
-    <div class="pl-row">
-      <div style="font-weight:600;color:var(--text)">Маржа прибыли</div>
-      <div class="pl-val" style="color:${margin >= 0 ? 'var(--inc)' : 'var(--exp)'}; font-weight:700;font-size:14px">${margin}%</div>
-    </div>
-    
-    <div class="pl-row" style="font-size:11px;color:var(--t2);margin-top:8px">
-      <div>ROI (на доход)</div>
-      <div class="pl-val">${income > 0 ? ((ebit / income) * 100).toFixed(1) : 0}%</div>
-    </div>`;
-  
-  document.getElementById('plTable').innerHTML = html;
-}
-
-function renderPLBudget() {
-  // Получим текущие фактические значения
-  const txs = getFilteredTransactionsPL();
-  let factIncome = 0, factExpense = 0;
-  
-  txs.forEach(tx => {
-    if(tx.type === 'income') factIncome += tx.amount;
-    if(tx.type === 'expense') factExpense += tx.amount;
-  });
-  
-  const factProfit = factIncome - factExpense;
-  const factMargin = factIncome > 0 ? ((factProfit / factIncome) * 100).toFixed(1) : 0;
-  
-  // Плановые значения из localStorage
-  const planData = getPlanData();
-  const planIncome = planData.planIncome || 0;
-  const planExpense = planData.planExpense || 0;
-  const planProfit = planIncome - planExpense;
-  const planMargin = planIncome > 0 ? ((planProfit / planIncome) * 100).toFixed(1) : 0;
-  
-  // Отклонения
-  const incomeVar = factIncome - planIncome;
-  const expenseVar = factExpense - planExpense;
-  const profitVar = factProfit - planProfit;
-  
-  const incomeVarPct = planIncome > 0 ? ((incomeVar / planIncome) * 100).toFixed(1) : 0;
-  const expenseVarPct = planExpense > 0 ? ((expenseVar / planExpense) * 100).toFixed(1) : 0;
-  
-  let html = `
-    <div style="font-size:12px;color:var(--t2);margin-bottom:10px">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;text-align:center">
-        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">Показатель</div>
-        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">План</div>
-        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">Факт</div>
-        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">Отклон %</div>
-      </div>
-    </div>
-    
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;align-items:center">
-      <div style="font-weight:600;font-size:12px">Доход</div>
-      <div style="text-align:center;color:var(--t2);font-size:12px">${planIncome.toLocaleString('ru-RU')}</div>
-      <div style="text-align:center;color:var(--inc);font-weight:600;font-size:12px">${factIncome.toLocaleString('ru-RU')}</div>
-      <div style="text-align:center;font-size:12px;color:${incomeVar >= 0 ? 'var(--inc)' : 'var(--exp)'}">${incomeVar >= 0 ? '+' : ''}${incomeVarPct}%</div>
-    </div>
-    
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;align-items:center">
-      <div style="font-weight:600;font-size:12px">Расходы</div>
-      <div style="text-align:center;color:var(--t2);font-size:12px">${planExpense.toLocaleString('ru-RU')}</div>
-      <div style="text-align:center;color:var(--exp);font-weight:600;font-size:12px">${factExpense.toLocaleString('ru-RU')}</div>
-      <div style="text-align:center;font-size:12px;color:${expenseVar <= 0 ? 'var(--inc)' : 'var(--exp)'}">${expenseVar <= 0 ? '+' : ''}${expenseVarPct}%</div>
-    </div>
-    
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;background:var(--s2);border-radius:6px;padding:8px;align-items:center">
-      <div style="font-weight:700;font-size:12px">Прибыль</div>
-      <div style="text-align:center;color:var(--t2);font-size:12px">${planProfit.toLocaleString('ru-RU')}</div>
-      <div style="text-align:center;color:var(--accent);font-weight:700;font-size:12px">${factProfit.toLocaleString('ru-RU')}</div>
-      <div style="text-align:center;font-size:12px;font-weight:600;color:${profitVar >= 0 ? 'var(--inc)' : 'var(--exp)'}">${profitVar >= 0 ? '+' : ''}${profitVar.toLocaleString('ru-RU')}</div>
-    </div>
-    
-    <div style="font-size:11px;color:var(--t2);margin-top:12px;padding:8px;background:var(--s2);border-radius:6px">
-      📌 <strong>План:</strong> ${planIncome > 0 ? 'задано' : 'не задано'} - Доход ${planIncome.toLocaleString('ru-RU')} ₽, Расходы ${planExpense.toLocaleString('ru-RU')} ₽<br>
-      📌 <strong>Факт:</strong> текущие данные из операций<br>
-      📌 <strong>Отклон:</strong> разница в процентах
-    </div>`;
-  
-  document.getElementById('plBudget').innerHTML = html;
-}
-
-function getFilteredTransactionsShops() {
-  const txs = getTransactions();
-  const today = new Date();
-  today.setHours(23, 59, 59, 999); // Set to end of day
-  
-  let from = new Date(today.getFullYear(), today.getMonth(), today.getDate()); // Start of today
-  
-  const activePeriodBtn = document.querySelector('#pg-shops .pchips .pc.active');
-  const period = activePeriodBtn ? activePeriodBtn.textContent.trim() : 'Сегодня';
-  
-  if(period === 'Неделя') {
-    from = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-    from.setHours(0, 0, 0, 0);
-  } else if(period === 'Месяц') {
-    from = new Date(today.getFullYear(), today.getMonth(), 1);
-  } else if(period.includes('Период')) {
-    const fromStr = document.getElementById('shopFrom').value;
-    if(fromStr) from = new Date(fromStr + 'T00:00:00');
-  }
-  
-  return txs.filter(tx => {
-    const txDate = new Date(tx.date);
-    return txDate >= from && txDate <= today && tx.type === 'income';
-  });
-}
 
 function setShopPeriod(period, btn) {
   const customDiv = document.getElementById('shopCustomDates');
@@ -3416,6 +3052,375 @@ function renderShops() {
     if(el) el.innerHTML = '<div style="color:var(--exp);padding:12px">Ошибка: ' + e.message + '</div>';
   }
 }
+
+
+function getFilteredTransactionsPL() {
+  const txs = getTransactions();
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  
+  let from = new Date(today.getFullYear(), today.getMonth(), 1);
+  
+  const activePeriodBtn = document.querySelector('#pg-pl .pchips .pc.active');
+  const period = activePeriodBtn ? activePeriodBtn.textContent.trim() : 'Месяц';
+  
+  if(period === 'Неделя') {
+    from = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    from.setHours(0, 0, 0, 0);
+  } else if(period === 'Год') {
+    from = new Date(today.getFullYear(), 0, 1);
+  } else if(period.includes('Период')) {
+    const fromStr = document.getElementById('plFrom').value;
+    const toStr = document.getElementById('plTo').value;
+    if(fromStr) from = new Date(fromStr + 'T00:00:00');
+  }
+  
+  return txs.filter(tx => {
+    const txDate = new Date(tx.date);
+    return txDate >= from && txDate <= today;
+  });
+}
+
+function setPLPeriod(period, btn) {
+  const customDiv = document.getElementById('plCustomDates');
+  document.querySelectorAll('#pg-pl .pchips .pc').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  
+  if(period === 'custom') {
+    customDiv.style.display = 'grid';
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    document.getElementById('plFrom').value = firstDay.toISOString().split('T')[0];
+    document.getElementById('plTo').value = today.toISOString().split('T')[0];
+  } else {
+    customDiv.style.display = 'none';
+  }
+  
+  renderPL();
+  renderPLBudget();
+}
+
+function renderPL() {
+  const txs = getFilteredTransactionsPL();
+  
+  let income = 0, expense = 0;
+  const bySource = {};
+  const byCategory = {};
+  
+  // Calculate totals and breakdowns
+  txs.forEach(tx => {
+    if(tx.type === 'income') {
+      income += tx.amount;
+      bySource[tx.source || 'Прочее'] = (bySource[tx.source || 'Прочее'] || 0) + tx.amount;
+    }
+    if(tx.type === 'expense') {
+      expense += tx.amount;
+      byCategory[tx.category || 'Прочее'] = (byCategory[tx.category || 'Прочее'] || 0) + tx.amount;
+    }
+  });
+  
+  // Split expenses into COGS (себестоимость) and Operating (расходы)
+  // COGS: Закупки, Материалы
+  // Operating: Аренда, Зарплаты, Коммунальные, Маркетинг, Прочие
+  const cogsCategories = ['Закупки', 'Материалы', 'Производство'];
+  let cogs = 0, operatingExp = 0;
+  
+  Object.entries(byCategory).forEach(([cat, amt]) => {
+    if(cogsCategories.some(c => cat.includes(c))) {
+      cogs += amt;
+    } else {
+      operatingExp += amt;
+    }
+  });
+  
+  const grossProfit = income - cogs;
+  const ebit = grossProfit - operatingExp;
+  const margin = income > 0 ? ((ebit / income) * 100).toFixed(1) : 0;
+  
+  let html = `
+    <div style="font-size:13px;font-weight:700;margin-bottom:12px;color:var(--accent)">📊 P&L ОТЧЁТ</div>
+    
+    <!-- ДОХОД -->
+    <div class="pl-row tot" style="border-bottom:2px solid var(--border);padding-bottom:12px;margin-bottom:12px">
+      <div style="font-weight:700">ДОХОД (Revenue)</div>
+      <div class="pl-val" style="color:var(--inc);font-size:14px;font-weight:700">${income.toLocaleString('ru-RU')} ₽</div>
+    </div>
+    
+    <div style="font-size:11px;color:var(--t2);margin-bottom:6px">По источникам:</div>`;
+  
+  Object.entries(bySource)
+    .sort((a,b) => b[1] - a[1])
+    .forEach(([src, amt]) => {
+      const pct = income > 0 ? ((amt / income) * 100).toFixed(0) : 0;
+      html += `<div class="pl-row">
+        <div style="margin-left:12px;font-size:12px">├─ ${src}</div>
+        <div class="pl-val" style="color:var(--a2);font-size:12px">${amt.toLocaleString('ru-RU')} ₽ (${pct}%)</div>
+      </div>`;
+    });
+  
+  // COGS
+  html += `
+    <div class="pl-row tot" style="border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:8px 0;margin:12px 0">
+      <div style="font-weight:700">СЕБЕСТОИМОСТЬ (COGS)</div>
+      <div class="pl-val" style="color:var(--exp);font-size:14px;font-weight:700">−${cogs.toLocaleString('ru-RU')} ₽</div>
+    </div>
+    <div style="font-size:11px;color:var(--t2);margin-bottom:6px">По категориям:</div>`;
+  
+  Object.entries(byCategory)
+    .filter(([cat]) => cogsCategories.some(c => cat.includes(c)))
+    .sort((a,b) => b[1] - a[1])
+    .forEach(([cat, amt]) => {
+      html += `<div class="pl-row">
+        <div style="margin-left:12px;font-size:12px">├─ ${cat}</div>
+        <div class="pl-val" style="color:var(--t2);font-size:12px">${amt.toLocaleString('ru-RU')} ₽</div>
+      </div>`;
+    });
+  
+  // GROSS PROFIT
+  html += `
+    <div class="pl-row tot" style="background:var(--s2);border-radius:8px;padding:10px;margin:12px 0;border:1px solid var(--border)">
+      <div style="font-weight:700">ВАЛОВАЯ ПРИБЫЛЬ</div>
+      <div class="pl-val" style="color:var(--inc);font-size:13px;font-weight:700">${grossProfit.toLocaleString('ru-RU')} ₽</div>
+    </div>
+    
+    <!-- OPERATING EXPENSES -->
+    <div class="pl-row tot" style="border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:12px">
+      <div style="font-weight:700">ОПЕРАЦИОННЫЕ РАСХОДЫ</div>
+      <div class="pl-val" style="color:var(--exp);font-size:14px;font-weight:700">−${operatingExp.toLocaleString('ru-RU')} ₽</div>
+    </div>
+    <div style="font-size:11px;color:var(--t2);margin-bottom:6px">По статьям:</div>`;
+  
+  Object.entries(byCategory)
+    .filter(([cat]) => !cogsCategories.some(c => cat.includes(c)))
+    .sort((a,b) => b[1] - a[1])
+    .forEach(([cat, amt]) => {
+      html += `<div class="pl-row">
+        <div style="margin-left:12px;font-size:12px">├─ ${cat}</div>
+        <div class="pl-val" style="color:var(--t2);font-size:12px">${amt.toLocaleString('ru-RU')} ₽</div>
+      </div>`;
+    });
+  
+  // EBIT & MARGIN
+  html += `
+    <div class="pl-row tot" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border:1px solid var(--accent);border-radius:8px;padding:12px;margin:12px 0">
+      <div style="font-weight:700;font-size:13px">EBIT (Операционная прибыль)</div>
+      <div class="pl-val" style="color:var(--accent);font-size:14px;font-weight:700">${ebit >= 0 ? '+' : ''}${ebit.toLocaleString('ru-RU')} ₽</div>
+    </div>
+    
+    <div class="pl-row">
+      <div style="font-weight:600;color:var(--text)">Маржа прибыли</div>
+      <div class="pl-val" style="color:${margin >= 0 ? 'var(--inc)' : 'var(--exp)'}; font-weight:700;font-size:14px">${margin}%</div>
+    </div>
+    
+    <div class="pl-row" style="font-size:11px;color:var(--t2);margin-top:8px">
+      <div>ROI (на доход)</div>
+      <div class="pl-val">${income > 0 ? ((ebit / income) * 100).toFixed(1) : 0}%</div>
+    </div>`;
+  
+  document.getElementById('plTable').innerHTML = html;
+}
+
+function renderPLBudget() {
+  // Получим текущие фактические значения
+  const txs = getFilteredTransactionsPL();
+  let factIncome = 0, factExpense = 0;
+  
+  txs.forEach(tx => {
+    if(tx.type === 'income') factIncome += tx.amount;
+    if(tx.type === 'expense') factExpense += tx.amount;
+  });
+  
+  const factProfit = factIncome - factExpense;
+  const factMargin = factIncome > 0 ? ((factProfit / factIncome) * 100).toFixed(1) : 0;
+  
+  // Плановые значения из localStorage
+  const planData = getPlanData();
+  const planIncome = planData.planIncome || 0;
+  const planExpense = planData.planExpense || 0;
+  const planProfit = planIncome - planExpense;
+  const planMargin = planIncome > 0 ? ((planProfit / planIncome) * 100).toFixed(1) : 0;
+  
+  // Отклонения
+  const incomeVar = factIncome - planIncome;
+  const expenseVar = factExpense - planExpense;
+  const profitVar = factProfit - planProfit;
+  
+  const incomeVarPct = planIncome > 0 ? ((incomeVar / planIncome) * 100).toFixed(1) : 0;
+  const expenseVarPct = planExpense > 0 ? ((expenseVar / planExpense) * 100).toFixed(1) : 0;
+  
+  let html = `
+    <div style="font-size:12px;color:var(--t2);margin-bottom:10px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;text-align:center">
+        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">Показатель</div>
+        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">План</div>
+        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">Факт</div>
+        <div style="border-bottom:1px solid var(--border);padding-bottom:6px">Отклон %</div>
+      </div>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;align-items:center">
+      <div style="font-weight:600;font-size:12px">Доход</div>
+      <div style="text-align:center;color:var(--t2);font-size:12px">${planIncome.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;color:var(--inc);font-weight:600;font-size:12px">${factIncome.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;font-size:12px;color:${incomeVar >= 0 ? 'var(--inc)' : 'var(--exp)'}">${incomeVar >= 0 ? '+' : ''}${incomeVarPct}%</div>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;align-items:center">
+      <div style="font-weight:600;font-size:12px">Расходы</div>
+      <div style="text-align:center;color:var(--t2);font-size:12px">${planExpense.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;color:var(--exp);font-weight:600;font-size:12px">${factExpense.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;font-size:12px;color:${expenseVar <= 0 ? 'var(--inc)' : 'var(--exp)'}">${expenseVar <= 0 ? '+' : ''}${expenseVarPct}%</div>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;background:var(--s2);border-radius:6px;padding:8px;align-items:center">
+      <div style="font-weight:700;font-size:12px">Прибыль</div>
+      <div style="text-align:center;color:var(--t2);font-size:12px">${planProfit.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;color:var(--accent);font-weight:700;font-size:12px">${factProfit.toLocaleString('ru-RU')}</div>
+      <div style="text-align:center;font-size:12px;font-weight:600;color:${profitVar >= 0 ? 'var(--inc)' : 'var(--exp)'}">${profitVar >= 0 ? '+' : ''}${profitVar.toLocaleString('ru-RU')}</div>
+    </div>
+    
+    <div style="font-size:11px;color:var(--t2);margin-top:12px;padding:8px;background:var(--s2);border-radius:6px">
+      📌 <strong>План:</strong> ${planIncome > 0 ? 'задано' : 'не задано'} - Доход ${planIncome.toLocaleString('ru-RU')} ₽, Расходы ${planExpense.toLocaleString('ru-RU')} ₽<br>
+      📌 <strong>Факт:</strong> текущие данные из операций<br>
+      📌 <strong>Отклон:</strong> разница в процентах
+    </div>`;
+  
+  document.getElementById('plBudget').innerHTML = html;
+}
+
+function getFilteredTransactionsShops() {
+  const txs = getTransactions();
+  const today = new Date();
+  today.setHours(23, 59, 59, 999); // Set to end of day
+  
+  let from = new Date(today.getFullYear(), today.getMonth(), today.getDate()); // Start of today
+  
+  const activePeriodBtn = document.querySelector('#pg-shops .pchips .pc.active');
+  const period = activePeriodBtn ? activePeriodBtn.textContent.trim() : 'Сегодня';
+  
+  if(period === 'Неделя') {
+    from = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    from.setHours(0, 0, 0, 0);
+  } else if(period === 'Месяц') {
+    from = new Date(today.getFullYear(), today.getMonth(), 1);
+  } else if(period.includes('Период')) {
+    const fromStr = document.getElementById('shopFrom').value;
+    if(fromStr) from = new Date(fromStr + 'T00:00:00');
+  }
+  
+  return txs.filter(tx => {
+    const txDate = new Date(tx.date);
+    return txDate >= from && txDate <= today && tx.type === 'income';
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  initRefBooks();
+  initStaff();
+  renderRefBooks();
+  startSyncListeners();
+  // Create default admin FIRST before sync listeners overwrite
+  var users = getAdminUsers();
+  var hasDefault = users.some(function(u){ return u.id === 'admin_default'; });
+  if(!hasDefault) {
+    users.unshift({id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'});
+    localStorage.setItem('iz_admin_users', JSON.stringify(users));
+  }
+  startAdminSyncListeners();
+  startStaffSyncListener();
+  // Auto-select first role card
+  var firstCard = document.querySelector('.role-card');
+  if(firstCard) firstCard.click();
+  // Init shops if not exist
+  if(!localStorage.getItem('iz_shops')) {
+    saveShops(['ОПИТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
+  }
+  
+  // Init plan data if not exist
+  if(!localStorage.getItem('iz_plan_data')) {
+    savePlanData({
+      planIncome: 130000,
+      planExpense: 68000
+    });
+  }
+  
+  // Init transactions with test data if not exist
+  if(!localStorage.getItem('iz_transactions')) {
+    const today = new Date();
+    const testTransactions = [
+      {id: uid(), type: 'income', amount: 50000, source: 'Роза Хутор', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'income', amount: 35000, source: 'Горки', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'income', amount: 20000, source: 'ТГ канал', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'income', amount: 15000, source: 'Instagram', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 30000, source: '', category: 'Закупки', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 12000, source: '', category: 'Материалы', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 15000, source: '', category: 'Аренда', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 8000, source: '', category: 'Зарплаты', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 3000, source: '', category: 'Коммунальные', date: today.toISOString(), createdAt: now(), createdBy: 'System'}
+    ];
+    saveTransactions(testTransactions);
+  }
+  
+  // Init sales sources if not exist
+  if(!localStorage.getItem('iz_sales_sources')) {
+    saveSalesSources([
+      {id: uid(), name: 'Роза Хутор', type: 'shop', createdAt: now()},
+      {id: uid(), name: 'Горки', type: 'shop', createdAt: now()},
+      {id: uid(), name: 'ТГ канал', type: 'online', createdAt: now()},
+      {id: uid(), name: 'Instagram', type: 'online', createdAt: now()},
+      {id: uid(), name: 'Мастерская', type: 'workshop', createdAt: now()},
+      {id: uid(), name: 'Опт', type: 'offline', createdAt: now()}
+    ]);
+  }
+  
+  // Init users if not exist
+  // Init admin users - CRITICAL
+  if(!localStorage.getItem('iz_admin_users')) {
+    const adminUsers = [
+      {id: '1', name: 'Ксения', role: 'admin', pass: '1'},
+      {id: '2', name: 'Елена', role: 'admin', pass: '1'},
+      {id: '3', name: 'Владимир', role: 'owner', pass: '1'},
+      {id: '4', name: 'Анна', role: 'accountant', pass: '1'}
+    ];
+    localStorage.setItem('iz_admin_users', JSON.stringify(adminUsers));
+    console.log('✅ Admin users initialized');
+  }
+  
+  // Initialize first role on page load
+  setTimeout(function() {
+    const firstCard = document.querySelector('.role-card');
+    if(firstCard && !document.querySelector('.role-card.selected')) {
+      firstCard.click();
+    }
+  }, 100);
+  
+  // Check if logged in
+  const saved = sessionStorage.getItem('iz_admin_session');
+  if(saved) {
+    try {
+      session = JSON.parse(saved);
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('appScreen').style.display = 'block';
+      document.getElementById('tabsBar').style.display = 'flex';
+      document.getElementById('hdrName').textContent = session.name;
+      document.getElementById('hdrRole').textContent = session.role;
+      populateSellers();
+      populateWsEmployees();
+      populateAdminUsers();
+      populateSalesSourcesList();
+      populateSourcesForOp();
+      populateShopCheckboxes();
+      renderDashboard();
+      setTxType('income');
+      clearOperationForm();
+      renderPL();
+      renderPLBudget();
+      renderShops();
+      renderDebts();
+    } catch(e) {}
+  }
+  
+
 
 selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
 });
