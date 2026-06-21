@@ -226,6 +226,13 @@ function checkForAppUpdate() {
     <span style="font-size:13px;color:#c8f060;font-weight:600">🆕 Доступно обновление приложения</span>
     <button onclick="applyUpdate()" style="background:#c8f060;border:none;border-radius:8px;padding:7px 14px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Обновить</button>
   </div>
+  <div id="restoreModeBanner" style="display:none;align-items:center;justify-content:space-between;gap:10px;background:#2a1e14;border-bottom:2px solid #f0a060;padding:10px 16px">
+    <span style="font-size:13px;color:#f0a060;font-weight:600">🕘 Восстановление смены</span>
+    <button onclick="exitShift()" style="background:none;border:1px solid #f0a060;border-radius:8px;padding:6px 12px;color:#f0a060;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">← Выйти</button>
+  </div>
+  <div id="restoreImportBtnWrap" style="display:none;padding:12px 16px 0">
+    <button onclick="openRestoreImportMo()" style="width:100%;background:#2a1e14;border:2px solid #f0a060;border-radius:12px;padding:12px;color:#f0a060;font-size:13px;font-weight:700;cursor:pointer">📷 Внести продажи через фото / файл / ChatGPT</button>
+  </div>
   <div class="page" id="pg-home">
     <div id="pendingAlert"></div>
     <div id="morningCashDiffBanner"></div>
@@ -616,7 +623,10 @@ function checkForAppUpdate() {
   </div>
   <!-- ════ ВОССТАНОВЛЕНИЕ ДАННЫХ ════ -->
   <div class="page" id="pg-restore">
-    <div class="stitle">🗄 Восстановление данных</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div class="stitle" style="margin:0">🗄 Восстановление данных</div>
+      <button id="restoreBackToShiftBtn" onclick="closeRestoreImportAndReturn()" style="display:none;background:none;border:1px solid #c8f060;border-radius:8px;padding:6px 12px;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">← К смене</button>
+    </div>
 
     <!-- ОТКРЫТЬ СМЕНУ ВОССТАНОВЛЕНИЯ -->
     <div class="card" id="rstShiftCard" style="border-color:#c8f060;margin-bottom:14px">
@@ -1867,6 +1877,18 @@ function startSyncListeners() {
 // ════ STATE ════
 let session = null, pendingSession = null;
 let journal = [];
+// ── Режим восстановления смены ──
+// Когда true, saveS()/saveJ() пишут в KEY.restoreSession/KEY.restoreJournal
+// вместо KEY.session/KEY.journal, а весь обычный UI (morningMo, saleMo,
+// closeShift, renderClose, журнал) продолжает работать как есть — он не
+// знает о подмене, просто видит другие данные в тех же session/journal.
+// Это позволяет переиспользовать всю логику открытия/закрытия смены и
+// внесения продаж без дублирования кода для восстановления задним числом.
+var restoreMode = false;
+// {shop, sellerId, sellerName, date} — заполняется при входе в режим,
+// используется вместо pendingSession.shopName/etc там, где обычный поток
+// предполагает "сейчас", а restore-поток — выбранный прошедший день.
+var restoreMeta = null;
 // ── Backfill-aware "current date/time" helpers ──
 // When a seller is restoring a past shift (session.isBackfill), every place
 // that would normally stamp "today" should instead file under the chosen
@@ -2000,7 +2022,9 @@ let currentEditShiftId = null;
 let blockSellerAction = null;
 
 // ════ STORAGE ════
-const KEY = {session:'iz_shop_session',journal:'iz_shop_journal',shifts:'iz_shifts',trash:'iz_shop_trash'};
+const KEY = {session:'iz_shop_session',journal:'iz_shop_journal',shifts:'iz_shifts',trash:'iz_shop_trash',
+  restoreSession:'iz_restore_session',restoreJournal:'iz_restore_journal',
+  liveSessionBackup:'iz_live_session_backup',liveJournalBackup:'iz_live_journal_backup'};
 var TRASH_RETENTION_DAYS = 7;
 
 // ── Корзина (deletion trash with 7-day recovery window) ──
@@ -2282,8 +2306,8 @@ function getShopType(name){
 function isShopType(name){ return getShopType(name)==='shop'; }
 function isOnlineType(name){ return getShopType(name)==='online'; }
 function isOfflineType(name){ return getShopType(name)==='offline'; }
-function saveJ(){ localStorage.setItem(KEY.journal,JSON.stringify(journal)); }
-function saveS(){ localStorage.setItem(KEY.session,JSON.stringify(session)); }
+function saveJ(){ localStorage.setItem(restoreMode?KEY.restoreJournal:KEY.journal,JSON.stringify(journal)); }
+function saveS(){ localStorage.setItem(restoreMode?KEY.restoreSession:KEY.session,JSON.stringify(session)); }
 
 // ════ AUDIT LOG ════
 function getAuditLog(){ try { return JSON.parse(localStorage.getItem('iz_audit_log_shop')||'[]'); } catch(e) { return []; } }
@@ -3256,6 +3280,11 @@ function exitSellerRestore(){
 }
 
 function exitShift(){
+  if(restoreMode){
+    if(!confirm('Выйти из режима восстановления? Незакрытая смена восстановления останется сохранённой — вернётесь к ней позже.')) return;
+    exitRestoreMode();
+    return;
+  }
   const msg=(session&&session.role)==='shopadmin'?'Выйти из режима администратора?':'Выйти? Смена останется открытой.';
   if(confirm(msg)){
     stopLiveShiftListener();
@@ -3310,12 +3339,15 @@ function openMorningModal(){
   // Non-shop types: skip cash modal, open directly
   if(shopType!=='shop'){
     var goodsM=calcGoodsMorning(shopName);
-    session={...pendingSession,openedAt:new Date().toISOString(),cashMorning:0,goodsMorning:goodsM,shopType:shopType};
+    session={...pendingSession,openedAt:(restoreMode?pendingSession._restoreOpenedAt:new Date().toISOString()),cashMorning:0,goodsMorning:goodsM,shopType:shopType};
+    if(restoreMode) session.isRestoreShift = true;
     pendingSession=null;
     journal=[{id:uid(),type:'open',ts:_workingNowISO(),icon:'🔓',
-      label:'Смена открыта · '+(shopType==='online'?'📱 Онлайн':'🏭 Офлайн'),
+      label:'Смена открыта · '+(shopType==='online'?'📱 Онлайн':'🏭 Офлайн')+(restoreMode?' (восстановление)':''),
       sub:'📦 Товар: '+fmt(goodsM),cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0}];
-    saveS(); saveJ(); startApp(); return;
+    saveS(); saveJ(); startApp();
+    if(restoreMode) syncRestoreUIChrome();
+    return;
   }
 
   // Shop type: show morning cash modal
@@ -3401,10 +3433,11 @@ function confirmMorning(){
     :calcGoodsDrMorning(pendingSession.shopName);
   session=Object.assign({},pendingSession,{
     shiftId:uid(),
-    openedAt:new Date().toISOString(),
+    openedAt: restoreMode ? pendingSession._restoreOpenedAt : new Date().toISOString(),
     cashMorning:cashM, cashDrMorning:cashDr, cashStaffMorning:cashStaff,
     goodsMorning:goodsM, goodsDrMorning:goodsDrM, shopType:'shop'
   });
+  if(restoreMode) session.isRestoreShift = true;
   var prev=getPrevShiftByOpenOrder(pendingSession.shopName, session.openedAt);
   var hasCashDiff=false;
   var diffParts=[];
@@ -3422,7 +3455,10 @@ function confirmMorning(){
       diffParts.push({label:'🛒 Покупки сотрудников', morning:cashStaff, prevEvening:prev.cashStaffEvening, diff:cashStaff-prev.cashStaffEvening});
     }
   }
-  if(hasCashDiff){
+  // В restore-режиме расхождение нала утро — обычное дело (восстанавливаем
+  // задним числом по записям из бумажного журнала), это не повод слать
+  // тревожный алерт администратору, как при живой смене.
+  if(hasCashDiff && !restoreMode){
     var detailLines = diffParts.map(function(p){
       return p.label+': ввёл '+fmt(p.morning)+', вечер был '+fmt(p.prevEvening)+' ('+(p.diff>0?'+':'')+fmt(p.diff)+')';
     });
@@ -3437,16 +3473,22 @@ function confirmMorning(){
     });
   }
   journal=[{id:uid(),type:'open',ts:_workingNowISO(),icon: hasCashDiff?'⚠️':'🔓',
-    label:'Смена открыта'+(hasCashDiff?' ⚠️ Расхождение нала':''),
+    label:'Смена открыта'+(hasCashDiff?' ⚠️ Расхождение нала':'')+(restoreMode?' (восстановление)':''),
     sub:'🌳 '+fmt(cashM)+(cashDr?' 🛍 '+fmt(cashDr):'')+(cashStaff?' 🛒 '+fmt(cashStaff):'')+
         ' | 📦 '+fmt(goodsM)+' 🛍 '+fmt(goodsDrM),
     cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0,hasCashDiff:hasCashDiff,cashDiffParts:diffParts}];
   pendingSession=null; saveS(); saveJ();
-  logShiftOpen(session.shopName, cashM);
-  syncLiveShift();
+  if(!restoreMode){
+    logShiftOpen(session.shopName, cashM);
+    syncLiveShift();
+  }
   closeMo('morningMo'); startApp();
+  if(restoreMode) syncRestoreUIChrome();
 }
-function cancelMorning(){ closeMo('morningMo'); pendingSession=null; }
+function cancelMorning(){
+  closeMo('morningMo'); pendingSession=null;
+  if(restoreMode){ restoreMode=false; restoreMeta=null; }
+}
 function getPrevShift(shopName){
   var all=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   return all.filter(function(s){return s.shopName===shopName;}).sort(function(a,b){return new Date(b.closedAt||0)-new Date(a.closedAt||0);})[0]||null;
@@ -3805,6 +3847,7 @@ function migrateLegacyDrExpenses(){
 function startApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
+  if(!restoreMode) syncRestoreUIChrome();
   if(!session.isPreview){ migrateLegacyReceiveEntries(); migrateLegacyDrExpenses(); }
   try{ var tr=getTrash(), prTr=purgeExpiredTrash(tr); if(prTr.length!==tr.length){ saveTrash(prTr); syncTrashToCloud(prTr); } }catch(e){}
   document.getElementById('hdrShop').textContent=(session.isPreview?'🔍 ':'')+session.shopName;
@@ -6365,6 +6408,17 @@ function _closeShiftReal(){
   const shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   shifts.unshift(report); localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
   try{ db.collection('iz_shifts').doc(report.id).set(report); }catch(e){}
+  if(restoreMode){
+    // Restore-режим: смена ушла в общий архив KEY.shifts — этого достаточно,
+    // дальше не нужно ни trash/tombstones (это механика live-смены конкретного
+    // устройства), ни возврат на экран логина. Возвращаем в интерфейс
+    // восстановления, чтобы можно было открыть следующую смену для восстановления.
+    localStorage.removeItem(KEY.restoreSession); localStorage.removeItem(KEY.restoreJournal);
+    session=null; journal=[];
+    exitRestoreMode();
+    showToast('✅ Восстановленная смена сохранена в архив');
+    return;
+  }
   stopLiveShiftListener();
   localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal); clearTombstones();
   session=null; journal=[];
@@ -9672,6 +9726,84 @@ function renderRestoreShiftState(){
   updateRstMainBlockVisibility();
 }
 
+// ════ Полноценный режим восстановления через тот же UI, что у живой смены ════
+// Вместо упрощённой формы ввода (которая была раньше) теперь используется
+// morningMo/saleMo/closeShift/renderClose — тот же код, что и для обычной
+// смены продавца, просто с подменённым хранилищем (см. saveS/saveJ выше)
+// и редактируемой датой открытия вместо "сейчас".
+function enterRestoreMode(meta){
+  // Бэкап реальной активной (live) смены, если она сейчас открыта на этом
+  // устройстве — иначе мы бы её затёрли восстановлением. Это то, что
+  // позволяет одновременно вести свою смену и восстанавливать чужую.
+  if(session && !restoreMode){
+    localStorage.setItem(KEY.liveSessionBackup, JSON.stringify(session));
+    localStorage.setItem(KEY.liveJournalBackup, JSON.stringify(journal));
+  }
+  restoreMode = true;
+  restoreMeta = meta;
+  // Если для этого магазина/продавца/даты уже есть незакрытая restore-сессия
+  // (например, человек уходил и вернулся) — подхватываем её вместо создания
+  // новой, чтобы не потерять уже внесённые записи.
+  var savedRestoreSession = JSON.parse(localStorage.getItem(KEY.restoreSession)||'null');
+  var savedRestoreJournal = JSON.parse(localStorage.getItem(KEY.restoreJournal)||'[]');
+  if(savedRestoreSession && savedRestoreSession.shopName===meta.shop && savedRestoreSession.sellerId===meta.sellerId
+     && savedRestoreSession.openedAt && savedRestoreSession.openedAt.indexOf(meta.date)===0){
+    session = savedRestoreSession;
+    journal = savedRestoreJournal;
+    startApp();
+    syncRestoreUIChrome();
+    showToast('📂 Восстановлена незавершённая смена восстановления');
+    return;
+  }
+  // Иначе — открываем стандартную форму "Наличные на утро / Остаток товара",
+  // как при открытии обычной смены, только с датой = выбранный прошедший день.
+  session = null; journal = [];
+  pendingSession = {shopName:meta.shop, sellerName:meta.sellerName, sellerId:meta.sellerId, _restoreOpenedAt: meta.date+'T09:00:00.000Z'};
+  openMorningModal();
+}
+function exitRestoreMode(opts){
+  opts = opts || {};
+  restoreMode = false;
+  restoreMeta = null;
+  // Восстанавливаем live-сессию из бэкапа, если она была — это может быть
+  // как обычный продавец с реально открытой сменой, так и шопадмин/админ
+  // (KEY.session хранит обоих под одной переменной session, различая по role).
+  var liveS = JSON.parse(localStorage.getItem(KEY.liveSessionBackup)||'null');
+  var liveJ = JSON.parse(localStorage.getItem(KEY.liveJournalBackup)||'[]');
+  document.getElementById('mainTabs').style.display='none';
+  document.getElementById('appScreen').style.display='none';
+  document.getElementById('loginScreen').style.display='none';
+  if(liveS){
+    session = liveS; journal = liveJ;
+    localStorage.removeItem(KEY.liveSessionBackup);
+    localStorage.removeItem(KEY.liveJournalBackup);
+    if(session.role==='shopadmin'){ startAdminApp(); }
+    else { startApp(); syncLiveShift(); }
+    switchRst('shifts');
+    renderRestoreShiftState();
+  } else {
+    // Не было активной live-сессии вообще (зашли в восстановление "с нуля",
+    // например через ограниченный режим продавца или сразу из логина) —
+    // возвращаемся на экран входа, как и было до входа в восстановление.
+    session = null; journal = [];
+    document.getElementById('loginScreen').style.display='flex';
+    pick('seller');
+  }
+}
+// Подсвечивает шапку приложения, пока человек работает в режиме
+// восстановления — иначе экран продавца неотличим от обычной живой смены,
+// и легко перепутать, какие данные сейчас редактируешь.
+function syncRestoreUIChrome(){
+  var banner = document.getElementById('restoreModeBanner');
+  var btnWrap = document.getElementById('restoreImportBtnWrap');
+  if(btnWrap) btnWrap.style.display = restoreMode ? 'block' : 'none';
+  if(!banner) return;
+  banner.style.display = restoreMode ? 'flex' : 'none';
+  if(restoreMode && restoreMeta){
+    banner.querySelector('span').textContent = '🕘 Восстановление: '+restoreMeta.shop+' · '+restoreMeta.date;
+  }
+}
+
 function openRestoreShift(){
   var shop = gv('rstShiftShop');
   var sellerSel = document.getElementById('rstShiftSeller');
@@ -9682,13 +9814,9 @@ function openRestoreShift(){
   if(session && session.sellerRestoreMode){
     if(sellerId!==session.restrictedSellerId){ showToast('⛔ Можно вносить только свою смену'); return; }
     if(session.restrictedShops && session.restrictedShops.indexOf(shop)<0){ showToast('⛔ Этот магазин недоступен'); return; }
-    if(date>=new Date().toISOString().split('T')[0]){ showToast('⛔ Можно восстановить только прошедший день'); return; }
   }
-  _restoreShift = {shop:shop, sellerId:sellerId, sellerName:sellerName, date:date, openedAt:new Date().toISOString()};
-  saveRestoreShift(_restoreShift);
-  renderRestoreShiftState();
-  switchRst('journal'); switchRstJ('manual', document.getElementById('rstj_manual'));
-  showToast('📂 Смена восстановления открыта');
+  if(date>=new Date().toISOString().split('T')[0]){ showToast('⛔ Можно восстановить только прошедший день'); return; }
+  enterRestoreMode({shop:shop, sellerId:sellerId, sellerName:sellerName, date:date});
 }
 
 function closeRestoreShift(){
@@ -10664,7 +10792,7 @@ function confirmPhotoImport() {
   });
   savePsjEntries(existing);
   var hist=JSON.parse(localStorage.getItem('iz_photo_imports')||'[]');
-  hist.unshift({date:new Date().toISOString().split('T')[0],count:added,shopName:shopName,importedAt:new Date().toISOString()});
+  hist.unshift({id:uid(),date:new Date().toISOString().split('T')[0],count:added,shopName:shopName,importedAt:new Date().toISOString()});
   localStorage.setItem('iz_photo_imports',JSON.stringify(hist.slice(0,30)));
   duPendingRecognized=[]; duPhotoFiles=[];
   document.getElementById('duPhotoPreview').style.display='none';
@@ -10790,7 +10918,7 @@ function confirmImport(){
   // with the photo-recognition import flow), so log file imports there too
   // — otherwise a successful import would never show up in "Восст." history.
   var hist=JSON.parse(localStorage.getItem('iz_photo_imports')||'[]');
-  hist.unshift({date:new Date().toISOString().split('T')[0],count:deduped.length,
+  hist.unshift({id:uid(),date:new Date().toISOString().split('T')[0],count:deduped.length,
     shopName:(pendingImportData[0]&&pendingImportData[0].shopName)||'разные магазины',
     importedAt:new Date().toISOString()});
   localStorage.setItem('iz_photo_imports',JSON.stringify(hist.slice(0,30)));
@@ -11171,7 +11299,65 @@ function rstjSaveAll(){
   // вкладки "Фото" — иначе при открытой смене другого магазина записи
   // уходят не туда, и пользователь их не видит там, где ожидает.
   var shopName=(rstjPending[0]&&rstjPending[0].shopName)||(document.getElementById('rstjPhotoShop')||{}).value||'';
-  var existing=getPsjEntries(); var added=0;
+  var added=0;
+
+  // ── Новый restore-режим (через morningMo/saleMo/closeShift) ──
+  // Если сейчас открыта именно та смена восстановления, к которой относятся
+  // распознанные записи — пишем прямо в journal этой смены, как делает
+  // обычная "+ Продажа" у продавца, чтобы записи сразу встали в общий
+  // журнал смены (Главная/Журнал) и участвовали в расчёте кассы при закрытии.
+  if(restoreMode && session && session.shopName===shopName){
+    rstjPending.forEach(function(e){
+      var amt = e.amount||0;
+      var cashAmt = e.cashAmount!=null ? e.cashAmount : (e.payMethod==='cash' && e.type==='sale' ? amt : 0);
+      var cardAmt = e.cardAmount!=null ? e.cardAmount : (e.payMethod!=='cash' && e.type==='sale' ? amt : 0);
+      var isDr = (e.goodsType||'derevo')==='dr';
+      var typeLabel={sale:'Продажа',expense:'Расход',writeoff:'Списание',receive:'Приход товара'}[e.type||'sale'];
+      var entry = {
+        id:uid(), type:e.type||'sale', ts:_workingNowISO(),
+        icon:{sale:'💰',writeoff:'🗑️',receive:'📥',expense:'💸'}[e.type||'sale']||'📝',
+        label:typeLabel,
+        sub:(e.name||'')+(e.article?' №'+e.article:'')+(e.sellerName?' · '+e.sellerName:'')+' · '+(e.payMethod||''),
+        amount:amt, amtSign:(e.type==='expense'||e.type==='writeoff')?'−':'+',
+        comment:(e.comment||'')+(e.uncertain?' ⚠️ требует проверки':''),
+        source:'chatgpt_restore',
+        goodsType:isDr?'dr':'derevo'
+      };
+      // Эффекты на кассу/товар — те же поля, что использует calcTotals() для
+      // обычного журнала живой смены (cashEffect/cardEffect/goodsEffect и их
+      // ДР-аналоги), иначе сумма в "Закрыть смену" не сойдётся с журналом.
+      if(!isDr){
+        entry.cashEffect = (e.type==='sale')?cashAmt:0;
+        entry.cardEffect = (e.type==='sale')?cardAmt:0;
+        entry.goodsEffect = e.type==='sale' ? -amt : e.type==='receive' ? amt : e.type==='writeoff' ? -amt : 0;
+        if(e.type==='expense') entry.cashEffect = -amt;
+      } else {
+        entry.cashDrEffect = (e.type==='sale')?cashAmt:0;
+        entry.cardDrEffect = (e.type==='sale')?cardAmt:0;
+        entry.goodsDrEffect = e.type==='sale' ? -amt : e.type==='receive' ? amt : e.type==='writeoff' ? -amt : 0;
+        if(e.type==='expense') entry.cashDrEffect = -amt;
+      }
+      if(e.discount){ entry.discount = e.discount; }
+      journal.push(entry);
+      added++;
+    });
+    saveJ();
+    rstjPending=[];rstjPhotoFiles=[];rstjActiveResultEl=null;
+    document.getElementById('rstjPhotoPreview').style.display='none';
+    document.getElementById('rstjRecognizeBtn').style.display='none';
+    document.getElementById('rstjRecognizeResult').style.display='none';
+    document.getElementById('rstjPhotoInput').value='';
+    var gptRes2=document.getElementById('rstjGptFileResult'); if(gptRes2) gptRes2.innerHTML='';
+    var gptFi2=document.getElementById('rstjGptFileInput'); if(gptFi2) gptFi2.value='';
+    renderAll();
+    showToast('✅ Добавлено '+added+' записей в журнал смены');
+    return;
+  }
+
+  // ── Старый поток (iz_psj) — для совместимости, пока не вся система
+  // переведена на новый restore-режим (например, восстановление вне
+  // открытой смены или старые сохранённые данные). ──
+  var existing=getPsjEntries();
   rstjPending.forEach(function(e){
     var entry={id:uid(),date:normalizeDate(e.date),shopName:e.shopName||shopName,sellerName:e.sellerName||'',
       type:e.type||'sale',ts:_workingNowISO(),
@@ -11188,7 +11374,7 @@ function rstjSaveAll(){
   });
   savePsjEntries(existing);
   var hist=JSON.parse(localStorage.getItem('iz_photo_imports')||'[]');
-  hist.unshift({date:new Date().toISOString().split('T')[0],count:added,shopName:shopName,importedAt:new Date().toISOString()});
+  hist.unshift({id:uid(),date:new Date().toISOString().split('T')[0],count:added,shopName:shopName,importedAt:new Date().toISOString()});
   localStorage.setItem('iz_photo_imports',JSON.stringify(hist.slice(0,30)));
   rstjPending=[];rstjPhotoFiles=[];rstjActiveResultEl=null;
   document.getElementById('rstjPhotoPreview').style.display='none';
@@ -11198,9 +11384,6 @@ function rstjSaveAll(){
   var gptRes=document.getElementById('rstjGptFileResult'); if(gptRes) gptRes.innerHTML='';
   var gptFi=document.getElementById('rstjGptFileInput'); if(gptFi) gptFi.value='';
   renderRstjHistory();
-  // Если только что сохранённые записи относятся к той же смене, что сейчас
-  // открыта (_restoreShift) — сразу обновляем список во вкладке "Вручную",
-  // чтобы их было видно и можно было поправить без переключения вкладок.
   if(_restoreShift && _restoreShift.shop===shopName){ try{ psjLoadJournal(); }catch(e){} }
   showToast('✅ Добавлено '+added+' записей в журнал — откройте вкладку «Вручную», чтобы их увидеть и поправить');
 }
@@ -11286,22 +11469,56 @@ function readRstjGptFile(file){
     catch(err){ res.innerHTML='<div class="al-err">❌ Не удалось прочитать JSON. Проверьте, что в файле только текст ответа ChatGPT, без лишнего.<br><small style="color:#8888aa">'+err.message+'</small></div>'; return; }
     if(!Array.isArray(entries)){ entries = entries.entries || [entries]; }
     if(!entries.length){ res.innerHTML='<div class="al-warn">⚠️ В файле нет записей.</div>'; return; }
-    // Магазин берём из РЕАЛЬНО ОТКРЫТОЙ смены восстановления (_restoreShift),
-    // а не из поля формы вкладки "Фото" — иначе записи уходят не в ту смену,
-    // которую человек открыл и собирается проверять/редактировать.
-    if(!_restoreShift || !_restoreShift.shop){
-      res.innerHTML='<div class="al-err">❌ Сначала откройте смену восстановления (магазин и дату) во вкладке "Список смен" или "Вручную".</div>';
+    // Магазин берём из РЕАЛЬНО ОТКРЫТОЙ смены восстановления — в новом
+    // режиме это session (та же смена, что видна на Главной/Журнал), со
+    // старым _restoreShift как fallback для совместимости. Не из поля формы
+    // вкладки "Фото" — иначе записи уходят не в ту смену, которую человек
+    // открыл и собирается проверять/редактировать.
+    var shopName, dateLabel;
+    if(restoreMode && session && session.shopName){
+      shopName = session.shopName;
+      dateLabel = restoreMeta ? restoreMeta.date : (session.openedAt||'').split('T')[0];
+    } else if(_restoreShift && _restoreShift.shop){
+      shopName = _restoreShift.shop;
+      dateLabel = _restoreShift.date;
+    } else {
+      res.innerHTML='<div class="al-err">❌ Сначала откройте смену восстановления (магазин и дату).</div>';
       return;
     }
-    var shopName = _restoreShift.shop;
-    res.innerHTML = '<div class="al-ok" style="margin-bottom:8px">✅ Прочитано '+entries.length+' записей для «'+shopName+' · '+_restoreShift.date+'» — проверьте и сохраните</div>';
+    res.innerHTML = '<div class="al-ok" style="margin-bottom:8px">✅ Прочитано '+entries.length+' записей для «'+shopName+' · '+dateLabel+'» — проверьте и сохраните</div>';
     showRstjRecognized(entries, shopName, res);
   };
   reader.onerror = function(){ res.innerHTML='<div class="al-err">❌ Не удалось прочитать файл.</div>'; };
   reader.readAsText(file, 'UTF-8');
 }
 
-// File import for restore journal (reuses existing functions)
+// Кнопка "Внести продажи через фото/файл/ChatGPT" на Главной в restore-режиме
+// просто показывает уже существующую страницу "Восст. смены" с открытой
+// вкладкой Журнал → Фото — весь функционал там тот же (rstjRecognize,
+// readRstjGptFile, rstjSaveAll уже умеют писать прямо в session/journal
+// текущей restore-смены, см. правки выше).
+function openRestoreImportMo(){
+  showPg('restore');
+  switchRst('journal');
+  switchRstJ('photo', document.getElementById('rstj_photo'));
+  var backBtn = document.getElementById('restoreBackToShiftBtn');
+  if(backBtn) backBtn.style.display = 'inline-block';
+  // Поля магазин/продавец на вкладке "Фото" — подставляем из текущей смены,
+  // чтобы не приходилось выбирать заново (хотя rstjSaveAll всё равно берёт
+  // итоговый магазин из session, не из этих полей — но удобнее видеть верное).
+  var shopSel = document.getElementById('rstjPhotoShop');
+  if(shopSel && session){
+    for(var i=0;i<shopSel.options.length;i++){ if(shopSel.options[i].value===session.shopName){ shopSel.selectedIndex=i; break; } }
+  }
+  var sellerInput = document.getElementById('rstjPhotoSeller');
+  if(sellerInput && session) sellerInput.value = session.sellerName||'';
+}
+// Возврат из раздела импорта обратно на Главную восстанавливаемой смены.
+function closeRestoreImportAndReturn(){
+  var backBtn = document.getElementById('restoreBackToShiftBtn');
+  if(backBtn) backBtn.style.display = 'none';
+  showPg('home');
+}
 function handleRstjFileSelect(input){
   var file=input.files[0]; if(!file) return;
   readImportFile(file); // reuse existing
@@ -11317,9 +11534,32 @@ function renderRstjHistory(){
   var c=document.getElementById('rstjHistory'); if(!c) return;
   var hist=JSON.parse(localStorage.getItem('iz_photo_imports')||'[]');
   if(!hist.length){c.innerHTML='<div class="empty"><div class="ei">📷</div>Загрузок не было</div>';return;}
-  c.innerHTML=hist.slice(0,10).map(function(h){
-    return '<div style="display:flex;justify-content:space-between;padding:9px;background:#22222e;border-radius:10px;margin-bottom:5px"><div><div style="font-size:12px;font-weight:700">📷 '+h.shopName+'</div><div style="font-size:11px;color:#8888aa">'+h.date+' · '+h.count+' записей</div></div><div style="color:#60f090;font-weight:700;font-size:12px">+'+h.count+'</div></div>';
+  c.innerHTML=hist.slice(0,10).map(function(h,i){
+    // Старые записи (до добавления id) удаляются по индексу — h.id||i ниже
+    // безопасен, потому что массив каждый раз перечитывается из localStorage.
+    var delKey = h.id||('idx:'+i);
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:#22222e;border-radius:10px;margin-bottom:5px">'+
+      '<div><div style="font-size:12px;font-weight:700">📷 '+h.shopName+'</div><div style="font-size:11px;color:#8888aa">'+h.date+' · '+h.count+' записей</div></div>'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        '<div style="color:#60f090;font-weight:700;font-size:12px">+'+h.count+'</div>'+
+        '<button onclick="deleteRstjHistoryEntry(\''+delKey+'\')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
+      '</div>'+
+    '</div>';
   }).join('');
+}
+function deleteRstjHistoryEntry(key){
+  // Удаляет только запись из визуального журнала "История загрузок" —
+  // сами сохранённые записи журнала (iz_psj) это действие не трогает,
+  // это просто список "что когда грузили", чтобы не путаться.
+  var hist=JSON.parse(localStorage.getItem('iz_photo_imports')||'[]');
+  if(key.indexOf('idx:')===0){
+    var idx=parseInt(key.slice(4),10);
+    hist.splice(idx,1);
+  } else {
+    hist=hist.filter(function(h){ return h.id!==key; });
+  }
+  localStorage.setItem('iz_photo_imports',JSON.stringify(hist));
+  renderRstjHistory();
 }
 
 // ── Activation ──
