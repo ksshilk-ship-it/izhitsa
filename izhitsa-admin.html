@@ -1067,20 +1067,7 @@ function doLogout() {
   document.getElementById('loginErr').textContent = '';
 }
 
-function switchTab(id, btn) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  
-  const page = document.getElementById('pg-' + id);
-  if(page) page.classList.add('active');
-  if(btn) btn.classList.add('active');
-  
-  // Render specific page data when switching
-  if(id === 'shops') renderShops();
-  if(id === 'pl') { renderPL(); renderPLBudget(); }
-  if(id === 'debt') renderDebts();
-  if(id === 'audit') renderAuditLog();
-}
+// (старая switchTab удалена — единственная актуальная версия ниже, в конце файла, содержит вызовы для всех вкладок)
 
 function openMo(id) {
   const mo = document.getElementById(id);
@@ -2242,6 +2229,9 @@ function getDateRange(period) {
   } else if(period === 'month') {
     from = new Date(today);
     from.setMonth(from.getMonth() - 1);
+  } else if(period === 'quarter') {
+    from = new Date(today);
+    from.setMonth(from.getMonth() - 3);
   } else if(period === 'year') {
     from = new Date(today);
     from.setFullYear(from.getFullYear() - 1);
@@ -2251,6 +2241,17 @@ function getDateRange(period) {
     from: from.getFullYear() + '-' + String(from.getMonth()+1).padStart(2,'0') + '-' + String(from.getDate()).padStart(2,'0'),
     to: to.getFullYear() + '-' + String(to.getMonth()+1).padStart(2,'0') + '-' + String(to.getDate()).padStart(2,'0')
   };
+}
+
+// Диапазон ПРЕДЫДУЩЕГО периода той же длины, что и текущий (from/to в формате
+// YYYY-MM-DD) — используется для сравнения «рост/падение к прошлому периоду».
+function getPrevDateRange(fromKey, toKey){
+  var from = new Date(fromKey+'T00:00:00'), to = new Date(toKey+'T00:00:00');
+  var lenDays = Math.max(1, Math.round((to-from)/(1000*60*60*24)));
+  var prevTo = new Date(from); prevTo.setDate(prevTo.getDate()-1);
+  var prevFrom = new Date(prevTo); prevFrom.setDate(prevFrom.getDate()-lenDays);
+  function k(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  return {from:k(prevFrom), to:k(prevTo)};
 }
 
 function getShiftsInRange(from, to) {
@@ -2275,9 +2276,27 @@ function getTodayShifts() {
 
 function renderDashboard() {
   var today = getTodayKey();
-  var shifts = getTodayShifts();
-  
-  // KPI calculations
+  var todayShifts = getTodayShifts();
+
+  // ── Период для KPI/алертов: те же кнопки Месяц/Неделя/Год/Период, что
+  // уже были в разметке (setDashPeriod), но раньше renderDashboard() их
+  // полностью игнорировала и везде считала только сегодняшний день — отсюда
+  // КPI всегда показывали 0, если сегодня ещё не было смен, независимо от
+  // того, какой период был выбран сверху.
+  var periodBtn = document.querySelector('#pg-dash .pchips .pc.active');
+  var periodLabel = periodBtn ? periodBtn.textContent.trim() : 'Месяц';
+  var range;
+  if(periodLabel.includes('Период')) {
+    var fromStr = document.getElementById('dashFrom').value;
+    var toStr = document.getElementById('dashTo').value;
+    range = {from: fromStr || today, to: toStr || today};
+  } else {
+    var periodKey = {'Месяц':'month','Неделя':'week','Год':'year'}[periodLabel] || 'month';
+    range = getDateRange(periodKey);
+  }
+  var shifts = getShiftsInRange(range.from, range.to);
+
+  // KPI calculations (за выбранный период, не только сегодня)
   var totalRevenue = 0, totalSales = 0, totalCashDisc = 0;
   var shopStats = {}, sellerStats = {};
   
@@ -2302,16 +2321,62 @@ function renderDashboard() {
       sellerStats[s.seller].zp += (s.zpCalc || 0);
     }
   });
-  
+
+  // Расходы за период берём из ручных операций (iz_transactions) — та же
+  // модель данных, что использует P&L, потому что cashDisc смен — это
+  // расхождение кассы, а не реальные расходы бизнеса.
+  var txsForPeriod = getTransactions().filter(function(tx){
+    var day = (tx.date||'').split('T')[0];
+    return day >= range.from && day <= range.to;
+  });
+  var totalExpense = 0;
+  var bySourceIncome = {}, byCategoryExpense = {};
+  txsForPeriod.forEach(function(tx){
+    if(tx.type === 'expense') {
+      totalExpense += (tx.amount||0);
+      var cat = tx.category || 'Прочее';
+      byCategoryExpense[cat] = (byCategoryExpense[cat]||0) + tx.amount;
+    }
+    if(tx.type === 'income') {
+      var src = tx.source || 'Прочее';
+      bySourceIncome[src] = (bySourceIncome[src]||0) + tx.amount;
+    }
+  });
+  // Выручка магазинов (из смен) тоже считается доходом по источнику «Магазины»
+  if(totalRevenue) bySourceIncome['🏪 Магазины (смены)'] = (bySourceIncome['🏪 Магазины (смены)']||0) + totalRevenue;
+
+  var netIncome = totalRevenue + Object.keys(bySourceIncome).filter(function(k){return k!=='🏪 Магазины (смены)';}).reduce(function(s,k){return s+bySourceIncome[k];},0) - totalExpense;
+
   // Update KPI
-  document.getElementById('dashIncome').textContent = '₽ ' + totalRevenue.toLocaleString('ru-RU');
-  document.getElementById('dashExpense').textContent = '₽ ' + totalCashDisc.toLocaleString('ru-RU');
-  document.getElementById('dashBalance').textContent = '₽ ' + (totalRevenue - totalCashDisc).toLocaleString('ru-RU');
+  document.getElementById('dashIncome').textContent = '₽ ' + (totalRevenue + (Object.keys(bySourceIncome).filter(function(k){return k!=='🏪 Магазины (смены)';}).reduce(function(s,k){return s+bySourceIncome[k];},0))).toLocaleString('ru-RU');
+  document.getElementById('dashExpense').textContent = '₽ ' + totalExpense.toLocaleString('ru-RU');
+  document.getElementById('dashBalance').textContent = '₽ ' + netIncome.toLocaleString('ru-RU');
+  var diffEl = document.getElementById('dashDiff');
+  if(diffEl) {
+    var prevRange = getPrevDateRange(range.from, range.to);
+    var prevShifts = getShiftsInRange(prevRange.from, prevRange.to);
+    var prevRevenue = prevShifts.reduce(function(s,sh){return s+(sh.netRevenue||0);},0);
+    var prevTxs = getTransactions().filter(function(tx){ var d=(tx.date||'').split('T')[0]; return d>=prevRange.from && d<=prevRange.to; });
+    var prevExpense = prevTxs.filter(function(t){return t.type==='expense';}).reduce(function(s,t){return s+(t.amount||0);},0);
+    var prevIncomeManual = prevTxs.filter(function(t){return t.type==='income';}).reduce(function(s,t){return s+(t.amount||0);},0);
+    var prevNet = prevRevenue + prevIncomeManual - prevExpense;
+    var diff = netIncome - prevNet;
+    var diffPct = prevNet !== 0 ? Math.round(100*diff/Math.abs(prevNet)) : (netIncome!==0 ? 100 : 0);
+    diffEl.textContent = (diff>=0?'+':'') + diff.toLocaleString('ru-RU') + ' ₽ (' + (diffPct>=0?'+':'') + diffPct + '%) к прошлому периоду';
+    diffEl.style.color = diff>=0 ? 'var(--inc)' : 'var(--exp)';
+  }
   
-  // Shops
+  // Shops (сегодня — отдельный быстрый снимок дня, как и было)
+  var shopStatsToday = {};
+  todayShifts.forEach(function(s){
+    if(!shopStatsToday[s.shopName]) shopStatsToday[s.shopName] = {revenue:0, sales:0, sellers:[]};
+    shopStatsToday[s.shopName].revenue += (s.netRevenue||0);
+    shopStatsToday[s.shopName].sales += (s.salesCount||0);
+    if(s.seller && !shopStatsToday[s.shopName].sellers.includes(s.seller)) shopStatsToday[s.shopName].sellers.push(s.seller);
+  });
   var shopsHtml = '';
-  Object.keys(shopStats).forEach(function(shop) {
-    var stat = shopStats[shop];
+  Object.keys(shopStatsToday).forEach(function(shop) {
+    var stat = shopStatsToday[shop];
     shopsHtml += '<div style="background:var(--s1);padding:10px;border-radius:8px;display:flex;justify-content:space-between;align-items:center">' +
       '<div><div style="font-weight:600">🏪 ' + shop + '</div><div style="font-size:11px;color:var(--t2)">Продавцов: ' + stat.sellers.length + '</div></div>' +
       '<div style="text-align:right"><div style="font-weight:700;color:var(--inc)">₽ ' + stat.revenue.toLocaleString('ru-RU') + '</div><div style="font-size:11px;color:var(--t2)">' + stat.sales + ' продаж</div></div>' +
@@ -2319,10 +2384,18 @@ function renderDashboard() {
   });
   document.getElementById('dashShopsToday').innerHTML = shopsHtml || '<div style="color:var(--t2);font-size:12px">Нет смен сегодня</div>';
   
-  // Sellers
+  // Sellers (сегодня)
+  var sellerStatsToday = {};
+  todayShifts.forEach(function(s){
+    if(!s.seller) return;
+    if(!sellerStatsToday[s.seller]) sellerStatsToday[s.seller] = {revenue:0, sales:0, zp:0, shop:s.shopName};
+    sellerStatsToday[s.seller].revenue += (s.netRevenue||0);
+    sellerStatsToday[s.seller].sales += (s.salesCount||0);
+    sellerStatsToday[s.seller].zp += (s.zpCalc||0);
+  });
   var sellersHtml = '';
-  Object.keys(sellerStats).forEach(function(seller) {
-    var stat = sellerStats[seller];
+  Object.keys(sellerStatsToday).forEach(function(seller) {
+    var stat = sellerStatsToday[seller];
     sellersHtml += '<div style="background:var(--s1);padding:10px;border-radius:8px;display:flex;justify-content:space-between;align-items:center">' +
       '<div><div style="font-weight:600">👤 ' + seller + '</div><div style="font-size:11px;color:var(--t2)">' + stat.shop + '</div></div>' +
       '<div style="text-align:right"><div style="font-weight:700;color:var(--inc)">₽ ' + stat.revenue.toLocaleString('ru-RU') + '</div><div style="font-size:11px;color:var(--a4)">ЗП: ₽ ' + stat.zp.toLocaleString('ru-RU') + '</div></div>' +
@@ -2330,7 +2403,7 @@ function renderDashboard() {
   });
   document.getElementById('dashSellersToday').innerHTML = sellersHtml || '<div style="color:var(--t2);font-size:12px">Нет продавцов</div>';
   
-  // Workshop
+  // Workshop (сегодня)
   try {
     var wsItems = JSON.parse(localStorage.getItem('ws_items') || '[]');
     var todayItems = wsItems.filter(function(it) {
@@ -2354,26 +2427,177 @@ function renderDashboard() {
     document.getElementById('dashWorkshopToday').innerHTML = '<div style="color:var(--t2);font-size:12px">Ошибка загрузки</div>';
   }
   
-  // Alerts
+  // Alerts — за выбранный период, не только сегодня
   var alertsHtml = '';
   var hasAlerts = false;
-  
-  // Check for cash discrepancies
   shifts.forEach(function(s) {
     if(Math.abs(s.cashDisc || 0) > 500) {
       alertsHtml += '<div style="background:#2e1a1a;border:1px solid #f06060;border-radius:8px;padding:10px;color:#f06060;font-size:12px">' +
-        '⚠️ ' + s.shopName + ': Расхождение в кассе ₽ ' + (s.cashDisc || 0) +
+        '⚠️ ' + s.shopName + ' (' + s.date + '): Расхождение в кассе ₽ ' + (s.cashDisc || 0) +
       '</div>';
       hasAlerts = true;
     }
   });
-  
   if(!hasAlerts) alertsHtml = '<div style="color:var(--t2);font-size:12px">✅ Все в порядке</div>';
   document.getElementById('dashAlerts').innerHTML = alertsHtml;
+
+  // Продажи по источникам — теперь реально заполняется (раньше контейнер
+  // навсегда оставался на «Загрузка...», т.к. ничего его не обновляло)
+  var srcEl = document.getElementById('dashBySalesSource');
+  if(srcEl) {
+    var srcEntries = Object.entries(bySourceIncome).sort(function(a,b){return b[1]-a[1];});
+    var srcTotal = srcEntries.reduce(function(s,e){return s+e[1];},0);
+    srcEl.innerHTML = srcEntries.length ? srcEntries.map(function(e){
+      var pct = srcTotal>0 ? Math.round(100*e[1]/srcTotal) : 0;
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'+
+        '<span style="font-size:12px">'+e[0]+'</span>'+
+        '<span style="font-size:12px;font-weight:700;color:var(--inc)">₽ '+e[1].toLocaleString('ru-RU')+' ('+pct+'%)</span>'+
+      '</div>';
+    }).join('') : '<div style="color:var(--t2);font-size:12px;padding:8px 0">Нет данных за период</div>';
+  }
+
+  // По категориям расходов — то же самое, раньше тоже навсегда «Загрузка...»
+  var catEl = document.getElementById('dashByCategory');
+  if(catEl) {
+    var catEntries = Object.entries(byCategoryExpense).sort(function(a,b){return b[1]-a[1];});
+    var catTotal = catEntries.reduce(function(s,e){return s+e[1];},0);
+    catEl.innerHTML = catEntries.length ? catEntries.map(function(e){
+      var pct = catTotal>0 ? Math.round(100*e[1]/catTotal) : 0;
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'+
+        '<span style="font-size:12px">'+e[0]+'</span>'+
+        '<span style="font-size:12px;font-weight:700;color:var(--exp)">₽ '+e[1].toLocaleString('ru-RU')+' ('+pct+'%)</span>'+
+      '</div>';
+    }).join('') : '<div style="color:var(--t2);font-size:12px;padding:8px 0">Нет данных за период</div>';
+  }
 }
 
+function setAnalyticsPeriod(period, el) {
+  document.querySelectorAll('#pg-analytics .pchips .pc').forEach(function(c) { c.classList.remove('active'); });
+  if(el) el.classList.add('active');
+  renderAnalytics();
+}
+
+// Сводная аналитика по всему бизнесу за период (Месяц/Квартал/Год):
+// выручка магазинов из реальных смен + ручные доходы/расходы, сравнение
+// с предыдущим периодом, разбивка по магазинам/продавцам, сводка по
+// мастерской. Раньше эта функция вызывалась из switchTab(), но нигде не
+// была определена — вкладка «Аналитика» всегда оставалась пустой.
+function renderAnalytics() {
+  var el = document.getElementById('analyticsData');
+  if(!el) return;
+  try {
+    var periodBtn = document.querySelector('#pg-analytics .pchips .pc.active');
+    var periodLabel = periodBtn ? periodBtn.textContent.trim() : 'Месяц';
+    var periodKey = {'Месяц':'month','Квартал':'quarter','Год':'year'}[periodLabel] || 'month';
+    var range = getDateRange(periodKey);
+    var prevRange = getPrevDateRange(range.from, range.to);
+
+    var shifts = getShiftsInRange(range.from, range.to);
+    var prevShifts = getShiftsInRange(prevRange.from, prevRange.to);
+
+    var txs = getTransactions().filter(function(tx){ var d=(tx.date||'').split('T')[0]; return d>=range.from && d<=range.to; });
+    var prevTxs = getTransactions().filter(function(tx){ var d=(tx.date||'').split('T')[0]; return d>=prevRange.from && d<=prevRange.to; });
+
+    var shopRevenue = shifts.reduce(function(s,sh){return s+(sh.netRevenue||0);},0);
+    var manualIncome = txs.filter(function(t){return t.type==='income';}).reduce(function(s,t){return s+(t.amount||0);},0);
+    var manualExpense = txs.filter(function(t){return t.type==='expense';}).reduce(function(s,t){return s+(t.amount||0);},0);
+    var totalIncome = shopRevenue + manualIncome;
+    var netProfit = totalIncome - manualExpense;
+
+    var prevShopRevenue = prevShifts.reduce(function(s,sh){return s+(sh.netRevenue||0);},0);
+    var prevManualIncome = prevTxs.filter(function(t){return t.type==='income';}).reduce(function(s,t){return s+(t.amount||0);},0);
+    var prevManualExpense = prevTxs.filter(function(t){return t.type==='expense';}).reduce(function(s,t){return s+(t.amount||0);},0);
+    var prevTotalIncome = prevShopRevenue + prevManualIncome;
+    var prevNetProfit = prevTotalIncome - prevManualExpense;
+
+    function pctDiff(cur, prev){
+      if(prev === 0) return cur === 0 ? 0 : 100;
+      return Math.round(100*(cur-prev)/Math.abs(prev));
+    }
+    function diffChipHtml(cur, prev){
+      var d = pctDiff(cur, prev);
+      var color = d>=0 ? 'var(--inc)' : 'var(--exp)';
+      return '<span style="font-size:11px;color:'+color+';font-weight:700">'+(d>=0?'+':'')+d+'% к прошлому периоду</span>';
+    }
+
+    // По магазинам/продавцам за период
+    var byShop = {}, bySeller = {};
+    shifts.forEach(function(s){
+      if(!byShop[s.shopName]) byShop[s.shopName] = {revenue:0, sales:0};
+      byShop[s.shopName].revenue += (s.netRevenue||0);
+      byShop[s.shopName].sales += (s.salesCount||0);
+      if(s.seller){
+        if(!bySeller[s.seller]) bySeller[s.seller] = {revenue:0, sales:0, shop:s.shopName};
+        bySeller[s.seller].revenue += (s.netRevenue||0);
+        bySeller[s.seller].sales += (s.salesCount||0);
+      }
+    });
+    var shopEntries = Object.entries(byShop).sort(function(a,b){return b[1].revenue-a[1].revenue;});
+    var sellerEntries = Object.entries(bySeller).sort(function(a,b){return b[1].revenue-a[1].revenue;});
+
+    // Мастерская за период
+    var wsItems = JSON.parse(localStorage.getItem('ws_items') || '[]');
+    var wsItemsInRange = wsItems.filter(function(it){
+      var d = it.createdAt ? it.createdAt.split('T')[0] : '';
+      return d >= range.from && d <= range.to;
+    });
+    var wsTotalValue = wsItemsInRange.reduce(function(s,it){return s+(it.price||0);},0);
+
+    var html =
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'+
+        '<div style="background:var(--s2);border-radius:8px;padding:12px">'+
+          '<div style="font-size:11px;color:var(--t2)">Общая выручка</div>'+
+          '<div style="font-size:16px;font-weight:700;color:var(--inc)">₽ '+totalIncome.toLocaleString('ru-RU')+'</div>'+
+          diffChipHtml(totalIncome, prevTotalIncome)+
+        '</div>'+
+        '<div style="background:var(--s2);border-radius:8px;padding:12px">'+
+          '<div style="font-size:11px;color:var(--t2)">Расходы</div>'+
+          '<div style="font-size:16px;font-weight:700;color:var(--exp)">₽ '+manualExpense.toLocaleString('ru-RU')+'</div>'+
+          diffChipHtml(manualExpense, prevManualExpense)+
+        '</div>'+
+        '<div style="background:var(--s2);border-radius:8px;padding:12px;grid-column:span 2;border:1px solid var(--accent)">'+
+          '<div style="font-size:11px;color:var(--t2)">Чистая прибыль</div>'+
+          '<div style="font-size:18px;font-weight:700">₽ '+netProfit.toLocaleString('ru-RU')+'</div>'+
+          diffChipHtml(netProfit, prevNetProfit)+
+        '</div>'+
+      '</div>';
+
+    html += '<div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin:14px 0 8px">🏪 По магазинам</div>';
+    html += shopEntries.length ? shopEntries.map(function(e){
+      var pct = shopRevenue>0 ? Math.round(100*e[1].revenue/shopRevenue) : 0;
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'+
+        '<div><div style="font-weight:600;font-size:12px">'+e[0]+'</div><div style="font-size:11px;color:var(--t2)">'+e[1].sales+' продаж</div></div>'+
+        '<div style="text-align:right"><div style="font-weight:700;color:var(--inc);font-size:12px">₽ '+e[1].revenue.toLocaleString('ru-RU')+'</div><div style="font-size:11px;color:var(--a2)">'+pct+'%</div></div>'+
+      '</div>';
+    }).join('') : '<div style="color:var(--t2);font-size:12px;padding:8px 0">Нет данных за период</div>';
+
+    html += '<div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin:14px 0 8px">👥 По продавцам</div>';
+    html += sellerEntries.length ? sellerEntries.map(function(e){
+      var pct = shopRevenue>0 ? Math.round(100*e[1].revenue/shopRevenue) : 0;
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'+
+        '<div><div style="font-weight:600;font-size:12px">👤 '+e[0]+'</div><div style="font-size:11px;color:var(--t2)">'+e[1].shop+'</div></div>'+
+        '<div style="text-align:right"><div style="font-weight:700;color:var(--inc);font-size:12px">₽ '+e[1].revenue.toLocaleString('ru-RU')+'</div><div style="font-size:11px;color:var(--a2)">'+pct+'%</div></div>'+
+      '</div>';
+    }).join('') : '<div style="color:var(--t2);font-size:12px;padding:8px 0">Нет данных за период</div>';
+
+    html += '<div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin:14px 0 8px">🏭 Мастерская</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0">'+
+      '<span style="font-size:12px">🔨 Изделий сделано</span><span style="font-weight:700;font-size:12px">'+wsItemsInRange.length+' шт</span>'+
+    '</div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0">'+
+      '<span style="font-size:12px">💎 Стоимость</span><span style="font-weight:700;color:var(--inc);font-size:12px">₽ '+wsTotalValue.toLocaleString('ru-RU')+'</span>'+
+    '</div>';
+
+    el.innerHTML = html;
+  } catch(e) {
+    console.error('renderAnalytics error:', e);
+    el.innerHTML = '<div style="color:var(--exp);padding:12px;font-size:12px">Ошибка: '+e.message+'</div>';
+  }
+}
+
+
 function setDashPeriod(period, el) {
-  document.querySelectorAll('.pchips .pc').forEach(function(c) { c.classList.remove('active'); });
+  document.querySelectorAll('#pg-dash .pchips .pc').forEach(function(c) { c.classList.remove('active'); });
   if(el) el.classList.add('active');
   
   var dateInputs = document.getElementById('dashCustomDates');
