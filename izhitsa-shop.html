@@ -7426,10 +7426,34 @@ function svSaveCassa(){
 function svSaveTovar(){
   var reason=((document.getElementById('sv_tovarReason')||{}).value||'').trim();
   if(!reason){showToast('Укажите причину правки');return;}
-  _currentShiftView.goodsMorning=parseFloat((document.getElementById('sv_goodsMorn')||{}).value)||0;
-  _currentShiftView.goodsEvening=parseFloat((document.getElementById('sv_goodsEve')||{}).value)||0;
-  _currentShiftView.goodsDrMorning=parseFloat((document.getElementById('sv_drGoodsMorn')||{}).value)||0;
-  _currentShiftView.drGoodsEvening=parseFloat((document.getElementById('sv_drGoodsEve')||{}).value)||0;
+
+  var oldMorn = _currentShiftView.goodsMorning||0;
+  var oldEve = _currentShiftView.goodsEvening||0;
+  var oldDrMorn = _currentShiftView.goodsDrMorning||0;
+  var oldDrEve = _currentShiftView.drGoodsEvening||0;
+
+  var newMorn = parseFloat((document.getElementById('sv_goodsMorn')||{}).value)||0;
+  var newEveInput = parseFloat((document.getElementById('sv_goodsEve')||{}).value)||0;
+  var newDrMorn = parseFloat((document.getElementById('sv_drGoodsMorn')||{}).value)||0;
+  var newDrEveInput = parseFloat((document.getElementById('sv_drGoodsEve')||{}).value)||0;
+
+  // Если поле «Товар вечер» не трогали (значение в инпуте совпадает со старым
+  // сохранённым вечерним остатком), а утро при этом изменилось — переносим
+  // ту же дельту (вечер минус утро) на новое утро, а не оставляем устаревшее
+  // число. Если вечер тоже правили вручную — используем то, что ввели.
+  var goodsEve = newEveInput;
+  if(newEveInput === oldEve && newMorn !== oldMorn){
+    goodsEve = oldEve + (newMorn - oldMorn);
+  }
+  var goodsDrEve = newDrEveInput;
+  if(newDrEveInput === oldDrEve && newDrMorn !== oldDrMorn){
+    goodsDrEve = oldDrEve + (newDrMorn - oldDrMorn);
+  }
+
+  _currentShiftView.goodsMorning=newMorn;
+  _currentShiftView.goodsEvening=goodsEve;
+  _currentShiftView.goodsDrMorning=newDrMorn;
+  _currentShiftView.drGoodsEvening=goodsDrEve;
   _currentShiftView.editedBy=(session&&(session.name||session.sellerName))||'admin';
   _currentShiftView.editedAt=new Date().toISOString();
   _currentShiftView.editReason=reason;
