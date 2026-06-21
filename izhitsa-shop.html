@@ -1365,6 +1365,15 @@ function checkForAppUpdate() {
 <div class="mo" id="woEditMo">
   <div class="md"><div class="mh"></div><div class="mt">Исправить списание</div>
     <div class="fg"><label class="fl">Причина</label><input class="fi" id="woEditReason" placeholder="Причина списания"></div>
+    <div class="fg">
+      <label class="fl">Тип товара</label>
+      <div style="display:flex;gap:6px">
+        <button type="button" id="woEditTypeDerevo" onclick="setWoEditType('derevo')"
+          style="flex:1;padding:7px;border-radius:8px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">🌳 Дерево</button>
+        <button type="button" id="woEditTypeDr" onclick="setWoEditType('dr')"
+          style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
+      </div>
+    </div>
     <div style="font-size:10px;color:#8888aa;margin-bottom:6px">ПОЗИЦИИ (наим. · кол-во · цена)</div>
     <div id="woEditItemsList"></div>
     <button type="button" onclick="addWoEditItem()" class="btn sec" style="font-size:12px;margin:6px 0 4px;border-color:#f06060;color:#f06060">＋ Добавить позицию</button>
@@ -5391,8 +5400,21 @@ function editWriteoff(id){
   var mo = document.getElementById('woEditMo');
   if(!mo) return;
   document.getElementById('woEditReason').value = e.reason || (_woEditItems[0]&&_woEditItems[0].reason)||'';
+  setWoEditType(e.goodsType==='dr' ? 'dr' : 'derevo');
   renderWoEditItems();
   openMo('woEditMo');
+}
+var _woEditGoodsType = 'derevo';
+function setWoEditType(type){
+  _woEditGoodsType = type;
+  var db=document.getElementById('woEditTypeDerevo'), dr=document.getElementById('woEditTypeDr');
+  if(type==='derevo'){
+    if(db) db.style.cssText='flex:1;padding:7px;border-radius:8px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer';
+    if(dr) dr.style.cssText='flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer';
+  } else {
+    if(dr) dr.style.cssText='flex:1;padding:7px;border-radius:8px;border:2px solid #a060f0;background:#1e1a2e;color:#a060f0;font-size:11px;font-weight:700;cursor:pointer';
+    if(db) db.style.cssText='flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer';
+  }
 }
 
 function renderWoEditItems(){
@@ -5428,7 +5450,7 @@ function saveWoEdit(){
   var idx=journal.findIndex(function(j){ return j.id===_woEditId; });
   if(idx<0){ showToast('Запись не найдена'); return; }
   var orig=journal[idx];
-  var isDr=orig.goodsType==='dr';
+  var isDr=_woEditGoodsType==='dr';
   var total=_woEditItems.reduce(function(s,it){return s+(it.amt||0);},0);
   var count=_woEditItems.length;
   var totalQty=_woEditItems.reduce(function(s,it){return s+(it.qty||1);},0);
@@ -5436,9 +5458,9 @@ function saveWoEdit(){
   var sub=count===1
     ?(((_woEditItems[0].num)?'№'+_woEditItems[0].num+' ':'')+_woEditItems[0].name+(_woEditItems[0].species?' · '+_woEditItems[0].species:'')+(_woEditItems[0].qty&&_woEditItems[0].qty!==1?' × '+_woEditItems[0].qty:'')+' · '+reason)
     :(count+' позиций ('+totalQty+' шт.): '+namesPreview+' · '+reason);
-  _woEditItems.forEach(function(it){ it.reason=reason; });
+  _woEditItems.forEach(function(it){ it.reason=reason; it.goodsType=_woEditGoodsType; });
   journal[idx]=Object.assign({},orig,{
-    sub:sub, reason:reason, items:_woEditItems,
+    sub:sub, reason:reason, items:_woEditItems, goodsType:_woEditGoodsType,
     amount:total, goodsEffect:isDr?0:-total, goodsDrEffect:isDr?-total:0,
     editedAt:new Date().toISOString()
   });
