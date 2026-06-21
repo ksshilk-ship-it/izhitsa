@@ -5193,7 +5193,8 @@ function saveStaff(){
     sub:(num?'№'+num+' ':'')+item+(species?' · '+species:'')+(qty&&qty!==1?' × '+qty:'')+' · '+fmt(retail)+' · '+fmt(pay)+' '+payL,
     amount:pay,amtCls:'neu',
     goodsType:spGoodsType,species,article:num,qty,price:parseFloat(gv('spPrice'))||0,
-    cashEffect:0,cardEffect:isCard?pay:0,staffEffect:staffPayMethod==='cash'?pay:0,goodsEffect:-retail});
+    cashEffect:0,cardEffect:isCard?pay:0,staffEffect:staffPayMethod==='cash'?pay:0,
+    goodsEffect:spGoodsType==='dr'?0:-retail, goodsDrEffect:spGoodsType==='dr'?-retail:0});
   saveJ(); ['spWho','spNum','spItem','spSpecies','spPrice','spRetail','spPay','spComment'].forEach(id=>{var el=document.getElementById(id); if(el) el.value='';});
   var qtyEl=document.getElementById('spQty'); if(qtyEl) qtyEl.value='1';
   setSpGoods('derevo');
@@ -7808,7 +7809,7 @@ function svAddStaff(type){
   var opt = row.amt || (row.price*row.qty);
   var jnl = _currentShiftView.journal||[];
   jnl.push({id:uid(),type:'staff',who:who,item:row.name,article:row.art,species:row.species,price:row.price,qty:row.qty,opt:opt,retail:retail,amount:opt,goodsType:isWood?'wood':'dr',ts:_workingNowISO(),
-    cashEffect:0, cardEffect:0, staffEffect:opt, goodsEffect:-retail});
+    cashEffect:0, cardEffect:0, staffEffect:opt, goodsEffect:isWood?-retail:0, goodsDrEffect:isWood?0:-retail});
   _currentShiftView.journal = jnl;
   svPersist(); _renderShiftView();
   setTimeout(function(){ toggleShiftAcc('acc_staff'); toggleShiftAcc('acc_staff'); },50);
