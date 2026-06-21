@@ -6713,6 +6713,7 @@ function openShiftView(id){
   var sh = shifts.find(function(s){ return (s.id||s._id)===id; }); if(!sh) return;
   _currentShiftView = JSON.parse(JSON.stringify(sh));
   if(!_currentShiftView.id) _currentShiftView.id = _currentShiftView._id;
+  _svOpenAccs = {};
   _renderShiftView();
   openMo('editShiftMo');
 }
@@ -6906,6 +6907,7 @@ function _renderShiftView(){
 
   function acc(id, icon, title, color, count, body){
     var badge = count ? '<span style="background:'+color+';color:#0f0f13;font-size:10px;font-weight:700;border-radius:8px;padding:1px 6px;margin-left:6px">'+count+'</span>' : '';
+    var isOpen = !!_svOpenAccs['acc_'+id];
     return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;margin-bottom:8px;overflow:hidden">'+
       '<div onclick="toggleShiftAcc(\'acc_'+id+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer">'+
         '<div style="display:flex;align-items:center;gap:8px">'+
@@ -6913,9 +6915,9 @@ function _renderShiftView(){
           '<span style="font-size:13px;font-weight:700;color:'+color+'">'+title+'</span>'+
           badge+
         '</div>'+
-        '<span id="acc_'+id+'_arr" style="color:#8888aa;font-size:14px;transition:transform .2s">▼</span>'+
+        '<span id="acc_'+id+'_arr" style="color:#8888aa;font-size:14px;transition:transform .2s'+(isOpen?';transform:rotate(180deg)':'')+'">▼</span>'+
       '</div>'+
-      '<div id="acc_'+id+'" style="display:none;padding:0 14px 12px">'+
+      '<div id="acc_'+id+'" style="display:'+(isOpen?'block':'none')+';padding:0 14px 12px">'+
         body+
       '</div>'+
     '</div>';
@@ -7446,6 +7448,14 @@ function _renderShiftView(){
     deleteShiftHtml;
 }
 
+// Какие аккордеоны (Касса/Товар/Приходы/Списания/Покупки и т.п.) сейчас
+// раскрыты в просматриваемой смене — по id, например {acc_rcv:true}.
+// Раньше состояние раскрытости жило только в инлайн-style DOM-элемента, и
+// любой полный перерендер _renderShiftView() (например, при открытии формы
+// редактирования одной позиции прихода через карандаш) пересоздавал разметку
+// с display:none по умолчанию — аккордеон визуально схлопывался у пользователя
+// прямо во время правки, хотя по сути ничего не закрывали.
+var _svOpenAccs = {};
 function toggleShiftAcc(id){
   var el=document.getElementById(id);
   var arr=document.getElementById(id+'_arr');
@@ -7453,6 +7463,7 @@ function toggleShiftAcc(id){
   var open = el.style.display!=='none';
   el.style.display = open?'none':'block';
   if(arr) arr.style.transform = open?'':'rotate(180deg)';
+  _svOpenAccs[id] = !open;
 }
 
 function showAddForm(id){
@@ -7904,8 +7915,7 @@ function svAddRcv(type){
     arr2.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt});
     _currentShiftView.drGoodsReceives = arr2;
   }
-  svPersist(); _renderShiftView();
-  setTimeout(function(){ toggleShiftAcc('acc_rcv'); toggleShiftAcc('acc_rcv'); },50);
+  svPersist(); _svOpenAccs['acc_rcv']=true; _renderShiftView();
   showToast('✅ Приход добавлен');
 }
 
@@ -7925,8 +7935,7 @@ function svAddWo(type){
     arr2.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, reason:reason});
     _currentShiftView.drGoodsWriteoffs = arr2;
   }
-  svPersist(); _renderShiftView();
-  setTimeout(function(){ toggleShiftAcc('acc_wo'); toggleShiftAcc('acc_wo'); },50);
+  svPersist(); _svOpenAccs['acc_wo']=true; _renderShiftView();
   showToast('✅ Списание добавлено');
 }
 
@@ -7940,8 +7949,7 @@ function svAddExp(type){
   jnl.push({id:uid(),type:'expense',expType:expType,amount:amt,comment:comment,goodsType:isWood?'wood':'dr',ts:_workingNowISO(),
     cashEffect: isWood?-amt:0, cashDrEffect: isWood?0:-amt, cardEffect:0, staffEffect:0, goodsEffect:0});
   _currentShiftView.journal = jnl;
-  svPersist(); _renderShiftView();
-  setTimeout(function(){ toggleShiftAcc('acc_exp'); toggleShiftAcc('acc_exp'); },50);
+  svPersist(); _svOpenAccs['acc_exp']=true; _renderShiftView();
   showToast('✅ Расход добавлен');
 }
 
@@ -7960,8 +7968,7 @@ function svAddStaff(type){
   jnl.push({id:uid(),type:'staff',who:who,item:row.name,article:row.art,species:row.species,price:row.price,qty:row.qty,opt:opt,retail:retail,amount:opt,goodsType:isWood?'wood':'dr',ts:_workingNowISO(),
     cashEffect:0, cardEffect:0, staffEffect:opt, goodsEffect:isWood?-retail:0, goodsDrEffect:isWood?0:-retail});
   _currentShiftView.journal = jnl;
-  svPersist(); _renderShiftView();
-  setTimeout(function(){ toggleShiftAcc('acc_staff'); toggleShiftAcc('acc_staff'); },50);
+  svPersist(); _svOpenAccs['acc_staff']=true; _renderShiftView();
   showToast('✅ Покупка добавлена');
 }
 function savePastShift(){
