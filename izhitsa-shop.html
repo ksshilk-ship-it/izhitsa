@@ -771,6 +771,39 @@ function checkForAppUpdate() {
             <button class="btn sec" style="font-size:11px" onclick="downloadCsvTemplate()">⬇️ CSV</button>
           </div>
         </div>
+
+        <!-- Журнал построчно от ChatGPT — отдельно от импорта ИТОГОВ смены
+        выше: тот формат суммирует кассу/товар за день, а этот — построчные
+        записи (продажа/расход/списание/приход), как в бумажном журнале. -->
+        <div class="card" style="margin-top:10px;border-color:#c8f060">
+          <div class="ctitle">📋 Журнал от ChatGPT</div>
+          <div style="font-size:11.5px;color:#8888aa;margin-bottom:10px">
+            Сфотографируйте журнал, отправьте фото в обычный ChatGPT вместе с инструкцией ниже,
+            он распознает записи и пришлёт JSON. Скопируйте JSON в текстовый файл и загрузите сюда —
+            записи появятся для проверки, как при автоматическом распознавании.
+          </div>
+          <button class="btn sec" style="width:100%;margin-bottom:10px" onclick="showChatGptPromptTemplate()">📋 Показать инструкцию для ChatGPT</button>
+          <div id="rstjGptDropZone" onclick="document.getElementById('rstjGptFileInput').click()"
+            style="border:2px dashed #c8f060;border-radius:12px;padding:20px;text-align:center;cursor:pointer;margin-bottom:10px"
+            ondragover="event.preventDefault();this.style.borderColor='#a0d040'"
+            ondragleave="this.style.borderColor='#c8f060'"
+            ondrop="handleRstjGptFileDrop(event)">
+            <div style="font-size:24px;margin-bottom:4px">📥</div>
+            <div style="font-size:12.5px;font-weight:700">Загрузить JSON от ChatGPT</div>
+            <input type="file" id="rstjGptFileInput" accept=".json,.txt" style="display:none" onchange="handleRstjGptFileSelect(this)">
+          </div>
+          <div id="rstjGptFileResult"></div>
+        </div>
+      </div>
+
+      <!-- Модалка с готовым промптом для ChatGPT -->
+      <div class="mo" id="chatGptPromptMo">
+        <div class="md"><div class="mh"></div><div class="mt">📋 Инструкция для ChatGPT</div>
+          <div style="font-size:11.5px;color:#8888aa;margin-bottom:10px">Скопируйте текст ниже, откройте ChatGPT, прикрепите фото журнала и вставьте этот текст вместе с фото.</div>
+          <textarea id="chatGptPromptText" readonly style="width:100%;height:260px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:10px;color:#f0f0f8;font-size:11.5px;font-family:monospace;margin-bottom:10px"></textarea>
+          <button class="btn" onclick="copyChatGptPrompt()">📋 Скопировать текст</button>
+          <button class="btn sec" style="margin-top:8px" onclick="closeMo('chatGptPromptMo')">Закрыть</button>
+        </div>
       </div>
 
       <!-- ВРУЧНУЮ -->
@@ -10512,6 +10545,10 @@ function showPhotoPreview() {
   btn.style.display = 'block';
 }
 
+// Адрес вашего Cloudflare Worker — замените после деплоя (см. инструкцию).
+// Один и тот же воркер используется обеими функциями распознавания.
+var AI_PROXY_URL = 'https://izhitsa-ai-proxy.YOUR-SUBDOMAIN.workers.dev';
+
 function recognizeJournalPhoto() {
   if(!duPhotoFiles.length){ showToast('Выберите фото'); return; }
   var shopName = (document.getElementById('duPhotoShop')||{}).value || '';
@@ -10524,33 +10561,28 @@ function recognizeJournalPhoto() {
 
   var promises = duPhotoFiles.map(function(file){ return fileToBase64(file); });
   Promise.all(promises).then(function(base64arr) {
-    var imageBlocks = base64arr.map(function(b64, i){
-      return { type:'image', source:{ type:'base64', media_type: duPhotoFiles[i].type||'image/jpeg', data:b64 } };
+    var images = base64arr.map(function(b64, i){
+      return { mediaType: duPhotoFiles[i].type||'image/jpeg', base64: b64 };
     });
     var prompt = 'Ты помощник для распознавания журналов продаж деревянных изделий.\n\n' +
       'На фото — рукописная страница журнала магазина "' + shopName + '".\n' +
       (sellerHint ? 'Продавец по умолчанию: ' + sellerHint + '\n' : '') +
       'Распознай ВСЕ записи о продажах, расходах, списаниях и приходах товара.\n\n' +
-      'Верни ТОЛЬКО JSON массив без пояснений и без markdown:\n' +
-      '[\n  {\n    "date": "ДД.ММ или ГГГГ-ММ-ДД",\n    "sellerName": "имя если есть",\n    "type": "sale|expense|writeoff|receive",\n    "name": "наименование товара",\n    "article": "артикул или null",\n    "amount": число,\n    "discount": число_или_0,\n    "payMethod": "cash|terminal|sbp|transfer|qr|mixed",\n    "cashAmount": число_или_0,\n    "cardAmount": число_или_0,\n    "goodsType": "derevo|dr",\n    "comment": "заметки",\n    "uncertain": true_если_плохо_читается\n  }\n]\n\n' +
-      'Правила: нал→cash, П/Т/QR/СБП→cardAmount. Год 2025 если не указан. Верни ТОЛЬКО JSON.';
+      'Правила: нал→cash, П/Т/QR/СБП→cardAmount. Год 2026 если не указан.';
 
-    return fetch('https://api.anthropic.com/v1/messages', {
+    return fetch(AI_PROXY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4000,
-        messages: [{ role: 'user', content: [...imageBlocks, { type:'text', text:prompt }] }]
-      })
+      body: JSON.stringify({ prompt: prompt, images: images })
     });
   }).then(function(r){ return r.json(); }).then(function(data) {
     btn.textContent = '🤖 Распознать'; btn.disabled = false;
-    var text = (data.content||[]).map(function(c){ return c.text||''; }).join('');
-    var clean = text.replace(/```json|```/g,'').trim();
+    if(data.error){ res.innerHTML='<div class="al-err">❌ Ошибка сервера: '+(data.error.message||data.error)+'</div>'; return; }
+    var text = ((data.choices||[])[0]||{}).message && data.choices[0].message.content || '';
     try {
-      var entries = JSON.parse(clean);
-      if(!entries||!entries.length){ res.innerHTML='<div class="al-warn">⚠️ Записей не найдено. Попробуйте фото лучшего качества.</div>'; return; }
+      var parsed = JSON.parse(text);
+      var entries = parsed.entries||[];
+      if(!entries.length){ res.innerHTML='<div class="al-warn">⚠️ Записей не найдено. Попробуйте фото лучшего качества.</div>'; return; }
       showRecognizedEntries(entries, shopName);
     } catch(e) {
       res.innerHTML='<div class="al-err">❌ Не удалось распознать. Попробуйте фото лучшего качества.<br><small style="color:#8888aa">'+text.substring(0,200)+'</small></div>';
@@ -11091,23 +11123,29 @@ function rstjRecognize(){
   res.innerHTML='<div class="card"><div style="text-align:center;padding:20px"><div style="font-size:24px">🤖</div><div style="font-size:13px;color:#8888aa;margin-top:8px">AI читает журнал...</div></div></div>';
   var promises=rstjPhotoFiles.map(function(f){return fileToBase64(f);});
   Promise.all(promises).then(function(b64arr){
-    var imageBlocks=b64arr.map(function(b,i){return{type:'image',source:{type:'base64',media_type:rstjPhotoFiles[i].type||'image/jpeg',data:b}};});
-    var prompt='Распознай рукописный журнал продаж магазина "'+shopName+'".'+(sellerHint?'\nПродавец: '+sellerHint:'')+'\nВерни ТОЛЬКО JSON массив:\n[{"date":"ДД.ММ","sellerName":"имя","type":"sale|expense|writeoff|receive","name":"товар","article":"арт или null","amount":число,"discount":0,"payMethod":"cash|terminal|sbp|transfer|qr|mixed","cashAmount":0,"cardAmount":0,"goodsType":"derevo|dr","comment":"","uncertain":true_если_плохо}]\nПравила: нал→cash+cashAmount, П/Т/QR/СБП→cardAmount. Год 2025. Только JSON.';
-    return fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,messages:[{role:'user',content:[...imageBlocks,{type:'text',text:prompt}]}]})});
+    var images=b64arr.map(function(b,i){return{mediaType:rstjPhotoFiles[i].type||'image/jpeg',base64:b};});
+    var prompt='Распознай рукописный журнал продаж магазина "'+shopName+'".'+(sellerHint?'\nПродавец: '+sellerHint:'')+'\nПравила: нал→cash+cashAmount, П/Т/QR/СБП→cardAmount. Год 2026.';
+    return fetch(AI_PROXY_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:prompt,images:images})});
   }).then(function(r){return r.json();}).then(function(data){
     btn.textContent='🤖 Распознать AI';btn.disabled=false;
-    var text=(data.content||[]).map(function(c){return c.text||'';}).join('');
-    var clean=text.replace(/```json|```/g,'').trim();
+    if(data.error){res.innerHTML='<div class="al-err">❌ Ошибка сервера: '+(data.error.message||data.error)+'</div>';return;}
+    var text=((data.choices||[])[0]||{}).message && data.choices[0].message.content || '';
     try{
-      var entries=JSON.parse(clean);
-      if(!entries||!entries.length){res.innerHTML='<div class="al-warn">⚠️ Записей не найдено</div>';return;}
+      var parsed=JSON.parse(text);
+      var entries=parsed.entries||[];
+      if(!entries.length){res.innerHTML='<div class="al-warn">⚠️ Записей не найдено</div>';return;}
       showRstjRecognized(entries,shopName,res);
     }catch(e){res.innerHTML='<div class="al-err">❌ Не удалось распознать.<br><small>'+text.substring(0,150)+'</small></div>';}
   }).catch(function(e){btn.textContent='🤖 Распознать AI';btn.disabled=false;res.innerHTML='<div class="al-err">❌ '+e.message+'</div>';});
 }
 var rstjPending=[];
+var rstjActiveResultEl=null; // контейнер, в который сейчас отрисован rstjPending —
+// им может быть либо rstjRecognizeResult (AI-распознавание), либо
+// rstjGptFileResult (ручная загрузка JSON от ChatGPT); правка/удаление
+// записи должны перерисовывать именно тот контейнер, откуда их вызвали.
 function showRstjRecognized(entries,shopName,res){
   rstjPending=entries.map(function(e){return Object.assign({},e,{shopName:shopName});});
+  rstjActiveResultEl=res;
   var uncertain=entries.filter(function(e){return e.uncertain;}).length;
   var html='<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="ctitle" style="margin:0">Распознано: '+entries.length+'</div>'+(uncertain?'<div style="font-size:11px;color:#f0a060;font-weight:700">⚠️ '+uncertain+' проверьте</div>':'<div style="font-size:11px;color:#60f090;font-weight:700">✅ Всё чётко</div>')+'</div>';
   html+=entries.map(function(e,i){
@@ -11122,8 +11160,8 @@ function showRstjRecognized(entries,shopName,res){
   html+='<button class="btn" onclick="rstjSaveAll()" style="width:100%;margin-top:4px">💾 Сохранить в журнал</button></div>';
   res.innerHTML=html;
 }
-function rstjEditEntry(i){var e=rstjPending[i];var a=prompt('Сумма для "'+e.name+'"',e.amount||0);if(a!==null){rstjPending[i].amount=parseFloat(a)||0;rstjPending[i].uncertain=false;}var res=document.getElementById('rstjRecognizeResult');showRstjRecognized(rstjPending,(rstjPending[0]&&rstjPending[0].shopName)||'',res);}
-function rstjRemoveEntry(i){rstjPending.splice(i,1);var res=document.getElementById('rstjRecognizeResult');if(rstjPending.length)showRstjRecognized(rstjPending,(rstjPending[0]&&rstjPending[0].shopName)||'',res);else res.innerHTML='';}
+function rstjEditEntry(i){var e=rstjPending[i];var a=prompt('Сумма для "'+e.name+'"',e.amount||0);if(a!==null){rstjPending[i].amount=parseFloat(a)||0;rstjPending[i].uncertain=false;}var res=rstjActiveResultEl||document.getElementById('rstjRecognizeResult');showRstjRecognized(rstjPending,(rstjPending[0]&&rstjPending[0].shopName)||'',res);}
+function rstjRemoveEntry(i){rstjPending.splice(i,1);var res=rstjActiveResultEl||document.getElementById('rstjRecognizeResult');if(rstjPending.length)showRstjRecognized(rstjPending,(rstjPending[0]&&rstjPending[0].shopName)||'',res);else res.innerHTML='';}
 function rstjSaveAll(){
   if(!rstjPending.length){showToast('Нет записей');return;}
   var shopName=(document.getElementById('rstjPhotoShop')||{}).value||'';
@@ -11146,13 +11184,93 @@ function rstjSaveAll(){
   var hist=JSON.parse(localStorage.getItem('iz_photo_imports')||'[]');
   hist.unshift({date:new Date().toISOString().split('T')[0],count:added,shopName:shopName,importedAt:new Date().toISOString()});
   localStorage.setItem('iz_photo_imports',JSON.stringify(hist.slice(0,30)));
-  rstjPending=[];rstjPhotoFiles=[];
+  rstjPending=[];rstjPhotoFiles=[];rstjActiveResultEl=null;
   document.getElementById('rstjPhotoPreview').style.display='none';
   document.getElementById('rstjRecognizeBtn').style.display='none';
   document.getElementById('rstjRecognizeResult').style.display='none';
   document.getElementById('rstjPhotoInput').value='';
+  var gptRes=document.getElementById('rstjGptFileResult'); if(gptRes) gptRes.innerHTML='';
+  var gptFi=document.getElementById('rstjGptFileInput'); if(gptFi) gptFi.value='';
   renderRstjHistory();
   showToast('✅ Добавлено '+added+' записей в журнал');
+}
+
+// ════ Ручной импорт построчного журнала от ChatGPT (без API/прокси) ════
+// Тот же конечный формат записи, что и при автоматическом AI-распознавании
+// (showRstjRecognized/rstjPending/rstjSaveAll) — только JSON получает не от
+// воркера, а вставляет сам пользователь после ручного запроса в ChatGPT.
+function showChatGptPromptTemplate(){
+  var shopName=(document.getElementById('rstjPhotoShop')||{}).value||'Магазин';
+  var prompt =
+    'Распознай рукописный журнал продаж на фото магазина "'+shopName+'".\n\n'+
+    'Верни ТОЛЬКО JSON-массив, без пояснений и без markdown-обёртки (без ```), '+
+    'в точности в таком формате:\n\n'+
+    '[\n'+
+    '  {\n'+
+    '    "date": "ДД.ММ или ГГГГ-ММ-ДД",\n'+
+    '    "sellerName": "имя продавца если указано",\n'+
+    '    "type": "sale",\n'+
+    '    "name": "наименование товара",\n'+
+    '    "article": "артикул или null",\n'+
+    '    "amount": 1500,\n'+
+    '    "discount": 0,\n'+
+    '    "payMethod": "cash",\n'+
+    '    "cashAmount": 1500,\n'+
+    '    "cardAmount": 0,\n'+
+    '    "goodsType": "derevo",\n'+
+    '    "comment": "",\n'+
+    '    "uncertain": false\n'+
+    '  }\n'+
+    ']\n\n'+
+    'Правила:\n'+
+    '- "type": "sale" — продажа, "expense" — расход, "writeoff" — списание, "receive" — приход товара\n'+
+    '- "payMethod": "cash" если наличные, "terminal"/"sbp"/"qr"/"transfer" если безнал, "mixed" если смешанная оплата\n'+
+    '- Если оплата наличными — сумму укажи в "cashAmount", если безналом — в "cardAmount" (для смешанной — в оба поля по факту)\n'+
+    '- "goodsType": "derevo" для деревянных изделий, "dr" для остальных товаров (ДР Товар)\n'+
+    '- Год не указан на фото — считай 2026\n'+
+    '- Если запись плохо читается или ты не уверен(а) — поставь "uncertain": true и впиши свою лучшую догадку\n'+
+    '- Распознай ВСЕ строки на фото, ничего не пропускай\n\n'+
+    'Верни только сам JSON-массив целиком, я скопирую его в файл.';
+  document.getElementById('chatGptPromptText').value = prompt;
+  openMo('chatGptPromptMo');
+}
+function copyChatGptPrompt(){
+  var ta = document.getElementById('chatGptPromptText');
+  ta.select(); ta.setSelectionRange(0, 99999);
+  try { document.execCommand('copy'); showToast('✅ Скопировано'); }
+  catch(e) {
+    if(navigator.clipboard){ navigator.clipboard.writeText(ta.value).then(function(){ showToast('✅ Скопировано'); }); }
+    else { showToast('Скопируйте вручную из поля'); }
+  }
+}
+function handleRstjGptFileSelect(input){
+  var file=input.files[0]; if(!file) return;
+  readRstjGptFile(file);
+}
+function handleRstjGptFileDrop(ev){
+  ev.preventDefault();
+  var f=ev.dataTransfer.files[0];
+  if(f){ document.getElementById('rstjGptFileInput').files=ev.dataTransfer.files; readRstjGptFile(f); }
+}
+function readRstjGptFile(file){
+  var res = document.getElementById('rstjGptFileResult');
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var raw = e.target.result;
+    // ChatGPT иногда всё равно оборачивает ответ в ```json ... ``` несмотря
+    // на просьбу не делать этого — на всякий случай чистим перед парсингом.
+    var clean = raw.replace(/```json|```/g,'').trim();
+    var entries;
+    try { entries = JSON.parse(clean); }
+    catch(err){ res.innerHTML='<div class="al-err">❌ Не удалось прочитать JSON. Проверьте, что в файле только текст ответа ChatGPT, без лишнего.<br><small style="color:#8888aa">'+err.message+'</small></div>'; return; }
+    if(!Array.isArray(entries)){ entries = entries.entries || [entries]; }
+    if(!entries.length){ res.innerHTML='<div class="al-warn">⚠️ В файле нет записей.</div>'; return; }
+    var shopName=(document.getElementById('rstjPhotoShop')||{}).value||'';
+    res.innerHTML = '<div class="al-ok" style="margin-bottom:8px">✅ Прочитано '+entries.length+' записей — проверьте и сохраните</div>';
+    showRstjRecognized(entries, shopName, res);
+  };
+  reader.onerror = function(){ res.innerHTML='<div class="al-err">❌ Не удалось прочитать файл.</div>'; };
+  reader.readAsText(file, 'UTF-8');
 }
 
 // File import for restore journal (reuses existing functions)
