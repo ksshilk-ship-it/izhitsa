@@ -9868,6 +9868,16 @@ function switchRstShTab(tab){
 
 function updateRstMainBlockVisibility(){
   var mainBlock = document.getElementById('rstMainBlock'); if(!mainBlock) return;
+  var shiftCard = document.getElementById('rstShiftCard');
+  // Новый restore-режим (через morningMo/saleMo) — смена уже открыта в
+  // session, форму "Магазин/Продавец/Дата/Открыть смену" незачем показывать
+  // повторно, а вкладки Журнал/Накладные/Активация/Смены должны быть видны.
+  if(restoreMode && session && session.shopName){
+    if(shiftCard) shiftCard.style.display = 'none';
+    mainBlock.style.display = 'block';
+    return;
+  }
+  if(shiftCard) shiftCard.style.display = 'block';
   var shouldShow = _rstShTab==='open' && !!(_restoreShift && _restoreShift.shop && _restoreShift.date);
   mainBlock.style.display = shouldShow ? 'block' : 'none';
 }
@@ -11499,6 +11509,7 @@ function readRstjGptFile(file){
 // текущей restore-смены, см. правки выше).
 function openRestoreImportMo(){
   showPg('restore');
+  updateRstMainBlockVisibility();
   switchRst('journal');
   switchRstJ('photo', document.getElementById('rstj_photo'));
   var backBtn = document.getElementById('restoreBackToShiftBtn');
