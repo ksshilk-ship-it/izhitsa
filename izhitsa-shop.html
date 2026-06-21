@@ -9747,7 +9747,9 @@ function renderRestoreShiftsList(){
       '</div>'+
       '<div style="display:flex;gap:6px">'+
         '<button onclick="reopenRestoreShift('+shopArg+',\''+g.date+'\')" style="flex:1;background:none;border:1px solid #c8f060;border-radius:8px;padding:6px 8px;font-size:12px;color:#c8f060;cursor:pointer">📂 Открыть</button>'+
-        (g.activated ? '' : '<button onclick="activateRestoreShift('+shopArg+',\''+g.date+'\')" style="flex:1;background:none;border:1px solid #60f090;border-radius:8px;padding:6px 8px;font-size:12px;color:#60f090;cursor:pointer">✅ Активировать</button>')+
+        (g.activated
+          ? '<button onclick="activateRestoreShift('+shopArg+',\''+g.date+'\')" style="flex:1;background:none;border:1px solid #60f090;border-radius:8px;padding:6px 8px;font-size:12px;color:#60f090;cursor:pointer">🔄 Обновить в архиве</button>'
+          : '<button onclick="activateRestoreShift('+shopArg+',\''+g.date+'\')" style="flex:1;background:none;border:1px solid #60f090;border-radius:8px;padding:6px 8px;font-size:12px;color:#60f090;cursor:pointer">✅ Активировать</button>')+
         '<button onclick="deleteRestoreShift('+shopArg+',\''+g.date+'\')" style="flex:0 0 40px;background:none;border:1px solid #f06060;border-radius:8px;padding:6px 4px;font-size:13px;color:#f06060;cursor:pointer">✕</button>'+
       '</div>'+
     '</div>';
@@ -9808,13 +9810,45 @@ function activateRestoreShift(shop, date){
   });
   savePsjEntries(entries);
 
-  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-  shifts.forEach(function(s){
-    if(s.shopName===shop && s.date===date && s.isArchive && !s.activated){
-      s.activated=true; s.activatedAt=new Date().toISOString();
-    }
+  // ── Реально создать/обновить запись смены в KEY.shifts ──
+  // Раньше этот шаг отсутствовал: ниже только искалась уже существующая
+  // isArchive-смена этой даты/магазина и помечалась activated — но такая
+  // смена никогда не создаётся автоматически из iz_psj записей, поэтому
+  // "Активировать" молча ничего не делала, и смена не появлялась в архиве.
+  // Та же агрегация, что и в savePsjAsShift(), но по параметрам shop/date
+  // активируемой группы, а не по текущим полям формы.
+  var entriesForShift = entries.filter(function(e){
+    return (shop===null ? !e.shopName : e.shopName===shop) && e.date===date;
   });
-  localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+  if(entriesForShift.length){
+    var sellerName = '';
+    for(var i=entriesForShift.length-1;i>=0;i--){ if(entriesForShift[i].sellerName){ sellerName=entriesForShift[i].sellerName; break; } }
+    var cashRev=0, cardRev=0, disc=0, exp=0;
+    var journalForShift = entriesForShift.map(function(e){
+      cashRev += e.cashEffect||0; cardRev += e.cardEffect||0; disc += e.discEffect||0;
+      if(e.type==='expense') exp += e.amount||0;
+      return { id:e.id, type:e.type, ts:e.date+'T12:00:00.000Z', icon: {sale:'💰',writeoff:'🗑️',receive:'📥',expense:'💸',staff:'🛒'}[e.type]||'📝',
+        label:e.label, sub:e.sub, amount:e.amount, amtCls:e.type==='sale'?'pos':'exp', amtSign:e.amtSign,
+        goodsType: e.goodsType, items: e.items, who: e.who, opt: e.opt, retail: e.retail, from: e.from, expType: e.expType,
+        cashEffect:e.cashEffect||0, cardEffect:e.cardEffect||0, staffEffect:0, goodsEffect: e.type==='sale'?-(e.amount||0): e.type==='receive'?(e.amount||0): e.type==='writeoff'?-(e.amount||0):0 };
+    });
+    var shiftObj = {
+      id: uid(), source: 'psj', isArchive: true, backfilled: true, activated: true, activatedAt: new Date().toISOString(),
+      shopName: shop||'', sellerName: sellerName, date: date,
+      openedAt: date+'T09:00:00.000Z', closedAt: date+'T21:00:00.000Z',
+      cashRevenue: cashRev, cardRevenue: cardRev, totalDiscount: disc,
+      zp: 0, inkass: 0, otherExp: exp,
+      journal: journalForShift,
+      savedAt: new Date().toISOString(), savedBy: (session&&session.name)||'Admin'
+    };
+    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    // Remove any existing shift for this exact date+shop+source so re-activating
+    // (e.g. after adding more psj entries) replaces it rather than duplicating.
+    shifts = shifts.filter(function(s){ return !(s.date===date && s.shopName===(shop||'') && s.source==='psj'); });
+    shifts.unshift(shiftObj);
+    localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+    try { db.collection('iz_shifts').doc(shiftObj.id).set(shiftObj); } catch(e) {}
+  }
 
   var acts=JSON.parse(localStorage.getItem('iz_activations')||'[]');
   acts.unshift({id:uid(), from:date, to:date, shopName:shop, activatedAt:new Date().toISOString(), count:activated, by:(session&&session.name)||'Admin'});
@@ -9822,7 +9856,7 @@ function activateRestoreShift(shop, date){
 
   renderRestoreShiftsList();
   try{ renderActivatedList(); }catch(e){}
-  showToast('✅ Активировано '+activated+' записей');
+  showToast(entriesForShift.length ? ('✅ Смена обновлена в архиве ('+entriesForShift.length+' записей)') : '✅ Активировано '+activated+' записей');
 }
 
 function psjInit() {
@@ -11201,12 +11235,46 @@ function activateArchivePeriod(){
   });
   savePsjEntries(entries);
 
-  // Activate shifts
-  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-  shifts.forEach(function(s){
-    if(s.date>=from&&s.date<=to&&(!shop||s.shopName===shop)&&s.isArchive&&!s.activated){
-      s.activated=true; s.activatedAt=new Date().toISOString();
+  // ── Реально создать/обновить смены в KEY.shifts для каждой даты+магазина
+  // в периоде — та же причина, что и в activateRestoreShift(): без этого
+  // шага смены физически никогда не появлялись в KEY.shifts и не попадали
+  // в архив/статистику, даже после "успешной" активации.
+  var groupsToBuild = {};
+  entries.forEach(function(e){
+    if(e.date>=from && e.date<=to && (!shop||e.shopName===shop)){
+      var gKey = (e.shopName||'')+'|'+e.date;
+      if(!groupsToBuild[gKey]) groupsToBuild[gKey] = [];
+      groupsToBuild[gKey].push(e);
     }
+  });
+  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  Object.keys(groupsToBuild).forEach(function(gKey){
+    var groupEntries = groupsToBuild[gKey];
+    var gShop = groupEntries[0].shopName||'';
+    var gDate = groupEntries[0].date;
+    var sellerName = '';
+    for(var i=groupEntries.length-1;i>=0;i--){ if(groupEntries[i].sellerName){ sellerName=groupEntries[i].sellerName; break; } }
+    var cashRev=0, cardRev=0, disc=0, exp=0;
+    var journalForShift = groupEntries.map(function(e){
+      cashRev += e.cashEffect||0; cardRev += e.cardEffect||0; disc += e.discEffect||0;
+      if(e.type==='expense') exp += e.amount||0;
+      return { id:e.id, type:e.type, ts:e.date+'T12:00:00.000Z', icon: {sale:'💰',writeoff:'🗑️',receive:'📥',expense:'💸',staff:'🛒'}[e.type]||'📝',
+        label:e.label, sub:e.sub, amount:e.amount, amtCls:e.type==='sale'?'pos':'exp', amtSign:e.amtSign,
+        goodsType: e.goodsType, items: e.items, who: e.who, opt: e.opt, retail: e.retail, from: e.from, expType: e.expType,
+        cashEffect:e.cashEffect||0, cardEffect:e.cardEffect||0, staffEffect:0, goodsEffect: e.type==='sale'?-(e.amount||0): e.type==='receive'?(e.amount||0): e.type==='writeoff'?-(e.amount||0):0 };
+    });
+    var shiftObj = {
+      id: uid(), source: 'psj', isArchive: true, backfilled: true, activated: true, activatedAt: new Date().toISOString(),
+      shopName: gShop, sellerName: sellerName, date: gDate,
+      openedAt: gDate+'T09:00:00.000Z', closedAt: gDate+'T21:00:00.000Z',
+      cashRevenue: cashRev, cardRevenue: cardRev, totalDiscount: disc,
+      zp: 0, inkass: 0, otherExp: exp,
+      journal: journalForShift,
+      savedAt: new Date().toISOString(), savedBy: (session&&session.name)||'Admin'
+    };
+    shifts = shifts.filter(function(s){ return !(s.date===gDate && s.shopName===gShop && s.source==='psj'); });
+    shifts.unshift(shiftObj);
+    try { db.collection('iz_shifts').doc(shiftObj.id).set(shiftObj); } catch(e) {}
   });
   localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
 
