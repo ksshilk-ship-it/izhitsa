@@ -10729,7 +10729,7 @@ function recognizeJournalPhoto() {
       'На фото — рукописная страница журнала магазина "' + shopName + '".\n' +
       (sellerHint ? 'Продавец по умолчанию: ' + sellerHint + '\n' : '') +
       'Распознай ВСЕ записи о продажах, расходах, списаниях и приходах товара.\n\n' +
-      'Правила: нал→cash, П/Т/QR/СБП→cardAmount. Год 2026 если не указан.';
+      'Правила: нал→cash, П/Т/QR/СБП→cardAmount. Год 2026 если не указан. Для групп товаров под одной скобкой указывай реальную цену каждого товара в поле price (через запятую, не делить общую сумму поровну).';
 
     return fetch(AI_PROXY_URL, {
       method: 'POST',
@@ -11285,7 +11285,7 @@ function rstjRecognize(){
   var promises=rstjPhotoFiles.map(function(f){return fileToBase64(f);});
   Promise.all(promises).then(function(b64arr){
     var images=b64arr.map(function(b,i){return{mediaType:rstjPhotoFiles[i].type||'image/jpeg',base64:b};});
-    var prompt='Распознай рукописный журнал продаж магазина "'+shopName+'".'+(sellerHint?'\nПродавец: '+sellerHint:'')+'\nПравила: нал→cash+cashAmount, П/Т/QR/СБП→cardAmount. Год 2026.';
+    var prompt='Распознай рукописный журнал продаж магазина "'+shopName+'".'+(sellerHint?'\nПродавец: '+sellerHint:'')+'\nПравила: нал→cash+cashAmount, П/Т/QR/СБП→cardAmount. Год 2026. Для групп товаров под одной скобкой указывай реальную цену каждого товара в поле price (через запятую, не делить общую сумму поровну).';
     return fetch(AI_PROXY_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:prompt,images:images})});
   }).then(function(r){return r.json();}).then(function(data){
     btn.textContent='🤖 Распознать AI';btn.disabled=false;
@@ -11367,9 +11367,19 @@ function rstjSaveAll(){
         var names = (e.name||'Товар').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
         var articles = (e.article||'').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
         if(!names.length) names = ['Товар'];
-        var perItemAmt = Math.round((amt/names.length)*100)/100;
+        // Реальные цены каждого товара (как написаны в столбце "Цена" на
+        // фото журнала) — ChatGPT передаёт их через запятую в поле price,
+        // в том же порядке, что и названия. Раньше тут общая сумма скобки
+        // делилась поровну между товарами — это давало неверные цены
+        // (например 5050₽ на 7 товаров → одинаковые 721₽ у каждого вместо
+        // их настоящих, разных цен). Если price почему-то не пришёл
+        // (старый формат ответа/одиночная позиция) — делим поровну как
+        // запасной вариант, лучше приблизительные цены, чем совсем без них.
+        var pricesRaw = (e.price!=null ? String(e.price) : '').split(',').map(function(s){ return parseFloat(s.trim()); }).filter(function(n){ return !isNaN(n); });
+        var fallbackPerItem = Math.round((amt/names.length)*100)/100;
         entry.items = names.map(function(nm, idx){
-          return {id:uid(), num:articles[idx]||'', name:nm, price:perItemAmt, qty:1, amt:perItemAmt,
+          var pr = pricesRaw[idx]!=null ? pricesRaw[idx] : fallbackPerItem;
+          return {id:uid(), num:articles[idx]||'', name:nm, price:pr, qty:1, amt:pr,
             species:'', goodsType:isDr?'dr':'derevo', hasDiff:!!e.uncertain,
             diffNote:e.uncertain?'⚠️ распознано через ChatGPT, проверьте':''};
         });
@@ -11464,6 +11474,7 @@ function showChatGptPromptTemplate(){
     '    "type": "sale",\n'+
     '    "name": "наименование товара",\n'+
     '    "article": "артикул или null",\n'+
+    '    "price": 1500,\n'+
     '    "amount": 1500,\n'+
     '    "discount": 0,\n'+
     '    "payMethod": "cash",\n'+
@@ -11477,6 +11488,7 @@ function showChatGptPromptTemplate(){
     'Магазин в JSON указывать НЕ нужно — это поле я добавлю сама в приложении.\n\n'+
     'Правила распознавания:\n'+
     '- "type": "sale" — продажа, "expense" — расход, "writeoff" — списание, "receive" — приход товара\n'+
+    '- "price" — цена ИМЕННО ЭТОГО товара, как написано в столбце "Цена" журнала напротив его строки. Для одиночной (не сгруппированной) продажи price совпадает с amount.\n'+
     '- "payMethod": "cash" если наличные, "terminal"/"sbp"/"qr"/"transfer" если безнал, "mixed" если смешанная оплата\n'+
     '- Если оплата наличными — сумму укажи в "cashAmount", если безналом — в "cardAmount" (для смешанной — в оба поля по факту, и cashAmount+cardAmount должны давать amount минус discount)\n'+
     '- "goodsType": "derevo" для деревянных изделий, "dr" для остальных товаров (ДР Товар)\n'+
@@ -11485,11 +11497,13 @@ function showChatGptPromptTemplate(){
     '- Распознай ВСЕ строки на фото, ничего не пропускай и не сокращай список.\n\n'+
     'ВАЖНОЕ ПРАВИЛО ПРО ГРУППЫ ТОВАРОВ:\n'+
     'Иногда несколько строк с разными товарами объединены в журнале одной фигурной или квадратной скобкой '+
-    'и у них ОДНА общая сумма оплаты на всех (одна цифра в столбце "нал" или "безнал" стоит напротив всей скобки, '+
-    'а не у каждой строки по отдельности). В этом случае:\n'+
+    'и у них ОДНА общая сумма оплаты на всех (одна цифра в столбце "нал" или "безнал" стоит напротив всей скобки) — '+
+    'но при этом У КАЖДОГО ТОВАРА В СТРОКЕ ВСЁ РАВНО ЕСТЬ СВОЯ ЦЕНА в столбце "Цена", просто оплачены они одной суммой на кассе. '+
+    'В этом случае:\n'+
     '- Сделай ОДНУ запись в JSON на всю группу, а не отдельную запись на каждый товар.\n'+
     '- В поле "name" перечисли все товары группы через запятую, например: "Свеча, Доска, Ложка".\n'+
-    '- В "amount", "cashAmount"/"cardAmount" укажи ту единую сумму, что стоит у скобки — не дели её между товарами.\n'+
+    '- В поле "price" перечисли через запятую РЕАЛЬНУЮ цену каждого товара из столбца "Цена", в том же порядке, что и в "name" — например "1650, 1550, 700". НЕ дели общую сумму поровну, бери цену каждой строки как она написана.\n'+
+    '- В "amount", "cashAmount"/"cardAmount" укажи ту единую сумму, что стоит у скобки (это то, что реально получено на кассу) — она может не совпадать с суммой всех price, если в скобке была скидка или округление, это нормально.\n'+
     '- Если у каждой строки в скобке всё же указан отдельный артикул — перечисли все артикулы через запятую в "article" в том же порядке, что и товары в "name".\n'+
     '- Если непонятно, объединены строки скобкой или нет — лучше поставь "uncertain": true и сделай отдельные записи, чем гадать.';
   document.getElementById('chatGptPromptText').value = prompt;
