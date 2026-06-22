@@ -561,10 +561,9 @@ function checkForAppUpdate() {
     <div id="personalShiftsList"></div>
   </div>
 
-  <!-- STOCK PAGE (seller + admin share same page id) -->
+  <!-- STOCK PAGE -->
   <div class="page" id="pg-stock">
     <div class="stitle" id="stockPageTitle">Склад</div>
-    <!-- Filters -->
     <div style="margin-bottom:10px">
       <input class="fi" id="stockSearch" placeholder="🔍 Поиск по артикулу, названию, породе..." oninput="renderStockPage()" style="margin-bottom:8px">
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
@@ -594,14 +593,12 @@ function checkForAppUpdate() {
         </div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
-        <button type="button" onclick="clearStockFilters()" style="padding:6px 12px;background:#22222e;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:11px;cursor:pointer">Сбросить фильтры</button>
+        <button type="button" onclick="clearStockFilters()" style="padding:6px 12px;background:#22222e;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:11px;cursor:pointer">Сбросить</button>
         <div id="stockFilterCount" style="font-size:11px;color:#8888aa"></div>
         <button type="button" onclick="rebuildStock(true)" style="padding:6px 12px;background:#22222e;border:1px solid #2e2e3e;border-radius:8px;color:#c8f060;font-size:11px;cursor:pointer;margin-left:auto">🔄 Пересчитать</button>
       </div>
     </div>
-    <!-- Summary -->
     <div id="stockSummary" style="margin-bottom:10px"></div>
-    <!-- Items -->
     <div id="stockList"></div>
   </div>
 
@@ -3949,9 +3946,8 @@ function startApp(){
   document.getElementById('rcvDate').value=new Date().toISOString().split('T')[0];
   if(!session.isPreview) startLiveShiftListener();
   renderAll();
-  // Stock module
   try{ startStockSync(); }catch(e){}
-  setTimeout(function(){ try{ rebuildStock(false); }catch(e){} }, 1500);
+  setTimeout(function(){ try{ rebuildStock(false); }catch(e){}; },2000);
 }
 function adaptUIForShopType(){
   var shopType = session.shopType || getShopType(session.shopName);
@@ -4878,40 +4874,24 @@ function lookupItem(num){
   _siNoArticleMode = false;
   var lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
   if(!num.trim()){ lr.style.display='none'; mb.style.display='none'; currentLookupItem=null; return; }
-  var numStr = num.trim();
-  // Search stock first (has qty/balance info), then fall back to iz_items catalog
-  var shopNm = session && session.shopName;
-  var stockEntry = stockGetByNum(shopNm, numStr);
-  var items = JSON.parse(localStorage.getItem('iz_items')||'[]');
-  var found = stockEntry ? {
-    num: stockEntry.num,
-    name: stockEntry.name,
-    price: stockEntry.price,
-    species: stockEntry.species,
-    goodsType: stockEntry.goodsType,
-    qty: stockEntry.qty,
-    fromStock: true
-  } : items.find(function(i){ return String(i.num)===numStr; });
+  var numStr=num.trim();
+  var shopNm=session&&session.shopName;
+  var stockEntry=stockGetByNum(shopNm,numStr);
+  var items=JSON.parse(localStorage.getItem('iz_items')||'[]');
+  var found=stockEntry ? {num:stockEntry.num,name:stockEntry.name,price:stockEntry.price,species:stockEntry.species,goodsType:stockEntry.goodsType,qty:stockEntry.qty,fromStock:true}
+    : items.find(function(i){ return String(i.num)===numStr; });
   if(found){
-    currentLookupItem = found;
-    document.getElementById('siName').value = found.name||'';
-    document.getElementById('siPrice').value = found.price||'';
-    document.getElementById('siSpecies').value = found.species||'';
-    var qEl = document.getElementById('siQty'); if(qEl) qEl.value = qEl.value||'1';
+    currentLookupItem=found;
+    document.getElementById('siName').value=found.name||'';
+    document.getElementById('siPrice').value=found.price||'';
+    document.getElementById('siSpecies').value=found.species||'';
+    var qEl=document.getElementById('siQty'); if(qEl) qEl.value=qEl.value||'1';
     lr.style.display='block'; mb.style.display='none';
     document.getElementById('siDiffWarn').style.display='none';
-    // Show stock qty hint
-    var hint = document.getElementById('siLookupResult');
-    if(hint && found.fromStock){
-      var qtyInfo = found.qty > 0 ? ' · В наличии: '+found.qty+' шт.' : ' · ⚠️ Нет в наличии';
-      var existingHint = hint.querySelector('.stock-qty-hint');
-      if(!existingHint){
-        existingHint = document.createElement('div');
-        existingHint.className = 'stock-qty-hint';
-        existingHint.style.cssText = 'font-size:11px;color:#60c8f0;margin-top:3px';
-        hint.appendChild(existingHint);
-      }
-      existingHint.textContent = qtyInfo;
+    if(found.fromStock){
+      var hint=lr.querySelector('.stock-qty-hint');
+      if(!hint){ hint=document.createElement('div'); hint.className='stock-qty-hint'; hint.style.cssText='font-size:11px;color:#60c8f0;margin-top:3px'; lr.appendChild(hint); }
+      hint.textContent=found.qty>0?('В наличии: '+found.qty+' шт.'):'⚠️ Нет в наличии';
     }
     siCalcAmt();
   } else {
@@ -5196,7 +5176,6 @@ function saveSale(){
   }
 
   journal.push(Object.assign({id:uid(),type:'sale'}, newEntryData));
-  // Update stock
   try{ stockApplySale(session&&session.shopName, saleItems); }catch(e){}
   // For online/offline: notify source shop to remove goods from shelf
   var shopType = session.shopType || getShopType(session.shopName);
@@ -5413,13 +5392,7 @@ function saveWriteoff(){
   });
   var total = woItems.reduce(function(s,it){ return s+(it.amt||0); },0);
   var count = woItems.length;
-  // Update stock for all written-off items with articles
-  try{
-    var _woShop = session&&session.shopName;
-    woItems.forEach(function(it){
-      if(it.num && _woShop) stockUpdateQty(_woShop, it.num, it.name, it.price, it.species, it.goodsType, it.size, -(it.qty||1), null);
-    });
-  }catch(e){}
+  try{ var _woSh=session&&session.shopName; woItems.forEach(function(it){ if(it.num&&_woSh) stockUpdateQty(_woSh,it.num,it.name,it.price,it.species,it.goodsType,it.size,-(it.qty||1),null); }); }catch(e){}
   saveJ(); clearWoDraft(); resetWoForm();
   closeMo('woMo'); renderAll();
   showToast('🗑️ Списано '+count+(count===1?' позиция':' позиций')+' на '+fmt(total));
@@ -5448,13 +5421,12 @@ function saveReceive(){
   const name=gv('rcvName'),price=parseFloat(gv('rcvPrice'))||0;
   if(!name){showToast('Введите наименование');return;} if(!price){showToast('Введите цену');return;}
   const article=gv('rcvArticle');
-  var rcvQtyNum = parseFloat(gv('rcvQty'))||1;
+  var rcvQtyNum=parseFloat(gv('rcvQty'))||1;
   journal.push({id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',label:'Приход товара',
     sub:(article?'№'+article+' ':'')+name+(gv('rcvQty')?' · '+gv('rcvQty'):'')+' · '+gv('rcvFrom')+' · '+gv('rcvDate'),
     amount:price,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:price,
     article:article});
-  // Update stock
-  if(article){ try{ stockApplyReceive(session&&session.shopName, [{num:article, name:name, price:price, qty:rcvQtyNum, goodsType:'derevo'}], gv('rcvDate')||new Date().toISOString().split('T')[0]); }catch(e){} }
+  if(article){ try{ stockApplyReceive(session&&session.shopName,[{num:article,name:name,price:price,qty:rcvQtyNum,goodsType:'derevo'}],gv('rcvDate')||new Date().toISOString().split('T')[0]); }catch(e){} }
   saveJ(); ['rcvArticle','rcvName','rcvQty','rcvPrice','rcvFrom'].forEach(id=>{var el=document.getElementById(id); if(el) el.value='';});
   logReceive(gv('rcvFrom'), price, session.shopName);
   var hint=document.getElementById('rcvLookupHint'); if(hint) hint.style.display='none';
@@ -5514,9 +5486,8 @@ function saveStaff(){
   saveJ(); ['spWho','spNum','spItem','spSpecies','spPrice','spRetail','spPay','spComment'].forEach(id=>{var el=document.getElementById(id); if(el) el.value='';});
   var qtyEl=document.getElementById('spQty'); if(qtyEl) qtyEl.value='1';
   setSpGoods('derevo');
-  // Update stock
-  var _spNum=gv('spNum'); var _spShop=session&&session.shopName;
-  if(_spNum && _spShop){ try{ var _spQtyN=parseFloat(gv('spQty'))||1; stockUpdateQty(_spShop,_spNum,gv('spItem'),parseFloat(gv('spPrice'))||0,gv('spSpecies'),spGoodsType,'',- _spQtyN,null); }catch(e){} }
+  var _spN=gv('spNum'),_spSh=session&&session.shopName;
+  if(_spN&&_spSh){ try{ stockUpdateQty(_spSh,_spN,gv('spItem'),parseFloat(gv('spPrice'))||0,gv('spSpecies'),spGoodsType,'',-( parseFloat(gv('spQty'))||1),null); }catch(e){} }
   closeMo('staffMo'); renderAll(); renderStaff(); showToast('🛒 Покупка зафиксирована');
 }
 function renderStaff(){
@@ -5996,7 +5967,6 @@ function acceptInvoice(){
   const goodsTotal=accepted.reduce((s,a)=>s+a.factPrice,0);
   journal.push({id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',label:'Приёмка '+inv2.num,
     sub:inv2.items.length+' изд. · принял: '+who,amount:goodsTotal,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:goodsTotal});
-  // Update stock
   try{ stockApplyReceive(session&&session.shopName, accepted, inv2.acceptedDate); }catch(e){}
   saveJ(); try{ db.collection('iz_invoices').doc(currentInvId).set(inv2); }catch(e){}
   clearInvProgress(currentInvId);
@@ -12763,349 +12733,373 @@ function init(){
 }
 init();
 
-// ════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 // STOCK MODULE — iz_stock
-// Структура iz_stock в localStorage:
-// { "Горки": { "12345": {num,name,species,goodsType,size,qty,price,lastReceived} }, ... }
-// ════════════════════════════════════════════════════
+// { shopName: { "num": {num,name,species,goodsType,size,qty,price,lastReceived} } }
+// ═══════════════════════════════════════════════════
 
 function getStock(){
   try{ return JSON.parse(localStorage.getItem('iz_stock')||'{}'); }catch(e){ return {}; }
 }
 function saveStock(stock){
-  localStorage.setItem('iz_stock', JSON.stringify(stock));
-  // Sync to Firestore — one doc per shop
-  var shops = Object.keys(stock);
+  localStorage.setItem('iz_stock',JSON.stringify(stock));
+  var shops=Object.keys(stock);
   shops.forEach(function(sn){
-    try{
-      db.collection('iz_settings').doc('stock_'+sn.replace(/\s+/g,'_')).set({items: stock[sn], updatedAt: new Date().toISOString()}, {merge:true});
-    }catch(e){}
+    try{ db.collection('iz_settings').doc('stock_'+sn.replace(/\s+/g,'_')).set({items:stock[sn],updatedAt:new Date().toISOString()},{merge:true}); }catch(e){}
   });
 }
 
-// Get single item from stock by shop+num
-function stockGetByNum(shopName, num){
+function stockGetByNum(shopName,num){
   if(!shopName||!num) return null;
-  var stock = getStock();
-  var shopStock = stock[shopName]||{};
-  return shopStock[String(num)] || null;
+  var stock=getStock();
+  var ss=stock[shopName]||{};
+  return ss[String(num)]||null;
 }
 
-// Update single item qty (delta, positive = +, negative = -)
-function stockUpdateQty(shopName, num, name, price, species, goodsType, size, qtyDelta, date){
+function stockUpdateQty(shopName,num,name,price,species,goodsType,size,qtyDelta,date){
   if(!shopName||!num) return;
-  var stock = getStock();
-  if(!stock[shopName]) stock[shopName] = {};
-  var key = String(num);
+  var stock=getStock();
+  if(!stock[shopName]) stock[shopName]={};
+  var key=String(num);
   if(!stock[shopName][key]){
-    stock[shopName][key] = {num:key, name:name||'', price:price||0, species:species||'', goodsType:goodsType||'derevo', size:size||'', qty:0, lastReceived:''};
+    stock[shopName][key]={num:key,name:name||'',price:price||0,species:species||'',goodsType:goodsType||'derevo',size:size||'',qty:0,lastReceived:''};
   }
-  var entry = stock[shopName][key];
-  // Update metadata if provided
-  if(name) entry.name = name;
-  if(price) entry.price = price;
-  if(species) entry.species = species;
-  if(goodsType) entry.goodsType = goodsType;
-  if(size) entry.size = size;
-  entry.qty = Math.max(0, (entry.qty||0) + qtyDelta);
-  if(qtyDelta > 0) entry.lastReceived = date || new Date().toISOString().split('T')[0];
+  var entry=stock[shopName][key];
+  if(name) entry.name=name;
+  if(price) entry.price=price;
+  if(species) entry.species=species;
+  if(goodsType) entry.goodsType=goodsType;
+  if(size) entry.size=size;
+  entry.qty=Math.max(0,(entry.qty||0)+qtyDelta);
+  if(qtyDelta>0) entry.lastReceived=date||new Date().toISOString().split('T')[0];
   saveStock(stock);
 }
 
-// Build stock from scratch from all history (nakl + shifts)
-function rebuildStock(showToastMsg){
-  var stock = {};
-  var shops = getShopNames();
-  shops.forEach(function(sn){ stock[sn] = {}; });
+function stockApplySale(shopName,items){
+  if(!shopName) return;
+  items.forEach(function(it){
+    if(!it.num) return;
+    stockUpdateQty(shopName,it.num,it.name,it.price,it.species,it.goodsType,it.size,-(it.qty||1),null);
+  });
+}
 
-  // 1. Process all manual invoices (accepted ones)
-  var manualInvs = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-  manualInvs.forEach(function(inv){
-    var sn = inv.destName || inv.shopName;
+function stockApplyReceive(shopName,items,date){
+  if(!shopName) return;
+  items.forEach(function(it){
+    if(!it.num) return;
+    var gt=it.goodsType||(it.category==='dr'?'dr':'derevo');
+    stockUpdateQty(shopName,it.num,it.name,it.price||it.factPrice,it.species,gt,it.size||'',(it.qty||1),date);
+  });
+}
+
+// Rebuild stock from ALL history: manual invoices + all archived shifts + live journal
+function rebuildStock(showMsg){
+  var stock={};
+  var shops=getShopNames();
+  shops.forEach(function(sn){ stock[sn]={}; });
+
+  // 1. Manual invoices (destName or shopName field)
+  var manInvs=JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  manInvs.forEach(function(inv){
+    var sn=inv.destName||inv.shopName||inv.shop;
     if(!sn) return;
-    if(!stock[sn]) stock[sn] = {};
-    var date = inv.acceptedAt ? inv.acceptedAt.split('T')[0] : (inv.date||'');
-    (inv.items||[]).forEach(function(it){
+    if(!stock[sn]) stock[sn]={};
+    var date=inv.acceptedAt?inv.acceptedAt.split('T')[0]:(inv.date||'');
+    // Use acceptedItems if available (has factPrice), fallback to items
+    var itemsList=inv.acceptedItems||inv.items||[];
+    itemsList.forEach(function(it){
       if(!it.num) return;
-      var key = String(it.num);
-      if(!stock[sn][key]) stock[sn][key] = {num:key, name:it.name||'', price:it.price||0, species:it.species||'', goodsType:it.goodsType||it.category==='dr'?'dr':'derevo', size:it.size||'', qty:0, lastReceived:''};
-      var qty = it.qty||1;
-      stock[sn][key].qty += qty;
-      if(date > (stock[sn][key].lastReceived||'')) stock[sn][key].lastReceived = date;
-      // update metadata
-      if(it.name) stock[sn][key].name = it.name;
-      if(it.price) stock[sn][key].price = it.price;
-      if(it.species) stock[sn][key].species = it.species;
+      var key=String(it.num);
+      var qty=it.qty||1;
+      var pr=it.factPrice||it.price||0;
+      var gt=it.goodsType||(it.category==='dr'?'dr':'derevo');
+      if(!stock[sn][key]) stock[sn][key]={num:key,name:it.name||'',price:pr,species:it.species||'',goodsType:gt,size:it.size||'',qty:0,lastReceived:''};
+      stock[sn][key].qty+=qty;
+      if(date>(stock[sn][key].lastReceived||'')) stock[sn][key].lastReceived=date;
+      if(it.name) stock[sn][key].name=it.name;
+      if(pr) stock[sn][key].price=pr;
     });
   });
 
-  // 2. Process all closed shifts — journal entries
-  var allShifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
-  allShifts.forEach(function(sh){
-    var sn = sh.shopName;
+  // 2. Workshop invoices (iz_invoices, status=accepted)
+  var wsInvs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  wsInvs.forEach(function(inv){
+    if(inv.status!=='accepted') return;
+    var sn=inv.destName||inv.shopName;
     if(!sn) return;
-    if(!stock[sn]) stock[sn] = {};
-    var shJournal = sh.journal||[];
-    shJournal.forEach(function(e){
-      if(e.type === 'sale'){
-        // Deduct sold items by num
+    if(!stock[sn]) stock[sn]={};
+    var date=inv.acceptedAt?inv.acceptedAt.split('T')[0]:(inv.acceptedDate||inv.date||'');
+    var itemsList=inv.acceptedItems||inv.items||[];
+    itemsList.forEach(function(it){
+      if(!it.num) return;
+      var key=String(it.num);
+      var qty=it.qty||1;
+      var pr=it.factPrice||it.price||0;
+      var gt=it.goodsType||'derevo';
+      if(!stock[sn][key]) stock[sn][key]={num:key,name:it.name||'',price:pr,species:it.species||'',goodsType:gt,size:it.size||'',qty:0,lastReceived:''};
+      stock[sn][key].qty+=qty;
+      if(date>(stock[sn][key].lastReceived||'')) stock[sn][key].lastReceived=date;
+    });
+  });
+
+  // 3. Archived shifts — process journal entries
+  var allShifts=JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+  // Track which invoice IDs already counted via iz_manual_invoices / iz_invoices
+  var countedInvIds={};
+  manInvs.forEach(function(inv){ var id=inv.id||inv._id; if(id) countedInvIds[String(id)]=true; });
+  wsInvs.forEach(function(inv){ var id=inv.id||inv._id; if(id) countedInvIds[String(id)]=true; });
+
+  allShifts.forEach(function(sh){
+    var sn=sh.shopName; if(!sn) return;
+    if(!stock[sn]) stock[sn]={};
+    var shJ=sh.journal||[];
+    shJ.forEach(function(e){
+      if(e.type==='sale'){
         (e.items||[]).forEach(function(it){
           if(!it.num) return;
-          var key = String(it.num);
-          if(!stock[sn][key]) return; // не ставим на минус незнакомые
-          var qty = it.qty||1;
-          stock[sn][key].qty = Math.max(0, (stock[sn][key].qty||0) - qty);
-        });
-      } else if(e.type === 'receive' && e.invId){
-        // receive entries from invoices already counted above via iz_manual_invoices
-        // skip to avoid double-counting
-      } else if(e.type === 'receive' && !e.invId){
-        // manual receive without invoice — add to stock if has article
-        if(e.article){
-          var key = String(e.article);
-          if(!stock[sn][key]) stock[sn][key] = {num:key, name:e.name||'', price:e.amount||0, species:'', goodsType:'derevo', size:'', qty:0, lastReceived:''};
-          stock[sn][key].qty += 1;
-        }
-      } else if(e.type === 'writeoff'){
-        (e.items||[]).forEach(function(it){
-          if(!it.num) return;
-          var key = String(it.num);
+          var key=String(it.num);
           if(!stock[sn][key]) return;
-          var qty = it.qty||1;
-          stock[sn][key].qty = Math.max(0, (stock[sn][key].qty||0) - qty);
+          stock[sn][key].qty=Math.max(0,(stock[sn][key].qty||0)-(it.qty||1));
         });
-      } else if(e.type === 'staff'){
+      } else if(e.type==='receive'){
+        // Only count receive entries NOT linked to an already-counted invoice
+        if(e.invId && countedInvIds[String(e.invId)]) return;
+        // Manual receive in journal with article
         if(e.article){
-          var key = String(e.article);
-          if(stock[sn][key]){
-            var qty = e.qty||1;
-            stock[sn][key].qty = Math.max(0, (stock[sn][key].qty||0) - qty);
+          var key=String(e.article);
+          if(!stock[sn][key]) stock[sn][key]={num:key,name:e.name||'',price:e.amount||0,species:'',goodsType:'derevo',size:'',qty:0,lastReceived:''};
+          stock[sn][key].qty+=1;
+          var d=e.ts?e.ts.split('T')[0]:'';
+          if(d>(stock[sn][key].lastReceived||'')) stock[sn][key].lastReceived=d;
+        }
+      } else if(e.type==='writeoff'){
+        (e.items||[]).forEach(function(it){
+          if(!it.num) return;
+          var key=String(it.num);
+          if(!stock[sn][key]) return;
+          stock[sn][key].qty=Math.max(0,(stock[sn][key].qty||0)-(it.qty||1));
+        });
+      } else if(e.type==='staff'){
+        if(e.article){
+          var key=String(e.article);
+          if(stock[sn]&&stock[sn][key]){
+            stock[sn][key].qty=Math.max(0,(stock[sn][key].qty||0)-(e.qty||1));
           }
         }
       }
     });
   });
 
-  // 3. Also process LIVE journal (current open shift)
-  if(session && session.shopName){
-    var sn = session.shopName;
-    if(!stock[sn]) stock[sn] = {};
+  // 4. Live journal (current open shift)
+  if(session&&session.shopName){
+    var sn=session.shopName;
+    if(!stock[sn]) stock[sn]={};
     journal.forEach(function(e){
-      if(e.type === 'sale'){
+      if(e.type==='sale'){
         (e.items||[]).forEach(function(it){
           if(!it.num) return;
-          var key = String(it.num);
+          var key=String(it.num);
           if(!stock[sn][key]) return;
-          var qty = it.qty||1;
-          stock[sn][key].qty = Math.max(0, (stock[sn][key].qty||0) - qty);
+          stock[sn][key].qty=Math.max(0,(stock[sn][key].qty||0)-(it.qty||1));
         });
-      } else if(e.type === 'writeoff'){
+      } else if(e.type==='writeoff'){
         (e.items||[]).forEach(function(it){
           if(!it.num) return;
-          var key = String(it.num);
+          var key=String(it.num);
           if(!stock[sn][key]) return;
-          var qty = it.qty||1;
-          stock[sn][key].qty = Math.max(0, (stock[sn][key].qty||0) - qty);
+          stock[sn][key].qty=Math.max(0,(stock[sn][key].qty||0)-(it.qty||1));
         });
-      } else if(e.type === 'staff'){
-        if(e.article){
-          var key = String(e.article);
-          if(stock[sn][key]){
-            var qty = e.qty||1;
-            stock[sn][key].qty = Math.max(0, (stock[sn][key].qty||0) - qty);
-          }
+      } else if(e.type==='staff'){
+        if(e.article&&stock[sn]&&stock[sn][String(e.article)]){
+          stock[sn][String(e.article)].qty=Math.max(0,(stock[sn][String(e.article)].qty||0)-(e.qty||1));
         }
       }
     });
   }
 
   saveStock(stock);
-  if(showToastMsg) showToast('✅ Склад пересчитан');
+  if(showMsg){
+    // Count total items
+    var total=0;
+    Object.keys(stock).forEach(function(sn){ total+=Object.keys(stock[sn]).length; });
+    showToast('✅ Склад пересчитан: '+total+' позиций');
+  }
   try{ renderStockPage(); }catch(e){}
 }
 
-// Apply stock delta after sale saved
-function stockApplySale(shopName, items){
-  if(!shopName) return;
-  items.forEach(function(it){
-    if(!it.num) return;
-    stockUpdateQty(shopName, it.num, it.name, it.price, it.species, it.goodsType, it.size, -(it.qty||1), null);
+// ── Diagnostic: show raw manual invoice data to debug ──
+function stockDiagnostic(){
+  var manInvs=JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var wsInvs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  var msg='iz_manual_invoices: '+manInvs.length+' шт.\n';
+  manInvs.forEach(function(inv,i){
+    msg+='['+(i+1)+'] destName='+inv.destName+' shopName='+inv.shopName+' items='+(inv.items||[]).length+' date='+inv.date+'\n';
+    (inv.items||[]).slice(0,3).forEach(function(it){ msg+='   num='+it.num+' name='+it.name+' qty='+it.qty+'\n'; });
   });
+  msg+='\niz_invoices (accepted): '+wsInvs.filter(function(i){return i.status==='accepted';}).length+' шт.\n';
+  alert(msg);
 }
 
-// Apply stock delta after receive/invoice accepted
-function stockApplyReceive(shopName, items, date){
-  if(!shopName) return;
-  items.forEach(function(it){
-    if(!it.num) return;
-    var gt = it.goodsType || (it.category==='dr'?'dr':'derevo');
-    stockUpdateQty(shopName, it.num, it.name, it.price, it.species, gt, it.size, it.qty||1, date);
-  });
-}
-
-// Init stock page (called when tab opened)
 function initStockPage(){
-  // Populate shop filter for admin
-  var isAdmin = session && session.role === 'shopadmin';
-  var shopSel = document.getElementById('stockFilterShop');
-  var titleEl = document.getElementById('stockPageTitle');
+  var isAdmin=session&&session.role==='shopadmin';
+  var shopSel=document.getElementById('stockFilterShop');
+  var titleEl=document.getElementById('stockPageTitle');
   if(isAdmin){
     if(shopSel){
-      shopSel.style.display = '';
-      var shops = getShopNames();
-      shopSel.innerHTML = '<option value="">Все магазины</option>' +
+      shopSel.style.display='';
+      var shops=getShopNames();
+      shopSel.innerHTML='<option value="">Все магазины</option>'+
         shops.map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('');
     }
-    if(titleEl) titleEl.textContent = 'Склад (все магазины)';
+    if(titleEl) titleEl.textContent='Склад (все магазины)';
   } else {
-    if(shopSel) shopSel.style.display = 'none';
-    if(titleEl) titleEl.textContent = 'Склад · ' + (session&&session.shopName||'');
+    if(shopSel) shopSel.style.display='none';
+    if(titleEl) titleEl.textContent='Склад · '+(session&&session.shopName||'');
   }
-  // Populate size filter
-  var sizeSel = document.getElementById('stockFilterSize');
+  var sizeSel=document.getElementById('stockFilterSize');
   if(sizeSel){
-    var sizes = getRefBook('iz_sizes')||[];
-    sizeSel.innerHTML = '<option value="">Все размеры</option>' +
+    var sizes=getRefBook('iz_sizes')||[];
+    sizeSel.innerHTML='<option value="">Все размеры</option>'+
       sizes.map(function(s){ var n=(s&&s.name)||s; return '<option value="'+n+'">'+n+'</option>'; }).join('');
   }
   renderStockPage();
 }
 
-// Render stock page
 function renderStockPage(){
-  var isAdmin = session && session.role === 'shopadmin';
-  var stock = getStock();
-  var filterShop = (document.getElementById('stockFilterShop')||{}).value||'';
-  var filterType = (document.getElementById('stockFilterType')||{}).value||'';
-  var filterSpecies = ((document.getElementById('stockFilterSpecies')||{}).value||'').trim().toLowerCase();
-  var filterSize = (document.getElementById('stockFilterSize')||{}).value||'';
-  var filterFrom = (document.getElementById('stockFilterFrom')||{}).value||'';
-  var filterTo = (document.getElementById('stockFilterTo')||{}).value||'';
-  var search = ((document.getElementById('stockSearch')||{}).value||'').trim().toLowerCase();
+  var isAdmin=session&&session.role==='shopadmin';
+  var stock=getStock();
+  var filterShop=(document.getElementById('stockFilterShop')||{}).value||'';
+  var filterType=(document.getElementById('stockFilterType')||{}).value||'';
+  var filterSpecies=((document.getElementById('stockFilterSpecies')||{}).value||'').trim().toLowerCase();
+  var filterSize=(document.getElementById('stockFilterSize')||{}).value||'';
+  var filterFrom=(document.getElementById('stockFilterFrom')||{}).value||'';
+  var filterTo=(document.getElementById('stockFilterTo')||{}).value||'';
+  var search=((document.getElementById('stockSearch')||{}).value||'').trim().toLowerCase();
 
-  // Collect items
-  var rows = [];
-  var shopsToShow = isAdmin ? Object.keys(stock) : (session&&session.shopName ? [session.shopName] : []);
-  if(isAdmin && filterShop) shopsToShow = [filterShop];
+  var rows=[];
+  var shopsToShow=isAdmin?Object.keys(stock):(session&&session.shopName?[session.shopName]:[]);
+  if(isAdmin&&filterShop) shopsToShow=[filterShop];
 
   shopsToShow.forEach(function(sn){
-    var shopStock = stock[sn]||{};
-    Object.keys(shopStock).forEach(function(key){
-      var it = shopStock[key];
-      rows.push(Object.assign({}, it, {_shop: sn}));
+    var ss=stock[sn]||{};
+    Object.keys(ss).forEach(function(key){
+      rows.push(Object.assign({},ss[key],{_shop:sn}));
     });
   });
 
-  // Filter
-  var filtered = rows.filter(function(it){
-    if(filterType && it.goodsType !== filterType) return false;
-    if(filterSpecies && (it.species||'').toLowerCase().indexOf(filterSpecies) < 0) return false;
-    if(filterSize && it.size && it.size !== filterSize) return false;
-    if(filterFrom && it.lastReceived && it.lastReceived < filterFrom) return false;
-    if(filterTo && it.lastReceived && it.lastReceived > filterTo) return false;
+  var filtered=rows.filter(function(it){
+    if(filterType&&it.goodsType!==filterType) return false;
+    if(filterSpecies&&(it.species||'').toLowerCase().indexOf(filterSpecies)<0) return false;
+    if(filterSize&&it.size&&it.size!==filterSize) return false;
+    if(filterFrom&&it.lastReceived&&it.lastReceived<filterFrom) return false;
+    if(filterTo&&it.lastReceived&&it.lastReceived>filterTo) return false;
     if(search){
-      var hay = [it.num, it.name, it.species, it.size, it._shop].join(' ').toLowerCase();
-      if(hay.indexOf(search) < 0) return false;
+      var hay=[it.num,it.name,it.species,it.size,it._shop].join(' ').toLowerCase();
+      if(hay.indexOf(search)<0) return false;
     }
     return true;
   });
 
-  // Sort: by lastReceived desc, then by name
   filtered.sort(function(a,b){
-    var rd = (b.lastReceived||'').localeCompare(a.lastReceived||'');
-    if(rd !== 0) return rd;
-    return (a.name||'').localeCompare(b.name||'');
+    var rd=(b.lastReceived||'').localeCompare(a.lastReceived||'');
+    return rd!==0?rd:(a.name||'').localeCompare(b.name||'');
   });
 
-  // Summary
-  var sumEl = document.getElementById('stockSummary');
+  var sumEl=document.getElementById('stockSummary');
   if(sumEl){
-    var totalQty = filtered.reduce(function(s,it){ return s+(it.qty||0); },0);
-    var totalAmt = filtered.reduce(function(s,it){ return s+(it.qty||0)*(it.price||0); },0);
-    var woodQty = filtered.filter(function(it){ return it.goodsType!=='dr'; }).reduce(function(s,it){ return s+(it.qty||0); },0);
-    var drQty = filtered.filter(function(it){ return it.goodsType==='dr'; }).reduce(function(s,it){ return s+(it.qty||0); },0);
-    sumEl.innerHTML = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">' +
-      '<div style="background:#1a2e1e;border:1px solid #2e4e2e;border-radius:10px;padding:8px 12px;flex:1;min-width:80px">' +
-        '<div style="font-size:10px;color:#8888aa">🌳 Дерево</div>' +
-        '<div style="font-size:16px;font-weight:700;color:#c8f060">'+woodQty+' шт.</div>' +
-      '</div>' +
-      '<div style="background:#1e1a2e;border:1px solid #3e2e4e;border-radius:10px;padding:8px 12px;flex:1;min-width:80px">' +
-        '<div style="font-size:10px;color:#8888aa">🛍 ДР Товар</div>' +
-        '<div style="font-size:16px;font-weight:700;color:#a060f0">'+drQty+' шт.</div>' +
-      '</div>' +
-      '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:8px 12px;flex:1;min-width:80px">' +
-        '<div style="font-size:10px;color:#8888aa">💰 Сумма</div>' +
-        '<div style="font-size:14px;font-weight:700;color:#f0f0f8">'+Math.round(totalAmt).toLocaleString('ru-RU')+'₽</div>' +
-      '</div>' +
+    var woodQty=0,drQty=0,totalAmt=0;
+    filtered.forEach(function(it){
+      var q=it.qty||0;
+      if(it.goodsType==='dr') drQty+=q; else woodQty+=q;
+      totalAmt+=q*(it.price||0);
+    });
+    sumEl.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">'+
+      '<div style="background:#1a2e1e;border:1px solid #2e4e2e;border-radius:10px;padding:8px 12px;flex:1;min-width:80px">'+
+        '<div style="font-size:10px;color:#8888aa">🌳 Дерево</div>'+
+        '<div style="font-size:16px;font-weight:700;color:#c8f060">'+woodQty+' шт.</div>'+
+      '</div>'+
+      '<div style="background:#1e1a2e;border:1px solid #3e2e4e;border-radius:10px;padding:8px 12px;flex:1;min-width:80px">'+
+        '<div style="font-size:10px;color:#8888aa">🛍 ДР Товар</div>'+
+        '<div style="font-size:16px;font-weight:700;color:#a060f0">'+drQty+' шт.</div>'+
+      '</div>'+
+      '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:8px 12px;flex:1;min-width:80px">'+
+        '<div style="font-size:10px;color:#8888aa">💰 Сумма</div>'+
+        '<div style="font-size:14px;font-weight:700;color:#f0f0f8">'+Math.round(totalAmt).toLocaleString('ru-RU')+'₽</div>'+
+      '</div>'+
     '</div>';
   }
 
-  var countEl = document.getElementById('stockFilterCount');
-  if(countEl) countEl.textContent = filtered.length ? filtered.length + ' поз.' : '';
+  var countEl=document.getElementById('stockFilterCount');
+  if(countEl) countEl.textContent=filtered.length?filtered.length+' поз.':'';
 
-  var listEl = document.getElementById('stockList');
+  var listEl=document.getElementById('stockList');
   if(!listEl) return;
   if(!filtered.length){
-    listEl.innerHTML = '<div class="empty"><div class="ei">📦</div>Нет товаров' + (search||filterType||filterSpecies?'<br>по выбранным фильтрам':'') + '</div>';
+    // Show diagnostic button if no items and no filters active
+    var noFilter=!search&&!filterType&&!filterSpecies&&!filterSize&&!filterFrom&&!filterTo&&!filterShop;
+    listEl.innerHTML='<div class="empty"><div class="ei">📦</div>'+
+      (noFilter?'Нет данных · нажмите<br><b>🔄 Пересчитать</b>':'Нет товаров по фильтрам')+
+      '</div>'+
+      (noFilter?'<div style="text-align:center;margin-top:8px"><button type="button" onclick="stockDiagnostic()" style="padding:6px 14px;background:#22222e;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:11px;cursor:pointer">🔍 Диагностика</button></div>':'');
     return;
   }
 
-  listEl.innerHTML = filtered.map(function(it){
-    var gtColor = it.goodsType==='dr' ? '#a060f0' : '#c8f060';
-    var gtLabel = it.goodsType==='dr' ? 'ДР' : '🌳';
-    var qtyColor = it.qty > 0 ? '#f0f0f8' : '#f06060';
-    var dateStr = it.lastReceived ? 'приход: '+it.lastReceived : '';
-    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:8px">' +
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
-        '<div style="flex:1">' +
-          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">' +
-            '<span style="font-size:11px;font-weight:700;color:'+gtColor+';background:'+gtColor+'22;padding:2px 6px;border-radius:6px">'+gtLabel+'</span>' +
-            (it.num ? '<span style="font-size:12px;font-weight:700;color:#8888aa">№'+it.num+'</span>' : '') +
-            (isAdmin ? '<span style="font-size:10px;color:#8888aa;margin-left:2px">· '+it._shop+'</span>' : '') +
-          '</div>' +
-          '<div style="font-size:14px;font-weight:700;margin-bottom:2px">'+it.name+'</div>' +
-          (it.species ? '<div style="font-size:12px;color:#8888aa">'+it.species+(it.size?' · '+it.size:'')+'</div>' : (it.size?'<div style="font-size:12px;color:#8888aa">'+it.size+'</div>':'')) +
-          (dateStr ? '<div style="font-size:10px;color:#606080;margin-top:2px">'+dateStr+'</div>' : '') +
-        '</div>' +
-        '<div style="text-align:right;flex-shrink:0;padding-left:10px">' +
-          '<div style="font-size:20px;font-weight:700;color:'+qtyColor+'">'+it.qty+'</div>' +
-          '<div style="font-size:10px;color:#8888aa">шт.</div>' +
-          '<div style="font-size:12px;font-weight:600;color:#c8a060;margin-top:2px">'+Math.round((it.qty||0)*(it.price||0)).toLocaleString('ru-RU')+'₽</div>' +
-        '</div>' +
-      '</div>' +
+  listEl.innerHTML=filtered.map(function(it){
+    var gtColor=it.goodsType==='dr'?'#a060f0':'#c8f060';
+    var gtLabel=it.goodsType==='dr'?'ДР':'🌳';
+    var qtyColor=it.qty>0?'#f0f0f8':'#f06060';
+    var dateStr=it.lastReceived?'приход: '+it.lastReceived:'';
+    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:8px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div style="flex:1">'+
+          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'+
+            '<span style="font-size:11px;font-weight:700;color:'+gtColor+';background:'+gtColor+'22;padding:2px 6px;border-radius:6px">'+gtLabel+'</span>'+
+            (it.num?'<span style="font-size:12px;font-weight:700;color:#8888aa">№'+it.num+'</span>':'')+
+            (isAdmin?'<span style="font-size:10px;color:#606080;margin-left:2px">'+it._shop+'</span>':'')+
+          '</div>'+
+          '<div style="font-size:14px;font-weight:700;margin-bottom:2px">'+it.name+'</div>'+
+          (it.species?'<div style="font-size:12px;color:#8888aa">'+it.species+(it.size?' · '+it.size:'')+'</div>':
+            (it.size?'<div style="font-size:12px;color:#8888aa">'+it.size+'</div>':''))+
+          (dateStr?'<div style="font-size:10px;color:#606080;margin-top:2px">'+dateStr+'</div>':'')+
+        '</div>'+
+        '<div style="text-align:right;flex-shrink:0;padding-left:10px">'+
+          '<div style="font-size:20px;font-weight:700;color:'+qtyColor+'">'+it.qty+'</div>'+
+          '<div style="font-size:10px;color:#8888aa">шт.</div>'+
+          '<div style="font-size:12px;font-weight:600;color:#c8a060;margin-top:2px">'+Math.round((it.qty||0)*(it.price||0)).toLocaleString('ru-RU')+'₽</div>'+
+        '</div>'+
+      '</div>'+
     '</div>';
   }).join('');
 }
 
 function clearStockFilters(){
   ['stockSearch','stockFilterSpecies','stockFilterFrom','stockFilterTo'].forEach(function(id){
-    var el = document.getElementById(id); if(el) el.value = '';
+    var el=document.getElementById(id); if(el) el.value='';
   });
   ['stockFilterType','stockFilterShop','stockFilterSize'].forEach(function(id){
-    var el = document.getElementById(id); if(el) el.selectedIndex = 0;
+    var el=document.getElementById(id); if(el) el.selectedIndex=0;
   });
   renderStockPage();
 }
 
-// Listen to iz_stock from Firestore (sync across devices)
 function startStockSync(){
-  var shops = getShopNames();
+  var shops=getShopNames();
   shops.forEach(function(sn){
-    var docId = 'stock_'+sn.replace(/\s+/g,'_');
+    var docId='stock_'+sn.replace(/\s+/g,'_');
     try{
       db.collection('iz_settings').doc(docId).onSnapshot(function(snap){
         if(!snap.exists) return;
-        var data = snap.data();
+        var data=snap.data();
         if(!data||!data.items) return;
-        var stock = getStock();
-        stock[sn] = data.items;
-        localStorage.setItem('iz_stock', JSON.stringify(stock));
+        var stock=getStock();
+        stock[sn]=data.items;
+        localStorage.setItem('iz_stock',JSON.stringify(stock));
         try{ renderStockPage(); }catch(e){}
       });
     }catch(e){}
   });
 }
-// ════ END STOCK MODULE ════
+// ═══════ END STOCK MODULE ═══════
 </script>
 </body>
 </html>
