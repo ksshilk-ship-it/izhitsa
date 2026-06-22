@@ -3505,7 +3505,10 @@ function cancelMorning(){
 }
 function getPrevShift(shopName){
   var all=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-  return all.filter(function(s){return s.shopName===shopName;}).sort(function(a,b){return new Date(b.closedAt||0)-new Date(a.closedAt||0);})[0]||null;
+  return all.filter(function(s){
+    if(s.isRestoreShift || s.backfilled || s.source==='psj') return false;
+    return s.shopName===shopName;
+  }).sort(function(a,b){return new Date(b.closedAt||0)-new Date(a.closedAt||0);})[0]||null;
 }
 // Тот же поиск «предыдущей смены», что и getPrevShift(), но по порядку
 // ОТКРЫТИЯ, а не закрытия. Используется специально для сверки нал утро —
@@ -3514,8 +3517,18 @@ function getPrevShift(shopName){
 // не ту смену и даёт ложное расхождение кассы.
 function getPrevShiftByOpenOrder(shopName, beforeOpenedAt){
   var all = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  // «Предыдущая смена» = последняя смена этого магазина, открытая
+  // в предыдущий или более ранний календарный день — не сегодня.
+  // Это гарантирует, что restore-смена за 11.06, закрытая вчера,
+  // не вытеснит реальную смену за 21.06 при сравнении нала на утро 22.06.
+  var beforeDate = beforeOpenedAt ? beforeOpenedAt.split('T')[0] : '';
   var candidates = all.filter(function(s){
-    return s.shopName===shopName && s.openedAt && beforeOpenedAt && s.openedAt < beforeOpenedAt;
+    if(s.isRestoreShift || s.backfilled || s.source==='psj') return false;
+    if(!s.shopName===shopName) return false;
+    if(s.shopName!==shopName) return false;
+    if(!s.openedAt) return false;
+    var sDate = s.openedAt.split('T')[0];
+    return beforeDate ? sDate < beforeDate : true;
   });
   return candidates.sort(function(a,b){ return new Date(b.openedAt)-new Date(a.openedAt); })[0] || null;
 }
