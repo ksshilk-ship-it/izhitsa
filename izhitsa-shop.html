@@ -2931,6 +2931,11 @@ var _shiftForceClosedRemotely = false;
 function syncLiveShift(){
   if(!session || session.isPreview) return;
   if(_shiftForceClosedRemotely) return;
+  // Restore-смена существует только локально пока не закрыта — она не должна
+  // попадать в Firestore со status:'open', иначе продавцы не смогут открыть
+  // смену в этом же магазине за текущий день (система решит, что магазин
+  // уже "занят" этой архивной restore-сменой).
+  if(restoreMode) return;
   // Don't push a live shift doc to Firestore until the shift has at least one
   // real journal entry. A shift that was opened and then immediately
   // abandoned (browser tab closed, no sales/actions) would otherwise still
@@ -6412,7 +6417,21 @@ function _closeShiftReal(){
     var d = new Date(session.openedAt);
     return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   })();
-  const report={id:(session.shiftId||uid()),status:'closed',source:'shop',shopName:session.shopName,sellerName:session.sellerName,
+  // При закрытии restore-смены находим оригинальную открытую запись этого
+  // магазина/продавца/даты в Firestore (если она есть — она там с status:'open')
+  // и перезаписываем её тем же document id, чтобы она стала 'closed'.
+  // Иначе старая открытая запись так и остаётся со status:'open' в Firestore
+  // и продолжает показываться как "незакрытая смена" в архиве администратора.
+  var finalReportId = session.shiftId || uid();
+  if(restoreMode){
+    var allExisting = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var origOpen = allExisting.find(function(s){
+      return s.shopName===session.shopName && s.sellerName===session.sellerName &&
+        s.date===openedDateStr && (s.status==='open'||!s.closedAt) && s.id!==session.shiftId;
+    });
+    if(origOpen && origOpen.id) finalReportId = origOpen.id;
+  }
+  const report={id:finalReportId,status:'closed',source:'shop',shopName:session.shopName,sellerName:session.sellerName,
     date:openedDateStr,openedAt:session.openedAt,closedAt:new Date().toISOString(),
     cashMorning:session.cashMorning,goodsMorning:session.goodsMorning,cashEvening:cashEve,goodsEvening:t.goods,
     cashDrMorning:(session.cashDrMorning||0),drCashEvening:drCashEve,goodsDrMorning:(session.goodsDrMorning||0),drGoodsEvening:t.goodsDr,drCashDiff:drCashDiff,
@@ -6428,16 +6447,42 @@ function _closeShiftReal(){
       date:report.date,cashDiff,cashDiffReason:reason,morningDiff,prevCashEve:(prev&&prev.cashEvening),cashMorning:session.cashMorning});
   }
   const shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-  shifts.unshift(report); localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+  // Убираем старую открытую запись с тем же магазином/датой из localStorage,
+  // чтобы она не показывалась как "незакрытая" рядом с только что закрытой.
+  var filteredShifts = shifts.filter(function(s){
+    if(!restoreMode) return true;
+    return !(s.shopName===report.shopName && s.date===report.date &&
+      (s.status==='open'||!s.closedAt) && s.id!==report.id);
+  });
+  filteredShifts.unshift(report);
+  localStorage.setItem(KEY.shifts,JSON.stringify(filteredShifts));
   try{ db.collection('iz_shifts').doc(report.id).set(report); }catch(e){}
   if(restoreMode){
-    // Restore-режим: смена ушла в общий архив KEY.shifts — этого достаточно,
-    // дальше не нужно ни trash/tombstones (это механика live-смены конкретного
-    // устройства), ни возврат на экран логина. Возвращаем в интерфейс
-    // восстановления, чтобы можно было открыть следующую смену для восстановления.
+    // Дополнительно: найти в Firestore все открытые документы этого магазина
+    // за эту дату и закрыть их — это покрывает случай, когда оригинальный
+    // shiftId продавца не совпадает с нашим (т.к. мы создали новую restore-сессию
+    // с uid()), и оригинал так и лежит в Firestore со status:'open'.
+    try{
+      db.collection('iz_shifts')
+        .where('shopName','==',report.shopName)
+        .where('date','==',report.date)
+        .where('status','==','open')
+        .get().then(function(snap){
+          snap.forEach(function(doc){
+            if(doc.id!==report.id){
+              doc.ref.set(Object.assign({},doc.data(),{
+                status:'closed',
+                closedAt:report.closedAt,
+                closedByRestore:true,
+                restoreShiftId:report.id
+              }),{merge:true});
+            }
+          });
+        });
+    }catch(e){}
     localStorage.removeItem(KEY.restoreSession); localStorage.removeItem(KEY.restoreJournal);
     session=null; journal=[];
-    exitRestoreMode();
+    exitRestoreMode({_closedProperly:true});
     showToast('✅ Восстановленная смена сохранена в архив');
     return;
   }
@@ -9785,6 +9830,25 @@ function enterRestoreMode(meta){
 }
 function exitRestoreMode(opts){
   opts = opts || {};
+  // Если restore-смена была открыта (session существует, shiftId есть) но
+  // закрывается не через _closeShiftReal (т.е. пользователь вышел без
+  // закрытия смены), удаляем live-документ из Firestore — он мог туда
+  // попасть в старых версиях до фикса syncLiveShift()/restoreMode.
+  // После фикса syncLiveShift() больше не пишет restore-смены в Firestore,
+  // но на случай если что-то всё равно туда попало — чистим явно.
+  if(session && session.shiftId && !opts._closedProperly){
+    try{
+      db.collection('iz_shifts').where('shopName','==',session.shopName)
+        .where('status','==','open').get().then(function(snap){
+          snap.forEach(function(doc){
+            if(doc.data().isRestoreShift || doc.data().closedByRestore ||
+               doc.id===session.shiftId){
+              doc.ref.delete();
+            }
+          });
+        });
+    }catch(e){}
+  }
   restoreMode = false;
   restoreMeta = null;
   // Восстанавливаем live-сессию из бэкапа, если она была — это может быть
