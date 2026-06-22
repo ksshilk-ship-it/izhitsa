@@ -2254,17 +2254,38 @@ function getPrevDateRange(fromKey, toKey){
   return {from:k(prevFrom), to:k(prevTo)};
 }
 
+// Проверяет, является ли смена «настоящей» для целей аналитики:
+// — shopName должен совпадать с одним из официальных магазинов из iz_shops
+// — статус не должен быть 'open' (незакрытые смены не учитываем)
+// Это автоматически исключает тестовые смены, открытые под несуществующими
+// точками (например, «Дерево», которой нет в iz_shops), без необходимости
+// фильтровать по имени продавца и рисковать исключить реальные смены.
+function _validShopNames() {
+  try {
+    var shops = JSON.parse(localStorage.getItem('iz_shops') || '[]');
+    // iz_shops может быть массивом объектов {name, type, ...} или массивом строк
+    return shops.map(function(s){ return typeof s === 'string' ? s : (s.name || ''); }).filter(Boolean);
+  } catch(e) { return []; }
+}
+function isValidShift(s) {
+  if(s.status === 'open') return false;
+  var validShops = _validShopNames();
+  // Если список магазинов не загружен ещё — пропускаем все закрытые смены
+  if(!validShops.length) return s.status === 'closed';
+  return validShops.indexOf(s.shopName) >= 0;
+}
+
 function getShiftsInRange(from, to) {
   try {
     var shifts = JSON.parse(localStorage.getItem('iz_shifts') || '[]');
-    return shifts.filter(function(s) { return s.date >= from && s.date <= to; });
+    return shifts.filter(function(s) { return s.date >= from && s.date <= to && isValidShift(s); });
   } catch(e) { return []; }
 }
 
 function getShiftsForDate(dateKey) {
   try {
     var shifts = JSON.parse(localStorage.getItem('iz_shifts') || '[]');
-    return shifts.filter(function(s) { return s.date === dateKey; });
+    return shifts.filter(function(s) { return s.date === dateKey && isValidShift(s); });
   } catch(e) { return []; }
 }
 
