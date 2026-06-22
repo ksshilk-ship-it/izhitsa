@@ -1161,30 +1161,14 @@ function checkForAppUpdate() {
           <label class="fl">Наименование</label>
           <div style="display:flex;gap:6px">
             <input class="fi" id="siName" placeholder="Название" autocomplete="off"
-              oninput="checkItemDiff();psjSuggest('siName',getItemNames(),'siPickName')"
-              onfocus="psjSuggest('siName',getItemNames(),'siPickName')"
+              oninput="checkItemDiff();psjSuggest('siName',getItemNames(_siItemGoodsType),'siPickName')"
+              onfocus="psjSuggest('siName',getItemNames(_siItemGoodsType),'siPickName')"
               onblur="psjHideSugg('siName')">
             <button type="button" onclick="siAddToGoods('siName')" style="background:#22222e;border:1px solid #c8f060;border-radius:10px;padding:0 14px;color:#c8f060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
           </div>
           <div id="siName_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
         </div>
-        <div class="fg" style="margin-bottom:8px;position:relative">
-          <label class="fl">Порода дерева</label>
-          <div style="display:flex;gap:6px">
-            <input class="fi" id="siSpecies" placeholder="Порода" autocomplete="off"
-              oninput="psjSuggest('siSpecies',getSpecies(),'siPickSpecies')"
-              onfocus="psjSuggest('siSpecies',getSpecies(),'siPickSpecies')"
-              onblur="psjHideSugg('siSpecies')">
-            <button type="button" onclick="siAddToSpecies('siSpecies')" style="background:#22222e;border:1px solid #f0c060;border-radius:10px;padding:0 14px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
-          </div>
-          <div id="siSpecies_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
-        </div>
-        <div style="display:flex;gap:8px">
-          <div class="fg" style="margin:0;flex:1"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="siPrice" placeholder="0" inputmode="numeric" oninput="checkItemDiff();siCalcAmt()"></div>
-          <div class="fg" style="margin:0;width:80px"><label class="fl">Кол-во</label><input class="fi" type="number" id="siQty" placeholder="1" inputmode="numeric" value="1" oninput="siCalcAmt()"></div>
-        </div>
-        <div class="fg" style="margin:6px 0 0"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="siAmt" placeholder="0" inputmode="numeric" oninput="siCalcFromAmt()" style="border-color:#c8f060;color:#c8f060;font-weight:700"></div>
-        <div class="fg" style="margin-top:8px;margin-bottom:0">
+        <div class="fg" style="margin-top:8px;margin-bottom:6px">
           <label class="fl">Тип товара</label>
           <div style="display:flex;gap:6px">
             <button type="button" id="siTypeDerevo" onclick="setSiItemType('derevo')"
@@ -1193,27 +1177,52 @@ function checkForAppUpdate() {
               style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
           </div>
         </div>
+        <div class="fg" style="margin-bottom:8px;position:relative">
+          <label class="fl" id="siSpeciesLabel">Порода дерева</label>
+          <div style="display:flex;gap:6px">
+            <input class="fi" id="siSpecies" placeholder="Порода" autocomplete="off"
+              oninput="psjSuggest('siSpecies',getSiSpeciesList(),'siPickSpecies')"
+              onfocus="psjSuggest('siSpecies',getSiSpeciesList(),'siPickSpecies')"
+              onblur="psjHideSugg('siSpecies')">
+            <button type="button" onclick="siAddToSpecies('siSpecies')" id="siSpeciesAddBtn" style="background:#22222e;border:1px solid #f0c060;border-radius:10px;padding:0 14px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
+          </div>
+          <div id="siSpecies_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <div class="fg" style="margin:0;flex:1"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="siPrice" placeholder="0" inputmode="numeric" oninput="checkItemDiff();siCalcAmt()"></div>
+          <div class="fg" style="margin:0;width:80px"><label class="fl">Кол-во</label><input class="fi" type="number" id="siQty" placeholder="1" inputmode="numeric" value="1" oninput="siCalcAmt()"></div>
+        </div>
+        <div class="fg" style="margin:6px 0 0"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="siAmt" placeholder="0" inputmode="numeric" oninput="siCalcFromAmt()" style="border-color:#c8f060;color:#c8f060;font-weight:700"></div>
         <div id="siDiffWarn" style="display:none;margin-top:8px;padding:8px;background:#2e1a1a;border:1px solid #f06060;border-radius:8px;font-size:11px;color:#f06060"></div>
         <button type="button" onclick="addSaleItem()" style="width:100%;margin-top:12px;background:#c8f060;border:none;border-radius:10px;padding:11px;font-weight:700;color:#0f0f13;cursor:pointer;font-family:'Unbounded',sans-serif;font-size:13px">＋ Добавить в чек</button>
       </div>
       <div id="siManualBlock" style="display:none">
+        <div class="fg" style="margin-top:8px;margin-bottom:6px">
+          <label class="fl">Тип товара</label>
+          <div style="display:flex;gap:6px">
+            <button type="button" id="siTypeDerevoM" onclick="setSiItemType('derevo')"
+              style="flex:1;padding:7px;border-radius:8px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">🌳 Дерево</button>
+            <button type="button" id="siTypeDrM" onclick="setSiItemType('dr')"
+              style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
+          </div>
+        </div>
         <div class="fg" style="margin-bottom:8px;position:relative">
           <label class="fl">Наименование</label>
           <div style="display:flex;gap:6px">
             <input class="fi" id="siNameM" placeholder="Введите вручную" autocomplete="off"
-              oninput="psjSuggest('siNameM',getItemNames(),'siPickNameM')"
-              onfocus="psjSuggest('siNameM',getItemNames(),'siPickNameM')"
+              oninput="psjSuggest('siNameM',getItemNames(_siItemGoodsType),'siPickNameM')"
+              onfocus="psjSuggest('siNameM',getItemNames(_siItemGoodsType),'siPickNameM')"
               onblur="psjHideSugg('siNameM')">
             <button type="button" onclick="siAddToGoods('siNameM')" style="background:#22222e;border:1px solid #c8f060;border-radius:10px;padding:0 14px;color:#c8f060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
           </div>
           <div id="siNameM_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
         </div>
         <div class="fg" style="margin-bottom:8px;position:relative">
-          <label class="fl">Порода дерева</label>
+          <label class="fl" id="siSpeciesLabelM">Порода дерева</label>
           <div style="display:flex;gap:6px">
             <input class="fi" id="siSpeciesM" placeholder="Порода" autocomplete="off"
-              oninput="psjSuggest('siSpeciesM',getSpecies(),'siPickSpeciesM')"
-              onfocus="psjSuggest('siSpeciesM',getSpecies(),'siPickSpeciesM')"
+              oninput="psjSuggest('siSpeciesM',getSiSpeciesList(),'siPickSpeciesM')"
+              onfocus="psjSuggest('siSpeciesM',getSiSpeciesList(),'siPickSpeciesM')"
               onblur="psjHideSugg('siSpeciesM')">
             <button type="button" onclick="siAddToSpecies('siSpeciesM')" style="background:#22222e;border:1px solid #f0c060;border-radius:10px;padding:0 14px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
           </div>
@@ -1224,15 +1233,6 @@ function checkForAppUpdate() {
           <div class="fg" style="margin:0;width:80px"><label class="fl">Кол-во</label><input class="fi" type="number" id="siQtyM" placeholder="1" inputmode="numeric" value="1" oninput="siCalcAmtM()"></div>
         </div>
         <div class="fg" style="margin:6px 0 0"><label class="fl">Сумма (₽)</label><input class="fi" type="number" id="siAmtM" placeholder="0" inputmode="numeric" oninput="siCalcFromAmtM()" style="border-color:#c8f060;color:#c8f060;font-weight:700"></div>
-        <div class="fg" style="margin-top:8px;margin-bottom:0">
-          <label class="fl">Тип товара</label>
-          <div style="display:flex;gap:6px">
-            <button type="button" id="siTypeDerevoM" onclick="setSiItemType('derevo')"
-              style="flex:1;padding:7px;border-radius:8px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">🌳 Дерево</button>
-            <button type="button" id="siTypeDrM" onclick="setSiItemType('dr')"
-              style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
-          </div>
-        </div>
         <button type="button" onclick="addSaleItem()" style="width:100%;margin-top:12px;background:#c8f060;border:none;border-radius:10px;padding:11px;font-weight:700;color:#0f0f13;cursor:pointer;font-family:'Unbounded',sans-serif;font-size:13px">＋ Добавить в чек</button>
       </div>
     </div>
@@ -1848,7 +1848,7 @@ function syncListen(lsKey) {
         try{ if(session && document.getElementById('mainStatusBar')) renderStatusBar(); }catch(e){}
       }
       // Generic shared refbooks live-refresh
-      var shopRefbookKeys = ['iz_payment_methods','iz_suppliers','iz_goods','iz_materials','iz_work_schedules'];
+      var shopRefbookKeys = ['iz_payment_methods','iz_suppliers','iz_goods','iz_goods_derevo','iz_goods_dr','iz_materials','iz_dr_species','iz_work_schedules'];
       if(shopRefbookKeys.indexOf(lsKey)>=0){
         var book = SHOP_REFBOOKS.find(function(b){ return b.key===lsKey; });
         if(book){
@@ -3875,7 +3875,7 @@ function startApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
   if(!restoreMode) syncRestoreUIChrome();
-  if(!session.isPreview){ migrateLegacyReceiveEntries(); migrateLegacyDrExpenses(); }
+  if(!session.isPreview){ migrateLegacyReceiveEntries(); migrateLegacyDrExpenses(); migrateGoodsRefbooks(); }
   try{ var tr=getTrash(), prTr=purgeExpiredTrash(tr); if(prTr.length!==tr.length){ saveTrash(prTr); syncTrashToCloud(prTr); } }catch(e){}
   document.getElementById('hdrShop').textContent=(session.isPreview?'🔍 ':'')+session.shopName;
   if(session.isPreview){
@@ -4716,8 +4716,42 @@ function siCalcFromAmtM(){
 }
 
 var _siItemGoodsType = 'derevo';
+function getSiSpeciesList(){
+  // Для Дерево — породы дерева (iz_materials)
+  // Для ДР Товар — вкус/состав (iz_dr_species)
+  return _siItemGoodsType==='dr' ? getRefBook('iz_dr_species').map(function(g){return g.name||g;}) : getSpecies();
+}
+function siAddToSpecies(inputId){
+  var el=document.getElementById(inputId); var val=(el&&el.value||'').trim();
+  if(!val){ showToast('Введите значение'); return; }
+  if(_siItemGoodsType==='dr'){
+    var drSp = getRefBook('iz_dr_species');
+    if(drSp.some(function(g){return (g.name||g)===val;})){ showToast('Уже есть'); return; }
+    drSp.push({id:uid(),name:val}); saveRefBookShop('iz_dr_species',drSp);
+    showToast('✅ Добавлено в Вкус/Состав: '+val);
+  } else {
+    var before=getSpecies().length; saveSpecies(val);
+    if(getSpecies().length>before) showToast('✅ Добавлено в Породы дерева: '+val);
+    else showToast('Уже есть в породах дерева');
+  }
+}
 function setSiItemType(type){
   _siItemGoodsType = type;
+  // Обновляем название поля species и плейсхолдер
+  var lbl = document.getElementById('siSpeciesLabel');
+  var inp = document.getElementById('siSpecies');
+  var inpM = document.getElementById('siSpeciesM');
+  var lblM = document.getElementById('siSpeciesLabelM');
+  var isDr = type==='dr';
+  if(lbl) lbl.textContent = isDr ? 'Вкус / Состав' : 'Порода дерева';
+  if(inp){ inp.placeholder = isDr ? 'Вкус/Состав' : 'Порода'; inp.value=''; }
+  if(lblM) lblM.textContent = isDr ? 'Вкус / Состав' : 'Порода дерева';
+  if(inpM){ inpM.placeholder = isDr ? 'Вкус/Состав' : 'Порода'; inpM.value=''; }
+  // Обновляем список товаров в поле siName по типу
+  var nameEl = document.getElementById('siName');
+  var nameMEl = document.getElementById('siNameM');
+  if(nameEl){ nameEl.value=''; psjSuggest('siName',getItemNames(type),'siPickName'); }
+  if(nameMEl){ nameMEl.value=''; }
   ['','M'].forEach(function(suf){
     var db=document.getElementById('siTypeDerevo'+suf), dr=document.getElementById('siTypeDr'+suf);
     if(type==='derevo'){
@@ -4730,9 +4764,16 @@ function setSiItemType(type){
   });
 }
 
-function getItemNames(){
+function getItemNames(goodsType){
+  var type = goodsType || _siItemGoodsType || 'derevo';
+  var key = type==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
   var names = {};
-  getItemsBase().forEach(function(it){ if(it.name) names[it.name]=true; });
+  // Сначала из нужного типового справочника
+  getRefBook(key).forEach(function(it){ if(it.name||it) names[it.name||it]=true; });
+  // Потом из общего iz_goods (legacy/совместимость) — только если типовой пустой
+  if(!Object.keys(names).length){
+    getItemsBase().forEach(function(it){ if(it.name) names[it.name]=true; });
+  }
   return Object.keys(names);
 }
 function siPickName(val){ var el=document.getElementById('siName'); if(el){el.value=val;checkItemDiff();} var box=document.getElementById('siName_sugg'); if(box) box.style.display='none'; }
@@ -4743,11 +4784,18 @@ function siPickSpeciesM(val){ var el=document.getElementById('siSpeciesM'); if(e
 function siAddToGoods(inputId){
   var el=document.getElementById(inputId); var val=(el&&el.value||'').trim();
   if(!val){ showToast('Введите наименование'); return; }
-  var goods = getRefBook('iz_goods');
+  var key = _siItemGoodsType==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
+  var goods = getRefBook(key);
   var exists = goods.some(function(g){ return ((g&&g.name)||g)===val; });
   if(!exists){
     goods.push({id:uid(), name:val});
-    saveRefBookShop('iz_goods', goods);
+    saveRefBookShop(key, goods);
+    // Также синхронизируем в iz_goods для совместимости
+    var allGoods = getRefBook('iz_goods');
+    if(!allGoods.some(function(g){return ((g&&g.name)||g)===val;})){
+      allGoods.push({id:uid(), name:val});
+      saveRefBookShop('iz_goods', allGoods);
+    }
     showToast('✅ Добавлено в базу товаров: '+val);
   } else {
     showToast('Уже есть в базе товаров');
@@ -6669,6 +6717,24 @@ function simpleEditForm(id, color, opts){
 // at night and closed after midnight showed the wrong day in the archive.
 // Recompute "date" from openedAt for any closed, non-backfilled shift where
 // they don't match — runs once whenever the archive is opened.
+// Одноразовая миграция: переносит накопленные товары из iz_goods (единый
+// старый справочник) в iz_goods_derevo (Дерево). Выполняется один раз —
+// если iz_goods_derevo уже заполнен, пропускает. Старый iz_goods остаётся
+// как источник совместимости для функций, которые его читают напрямую.
+function migrateGoodsRefbooks(){
+  if(localStorage.getItem('iz_goods_migrated_v1')) return;
+  var old = getRefBook('iz_goods');
+  if(!old.length){ localStorage.setItem('iz_goods_migrated_v1','1'); return; }
+  var existing = getRefBook('iz_goods_derevo');
+  var existingNames = {};
+  existing.forEach(function(g){ existingNames[(g.name||g)]=true; });
+  var toAdd = old.filter(function(g){ return !existingNames[(g.name||g)]; });
+  if(toAdd.length){
+    var merged = existing.concat(toAdd);
+    saveRefBookShop('iz_goods_derevo', merged);
+  }
+  localStorage.setItem('iz_goods_migrated_v1','1');
+}
 function migrateLegacyShiftDates(){
   var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   if(!shifts.length) return;
@@ -9194,11 +9260,13 @@ function deleteAccountAdmin(idx){
 
 // ── Shared refbooks (synced with admin via Firestore) ──
 var SHOP_REFBOOKS = [
-  {id:'payments',  icon:'💳', name:'Способы оплаты',   key:'iz_payment_methods'},
-  {id:'suppliers', icon:'🚚', name:'База поставщиков', key:'iz_suppliers'},
-  {id:'goods',     icon:'📦', name:'База товаров',     key:'iz_goods'},
-  {id:'materials', icon:'💎', name:'Породы дерева',    key:'iz_materials'},
-  {id:'schedules', icon:'⏰', name:'Графики работы',   key:'iz_work_schedules'}
+  {id:'payments',    icon:'💳', name:'Способы оплаты',          key:'iz_payment_methods'},
+  {id:'suppliers',   icon:'🚚', name:'База поставщиков',         key:'iz_suppliers'},
+  {id:'goods',       icon:'🌳', name:'База товаров — Дерево',    key:'iz_goods_derevo'},
+  {id:'goods_dr',    icon:'🛍', name:'База товаров — ДР Товар',  key:'iz_goods_dr'},
+  {id:'materials',   icon:'💎', name:'Породы дерева',            key:'iz_materials'},
+  {id:'dr_species',  icon:'🍬', name:'Вкус / Состав (ДР Товар)', key:'iz_dr_species'},
+  {id:'schedules',   icon:'⏰', name:'Графики работы',           key:'iz_work_schedules'}
 ];
 function getRefBook(key){
   try{ return JSON.parse(localStorage.getItem(key)||'[]'); } catch(e){ return []; }

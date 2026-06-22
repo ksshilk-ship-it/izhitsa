@@ -215,6 +215,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <div class="hdr-logo">Ижица</div>
     <div class="hdr-right">
       <div class="hdr-user"><div class="hdr-name" id="hdrName"></div><div class="hdr-role" id="hdrRole"></div></div>
+      <button class="exit-btn" id="adminSyncBtn" onclick="adminManualSync()" title="Обновить данные из базы" style="padding:6px 10px;font-size:15px">🔄</button>
       <button class="exit-btn" onclick="doLogout()">Выйти</button>
     </div>
   </div>
@@ -520,6 +521,13 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       </div>
     </div>
 
+    <!-- ДИАГНОСТИКА СМЕН -->
+    <div style="background:var(--s2);border-radius:8px;margin-bottom:16px;padding:12px;border-left:3px solid #60a0f0">
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px">🔍 Диагностика данных смен</div>
+      <button class="btn" onclick="runShiftDiag()" style="width:100%;background:#1a2a3a;border:1px solid #60a0f0;color:#60a0f0;font-size:12px;padding:10px;border-radius:8px;margin-bottom:10px">🔍 Запустить диагностику</button>
+      <div id="diagResult" style="font-size:11px;font-family:monospace;white-space:pre-wrap;color:var(--t1);background:var(--bg);border-radius:6px;padding:10px;display:none;max-height:400px;overflow-y:auto"></div>
+    </div>
+
     <!-- 12 COLLAPSED REFERENCE BOOKS -->
     <div style="margin-top:16px">
       <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:12px">📚 Справочники системы</div>
@@ -676,6 +684,179 @@ function pullAdminUsersFromFirebase() {
   } catch(e) {
     console.error('pullAdminUsersFromFirebase error:', e);
   }
+}
+
+// ── Диагностика данных смен ──
+function runShiftDiag() {
+  var el = document.getElementById('diagResult');
+  if(!el) return;
+  el.style.display = 'block';
+  el.textContent = 'Анализирую...';
+
+  try {
+    var allShifts = JSON.parse(localStorage.getItem('iz_shifts') || '[]');
+    var validShops = _validShopNames();
+    var deleted = _deletedShiftIds();
+    var range = getDateRange('month');
+
+    var lines = [];
+    lines.push('=== ДИАГНОСТИКА iz_shifts ===');
+    lines.push('Всего записей в localStorage: ' + allShifts.length);
+    lines.push('Официальные магазины: ' + (validShops.length ? validShops.join(', ') : '(нет в iz_shops!)'));
+    lines.push('Удалённых (tombstone): ' + Object.keys(deleted).length);
+    lines.push('Период "Месяц": ' + range.from + ' → ' + range.to);
+    lines.push('');
+
+    // Считаем по фильтрам
+    var inRange = allShifts.filter(function(s){ return s.date >= range.from && s.date <= range.to; });
+    var passed = allShifts.filter(function(s){ return s.date >= range.from && s.date <= range.to && isValidShift(s); });
+
+    lines.push('В диапазоне дат: ' + inRange.length);
+    lines.push('Прошли фильтр (в аналитику): ' + passed.length);
+    lines.push('');
+
+    // Почему исключены
+    var excluded = inRange.filter(function(s){ return !isValidShift(s); });
+    if(excluded.length) {
+      lines.push('=== ИСКЛЮЧЁННЫЕ (не попадают в аналитику) ===');
+      excluded.forEach(function(s){
+        var reason = [];
+        if(s.status === 'open') reason.push('status=open');
+        if(deleted[s.id||s._id]) reason.push('tombstoned/удалена');
+        if(validShops.length && validShops.indexOf(s.shopName) < 0) reason.push('магазин "'+s.shopName+'" не в iz_shops');
+        lines.push('  ['+s.date+'] '+s.shopName+' / '+(s.sellerName||'—')+' / '+reason.join(', '));
+      });
+      lines.push('');
+    }
+
+    // Что прошло — сводка по магазинам
+    lines.push('=== ПРОШЛИ ФИЛЬТР ===');
+    var byShop = {};
+    passed.forEach(function(s){
+      if(!byShop[s.shopName]) byShop[s.shopName] = {count:0, revenue:0, dates:[]};
+      byShop[s.shopName].count++;
+      byShop[s.shopName].revenue += shiftRevenue(s);
+      byShop[s.shopName].dates.push(s.date);
+    });
+    Object.keys(byShop).sort().forEach(function(shop){
+      var d = byShop[shop];
+      lines.push('  '+shop+': '+d.count+' смен, ₽'+d.revenue.toLocaleString('ru-RU'));
+      lines.push('    даты: '+d.dates.sort().join(', '));
+    });
+    lines.push('');
+
+    // Проверка полей у случайной смены
+    if(passed.length > 0) {
+      var sample = passed[0];
+      lines.push('=== ПРИМЕР СМЕНЫ (первая прошедшая) ===');
+      lines.push('  id: ' + (sample.id||sample._id||'нет'));
+      lines.push('  date: ' + sample.date);
+      lines.push('  shopName: ' + sample.shopName);
+      lines.push('  sellerName: ' + sample.sellerName);
+      lines.push('  status: ' + sample.status);
+      lines.push('  totalRevenue: ' + sample.totalRevenue);
+      lines.push('  drTotalRevenue: ' + sample.drTotalRevenue);
+      lines.push('  cashRevenue: ' + sample.cashRevenue);
+      lines.push('  cardRevenue: ' + sample.cardRevenue);
+      lines.push('  salesCount: ' + sample.salesCount);
+      lines.push('  shiftRevenue(): ' + shiftRevenue(sample));
+      lines.push('  поля: ' + Object.keys(sample).filter(function(k){ return k !== 'journal'; }).join(', '));
+    }
+
+    // Все смены в диапазоне — полный список
+    lines.push('');
+    lines.push('=== ВСЕ СМЕНЫ В ДИАПАЗОНЕ ===');
+    inRange.sort(function(a,b){ return a.date > b.date ? 1 : -1; }).forEach(function(s){
+      var rev = shiftRevenue(s);
+      var ok = isValidShift(s) ? '✅' : '❌';
+      lines.push(ok+' ['+s.date+'] '+s.shopName+' / '+(s.sellerName||'—')+' / ₽'+rev+' / status:'+s.status);
+    });
+
+    el.textContent = lines.join('\n');
+  } catch(e) {
+    el.textContent = 'Ошибка: ' + e.message + '\n' + e.stack;
+  }
+}
+
+// ── Принудительное обновление данных из Firestore ──
+// В отличие от фоновых onSnapshot-листенеров (которые работают автоматически,
+// но могут задерживаться при слабой связи), эта функция делает явный get()
+// прямо с сервера (не из кеша) для всех ключевых коллекций, затем
+// перерендеривает текущую активную вкладку — так же, как кнопка 🔄 в shop-модуле.
+var _adminManualSyncing = false;
+function adminManualSync() {
+  if(_adminManualSyncing) return;
+  _adminManualSyncing = true;
+  var btn = document.getElementById('adminSyncBtn');
+  if(btn) btn.textContent = '⏳';
+
+  var opts = {source: 'server'};
+
+  // Список коллекций Firestore → ключей localStorage
+  var collections = [
+    {col: 'iz_shifts',               key: 'iz_shifts'},
+    {col: 'iz_transactions',         key: 'iz_transactions'},
+    {col: 'ws_items',                key: 'ws_items'},
+    {col: 'ws_shipments',            key: 'ws_shipments'},
+    {col: 'ws_other_tasks',          key: 'ws_other_tasks'},
+    {col: 'ws_master_returns',       key: 'ws_master_returns'},
+    {col: 'iz_invoices',             key: 'iz_invoices'},
+    {col: 'iz_admin_alerts',         key: 'iz_admin_alerts'},
+  ];
+
+  // Список документов из iz_settings → ключей localStorage
+  var settingsDocs = [
+    {doc: 'staff',        key: 'iz_staff'},
+    {doc: 'shops',        key: 'iz_shops'},
+    {doc: 'accounts',     key: 'iz_accounts'},
+    {doc: 'items',        key: 'iz_items'},
+    {doc: 'pay_methods',  key: 'iz_pay_methods'},
+    {doc: 'zp_settings',  key: 'iz_shop_zp_settings'},
+  ];
+
+  var promises = [];
+
+  // Тянем коллекции
+  collections.forEach(function(c){
+    promises.push(
+      db.collection(c.col).get(opts).then(function(snap){
+        var docs = snap.docs.map(function(d){ return Object.assign({_id: d.id}, d.data()); });
+        localStorage.setItem(c.key, JSON.stringify(docs));
+        console.log('✅ Synced', c.col, docs.length, 'docs');
+      }).catch(function(e){ console.warn('sync err', c.col, e); })
+    );
+  });
+
+  // Тянем настройки (iz_settings/{doc})
+  settingsDocs.forEach(function(s){
+    promises.push(
+      db.collection('iz_settings').doc(s.doc).get(opts).then(function(snap){
+        if(!snap.exists) return;
+        var val = snap.data()[s.doc] || snap.data().staff || snap.data().shops || snap.data().accounts || snap.data().items || snap.data().pay_methods || snap.data().zp_settings || snap.data().value;
+        // Попробуем угадать правильный ключ в документе
+        var data = snap.data();
+        var firstKey = Object.keys(data)[0];
+        val = data[s.doc] !== undefined ? data[s.doc] : (firstKey ? data[firstKey] : null);
+        if(val != null) {
+          localStorage.setItem(s.key, JSON.stringify(val));
+          console.log('✅ Synced iz_settings/' + s.doc);
+        }
+      }).catch(function(e){ console.warn('sync err iz_settings/' + s.doc, e); })
+    );
+  });
+
+  Promise.all(promises).then(function(){
+    // Перерендер текущей активной вкладки
+    var activePage = document.querySelector('.page.active');
+    var tab = activePage ? activePage.id.replace('pg-', '') : 'dash';
+    switchTab(tab, document.querySelector('.nav-tab.active') || document.querySelector('.tab.active'));
+    showToast('🔄 Данные обновлены');
+  }).catch(function(){
+    showToast('⚠️ Частичное обновление — проверьте связь');
+  }).finally(function(){
+    _adminManualSyncing = false;
+    if(btn) btn.textContent = '🔄';
+  });
 }
 
 function startAdminSyncListeners() {
@@ -2224,23 +2405,27 @@ function getDateRange(period) {
   if(period === 'today') {
     from = new Date(today);
   } else if(period === 'week') {
+    // Последние 7 дней
     from = new Date(today);
-    from.setDate(from.getDate() - 7);
+    from.setDate(from.getDate() - 6);
   } else if(period === 'month') {
-    from = new Date(today);
-    from.setMonth(from.getMonth() - 1);
+    // С 1-го числа текущего календарного месяца
+    from = new Date(today.getFullYear(), today.getMonth(), 1);
   } else if(period === 'quarter') {
-    from = new Date(today);
-    from.setMonth(from.getMonth() - 3);
+    // С 1-го числа три месяца назад (начало квартала)
+    var qMonth = today.getMonth() - 2;
+    var qYear = today.getFullYear();
+    if(qMonth < 0){ qMonth += 12; qYear -= 1; }
+    from = new Date(qYear, qMonth, 1);
   } else if(period === 'year') {
+    // С 1 января текущего года
+    from = new Date(today.getFullYear(), 0, 1);
+  } else {
     from = new Date(today);
-    from.setFullYear(from.getFullYear() - 1);
   }
   
-  return {
-    from: from.getFullYear() + '-' + String(from.getMonth()+1).padStart(2,'0') + '-' + String(from.getDate()).padStart(2,'0'),
-    to: to.getFullYear() + '-' + String(to.getMonth()+1).padStart(2,'0') + '-' + String(to.getDate()).padStart(2,'0')
-  };
+  function fmt(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  return { from: fmt(from), to: fmt(to) };
 }
 
 // Диапазон ПРЕДЫДУЩЕГО периода той же длины, что и текущий (from/to в формате
@@ -2267,8 +2452,20 @@ function _validShopNames() {
     return shops.map(function(s){ return typeof s === 'string' ? s : (s.name || ''); }).filter(Boolean);
   } catch(e) { return []; }
 }
+function _deletedShiftIds() {
+  try {
+    var trash = JSON.parse(localStorage.getItem('iz_shop_trash') || '[]');
+    var ids = {};
+    trash.forEach(function(t){ if(t && t.id) ids[t.id] = true; });
+    return ids;
+  } catch(e) { return {}; }
+}
+
 function isValidShift(s) {
   if(s.status === 'open') return false;
+  // Исключаем смены, удалённые через корзину (tombstoned)
+  var deleted = _deletedShiftIds();
+  if(deleted[s.id || s._id]) return false;
   var validShops = _validShopNames();
   // Если список магазинов не загружен ещё — пропускаем все закрытые смены
   if(!validShops.length) return s.status === 'closed';
