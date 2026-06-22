@@ -799,13 +799,14 @@ function runShiftDiag() {
       lines.push('  поля: ' + Object.keys(sample).filter(function(k){ return k !== 'journal'; }).join(', '));
     }
 
-    // Все смены в диапазоне — полный список
+    // Все смены в диапазоне — полный список с денежными полями
     lines.push('');
-    lines.push('=== ВСЕ СМЕНЫ В ДИАПАЗОНЕ ===');
+    lines.push('=== ВСЕ СМЕНЫ В ДИАПАЗОНЕ (детально) ===');
     inRange.sort(function(a,b){ return a.date > b.date ? 1 : -1; }).forEach(function(s){
       var rev = shiftRevenue(s);
       var ok = isValidShift(s) ? '✅' : '❌';
-      lines.push(ok+' ['+s.date+'] '+s.shopName+' / '+(s.sellerName||'—')+' / ₽'+rev+' / status:'+s.status);
+      lines.push(ok+' ['+s.date+'] '+s.shopName+' / '+(s.sellerName||'—'));
+      lines.push('   shiftRevenue='+rev+' | totalRevenue='+s.totalRevenue+' | drTotal='+s.drTotalRevenue+' | cash='+s.cashRevenue+' | card='+s.cardRevenue+' | disc='+s.totalDiscount+' | status='+s.status);
     });
 
     el.textContent = lines.join('\n');
