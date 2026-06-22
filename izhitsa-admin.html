@@ -662,9 +662,45 @@ function adminSyncSave(lsKey, data) {
 }
 function adminSyncListenCollection(lsKey, colName) {
   if(_adminSyncUnsubs[lsKey]) return;
+  var firstSnapshot = true;
   _adminSyncUnsubs[lsKey] = db.collection(colName).onSnapshot(function(snap){
     var docs = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
+    docs.sort(function(a,b){ return (b.date||b.closedAt||b.createdAt||'').localeCompare(a.date||a.closedAt||a.createdAt||''); });
     localStorage.setItem(lsKey, JSON.stringify(docs));
+    // Для iz_shifts: первый снапшот часто приходит из оффлайн-кеша и
+    // может быть неполным. Делаем дополнительный запрос с сервера.
+    if(lsKey === 'iz_shifts' && firstSnapshot) {
+      firstSnapshot = false;
+      db.collection(colName).get({source:'server'}).then(function(serverSnap){
+        var serverDocs = serverSnap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
+        serverDocs.sort(function(a,b){ return (b.date||b.closedAt||b.createdAt||'').localeCompare(a.date||a.closedAt||a.createdAt||''); });
+        localStorage.setItem(lsKey, JSON.stringify(serverDocs));
+        console.log('✅ iz_shifts refreshed from server:', serverDocs.length, 'docs');
+        // Перерендерить аналитику если открыта
+        var analyticsPages = ['pg-dash','pg-shops','pg-analytics','pg-prod'];
+        var activePage = document.querySelector('.page.active');
+        if(activePage && analyticsPages.indexOf(activePage.id) >= 0) {
+          var tab = activePage.id.replace('pg-', '');
+          if(tab === 'dash') renderDashboard();
+          else if(tab === 'shops') renderShops();
+          else if(tab === 'analytics') renderAnalytics();
+          else if(tab === 'prod') renderProduction();
+        }
+      }).catch(function(e){ console.warn('iz_shifts server refresh err:', e.code||e); });
+    } else {
+      firstSnapshot = false;
+      // Для остальных коллекций — перерендер аналитики при обновлении
+      if(lsKey === 'ws_items' || lsKey === 'ws_shipments') {
+        var analyticsPages = ['pg-prod','pg-dash','pg-analytics'];
+        var activePage = document.querySelector('.page.active');
+        if(activePage && analyticsPages.indexOf(activePage.id) >= 0) {
+          var tab = activePage.id.replace('pg-', '');
+          if(tab === 'prod') renderProduction();
+          else if(tab === 'dash') renderDashboard();
+          else if(tab === 'analytics') renderAnalytics();
+        }
+      }
+    }
   }, function(e){ console.log('adminCol sync err', colName, e.code||e); });
 }
 function pullAdminUsersFromFirebase() {
@@ -779,83 +815,84 @@ function runShiftDiag() {
 }
 
 // ── Принудительное обновление данных из Firestore ──
-// В отличие от фоновых onSnapshot-листенеров (которые работают автоматически,
-// но могут задерживаться при слабой связи), эта функция делает явный get()
-// прямо с сервера (не из кеша) для всех ключевых коллекций, затем
-// перерендеривает текущую активную вкладку — так же, как кнопка 🔄 в shop-модуле.
 var _adminManualSyncing = false;
 function adminManualSync() {
   if(_adminManualSyncing) return;
   _adminManualSyncing = true;
   var btn = document.getElementById('adminSyncBtn');
-  if(btn) btn.textContent = '⏳';
+  if(btn) { btn.textContent = '⏳'; btn.disabled = true; }
 
-  var opts = {source: 'server'};
-
-  // Список коллекций Firestore → ключей localStorage
   var collections = [
-    {col: 'iz_shifts',               key: 'iz_shifts'},
-    {col: 'iz_transactions',         key: 'iz_transactions'},
-    {col: 'ws_items',                key: 'ws_items'},
-    {col: 'ws_shipments',            key: 'ws_shipments'},
-    {col: 'ws_other_tasks',          key: 'ws_other_tasks'},
-    {col: 'ws_master_returns',       key: 'ws_master_returns'},
-    {col: 'iz_invoices',             key: 'iz_invoices'},
-    {col: 'iz_admin_alerts',         key: 'iz_admin_alerts'},
+    {col: 'iz_shifts',         key: 'iz_shifts'},
+    {col: 'iz_transactions',   key: 'iz_transactions'},
+    {col: 'ws_items',          key: 'ws_items'},
+    {col: 'ws_shipments',      key: 'ws_shipments'},
+    {col: 'ws_other_tasks',    key: 'ws_other_tasks'},
+    {col: 'ws_master_returns', key: 'ws_master_returns'},
+    {col: 'iz_invoices',       key: 'iz_invoices'},
+    {col: 'iz_admin_alerts',   key: 'iz_admin_alerts'},
   ];
 
-  // Список документов из iz_settings → ключей localStorage
   var settingsDocs = [
-    {doc: 'staff',        key: 'iz_staff'},
-    {doc: 'shops',        key: 'iz_shops'},
-    {doc: 'accounts',     key: 'iz_accounts'},
-    {doc: 'items',        key: 'iz_items'},
-    {doc: 'pay_methods',  key: 'iz_pay_methods'},
-    {doc: 'zp_settings',  key: 'iz_shop_zp_settings'},
+    {doc: 'staff',       key: 'iz_staff',             field: 'staff'},
+    {doc: 'shops',       key: 'iz_shops',             field: 'shops'},
+    {doc: 'accounts',    key: 'iz_accounts',          field: 'accounts'},
+    {doc: 'items',       key: 'iz_items',             field: 'items'},
+    {doc: 'pay_methods', key: 'iz_pay_methods',       field: 'pay_methods'},
+    {doc: 'zp_settings', key: 'iz_shop_zp_settings',  field: 'zp_settings'},
   ];
 
   var promises = [];
+  var totalLoaded = 0;
 
-  // Тянем коллекции
   collections.forEach(function(c){
+    // iz_shifts получаем принудительно с сервера, минуя кеш —
+    // именно он чаще всего устаревший и вызывает неполные данные.
+    // Остальные коллекции берём из кеша (быстрее, менее критично).
+    var getPromise = (c.col === 'iz_shifts')
+      ? db.collection(c.col).get({source:'server'})
+      : db.collection(c.col).get();
     promises.push(
-      db.collection(c.col).get(opts).then(function(snap){
-        var docs = snap.docs.map(function(d){ return Object.assign({_id: d.id}, d.data()); });
+      getPromise.then(function(snap){
+        var docs = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
+        docs.sort(function(a,b){ return (b.date||b.closedAt||b.createdAt||'').localeCompare(a.date||a.closedAt||a.createdAt||''); });
         localStorage.setItem(c.key, JSON.stringify(docs));
+        totalLoaded += docs.length;
         console.log('✅ Synced', c.col, docs.length, 'docs');
-      }).catch(function(e){ console.warn('sync err', c.col, e); })
+      }).catch(function(e){ console.warn('⚠️ sync err', c.col, e.code||e.message||e); })
     );
   });
 
-  // Тянем настройки (iz_settings/{doc})
   settingsDocs.forEach(function(s){
     promises.push(
-      db.collection('iz_settings').doc(s.doc).get(opts).then(function(snap){
+      db.collection('iz_settings').doc(s.doc).get().then(function(snap){
         if(!snap.exists) return;
-        var val = snap.data()[s.doc] || snap.data().staff || snap.data().shops || snap.data().accounts || snap.data().items || snap.data().pay_methods || snap.data().zp_settings || snap.data().value;
-        // Попробуем угадать правильный ключ в документе
         var data = snap.data();
-        var firstKey = Object.keys(data)[0];
-        val = data[s.doc] !== undefined ? data[s.doc] : (firstKey ? data[firstKey] : null);
-        if(val != null) {
+        // Поле документа может называться так же как doc, или быть единственным полем
+        var val = data[s.field] !== undefined ? data[s.field] : data[Object.keys(data).find(function(k){ return k !== 'updatedAt'; })];
+        if(val != null){
           localStorage.setItem(s.key, JSON.stringify(val));
           console.log('✅ Synced iz_settings/' + s.doc);
         }
-      }).catch(function(e){ console.warn('sync err iz_settings/' + s.doc, e); })
+      }).catch(function(e){ console.warn('⚠️ sync err iz_settings/' + s.doc, e.code||e.message||e); })
     );
   });
 
   Promise.all(promises).then(function(){
-    // Перерендер текущей активной вкладки
+    // Перерендер активной вкладки
     var activePage = document.querySelector('.page.active');
     var tab = activePage ? activePage.id.replace('pg-', '') : 'dash';
-    switchTab(tab, document.querySelector('.nav-tab.active') || document.querySelector('.tab.active'));
-    showToast('🔄 Данные обновлены');
-  }).catch(function(){
-    showToast('⚠️ Частичное обновление — проверьте связь');
+    if(tab === 'dash') renderDashboard();
+    else if(tab === 'shops') renderShops();
+    else if(tab === 'analytics') renderAnalytics();
+    else if(tab === 'prod') renderProduction();
+    else if(tab === 'pl') { renderPL(); renderPLBudget(); }
+    showToast('🔄 Загружено ' + totalLoaded + ' записей');
+  }).catch(function(e){
+    showToast('⚠️ Ошибка обновления: ' + (e.message||e));
   }).finally(function(){
     _adminManualSyncing = false;
-    if(btn) btn.textContent = '🔄';
+    if(btn) { btn.textContent = '🔄'; btn.disabled = false; }
   });
 }
 
@@ -2462,13 +2499,22 @@ function _deletedShiftIds() {
 }
 
 function isValidShift(s) {
-  if(s.status === 'open') return false;
   // Исключаем смены, удалённые через корзину (tombstoned)
   var deleted = _deletedShiftIds();
   if(deleted[s.id || s._id]) return false;
+
+  // status=undefined означает смену, которая не прошла нормальный цикл
+  // открытия/закрытия (тестовые или брошенные). Если у неё и выручка 0
+  // и продаж 0 — это явно мусор, исключаем.
+  if(!s.status && !shiftRevenue(s) && !(s.salesCount)) return false;
+
+  // Незакрытые (open) смены включаем если у них есть реальная выручка
+  // (продавец работает прямо сейчас — нужно видеть в аналитике)
+  // Но status=open с нулём — исключаем
+  if(s.status === 'open' && !shiftRevenue(s)) return false;
+
   var validShops = _validShopNames();
-  // Если список магазинов не загружен ещё — пропускаем все закрытые смены
-  if(!validShops.length) return s.status === 'closed';
+  if(!validShops.length) return true;
   return validShops.indexOf(s.shopName) >= 0;
 }
 
