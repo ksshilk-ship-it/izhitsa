@@ -2555,24 +2555,39 @@ function getTodayShifts() {
 // предположение о полях cashRevenue+cardRevenue+totalDiscount без totalRevenue
 // почти всегда давало 0, потому что в реальных сменах эти суммы либо не
 // заполнены отдельно, либо названы иначе в зависимости от пути сохранения.
-// Реальная выручка смены — единая формула для всех форматов записи:
-// cashRevenue + cardRevenue + totalDiscount.
-//
-// Почему не totalRevenue напрямую:
-// — В обычных сменах (closeShift): totalRevenue = sum(sale.totalPaid) — БЕЗ скидки
-// — В архивных (ручных) сменах: totalRevenue = cash+terminal+qr+discount — СО скидкой
-// Из-за этого рассинхрона totalRevenue нельзя использовать напрямую.
-// cashRevenue + cardRevenue + totalDiscount даёт правильный результат в обоих случаях.
+// Реальная выручка смены — единая формула для всех форматов записи.
+// cashRevenue + cardRevenue + totalDiscount покрывает все форматы.
 function shiftRevenue(s){
   var cash = (s.cashRevenue||0);
   var card = (s.cardRevenue||0);
   var disc = (s.totalDiscount||s.discount||0);
-  // drTotal — только у архивных смен с ДР Товаром
   var dr = (s.drTotalRevenue||0) || ((s.drCashRevenue||0)+(s.drCardRevenue||0)+(s.drDiscount||0));
   return cash + card + disc + dr;
 }
-function shiftCash(s){ return (s.cashRevenue||0); }
-function shiftCard(s){ return (s.cardRevenue||0); }
+
+// Нал и безнал считаем из журнала — единственный надёжный источник.
+// Поле cardRevenue в смене = terminalEvening (остаток на терминале вечером),
+// а не выручка по терминалу — поэтому из поля брать нельзя.
+function _shiftPayByMethod(s) {
+  var byMethod = {};
+  (s.journal||[]).forEach(function(e){
+    if(e.type !== 'sale') return;
+    var pm = e.payMethod || 'cash';
+    var amt = (e.amount || 0);
+    if(!byMethod[pm]) byMethod[pm] = 0;
+    byMethod[pm] += amt;
+  });
+  return byMethod;
+}
+function shiftCash(s){
+  var m = _shiftPayByMethod(s);
+  return (m.cash||0);
+}
+function shiftCard(s){
+  var m = _shiftPayByMethod(s);
+  // Всё что не наличные — безнал
+  return Object.keys(m).filter(function(k){return k!=='cash';}).reduce(function(s,k){return s+m[k];},0);
+}
 function shiftDiscount(s){ return (s.totalDiscount||s.discount||0); }
 // Продавец смены хранится в поле sellerName, не seller.
 function shiftSeller(s){ return s.sellerName || ''; }
