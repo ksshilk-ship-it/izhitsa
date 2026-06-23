@@ -7059,6 +7059,32 @@ function evaluateShiftIssues(sh){
     }
   }
 
+  // ── Остаток товара утро не совпадает с остатком вечер предыдущей смены ──
+  (function(){
+    var allShiftsG = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var candidatesG = allShiftsG.filter(function(s){
+      return s.shopName===sh.shopName && s.id!==sh.id && s.openedAt && sh.openedAt && s.openedAt < sh.openedAt;
+    });
+    var prevG = candidatesG.sort(function(a,b){ return new Date(b.openedAt)-new Date(a.openedAt); })[0] || null;
+    if(!prevG) return;
+    // Дерево
+    if(prevG.goodsEvening!=null && prevG.goodsEvening>0 && sh.goodsMorning!=null){
+      var diffW = Math.round((sh.goodsMorning||0) - prevG.goodsEvening);
+      if(Math.abs(diffW)>=1){
+        issues.push({code:'morn_goods_wood_diff', label:'🌳 Остаток товара утро (Дерево) не совпадает с вечером пред. смены: ввели '+Math.round(sh.goodsMorning).toLocaleString('ru-RU')+'₽, было '+Math.round(prevG.goodsEvening).toLocaleString('ru-RU')+'₽ ('+(diffW>0?'+':'')+Math.round(diffW).toLocaleString('ru-RU')+'₽)'});
+      }
+    }
+    // ДР Товар
+    var prevDrEve = prevG.drGoodsEvening!=null ? prevG.drGoodsEvening : prevG.goodsDrEvening;
+    var curDrMorn = sh.goodsDrMorning!=null ? sh.goodsDrMorning : sh.drGoodsMorning;
+    if(prevDrEve!=null && prevDrEve>0 && curDrMorn!=null){
+      var diffDr = Math.round((curDrMorn||0) - prevDrEve);
+      if(Math.abs(diffDr)>=1){
+        issues.push({code:'morn_goods_dr_diff', label:'🛍 Остаток товара утро (ДР Товар) не совпадает с вечером пред. смены: ввели '+Math.round(curDrMorn).toLocaleString('ru-RU')+'₽, было '+Math.round(prevDrEve).toLocaleString('ru-RU')+'₽ ('+(diffDr>0?'+':'')+Math.round(diffDr).toLocaleString('ru-RU')+'₽)'});
+      }
+    }
+  })();
+
   return {hasIssues: issues.length>0, issues: issues};
 }
 
@@ -7285,6 +7311,13 @@ function _renderShiftView(){
   }
   var morningWoodMismatch = prevShiftForThis ? enteredMismatch(sh.cashMorning, prevShiftForThis.cashEvening) : false;
   var morningDrMismatch = prevShiftForThis ? enteredMismatch(sh.cashDrMorning, prevShiftForThis.drCashEvening) : false;
+  // Товарный остаток утро vs вечер предыдущей смены
+  var morningGoodsMismatch = prevShiftForThis ? enteredMismatch(sh.goodsMorning, prevShiftForThis.goodsEvening) : false;
+  var morningDrGoodsMismatch = prevShiftForThis ? (function(){
+    var prevDrE = prevShiftForThis.drGoodsEvening!=null ? prevShiftForThis.drGoodsEvening : prevShiftForThis.goodsDrEvening;
+    var curDrM = sh.goodsDrMorning!=null ? sh.goodsDrMorning : sh.drGoodsMorning;
+    return enteredMismatch(curDrM, prevDrE);
+  })() : false;
 
   function diffChip(val, okLabel){
     if(val==null) return '<span style="font-size:10px;color:#555568">не введено</span>';
@@ -7294,6 +7327,7 @@ function _renderShiftView(){
   var anyDiff = (cashDiffVal!=null && Math.abs(cashDiffVal)>=1) || (cashDrDiffVal!=null && Math.abs(cashDrDiffVal)>=1) || (cashStaffDiffVal!=null && Math.abs(cashStaffDiffVal)>=1) || Math.abs(zpDiff)>=1 || !!sh.hasCashDiff || actCash==null || (sh.forceClosedBy && actCashDr==null) || morningWoodMismatch || morningDrMismatch;
   var _goodsIssues = evaluateShiftIssues(sh).issues.filter(function(i){ return i.code.indexOf('wood')>=0 || i.code.indexOf('_dr_')>=0; });
   if(_goodsIssues.length) anyDiff = true;
+  if(morningGoodsMismatch || morningDrGoodsMismatch) anyDiff = true;
 
   // Seller-entered values that disagree with what's expected (recalculated
   // from the journal, or carried over from the previous shift's вечер) are
@@ -7320,7 +7354,7 @@ function _renderShiftView(){
     tblRow('Выручка', f(totalRev), f(drTot), {bold:true,color:'#c8f060'})+
     tblRow('Кол-во', woodSaleQty+' шт.', drSaleQty+' шт.')+
     '<div style="font-size:10px;color:#f0a060;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:8px 0 2px">📦 ТОВАР</div>'+
-    tblRow('Остаток утро', f(sh.goodsMorning||0), f(sh.goodsDrMorning||0))+
+    tblRow('Остаток утро', enteredVal(sh.goodsMorning||0, morningGoodsMismatch), enteredVal(sh.goodsDrMorning!=null?sh.goodsDrMorning:(sh.drGoodsMorning||0), morningDrGoodsMismatch))+
     tblRow('Остаток вечер', f(sh.goodsEvening||0), f(sh.drGoodsEvening||0))+
     tblRow('Приход', f(woodRcvTotal), f(drRcvTotal))+
     tblRow('Списание', f(woodWoTotal), f(drWoTotal))+
@@ -12931,13 +12965,29 @@ function rebuildStock(showMsg){
 function stockDiagnostic(){
   var manInvs=JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   var wsInvs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-  var msg='iz_manual_invoices: '+manInvs.length+' шт.\n';
-  manInvs.forEach(function(inv,i){
-    msg+='['+(i+1)+'] destName='+inv.destName+' shopName='+inv.shopName+' items='+(inv.items||[]).length+' date='+inv.date+'\n';
-    (inv.items||[]).slice(0,3).forEach(function(it){ msg+='   num='+it.num+' name='+it.name+' qty='+it.qty+'\n'; });
-  });
-  msg+='\niz_invoices (accepted): '+wsInvs.filter(function(i){return i.status==='accepted';}).length+' шт.\n';
+  var shifts=JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+  var keys=[];
+  for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&k.indexOf('iz_')===0) keys.push(k); }
+  var msg='iz_manual_invoices (LS): '+manInvs.length+'\n';
+  msg+='iz_invoices accepted (LS): '+wsInvs.filter(function(i){return i.status==='accepted';}).length+'\n';
+  msg+='iz_shifts (LS): '+shifts.length+'\n';
+  msg+='\nLS ключи: '+keys.join(', ')+'\n';
+  msg+='\n→ Сейчас принудительно загружу из Firestore...';
   alert(msg);
+  try{
+    db.collection('iz_manual_invoices').get({source:'server'}).then(function(snap){
+      var arr=[];
+      snap.forEach(function(d){ var data=d.data(); if(data) arr.push(Object.assign({id:d.id},data)); });
+      localStorage.setItem('iz_manual_invoices',JSON.stringify(arr));
+      var msg2='Firestore iz_manual_invoices: '+arr.length+' шт.\n';
+      arr.slice(0,5).forEach(function(inv,i){
+        msg2+='['+(i+1)+'] destName='+inv.destName+' shopName='+inv.shopName+' shop='+inv.shop+' items='+(inv.items||[]).length+'\n';
+        (inv.items||[]).slice(0,2).forEach(function(it){ msg2+='  №'+it.num+' '+it.name+' qty='+it.qty+'\n'; });
+      });
+      alert(msg2);
+      rebuildStock(true);
+    }).catch(function(e){ alert('Ошибка iz_manual_invoices: '+e.message); });
+  }catch(e){ alert('catch: '+e.message); }
 }
 
 function initStockPage(){
