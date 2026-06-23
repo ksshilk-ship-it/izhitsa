@@ -422,18 +422,35 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <!-- SHOPS ANALYSIS -->
   <div class="page" id="pg-shops">
     <div class="stitle">🏪 Магазины</div>
-    <div class="pchips">
-      <div class="pc active" onclick="setShopPeriod('today',this)">Сегодня</div>
+
+    <!-- Строка 1: Фильтр по магазину -->
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:6px">
+      <div class="pchips" id="shopFilterShops" style="flex-wrap:nowrap;min-width:max-content">
+        <div class="pc active" onclick="setShopFilter('all',this)">Все</div>
+      </div>
+    </div>
+
+    <!-- Строка 2: Фильтр по типу товара -->
+    <div class="pchips" style="margin-bottom:6px" id="shopFilterGoods">
+      <div class="pc active" onclick="setGoodsFilter('all',this)">Все товары</div>
+      <div class="pc" onclick="setGoodsFilter('wood',this)">🌳 Дерево</div>
+      <div class="pc" onclick="setGoodsFilter('dr',this)">🛍 ДР Товар</div>
+    </div>
+
+    <!-- Строка 3: Период -->
+    <div class="pchips" id="shopFilterPeriod" style="margin-bottom:6px">
       <div class="pc" onclick="setShopPeriod('week',this)">Неделя</div>
-      <div class="pc" onclick="setShopPeriod('month',this)">Месяц</div>
+      <div class="pc active" onclick="setShopPeriod('month',this)">Месяц</div>
+      <div class="pc" onclick="setShopPeriod('quarter',this)">Квартал</div>
+      <div class="pc" onclick="setShopPeriod('year',this)">Год</div>
       <div class="pc" onclick="setShopPeriod('custom',this)">✏️ Период</div>
     </div>
-    
+
     <div id="shopCustomDates" style="display:none;margin-bottom:10px" class="row2">
       <div><label class="fl">С даты</label><input class="fi" type="date" id="shopFrom" onchange="renderShops()"></div>
       <div><label class="fl">По дату</label><input class="fi" type="date" id="shopTo" onchange="renderShops()"></div>
     </div>
-    
+
     <div id="shopsAnalysis">
       <div style="padding:24px;text-align:center;color:var(--t2);font-size:12px">Загрузка аналитики…</div>
     </div>
@@ -2171,7 +2188,7 @@ function switchTab(tab, el) {
   if(tab === 'analytics') renderAnalytics();
   if(tab === 'audit') renderAuditLog();
   if(tab === 'dash') renderDashboard();
-  if(tab === 'shops') renderShops();
+  if(tab === 'shops') { initShopFilterBar(); renderShops(); }
   if(tab === 'prod') renderProduction();
 }
 
@@ -3030,326 +3047,295 @@ function renderProduction() {
 }
 
 
+// Глобальные переменные для трёх независимых фильтров
+var _shopFilter = 'all';   // 'all' | конкретный shopName
+var _goodsFilter = 'all';  // 'all' | 'wood' | 'dr'
+
+function setShopFilter(shop, btn) {
+  _shopFilter = shop;
+  document.querySelectorAll('#shopFilterShops .pc').forEach(function(p){ p.classList.remove('active'); });
+  if(btn) btn.classList.add('active');
+  renderShops();
+}
+
+function setGoodsFilter(type, btn) {
+  _goodsFilter = type;
+  document.querySelectorAll('#shopFilterGoods .pc').forEach(function(p){ p.classList.remove('active'); });
+  if(btn) btn.classList.add('active');
+  renderShops();
+}
+
 function setShopPeriod(period, btn) {
-  const customDiv = document.getElementById('shopCustomDates');
-  document.querySelectorAll('#pg-shops .pchips .pc').forEach(p => p.classList.remove('active'));
-  btn.classList.add('active');
-  
+  var customDiv = document.getElementById('shopCustomDates');
+  document.querySelectorAll('#shopFilterPeriod .pc').forEach(function(p){ p.classList.remove('active'); });
+  if(btn) btn.classList.add('active');
   if(period === 'custom') {
     customDiv.style.display = 'grid';
-    const today = new Date();
+    var today = new Date();
     document.getElementById('shopFrom').value = today.toISOString().split('T')[0];
     document.getElementById('shopTo').value = today.toISOString().split('T')[0];
   } else {
     customDiv.style.display = 'none';
   }
-  
   renderShops();
+}
+
+// Инициализация строки фильтра магазинов из iz_shops
+function initShopFilterBar() {
+  var bar = document.getElementById('shopFilterShops');
+  if(!bar) return;
+  var shops = _validShopNames();
+  var html = '<div class="pc' + (_shopFilter==='all'?' active':'') + '" onclick="setShopFilter(\'all\',this)">Все</div>';
+  shops.forEach(function(name){
+    var active = _shopFilter === name ? ' active' : '';
+    // Передаём имя магазина через data-атрибут чтобы избежать проблем
+    // с экранированием кавычек в inline onclick для магазинов с апострофами
+    html += '<div class="pc'+active+'" data-shop="'+name.replace(/"/g,'&quot;')+'" onclick="setShopFilter(this.dataset.shop,this)">'+name+'</div>';
+  });
+  bar.innerHTML = html;
 }
 
 function renderShops() {
   try {
-    const el = document.getElementById('shopsAnalysis');
-    if(!el) {
-      console.error('shopsAnalysis element not found');
-      return;
-    }
+    var el = document.getElementById('shopsAnalysis');
+    if(!el) return;
+
+    // Инициализируем список магазинов в фильтре при каждом рендере
+    initShopFilterBar();
 
     // ── Период ──
-    const activePeriodBtn = document.querySelector('#pg-shops .pchips .pc.active');
-    const periodLabel = activePeriodBtn ? activePeriodBtn.textContent.trim() : 'Сегодня';
-    const today = new Date();
-    today.setHours(23, 59, 59, 999);
-    let from = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    if(periodLabel === 'Неделя') {
-      from = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-      from.setHours(0,0,0,0);
-    } else if(periodLabel === 'Месяц') {
-      from = new Date(today.getFullYear(), today.getMonth(), 1);
-    } else if(periodLabel.includes('Период')) {
-      const fromStr = document.getElementById('shopFrom').value;
-      const toStr = document.getElementById('shopTo').value;
-      if(fromStr) from = new Date(fromStr + 'T00:00:00');
-      if(toStr) { var customTo = new Date(toStr + 'T23:59:59'); }
+    var activePeriodBtn = document.querySelector('#shopFilterPeriod .pc.active');
+    var periodLabel = activePeriodBtn ? activePeriodBtn.textContent.trim() : 'Месяц';
+    var periodMap = {'Неделя':'week','Месяц':'month','Квартал':'quarter','Год':'year'};
+    var range;
+    if(periodLabel.includes('Период')) {
+      var fromStr = document.getElementById('shopFrom').value;
+      var toStr = document.getElementById('shopTo').value;
+      var today2 = new Date(); var todayKey = today2.getFullYear()+'-'+String(today2.getMonth()+1).padStart(2,'0')+'-'+String(today2.getDate()).padStart(2,'0');
+      range = {from: fromStr||todayKey, to: toStr||todayKey};
+    } else {
+      range = getDateRange(periodMap[periodLabel]||'month');
     }
-    const periodTo = (typeof customTo !== 'undefined' && customTo) ? customTo : today;
-    const fromKey = from.getFullYear() + '-' + String(from.getMonth()+1).padStart(2,'0') + '-' + String(from.getDate()).padStart(2,'0');
-    const toKey = periodTo.getFullYear() + '-' + String(periodTo.getMonth()+1).padStart(2,'0') + '-' + String(periodTo.getDate()).padStart(2,'0');
 
-    // ── Источник 1: реальные смены продавцов (iz_shifts) ──
-    const shifts = getShiftsInRange(fromKey, toKey);
+    // ── Получаем смены с учётом фильтра магазина ──
+    var allShifts = getShiftsInRange(range.from, range.to);
+    var shifts = _shopFilter === 'all' ? allShifts : allShifts.filter(function(s){ return s.shopName === _shopFilter; });
 
-    let income = 0, totalOps = 0;
-    const bySource = {};   // по точкам/магазинам
-    const bySeller = {};   // по продавцам
-    const byDay = {};
-    const byPayMethod = {};
-    const byProduct = {};
+    // ── Функция выручки с учётом фильтра типа товара ──
+    // Для 'all' — берём totalRevenue (вся смена)
+    // Для 'wood'/'dr' — считаем через journal.items по goodsType
+    function filteredRevenue(s) {
+      if(_goodsFilter === 'all') return shiftRevenue(s);
+      var rev = 0;
+      (s.journal||[]).forEach(function(entry){
+        if(entry.type !== 'sale') return;
+        (entry.items||[]).forEach(function(it){
+          if(_goodsFilter === 'wood' && it.goodsType !== 'dr') rev += (it.amt!=null?it.amt:(it.price||0)*(it.qty||1));
+          if(_goodsFilter === 'dr' && it.goodsType === 'dr') rev += (it.amt!=null?it.amt:(it.price||0)*(it.qty||1));
+        });
+        // Если items нет, но продажа есть и фильтр wood — считаем как Дерево
+        if((!entry.items||!entry.items.length) && _goodsFilter === 'wood') rev += (entry.amount||0);
+      });
+      return rev;
+    }
+    function filteredCash(s) {
+      if(_goodsFilter === 'all') return (s.cashRevenue||0);
+      var cash = 0;
+      (s.journal||[]).forEach(function(entry){
+        if(entry.type !== 'sale') return;
+        (entry.items||[]).forEach(function(it){
+          if(_goodsFilter === 'wood' && it.goodsType !== 'dr') cash += (it.cashAmt||0);
+          if(_goodsFilter === 'dr' && it.goodsType === 'dr') cash += (it.cashAmt||0);
+        });
+        if((!entry.items||!entry.items.length) && _goodsFilter === 'wood') cash += (entry.cashEffect||0);
+      });
+      return cash;
+    }
+    function filteredDiscount(s) {
+      if(_goodsFilter === 'all') return (s.totalDiscount||0);
+      var disc = 0;
+      (s.journal||[]).forEach(function(entry){
+        if(entry.type !== 'sale') return;
+        (entry.items||[]).forEach(function(it){
+          if(_goodsFilter === 'wood' && it.goodsType !== 'dr') disc += (it.discountAmt||0);
+          if(_goodsFilter === 'dr' && it.goodsType === 'dr') disc += (it.discountAmt||0);
+        });
+      });
+      return disc;
+    }
+    function filteredSalesCount(s) {
+      if(_goodsFilter === 'all') return (s.salesCount||0);
+      var cnt = 0;
+      (s.journal||[]).forEach(function(entry){
+        if(entry.type !== 'sale') return;
+        var relevant = (entry.items||[]).filter(function(it){
+          return _goodsFilter === 'wood' ? it.goodsType !== 'dr' : it.goodsType === 'dr';
+        });
+        if(relevant.length) cnt++;
+      });
+      return cnt;
+    }
 
-    shifts.forEach(function(s) {
-      const rev = shiftRevenue(s);
-      const cnt = s.salesCount || 0;
+    // ── Агрегация ──
+    var income = 0, totalOps = 0, totalCash = 0, totalCard = 0, totalDiscount = 0;
+    var byDay = {}, byShop = {}, bySeller = {}, byPayMethod = {}, byProduct = {};
+
+    shifts.forEach(function(s){
+      var rev = filteredRevenue(s);
+      var cnt = filteredSalesCount(s);
       income += rev;
       totalOps += cnt;
+      totalCash += filteredCash(s);
+      totalDiscount += filteredDiscount(s);
 
-      const shopKey = s.shopName || 'Без точки';
-      if(!bySource[shopKey]) bySource[shopKey] = {amount: 0, count: 0, type: 'shop'};
-      bySource[shopKey].amount += rev;
-      bySource[shopKey].count += cnt;
+      if(s.date){ if(!byDay[s.date]) byDay[s.date]=0; byDay[s.date]+=rev; }
 
-      const sellerKey = shiftSeller(s) || 'Неизвестно';
-      if(!bySeller[sellerKey]) bySeller[sellerKey] = {amount: 0, count: 0};
-      bySeller[sellerKey].amount += rev;
-      bySeller[sellerKey].count += cnt;
+      var shopKey = s.shopName||'Без точки';
+      if(!byShop[shopKey]) byShop[shopKey]={amount:0,count:0,type:'shop'};
+      byShop[shopKey].amount+=rev; byShop[shopKey].count+=cnt;
 
-      if(s.date) {
-        if(!byDay[s.date]) byDay[s.date] = 0;
-        byDay[s.date] += rev;
-      }
+      var sellerKey = shiftSeller(s)||'Неизвестно';
+      if(!bySeller[sellerKey]) bySeller[sellerKey]={amount:0,count:0};
+      bySeller[sellerKey].amount+=rev; bySeller[sellerKey].count+=cnt;
 
-      (s.journal || []).forEach(function(entry) {
-        if(entry.type === 'sale') {
-          const pm = entry.payMethod || 'cash';
-          if(!byPayMethod[pm]) byPayMethod[pm] = 0;
-          byPayMethod[pm] += (entry.amount || 0);
-
-          // Топ-товары считаются по реальным позициям продажи (entry.items[]),
-          // а не по entry.label — label всегда буквально равен слову «Продажа»
-          // для любой продажи независимо от состава, это не наименование товара.
-          // Группируем по «Наименование · Порода», как и просила Ксения.
-          const items = entry.items || [];
-          items.forEach(function(it){
-            const key = it.name ? (it.name + (it.species ? ' · ' + it.species : '')) : null;
-            if(!key) return;
-            if(!byProduct[key]) byProduct[key] = {count: 0, revenue: 0};
-            byProduct[key].count += (it.qty || 1);
-            byProduct[key].revenue += (it.amt!=null ? it.amt : (it.price||0)*(it.qty||1));
+      (s.journal||[]).forEach(function(entry){
+        if(entry.type==='sale'){
+          var pm = entry.payMethod||'cash';
+          if(!byPayMethod[pm]) byPayMethod[pm]=0;
+          var entryRev = 0;
+          (entry.items||[]).forEach(function(it){
+            if(_goodsFilter==='all'||(it.goodsType==='dr'&&_goodsFilter==='dr')||(it.goodsType!=='dr'&&_goodsFilter==='wood')){
+              entryRev+=(it.amt!=null?it.amt:(it.price||0)*(it.qty||1));
+              var key=it.name?(it.name+(it.species?' · '+it.species:'')):null;
+              if(key){
+                if(!byProduct[key]) byProduct[key]={count:0,revenue:0};
+                byProduct[key].count+=(it.qty||1);
+                byProduct[key].revenue+=(it.amt!=null?it.amt:(it.price||0)*(it.qty||1));
+              }
+            }
           });
+          if(!entry.items||!entry.items.length){
+            if(_goodsFilter!=='dr'){ entryRev=entry.amount||0; }
+          }
+          byPayMethod[pm]+=entryRev;
         }
       });
     });
 
-    // ── Источник 2: ручные операции (iz_transactions) ──
-    const txs = getFilteredTransactionsShops();
-    const sources = getSalesSources();
-    sources.forEach(function(s) {
-      if(!bySource[s.name]) bySource[s.name] = {amount: 0, count: 0, type: s.type};
-    });
+    totalCard = income - totalCash;
 
-    txs.forEach(function(tx) {
-      if(tx.type === 'income') {
-        income += tx.amount;
-        totalOps++;
+    var days = Object.keys(byDay);
+    var avgPerDay = days.length>0 ? income/days.length : 0;
+    var avgPerWeek = avgPerDay*7;
+    var avgPerMonth = avgPerDay*30;
+    var dayValues = days.map(function(d){return byDay[d];});
+    var maxDay = dayValues.length>0 ? Math.max.apply(null,dayValues) : 0;
+    var minDay = dayValues.length>0 ? Math.min.apply(null,dayValues) : 0;
+    var avgCheck = totalOps>0 ? income/totalOps : 0;
+    var totalPayments = Object.values(byPayMethod).reduce(function(a,b){return a+b;},0);
+    var sourceEntries = Object.entries(byShop).filter(function(e){return e[1].amount>0||e[1].count>0;}).sort(function(a,b){return b[1].amount-a[1].amount;});
+    var sellerEntries = Object.entries(bySeller).filter(function(e){return e[1].amount>0;}).sort(function(a,b){return b[1].amount-a[1].amount;});
+    var bestSource = sourceEntries.length>0?sourceEntries[0]:['Нет данных',{amount:0}];
+    var bestSeller = sellerEntries.length>0?sellerEntries[0]:['Нет данных',{amount:0}];
+    var topProductsArr = Object.entries(byProduct).map(function(e){return{name:e[0],count:e[1].count,revenue:e[1].revenue};}).sort(function(a,b){return b.revenue-a.revenue;}).slice(0,5);
+    var payMethodNames = {cash:'💵 Наличные',card:'💳 Карта',terminal:'💳 Терминал',sbp:'📱 СБП',qr:'📱 QR',transfer:'🏦 Перевод',mixed:'💱 Смешанная',other:'🔘 Другое'};
+    var filterLabel = (_shopFilter==='all'?'Все магазины':_shopFilter)+(_goodsFilter==='all'?'':', '+(_goodsFilter==='wood'?'🌳 Дерево':'🛍 ДР Товар'));
 
-        const srcKey = tx.source || 'Прочее';
-        if(!bySource[srcKey]) bySource[srcKey] = {amount: 0, count: 0, type: 'offline'};
-        bySource[srcKey].amount += tx.amount;
-        bySource[srcKey].count += 1;
+    var html = '<div style="font-size:11px;color:var(--t2);margin-bottom:8px;text-align:center">'+filterLabel+' · '+range.from+' — '+range.to+'</div>';
 
-        const seller = tx.createdBy || 'Неизвестно';
-        if(!bySeller[seller]) bySeller[seller] = {amount: 0, count: 0};
-        bySeller[seller].amount += tx.amount;
-        bySeller[seller].count += 1;
+    // СТАТИСТИКА
+    html += '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+      '<div class="ctitle">📊 Статистика</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">'+
+        _kpi('Ср. выручка/день',Math.round(avgPerDay),'var(--inc)')+
+        _kpi('Ср. выручка/неделю',Math.round(avgPerWeek),'var(--inc)')+
+        _kpi('Ср. выручка/месяц',Math.round(avgPerMonth),'var(--inc)')+
+        _kpi('Средний чек',Math.round(avgCheck),'var(--a2)')+
+        _kpi('Макс. за день',Math.round(maxDay),'var(--inc)')+
+        _kpi('Мин. за день',Math.round(minDay),'var(--exp)')+
+      '</div>'+
+      '<div style="background:var(--s1);border-radius:6px;padding:8px;margin-bottom:6px;display:flex;justify-content:space-between"><span style="font-size:12px">Всего операций</span><span style="font-weight:700">'+totalOps+'</span></div>'+
+      '<div style="background:var(--s1);border-radius:6px;padding:8px;margin-bottom:6px;display:flex;justify-content:space-between"><span style="font-size:12px">💵 Нал</span><span style="font-weight:700">'+Math.round(totalCash).toLocaleString('ru-RU')+' ₽</span></div>'+
+      '<div style="background:var(--s1);border-radius:6px;padding:8px;margin-bottom:6px;display:flex;justify-content:space-between"><span style="font-size:12px">💳 Безнал</span><span style="font-weight:700">'+Math.round(totalCard).toLocaleString('ru-RU')+' ₽</span></div>'+
+      '<div style="background:var(--s1);border-radius:6px;padding:8px;display:flex;justify-content:space-between"><span style="font-size:12px">🏷 Скидка</span><span style="font-weight:700;color:var(--exp)">'+Math.round(totalDiscount).toLocaleString('ru-RU')+' ₽</span></div>'+
+    '</div>';
 
-        const day = (tx.date || '').split('T')[0];
-        if(day) {
-          if(!byDay[day]) byDay[day] = 0;
-          byDay[day] += tx.amount;
-        }
+    // ТОП МЕТРИКИ
+    html += '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+      '<div class="ctitle">🏆 Топ метрики</div>'+
+      _metricRow('Лучшая точка',bestSource[0],bestSource[1].amount,'var(--inc)')+
+      _metricRow('Лучший продавец',bestSeller[0],bestSeller[1].amount,'var(--inc)')+
+    '</div>';
 
-        const pm = tx.payMethod || 'other';
-        if(!byPayMethod[pm]) byPayMethod[pm] = 0;
-        byPayMethod[pm] += tx.amount;
-      }
-    });
+    // ПО ТОЧКАМ
+    html += '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+      '<div class="ctitle">🏪 По точкам продаж</div>'+
+      (sourceEntries.length ? sourceEntries.map(function(e){
+        var pct = income>0?Math.round(100*e[1].amount/income):0;
+        var avg = e[1].count>0?Math.round(e[1].amount/e[1].count):0;
+        return '<div style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'+
+          '<div><div style="font-weight:600;font-size:12px">🏪 '+e[0]+'</div><div style="font-size:11px;color:var(--t2)">'+e[1].count+' опер. · ср.чек '+avg+'₽</div></div>'+
+          '<div style="text-align:right"><div style="font-weight:700;color:var(--inc);font-size:12px">'+Math.round(e[1].amount).toLocaleString('ru-RU')+' ₽</div><div style="font-size:11px;color:var(--a2)">'+pct+'%</div></div>'+
+        '</div>';
+      }).join('') : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных за период</div>')+
+    '</div>';
 
-    // ── KPI ──
-    const days = Object.keys(byDay);
-    const avgPerDay = days.length > 0 ? income / days.length : 0;
-    const avgPerWeek = avgPerDay * 7;
-    const avgPerMonth = avgPerDay * 30;
-    const dayValues = Object.values(byDay);
-    const maxDay = dayValues.length > 0 ? Math.max(...dayValues) : 0;
-    const minDay = dayValues.length > 0 ? Math.min(...dayValues) : 0;
-    const avgCheck = totalOps > 0 ? income / totalOps : 0;
+    // ПО ПРОДАВЦАМ
+    html += '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+      '<div class="ctitle">👥 По продавцам</div>'+
+      (sellerEntries.length ? sellerEntries.map(function(e){
+        var pct = income>0?Math.round(100*e[1].amount/income):0;
+        return '<div style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'+
+          '<div><div style="font-weight:600;font-size:12px">👤 '+e[0]+'</div><div style="font-size:11px;color:var(--t2)">'+e[1].count+' опер.</div></div>'+
+          '<div style="text-align:right"><div style="font-weight:700;color:var(--inc);font-size:12px">'+Math.round(e[1].amount).toLocaleString('ru-RU')+' ₽</div><div style="font-size:11px;color:var(--a2)">'+pct+'%</div></div>'+
+        '</div>';
+      }).join('') : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных о продавцах</div>')+
+    '</div>';
 
-    const sourceEntries = Object.entries(bySource).filter(function(e){ return e[1].amount > 0 || e[1].count > 0; });
-    const bestSource = sourceEntries.length > 0 ? sourceEntries.reduce(function(a,b){ return a[1].amount > b[1].amount ? a : b; }) : ['Нет данных', {amount:0}];
-    const worstSourcePool = sourceEntries.filter(function(e){ return e[1].amount > 0; });
-    const worstSource = worstSourcePool.length > 0 ? worstSourcePool.reduce(function(a,b){ return a[1].amount < b[1].amount ? a : b; }) : ['', {amount:0}];
-    const sellerEntries = Object.entries(bySeller);
-    const bestSeller = sellerEntries.length > 0 ? sellerEntries.reduce(function(a,b){ return a[1].amount > b[1].amount ? a : b; }) : ['Нет данных', {amount:0}];
+    // МЕТОДЫ ОПЛАТЫ
+    html += '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+      '<div class="ctitle">📈 Методы оплаты</div>'+
+      (totalPayments>0 ? Object.entries(byPayMethod).filter(function(e){return e[1]>0;}).sort(function(a,b){return b[1]-a[1];}).map(function(e){
+        var pct = totalPayments>0?Math.round(100*e[1]/totalPayments):0;
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:6px;margin-bottom:6px">'+
+          '<span style="font-size:12px">'+(payMethodNames[e[0]]||'🔘 '+e[0])+'</span>'+
+          '<span style="font-weight:700;font-size:12px">₽ '+Math.round(e[1]).toLocaleString('ru-RU')+' ('+pct+'%)</span>'+
+        '</div>';
+      }).join('') : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных</div>')+
+    '</div>';
 
-    const sourceIcons = {shop: '🏪', online: '📱', offline: '📦', workshop: '🏭'};
-    const payMethodNames = {cash: '💵 Наличные', card: '💳 Карта', sbp: '📱 СБП', other: '🔘 Другое'};
-    const totalPayments = Object.values(byPayMethod).reduce(function(a,b){ return a+b; }, 0);
-    const topProductsArr = Object.entries(byProduct).map(function(e){
-      return {name: e[0], count: e[1].count, revenue: e[1].revenue};
-    }).sort(function(a,b){ return b.revenue - a.revenue; }).slice(0, 5);
-
-    let html = `
-      <!-- СТАТИСТИКА / KPI -->
-      <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
-        <div class="ctitle">📊 Статистика</div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-          <div style="background:var(--s2);border-radius:8px;padding:10px">
-            <div style="font-size:11px;color:var(--t2)">Ср. выручка/день</div>
-            <div style="font-size:14px;font-weight:700;color:var(--inc)">${Math.round(avgPerDay).toLocaleString('ru-RU')} ₽</div>
-          </div>
-          <div style="background:var(--s2);border-radius:8px;padding:10px">
-            <div style="font-size:11px;color:var(--t2)">Ср. выручка/неделю</div>
-            <div style="font-size:14px;font-weight:700;color:var(--inc)">${Math.round(avgPerWeek).toLocaleString('ru-RU')} ₽</div>
-          </div>
-          <div style="background:var(--s2);border-radius:8px;padding:10px">
-            <div style="font-size:11px;color:var(--t2)">Ср. выручка/месяц</div>
-            <div style="font-size:14px;font-weight:700;color:var(--inc)">${Math.round(avgPerMonth).toLocaleString('ru-RU')} ₽</div>
-          </div>
-          <div style="background:var(--s2);border-radius:8px;padding:10px">
-            <div style="font-size:11px;color:var(--t2)">Средний чек</div>
-            <div style="font-size:14px;font-weight:700;color:var(--a2)">${Math.round(avgCheck).toLocaleString('ru-RU')} ₽</div>
-          </div>
-          <div style="background:var(--s2);border-radius:8px;padding:10px">
-            <div style="font-size:11px;color:var(--t2)">Макс. за день</div>
-            <div style="font-size:14px;font-weight:700;color:var(--inc)">${Math.round(maxDay).toLocaleString('ru-RU')} ₽</div>
-          </div>
-          <div style="background:var(--s2);border-radius:8px;padding:10px">
-            <div style="font-size:11px;color:var(--t2)">Мин. за день</div>
-            <div style="font-size:14px;font-weight:700;color:var(--exp)">${Math.round(minDay).toLocaleString('ru-RU')} ₽</div>
-          </div>
-        </div>
-
-        <div style="display:flex;justify-content:space-between;padding:10px;background:var(--s1);border-radius:8px;font-size:12px">
-          <span style="color:var(--t2)">Всего операций</span>
-          <span style="font-weight:700">${totalOps}</span>
-        </div>
-      </div>
-
-      <!-- TOP МЕТРИКИ -->
-      <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
-        <div class="ctitle">🏆 Top метрики</div>
-
-        <div class="pl-row" style="margin-bottom:12px;padding:10px;background:var(--s2);border-radius:8px">
-          <div>
-            <div style="font-size:11px;color:var(--t2)">Лучшая точка/источник</div>
-            <div style="font-weight:600;font-size:12px">${bestSource[0]}</div>
-          </div>
-          <div class="pl-val" style="color:var(--inc);font-weight:700">${Math.round(bestSource[1].amount).toLocaleString('ru-RU')} ₽</div>
-        </div>
-
-        <div class="pl-row" style="margin-bottom:12px;padding:10px;background:var(--s2);border-radius:8px">
-          <div>
-            <div style="font-size:11px;color:var(--t2)">Лучший продавец</div>
-            <div style="font-weight:600;font-size:12px">${bestSeller[0]}</div>
-          </div>
-          <div class="pl-val" style="color:var(--inc);font-weight:700">${Math.round(bestSeller[1].amount).toLocaleString('ru-RU')} ₽</div>
-        </div>
-
-        ${worstSource[0] ? `<div class="pl-row" style="padding:10px;background:var(--s2);border-radius:8px">
-          <div>
-            <div style="font-size:11px;color:var(--t2)">Худшая точка/источник</div>
-            <div style="font-weight:600;font-size:12px">${worstSource[0]}</div>
-          </div>
-          <div class="pl-val" style="color:var(--exp);font-weight:700">${Math.round(worstSource[1].amount).toLocaleString('ru-RU')} ₽</div>
-        </div>` : ''}
-      </div>
-
-      <!-- ПО ТОЧКАМ ПРОДАЖ -->
-      <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
-        <div class="ctitle">🏪 По точкам продаж</div>
-        ${
-          sourceEntries.length > 0 ?
-          sourceEntries
-            .sort(function(a,b){ return b[1].amount - a[1].amount; })
-            .map(function(e){
-              var name = e[0], data = e[1];
-              var pct = income > 0 ? ((data.amount / income) * 100).toFixed(0) : 0;
-              var avgCheckSource = data.count > 0 ? Math.round(data.amount / data.count) : 0;
-              return `<div class="pl-row" style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px">
-                <div>
-                  <div style="font-weight:600;font-size:12px">${sourceIcons[data.type] || '📌'} ${name}</div>
-                  <div style="font-size:11px;color:var(--t2)">${data.count} опер. | ср.чек ${avgCheckSource}₽</div>
-                </div>
-                <div class="pl-val">
-                  <div style="color:var(--inc);font-weight:700">${Math.round(data.amount).toLocaleString('ru-RU')} ₽</div>
-                  <div style="font-size:11px;color:var(--a2)">${pct}%</div>
-                </div>
-              </div>`;
-            }).join('')
-          : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных за выбранный период</div>'
-        }
-      </div>
-
-      <!-- ПО ПРОДАВЦАМ -->
-      <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
-        <div class="ctitle">👥 По продавцам</div>
-        ${
-          sellerEntries.length > 0 ?
-          sellerEntries
-            .sort(function(a,b){ return b[1].amount - a[1].amount; })
-            .map(function(e){
-              var seller = e[0], data = e[1];
-              var pct = income > 0 ? ((data.amount / income) * 100).toFixed(0) : 0;
-              var avgCheckSeller = data.count > 0 ? Math.round(data.amount / data.count) : 0;
-              return `<div class="pl-row" style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px">
-                <div>
-                  <div style="font-weight:600;font-size:12px">👤 ${seller}</div>
-                  <div style="font-size:11px;color:var(--t2)">${data.count} опер. | ср.чек ${avgCheckSeller}₽</div>
-                </div>
-                <div class="pl-val">
-                  <div style="color:var(--inc);font-weight:700">${Math.round(data.amount).toLocaleString('ru-RU')} ₽</div>
-                  <div style="font-size:11px;color:var(--a2)">${pct}%</div>
-                </div>
-              </div>`;
-            }).join('')
-          : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных о продавцах</div>'
-        }
-      </div>
-
-      <!-- МЕТОДЫ ОПЛАТЫ -->
-      <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
-        <div class="ctitle">📈 Методы оплаты</div>
-        ${
-          totalPayments > 0 ?
-          Object.entries(byPayMethod)
-            .sort(function(a,b){ return b[1] - a[1]; })
-            .map(function(e){
-              var pm = e[0], amount = e[1];
-              var pct = totalPayments > 0 ? Math.round(100*amount/totalPayments) : 0;
-              return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:6px;margin-bottom:8px">
-                <span style="font-size:12px">${payMethodNames[pm] || ('🔘 ' + pm)}</span>
-                <span style="font-weight:700;font-size:12px">₽ ${Math.round(amount).toLocaleString('ru-RU')} (${pct}%)</span>
-              </div>`;
-            }).join('')
-          : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных по методам оплаты</div>'
-        }
-      </div>
-
-      <!-- ТОП ТОВАРЫ -->
-      <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:16px">
-        <div class="ctitle">💰 Топ товары</div>
-        ${
-          topProductsArr.length > 0 ?
-          topProductsArr.map(function(prod, idx){
-            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px">
-              <div><div style="font-weight:600;font-size:12px">${idx+1}. ${prod.name}</div><div style="font-size:10px;color:var(--t2)">${prod.count} шт</div></div>
-              <div style="text-align:right;font-weight:700;color:var(--inc);font-size:12px">₽ ${Math.round(prod.revenue).toLocaleString('ru-RU')}</div>
-            </div>`;
-          }).join('')
-          : `<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">
-              <div style="margin-bottom:8px">Нет данных о товарах за период</div>
-              <div style="font-size:11px;color:var(--t3)">Заполняется из журнала смен продавцов</div>
-            </div>`
-        }
-      </div>`;
+    // ТОП ТОВАРЫ
+    html += '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+      '<div class="ctitle">💰 Топ товары</div>'+
+      (topProductsArr.length ? topProductsArr.map(function(prod,idx){
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:6px;margin-bottom:6px">'+
+          '<div><div style="font-weight:600;font-size:12px">'+(idx+1)+'. '+prod.name+'</div><div style="font-size:10px;color:var(--t2)">'+prod.count+' шт</div></div>'+
+          '<div style="font-weight:700;color:var(--inc);font-size:12px">₽ '+Math.round(prod.revenue).toLocaleString('ru-RU')+'</div>'+
+        '</div>';
+      }).join('') : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных о товарах</div>')+
+    '</div>';
 
     el.innerHTML = html;
   } catch(e) {
     console.error('renderShops error:', e);
-    const el = document.getElementById('shopsAnalysis');
-    if(el) el.innerHTML = '<div style="color:var(--exp);padding:12px">Ошибка: ' + e.message + '</div>';
+    var el = document.getElementById('shopsAnalysis');
+    if(el) el.innerHTML = '<div style="color:var(--exp);padding:12px">Ошибка: '+e.message+'</div>';
   }
 }
+
+function _kpi(label, val, color) {
+  return '<div style="background:var(--s2);border-radius:8px;padding:10px">'+
+    '<div style="font-size:11px;color:var(--t2)">'+label+'</div>'+
+    '<div style="font-size:14px;font-weight:700;color:'+color+'">'+val.toLocaleString('ru-RU')+' ₽</div>'+
+  '</div>';
+}
+function _metricRow(label, name, val, color) {
+  return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:6px">'+
+    '<div><div style="font-size:11px;color:var(--t2)">'+label+'</div><div style="font-weight:600;font-size:12px">'+name+'</div></div>'+
+    '<div style="font-weight:700;color:'+color+';font-size:12px">'+Math.round(val).toLocaleString('ru-RU')+' ₽</div>'+
+  '</div>';
+}
+
 
 
 function getFilteredTransactionsPL() {
@@ -3611,6 +3597,9 @@ function getFilteredTransactionsShops() {
     return txDate >= from && txDate <= today && tx.type === 'income';
   });
 }
+
+
+
 
 document.addEventListener('DOMContentLoaded', function() {
   initRefBooks();
