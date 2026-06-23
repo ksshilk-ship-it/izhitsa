@@ -2555,15 +2555,25 @@ function getTodayShifts() {
 // предположение о полях cashRevenue+cardRevenue+totalDiscount без totalRevenue
 // почти всегда давало 0, потому что в реальных сменах эти суммы либо не
 // заполнены отдельно, либо названы иначе в зависимости от пути сохранения.
+// Реальная выручка смены — единая формула для всех форматов записи:
+// cashRevenue + cardRevenue + totalDiscount.
+//
+// Почему не totalRevenue напрямую:
+// — В обычных сменах (closeShift): totalRevenue = sum(sale.totalPaid) — БЕЗ скидки
+// — В архивных (ручных) сменах: totalRevenue = cash+terminal+qr+discount — СО скидкой
+// Из-за этого рассинхрона totalRevenue нельзя использовать напрямую.
+// cashRevenue + cardRevenue + totalDiscount даёт правильный результат в обоих случаях.
 function shiftRevenue(s){
-  if(s.totalRevenue!=null || s.drTotalRevenue!=null){
-    return (s.totalRevenue||0) + (s.drTotalRevenue||0);
-  }
-  // Запасной вариант для очень старых/нестандартных записей без totalRevenue
-  var wood = (s.cashRevenue||0) + (s.cardRevenue||0) + (s.totalDiscount||s.discount||0);
-  var dr = (s.drCashRevenue||0) + (s.drCardRevenue||0) + (s.drDiscount||0);
-  return wood + dr;
+  var cash = (s.cashRevenue||0);
+  var card = (s.cardRevenue||0);
+  var disc = (s.totalDiscount||s.discount||0);
+  // drTotal — только у архивных смен с ДР Товаром
+  var dr = (s.drTotalRevenue||0) || ((s.drCashRevenue||0)+(s.drCardRevenue||0)+(s.drDiscount||0));
+  return cash + card + disc + dr;
 }
+function shiftCash(s){ return (s.cashRevenue||0); }
+function shiftCard(s){ return (s.cardRevenue||0); }
+function shiftDiscount(s){ return (s.totalDiscount||s.discount||0); }
 // Продавец смены хранится в поле sellerName, не seller.
 function shiftSeller(s){ return s.sellerName || ''; }
 
@@ -3195,7 +3205,7 @@ function renderShops() {
     }
 
     // Агрегация
-    var income=0, totalOps=0, totalCash=0, totalDiscount=0, totalItems=0;
+    var income=0, totalOps=0, totalCash=0, totalCard=0, totalDiscount=0, totalItems=0;
     var byDay={}, byShop={}, byProduct={}, byPayMethod={};
 
     // По продавцам: накапливаем данные по дням для средних
@@ -3205,7 +3215,9 @@ function renderShops() {
     shifts.forEach(function(s){
       var rev=filtRev(s), disc=filtDisc(s), cnt=filtSales(s), items=filtItems(s);
       income+=rev; totalOps+=cnt; totalDiscount+=disc; totalItems+=items;
-      totalCash+=(_goodsFilter==='all'?(s.cashRevenue||0):0);
+      // Нал и безнал берём напрямую из полей смены (не вычитанием)
+      totalCash+=shiftCash(s);
+      totalCard+=shiftCard(s);
       if(s.date){if(!byDay[s.date]) byDay[s.date]=0; byDay[s.date]+=rev;}
 
       var shopKey=s.shopName||'—';
@@ -3243,7 +3255,6 @@ function renderShops() {
       });
     });
 
-    var totalCard = income - totalCash;
     var days=Object.keys(byDay), dayValues=days.map(function(d){return byDay[d];});
     var avgPerDay=days.length?income/days.length:0;
     var maxDay=dayValues.length?Math.max.apply(null,dayValues):0;

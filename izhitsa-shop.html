@@ -12980,9 +12980,11 @@ function stockDiagnostic(){
       snap.forEach(function(d){ var data=d.data(); if(data) arr.push(Object.assign({id:d.id},data)); });
       localStorage.setItem('iz_manual_invoices',JSON.stringify(arr));
       var msg2='Firestore iz_manual_invoices: '+arr.length+' шт.\n';
-      arr.slice(0,5).forEach(function(inv,i){
-        msg2+='['+(i+1)+'] destName='+inv.destName+' shopName='+inv.shopName+' shop='+inv.shop+' items='+(inv.items||[]).length+'\n';
-        (inv.items||[]).slice(0,2).forEach(function(it){ msg2+='  №'+it.num+' '+it.name+' qty='+it.qty+'\n'; });
+      arr.slice(0,3).forEach(function(inv,i){
+        msg2+='['+(i+1)+'] destName='+inv.destName+' items='+(inv.items||[]).length+'\n';
+        // Show ALL keys of first item to find article field
+        var firstItem=(inv.items||[])[0];
+        if(firstItem) msg2+='  item keys: '+Object.keys(firstItem).join(', ')+'\n  values: '+Object.values(firstItem).slice(0,8).join(' | ')+'\n';
       });
       alert(msg2);
       rebuildStock(true);
