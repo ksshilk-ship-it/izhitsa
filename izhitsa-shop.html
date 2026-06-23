@@ -1438,6 +1438,11 @@ function checkForAppUpdate() {
 <!-- RECEIVE -->
 <div class="mo" id="receiveMo">
   <div class="md"><div class="mh"></div><div class="mt">📥 Приход товара</div>
+    <!-- Тип товара -->
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button type="button" id="rcvTypeDerevo" onpointerdown="event.preventDefault();setRcvGoodsType('derevo',this)" style="flex:1;padding:10px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:13px;font-weight:700;cursor:pointer">🌳 Дерево</button>
+      <button type="button" id="rcvTypeDr" onpointerdown="event.preventDefault();setRcvGoodsType('dr',this)" style="flex:1;padding:10px;border-radius:10px;border:2px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:13px;font-weight:700;cursor:pointer">🛍 ДР Товар</button>
+    </div>
     <div class="row2">
       <div class="fg" style="flex:0 0 120px"><label class="fl">Артикул</label>
         <input class="fi" id="rcvArticle" placeholder="№" oninput="lookupReceiveItem(this.value)">
@@ -5399,6 +5404,15 @@ function saveWriteoff(){
 }
 
 // ════ RECEIVE ════
+var _rcvGoodsType = 'derevo';
+function setRcvGoodsType(type, el){
+  _rcvGoodsType = type;
+  var btnD = document.getElementById('rcvTypeDerevo');
+  var btnDr = document.getElementById('rcvTypeDr');
+  if(btnD){ btnD.style.borderColor = type==='derevo'?'#c8f060':'#2e2e3e'; btnD.style.background = type==='derevo'?'#1e2a14':'#22222e'; btnD.style.color = type==='derevo'?'#c8f060':'#8888aa'; }
+  if(btnDr){ btnDr.style.borderColor = type==='dr'?'#a060f0':'#2e2e3e'; btnDr.style.background = type==='dr'?'#1e1a2e':'#22222e'; btnDr.style.color = type==='dr'?'#a060f0':'#8888aa'; }
+}
+
 function lookupReceiveItem(num){
   var hint = document.getElementById('rcvLookupHint');
   if(!num.trim()){ if(hint) hint.style.display='none'; return; }
@@ -5418,19 +5432,25 @@ function lookupReceiveItem(num){
 }
 
 function saveReceive(){
-  const name=gv('rcvName'),price=parseFloat(gv('rcvPrice'))||0;
+  var name=gv('rcvName'),price=parseFloat(gv('rcvPrice'))||0;
   if(!name){showToast('Введите наименование');return;} if(!price){showToast('Введите цену');return;}
-  const article=gv('rcvArticle');
+  var article=gv('rcvArticle');
   var rcvQtyNum=parseFloat(gv('rcvQty'))||1;
-  journal.push({id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',label:'Приход товара',
+  var isDr = _rcvGoodsType === 'dr';
+  var entry = {id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',
+    label:'Приход '+(isDr?'ДР Товар':'товара'),
     sub:(article?'№'+article+' ':'')+name+(gv('rcvQty')?' · '+gv('rcvQty'):'')+' · '+gv('rcvFrom')+' · '+gv('rcvDate'),
-    amount:price,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:price,
-    article:article});
-  if(article){ try{ stockApplyReceive(session&&session.shopName,[{num:article,name:name,price:price,qty:rcvQtyNum,goodsType:'derevo'}],gv('rcvDate')||new Date().toISOString().split('T')[0]); }catch(e){} }
-  saveJ(); ['rcvArticle','rcvName','rcvQty','rcvPrice','rcvFrom'].forEach(id=>{var el=document.getElementById(id); if(el) el.value='';});
+    amount:price,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,
+    goodsEffect: isDr?0:price, goodsDrEffect: isDr?price:0,
+    goodsType: _rcvGoodsType,
+    article:article};
+  journal.push(entry);
+  if(article){ try{ stockApplyReceive(session&&session.shopName,[{num:article,name:name,price:price,qty:rcvQtyNum,goodsType:_rcvGoodsType}],gv('rcvDate')||new Date().toISOString().split('T')[0]); }catch(e){} }
+  saveJ(); ['rcvArticle','rcvName','rcvQty','rcvPrice','rcvFrom'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   logReceive(gv('rcvFrom'), price, session.shopName);
   var hint=document.getElementById('rcvLookupHint'); if(hint) hint.style.display='none';
-  closeMo('receiveMo'); renderAll(); showToast('📥 Товар принят: '+fmt(price));
+  setRcvGoodsType('derevo'); // reset to Дерево
+  closeMo('receiveMo'); renderAll(); showToast('📥 '+(isDr?'🛍 ДР Товар':'🌳 Дерево')+' принят: '+fmt(price));
 }
 
 // ════ STAFF ════
