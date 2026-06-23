@@ -12820,9 +12820,10 @@ function stockApplySale(shopName,items){
 function stockApplyReceive(shopName,items,date){
   if(!shopName) return;
   items.forEach(function(it){
-    if(!it.num) return;
+    var artNum=it.article||it.num||it.artNum;
+    if(!artNum) return;
     var gt=it.goodsType||(it.category==='dr'?'dr':'derevo');
-    stockUpdateQty(shopName,it.num,it.name,it.price||it.factPrice,it.species,gt,it.size||'',(it.qty||1),date);
+    stockUpdateQty(shopName,artNum,it.name,it.price||it.factPrice,it.species,gt,it.size||'',(it.qty||1),date);
   });
 }
 
@@ -12842,8 +12843,9 @@ function rebuildStock(showMsg){
     // Use acceptedItems if available (has factPrice), fallback to items
     var itemsList=inv.acceptedItems||inv.items||[];
     itemsList.forEach(function(it){
-      if(!it.num) return;
-      var key=String(it.num);
+      var artNum=it.article||it.num||it.artNum;
+      if(!artNum) return;
+      var key=String(artNum);
       var qty=it.qty||1;
       var pr=it.factPrice||it.price||0;
       var gt=it.goodsType||(it.category==='dr'?'dr':'derevo');
@@ -12865,8 +12867,9 @@ function rebuildStock(showMsg){
     var date=inv.acceptedAt?inv.acceptedAt.split('T')[0]:(inv.acceptedDate||inv.date||'');
     var itemsList=inv.acceptedItems||inv.items||[];
     itemsList.forEach(function(it){
-      if(!it.num) return;
-      var key=String(it.num);
+      var artNum=it.article||it.num||it.artNum;
+      if(!artNum) return;
+      var key=String(artNum);
       var qty=it.qty||1;
       var pr=it.factPrice||it.price||0;
       var gt=it.goodsType||'derevo';
@@ -12890,8 +12893,9 @@ function rebuildStock(showMsg){
     shJ.forEach(function(e){
       if(e.type==='sale'){
         (e.items||[]).forEach(function(it){
-          if(!it.num) return;
-          var key=String(it.num);
+          var artNum=it.article||it.num||it.artNum||it.art;
+          if(!artNum) return;
+          var key=String(artNum);
           if(!stock[sn][key]) return;
           stock[sn][key].qty=Math.max(0,(stock[sn][key].qty||0)-(it.qty||1));
         });
@@ -12908,14 +12912,16 @@ function rebuildStock(showMsg){
         }
       } else if(e.type==='writeoff'){
         (e.items||[]).forEach(function(it){
-          if(!it.num) return;
-          var key=String(it.num);
+          var artNum=it.article||it.num||it.artNum;
+          if(!artNum) return;
+          var key=String(artNum);
           if(!stock[sn][key]) return;
           stock[sn][key].qty=Math.max(0,(stock[sn][key].qty||0)-(it.qty||1));
         });
       } else if(e.type==='staff'){
-        if(e.article){
-          var key=String(e.article);
+        var stArt=e.article||e.num||e.artNum;
+        if(stArt){
+          var key=String(stArt);
           if(stock[sn]&&stock[sn][key]){
             stock[sn][key].qty=Math.max(0,(stock[sn][key].qty||0)-(e.qty||1));
           }
