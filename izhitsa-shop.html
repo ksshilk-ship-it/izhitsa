@@ -12980,6 +12980,14 @@ function stockDiagnostic(){
   msg+='\nLS ключи: '+keys.join(', ')+'\n';
   msg+='\n→ Сейчас принудительно загружу из Firestore...';
   alert(msg);
+  // Also show current journal receive entries
+  var jRcvDbg = journal.filter(function(e){ return e.type==='receive'; });
+  var jMsg = 'journal receive-записей: '+jRcvDbg.length+'\n';
+  jRcvDbg.forEach(function(e,i){
+    jMsg += '['+(i+1)+'] '+e.label+' goodsEffect='+e.goodsEffect+' ts='+(e.ts||'').slice(0,16)+'\n';
+  });
+  if(jRcvDbg.length) alert(jMsg);
+
   try{
     db.collection('iz_manual_invoices').get({source:'server'}).then(function(snap){
       var arr=[];
@@ -12988,7 +12996,6 @@ function stockDiagnostic(){
       var msg2='Firestore iz_manual_invoices: '+arr.length+' шт.\n';
       arr.slice(0,3).forEach(function(inv,i){
         msg2+='['+(i+1)+'] destName='+inv.destName+' items='+(inv.items||[]).length+'\n';
-        // Show ALL keys of first item to find article field
         var firstItem=(inv.items||[])[0];
         if(firstItem) msg2+='  item keys: '+Object.keys(firstItem).join(', ')+'\n  values: '+Object.values(firstItem).slice(0,8).join(' | ')+'\n';
       });
