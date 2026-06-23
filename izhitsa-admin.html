@@ -2500,13 +2500,6 @@ function getPrevDateRange(fromKey, toKey){
 // Это автоматически исключает тестовые смены, открытые под несуществующими
 // точками (например, «Дерево», которой нет в iz_shops), без необходимости
 // фильтровать по имени продавца и рисковать исключить реальные смены.
-function _validShopNames() {
-  try {
-    var shops = JSON.parse(localStorage.getItem('iz_shops') || '[]');
-    // iz_shops может быть массивом объектов {name, type, ...} или массивом строк
-    return shops.map(function(s){ return typeof s === 'string' ? s : (s.name || ''); }).filter(Boolean);
-  } catch(e) { return []; }
-}
 function _deletedShiftIds() {
   try {
     var trash = JSON.parse(localStorage.getItem('iz_shop_trash') || '[]');
@@ -3081,252 +3074,313 @@ function setShopPeriod(period, btn) {
 }
 
 // Инициализация строки фильтра магазинов из iz_shops
+
+
+
+// ── Фильтр магазинов: берём из iz_shops, оффлайн (type=shop/offline) — первыми ──
+function _getShopsForFilter() {
+  try {
+    var raw = JSON.parse(localStorage.getItem('iz_shops') || '[]');
+    var offline = [], online = [];
+    raw.forEach(function(s) {
+      var name = typeof s === 'string' ? s : (s.name || '');
+      var type = typeof s === 'string' ? 'shop' : (s.type || 'shop');
+      if(!name) return;
+      if(type === 'shop' || type === 'offline') offline.push({name:name, type:type});
+      else online.push({name:name, type:type});
+    });
+    return offline.concat(online);
+  } catch(e) { return []; }
+}
+
+function _validShopNames() {
+  return _getShopsForFilter().map(function(s){ return s.name; });
+}
+
 function initShopFilterBar() {
   var bar = document.getElementById('shopFilterShops');
   if(!bar) return;
-  var shops = _validShopNames();
+  var shops = _getShopsForFilter();
+  var typeIcons = {shop:'🏪', offline:'🏪', online:'📱', workshop:'🏭'};
   var html = '<div class="pc' + (_shopFilter==='all'?' active':'') + '" onclick="setShopFilter(\'all\',this)">Все</div>';
-  shops.forEach(function(name){
-    var active = _shopFilter === name ? ' active' : '';
-    // Передаём имя магазина через data-атрибут чтобы избежать проблем
-    // с экранированием кавычек в inline onclick для магазинов с апострофами
-    html += '<div class="pc'+active+'" data-shop="'+name.replace(/"/g,'&quot;')+'" onclick="setShopFilter(this.dataset.shop,this)">'+name+'</div>';
+  shops.forEach(function(s){
+    var active = _shopFilter === s.name ? ' active' : '';
+    var icon = typeIcons[s.type] || '🏪';
+    html += '<div class="pc'+active+'" data-shop="'+s.name.replace(/"/g,'&quot;')+'" onclick="setShopFilter(this.dataset.shop,this)">'+icon+' '+s.name+'</div>';
   });
   bar.innerHTML = html;
 }
 
+// ── Главная функция рендера раздела «Магазины» ──
 function renderShops() {
   try {
     var el = document.getElementById('shopsAnalysis');
     if(!el) return;
 
-    // Инициализируем список магазинов в фильтре при каждом рендере
     initShopFilterBar();
 
-    // ── Период ──
+    // Период
     var activePeriodBtn = document.querySelector('#shopFilterPeriod .pc.active');
     var periodLabel = activePeriodBtn ? activePeriodBtn.textContent.trim() : 'Месяц';
     var periodMap = {'Неделя':'week','Месяц':'month','Квартал':'quarter','Год':'year'};
     var range;
     if(periodLabel.includes('Период')) {
-      var fromStr = document.getElementById('shopFrom').value;
-      var toStr = document.getElementById('shopTo').value;
-      var today2 = new Date(); var todayKey = today2.getFullYear()+'-'+String(today2.getMonth()+1).padStart(2,'0')+'-'+String(today2.getDate()).padStart(2,'0');
-      range = {from: fromStr||todayKey, to: toStr||todayKey};
+      var fv = document.getElementById('shopFrom').value;
+      var tv = document.getElementById('shopTo').value;
+      var td = getTodayKey();
+      range = {from: fv||td, to: tv||td};
     } else {
       range = getDateRange(periodMap[periodLabel]||'month');
     }
 
-    // ── Получаем смены с учётом фильтра магазина ──
+    // Смены с учётом фильтра магазина
     var allShifts = getShiftsInRange(range.from, range.to);
-    var shifts = _shopFilter === 'all' ? allShifts : allShifts.filter(function(s){ return s.shopName === _shopFilter; });
+    var shifts = _shopFilter === 'all'
+      ? allShifts
+      : allShifts.filter(function(s){ return s.shopName === _shopFilter; });
 
-    // ── Функция выручки с учётом фильтра типа товара ──
-    // Для 'all' — берём totalRevenue (вся смена)
-    // Для 'wood'/'dr' — считаем через journal.items по goodsType
-    function filteredRevenue(s) {
+    // Кол-во дней в периоде (для средних по каждому продавцу)
+    var dFrom = new Date(range.from+'T00:00:00'), dTo = new Date(range.to+'T23:59:59');
+    var periodDays = Math.max(1, Math.round((dTo-dFrom)/(1000*60*60*24))+1);
+
+    // Выручка с учётом фильтра типа товара
+    function filtRev(s) {
       if(_goodsFilter === 'all') return shiftRevenue(s);
       var rev = 0;
-      (s.journal||[]).forEach(function(entry){
-        if(entry.type !== 'sale') return;
-        (entry.items||[]).forEach(function(it){
-          if(_goodsFilter === 'wood' && it.goodsType !== 'dr') rev += (it.amt!=null?it.amt:(it.price||0)*(it.qty||1));
-          if(_goodsFilter === 'dr' && it.goodsType === 'dr') rev += (it.amt!=null?it.amt:(it.price||0)*(it.qty||1));
+      (s.journal||[]).forEach(function(e){
+        if(e.type!=='sale') return;
+        (e.items||[]).forEach(function(it){
+          if(_goodsFilter==='wood' && it.goodsType!=='dr') rev+=(it.amt!=null?it.amt:(it.price||0)*(it.qty||1));
+          if(_goodsFilter==='dr' && it.goodsType==='dr') rev+=(it.amt!=null?it.amt:(it.price||0)*(it.qty||1));
         });
-        // Если items нет, но продажа есть и фильтр wood — считаем как Дерево
-        if((!entry.items||!entry.items.length) && _goodsFilter === 'wood') rev += (entry.amount||0);
+        if((!e.items||!e.items.length) && _goodsFilter==='wood') rev+=(e.amount||0);
       });
       return rev;
     }
-    function filteredCash(s) {
-      if(_goodsFilter === 'all') return (s.cashRevenue||0);
-      var cash = 0;
-      (s.journal||[]).forEach(function(entry){
-        if(entry.type !== 'sale') return;
-        (entry.items||[]).forEach(function(it){
-          if(_goodsFilter === 'wood' && it.goodsType !== 'dr') cash += (it.cashAmt||0);
-          if(_goodsFilter === 'dr' && it.goodsType === 'dr') cash += (it.cashAmt||0);
-        });
-        if((!entry.items||!entry.items.length) && _goodsFilter === 'wood') cash += (entry.cashEffect||0);
-      });
-      return cash;
-    }
-    function filteredDiscount(s) {
-      if(_goodsFilter === 'all') return (s.totalDiscount||0);
-      var disc = 0;
-      (s.journal||[]).forEach(function(entry){
-        if(entry.type !== 'sale') return;
-        (entry.items||[]).forEach(function(it){
-          if(_goodsFilter === 'wood' && it.goodsType !== 'dr') disc += (it.discountAmt||0);
-          if(_goodsFilter === 'dr' && it.goodsType === 'dr') disc += (it.discountAmt||0);
+    function filtDisc(s) {
+      if(_goodsFilter==='all') return (s.totalDiscount||0);
+      var d=0;
+      (s.journal||[]).forEach(function(e){
+        if(e.type!=='sale') return;
+        (e.items||[]).forEach(function(it){
+          if(_goodsFilter==='wood'&&it.goodsType!=='dr') d+=(it.discountAmt||0);
+          if(_goodsFilter==='dr'&&it.goodsType==='dr') d+=(it.discountAmt||0);
         });
       });
-      return disc;
+      return d;
     }
-    function filteredSalesCount(s) {
-      if(_goodsFilter === 'all') return (s.salesCount||0);
-      var cnt = 0;
-      (s.journal||[]).forEach(function(entry){
-        if(entry.type !== 'sale') return;
-        var relevant = (entry.items||[]).filter(function(it){
-          return _goodsFilter === 'wood' ? it.goodsType !== 'dr' : it.goodsType === 'dr';
+    function filtSales(s) {
+      if(_goodsFilter==='all') return (s.salesCount||0);
+      var cnt=0;
+      (s.journal||[]).forEach(function(e){
+        if(e.type!=='sale') return;
+        var rel=(e.items||[]).filter(function(it){
+          return _goodsFilter==='wood'?it.goodsType!=='dr':it.goodsType==='dr';
         });
-        if(relevant.length) cnt++;
+        if(rel.length||(!e.items||!e.items.length)&&_goodsFilter==='wood') cnt++;
+      });
+      return cnt;
+    }
+    function filtItems(s) {
+      var cnt=0;
+      (s.journal||[]).forEach(function(e){
+        if(e.type!=='sale') return;
+        if(_goodsFilter==='all') { cnt+=(e.items&&e.items.length?e.items.length:1); return; }
+        (e.items||[]).forEach(function(it){
+          if(_goodsFilter==='wood'&&it.goodsType!=='dr') cnt++;
+          if(_goodsFilter==='dr'&&it.goodsType==='dr') cnt++;
+        });
       });
       return cnt;
     }
 
-    // ── Агрегация ──
-    var income = 0, totalOps = 0, totalCash = 0, totalCard = 0, totalDiscount = 0;
-    var byDay = {}, byShop = {}, bySeller = {}, byPayMethod = {}, byProduct = {};
+    // Агрегация
+    var income=0, totalOps=0, totalCash=0, totalDiscount=0, totalItems=0;
+    var byDay={}, byShop={}, byProduct={}, byPayMethod={};
+
+    // По продавцам: накапливаем данные по дням для средних
+    var bySeller={};
+    // bySeller[name] = {revenue, discount, sales, items, zp, days:{date:revenue}, shiftDates:Set}
 
     shifts.forEach(function(s){
-      var rev = filteredRevenue(s);
-      var cnt = filteredSalesCount(s);
-      income += rev;
-      totalOps += cnt;
-      totalCash += filteredCash(s);
-      totalDiscount += filteredDiscount(s);
+      var rev=filtRev(s), disc=filtDisc(s), cnt=filtSales(s), items=filtItems(s);
+      income+=rev; totalOps+=cnt; totalDiscount+=disc; totalItems+=items;
+      totalCash+=(_goodsFilter==='all'?(s.cashRevenue||0):0);
+      if(s.date){if(!byDay[s.date]) byDay[s.date]=0; byDay[s.date]+=rev;}
 
-      if(s.date){ if(!byDay[s.date]) byDay[s.date]=0; byDay[s.date]+=rev; }
-
-      var shopKey = s.shopName||'Без точки';
-      if(!byShop[shopKey]) byShop[shopKey]={amount:0,count:0,type:'shop'};
+      var shopKey=s.shopName||'—';
+      if(!byShop[shopKey]) byShop[shopKey]={amount:0,count:0};
       byShop[shopKey].amount+=rev; byShop[shopKey].count+=cnt;
 
-      var sellerKey = shiftSeller(s)||'Неизвестно';
-      if(!bySeller[sellerKey]) bySeller[sellerKey]={amount:0,count:0};
-      bySeller[sellerKey].amount+=rev; bySeller[sellerKey].count+=cnt;
+      var seller=shiftSeller(s)||'—';
+      if(!bySeller[seller]) bySeller[seller]={revenue:0,discount:0,sales:0,items:0,zp:0,shiftDates:[]};
+      bySeller[seller].revenue+=rev;
+      bySeller[seller].discount+=disc;
+      bySeller[seller].sales+=cnt;
+      bySeller[seller].items+=items;
+      bySeller[seller].zp+=(s.zp||0);
+      if(s.date && bySeller[seller].shiftDates.indexOf(s.date)<0)
+        bySeller[seller].shiftDates.push(s.date);
 
-      (s.journal||[]).forEach(function(entry){
-        if(entry.type==='sale'){
-          var pm = entry.payMethod||'cash';
-          if(!byPayMethod[pm]) byPayMethod[pm]=0;
-          var entryRev = 0;
-          (entry.items||[]).forEach(function(it){
-            if(_goodsFilter==='all'||(it.goodsType==='dr'&&_goodsFilter==='dr')||(it.goodsType!=='dr'&&_goodsFilter==='wood')){
-              entryRev+=(it.amt!=null?it.amt:(it.price||0)*(it.qty||1));
-              var key=it.name?(it.name+(it.species?' · '+it.species:'')):null;
-              if(key){
-                if(!byProduct[key]) byProduct[key]={count:0,revenue:0};
-                byProduct[key].count+=(it.qty||1);
-                byProduct[key].revenue+=(it.amt!=null?it.amt:(it.price||0)*(it.qty||1));
-              }
+      (s.journal||[]).forEach(function(e){
+        if(e.type!=='sale') return;
+        var pm=e.payMethod||'cash';
+        var eRev=0;
+        (e.items||[]).forEach(function(it){
+          if(_goodsFilter==='all'||(it.goodsType==='dr'&&_goodsFilter==='dr')||(it.goodsType!=='dr'&&_goodsFilter==='wood')){
+            eRev+=(it.amt!=null?it.amt:(it.price||0)*(it.qty||1));
+            var key=it.name?(it.name+(it.species?' · '+it.species:'')):null;
+            if(key){
+              if(!byProduct[key]) byProduct[key]={count:0,revenue:0};
+              byProduct[key].count+=(it.qty||1);
+              byProduct[key].revenue+=(it.amt!=null?it.amt:(it.price||0)*(it.qty||1));
             }
-          });
-          if(!entry.items||!entry.items.length){
-            if(_goodsFilter!=='dr'){ entryRev=entry.amount||0; }
           }
-          byPayMethod[pm]+=entryRev;
-        }
+        });
+        if(!e.items||!e.items.length){if(_goodsFilter!=='dr') eRev=(e.amount||0);}
+        if(!byPayMethod[pm]) byPayMethod[pm]=0;
+        byPayMethod[pm]+=eRev;
       });
     });
 
-    totalCard = income - totalCash;
+    var totalCard = income - totalCash;
+    var days=Object.keys(byDay), dayValues=days.map(function(d){return byDay[d];});
+    var avgPerDay=days.length?income/days.length:0;
+    var maxDay=dayValues.length?Math.max.apply(null,dayValues):0;
+    var minDay=dayValues.length?Math.min.apply(null,dayValues):0;
+    var avgCheck=totalOps?income/totalOps:0;
+    var avgItems=totalOps?totalItems/totalOps:0;
+    var totalPayments=Object.values(byPayMethod).reduce(function(a,b){return a+b;},0);
 
-    var days = Object.keys(byDay);
-    var avgPerDay = days.length>0 ? income/days.length : 0;
-    var avgPerWeek = avgPerDay*7;
-    var avgPerMonth = avgPerDay*30;
-    var dayValues = days.map(function(d){return byDay[d];});
-    var maxDay = dayValues.length>0 ? Math.max.apply(null,dayValues) : 0;
-    var minDay = dayValues.length>0 ? Math.min.apply(null,dayValues) : 0;
-    var avgCheck = totalOps>0 ? income/totalOps : 0;
-    var totalPayments = Object.values(byPayMethod).reduce(function(a,b){return a+b;},0);
-    var sourceEntries = Object.entries(byShop).filter(function(e){return e[1].amount>0||e[1].count>0;}).sort(function(a,b){return b[1].amount-a[1].amount;});
-    var sellerEntries = Object.entries(bySeller).filter(function(e){return e[1].amount>0;}).sort(function(a,b){return b[1].amount-a[1].amount;});
-    var bestSource = sourceEntries.length>0?sourceEntries[0]:['Нет данных',{amount:0}];
-    var bestSeller = sellerEntries.length>0?sellerEntries[0]:['Нет данных',{amount:0}];
-    var topProductsArr = Object.entries(byProduct).map(function(e){return{name:e[0],count:e[1].count,revenue:e[1].revenue};}).sort(function(a,b){return b.revenue-a.revenue;}).slice(0,5);
-    var payMethodNames = {cash:'💵 Наличные',card:'💳 Карта',terminal:'💳 Терминал',sbp:'📱 СБП',qr:'📱 QR',transfer:'🏦 Перевод',mixed:'💱 Смешанная',other:'🔘 Другое'};
-    var filterLabel = (_shopFilter==='all'?'Все магазины':_shopFilter)+(_goodsFilter==='all'?'':', '+(_goodsFilter==='wood'?'🌳 Дерево':'🛍 ДР Товар'));
+    var shopEntries=Object.entries(byShop).filter(function(e){return e[1].amount>0||e[1].count>0;}).sort(function(a,b){return b[1].amount-a[1].amount;});
+    var sellerEntries=Object.entries(bySeller).filter(function(e){return e[1].revenue>0;}).sort(function(a,b){return b[1].revenue-a[1].revenue;});
+    var topProducts=Object.entries(byProduct).map(function(e){return{name:e[0],count:e[1].count,revenue:e[1].revenue};}).sort(function(a,b){return b.revenue-a.revenue;}).slice(0,10);
 
-    var html = '<div style="font-size:11px;color:var(--t2);margin-bottom:8px;text-align:center">'+filterLabel+' · '+range.from+' — '+range.to+'</div>';
+    var payNames={cash:'💵 Наличные',card:'💳 Карта',terminal:'💳 Терминал',sbp:'📱 СБП',qr:'📱 QR',transfer:'🏦 Перевод',mixed:'💱 Смешанная',other:'🔘 Другое'};
+    var filterLabel=(_shopFilter==='all'?'Все магазины':_shopFilter)+(_goodsFilter==='all'?'':', '+(_goodsFilter==='wood'?'🌳 Дерево':'🛍 ДР Товар'));
 
-    // СТАТИСТИКА
-    html += '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+    function fmt(n){ return Math.round(n||0).toLocaleString('ru-RU'); }
+
+    var html='<div style="font-size:11px;color:var(--t2);margin-bottom:8px;text-align:center">'+filterLabel+' · '+range.from+' — '+range.to+'</div>';
+
+    // ── СТАТИСТИКА ──
+    html+='<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
       '<div class="ctitle">📊 Статистика</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">'+
-        _kpi('Ср. выручка/день',Math.round(avgPerDay),'var(--inc)')+
-        _kpi('Ср. выручка/неделю',Math.round(avgPerWeek),'var(--inc)')+
-        _kpi('Ср. выручка/месяц',Math.round(avgPerMonth),'var(--inc)')+
-        _kpi('Средний чек',Math.round(avgCheck),'var(--a2)')+
-        _kpi('Макс. за день',Math.round(maxDay),'var(--inc)')+
-        _kpi('Мин. за день',Math.round(minDay),'var(--exp)')+
+        _kpi('Ср. выручка/день',fmt(avgPerDay),'var(--inc)')+
+        _kpi('Ср. выручка/неделю',fmt(avgPerDay*7),'var(--inc)')+
+        _kpi('Ср. выручка/месяц',fmt(avgPerDay*30),'var(--inc)')+
+        _kpi('Средний чек',fmt(avgCheck),'var(--a2)')+
+        _kpi('Макс. за день',fmt(maxDay),'var(--inc)')+
+        _kpi('Мин. за день',fmt(minDay),'var(--exp)')+
       '</div>'+
-      '<div style="background:var(--s1);border-radius:6px;padding:8px;margin-bottom:6px;display:flex;justify-content:space-between"><span style="font-size:12px">Всего операций</span><span style="font-weight:700">'+totalOps+'</span></div>'+
-      '<div style="background:var(--s1);border-radius:6px;padding:8px;margin-bottom:6px;display:flex;justify-content:space-between"><span style="font-size:12px">💵 Нал</span><span style="font-weight:700">'+Math.round(totalCash).toLocaleString('ru-RU')+' ₽</span></div>'+
-      '<div style="background:var(--s1);border-radius:6px;padding:8px;margin-bottom:6px;display:flex;justify-content:space-between"><span style="font-size:12px">💳 Безнал</span><span style="font-weight:700">'+Math.round(totalCard).toLocaleString('ru-RU')+' ₽</span></div>'+
-      '<div style="background:var(--s1);border-radius:6px;padding:8px;display:flex;justify-content:space-between"><span style="font-size:12px">🏷 Скидка</span><span style="font-weight:700;color:var(--exp)">'+Math.round(totalDiscount).toLocaleString('ru-RU')+' ₽</span></div>'+
+      _row('Всего операций','<b>'+totalOps+'</b>')+
+      _row('Итого продаж на сумму','<b style="color:var(--inc)">'+fmt(income)+' ₽</b>')+
+      _row('💵 Нал','<b>'+fmt(totalCash)+' ₽</b>')+
+      _row('💳 Безнал','<b>'+fmt(totalCard)+' ₽</b>')+
+      _row('🏷 Скидка','<b style="color:var(--exp)">'+fmt(totalDiscount)+' ₽</b>')+
     '</div>';
 
-    // ТОП МЕТРИКИ
-    html += '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
-      '<div class="ctitle">🏆 Топ метрики</div>'+
-      _metricRow('Лучшая точка',bestSource[0],bestSource[1].amount,'var(--inc)')+
-      _metricRow('Лучший продавец',bestSeller[0],bestSeller[1].amount,'var(--inc)')+
-    '</div>';
+    // ── ТОП МЕТРИКИ — только если не выбран конкретный магазин ──
+    if(_shopFilter === 'all' && shopEntries.length) {
+      var bestShop=shopEntries[0], worstShop=shopEntries[shopEntries.length-1];
+      var bestSeller=sellerEntries.length?sellerEntries[0]:null;
+      html+='<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+        '<div class="ctitle">🏆 Топ метрики</div>'+
+        _metricRow('🥇 Лучший магазин',bestShop[0],bestShop[1].amount,'var(--inc)')+
+        (shopEntries.length>1?_metricRow('📉 Слабейший магазин',worstShop[0],worstShop[1].amount,'var(--exp)'):'')+
+        (bestSeller?_metricRow('🥇 Лучший продавец',bestSeller[0],bestSeller[1].revenue,'var(--inc)'):'')+
+      '</div>';
+    }
 
-    // ПО ТОЧКАМ
-    html += '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
-      '<div class="ctitle">🏪 По точкам продаж</div>'+
-      (sourceEntries.length ? sourceEntries.map(function(e){
-        var pct = income>0?Math.round(100*e[1].amount/income):0;
-        var avg = e[1].count>0?Math.round(e[1].amount/e[1].count):0;
-        return '<div style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'+
-          '<div><div style="font-weight:600;font-size:12px">🏪 '+e[0]+'</div><div style="font-size:11px;color:var(--t2)">'+e[1].count+' опер. · ср.чек '+avg+'₽</div></div>'+
-          '<div style="text-align:right"><div style="font-weight:700;color:var(--inc);font-size:12px">'+Math.round(e[1].amount).toLocaleString('ru-RU')+' ₽</div><div style="font-size:11px;color:var(--a2)">'+pct+'%</div></div>'+
-        '</div>';
-      }).join('') : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных за период</div>')+
-    '</div>';
+    // ── ПО ТОЧКАМ ПРОДАЖ — только если не выбрана конкретная точка ──
+    if(_shopFilter === 'all') {
+      html+='<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+        '<div class="ctitle">🏪 По точкам продаж</div>'+
+        (shopEntries.length?shopEntries.map(function(e){
+          var pct=income>0?Math.round(100*e[1].amount/income):0;
+          var avg=e[1].count>0?Math.round(e[1].amount/e[1].count):0;
+          return '<div style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'+
+            '<div><div style="font-weight:600;font-size:12px">🏪 '+e[0]+'</div><div style="font-size:11px;color:var(--t2)">'+e[1].count+' опер. · ср.чек '+avg+'₽</div></div>'+
+            '<div style="text-align:right"><div style="font-weight:700;color:var(--inc);font-size:12px">'+fmt(e[1].amount)+' ₽</div><div style="font-size:11px;color:var(--a2)">'+pct+'%</div></div>'+
+          '</div>';
+        }).join(''):'<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных за период</div>')+
+      '</div>';
+    }
 
-    // ПО ПРОДАВЦАМ
-    html += '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
-      '<div class="ctitle">👥 По продавцам</div>'+
-      (sellerEntries.length ? sellerEntries.map(function(e){
-        var pct = income>0?Math.round(100*e[1].amount/income):0;
-        return '<div style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'+
-          '<div><div style="font-weight:600;font-size:12px">👤 '+e[0]+'</div><div style="font-size:11px;color:var(--t2)">'+e[1].count+' опер.</div></div>'+
-          '<div style="text-align:right"><div style="font-weight:700;color:var(--inc);font-size:12px">'+Math.round(e[1].amount).toLocaleString('ru-RU')+' ₽</div><div style="font-size:11px;color:var(--a2)">'+pct+'%</div></div>'+
-        '</div>';
-      }).join('') : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных о продавцах</div>')+
-    '</div>';
+    // ── ПО ПРОДАВЦАМ ──
+    if(sellerEntries.length) {
+      html+='<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+        '<div class="ctitle">👥 По продавцам</div>'+
+        sellerEntries.map(function(e){
+          var sel=e[0], d=e[1];
+          var workDays=Math.max(1,d.shiftDates.length);
+          var avgRevDay=d.revenue/workDays;
+          var avgChk=d.sales>0?d.revenue/d.sales:0;
+          var avgSalesDay=d.sales/workDays;
+          var avgItemsChk=d.sales>0?d.items/d.sales:0;
+          var avgZpDay=d.zp/workDays;
+          return '<div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:8px">'+
+            '<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--t1)">👤 '+sel+'</div>'+
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px">'+
+              _sellKpi('Выручка',fmt(d.revenue)+' ₽','var(--inc)')+
+              _sellKpi('Скидка',fmt(d.discount)+' ₽','var(--exp)')+
+              _sellKpi('Ср. выручка/день',fmt(avgRevDay)+' ₽','var(--inc)')+
+              _sellKpi('Средний чек',fmt(avgChk)+' ₽','var(--a2)')+
+              _sellKpi('Ср. продаж/день',avgSalesDay.toFixed(1),'var(--t1)')+
+              _sellKpi('Ср. позиций/чек',avgItemsChk.toFixed(1),'var(--t1)')+
+              _sellKpi('ЗП итого',fmt(d.zp)+' ₽','var(--a4)')+
+              _sellKpi('Ср. ЗП/день',fmt(avgZpDay)+' ₽','var(--a4)')+
+            '</div>'+
+            '<div style="margin-top:6px;font-size:11px;color:var(--t2)">Смен: '+workDays+' · Операций: '+d.sales+'</div>'+
+          '</div>';
+        }).join('')+
+      '</div>';
+    }
 
-    // МЕТОДЫ ОПЛАТЫ
-    html += '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
-      '<div class="ctitle">📈 Методы оплаты</div>'+
-      (totalPayments>0 ? Object.entries(byPayMethod).filter(function(e){return e[1]>0;}).sort(function(a,b){return b[1]-a[1];}).map(function(e){
-        var pct = totalPayments>0?Math.round(100*e[1]/totalPayments):0;
-        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:6px;margin-bottom:6px">'+
-          '<span style="font-size:12px">'+(payMethodNames[e[0]]||'🔘 '+e[0])+'</span>'+
-          '<span style="font-weight:700;font-size:12px">₽ '+Math.round(e[1]).toLocaleString('ru-RU')+' ('+pct+'%)</span>'+
-        '</div>';
-      }).join('') : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных</div>')+
-    '</div>';
+    // ── МЕТОДЫ ОПЛАТЫ ──
+    if(totalPayments>0) {
+      html+='<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+        '<div class="ctitle">📈 Методы оплаты</div>'+
+        Object.entries(byPayMethod).filter(function(e){return e[1]>0;}).sort(function(a,b){return b[1]-a[1];}).map(function(e){
+          var pct=Math.round(100*e[1]/totalPayments);
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:6px;margin-bottom:6px">'+
+            '<span style="font-size:12px">'+(payNames[e[0]]||'🔘 '+e[0])+'</span>'+
+            '<span style="font-weight:700;font-size:12px">₽ '+fmt(e[1])+' ('+pct+'%)</span>'+
+          '</div>';
+        }).join('')+
+      '</div>';
+    }
 
-    // ТОП ТОВАРЫ
-    html += '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+    // ── ТОП ТОВАРЫ ──
+    html+='<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
       '<div class="ctitle">💰 Топ товары</div>'+
-      (topProductsArr.length ? topProductsArr.map(function(prod,idx){
+      (topProducts.length?topProducts.map(function(p,i){
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:6px;margin-bottom:6px">'+
-          '<div><div style="font-weight:600;font-size:12px">'+(idx+1)+'. '+prod.name+'</div><div style="font-size:10px;color:var(--t2)">'+prod.count+' шт</div></div>'+
-          '<div style="font-weight:700;color:var(--inc);font-size:12px">₽ '+Math.round(prod.revenue).toLocaleString('ru-RU')+'</div>'+
+          '<div><div style="font-weight:600;font-size:12px">'+(i+1)+'. '+p.name+'</div><div style="font-size:10px;color:var(--t2)">'+p.count+' шт</div></div>'+
+          '<div style="font-weight:700;color:var(--inc);font-size:12px">₽ '+fmt(p.revenue)+'</div>'+
         '</div>';
-      }).join('') : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных о товарах</div>')+
+      }).join(''):'<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных о товарах</div>')+
     '</div>';
 
-    el.innerHTML = html;
+    el.innerHTML=html;
   } catch(e) {
-    console.error('renderShops error:', e);
-    var el = document.getElementById('shopsAnalysis');
-    if(el) el.innerHTML = '<div style="color:var(--exp);padding:12px">Ошибка: '+e.message+'</div>';
+    console.error('renderShops error:',e);
+    var el=document.getElementById('shopsAnalysis');
+    if(el) el.innerHTML='<div style="color:var(--exp);padding:12px">Ошибка: '+e.message+'</div>';
   }
 }
 
 function _kpi(label, val, color) {
   return '<div style="background:var(--s2);border-radius:8px;padding:10px">'+
     '<div style="font-size:11px;color:var(--t2)">'+label+'</div>'+
-    '<div style="font-size:14px;font-weight:700;color:'+color+'">'+val.toLocaleString('ru-RU')+' ₽</div>'+
+    '<div style="font-size:14px;font-weight:700;color:'+color+'">'+val+'</div>'+
+  '</div>';
+}
+function _row(label, valHtml) {
+  return '<div style="display:flex;justify-content:space-between;align-items:center;background:var(--s1);border-radius:6px;padding:8px 10px;margin-bottom:6px">'+
+    '<span style="font-size:12px;color:var(--t2)">'+label+'</span>'+
+    '<span style="font-size:12px">'+valHtml+'</span>'+
   '</div>';
 }
 function _metricRow(label, name, val, color) {
@@ -3335,7 +3389,12 @@ function _metricRow(label, name, val, color) {
     '<div style="font-weight:700;color:'+color+';font-size:12px">'+Math.round(val).toLocaleString('ru-RU')+' ₽</div>'+
   '</div>';
 }
-
+function _sellKpi(label, val, color) {
+  return '<div>'+
+    '<div style="font-size:10px;color:var(--t2)">'+label+'</div>'+
+    '<div style="font-size:12px;font-weight:600;color:'+color+'">'+val+'</div>'+
+  '</div>';
+}
 
 
 function getFilteredTransactionsPL() {
