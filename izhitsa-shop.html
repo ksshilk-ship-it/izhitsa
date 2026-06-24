@@ -2454,7 +2454,16 @@ function getShopType(name){
 function isShopType(name){ return getShopType(name)==='shop'; }
 function isOnlineType(name){ return getShopType(name)==='online'; }
 function isOfflineType(name){ return getShopType(name)==='offline'; }
-function saveJ(){ localStorage.setItem(restoreMode?KEY.restoreJournal:KEY.journal,JSON.stringify(journal)); }
+function saveJ(){
+  // Purge receive entries that predate current shift opening (defensive cleanup)
+  if(!restoreMode && session && session.openedAt){
+    journal = journal.filter(function(e){
+      if(e.type==='receive' && e.ts && e.ts < session.openedAt) return false;
+      return true;
+    });
+  }
+  localStorage.setItem(restoreMode?KEY.restoreJournal:KEY.journal,JSON.stringify(journal));
+}
 function saveS(){ localStorage.setItem(restoreMode?KEY.restoreSession:KEY.session,JSON.stringify(session)); }
 
 // ════ AUDIT LOG ════
@@ -2598,8 +2607,9 @@ function calcSellerSummary(){
 
   var woWood = writeoffs.reduce(function(s,e){ return s-(e.goodsEffect||0); },0);
   var woDr = writeoffs.reduce(function(s,e){ return s-(e.goodsDrEffect||0); },0);
-  var rcvWood = receives.reduce(function(s,e){ return s+(e.goodsEffect||0); },0);
-  var rcvDr = receives.reduce(function(s,e){ return s+(e.goodsDrEffect||0); },0);
+  var _openedAt = session && session.openedAt ? session.openedAt : '';
+  var rcvWood = receives.filter(function(e){ return !_openedAt || !e.ts || e.ts >= _openedAt; }).reduce(function(s,e){ return s+(e.goodsEffect||0); },0);
+  var rcvDr = receives.filter(function(e){ return !_openedAt || !e.ts || e.ts >= _openedAt; }).reduce(function(s,e){ return s+(e.goodsDrEffect||0); },0);
 
   var totalRevenue = wood.listPrice + dr.listPrice; // includes discounts (полная стоимость)
   var totalDiscount = wood.discount + dr.discount;
@@ -3062,7 +3072,11 @@ function buildLiveShiftDoc(){
     goodsCurrent: t.goods, cashDrCurrent: t.cashDr, goodsDrCurrent: t.goodsDr,
     revenue: t.revenue, discount: t.discount,
     hasCashDiff: journal.some(function(e){ return e.hasCashDiff; }),
-    journal: journal.slice(),
+    journal: journal.filter(function(e){
+      // Never push receive entries from before this shift opened to Firestore
+      if(e.type==='receive' && session.openedAt && e.ts && e.ts < session.openedAt) return false;
+      return true;
+    }),
     tombstones: getTombstones()
   };
 }
@@ -3150,7 +3164,20 @@ function mergeRemoteJournal(remote){
     if(tombstoned[e.id]) return; // was deliberately deleted on this or another device — never resurrect
     if(e.type==='receive' && e.invId && localReceiveInvIds[e.invId]) return; // already have this invoice's entry
     // Don't pull in receive entries from before this shift opened — they belong to a past shift
-    if(e.type==='receive' && shiftOpenedAt && e.ts && e.ts < shiftOpenedAt) return;
+    if(e.type==='receive' && shiftOpenedAt){
+      // Check by ts if available
+      if(e.ts && e.ts < shiftOpenedAt) return;
+      // If no ts but has invId — check if already processed
+      if(!e.ts && e.invId && localReceiveInvIds[e.invId]) return;
+      // If no ts and no invId — check label contains date earlier than shift
+      if(!e.ts){
+        // Use shiftDate as guard — only allow entries without ts if invId not already counted
+        var shiftDateStr = shiftOpenedAt.split('T')[0];
+        // If we can infer a date from the entry sub field
+        var subDate = (e.sub||'').match(/\d{4}-\d{2}-\d{2}/);
+        if(subDate && subDate[0] < shiftDateStr) return;
+      }
+    }
     journal.push(e); added++;
     if(e.type==='receive' && e.invId) localReceiveInvIds[e.invId]=true;
   });
