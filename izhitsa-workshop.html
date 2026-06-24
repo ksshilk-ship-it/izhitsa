@@ -1296,59 +1296,67 @@ function acField(inputId, value, placeholder, onInputFn, onPickFn, extraArgsJson
 const _acLists = {}; // inputId -> array of strings (обновляется перед рендером каждой формы)
 function acSuggest(inputId, onPick, extraArg){
   const input = document.getElementById(inputId);
-  const box = document.getElementById(inputId+'_sugg');
-  if(!box || !input) return;
+  let box = document.getElementById(inputId+'_sugg');
+  if(!input) return;
+  if(!box) return;
+
   const val = (input.value||'').trim().toLowerCase();
   const list = _acLists[inputId]||[];
-  if(!val){ box.style.display='none'; box.innerHTML=''; return; }
-  const matches = list.filter(s=>s.toLowerCase().indexOf(val)>=0).slice(0,8);
-  if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
+  if(!val){ acHideSugg(inputId); return; }
+  const matches = list.filter(function(s){ return s.toLowerCase().indexOf(val)>=0; }).slice(0,8);
+  if(!matches.length){ acHideSugg(inputId); return; }
+
+  // Перемещаем бокс в body, чтобы он был вне любого overflow-контейнера
+  if(box.parentElement !== document.body) document.body.appendChild(box);
 
   const rect = input.getBoundingClientRect();
-  box.style.position = 'fixed';
-  box.style.top  = (rect.bottom + 2) + 'px';
-  box.style.left  = rect.left + 'px';
-  box.style.width = rect.width + 'px';
-  box.style.zIndex = '9999';
-  box.style.maxHeight = '180px';
-  box.style.overflowY = 'auto';
-  box.style.background = 'var(--s1)';
-  box.style.border = '1px solid var(--border)';
-  box.style.borderRadius = '8px';
-  box.style.marginTop = '0';
-  box.style.boxShadow = '0 8px 24px rgba(0,0,0,.6)';
+  box.style.cssText = [
+    'display:block',
+    'position:fixed',
+    'top:'+(rect.bottom+2)+'px',
+    'left:'+rect.left+'px',
+    'width:'+rect.width+'px',
+    'z-index:99999',
+    'max-height:200px',
+    'overflow-y:auto',
+    'background:var(--s1)',
+    'border:1px solid var(--border)',
+    'border-radius:10px',
+    'box-shadow:0 8px 32px rgba(0,0,0,.7)',
+    '-webkit-overflow-scrolling:touch'
+  ].join(';');
 
-  box.innerHTML = matches.map(m=>{
-    const safe = String(m).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    const args = extraArg!==undefined
-      ? `'${safe}', ${JSON.stringify(extraArg)}`
-      : `'${safe}'`;
-    return `<div data-ac-item="1" style="padding:12px 14px;font-size:14px;color:var(--text);border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent"
-      onpointerdown="event.stopPropagation();event.preventDefault();${onPick}(${args})">${m}</div>`;
+  box.innerHTML = matches.map(function(m){
+    var safe = String(m).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    var args = extraArg!==undefined ? "'"+safe+"', "+JSON.stringify(extraArg) : "'"+safe+"'";
+    return '<div style="padding:14px 16px;font-size:15px;color:var(--text);border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,0.1);user-select:none;-webkit-user-select:none" '
+      +'ontouchstart="this.style.background=\'rgba(255,255,255,0.08)\'" '
+      +'ontouchend="this.style.background=\'\';event.preventDefault();'+onPick+'('+args+');acHideSugg(\''+inputId+'\')" '
+      +'onmousedown="event.preventDefault();'+onPick+'('+args+');acHideSugg(\''+inputId+'\')" '
+      +'>'+m+'</div>';
   }).join('');
-  box.setAttribute('data-ac-for', inputId);
-  box.style.display = 'block';
+
   _acActiveInputId = inputId;
+}
+
+function acHideSugg(inputId){
+  var id = inputId || _acActiveInputId;
+  if(!id) return;
+  var box = document.getElementById(id+'_sugg');
+  if(box){ box.style.display='none'; box.innerHTML=''; }
+  if(id===_acActiveInputId) _acActiveInputId = null;
 }
 
 // Глобальный обработчик: скрываем суггест при тапе вне него
 let _acActiveInputId = null;
-document.addEventListener('pointerdown', function(e){
+document.addEventListener('touchstart', function(e){
   if(!_acActiveInputId) return;
-  const box = document.getElementById(_acActiveInputId+'_sugg');
-  const input = document.getElementById(_acActiveInputId);
+  var box = document.getElementById(_acActiveInputId+'_sugg');
+  var input = document.getElementById(_acActiveInputId);
   if(!box || box.style.display==='none') return;
-  // Если клик по самому суггесту или инпуту — не скрываем
   if(box.contains(e.target) || (input && input.contains(e.target))) return;
-  box.style.display = 'none';
-  box.innerHTML = '';
-  _acActiveInputId = null;
-}, true);
-
-function acHideSugg(inputId){
-  // Оставляем для обратной совместимости, но больше не нужна —
-  // скрытие через глобальный pointerdown
-}
+  acHideSugg(_acActiveInputId);
+}, {passive:true});
 function acPickBlankName(val){ const el=document.getElementById('blankName'); if(el) el.value=val; acHideSugg('blankName'); }
 function acPickBlankWood(val){ const el=document.getElementById('blankWood'); if(el) el.value=val; acHideSugg('blankWood'); }
 function acPickBlankSize(val){ const el=document.getElementById('blankSize'); if(el) el.value=val; acHideSugg('blankSize'); }
@@ -5477,7 +5485,9 @@ function openFiGroupDetail(groupId){
       <button onclick="closeMo('fiGroupDetailMo');openFiGroupForEdit('${g.id}')" class="btn" style="background:var(--a2);color:#000;margin-bottom:8px">➕ Дополнить группу</button>
       <button onclick="closeMo('fiGroupDetailMo');archiveFirstInvGroup('${g.id}')" class="btn sec">🗄 Перенести в архив</button>`;
   } else {
-    actions = `<button onclick="deleteFiGroup('${g.id}')" class="btn" style="background:var(--exp)">🗑 Удалить группу из архива</button>`;
+    actions = `
+      <button onclick="closeMo('fiGroupDetailMo');openFiGroupForEdit('${g.id}')" class="btn" style="background:var(--a2);color:#000;margin-bottom:8px">➕ Дополнить группу</button>
+      <button onclick="deleteFiGroup('${g.id}')" class="btn" style="background:var(--exp)">🗑 Удалить группу из архива</button>`;
   }
   document.getElementById('fiGroupDetailActions').innerHTML = actions;
 
