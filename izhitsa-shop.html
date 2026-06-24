@@ -643,6 +643,12 @@ function checkForAppUpdate() {
     <!-- Active filters chips -->
     <div id="stockActiveFilters" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
 
+    <!-- Sort row -->
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+      <div style="font-size:10px;color:#8888aa;flex-shrink:0">Сортировка:</div>
+      <div id="stockSortBtns" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+    </div>
+
     <!-- Actions row -->
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
       <button type="button" onclick="clearStockFilters()" style="padding:6px 12px;background:#22222e;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:11px;cursor:pointer">Сбросить</button>
@@ -14656,7 +14662,8 @@ function rebuildStock(showMsg){
     var shJ=sh.journal||[];
     shJ.forEach(function(e){
       if(e.type==='sale'){
-        var saleDate=e.ts?e.ts.split('T')[0]:(sh.date||'');
+        // Use ts date, fallback to shift date
+        var saleDate=e.ts?e.ts.split('T')[0]:(sh.date||sh.closedAt?sh.closedAt.split('T')[0]:'');
         (e.items||[]).forEach(function(it){
           var artNum=it.article||it.num||it.artNum||it.art;
           if(!artNum) return;
@@ -14664,7 +14671,14 @@ function rebuildStock(showMsg){
           if(!stock[sn][key]) return;
           var prev=stock[sn][key].qty||0;
           stock[sn][key].qty=Math.max(0,prev-(it.qty||1));
-          if(stock[sn][key].qty===0 && saleDate>(stock[sn][key].lastSold||'')) stock[sn][key].lastSold=saleDate;
+          // Always update lastSold if we have a date and qty reached 0
+          if(saleDate && stock[sn][key].qty===0){
+            if(!stock[sn][key].lastSold || saleDate>stock[sn][key].lastSold)
+              stock[sn][key].lastSold=saleDate;
+          }
+          // Even if qty not 0 yet — track as candidate (will be overwritten by later sales)
+          if(saleDate && (!stock[sn][key].lastSold || saleDate>stock[sn][key].lastSold))
+            stock[sn][key]._lastSaleDate=saleDate;
         });
       } else if(e.type==='receive'){
         // Only count receive entries NOT linked to an already-counted invoice
@@ -14748,9 +14762,18 @@ function rebuildStock(showMsg){
     });
   }
 
+  // Second pass: fill lastSold from _lastSaleDate where missing
+  Object.keys(stock).forEach(function(sn){
+    Object.keys(stock[sn]||{}).forEach(function(key){
+      var it=stock[sn][key];
+      if((it.qty||0)===0 && !it.lastSold && it._lastSaleDate){
+        it.lastSold=it._lastSaleDate;
+      }
+      delete it._lastSaleDate;
+    });
+  });
   saveStock(stock);
   if(showMsg){
-    // Count total items
     var total=0;
     Object.keys(stock).forEach(function(sn){ total+=Object.keys(stock[sn]).length; });
     showToast('✅ Склад пересчитан: '+total+' позиций');
@@ -14813,8 +14836,36 @@ function stockDiagnostic(){
   }catch(e){ alert('catch: '+e.message); }
 }
 
-var _stockMode = 'avail'; // 'avail' | 'archive'
+var _stockMode = 'avail';
+var _stockSort = 'date_desc'; // default: newest first // 'avail' | 'archive'
 var _stockFilters = {}; // {article, name, species, type, shop}
+
+var _stockSortOptions = [
+  {key:'date_desc',  label:'📅 Новее'},
+  {key:'date_asc',   label:'📅 Старее'},
+  {key:'sold_desc',  label:'✓ Продано ↓'},
+  {key:'sold_asc',   label:'✓ Продано ↑'},
+  {key:'price_desc', label:'💰 Дороже'},
+  {key:'price_asc',  label:'💰 Дешевле'}
+];
+
+function renderStockSortBtns(){
+  var c=document.getElementById('stockSortBtns'); if(!c) return;
+  c.innerHTML=_stockSortOptions.map(function(opt){
+    var active=_stockSort===opt.key;
+    return '<div onpointerdown="event.preventDefault();setStockSort(&quot;'+opt.key+'&quot;)" '+
+      'style="padding:5px 10px;border-radius:16px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;'+
+      'border:'+(active?'2px solid #c8f060':'1px solid #2e2e3e')+';'+
+      'background:'+(active?'#1e2a14':'#22222e')+';'+
+      'color:'+(active?'#c8f060':'#8888aa')+'">'+opt.label+'</div>';
+  }).join('');
+}
+
+function setStockSort(key){
+  _stockSort=key;
+  renderStockSortBtns();
+  renderStockPage();
+}
 
 function setStockMode(mode){
   _stockMode = mode;
@@ -14977,9 +15028,11 @@ function initStockPage(){
   }
   _stockMode='avail';
   _stockFilters={};
+  _stockSort='date_desc';
   var sel=document.getElementById('stockFilterBy'); if(sel) sel.selectedIndex=0;
   var inp=document.getElementById('stockFilterInput'); if(inp){ inp.style.display='none'; inp.innerHTML=''; }
   setStockMode('avail');
+  renderStockSortBtns();
 }
 
 function renderStockPage(){
@@ -15008,15 +15061,19 @@ function renderStockPage(){
   });
 
   // Sort
-  var isAgeFilter = !!(_stockFilters.ageCutoff||_stockFilters.ageFrom);
   filtered.sort(function(a,b){
-    if(isAgeFilter){
-      // Oldest first (залежавшиеся сверху)
+    // Age filter override: oldest first
+    if(_stockFilters.ageCutoff||_stockFilters.ageFrom){
       var rd=(a.lastReceived||'').localeCompare(b.lastReceived||'');
       return rd!==0?rd:(a.name||'').localeCompare(b.name||'','ru');
     }
-    var rd=(b.lastReceived||'').localeCompare(a.lastReceived||'');
-    return rd!==0?rd:(a.name||'').localeCompare(b.name||'','ru');
+    if(_stockSort==='price_desc') return (b.price||0)-(a.price||0);
+    if(_stockSort==='price_asc')  return (a.price||0)-(b.price||0);
+    if(_stockSort==='sold_desc')  return (b.lastSold||'').localeCompare(a.lastSold||'');
+    if(_stockSort==='sold_asc')   return (a.lastSold||'').localeCompare(b.lastSold||'');
+    if(_stockSort==='date_asc')   return (a.lastReceived||'').localeCompare(b.lastReceived||'');
+    // default: date_desc
+    return (b.lastReceived||'').localeCompare(a.lastReceived||'');
   });
 
   // Active filter chips
