@@ -1112,6 +1112,7 @@ function checkForAppUpdate() {
     <div style="margin-bottom:12px">
       <button type="button" onclick="renameAllInvoices()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #f0a06055;background:#2a1e10;color:#f0a060;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">🔢 Переименовать все накладные по новому формату</button>
       <button type="button" onclick="startNameMatchReview()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #f0c06055;background:#2a2210;color:#f0c060;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">🔍 Проверить названия товаров (Дерево)</button>
+      <button type="button" onclick="_speciesMatchQueue_active=false;startSpeciesMatchReview()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #60f0c055;background:#102a22;color:#60f0c0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">🌲 Проверить породы дерева</button>
       <button type="button" onclick="rebuildGoodsDerevoFromHistory()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #60c8f055;background:#1a2e2e;color:#60c8f0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">📦 Собрать товары из истории в базу Дерево</button>
 
     </div>
@@ -13518,18 +13519,7 @@ function nameMatchShowNext(){
   openMo('nameMatchMo');
 }
 
-function nameMatchDecision(approve){
-  if(approve) _nameMatchApproved.push(_nameMatchQueue[_nameMatchIdx]);
-  else _nameMatchSkipped++;
-  _nameMatchIdx++;
-  nameMatchShowNext();
-}
-
-function nameMatchFinish(){
-  closeMo('nameMatchMo');
-  if(_nameMatchApproved.length) nameMatchApplyAll();
-  else showToast('Проверка завершена без изменений');
-}
+// nameMatchDecision and nameMatchFinish defined in species match section
 
 function nameMatchApplyAll(){
   if(!_nameMatchApproved.length){
@@ -13611,6 +13601,192 @@ function nameMatchApplyAll(){
   showToast('✅ Переименовано: '+changed+' позиций · одобрено: '+_nameMatchApproved.length+' · пропущено: '+_nameMatchSkipped);
 }
 // ════ END NAME MATCH REVIEW ════
+
+// ════ SPECIES MATCH REVIEW ════
+var _speciesMatchQueue = [];
+var _speciesMatchIdx = 0;
+var _speciesMatchApproved = [];
+var _speciesMatchSkipped = 0;
+
+function startSpeciesMatchReview(){
+  var catalog = getSpecies(); // iz_species list
+  if(!catalog.length){ showToast('База пород дерева пуста'); return; }
+
+  _speciesMatchQueue = [];
+  _speciesMatchApproved = [];
+  _speciesMatchSkipped = 0;
+
+  var seen = {};
+
+  function trySpecies(name, ctx){
+    if(!name || typeof name !== 'string') return;
+    var key = name.toLowerCase().trim();
+    if(seen[key]) return;
+    // Check exact match first
+    var exactMatch = catalog.find(function(c){
+      return (typeof c==='string'?c:c.name||'').toLowerCase().trim() === key;
+    });
+    if(exactMatch) return; // already correct
+    var match = findBestMatch(name, catalog.map(function(c){ return {name: typeof c==='string'?c:c.name||c}; }));
+    if(match){
+      seen[key] = match.match;
+      _speciesMatchQueue.push({oldName:name, newName:match.match, score:match.score, ctx:ctx, field:'species'});
+    }
+  }
+
+  var shifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+  shifts.forEach(function(sh){
+    (sh.journal||[]).forEach(function(e){
+      (e.items||[]).forEach(function(it){
+        if(it.goodsType==='dr') return;
+        trySpecies(it.species, 'Смена '+sh.shopName+' · '+sh.date);
+      });
+    });
+  });
+
+  var manInvs = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  manInvs.forEach(function(inv){
+    if(inv.goodsType==='dr') return;
+    (inv.items||[]).forEach(function(it){
+      trySpecies(it.species, 'Накладная '+(inv.num||'')+' · '+(inv.destName||inv.shopName||''));
+    });
+  });
+
+  var wsInvs = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  wsInvs.forEach(function(inv){
+    (inv.items||[]).forEach(function(it){
+      if(it.goodsType==='dr') return;
+      trySpecies(it.species, 'Накладная '+(inv.num||'')+' (мастерская)');
+    });
+    (inv.acceptedItems||[]).forEach(function(it){
+      if(it.goodsType==='dr') return;
+      trySpecies(it.species, 'Накладная '+(inv.num||'')+' (принятая)');
+    });
+  });
+
+  _speciesMatchQueue.sort(function(a,b){ return b.score-a.score; });
+
+  if(!_speciesMatchQueue.length){
+    showToast('Нет пород требующих проверки');
+    return;
+  }
+
+  _speciesMatchIdx = 0;
+  _speciesMatchQueue_active = true;
+  nameMatchShowNextSpecies();
+}
+
+var _speciesMatchQueue_active = false;
+
+function nameMatchShowNextSpecies(){
+  if(_speciesMatchIdx >= _speciesMatchQueue.length){
+    closeMo('nameMatchMo');
+    speciesMatchApplyAll();
+    return;
+  }
+  var item = _speciesMatchQueue[_speciesMatchIdx];
+  var prog=document.getElementById('nameMatchProgress');
+  var oldEl=document.getElementById('nameMatchOld');
+  var newEl=document.getElementById('nameMatchNew');
+  var ctxEl=document.getElementById('nameMatchCtx');
+  if(prog) prog.textContent=(_speciesMatchIdx+1)+' из '+_speciesMatchQueue.length+' · Породы дерева';
+  if(oldEl) oldEl.textContent=item.oldName;
+  if(newEl) newEl.textContent=item.newName;
+  if(ctxEl) ctxEl.textContent=item.ctx+' (схожесть: '+Math.round(item.score*100)+'%)';
+  openMo('nameMatchMo');
+}
+
+function nameMatchDecision(approve){
+  if(_speciesMatchQueue_active){
+    if(approve) _speciesMatchApproved.push(_speciesMatchQueue[_speciesMatchIdx]);
+    else _speciesMatchSkipped++;
+    _speciesMatchIdx++;
+    nameMatchShowNextSpecies();
+  } else {
+    if(approve) _nameMatchApproved.push(_nameMatchQueue[_nameMatchIdx]);
+    else _nameMatchSkipped++;
+    _nameMatchIdx++;
+    nameMatchShowNext();
+  }
+}
+
+function nameMatchFinish(){
+  closeMo('nameMatchMo');
+  if(_speciesMatchQueue_active){
+    if(_speciesMatchApproved.length) speciesMatchApplyAll();
+    else showToast('Проверка завершена без изменений');
+  } else {
+    if(_nameMatchApproved.length) nameMatchApplyAll();
+    else showToast('Проверка завершена без изменений');
+  }
+}
+
+function speciesMatchApplyAll(){
+  if(!_speciesMatchApproved.length){
+    showToast('Проверка пород завершена · пропущено: '+_speciesMatchSkipped);
+    _speciesMatchQueue_active = false;
+    return;
+  }
+  var renameMap={};
+  _speciesMatchApproved.forEach(function(a){ renameMap[a.oldName.toLowerCase().trim()]=a.newName; });
+
+  function fixSpecies(name){
+    if(!name) return name;
+    return renameMap[name.toLowerCase().trim()]||name;
+  }
+
+  var changed=0;
+
+  var shifts=JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+  shifts.forEach(function(sh){
+    var shChanged=false;
+    (sh.journal||[]).forEach(function(e){
+      (e.items||[]).forEach(function(it){
+        var nn=fixSpecies(it.species);
+        if(nn!==it.species){ it.species=nn; changed++; shChanged=true; }
+      });
+    });
+    if(shChanged) try{ db.collection('iz_shifts').doc(sh.id||sh._id).set(sh,{merge:true}); }catch(e){}
+  });
+  localStorage.setItem('iz_shifts',JSON.stringify(shifts));
+
+  var manInvs=JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  manInvs.forEach(function(inv){
+    var invChanged=false;
+    (inv.items||[]).forEach(function(it){
+      var nn=fixSpecies(it.species);
+      if(nn!==it.species){ it.species=nn; changed++; invChanged=true; }
+    });
+    if(invChanged){ var id=inv.id||inv._id; if(id) try{ db.collection('iz_manual_invoices').doc(id).set(inv,{merge:true}); }catch(e){} }
+  });
+  localStorage.setItem('iz_manual_invoices',JSON.stringify(manInvs));
+
+  var wsInvs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  wsInvs.forEach(function(inv){
+    var invChanged=false;
+    (inv.items||[]).concat(inv.acceptedItems||[]).forEach(function(it){
+      var nn=fixSpecies(it.species);
+      if(nn!==it.species){ it.species=nn; changed++; invChanged=true; }
+    });
+    if(invChanged){ var id=inv.id||inv._id; if(id) try{ db.collection('iz_invoices').doc(id).set(inv,{merge:true}); }catch(e){} }
+  });
+  localStorage.setItem('iz_invoices',JSON.stringify(wsInvs));
+
+  var stock=JSON.parse(localStorage.getItem('iz_stock')||'{}');
+  Object.keys(stock).forEach(function(sn){
+    Object.keys(stock[sn]||{}).forEach(function(key){
+      var it=stock[sn][key];
+      var nn=fixSpecies(it.species);
+      if(nn!==it.species){ it.species=nn; changed++; }
+    });
+  });
+  localStorage.setItem('iz_stock',JSON.stringify(stock));
+
+  _speciesMatchQueue_active=false;
+  showToast('✅ Пород исправлено: '+changed+' · одобрено: '+_speciesMatchApproved.length+' · пропущено: '+_speciesMatchSkipped);
+}
+// ════ END SPECIES MATCH ════
+
 
 function runGlobalNameFix(){
   if(!confirm('Исправить регистр названий товаров во всех сменах, накладных и позициях? Это займёт несколько секунд.')) return;
