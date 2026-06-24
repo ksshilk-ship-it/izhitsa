@@ -705,6 +705,7 @@ function checkForAppUpdate() {
       <div class="stitle" style="margin:0">🚨 Тревога</div>
       <button type="button" onclick="markAllAlertsRead()" style="padding:6px 12px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">✓ Прочитать все</button>
     </div>
+    <div id="alertsShopFilter" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
     <div id="alertsPageContent"></div>
     <div style="margin-top:16px">
       <button type="button" onclick="clearTestSession()"
@@ -731,9 +732,9 @@ function checkForAppUpdate() {
     </div>
     <!-- Period filter -->
     <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto" id="histPeriodFilter">
-      <button type="button" id="histPeriod_today" onclick="setHistPeriod('today',this)" style="padding:6px 12px;border-radius:20px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Сегодня</button>
-      <button type="button" id="histPeriod_week" onclick="setHistPeriod('week',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">Неделя</button>
+      <button type="button" id="histPeriod_week" onclick="setHistPeriod('week',this)" style="padding:6px 12px;border-radius:20px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Неделя</button>
       <button type="button" id="histPeriod_month" onclick="setHistPeriod('month',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">Месяц</button>
+      <button type="button" id="histPeriod_quarter" onclick="setHistPeriod('quarter',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">Квартал</button>
       <button type="button" id="histPeriod_all" onclick="setHistPeriod('all',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">Все</button>
       <button type="button" id="histPeriod_custom" onclick="setHistPeriod('custom',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">📅 Период</button>
     </div>
@@ -4306,15 +4307,69 @@ function alertCard(a){
   '</div>';
 }
 
+var _alertsShopFilter = '';
+
 function renderAlertsPage(){
   var c=document.getElementById('alertsPageContent'); if(!c) return;
+  var fc=document.getElementById('alertsShopFilter');
+
   if(!_adminAlerts.length){
+    if(fc) fc.innerHTML='';
     c.innerHTML='<div style="text-align:center;padding:30px;color:#8888aa"><div style="font-size:36px;margin-bottom:8px">✅</div>Нет непрочитанных уведомлений</div>';
     return;
   }
-  c.innerHTML='<div style="background:#1a0f0f;border:1px solid #f06060;border-radius:12px;padding:0 12px">'+
-    _adminAlerts.map(alertCard).join('')+
-  '</div>';
+
+  // Build shop list from alerts
+  var shops={};
+  _adminAlerts.forEach(function(a){ var s=a.shopName||''; if(s) shops[s]=true; });
+  var shopList=Object.keys(shops).sort();
+
+  // Render shop filter chips
+  if(fc && shopList.length>1){
+    fc.innerHTML='<div onpointerdown="event.preventDefault();_alertsShopFilter=\'\';renderAlertsPage()" '+
+      'style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;'+
+      (_alertsShopFilter===''?'border:2px solid #c8f060;background:#1e2a14;color:#c8f060':'border:1px solid #2e2e3e;background:#22222e;color:#8888aa')+'">Все</div>'+
+      shopList.map(function(s){
+        var active=_alertsShopFilter===s;
+        return '<div onpointerdown="event.preventDefault();_alertsShopFilter=\''+s+'\';renderAlertsPage()" '+
+          'style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;'+
+          (active?'border:2px solid #c8f060;background:#1e2a14;color:#c8f060':'border:1px solid #2e2e3e;background:#22222e;color:#8888aa')+'">'+s+'</div>';
+      }).join('');
+  } else if(fc){ fc.innerHTML=''; }
+
+  // Filter by shop
+  var alerts=_adminAlerts.filter(function(a){
+    return !_alertsShopFilter || (a.shopName||'')=== _alertsShopFilter;
+  });
+
+  if(!alerts.length){
+    c.innerHTML='<div style="text-align:center;padding:20px;color:#8888aa">Нет тревог для выбранного магазина</div>';
+    return;
+  }
+
+  // Group by shop, then by date desc within each shop
+  var grouped={};
+  alerts.forEach(function(a){
+    var s=a.shopName||'Без магазина';
+    if(!grouped[s]) grouped[s]=[];
+    grouped[s].push(a);
+  });
+  // Sort shops alphabetically
+  var sortedShops=Object.keys(grouped).sort();
+
+  c.innerHTML=sortedShops.map(function(shop){
+    var shopAlerts=grouped[shop];
+    // Sort by date desc within shop
+    shopAlerts.sort(function(a,b){
+      return (b.createdAt||b.date||'').localeCompare(a.createdAt||a.date||'');
+    });
+    return '<div style="margin-bottom:12px">'+
+      '<div style="font-size:11px;font-weight:700;color:#8888aa;text-transform:uppercase;letter-spacing:1px;padding:6px 0 4px">'+shop+'</div>'+
+      '<div style="background:#1a0f0f;border:1px solid #f06060;border-radius:12px;padding:0 12px">'+
+        shopAlerts.map(alertCard).join('')+
+      '</div>'+
+    '</div>';
+  }).join('');
 }
 
 function markAlertRead(id){
@@ -6912,7 +6967,7 @@ _closeShiftReal();
 }
 
 // ════ ADMIN FUNCTIONS ════
-var _histPeriod = 'today'; // 'today' | 'week' | 'month' | 'all' | 'custom'
+var _histPeriod = 'week'; // 'today' | 'week' | 'month' | 'all' | 'custom'
 
 function setHistPeriod(period, el){
   _histPeriod = period;
@@ -6938,15 +6993,17 @@ function setHistPeriod(period, el){
 
   var today = new Date();
   var todayStr = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
-  if(period === 'today'){
-    _histPeriodFrom = todayStr; _histPeriodTo = todayStr;
-  } else if(period === 'week'){
+  if(period === 'week'){
     var weekAgo = new Date(today.getTime() - 6*86400000);
     _histPeriodFrom = weekAgo.getFullYear()+'-'+String(weekAgo.getMonth()+1).padStart(2,'0')+'-'+String(weekAgo.getDate()).padStart(2,'0');
     _histPeriodTo = todayStr;
   } else if(period === 'month'){
     var monthAgo = new Date(today.getTime() - 29*86400000);
     _histPeriodFrom = monthAgo.getFullYear()+'-'+String(monthAgo.getMonth()+1).padStart(2,'0')+'-'+String(monthAgo.getDate()).padStart(2,'0');
+    _histPeriodTo = todayStr;
+  } else if(period === 'quarter'){
+    var quarterAgo = new Date(today.getTime() - 89*86400000);
+    _histPeriodFrom = quarterAgo.getFullYear()+'-'+String(quarterAgo.getMonth()+1).padStart(2,'0')+'-'+String(quarterAgo.getDate()).padStart(2,'0');
     _histPeriodTo = todayStr;
   } else { // all
     _histPeriodFrom = ''; _histPeriodTo = '';
@@ -7399,7 +7456,7 @@ function renderShiftHistory(){
   if(_histPeriodFrom && !_histShowOpen) allShifts = allShifts.filter(function(s){ return s.date >= _histPeriodFrom && (!_histPeriodTo||s.date <= _histPeriodTo); });
   allShifts.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
   if(!allShifts.length){
-    var periodLabel = {today:'Сегодня',week:'Неделя',month:'Месяц',all:'Все',custom:(_histPeriodFrom||'…')+' — '+(_histPeriodTo||'…')}[_histPeriod] || 'Сегодня';
+    var periodLabel = {week:'Неделя',month:'Месяц',quarter:'Квартал',all:'Все',custom:(_histPeriodFrom||'…')+' — '+(_histPeriodTo||'…')}[_histPeriod] || 'Неделя';
     var shopLabel = _histShopFilter || 'Все магазины';
     c.innerHTML='<div class="empty"><div class="ei">📋</div>Нет смен за выбранный период<div style="font-size:11px;color:#555568;margin-top:6px">Период: '+periodLabel+' · Магазин: '+shopLabel+'</div></div>';
     return;
