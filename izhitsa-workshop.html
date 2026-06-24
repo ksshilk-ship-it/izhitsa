@@ -1328,7 +1328,8 @@ function acSuggest(inputId, onPick, extraArg){
 
   box.innerHTML = matches.map(function(m){
     var safe = String(m).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    var args = extraArg!==undefined ? "'"+safe+"', "+JSON.stringify(extraArg) : "'"+safe+"'";
+    var extraSafe = extraArg!==undefined ? String(extraArg).replace(/\\/g,'\\\\').replace(/'/g,"\\'") : null;
+    var args = extraSafe!==null ? "'"+safe+"', '"+extraSafe+"'" : "'"+safe+"'";
     return '<div style="padding:14px 16px;font-size:15px;color:var(--text);border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,0.1);user-select:none;-webkit-user-select:none" '
       +'ontouchstart="this.style.background=\'rgba(255,255,255,0.08)\'" '
       +'ontouchend="this.style.background=\'\';event.preventDefault();'+onPick+'('+args+');acHideSugg(\''+inputId+'\')" '
