@@ -1992,6 +1992,18 @@ function syncListen(lsKey) {
       // Generic shared refbooks live-refresh
       var shopRefbookKeys = ['iz_payment_methods','iz_suppliers','iz_goods','iz_goods_derevo','iz_goods_dr','iz_materials','iz_dr_species','iz_work_schedules'];
       if(shopRefbookKeys.indexOf(lsKey)>=0){
+        // Filter out locally-deleted items before applying remote snapshot
+        var tombKey2 = lsKey+'_deleted';
+        var tombs2 = JSON.parse(localStorage.getItem(tombKey2)||'[]');
+        if(tombs2.length && Array.isArray(val)){
+          var filtered2 = val.filter(function(item){
+            var n=(item.name||item||'').toLowerCase().trim();
+            return tombs2.indexOf(n)<0;
+          });
+          if(filtered2.length !== val.length){
+            localStorage.setItem(lsKey, JSON.stringify(filtered2));
+          }
+        }
         var book = SHOP_REFBOOKS.find(function(b){ return b.key===lsKey; });
         if(book){
           try{ renderRefbookItemsShop(book.id, book.key); updateRefbookCountShop(book.id, book.key); }catch(e){}
@@ -2028,6 +2040,22 @@ function syncListenCollection(lsKey, colName) {
   }, function(e){ console.log('col sync err', colName, e.code||e); });
 }
 function startSyncListeners() {
+  // Load tombstones from Firestore on startup
+  ['iz_goods_derevo','iz_goods_dr','iz_species','iz_dr_species'].forEach(function(key){
+    var docName = key==='iz_goods_derevo'?'goods_derevo_deleted':
+                  key==='iz_goods_dr'?'goods_dr_deleted':
+                  key==='iz_species'?'species_deleted':'dr_species_deleted';
+    db.collection('iz_settings').doc(docName).get().then(function(snap){
+      if(snap.exists && snap.data().deleted){
+        var tombKey = key+'_deleted';
+        var local = JSON.parse(localStorage.getItem(tombKey)||'[]');
+        var remote = snap.data().deleted||[];
+        var merged = local.slice();
+        remote.forEach(function(n){ if(merged.indexOf(n)<0) merged.push(n); });
+        localStorage.setItem(tombKey, JSON.stringify(merged));
+      }
+    }).catch(function(){});
+  });
   Object.keys(SYNC_SETTINGS).forEach(syncListen);
   syncListenCollection('iz_shifts', 'iz_shifts');
   syncListenCollection('iz_invoices', 'iz_invoices');
@@ -9807,10 +9835,27 @@ function addRefbookItemShop(bookId, key){
 }
 function deleteRefbookItemShop(bookId, idx, key){
   var items = getRefBook(key);
-  items.splice(idx,1);
+  var deleted = items.splice(idx,1);
+  // Save tombstone so rebuildGoodsDerevo and syncListen don't resurrect it
+  var tombKey = key+'_deleted';
+  var tombs = JSON.parse(localStorage.getItem(tombKey)||'[]');
+  if(deleted.length){
+    var dname = (deleted[0].name||deleted[0]||'').toLowerCase().trim();
+    if(dname && tombs.indexOf(dname)<0) tombs.push(dname);
+    localStorage.setItem(tombKey, JSON.stringify(tombs));
+    // Persist tombstones to Firestore too
+    var tombDocKey = key==='iz_goods_derevo'?'goods_derevo_deleted':(key==='iz_goods_dr'?'goods_dr_deleted':'refbook_deleted_'+key);
+    try{ db.collection('iz_settings').doc(tombDocKey).set({deleted:tombs,updatedAt:new Date().toISOString()},{merge:true}); }catch(e){}
+  }
   saveRefBookShop(key, items);
   renderRefbookItemsShop(bookId, key);
   updateRefbookCountShop(bookId, key);
+}
+
+function refbookIsDeleted(key, name){
+  var tombKey = key+'_deleted';
+  var tombs = JSON.parse(localStorage.getItem(tombKey)||'[]');
+  return tombs.indexOf((name||'').toLowerCase().trim()) >= 0;
 }
 function updateRefbookCountShop(bookId, key){
   var items = getRefBook(key);
@@ -13363,6 +13408,8 @@ function rebuildGoodsDerevoFromHistory(){
     if(!name || typeof name !=='string' || name.length<2) return;
     if(goodsType==='dr') return; // skip DR items
     var key = name.trim().toLowerCase();
+    // Skip if previously deleted by admin
+    if(refbookIsDeleted('iz_goods_derevo', name)) return;
     if(!existingNames[key]){ existingNames[key]=true; toAdd.push(name.trim()); }
   }
 
