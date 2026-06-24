@@ -1086,6 +1086,7 @@ function checkForAppUpdate() {
   <div class="page" id="pg-shopsettings">
     <div class="stitle">⚙️ Настройки</div>
     <div style="margin-bottom:12px">
+      <button type="button" onclick="renameAllInvoices()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #f0a06055;background:#2a1e10;color:#f0a060;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">🔢 Переименовать все накладные по новому формату</button>
       <button type="button" onclick="rebuildGoodsDerevoFromHistory()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #60c8f055;background:#1a2e2e;color:#60c8f0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">📦 Собрать товары из истории в базу Дерево</button>
 
     </div>
@@ -13239,6 +13240,99 @@ function rebuildGoodsDerevoFromHistory(){
   saveRefBookShop('iz_goods_derevo', merged);
   showToast('✅ Добавлено '+toAdd.length+' товаров в базу Дерево');
   try{ renderRefbookSections(); }catch(e){}
+}
+
+
+function renameAllInvoices(){
+  if(!confirm('Переименовать все накладные по новому формату (001/дд.мм.гггг/Магазин)?\nЭто изменит номера в Firestore.')) return;
+  var manInvs = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var wsInvs = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  var allInvs = manInvs.concat(wsInvs);
+  if(!allInvs.length){
+    // Try fetch from Firestore first
+    showToast('⏳ Загружаю накладные из Firestore...');
+    Promise.all([
+      db.collection('iz_manual_invoices').get({source:'server'}),
+      db.collection('iz_invoices').get({source:'server'})
+    ]).then(function(results){
+      var arr1=[], arr2=[];
+      results[0].forEach(function(d){ arr1.push(Object.assign({id:d.id},d.data())); });
+      results[1].forEach(function(d){ arr2.push(Object.assign({id:d.id},d.data())); });
+      localStorage.setItem('iz_manual_invoices', JSON.stringify(arr1));
+      localStorage.setItem('iz_invoices', JSON.stringify(arr2));
+      renameAllInvoices();
+    }).catch(function(e){ showToast('Ошибка: '+e.message); });
+    return;
+  }
+
+  // Group by month to assign sequential numbers
+  // key = yyyy-mm + shopName
+  var groups = {};
+  allInvs.forEach(function(inv){
+    var date = inv.date || inv.acceptedAt || inv.acceptedDate || '';
+    if(!date) return;
+    var d = date.split('T')[0]; // yyyy-mm-dd
+    var parts = d.split('-');
+    if(parts.length<3) return;
+    var yyyy=parts[0], mm=parts[1];
+    var shop = inv.destName||inv.shopName||inv.shop||'Магазин';
+    var monthKey = yyyy+'-'+mm+'|'+shop;
+    if(!groups[monthKey]) groups[monthKey] = [];
+    groups[monthKey].push(inv);
+  });
+
+  // Sort each group by date asc and assign numbers
+  var renamed = 0;
+  Object.keys(groups).forEach(function(key){
+    var grp = groups[key];
+    grp.sort(function(a,b){
+      var da = (a.date||a.acceptedAt||''); var db2 = (b.date||b.acceptedAt||'');
+      return da.localeCompare(db2);
+    });
+    grp.forEach(function(inv, i){
+      var date = (inv.date||inv.acceptedAt||inv.acceptedDate||'').split('T')[0];
+      var parts = date.split('-');
+      if(parts.length<3) return;
+      var yyyy=parts[0], mm=parts[1], dd=parts[2];
+      var shop = inv.destName||inv.shopName||inv.shop||'Магазин';
+      var shopShort = shop.replace(/\s+/g,'').slice(0,8);
+      var newNum = String(i+1).padStart(3,'0')+'/'+dd+'.'+mm+'.'+yyyy+'/'+shopShort;
+      if(inv.num !== newNum){
+        inv.num = newNum;
+        renamed++;
+      }
+    });
+  });
+
+  // Save back
+  // Re-split into manual and workshop
+  var newManual = manInvs.map(function(inv){
+    var found = allInvs.find(function(a){ return a.id===inv.id||a._id===inv._id; });
+    return found||inv;
+  });
+  var newWs = wsInvs.map(function(inv){
+    var found = allInvs.find(function(a){ return a.id===inv.id||a._id===inv._id; });
+    return found||inv;
+  });
+  localStorage.setItem('iz_manual_invoices', JSON.stringify(newManual));
+  localStorage.setItem('iz_invoices', JSON.stringify(newWs));
+
+  // Sync to Firestore
+  var batch = [];
+  newManual.forEach(function(inv){
+    var id = inv.id||inv._id; if(!id) return;
+    batch.push(db.collection('iz_manual_invoices').doc(id).set(inv,{merge:true}));
+  });
+  newWs.forEach(function(inv){
+    var id = inv.id||inv._id; if(!id) return;
+    batch.push(db.collection('iz_invoices').doc(id).set(inv,{merge:true}));
+  });
+
+  Promise.all(batch).then(function(){
+    showToast('✅ Переименовано: '+renamed+' накладных');
+  }).catch(function(e){
+    showToast('✅ Переименовано локально: '+renamed+'. Ошибка Firestore: '+e.message);
+  });
 }
 
 function runGlobalNameFix(){
