@@ -13259,101 +13259,89 @@ function rebuildGoodsDerevoFromHistory(){
 }
 
 
+function getInvDate(inv){
+  // Try all possible date fields
+  var d = inv.date||inv.acceptedAt||inv.acceptedDate||inv.createdAt||inv.savedAt||'';
+  return d ? d.split('T')[0] : '';
+}
+
 function renameAllInvoices(){
   if(!confirm('Переименовать все накладные по новому формату (001/дд.мм.гггг/Магазин)?\nЭто изменит номера в Firestore.')) return;
-  var manInvs = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-  var wsInvs = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-  var allInvs = manInvs.concat(wsInvs);
-  if(!allInvs.length){
-    // Try fetch from Firestore first
-    showToast('⏳ Загружаю накладные из Firestore...');
-    Promise.all([
-      db.collection('iz_manual_invoices').get({source:'server'}),
-      db.collection('iz_invoices').get({source:'server'})
-    ]).then(function(results){
-      var arr1=[], arr2=[];
-      results[0].forEach(function(d){ arr1.push(Object.assign({id:d.id},d.data())); });
-      results[1].forEach(function(d){ arr2.push(Object.assign({id:d.id},d.data())); });
-      localStorage.setItem('iz_manual_invoices', JSON.stringify(arr1));
-      localStorage.setItem('iz_invoices', JSON.stringify(arr2));
-      renameAllInvoices();
-    }).catch(function(e){ showToast('Ошибка: '+e.message); });
-    return;
-  }
+  showToast('⏳ Загружаю накладные из Firestore...');
+  // Always fetch fresh from Firestore to get all invoices
+  Promise.all([
+    db.collection('iz_manual_invoices').get({source:'server'}),
+    db.collection('iz_invoices').get({source:'server'})
+  ]).then(function(results){
+    var manInvs=[], wsInvs=[];
+    results[0].forEach(function(d){ manInvs.push(Object.assign({id:d.id},d.data())); });
+    results[1].forEach(function(d){ wsInvs.push(Object.assign({id:d.id},d.data())); });
+    localStorage.setItem('iz_manual_invoices', JSON.stringify(manInvs));
+    localStorage.setItem('iz_invoices', JSON.stringify(wsInvs));
 
-  // Group by month to assign sequential numbers
-  // key = yyyy-mm + shopName
-  var groups = {};
-  allInvs.forEach(function(inv){
-    var date = inv.date || inv.acceptedAt || inv.acceptedDate || '';
-    if(!date) return;
-    var d = date.split('T')[0]; // yyyy-mm-dd
-    var parts = d.split('-');
-    if(parts.length<3) return;
-    var yyyy=parts[0], mm=parts[1];
-    var shop = inv.destName||inv.shopName||inv.shop||'Магазин';
-    var monthKey = yyyy+'-'+mm+'|'+shop;
-    if(!groups[monthKey]) groups[monthKey] = [];
-    groups[monthKey].push(inv);
-  });
-
-  // Sort each group by date asc and assign numbers
-  var renamed = 0;
-  Object.keys(groups).forEach(function(key){
-    var grp = groups[key];
-    grp.sort(function(a,b){
-      var da = (a.date||a.acceptedAt||''); var db2 = (b.date||b.acceptedAt||'');
-      return da.localeCompare(db2);
+    // Combine, deduplicate by id
+    var seen = {};
+    var allInvs = [];
+    manInvs.concat(wsInvs).forEach(function(inv){
+      var id = inv.id||inv._id;
+      if(id && seen[id]) return;
+      if(id) seen[id]=true;
+      allInvs.push(inv);
     });
-    grp.forEach(function(inv, i){
-      var date = (inv.date||inv.acceptedAt||inv.acceptedDate||'').split('T')[0];
+
+    // Group by month+shop
+    var groups = {};
+    allInvs.forEach(function(inv){
+      var date = getInvDate(inv);
+      if(!date){ date = '2026-06-01'; } // fallback
       var parts = date.split('-');
-      if(parts.length<3) return;
-      var yyyy=parts[0], mm=parts[1], dd=parts[2];
+      var yyyy=parts[0]||'2026', mm=parts[1]||'06';
       var shop = inv.destName||inv.shopName||inv.shop||'Магазин';
-      var shopShort = shopAbbrev(shop);
-      var newNum = String(i+1).padStart(3,'0')+'/'+dd+'.'+mm+'.'+yyyy+'/'+shopShort;
-      if(inv.num !== newNum){
-        inv.num = newNum;
-        renamed++;
-      }
+      var monthKey = yyyy+'-'+mm+'|'+shop;
+      if(!groups[monthKey]) groups[monthKey]=[];
+      groups[monthKey].push(inv);
     });
-  });
 
-  // Save back
-  // Re-split into manual and workshop
-  var newManual = manInvs.map(function(inv){
-    var found = allInvs.find(function(a){ return a.id===inv.id||a._id===inv._id; });
-    return found||inv;
-  });
-  var newWs = wsInvs.map(function(inv){
-    var found = allInvs.find(function(a){ return a.id===inv.id||a._id===inv._id; });
-    return found||inv;
-  });
-  localStorage.setItem('iz_manual_invoices', JSON.stringify(newManual));
-  localStorage.setItem('iz_invoices', JSON.stringify(newWs));
+    // Sort each group by date+time asc, assign sequential numbers
+    var renamed=0;
+    Object.keys(groups).forEach(function(key){
+      var grp = groups[key];
+      grp.sort(function(a,b){
+        var da=getInvDate(a)+(a.acceptedAt||a.createdAt||'');
+        var db2=getInvDate(b)+(b.acceptedAt||b.createdAt||'');
+        return da.localeCompare(db2);
+      });
+      grp.forEach(function(inv,i){
+        var date = getInvDate(inv)||'2026-06-01';
+        var parts = date.split('-');
+        var yyyy=parts[0]||'2026', mm=parts[1]||'06', dd=parts[2]||'01';
+        var shop = inv.destName||inv.shopName||inv.shop||'Магазин';
+        var newNum = String(i+1).padStart(3,'0')+'/'+dd+'.'+mm+'.'+yyyy+'/'+shopAbbrev(shop);
+        if(inv.num!==newNum){ inv.num=newNum; renamed++; }
+      });
+    });
 
-  // Sync to Firestore
-  var batch = [];
-  newManual.forEach(function(inv){
-    var id = inv.id||inv._id; if(!id) return;
-    // iz_manual_invoices stored in both collections
-    batch.push(db.collection('iz_manual_invoices').doc(id).set(inv,{merge:true}));
-  });
-  newWs.forEach(function(inv){
-    var id = inv.id||inv._id; if(!id) return;
-    batch.push(db.collection('iz_invoices').doc(id).set(inv,{merge:true}));
-  });
-  // Also sync to iz_manual_invoices Firestore for all manual invoices (some shops use this)
-  newManual.forEach(function(inv){
-    var id = inv.id||inv._id; if(!id) return;
-    batch.push(db.collection('iz_invoices').doc(id).set(inv,{merge:true}).catch(function(){}));
-  });
+    // Save updated lists back to localStorage
+    // Each inv is in allInvs — match back to manInvs/wsInvs by id
+    var idToInv={};
+    allInvs.forEach(function(inv){ var id=inv.id||inv._id; if(id) idToInv[id]=inv; });
+    manInvs.forEach(function(inv,i){ var id=inv.id||inv._id; if(id&&idToInv[id]) manInvs[i]=idToInv[id]; });
+    wsInvs.forEach(function(inv,i){ var id=inv.id||inv._id; if(id&&idToInv[id]) wsInvs[i]=idToInv[id]; });
+    localStorage.setItem('iz_manual_invoices', JSON.stringify(manInvs));
+    localStorage.setItem('iz_invoices', JSON.stringify(wsInvs));
 
-  Promise.all(batch).then(function(){
-    showToast('✅ Переименовано: '+renamed+' накладных');
+    // Sync ALL to Firestore (write to both collections to cover all cases)
+    var ops=[];
+    allInvs.forEach(function(inv){
+      var id=inv.id||inv._id; if(!id) return;
+      ops.push(db.collection('iz_invoices').doc(id).set(inv,{merge:true}).catch(function(){}));
+      ops.push(db.collection('iz_manual_invoices').doc(id).set(inv,{merge:true}).catch(function(){}));
+    });
+    return Promise.all(ops);
+  }).then(function(){
+    showToast('✅ Готово! Переименование завершено');
   }).catch(function(e){
-    showToast('✅ Переименовано локально: '+renamed+'. Ошибка Firestore: '+e.message);
+    showToast('Ошибка: '+(e&&e.message||e));
   });
 }
 
