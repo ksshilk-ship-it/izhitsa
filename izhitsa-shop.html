@@ -8301,6 +8301,7 @@ function svOpenInvoiceFromReceive(invId){
 
   if(isManual){
     window._manInvEdit[invId] = JSON.parse(JSON.stringify(inv));
+    window._manInvEditExpanded[invId] = -1; // all collapsed on open
     var curType = inv.goodsType||'derevo';
     var btnDStyle = curType==='derevo'
       ? 'flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer'
@@ -12682,15 +12683,49 @@ function editManualInvoice(id){
 }
 var _manInvEditActive = {id:null, i:null};
 function _manInvNameOptions(){ return getItemsBase().map(function(it){ return it.name; }).filter(Boolean); }
+window._manInvEditExpanded = {}; // id -> expanded index
+
+function _manInvEditToggle(id, i){
+  window._manInvEditExpanded[id] = (window._manInvEditExpanded[id]===i) ? -1 : i;
+  renderManInvEditItems(id);
+}
+
 function renderManInvEditItems(id){
   var data = window._manInvEdit[id]; if(!data) return;
   var c = document.getElementById('maninv_items_'+id); if(!c) return;
+  var expandIdx = window._manInvEditExpanded[id] != null ? window._manInvEditExpanded[id] : -1;
   c.innerHTML = (data.items||[]).map(function(item,i){
     var nameId = 'maninv_name_'+id+'_'+i;
     var spId = 'maninv_species_'+id+'_'+i;
-    return '<div style="background:#1a1a22;border-radius:10px;padding:8px;margin-bottom:6px">'+
-      '<div style="display:flex;gap:5px;margin-bottom:6px;align-items:flex-end">'+
-        '<input class="fi" value="'+(item.article||'')+'" placeholder="Арт." style="flex:0 0 56px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditArt(\''+id+'\','+i+',this.value)">'+
+    var isOpen = (i === expandIdx);
+    var isFilled = !!(item.name || item.article);
+    var artNum = item.article||item.num||'';
+    var summary = (artNum?'№'+artNum+' ':'')+(item.name||'—')+(item.species?' · '+item.species:'')+(item.qty&&item.qty>1?' ×'+item.qty:'');
+    var total = Math.round((item.qty||1)*(item.price||0));
+
+    // Collapsed row
+    if(!isOpen && isFilled){
+      return '<div onpointerdown="event.preventDefault();_manInvEditToggle(\''+id+'\','+i+')" '+
+        'style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:9px 12px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center;cursor:pointer">'+
+        '<div style="flex:1;overflow:hidden">'+
+          '<div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+summary+'</div>'+
+          '<div style="font-size:10px;color:#8888aa">'+(total?total.toLocaleString('ru-RU')+'₽':'')+'</div>'+
+        '</div>'+
+        '<div style="display:flex;gap:6px;align-items:center;flex-shrink:0;margin-left:8px">'+
+          '<span style="font-size:11px;color:#8888aa">✏️</span>'+
+          '<button type="button" onpointerdown="event.stopPropagation();event.preventDefault();removeManInvEditItem(\''+id+'\','+i+')" '+
+            'style="background:none;border:1px solid #3e2e2e;border-radius:8px;padding:4px 8px;color:#f06060;font-size:12px;cursor:pointer">✕</button>'+
+        '</div>'+
+      '</div>';
+    }
+
+    // Expanded row
+    return '<div style="background:#1a1a22;border:2px solid #c8f06055;border-radius:10px;padding:9px;margin-bottom:5px">'+
+      (isFilled
+        ? '<div onpointerdown="event.preventDefault();_manInvEditToggle(\''+id+'\','+i+')" style="font-size:10px;color:#c8f060;font-weight:700;margin-bottom:6px;cursor:pointer">ПОЗИЦИЯ '+(i+1)+' ▲ свернуть</div>'
+        : '<div style="font-size:10px;color:#c8f060;font-weight:700;margin-bottom:6px">ПОЗИЦИЯ '+(i+1)+'</div>')+
+      '<div style="display:flex;gap:5px;margin-bottom:6px;align-items:center">'+
+        '<input class="fi" value="'+artNum+'" placeholder="Арт." style="flex:0 0 70px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditArt(\''+id+'\','+i+',this.value)">'+
         '<div style="flex:2;position:relative">'+
           '<input class="fi" id="'+nameId+'" value="'+(item.name||'')+'" placeholder="Наименование" autocomplete="off" style="margin:0;padding:6px;font-size:12px" '+
             'oninput="_manInvEditActive={id:\''+id+'\',i:'+i+'};_manInvEditName(\''+id+'\','+i+',this.value);psjSuggest(\''+nameId+'\',_manInvNameOptions(),\'_manInvEditPickNameIdx\')" '+
@@ -12698,7 +12733,7 @@ function renderManInvEditItems(id){
             'onblur="psjHideSugg(\''+nameId+'\')">'+
           '<div id="'+nameId+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>'+
         '</div>'+
-        '<button type="button" onclick="removeManInvEditItem(\''+id+'\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:8px;padding:6px 9px;color:#f06060;font-size:13px;cursor:pointer;flex-shrink:0">✕</button>'+
+        '<button type="button" onclick="removeManInvEditItem(\''+id+'\','+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:8px;padding:6px 8px;color:#f06060;font-size:13px;cursor:pointer;flex-shrink:0">✕</button>'+
       '</div>'+
       '<div style="margin-bottom:6px;position:relative">'+
         '<div style="font-size:9px;color:#8888aa;margin-bottom:3px">ПОРОДА ДЕРЕВА</div>'+
@@ -12714,6 +12749,7 @@ function renderManInvEditItems(id){
       '<div style="display:flex;gap:5px">'+
         '<input class="fi" type="number" value="'+(item.qty!=null?item.qty:1)+'" inputmode="numeric" placeholder="Кол-во" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditQty(\''+id+'\','+i+',this.value)">'+
         '<input class="fi" type="number" value="'+(item.price||0)+'" inputmode="numeric" placeholder="Цена" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditPrice(\''+id+'\','+i+',this.value)">'+
+        '<div style="font-size:11px;color:#c8a060;flex:0 0 60px;text-align:right;padding-top:8px">'+(total?total.toLocaleString('ru-RU')+'₽':'')+'</div>'+
       '</div>'+
     '</div>';
   }).join('');
@@ -12723,6 +12759,7 @@ function addManInvEditItem(id){
   var data = window._manInvEdit[id]; if(!data) return;
   data.items = data.items||[];
   data.items.push({name:'', article:'', species:'', qty:1, price:0});
+  window._manInvEditExpanded[id] = data.items.length - 1; // expand new item
   renderManInvEditItems(id);
 }
 function removeManInvEditItem(id,i){
