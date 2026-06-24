@@ -12466,14 +12466,30 @@ function switchInvTab(tab) {
   if(tab === 'manual') { initManualInvoice(); }
 }
 
+function shopAbbrev(shopName){
+  if(!shopName) return 'Магазин';
+  // Smart abbreviation: РозаХутор, Горки, ОПТ etc
+  var map = {
+    'роза хутор': 'РозаХутор',
+    'розахутор': 'РозаХутор',
+    'горки': 'Горки',
+    'опт': 'ОПТ',
+    'тг канал': 'ТГ',
+    'тгканал': 'ТГ'
+  };
+  var key = shopName.toLowerCase().trim();
+  if(map[key]) return map[key];
+  // Otherwise remove spaces and limit to 10 chars
+  return shopName.replace(/\s+/g,'').slice(0,10);
+}
+
 function generateManInvNum(){
   var now = new Date();
   var dd = String(now.getDate()).padStart(2,'0');
   var mm = String(now.getMonth()+1).padStart(2,'0');
   var yyyy = now.getFullYear();
   var shopName = (session && session.shopName) || '';
-  // Abbreviate shop name for number
-  var shopShort = shopName.replace(/\s+/g,'').slice(0,8);
+  var shopShort = shopAbbrev(shopName);
   // Count invoices this month
   var existing = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   var monthKey = yyyy+'-'+mm;
@@ -13295,7 +13311,7 @@ function renameAllInvoices(){
       if(parts.length<3) return;
       var yyyy=parts[0], mm=parts[1], dd=parts[2];
       var shop = inv.destName||inv.shopName||inv.shop||'Магазин';
-      var shopShort = shop.replace(/\s+/g,'').slice(0,8);
+      var shopShort = shopAbbrev(shop);
       var newNum = String(i+1).padStart(3,'0')+'/'+dd+'.'+mm+'.'+yyyy+'/'+shopShort;
       if(inv.num !== newNum){
         inv.num = newNum;
@@ -13321,11 +13337,17 @@ function renameAllInvoices(){
   var batch = [];
   newManual.forEach(function(inv){
     var id = inv.id||inv._id; if(!id) return;
+    // iz_manual_invoices stored in both collections
     batch.push(db.collection('iz_manual_invoices').doc(id).set(inv,{merge:true}));
   });
   newWs.forEach(function(inv){
     var id = inv.id||inv._id; if(!id) return;
     batch.push(db.collection('iz_invoices').doc(id).set(inv,{merge:true}));
+  });
+  // Also sync to iz_manual_invoices Firestore for all manual invoices (some shops use this)
+  newManual.forEach(function(inv){
+    var id = inv.id||inv._id; if(!id) return;
+    batch.push(db.collection('iz_invoices').doc(id).set(inv,{merge:true}).catch(function(){}));
   });
 
   Promise.all(batch).then(function(){
@@ -13595,7 +13617,16 @@ function renderAdminRcvWo(){
             '<span style="font-size:11px;color:#8888aa">'+r.shop+'</span>'+
             '<span style="font-size:10px;color:#606080">'+r.date+(timeStr?' · '+timeStr:'')+'</span>'+
           '</div>'+
-          '<div style="font-size:13px;font-weight:700">'+r.label+'</div>'+
+          '<div style="font-size:13px;font-weight:700">'+(function(){
+            // Try to get actual invoice number from stored invoices
+            if(r.invId){
+              var manInvs2=JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+              var wsInvs2=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+              var found2=manInvs2.concat(wsInvs2).find(function(i2){ return (i2.id||i2._id)===r.invId; });
+              if(found2&&found2.num) return 'Приёмка '+found2.num;
+            }
+            return r.label;
+          }())+'</div>'+
           (r.sub&&r.sub!==r.label?'<div style="font-size:11px;color:#8888aa;margin-top:1px">'+r.sub+'</div>':'')+
           (r.reason?'<div style="font-size:11px;color:#a060f0;margin-top:1px">'+r.reason+'</div>':'')+
           itemsList+
