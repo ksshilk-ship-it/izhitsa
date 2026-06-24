@@ -5825,33 +5825,73 @@ function renderInvoices(){
 
 // ── Edit / delete invoices from the shop's "Приход" tab ──
 window._shInvEdit = window._shInvEdit || {};
+window._shInvExpandedMap = window._shInvExpandedMap || {}; // id -> expanded index
+
+function renderShInvItems(id, contextId){
+  // contextId = DOM container id where items are rendered
+  var data = window._shInvEdit[id]; if(!data) return;
+  var items = data.items||[];
+  var expandIdx = window._shInvExpandedMap[id] != null ? window._shInvExpandedMap[id] : -1;
+  var html = items.map(function(item, i){
+    var isOpen = (i === expandIdx);
+    var isFilled = !!(item.name || item.num || item.article);
+    var artNum = item.num || item.article || '';
+    var summary = (artNum?'№'+artNum+' ':'')+(item.name||'—')+(item.species?' · '+item.species:'')+(item.qty&&item.qty>1?' ×'+item.qty:'');
+    var total = Math.round((item.qty||1)*(item.price||0));
+
+    if(!isOpen && isFilled){
+      return '<div onpointerdown="event.preventDefault();_shInvToggle(\''+id+'\','+i+')" '+
+        'style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:9px 12px;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center;cursor:pointer">'+
+        '<div style="flex:1;overflow:hidden">'+
+          '<div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+summary+'</div>'+
+          '<div style="font-size:10px;color:#8888aa">'+(total?total.toLocaleString('ru-RU')+'₽':'')+'</div>'+
+        '</div>'+
+        '<span style="font-size:11px;color:#8888aa;margin-left:8px">✏️</span>'+
+      '</div>';
+    }
+    return '<div style="background:#1a1a22;border:2px solid #c8f06044;border-radius:10px;padding:9px;margin-bottom:5px">'+
+      (isFilled ? '<div onpointerdown="event.preventDefault();_shInvToggle(\''+id+'\','+i+')" style="font-size:10px;color:#c8f060;font-weight:700;margin-bottom:6px;cursor:pointer">ПОЗИЦИЯ '+(i+1)+' ▲</div>' :
+        '<div style="font-size:10px;color:#c8f060;font-weight:700;margin-bottom:6px">ПОЗИЦИЯ '+(i+1)+'</div>')+
+      '<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center">'+
+        '<input class="fi" value="'+artNum+'" placeholder="Арт." style="flex:0 0 70px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvNum(\''+id+'\','+i+',this.value)">'+
+        '<input class="fi" value="'+(item.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" oninput="_shInvName(\''+id+'\','+i+',this.value)">'+
+      '</div>'+
+      '<div style="display:flex;gap:5px;align-items:center">'+
+        '<input class="fi" type="number" value="'+(item.qty!=null?item.qty:1)+'" inputmode="numeric" placeholder="Кол" style="flex:0 0 60px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvQty(\''+id+'\','+i+',this.value)">'+
+        '<input class="fi" type="number" value="'+(item.price||0)+'" inputmode="numeric" placeholder="Цена" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvPrice(\''+id+'\','+i+',this.value)">'+
+        '<div style="font-size:11px;color:#c8a060;flex:0 0 60px;text-align:right">'+(total?total.toLocaleString('ru-RU')+'₽':'')+'</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  var cont = document.getElementById(contextId||('shinv_items_'+id));
+  if(cont) cont.innerHTML = html;
+}
+
+function _shInvToggle(id, i){
+  window._shInvExpandedMap[id] = (window._shInvExpandedMap[id]===i) ? -1 : i;
+  renderShInvItems(id);
+}
+
 function editShopInvoice(id){
   var inv = getInvoices().find(function(i){ return String(i._id!=null?i._id:i.id)===id; });
   if(!inv) return;
   var card = document.getElementById('shinv_'+id); if(!card) return;
   window._shInvEdit[id] = JSON.parse(JSON.stringify(inv));
 
-  var itemsHtml = (inv.items||[]).map(function(item,i){
-    return '<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center">'+
-      '<input class="fi" value="'+(item.num||'')+'" placeholder="Арт." style="flex:0 0 56px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvNum(\''+id+'\','+i+',this.value)">'+
-      '<input class="fi" value="'+(item.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" oninput="_shInvName(\''+id+'\','+i+',this.value)">'+
-      '<input class="fi" type="number" value="'+(item.qty!=null?item.qty:1)+'" inputmode="numeric" style="flex:0 0 50px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvQty(\''+id+'\','+i+',this.value)">'+
-      '<input class="fi" type="number" value="'+(item.price||0)+'" inputmode="numeric" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvPrice(\''+id+'\','+i+',this.value)">'+
-    '</div>';
-  }).join('');
-
+  window._shInvExpandedMap[id] = -1; // all collapsed by default
   card.innerHTML =
     '<div style="font-size:11px;font-weight:700;color:#c8f060;margin-bottom:8px">✏️ Исправление: '+(inv.num||'')+'</div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Номер</label><input class="fi" id="shinv_num_'+id+'" value="'+(inv.num||'')+'" style="margin:0;padding:7px"></div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата</label><input class="fi" type="date" id="shinv_date_'+id+'" value="'+(inv.date||'')+'" style="margin:0;padding:7px;-webkit-appearance:none;color-scheme:dark"></div>'+
     '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (арт. · наим. · кол-во · цена)</div>'+
-    itemsHtml+
+    '<div id="shinv_items_'+id+'"></div>'+
     '<div style="display:flex;gap:6px;margin-top:8px">'+
       '<button onclick="saveShopInvoice(\''+id+'\')" style="flex:1;padding:8px;border-radius:8px;border:none;background:#c8f060;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
       (inv.status==='accepted'
         ? '<button onclick="openRcvArchiveDate(\''+(inv.acceptedDate||inv.date||'—')+'\')" style="padding:8px 12px;border-radius:8px;border:1px solid #2e2e3e;background:none;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>'
         : '<button onclick="renderInvoices()" style="padding:8px 12px;border-radius:8px;border:1px solid #2e2e3e;background:none;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>')+
     '</div>';
+  renderShInvItems(id);
 }
 function _shInvNum(id,i,v){ if(window._shInvEdit[id]&&window._shInvEdit[id].items[i]) window._shInvEdit[id].items[i].num=v; }
 function _shInvName(id,i,v){ if(window._shInvEdit[id]&&window._shInvEdit[id].items[i]) window._shInvEdit[id].items[i].name=v; }
@@ -8296,14 +8336,7 @@ function svOpenInvoiceFromReceive(invId){
     var bDr2 = curType2==='dr'
       ? 'flex:1;padding:9px;border-radius:10px;border:2px solid #a060f0;background:#1e1a2e;color:#a060f0;font-size:12px;font-weight:700;cursor:pointer'
       : 'flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer';
-    var itemsHtml = (inv.items||[]).map(function(item,i){
-      return '<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center">'+
-        '<input class="fi" value="'+(item.num||item.article||'')+'" placeholder="Арт." style="flex:0 0 56px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvNum(\''+invId+'\','+i+',this.value)">'+
-        '<input class="fi" value="'+(item.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" oninput="_shInvName(\''+invId+'\','+i+',this.value)">'+
-        '<input class="fi" type="number" value="'+(item.qty!=null?item.qty:1)+'" inputmode="numeric" style="flex:0 0 50px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvQty(\''+invId+'\','+i+',this.value)">'+
-        '<input class="fi" type="number" value="'+(item.price||0)+'" inputmode="numeric" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvPrice(\''+invId+'\','+i+',this.value)">'+
-      '</div>';
-    }).join('');
+    window._shInvExpandedMap[invId] = -1;
     body.innerHTML =
       '<div class="fg" style="margin-bottom:6px"><label class="fl">Номер</label><input class="fi" id="adminInv_num_'+invId+'" value="'+(inv.num||'')+'" style="margin:0;padding:7px"></div>'+
       '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ТИП ТОВАРА</div>'+
@@ -8313,12 +8346,14 @@ function svOpenInvoiceFromReceive(invId){
       '</div>'+
       '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (арт. · наим. · кол-во · цена)</div>'+
       itemsHtml+
+      '<div id="shinv_items_'+invId+'"></div>'+
       '<div style="font-size:10px;color:#8888aa;margin:8px 0 3px">Причина правки</div>'+
       '<input class="fi" id="adminInv_reason_'+invId+'" placeholder="Обязательно укажите причину..." style="margin:0;padding:7px;margin-bottom:8px">'+
       '<div style="display:flex;gap:6px">'+
         '<button onclick="svSaveInvoiceFromArchive(\''+invId+'\',false)" style="flex:1;padding:9px;border-radius:8px;border:none;background:#c8f060;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
         '<button onclick="closeMo(\'adminInvMo\')" style="padding:9px 14px;border-radius:8px;border:1px solid #2e2e3e;background:none;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>'+
       '</div>';
+    renderShInvItems(invId);
   }
   openMo('adminInvMo');
 }
