@@ -1291,7 +1291,7 @@ function checkForAppUpdate() {
             <input class="fi" id="siName" placeholder="Название" autocomplete="off"
               oninput="checkItemDiff();psjSuggest('siName',getItemNames(_siItemGoodsType),'siPickName');siAutoDetectAndSetType(this.value)"
               onfocus="psjSuggest('siName',getItemNames(_siItemGoodsType),'siPickName')"
-              onblur="psjHideSugg('siName');dupCheckField(this,_siItemGoodsType==='dr'?'iz_goods_dr':'iz_goods_derevo')">
+              onblur="psjHideSugg('siName')">
             <button type="button" onclick="siAddToGoods('siName')" style="background:#22222e;border:1px solid #c8f060;border-radius:10px;padding:0 14px;color:#c8f060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
           </div>
           <div id="siName_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
@@ -1311,7 +1311,7 @@ function checkForAppUpdate() {
             <input class="fi" id="siSpecies" placeholder="Порода" autocomplete="off"
               oninput="psjSuggest('siSpecies',getSiSpeciesList(),'siPickSpecies')"
               onfocus="psjSuggest('siSpecies',getSiSpeciesList(),'siPickSpecies')"
-              onblur="psjHideSugg('siSpecies');dupCheckSpeciesField(this,_siItemGoodsType==='dr')">
+              onblur="psjHideSugg('siSpecies')">
             <button type="button" onclick="siAddToSpecies('siSpecies')" id="siSpeciesAddBtn" style="background:#22222e;border:1px solid #f0c060;border-radius:10px;padding:0 14px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
           </div>
           <div id="siSpecies_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
@@ -1340,7 +1340,7 @@ function checkForAppUpdate() {
             <input class="fi" id="siNameM" placeholder="Введите вручную" autocomplete="off"
               oninput="psjSuggest('siNameM',getItemNames(_siItemGoodsType),'siPickNameM');siAutoDetectAndSetType(this.value)"
               onfocus="psjSuggest('siNameM',getItemNames(_siItemGoodsType),'siPickNameM')"
-              onblur="psjHideSugg('siNameM');dupCheckField(this,_siItemGoodsType==='dr'?'iz_goods_dr':'iz_goods_derevo')">
+              onblur="psjHideSugg('siNameM')">
             <button type="button" onclick="siAddToGoods('siNameM')" style="background:#22222e;border:1px solid #c8f060;border-radius:10px;padding:0 14px;color:#c8f060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
           </div>
           <div id="siNameM_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
@@ -9766,6 +9766,31 @@ function addRefbookItemShop(bookId, key){
   var input = document.getElementById('rbNew_'+bookId);
   var value = (input.value||'').trim();
   if(!value){ showToast('Введите значение'); return; }
+  var existing = getRefBook(key);
+  var norm = value.toLowerCase().trim();
+  // Exact match — already exists
+  var exact = existing.find(function(c){ return (c.name||c).toLowerCase().trim()===norm; });
+  if(exact){ showToast('Уже есть: «'+(exact.name||exact)+'»'); input.value=''; return; }
+  // Close match — show warning
+  var closeMatch=null, bestScore=0;
+  existing.forEach(function(c){
+    var sc=nameSimilarity(norm,(c.name||c).toLowerCase().trim());
+    if(sc>bestScore){ bestScore=sc; closeMatch=c; }
+  });
+  if(bestScore>=0.65 && closeMatch){
+    showDupWarning(value, closeMatch.name||closeMatch, function(useExisting){
+      if(!useExisting){
+        var items2=getRefBook(key);
+        items2.push({id:uid(),name:value});
+        items2.sort(function(a,b){return (a.name||a).toLowerCase().localeCompare((b.name||b).toLowerCase(),'ru');});
+        saveRefBookShop(key,items2);
+        renderRefbookItemsShop(bookId,key);
+        updateRefbookCountShop(bookId,key);
+      }
+      input.value='';
+    });
+    return;
+  }
   var items = getRefBook(key);
   items.push({id:uid(), name:value});
   items.sort(function(a,b){ return (a.name||a).toLowerCase().localeCompare((b.name||b).toLowerCase(),'ru'); });
@@ -12693,7 +12718,7 @@ function renderManInvItems() {
           '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">НАИМЕНОВАНИЕ</div>'+
           '<div style="display:flex;gap:4px">'+
             '<input class="fi" list="'+dlId+'" value="'+item.name+'" placeholder="Название" '+
-              'oninput="_manInvName('+i+',this.value);siAutoDetectAndSetType(this.value)" onblur="_manInvNameBlurCheck(this)" style="margin:0;padding:8px;flex:1">'+
+              'oninput="_manInvName('+i+',this.value);siAutoDetectAndSetType(this.value)" style="margin:0;padding:8px;flex:1">'+
             '<button type="button" onclick="openAddItemModal(\'manInvName_'+i+'\',\'\',\'\')" '+
               'style="background:#c8f060;border:none;border-radius:8px;padding:6px 9px;font-weight:700;color:#0f0f13;cursor:pointer;font-size:14px;flex-shrink:0">＋</button>'+
           '</div>'+
@@ -12747,10 +12772,20 @@ function _manInvAddSpecies(i){
   var el = document.getElementById('manInvSpecies_'+i);
   var val = (el && el.value || '').trim();
   if(!val){ showToast('Введите породу'); return; }
-  var before = getSpecies().length;
+  var list = getSpecies();
+  var norm = val.toLowerCase().trim();
+  var exact = list.find(function(s){ return (s.name||s).toLowerCase().trim()===norm; });
+  if(exact){ showToast('Уже есть: «'+(exact.name||exact)+'»'); return; }
+  var closeMatch=null, bestScore=0;
+  list.forEach(function(s){ var sc=nameSimilarity(norm,(s.name||s).toLowerCase().trim()); if(sc>bestScore){bestScore=sc;closeMatch=s;} });
+  if(bestScore>=0.65 && closeMatch){
+    showDupWarning(val, closeMatch.name||closeMatch, function(useEx){
+      if(!useEx){ saveSpecies(val); showToast('✅ Добавлено: '+val); }
+    });
+    return;
+  }
   saveSpecies(val);
-  if(getSpecies().length>before) showToast('✅ Добавлено в породы дерева: '+val);
-  else showToast('Уже есть в породах дерева');
+  showToast('✅ Добавлено в породы дерева: '+val);
 }
 function _manInvQty(i, val) { _manInvItems[i].qty = parseFloat(val)||1; updateManInvTotal(); saveManInvDraft(); }
 function _manInvPrice(i, val) { _manInvItems[i].price = parseFloat(val)||0; updateManInvTotal(); saveManInvDraft(); }
