@@ -14715,21 +14715,35 @@ function stockOnFilterChange(){
     setTimeout(function(){ var el=document.getElementById('stockInputArticle'); if(el) el.focus(); },100);
 
   } else if(filterBy==='name'){
-    var items = _stockGetAllItems();
+    // Use catalog as source of truth, not stock (stock has historical duplicates)
+    var catalog = getRefBook('iz_goods_derevo').concat(getRefBook('iz_goods_dr'));
     var names = [];
-    var seen = {};
-    items.forEach(function(it){ var n=it.name||''; if(n&&!seen[n]){ seen[n]=true; names.push(n); } });
+    var seenNorm = {};
+    catalog.forEach(function(c){
+      var n = (c.name||c||'').trim();
+      if(!n) return;
+      var norm = n.toLowerCase();
+      if(!seenNorm[norm]){ seenNorm[norm]=true; names.push(n); }
+    });
     names.sort(function(a,b){ return a.localeCompare(b,'ru'); });
     container.innerHTML='<select class="fs" id="stockInputName" onchange="stockApplyFilter()" style="margin:0"><option value="">— Все наименования —</option>'+
       names.map(function(n){ return '<option value="'+n+'">'+n+'</option>'; }).join('')+'</select>';
 
   } else if(filterBy==='species'){
-    var items2 = _stockGetAllItems();
+    // Use species catalog, not stock
     var specs = [];
-    var seen2 = {};
-    items2.forEach(function(it){ var s=it.species||''; if(s&&!seen2[s]){ seen2[s]=true; specs.push(s); } });
-    // Also add from iz_species refbook
-    getSpecies().forEach(function(s){ var n=typeof s==='string'?s:(s.name||''); if(n&&!seen2[n]){ seen2[n]=true; specs.push(n); } });
+    var seenSpec = {};
+    getSpecies().forEach(function(s){
+      var n=typeof s==='string'?s:(s.name||s||'');
+      n=n.trim(); if(!n) return;
+      var norm=n.toLowerCase();
+      if(!seenSpec[norm]){ seenSpec[norm]=true; specs.push(n); }
+    });
+    getRefBook('iz_dr_species').forEach(function(s){
+      var n=(s.name||s||'').trim(); if(!n) return;
+      var norm=n.toLowerCase();
+      if(!seenSpec[norm]){ seenSpec[norm]=true; specs.push(n); }
+    });
     specs.sort(function(a,b){ return a.localeCompare(b,'ru'); });
     container.innerHTML='<select class="fs" id="stockInputSpecies" onchange="stockApplyFilter()" style="margin:0"><option value="">— Все породы/составы —</option>'+
       specs.map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('')+'</select>';
@@ -14804,7 +14818,7 @@ function renderStockPage(){
   // Apply active filters
   var filtered=modeFiltered.filter(function(it){
     if(f.article && (it.num||'').toLowerCase().indexOf(f.article)<0) return false;
-    if(f.name && (it.name||'')!==f.name) return false;
+    if(f.name && (it.name||'').toLowerCase().trim()!==f.name.toLowerCase().trim()) return false;
     if(f.species && (it.species||'')!==f.species) return false;
     if(f.type && it.goodsType!==f.type) return false;
     return true;
@@ -14889,7 +14903,7 @@ function renderStockPage(){
         '<div style="text-align:right;flex-shrink:0;padding-left:10px">'+
           '<div style="font-size:22px;font-weight:700;color:'+qtyColor+'">'+it.qty+'</div>'+
           '<div style="font-size:9px;color:#8888aa">шт.</div>'+
-          '<div style="font-size:11px;font-weight:600;color:#c8a060;margin-top:1px">'+Math.round((it.qty||0)*(it.price||0)).toLocaleString('ru-RU')+'₽</div>'+
+          '<div style="font-size:11px;font-weight:600;color:#c8a060;margin-top:1px">'+(it.qty>0?Math.round(it.qty*it.price).toLocaleString('ru-RU')+'₽':Math.round(it.price||0).toLocaleString('ru-RU')+'₽/шт')+'</div>'+
         '</div>'+
       '</div>'+
     '</div>';
