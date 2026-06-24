@@ -5980,6 +5980,14 @@ function pauseInvoice(){
 function acceptInvoice(){
   const who=gv('invWho'); if(!who){showToast('Укажите кто принял');return;}
   const invs=getInvoices(); const inv=invs.find(i=>(i.id||i._id)===currentInvId); if(!inv)return;
+  // Warn if invoice date differs from today's working date
+  var todayStr = _workingNowISO().split('T')[0];
+  var invDate = inv.date||'';
+  if(invDate && invDate < todayStr){
+    if(!confirm('⚠️ Накладная от '+invDate+', а сегодня '+todayStr+'. Если принять сейчас — приход попадёт в смену за сегодня, а не за '+invDate+'. Продолжить?')){
+      return;
+    }
+  }
   const inv2=JSON.parse(JSON.stringify(inv));
   const accepted=inv2.items.map((it,i)=>({...it,factPrice:(invCheckState[i]&&invCheckState[i].factPrice!=null?invCheckState[i].factPrice:it.price),ok:(invCheckState[i]&&invCheckState[i].ok)||false}));
   inv2.status='accepted'; inv2.acceptedBy=who; inv2.acceptedDate=new Date().toISOString().split('T')[0]; inv2.acceptedItems=accepted;
@@ -13000,13 +13008,13 @@ function stockDiagnostic(){
   msg+='\nLS ключи: '+keys.join(', ')+'\n';
   msg+='\n→ Сейчас принудительно загружу из Firestore...';
   alert(msg);
-  // Also show current journal receive entries
+  // Show current journal receive entries with full date
   var jRcvDbg = journal.filter(function(e){ return e.type==='receive'; });
-  var jMsg = 'journal receive-записей: '+jRcvDbg.length+'\n';
+  var jMsg = 'shiftId: '+(session&&session.shiftId||'?')+'\njournalReceives: '+jRcvDbg.length+'\n';
   jRcvDbg.forEach(function(e,i){
-    jMsg += '['+(i+1)+'] '+e.label+' goodsEffect='+e.goodsEffect+' ts='+(e.ts||'').slice(0,16)+'\n';
+    jMsg += '['+(i+1)+'] ts='+(e.ts||'').slice(0,16)+' id='+(e.id||'').slice(0,8)+' invId='+(e.invId||'-')+'\n  '+e.label+'\n';
   });
-  if(jRcvDbg.length) alert(jMsg);
+  alert(jMsg);
 
   try{
     db.collection('iz_manual_invoices').get({source:'server'}).then(function(snap){
