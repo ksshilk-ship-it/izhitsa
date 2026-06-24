@@ -747,6 +747,7 @@ function checkForAppUpdate() {
   </div>
   <!-- ════ ВОССТАНОВЛЕНИЕ ДАННЫХ ════ -->
   <div class="page" id="pg-restore">
+    <button type="button" onclick="psjDiagnostic()" style="width:100%;padding:8px;border-radius:8px;border:1px solid #3e3e4e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer;margin-bottom:8px">🔍 Диагностика данных восстановления</button>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
       <div class="stitle" style="margin:0">🗄 Восстановление данных</div>
       <button id="restoreBackToShiftBtn" onclick="closeRestoreImportAndReturn()" style="display:none;background:none;border:1px solid #c8f060;border-radius:8px;padding:6px 12px;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">← К смене</button>
@@ -10638,6 +10639,32 @@ function activateRestoreShift(shop, date){
   renderRestoreShiftsList();
   try{ renderActivatedList(); }catch(e){}
   showToast(entriesForShift.length ? ('✅ Смена обновлена в архиве ('+entriesForShift.length+' записей)') : '✅ Активировано '+activated+' записей');
+}
+
+function psjDiagnostic(){
+  var rj = localStorage.getItem('iz_restore_journal');
+  var rs = localStorage.getItem('iz_restore_session');
+  var psjRaw = localStorage.getItem('iz_psj');
+  var psjEntries = JSON.parse(psjRaw||'[]');
+  var msg = 'iz_restore_journal: '+(rj?JSON.parse(rj).length+' записей':'пусто')+'\n';
+  msg += 'iz_restore_session: '+(rs?'есть':'пусто')+'\n';
+  msg += 'iz_psj: '+psjEntries.length+' записей\n';
+  if(psjEntries.length){
+    var last = psjEntries.slice(-5);
+    last.forEach(function(e){
+      msg += '  '+e.date+' '+e.type+' '+e.shopName+' '+Math.round(e.amount||0)+'₽\n';
+    });
+  }
+  // Also check Firestore
+  db.collection('iz_psj').orderBy('createdAt','desc').limit(10).get({source:'server'}).then(function(snap){
+    var msg2 = 'Firestore iz_psj: '+snap.size+' документов\n';
+    snap.forEach(function(d){
+      var data=d.data();
+      msg2+='  '+data.date+' '+data.type+' '+data.shopName+' '+Math.round(data.amount||0)+'₽\n';
+    });
+    alert(msg2);
+  }).catch(function(e){ alert('Firestore error: '+e.message); });
+  alert(msg);
 }
 
 function psjInit() {
