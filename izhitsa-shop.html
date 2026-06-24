@@ -1420,7 +1420,7 @@ function checkForAppUpdate() {
           style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
       </div>
     </div>
-    <div style="font-size:10px;color:#8888aa;margin-bottom:6px">ПОЗИЦИИ (наим. · кол-во · цена)</div>
+    <div style="font-size:10px;color:#8888aa;margin-bottom:6px">ПОЗИЦИИ (арт. · наим. · кол-во · цена)</div>
     <div id="woEditItemsList"></div>
     <button type="button" onclick="addWoEditItem()" class="btn sec" style="font-size:12px;margin:6px 0 4px;border-color:#f06060;color:#f06060">＋ Добавить позицию</button>
     <div id="woEditTotal" style="margin-bottom:10px"></div>
@@ -5586,15 +5586,22 @@ function setWoEditType(type){
 function renderWoEditItems(){
   var c = document.getElementById('woEditItemsList'); if(!c) return;
   c.innerHTML = _woEditItems.map(function(it,i){
-    return '<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center">'+
-      '<input class="fi" value="'+(it.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" oninput="_woEditName('+i+',this.value)">'+
-      '<input class="fi" type="number" value="'+(it.qty||1)+'" inputmode="numeric" style="flex:0 0 50px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_woEditQty('+i+',this.value)">'+
-      '<input class="fi" type="number" value="'+(it.price||it.amt||0)+'" inputmode="numeric" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_woEditPrice('+i+',this.value)">'+
-      '<button type="button" onclick="_woEditDel('+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:8px;padding:6px 9px;color:#f06060;font-size:13px;cursor:pointer;flex-shrink:0">✕</button>'+
+    return '<div style="margin-bottom:8px;background:#1a1a22;border-radius:8px;padding:8px">'+
+      '<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center">'+
+        '<input class="fi" value="'+(it.num||it.article||'')+'" placeholder="Арт." style="flex:0 0 72px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_woEditNum('+i+',this.value)">'+
+        '<input class="fi" value="'+(it.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" oninput="_woEditName('+i+',this.value)">'+
+        '<button type="button" onclick="_woEditDel('+i+')" style="background:none;border:1px solid #3e2e2e;border-radius:8px;padding:6px 9px;color:#f06060;font-size:13px;cursor:pointer;flex-shrink:0">✕</button>'+
+      '</div>'+
+      '<div style="display:flex;gap:5px;align-items:center">'+
+        '<input class="fi" type="number" value="'+(it.qty||1)+'" inputmode="numeric" placeholder="Кол" style="flex:0 0 60px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_woEditQty('+i+',this.value)">'+
+        '<input class="fi" type="number" value="'+(it.price||it.amt||0)+'" inputmode="numeric" placeholder="Цена" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_woEditPrice('+i+',this.value)">'+
+        '<div style="flex:0 0 70px;font-size:11px;color:#f06060;text-align:right">'+fmt((it.qty||1)*(it.price||0))+'</div>'+
+      '</div>'+
     '</div>';
   }).join('');
   _updateWoEditTotal();
 }
+function _woEditNum(i,v){ if(_woEditItems[i]){ _woEditItems[i].num=v; _woEditItems[i].article=v; } }
 function _woEditName(i,v){ if(_woEditItems[i]) _woEditItems[i].name=v; }
 function _woEditQty(i,v){ if(_woEditItems[i]){ _woEditItems[i].qty=parseFloat(v)||1; _woEditItems[i].amt=(_woEditItems[i].qty)*(_woEditItems[i].price||0); _updateWoEditTotal(); } }
 function _woEditPrice(i,v){ if(_woEditItems[i]){ _woEditItems[i].price=parseFloat(v)||0; _woEditItems[i].amt=(_woEditItems[i].qty||1)*_woEditItems[i].price; _updateWoEditTotal(); } }
@@ -5624,6 +5631,7 @@ function saveWoEdit(){
   var sub=count===1
     ?(((_woEditItems[0].num)?'№'+_woEditItems[0].num+' ':'')+_woEditItems[0].name+(_woEditItems[0].species?' · '+_woEditItems[0].species:'')+(_woEditItems[0].qty&&_woEditItems[0].qty!==1?' × '+_woEditItems[0].qty:'')+' · '+reason)
     :(count+' позиций ('+totalQty+' шт.): '+namesPreview+' · '+reason);
+  var artsList=_woEditItems.filter(function(it){return it.num||it.article;}).map(function(it){return '№'+(it.num||it.article);}).join(', ');
   _woEditItems.forEach(function(it){ it.reason=reason; it.goodsType=_woEditGoodsType; });
   journal[idx]=Object.assign({},orig,{
     sub:sub, reason:reason, items:_woEditItems, goodsType:_woEditGoodsType,
