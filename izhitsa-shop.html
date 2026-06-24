@@ -1085,6 +1085,10 @@ function checkForAppUpdate() {
   <!-- SETTINGS PAGE -->
   <div class="page" id="pg-shopsettings">
     <div class="stitle">⚙️ Настройки</div>
+    <div style="margin-bottom:12px">
+      <button type="button" onclick="rebuildGoodsDerevoFromHistory()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #60c8f055;background:#1a2e2e;color:#60c8f0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">📦 Собрать товары из истории в базу Дерево</button>
+      <button type="button" onclick="runGlobalNameFix()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #c8f06055;background:#1e2a14;color:#c8f060;font-size:13px;font-weight:700;cursor:pointer">🔤 Исправить регистр названий товаров</button>
+    </div>
 
     <!-- ZP SETTINGS per shop -->
     <div class="card" style="margin-bottom:8px;padding:0;overflow:hidden">
@@ -13097,6 +13101,191 @@ function init(){
   if(saved){ session=saved; journal=JSON.parse(localStorage.getItem(KEY.journal)||'[]'); if(session.role==='shopadmin')startAdminApp(); else { startApp(); syncLiveShift(); } }
 }
 init();
+
+// ════ GLOBAL TEXT FIX TOOL ════
+function fixWordCapitalization(text, fixes){
+  if(!text || typeof text !== 'string') return text;
+  fixes.forEach(function(f){
+    // Replace word with case-insensitive match, preserve surrounding chars
+    var re = new RegExp('\\b'+f.from+'\\b', 'gi');
+    text = text.replace(re, function(match){
+      // Only replace if it's not already the correct case
+      return match === f.to ? match : f.to;
+    });
+  });
+  return text;
+}
+
+var _rcvWordFixes = [
+  {from:'доска', to:'Доска'},
+  {from:'доска для подачи', to:'Доска для подачи'},
+  {from:'поднос', to:'Поднос'},
+  {from:'менажница', to:'Менажница'},
+  {from:'ложка', to:'Ложка'},
+  {from:'лопатка', to:'Лопатка'},
+  {from:'капа', to:'Капа'},
+  {from:'соусник', to:'Соусник'},
+  {from:'подсвечник', to:'Подсвечник'},
+  {from:'кружка', to:'Кружка'},
+  {from:'тарелка', to:'Тарелка'},
+  {from:'миска', to:'Миска'},
+  {from:'вилка', to:'Вилка'},
+  {from:'нож', to:'Нож'},
+  {from:'чашка', to:'Чашка'},
+  {from:'блюдце', to:'Блюдце'},
+  {from:'бокал', to:'Бокал'},
+  {from:'стакан', to:'Стакан'},
+  {from:'подставка', to:'Подставка'},
+  {from:'рамка', to:'Рамка'},
+  {from:'шкатулка', to:'Шкатулка'},
+  {from:'шпатель', to:'Шпатель'}
+];
+
+function fixItemName(name){
+  if(!name) return name;
+  return fixWordCapitalization(name, _rcvWordFixes);
+}
+
+function rebuildGoodsDerevoFromHistory(){
+  if(!confirm('Собрать все названия товаров из накладных и смен и добавить в "База товаров — Дерево"?')) return;
+  var existing = getRefBook('iz_goods_derevo');
+  var existingNames = {};
+  existing.forEach(function(g){ existingNames[(g.name||g).toLowerCase()]=true; });
+
+  var toAdd = [];
+  function tryAdd(name, goodsType){
+    if(!name || typeof name !=='string' || name.length<2) return;
+    if(goodsType==='dr') return; // skip DR items
+    var key = name.trim().toLowerCase();
+    if(!existingNames[key]){ existingNames[key]=true; toAdd.push(name.trim()); }
+  }
+
+  // From iz_items (catalog with articles)
+  var items = JSON.parse(localStorage.getItem('iz_items')||'[]');
+  items.forEach(function(it){ tryAdd(it.name, it.goodsType); });
+
+  // From iz_manual_invoices
+  var manInvs = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  manInvs.forEach(function(inv){
+    var gt = inv.goodsType||'derevo';
+    (inv.items||[]).forEach(function(it){ tryAdd(it.name, gt); });
+  });
+
+  // From iz_invoices (workshop)
+  var wsInvs = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  wsInvs.forEach(function(inv){
+    (inv.items||[]).forEach(function(it){ tryAdd(it.name, inv.goodsType||'derevo'); });
+    (inv.acceptedItems||[]).forEach(function(it){ tryAdd(it.name, inv.goodsType||'derevo'); });
+  });
+
+  // From iz_shifts journal items
+  var shifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+  shifts.forEach(function(sh){
+    (sh.journal||[]).forEach(function(e){
+      (e.items||[]).forEach(function(it){ tryAdd(it.name, it.goodsType||e.goodsType||'derevo'); });
+    });
+  });
+
+  if(!toAdd.length){
+    showToast('Нет новых товаров для добавления');
+    return;
+  }
+
+  var merged = existing.concat(toAdd.map(function(n){ return {name:n}; }));
+  saveRefBookShop('iz_goods_derevo', merged);
+  showToast('✅ Добавлено '+toAdd.length+' товаров в базу Дерево');
+  try{ renderRefbookSections(); }catch(e){}
+}
+
+function runGlobalNameFix(){
+  if(!confirm('Исправить регистр названий товаров во всех сменах, накладных и позициях? Это займёт несколько секунд.')) return;
+  var fixed = 0;
+
+  // 1. Fix iz_shifts journal items
+  var shifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+  shifts.forEach(function(sh){
+    var changed = false;
+    (sh.journal||[]).forEach(function(e){
+      (e.items||[]).forEach(function(it){
+        var newName = fixItemName(it.name);
+        if(newName !== it.name){ it.name = newName; changed = true; fixed++; }
+      });
+      // Fix label/sub for receive entries
+      if(e.type==='receive'){
+        var newSub = fixItemName(e.sub);
+        if(newSub !== e.sub){ e.sub = newSub; changed = true; }
+      }
+    });
+    (sh.goodsReceives||[]).forEach(function(r){
+      var newName = fixItemName(r.name);
+      if(newName !== r.name){ r.name = newName; changed = true; fixed++; }
+    });
+    (sh.drGoodsReceives||[]).forEach(function(r){
+      var newName = fixItemName(r.name);
+      if(newName !== r.name){ r.name = newName; changed = true; fixed++; }
+    });
+    if(changed){
+      // Save to Firestore
+      try{ db.collection('iz_shifts').doc(sh.id||sh._id).set(sh, {merge:true}); }catch(e){}
+    }
+  });
+  localStorage.setItem('iz_shifts', JSON.stringify(shifts));
+
+  // 2. Fix iz_manual_invoices items
+  var manInvs = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  manInvs.forEach(function(inv){
+    var changed = false;
+    (inv.items||[]).forEach(function(it){
+      var newName = fixItemName(it.name);
+      if(newName !== it.name){ it.name = newName; changed = true; fixed++; }
+    });
+    if(changed){
+      try{ db.collection('iz_manual_invoices').doc(inv.id||inv._id).set(inv, {merge:true}); }catch(e){}
+    }
+  });
+  localStorage.setItem('iz_manual_invoices', JSON.stringify(manInvs));
+
+  // 3. Fix iz_invoices items
+  var invs = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  invs.forEach(function(inv){
+    var changed = false;
+    (inv.items||[]).forEach(function(it){
+      var newName = fixItemName(it.name);
+      if(newName !== it.name){ it.name = newName; changed = true; fixed++; }
+    });
+    (inv.acceptedItems||[]).forEach(function(it){
+      var newName = fixItemName(it.name);
+      if(newName !== it.name){ it.name = newName; changed = true; fixed++; }
+    });
+    if(changed){
+      try{ db.collection('iz_invoices').doc(inv.id||inv._id).set(inv, {merge:true}); }catch(e){}
+    }
+  });
+  localStorage.setItem('iz_invoices', JSON.stringify(invs));
+
+  // 4. Fix iz_items catalog
+  var items = JSON.parse(localStorage.getItem('iz_items')||'[]');
+  items.forEach(function(it){
+    var newName = fixItemName(it.name);
+    if(newName !== it.name){ it.name = newName; fixed++; }
+  });
+  localStorage.setItem('iz_items', JSON.stringify(items));
+
+  // 5. Fix iz_stock
+  var stock = JSON.parse(localStorage.getItem('iz_stock')||'{}');
+  Object.keys(stock).forEach(function(sn){
+    Object.keys(stock[sn]||{}).forEach(function(key){
+      var it = stock[sn][key];
+      var newName = fixItemName(it.name);
+      if(newName !== it.name){ it.name = newName; fixed++; }
+    });
+  });
+  localStorage.setItem('iz_stock', JSON.stringify(stock));
+
+  showToast('✅ Исправлено: '+fixed+' названий. Синхронизация...');
+  setTimeout(function(){ showToast('✅ Готово! Обновите страницу.'); }, 3000);
+}
+// ════ END GLOBAL NAME FIX ════
 
 // ════════════════════════════════════════
 // ADMIN RECEIVES / WRITEOFFS PAGE
