@@ -1976,7 +1976,24 @@ function syncListen(lsKey) {
     if(!snap.exists) return;
     var val = snap.data()[m.field];
     if(val !== undefined) {
-      localStorage.setItem(lsKey, JSON.stringify(val));
+      // Skip overwrite if we just saved this key locally in the last 5 seconds
+      var lastSave = _syncSaveGuard[lsKey]||0;
+      var justSaved = (Date.now() - lastSave) < 30000;
+      if(!justSaved){
+        // Apply tombstone filter before writing remote data
+        var shopRefbookKeys2 = ['iz_payment_methods','iz_suppliers','iz_goods','iz_goods_derevo','iz_goods_dr','iz_materials','iz_dr_species','iz_work_schedules'];
+        var valToWrite = val;
+        if(shopRefbookKeys2.indexOf(lsKey)>=0 && Array.isArray(val)){
+          var tombKey2 = lsKey+'_deleted';
+          var tombs2 = JSON.parse(localStorage.getItem(tombKey2)||'[]');
+          if(tombs2.length){
+            valToWrite = val.filter(function(item){
+              return tombs2.indexOf((item.name||item||'').toLowerCase().trim())<0;
+            });
+          }
+        }
+        localStorage.setItem(lsKey, JSON.stringify(valToWrite));
+      }
       if(lsKey === 'iz_admin_shops' || lsKey === 'iz_sellers') { try { pick(loginRole); } catch(e){} }
       if(lsKey === 'iz_admin_shops'){
         try{ renderShopsManage(); }catch(e){}
@@ -1989,21 +2006,8 @@ function syncListen(lsKey) {
         try{ renderShopSettings(); }catch(e){}
         try{ if(session && document.getElementById('mainStatusBar')) renderStatusBar(); }catch(e){}
       }
-      // Generic shared refbooks live-refresh
       var shopRefbookKeys = ['iz_payment_methods','iz_suppliers','iz_goods','iz_goods_derevo','iz_goods_dr','iz_materials','iz_dr_species','iz_work_schedules'];
       if(shopRefbookKeys.indexOf(lsKey)>=0){
-        // Filter out locally-deleted items before applying remote snapshot
-        var tombKey2 = lsKey+'_deleted';
-        var tombs2 = JSON.parse(localStorage.getItem(tombKey2)||'[]');
-        if(tombs2.length && Array.isArray(val)){
-          var filtered2 = val.filter(function(item){
-            var n=(item.name||item||'').toLowerCase().trim();
-            return tombs2.indexOf(n)<0;
-          });
-          if(filtered2.length !== val.length){
-            localStorage.setItem(lsKey, JSON.stringify(filtered2));
-          }
-        }
         var book = SHOP_REFBOOKS.find(function(b){ return b.key===lsKey; });
         if(book){
           try{ renderRefbookItemsShop(book.id, book.key); updateRefbookCountShop(book.id, book.key); }catch(e){}
@@ -2012,9 +2016,12 @@ function syncListen(lsKey) {
     }
   }, function(e){ console.log('syncListen err', lsKey, e.code||e); });
 }
+var _syncSaveGuard = {}; // lsKey -> timestamp of last local save
+
 function syncSave(lsKey, data) {
   localStorage.setItem(lsKey, JSON.stringify(data));
   var m = SYNC_SETTINGS[lsKey]; if(!m) return;
+  _syncSaveGuard[lsKey] = Date.now(); // mark as just saved locally
   var obj = {}; obj[m.field] = data; obj.updatedAt = new Date().toISOString();
   db.collection('iz_settings').doc(m.doc).set(obj, {merge:true}).catch(function(e){ console.log('syncSave err', lsKey, e.code||e); });
 }
@@ -9733,6 +9740,11 @@ function getRefBook(key){
 function saveRefBookShop(key, data){
   localStorage.setItem(key, JSON.stringify(data));
   syncSave(key, data);
+  // Immediately re-render the refbook section to confirm the save visually
+  var book = SHOP_REFBOOKS.find(function(b){ return b.key===key; });
+  if(book){
+    try{ renderRefbookItemsShop(book.id, book.key); updateRefbookCountShop(book.id, book.key); }catch(e){}
+  }
 }
 function renderRefbookSections(){
   var c = document.getElementById('refbookSections'); if(!c) return;
