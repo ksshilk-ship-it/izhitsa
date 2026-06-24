@@ -609,41 +609,49 @@ function checkForAppUpdate() {
   <!-- STOCK PAGE -->
   <div class="page" id="pg-stock">
     <div class="stitle" id="stockPageTitle">Склад</div>
-    <div style="margin-bottom:10px">
-      <input class="fi" id="stockSearch" placeholder="🔍 Поиск по артикулу, названию, породе..." oninput="renderStockPage()" style="margin-bottom:8px">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
-        <select class="fs" id="stockFilterType" onchange="renderStockPage()" style="flex:1;margin:0;min-width:100px">
-          <option value="">Все типы</option>
-          <option value="derevo">🌳 Дерево</option>
-          <option value="dr">🛍 ДР Товар</option>
-        </select>
-        <select class="fs" id="stockFilterShop" onchange="renderStockPage()" style="flex:1;margin:0;min-width:100px;display:none">
-          <option value="">Все магазины</option>
-        </select>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
-        <input class="fi" id="stockFilterSpecies" placeholder="Порода / состав / вкус" oninput="renderStockPage()" style="flex:1;margin:0">
-        <select class="fs" id="stockFilterSize" onchange="renderStockPage()" style="flex:1;margin:0;min-width:80px">
-          <option value="">Все размеры</option>
-        </select>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
-        <div style="flex:1">
-          <label class="fl" style="font-size:10px;color:#8888aa;margin-bottom:2px">Приход с</label>
-          <input class="fi" type="date" id="stockFilterFrom" style="-webkit-appearance:none;color-scheme:dark;margin:0" oninput="renderStockPage()">
-        </div>
-        <div style="flex:1">
-          <label class="fl" style="font-size:10px;color:#8888aa;margin-bottom:2px">Приход по</label>
-          <input class="fi" type="date" id="stockFilterTo" style="-webkit-appearance:none;color-scheme:dark;margin:0" oninput="renderStockPage()">
-        </div>
-      </div>
-      <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
-        <button type="button" onclick="clearStockFilters()" style="padding:6px 12px;background:#22222e;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:11px;cursor:pointer">Сбросить</button>
-        <div id="stockFilterCount" style="font-size:11px;color:#8888aa"></div>
-        <button type="button" onclick="rebuildStock(true)" style="padding:6px 12px;background:#22222e;border:1px solid #2e2e3e;border-radius:8px;color:#c8f060;font-size:11px;cursor:pointer;margin-left:auto">🔄 Пересчитать</button>
-      </div>
+
+    <!-- Mode: Наличие / Архив -->
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button type="button" id="stockModeAvail" onpointerdown="event.preventDefault();setStockMode('avail')" style="flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:13px;font-weight:700;cursor:pointer">📦 Наличие</button>
+      <button type="button" id="stockModeArchive" onpointerdown="event.preventDefault();setStockMode('archive')" style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:13px;font-weight:700;cursor:pointer">🗂 Архив</button>
     </div>
+
+    <!-- Shop selector (admin only) -->
+    <div id="stockShopRow" style="display:none;margin-bottom:8px">
+      <select class="fs" id="stockFilterShop" onchange="renderStockPage()" style="margin:0">
+        <option value="">Все магазины</option>
+      </select>
+    </div>
+
+    <!-- Filter selector -->
+    <div style="margin-bottom:8px">
+      <select class="fs" id="stockFilterBy" onchange="stockOnFilterChange()" style="margin:0">
+        <option value="">— Выбрать фильтр —</option>
+        <option value="article">По артикулу</option>
+        <option value="name">По наименованию</option>
+        <option value="species">По породе / составу</option>
+        <option value="type">По типу товара</option>
+      </select>
+    </div>
+
+    <!-- Dynamic filter input -->
+    <div id="stockFilterInput" style="margin-bottom:8px;display:none">
+      <!-- filled by stockOnFilterChange() -->
+    </div>
+
+    <!-- Active filters chips -->
+    <div id="stockActiveFilters" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"></div>
+
+    <!-- Actions row -->
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
+      <button type="button" onclick="clearStockFilters()" style="padding:6px 12px;background:#22222e;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:11px;cursor:pointer">Сбросить</button>
+      <div id="stockFilterCount" style="font-size:11px;color:#8888aa;flex:1"></div>
+      <button type="button" onclick="rebuildStock(true)" style="padding:6px 12px;background:#22222e;border:1px solid #2e2e3e;border-radius:8px;color:#c8f060;font-size:11px;cursor:pointer">🔄 Пересчитать</button>
+    </div>
+
+    <!-- Summary -->
     <div id="stockSummary" style="margin-bottom:10px"></div>
+    <!-- List -->
     <div id="stockList"></div>
   </div>
 
@@ -14682,71 +14690,146 @@ function stockDiagnostic(){
   }catch(e){ alert('catch: '+e.message); }
 }
 
+var _stockMode = 'avail'; // 'avail' | 'archive'
+var _stockFilters = {}; // {article, name, species, type, shop}
+
+function setStockMode(mode){
+  _stockMode = mode;
+  var btnA = document.getElementById('stockModeAvail');
+  var btnAr = document.getElementById('stockModeArchive');
+  if(btnA){ btnA.style.borderColor=mode==='avail'?'#c8f060':'#2e2e3e'; btnA.style.background=mode==='avail'?'#1e2a14':'#22222e'; btnA.style.color=mode==='avail'?'#c8f060':'#8888aa'; btnA.style.borderWidth=mode==='avail'?'2px':'1px'; }
+  if(btnAr){ btnAr.style.borderColor=mode==='archive'?'#f0a060':'#2e2e3e'; btnAr.style.background=mode==='archive'?'#2a1e10':'#22222e'; btnAr.style.color=mode==='archive'?'#f0a060':'#8888aa'; btnAr.style.borderWidth=mode==='archive'?'2px':'1px'; }
+  renderStockPage();
+}
+
+function stockOnFilterChange(){
+  var sel = document.getElementById('stockFilterBy');
+  var filterBy = sel ? sel.value : '';
+  var container = document.getElementById('stockFilterInput');
+  if(!container) return;
+  if(!filterBy){ container.style.display='none'; container.innerHTML=''; return; }
+  container.style.display='block';
+
+  if(filterBy==='article'){
+    container.innerHTML='<input class="fi" id="stockInputArticle" placeholder="Введите артикул..." oninput="stockApplyFilter()" style="margin:0">';
+    setTimeout(function(){ var el=document.getElementById('stockInputArticle'); if(el) el.focus(); },100);
+
+  } else if(filterBy==='name'){
+    var items = _stockGetAllItems();
+    var names = [];
+    var seen = {};
+    items.forEach(function(it){ var n=it.name||''; if(n&&!seen[n]){ seen[n]=true; names.push(n); } });
+    names.sort(function(a,b){ return a.localeCompare(b,'ru'); });
+    container.innerHTML='<select class="fs" id="stockInputName" onchange="stockApplyFilter()" style="margin:0"><option value="">— Все наименования —</option>'+
+      names.map(function(n){ return '<option value="'+n+'">'+n+'</option>'; }).join('')+'</select>';
+
+  } else if(filterBy==='species'){
+    var items2 = _stockGetAllItems();
+    var specs = [];
+    var seen2 = {};
+    items2.forEach(function(it){ var s=it.species||''; if(s&&!seen2[s]){ seen2[s]=true; specs.push(s); } });
+    // Also add from iz_species refbook
+    getSpecies().forEach(function(s){ var n=typeof s==='string'?s:(s.name||''); if(n&&!seen2[n]){ seen2[n]=true; specs.push(n); } });
+    specs.sort(function(a,b){ return a.localeCompare(b,'ru'); });
+    container.innerHTML='<select class="fs" id="stockInputSpecies" onchange="stockApplyFilter()" style="margin:0"><option value="">— Все породы/составы —</option>'+
+      specs.map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('')+'</select>';
+
+  } else if(filterBy==='type'){
+    container.innerHTML='<select class="fs" id="stockInputType" onchange="stockApplyFilter()" style="margin:0">'+
+      '<option value="">— Все типы —</option>'+
+      '<option value="derevo">🌳 Дерево</option>'+
+      '<option value="dr">🛍 ДР Товар</option>'+
+    '</select>';
+  }
+}
+
+function stockApplyFilter(){
+  var filterBy = (document.getElementById('stockFilterBy')||{}).value||'';
+  _stockFilters = {};
+  if(filterBy==='article'){ _stockFilters.article = ((document.getElementById('stockInputArticle')||{}).value||'').trim().toLowerCase(); }
+  else if(filterBy==='name'){ _stockFilters.name = (document.getElementById('stockInputName')||{}).value||''; }
+  else if(filterBy==='species'){ _stockFilters.species = (document.getElementById('stockInputSpecies')||{}).value||''; }
+  else if(filterBy==='type'){ _stockFilters.type = (document.getElementById('stockInputType')||{}).value||''; }
+  renderStockPage();
+}
+
+function _stockGetAllItems(){
+  var isAdmin=session&&session.role==='shopadmin';
+  var stock=getStock();
+  var filterShop=(document.getElementById('stockFilterShop')||{}).value||'';
+  var shopsToShow=isAdmin?Object.keys(stock):(session&&session.shopName?[session.shopName]:[]);
+  if(filterShop) shopsToShow=[filterShop];
+  var rows=[];
+  shopsToShow.forEach(function(sn){
+    var ss=stock[sn]||{};
+    Object.keys(ss).forEach(function(key){ rows.push(Object.assign({},ss[key],{_shop:sn})); });
+  });
+  return rows;
+}
+
 function initStockPage(){
   var isAdmin=session&&session.role==='shopadmin';
+  var shopRow=document.getElementById('stockShopRow');
   var shopSel=document.getElementById('stockFilterShop');
   var titleEl=document.getElementById('stockPageTitle');
   if(isAdmin){
+    if(shopRow) shopRow.style.display='block';
     if(shopSel){
-      shopSel.style.display='';
-      var shops=getShopNames();
       shopSel.innerHTML='<option value="">Все магазины</option>'+
-        shops.map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('');
+        getShopNames().map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('');
     }
     if(titleEl) titleEl.textContent='Склад (все магазины)';
   } else {
-    if(shopSel) shopSel.style.display='none';
+    if(shopRow) shopRow.style.display='none';
     if(titleEl) titleEl.textContent='Склад · '+(session&&session.shopName||'');
   }
-  var sizeSel=document.getElementById('stockFilterSize');
-  if(sizeSel){
-    var sizes=getRefBook('iz_sizes')||[];
-    sizeSel.innerHTML='<option value="">Все размеры</option>'+
-      sizes.map(function(s){ var n=(s&&s.name)||s; return '<option value="'+n+'">'+n+'</option>'; }).join('');
-  }
-  renderStockPage();
+  _stockMode='avail';
+  _stockFilters={};
+  var sel=document.getElementById('stockFilterBy'); if(sel) sel.selectedIndex=0;
+  var inp=document.getElementById('stockFilterInput'); if(inp){ inp.style.display='none'; inp.innerHTML=''; }
+  setStockMode('avail');
 }
 
 function renderStockPage(){
   var isAdmin=session&&session.role==='shopadmin';
-  var stock=getStock();
-  var filterShop=(document.getElementById('stockFilterShop')||{}).value||'';
-  var filterType=(document.getElementById('stockFilterType')||{}).value||'';
-  var filterSpecies=((document.getElementById('stockFilterSpecies')||{}).value||'').trim().toLowerCase();
-  var filterSize=(document.getElementById('stockFilterSize')||{}).value||'';
-  var filterFrom=(document.getElementById('stockFilterFrom')||{}).value||'';
-  var filterTo=(document.getElementById('stockFilterTo')||{}).value||'';
-  var search=((document.getElementById('stockSearch')||{}).value||'').trim().toLowerCase();
+  var rows=_stockGetAllItems();
+  var f=_stockFilters;
 
-  var rows=[];
-  var shopsToShow=isAdmin?Object.keys(stock):(session&&session.shopName?[session.shopName]:[]);
-  if(isAdmin&&filterShop) shopsToShow=[filterShop];
-
-  shopsToShow.forEach(function(sn){
-    var ss=stock[sn]||{};
-    Object.keys(ss).forEach(function(key){
-      rows.push(Object.assign({},ss[key],{_shop:sn}));
-    });
+  // Mode filter: avail = qty>0, archive = qty===0
+  var modeFiltered=rows.filter(function(it){
+    if(_stockMode==='avail') return (it.qty||0)>0;
+    return (it.qty||0)===0;
   });
 
-  var filtered=rows.filter(function(it){
-    if(filterType&&it.goodsType!==filterType) return false;
-    if(filterSpecies&&(it.species||'').toLowerCase().indexOf(filterSpecies)<0) return false;
-    if(filterSize&&it.size&&it.size!==filterSize) return false;
-    if(filterFrom&&it.lastReceived&&it.lastReceived<filterFrom) return false;
-    if(filterTo&&it.lastReceived&&it.lastReceived>filterTo) return false;
-    if(search){
-      var hay=[it.num,it.name,it.species,it.size,it._shop].join(' ').toLowerCase();
-      if(hay.indexOf(search)<0) return false;
-    }
+  // Apply active filters
+  var filtered=modeFiltered.filter(function(it){
+    if(f.article && (it.num||'').toLowerCase().indexOf(f.article)<0) return false;
+    if(f.name && (it.name||'')!==f.name) return false;
+    if(f.species && (it.species||'')!==f.species) return false;
+    if(f.type && it.goodsType!==f.type) return false;
     return true;
   });
 
+  // Sort
   filtered.sort(function(a,b){
     var rd=(b.lastReceived||'').localeCompare(a.lastReceived||'');
-    return rd!==0?rd:(a.name||'').localeCompare(b.name||'');
+    return rd!==0?rd:(a.name||'').localeCompare(b.name||'','ru');
   });
 
+  // Active filter chips
+  var chipsEl=document.getElementById('stockActiveFilters');
+  if(chipsEl){
+    var chips=[];
+    if(f.article) chips.push('Арт: '+f.article);
+    if(f.name) chips.push('Товар: '+f.name);
+    if(f.species) chips.push('Порода: '+f.species);
+    if(f.type) chips.push(f.type==='dr'?'🛍 ДР Товар':'🌳 Дерево');
+    chipsEl.innerHTML=chips.map(function(c){
+      return '<div style="padding:4px 10px;background:#1e2a14;border:1px solid #c8f060;border-radius:20px;font-size:11px;color:#c8f060">'+c+'</div>';
+    }).join('');
+  }
+
+  // Summary
   var sumEl=document.getElementById('stockSummary');
   if(sumEl){
     var woodQty=0,drQty=0,totalAmt=0;
@@ -14755,20 +14838,22 @@ function renderStockPage(){
       if(it.goodsType==='dr') drQty+=q; else woodQty+=q;
       totalAmt+=q*(it.price||0);
     });
+    var modeLabel=_stockMode==='avail'?'в наличии':'в архиве';
     sumEl.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">'+
-      '<div style="background:#1a2e1e;border:1px solid #2e4e2e;border-radius:10px;padding:8px 12px;flex:1;min-width:80px">'+
+      '<div style="background:#1a2e1e;border:1px solid #2e4e2e;border-radius:10px;padding:8px 12px;flex:1;min-width:70px">'+
         '<div style="font-size:10px;color:#8888aa">🌳 Дерево</div>'+
         '<div style="font-size:16px;font-weight:700;color:#c8f060">'+woodQty+' шт.</div>'+
       '</div>'+
-      '<div style="background:#1e1a2e;border:1px solid #3e2e4e;border-radius:10px;padding:8px 12px;flex:1;min-width:80px">'+
-        '<div style="font-size:10px;color:#8888aa">🛍 ДР Товар</div>'+
+      '<div style="background:#1e1a2e;border:1px solid #3e2e4e;border-radius:10px;padding:8px 12px;flex:1;min-width:70px">'+
+        '<div style="font-size:10px;color:#8888aa">🛍 ДР</div>'+
         '<div style="font-size:16px;font-weight:700;color:#a060f0">'+drQty+' шт.</div>'+
       '</div>'+
-      '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:8px 12px;flex:1;min-width:80px">'+
+      '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:8px 12px;flex:1;min-width:70px">'+
         '<div style="font-size:10px;color:#8888aa">💰 Сумма</div>'+
-        '<div style="font-size:14px;font-weight:700;color:#f0f0f8">'+Math.round(totalAmt).toLocaleString('ru-RU')+'₽</div>'+
+        '<div style="font-size:13px;font-weight:700;color:#f0f0f8">'+Math.round(totalAmt).toLocaleString('ru-RU')+'₽</div>'+
       '</div>'+
-    '</div>';
+    '</div>'+
+    '<div style="font-size:10px;color:#8888aa">'+filtered.length+' позиций '+modeLabel+'</div>';
   }
 
   var countEl=document.getElementById('stockFilterCount');
@@ -14777,37 +14862,34 @@ function renderStockPage(){
   var listEl=document.getElementById('stockList');
   if(!listEl) return;
   if(!filtered.length){
-    // Show diagnostic button if no items and no filters active
-    var noFilter=!search&&!filterType&&!filterSpecies&&!filterSize&&!filterFrom&&!filterTo&&!filterShop;
-    listEl.innerHTML='<div class="empty"><div class="ei">📦</div>'+
-      (noFilter?'Нет данных · нажмите<br><b>🔄 Пересчитать</b>':'Нет товаров по фильтрам')+
-      '</div>'+
-      (noFilter?'<div style="text-align:center;margin-top:8px"><button type="button" onclick="stockDiagnostic()" style="padding:6px 14px;background:#22222e;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:11px;cursor:pointer">🔍 Диагностика</button></div>':'');
+    var isEmpty=Object.keys(f).every(function(k){ return !f[k]; });
+    listEl.innerHTML='<div class="empty"><div class="ei">'+(_stockMode==='avail'?'📦':'🗂')+'</div>'+
+      (_stockMode==='avail'?'Нет товаров в наличии':'Нет товаров в архиве')+
+      (isEmpty?'<br><small>Нажмите 🔄 Пересчитать</small>':'<br>по выбранным фильтрам')+'</div>';
     return;
   }
 
   listEl.innerHTML=filtered.map(function(it){
     var gtColor=it.goodsType==='dr'?'#a060f0':'#c8f060';
     var gtLabel=it.goodsType==='dr'?'ДР':'🌳';
-    var qtyColor=it.qty>0?'#f0f0f8':'#f06060';
+    var qtyColor=_stockMode==='avail'?(it.qty>5?'#c8f060':it.qty>0?'#f0c060':'#f06060'):'#8888aa';
     var dateStr=it.lastReceived?'приход: '+it.lastReceived:'';
-    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:8px">'+
+    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:11px 12px;margin-bottom:7px">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
         '<div style="flex:1">'+
           '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'+
-            '<span style="font-size:11px;font-weight:700;color:'+gtColor+';background:'+gtColor+'22;padding:2px 6px;border-radius:6px">'+gtLabel+'</span>'+
-            (it.num?'<span style="font-size:12px;font-weight:700;color:#8888aa">№'+it.num+'</span>':'')+
-            (isAdmin?'<span style="font-size:10px;color:#606080;margin-left:2px">'+it._shop+'</span>':'')+
+            '<span style="font-size:10px;font-weight:700;color:'+gtColor+';background:'+gtColor+'18;padding:2px 6px;border-radius:6px">'+gtLabel+'</span>'+
+            (it.num?'<span style="font-size:11px;font-weight:700;color:#8888aa">№'+it.num+'</span>':'')+
+            (isAdmin?'<span style="font-size:10px;color:#606080">· '+it._shop+'</span>':'')+
           '</div>'+
-          '<div style="font-size:14px;font-weight:700;margin-bottom:2px">'+it.name+'</div>'+
-          (it.species?'<div style="font-size:12px;color:#8888aa">'+it.species+(it.size?' · '+it.size:'')+'</div>':
-            (it.size?'<div style="font-size:12px;color:#8888aa">'+it.size+'</div>':''))+
+          '<div style="font-size:14px;font-weight:700;margin-bottom:1px">'+it.name+'</div>'+
+          (it.species?'<div style="font-size:11px;color:#8888aa">'+it.species+(it.size?' · '+it.size:'')+'</div>':'')+
           (dateStr?'<div style="font-size:10px;color:#606080;margin-top:2px">'+dateStr+'</div>':'')+
         '</div>'+
         '<div style="text-align:right;flex-shrink:0;padding-left:10px">'+
-          '<div style="font-size:20px;font-weight:700;color:'+qtyColor+'">'+it.qty+'</div>'+
-          '<div style="font-size:10px;color:#8888aa">шт.</div>'+
-          '<div style="font-size:12px;font-weight:600;color:#c8a060;margin-top:2px">'+Math.round((it.qty||0)*(it.price||0)).toLocaleString('ru-RU')+'₽</div>'+
+          '<div style="font-size:22px;font-weight:700;color:'+qtyColor+'">'+it.qty+'</div>'+
+          '<div style="font-size:9px;color:#8888aa">шт.</div>'+
+          '<div style="font-size:11px;font-weight:600;color:#c8a060;margin-top:1px">'+Math.round((it.qty||0)*(it.price||0)).toLocaleString('ru-RU')+'₽</div>'+
         '</div>'+
       '</div>'+
     '</div>';
@@ -14815,12 +14897,10 @@ function renderStockPage(){
 }
 
 function clearStockFilters(){
-  ['stockSearch','stockFilterSpecies','stockFilterFrom','stockFilterTo'].forEach(function(id){
-    var el=document.getElementById(id); if(el) el.value='';
-  });
-  ['stockFilterType','stockFilterShop','stockFilterSize'].forEach(function(id){
-    var el=document.getElementById(id); if(el) el.selectedIndex=0;
-  });
+  _stockFilters={};
+  var sel=document.getElementById('stockFilterBy'); if(sel) sel.selectedIndex=0;
+  var inp=document.getElementById('stockFilterInput'); if(inp){ inp.style.display='none'; inp.innerHTML=''; }
+  var chips=document.getElementById('stockActiveFilters'); if(chips) chips.innerHTML='';
   renderStockPage();
 }
 
