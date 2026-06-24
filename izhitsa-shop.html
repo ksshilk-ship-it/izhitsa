@@ -14482,7 +14482,7 @@ function stockUpdateQty(shopName,num,name,price,species,goodsType,size,qtyDelta,
   if(!stock[shopName]) stock[shopName]={};
   var key=String(num);
   if(!stock[shopName][key]){
-    stock[shopName][key]={num:key,name:name||'',price:price||0,species:species||'',goodsType:goodsType||'derevo',size:size||'',qty:0,lastReceived:''};
+    stock[shopName][key]={num:key,name:name||'',price:price||0,species:species||'',goodsType:goodsType||'derevo',size:size||'',qty:0,lastReceived:'',lastSold:''};
   }
   var entry=stock[shopName][key];
   if(name) entry.name=name;
@@ -14490,8 +14490,12 @@ function stockUpdateQty(shopName,num,name,price,species,goodsType,size,qtyDelta,
   if(species) entry.species=species;
   if(goodsType) entry.goodsType=goodsType;
   if(size) entry.size=size;
-  entry.qty=Math.max(0,(entry.qty||0)+qtyDelta);
+  var prevQty = entry.qty||0;
+  entry.qty=Math.max(0,prevQty+qtyDelta);
   if(qtyDelta>0) entry.lastReceived=date||new Date().toISOString().split('T')[0];
+  if(qtyDelta<0 && entry.qty===0){
+    entry.lastSold=date||new Date().toISOString().split('T')[0];
+  }
   saveStock(stock);
 }
 
@@ -14590,12 +14594,15 @@ function rebuildStock(showMsg){
     var shJ=sh.journal||[];
     shJ.forEach(function(e){
       if(e.type==='sale'){
+        var saleDate=e.ts?e.ts.split('T')[0]:(sh.date||'');
         (e.items||[]).forEach(function(it){
           var artNum=it.article||it.num||it.artNum||it.art;
           if(!artNum) return;
           var key=String(artNum);
           if(!stock[sn][key]) return;
-          stock[sn][key].qty=Math.max(0,(stock[sn][key].qty||0)-(it.qty||1));
+          var prev=stock[sn][key].qty||0;
+          stock[sn][key].qty=Math.max(0,prev-(it.qty||1));
+          if(stock[sn][key].qty===0 && saleDate>(stock[sn][key].lastSold||'')) stock[sn][key].lastSold=saleDate;
         });
       } else if(e.type==='receive'){
         // Only count receive entries NOT linked to an already-counted invoice
@@ -15024,9 +15031,13 @@ function renderStockPage(){
           (dateStr?'<div style="font-size:10px;color:#606080;margin-top:2px">'+dateStr+'</div>':'')+
         '</div>'+
         '<div style="text-align:right;flex-shrink:0;padding-left:10px">'+
-          '<div style="font-size:22px;font-weight:700;color:'+qtyColor+'">'+it.qty+'</div>'+
-          '<div style="font-size:9px;color:#8888aa">шт.</div>'+
-          '<div style="font-size:11px;font-weight:600;color:#c8a060;margin-top:1px">'+(it.qty>0?Math.round(it.qty*it.price).toLocaleString('ru-RU')+'₽':Math.round(it.price||0).toLocaleString('ru-RU')+'₽/шт')+'</div>'+
+          (it.qty===0 && _stockMode==='archive'
+            ? '<div style="font-size:11px;font-weight:700;color:#60f090;background:#1a2e1e;border-radius:8px;padding:4px 8px;margin-bottom:2px">✓ Продано</div>'+
+              (it.lastSold?'<div style="font-size:10px;color:#8888aa">'+it.lastSold+'</div>':'')
+            : '<div style="font-size:22px;font-weight:700;color:'+qtyColor+'">'+it.qty+'</div>'+
+              '<div style="font-size:9px;color:#8888aa">шт.</div>'
+          )+
+          '<div style="font-size:11px;font-weight:600;color:#c8a060;margin-top:3px">'+(it.qty>0?Math.round(it.qty*(it.price||0)).toLocaleString('ru-RU')+'₽':Math.round(it.price||0).toLocaleString('ru-RU')+'₽/шт')+'</div>'+
         '</div>'+
       '</div>'+
     '</div>';
