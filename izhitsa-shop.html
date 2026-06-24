@@ -1087,7 +1087,7 @@ function checkForAppUpdate() {
     <div class="stitle">⚙️ Настройки</div>
     <div style="margin-bottom:12px">
       <button type="button" onclick="rebuildGoodsDerevoFromHistory()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #60c8f055;background:#1a2e2e;color:#60c8f0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">📦 Собрать товары из истории в базу Дерево</button>
-      <button type="button" onclick="runGlobalNameFix()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #c8f06055;background:#1e2a14;color:#c8f060;font-size:13px;font-weight:700;cursor:pointer">🔤 Исправить регистр названий товаров</button>
+
     </div>
 
     <!-- ZP SETTINGS per shop -->
@@ -12435,6 +12435,27 @@ function switchInvTab(tab) {
   if(tab === 'manual') { initManualInvoice(); }
 }
 
+function generateManInvNum(){
+  var now = new Date();
+  var dd = String(now.getDate()).padStart(2,'0');
+  var mm = String(now.getMonth()+1).padStart(2,'0');
+  var yyyy = now.getFullYear();
+  var shopName = (session && session.shopName) || '';
+  // Abbreviate shop name for number
+  var shopShort = shopName.replace(/\s+/g,'').slice(0,8);
+  // Count invoices this month
+  var existing = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var monthKey = yyyy+'-'+mm;
+  var monthInvs = existing.filter(function(inv){
+    if(!inv.num) return false;
+    // Match invoices from this month (contain /mm.yyyy/ or date field)
+    var invDate = inv.date||'';
+    return invDate.indexOf(monthKey)===0;
+  });
+  var n = String(monthInvs.length + 1).padStart(3,'0');
+  return n+'/'+dd+'.'+mm+'.'+yyyy+'/'+(shopShort||'Магазин');
+}
+
 function initManualInvoice() {
   var hadInMemory = _manInvItems.length>0;
   var restored = false;
@@ -12445,12 +12466,7 @@ function initManualInvoice() {
   if(dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split('T')[0];
   var numEl = document.getElementById('manInvNum');
   if(numEl && !numEl.value) {
-    var existing = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-    var year = String(new Date().getFullYear()).slice(2);
-    var yearInvs = existing.filter(function(inv){
-      return inv.num && inv.num.indexOf('.'+year) >= 0;
-    });
-    numEl.value = 'НАК-' + String(yearInvs.length + 1).padStart(3,'0') + '.' + year;
+    numEl.value = generateManInvNum();
   }
   renderManInvItems(); updateManInvTotal();
   var banner = document.getElementById('manInvDraftBanner');
@@ -12679,9 +12695,7 @@ function saveManualInvoice() {
   _manInvItems = [];
   var numEl = document.getElementById('manInvNum');
   if(numEl) {
-    var year = String(new Date().getFullYear()).slice(2);
-    var yearInvs = existing.filter(function(inv){ return inv.num && inv.num.indexOf('.'+year)>=0; });
-    numEl.value = 'НАК-' + String(yearInvs.length + 1).padStart(3,'0') + '.' + year;
+    numEl.value = generateManInvNum();
   }
   var fromEl = document.getElementById('manInvFrom'); if(fromEl) fromEl.value='';
   clearManInvDraft();
