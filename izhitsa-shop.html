@@ -591,6 +591,21 @@ function checkForAppUpdate() {
     </div>
   </div>
 
+  <!-- DUPLICATE ITEM WARNING BANNER -->
+  <div id="dupWarnBanner" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(200,0,0,0.97);flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center">
+    <div style="font-size:48px;margin-bottom:16px">⚠️</div>
+    <div style="font-size:18px;font-weight:900;color:#fff;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Вы пытаетесь внести товар,<br>который уже есть в базе!</div>
+    <div style="font-size:14px;color:#ffdddd;margin-bottom:16px">Вы написали:</div>
+    <div id="dupWarnEntered" style="font-size:20px;font-weight:700;color:#fff;background:rgba(0,0,0,0.3);border-radius:10px;padding:10px 20px;margin-bottom:16px"></div>
+    <div style="font-size:14px;color:#ffdddd;margin-bottom:8px">В базе уже есть:</div>
+    <div id="dupWarnExisting" style="font-size:22px;font-weight:900;color:#ffff00;background:rgba(0,0,0,0.3);border-radius:10px;padding:10px 20px;margin-bottom:24px"></div>
+    <div style="font-size:13px;color:#ffdddd;margin-bottom:24px">Используйте название из базы</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+      <button type="button" onclick="dupWarnUseExisting()" style="padding:14px 24px;border-radius:12px;border:none;background:#ffff00;color:#000;font-size:15px;font-weight:900;cursor:pointer">✓ Использовать из базы</button>
+      <button type="button" onclick="dupWarnDismiss()" style="padding:14px 24px;border-radius:12px;border:2px solid #fff;background:none;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Оставить моё</button>
+    </div>
+  </div>
+
   <!-- STOCK PAGE -->
   <div class="page" id="pg-stock">
     <div class="stitle" id="stockPageTitle">Склад</div>
@@ -1110,11 +1125,6 @@ function checkForAppUpdate() {
   <div class="page" id="pg-shopsettings">
     <div class="stitle">⚙️ Настройки</div>
     <div style="margin-bottom:12px">
-      <button type="button" onclick="renameAllInvoices()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #f0a06055;background:#2a1e10;color:#f0a060;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">🔢 Переименовать все накладные по новому формату</button>
-      <button type="button" onclick="startNameMatchReview()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #f0c06055;background:#2a2210;color:#f0c060;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">🔍 Проверить названия товаров (Дерево)</button>
-      <button type="button" onclick="_speciesMatchQueue_active=false;startSpeciesMatchReview()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #60f0c055;background:#102a22;color:#60f0c0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">🌲 Проверить породы дерева</button>
-      <button type="button" onclick="_drMatchQueue_active=false;_speciesMatchQueue_active=false;startDrMatchReview()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #a060f055;background:#1e102a;color:#a060f0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">🛍 Проверить ДР Товар</button>
-      <button type="button" onclick="rebuildGoodsDerevoFromHistory()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #60c8f055;background:#1a2e2e;color:#60c8f0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">📦 Собрать товары из истории в базу Дерево</button>
 
     </div>
 
@@ -1271,7 +1281,7 @@ function checkForAppUpdate() {
             <input class="fi" id="siName" placeholder="Название" autocomplete="off"
               oninput="checkItemDiff();psjSuggest('siName',getItemNames(_siItemGoodsType),'siPickName');siAutoDetectAndSetType(this.value)"
               onfocus="psjSuggest('siName',getItemNames(_siItemGoodsType),'siPickName')"
-              onblur="psjHideSugg('siName')">
+              onblur="psjHideSugg('siName');dupCheckField(this,_siItemGoodsType==='dr'?'iz_goods_dr':'iz_goods_derevo')">
             <button type="button" onclick="siAddToGoods('siName')" style="background:#22222e;border:1px solid #c8f060;border-radius:10px;padding:0 14px;color:#c8f060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
           </div>
           <div id="siName_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
@@ -1291,7 +1301,7 @@ function checkForAppUpdate() {
             <input class="fi" id="siSpecies" placeholder="Порода" autocomplete="off"
               oninput="psjSuggest('siSpecies',getSiSpeciesList(),'siPickSpecies')"
               onfocus="psjSuggest('siSpecies',getSiSpeciesList(),'siPickSpecies')"
-              onblur="psjHideSugg('siSpecies')">
+              onblur="psjHideSugg('siSpecies');dupCheckSpeciesField(this,_siItemGoodsType==='dr')">
             <button type="button" onclick="siAddToSpecies('siSpecies')" id="siSpeciesAddBtn" style="background:#22222e;border:1px solid #f0c060;border-radius:10px;padding:0 14px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
           </div>
           <div id="siSpecies_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
@@ -1320,7 +1330,7 @@ function checkForAppUpdate() {
             <input class="fi" id="siNameM" placeholder="Введите вручную" autocomplete="off"
               oninput="psjSuggest('siNameM',getItemNames(_siItemGoodsType),'siPickNameM');siAutoDetectAndSetType(this.value)"
               onfocus="psjSuggest('siNameM',getItemNames(_siItemGoodsType),'siPickNameM')"
-              onblur="psjHideSugg('siNameM')">
+              onblur="psjHideSugg('siNameM');dupCheckField(this,_siItemGoodsType==='dr'?'iz_goods_dr':'iz_goods_derevo')">
             <button type="button" onclick="siAddToGoods('siNameM')" style="background:#22222e;border:1px solid #c8f060;border-radius:10px;padding:0 14px;color:#c8f060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
           </div>
           <div id="siNameM_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
@@ -12617,7 +12627,7 @@ function renderManInvItems() {
           '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">НАИМЕНОВАНИЕ</div>'+
           '<div style="display:flex;gap:4px">'+
             '<input class="fi" list="'+dlId+'" value="'+item.name+'" placeholder="Название" '+
-              'oninput="_manInvName('+i+',this.value);siAutoDetectAndSetType(this.value)" style="margin:0;padding:8px;flex:1">'+
+              'oninput="_manInvName('+i+',this.value);siAutoDetectAndSetType(this.value)" onblur="_manInvNameBlurCheck(this)" style="margin:0;padding:8px;flex:1">'+
             '<button type="button" onclick="openAddItemModal(\'manInvName_'+i+'\',\'\',\'\')" '+
               'style="background:#c8f060;border:none;border-radius:8px;padding:6px 9px;font-weight:700;color:#0f0f13;cursor:pointer;font-size:14px;flex-shrink:0">＋</button>'+
           '</div>'+
@@ -12654,6 +12664,7 @@ function renderManInvItems() {
 }
 
 function _manInvName(i, val) { _manInvItems[i].name = val; updateManInvTotal(); saveManInvDraft(); }
+function _manInvNameBlurCheck(el){ var catKey = (_manInvGoodsType==='dr') ? 'iz_goods_dr' : 'iz_goods_derevo'; dupCheckField(el, catKey); }
 function _manInvArt(i, val) { _manInvItems[i].article = val; saveManInvDraft(); }
 function _manInvSpecies(i, val) { if(_manInvItems[i]) _manInvItems[i].species = val; saveManInvDraft(); }
 var _manInvSpeciesActive = 0;
@@ -13602,6 +13613,89 @@ function nameMatchApplyAll(){
   showToast('✅ Переименовано: '+changed+' позиций · одобрено: '+_nameMatchApproved.length+' · пропущено: '+_nameMatchSkipped);
 }
 // ════ END NAME MATCH REVIEW ════
+
+// ════════════════════════════════════════
+// DUPLICATE ITEM DETECTION
+// ════════════════════════════════════════
+var _dupWarnCallback = null; // function(useExisting)
+
+function dupWarnUseExisting(){
+  var banner = document.getElementById('dupWarnBanner');
+  if(banner) banner.style.display='none';
+  if(_dupWarnCallback) _dupWarnCallback(true);
+  _dupWarnCallback = null;
+}
+function dupWarnDismiss(){
+  var banner = document.getElementById('dupWarnBanner');
+  if(banner) banner.style.display='none';
+  if(_dupWarnCallback) _dupWarnCallback(false);
+  _dupWarnCallback = null;
+}
+
+// Check if name is duplicate in catalog. Returns {match, score} or null
+function checkDuplicate(name, catalogKey){
+  if(!name || name.length < 2) return null;
+  var catalog = getRefBook(catalogKey);
+  if(!catalog.length) return null;
+  var n = name.toLowerCase().trim();
+  // Exact match — no warning needed
+  var exact = catalog.find(function(c){ return (c.name||c).toLowerCase().trim()===n; });
+  if(exact) return null;
+  // Find close match
+  var best = null, bestScore = 0;
+  catalog.forEach(function(c){
+    var cn = (c.name||c).toLowerCase().trim();
+    var score = nameSimilarity(n, cn);
+    if(score > bestScore){ bestScore=score; best=c; }
+  });
+  if(bestScore >= 0.65 && best){
+    return {match: best.name||best, score: bestScore};
+  }
+  return null;
+}
+
+function showDupWarning(entered, existingName, onDismiss){
+  var banner = document.getElementById('dupWarnBanner');
+  var entEl = document.getElementById('dupWarnEntered');
+  var exEl = document.getElementById('dupWarnExisting');
+  if(!banner) return;
+  if(entEl) entEl.textContent = entered;
+  if(exEl) exEl.textContent = existingName;
+  banner.style.display='flex';
+  _dupWarnCallback = onDismiss;
+}
+
+// Hook: call after user finishes typing in a name field (on blur or on select from list)
+// fieldEl = input element, catalogKey, onAccept = function(finalName)
+function dupCheckField(fieldEl, catalogKey, goodsTypeFilter){
+  if(!fieldEl) return;
+  var val = (fieldEl.value||'').trim();
+  if(!val || val.length < 2) return;
+  // Skip if goodsType doesn't match
+  if(goodsTypeFilter && _siItemGoodsType !== goodsTypeFilter) return;
+  var dup = checkDuplicate(val, catalogKey);
+  if(dup){
+    showDupWarning(val, dup.match, function(useExisting){
+      if(useExisting){ fieldEl.value = dup.match; fieldEl.dispatchEvent(new Event('input')); }
+    });
+  }
+}
+
+// Species/flavor duplicate check
+function dupCheckSpeciesField(fieldEl, isdr){
+  if(!fieldEl) return;
+  var val = (fieldEl.value||'').trim();
+  if(!val || val.length < 2) return;
+  var catalogKey = isdr ? 'iz_dr_species' : 'iz_species';
+  var dup = checkDuplicate(val, catalogKey);
+  if(dup){
+    showDupWarning(val, dup.match, function(useExisting){
+      if(useExisting){ fieldEl.value = dup.match; fieldEl.dispatchEvent(new Event('input')); }
+    });
+  }
+}
+// ════ END DUPLICATE DETECTION ════
+
 
 // ════ SPECIES MATCH REVIEW ════
 var _speciesMatchQueue = [];
