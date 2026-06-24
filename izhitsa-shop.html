@@ -8230,9 +8230,21 @@ function svOpenInvoiceFromReceive(invId){
 
   if(isManual){
     window._manInvEdit[invId] = JSON.parse(JSON.stringify(inv));
+    var curType = inv.goodsType||'derevo';
+    var btnDStyle = curType==='derevo'
+      ? 'flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer'
+      : 'flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer';
+    var btnDrStyle = curType==='dr'
+      ? 'flex:1;padding:9px;border-radius:10px;border:2px solid #a060f0;background:#1e1a2e;color:#a060f0;font-size:12px;font-weight:700;cursor:pointer'
+      : 'flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer';
     body.innerHTML =
       '<div class="fg" style="margin-bottom:6px"><label class="fl">Номер</label><input class="fi" id="adminInv_num_'+invId+'" value="'+(inv.num||'')+'" style="margin:0;padding:7px"></div>'+
       '<div class="fg" style="margin-bottom:6px"><label class="fl">От кого</label><input class="fi" id="adminInv_from_'+invId+'" value="'+(inv.from||'')+'" style="margin:0;padding:7px"></div>'+
+      '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ТИП ТОВАРА</div>'+
+      '<div style="display:flex;gap:8px;margin-bottom:10px">'+
+        '<button type="button" id="adminInvTypeDerevo_'+invId+'" onpointerdown="event.preventDefault();setAdminInvType(\''+invId+'\',\'derevo\')" style="'+btnDStyle+'">🌳 Дерево</button>'+
+        '<button type="button" id="adminInvTypeDr_'+invId+'" onpointerdown="event.preventDefault();setAdminInvType(\''+invId+'\',\'dr\')" style="'+btnDrStyle+'">🛍 ДР Товар</button>'+
+      '</div>'+
       '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (арт. · наим. · порода · кол-во · цена)</div>'+
       '<div id="maninv_items_'+invId+'"></div>'+
       '<button type="button" onclick="addManInvEditItem(\''+invId+'\')" class="btn sec" style="font-size:12px;margin:6px 0 0">＋ Добавить позицию</button>'+
@@ -8246,9 +8258,16 @@ function svOpenInvoiceFromReceive(invId){
     renderManInvEditItems(invId);
   } else {
     window._shInvEdit[invId] = JSON.parse(JSON.stringify(inv));
+    var curType2 = inv.goodsType||'derevo';
+    var bD2 = curType2==='derevo'
+      ? 'flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer'
+      : 'flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer';
+    var bDr2 = curType2==='dr'
+      ? 'flex:1;padding:9px;border-radius:10px;border:2px solid #a060f0;background:#1e1a2e;color:#a060f0;font-size:12px;font-weight:700;cursor:pointer'
+      : 'flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer';
     var itemsHtml = (inv.items||[]).map(function(item,i){
       return '<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center">'+
-        '<input class="fi" value="'+(item.num||'')+'" placeholder="Арт." style="flex:0 0 56px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvNum(\''+invId+'\','+i+',this.value)">'+
+        '<input class="fi" value="'+(item.num||item.article||'')+'" placeholder="Арт." style="flex:0 0 56px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvNum(\''+invId+'\','+i+',this.value)">'+
         '<input class="fi" value="'+(item.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" oninput="_shInvName(\''+invId+'\','+i+',this.value)">'+
         '<input class="fi" type="number" value="'+(item.qty!=null?item.qty:1)+'" inputmode="numeric" style="flex:0 0 50px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvQty(\''+invId+'\','+i+',this.value)">'+
         '<input class="fi" type="number" value="'+(item.price||0)+'" inputmode="numeric" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvPrice(\''+invId+'\','+i+',this.value)">'+
@@ -8256,6 +8275,11 @@ function svOpenInvoiceFromReceive(invId){
     }).join('');
     body.innerHTML =
       '<div class="fg" style="margin-bottom:6px"><label class="fl">Номер</label><input class="fi" id="adminInv_num_'+invId+'" value="'+(inv.num||'')+'" style="margin:0;padding:7px"></div>'+
+      '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ТИП ТОВАРА</div>'+
+      '<div style="display:flex;gap:8px;margin-bottom:10px">'+
+        '<button type="button" id="adminInvTypeDerevo_'+invId+'" onpointerdown="event.preventDefault();setAdminInvType(\''+invId+'\',\'derevo\')" style="'+bD2+'">🌳 Дерево</button>'+
+        '<button type="button" id="adminInvTypeDr_'+invId+'" onpointerdown="event.preventDefault();setAdminInvType(\''+invId+'\',\'dr\')" style="'+bDr2+'">🛍 ДР Товар</button>'+
+      '</div>'+
       '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (арт. · наим. · кол-во · цена)</div>'+
       itemsHtml+
       '<div style="font-size:10px;color:#8888aa;margin:8px 0 3px">Причина правки</div>'+
@@ -8307,12 +8331,20 @@ function svSaveInvoiceFromArchive(id, isManual){
   var newTotal = data.totalAmt!=null ? data.totalAmt : (data.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
   if(jIdx>=0){
     var before = Object.assign({}, jnl[jIdx]);
+    var _savedGt = (window._manInvEdit&&window._manInvEdit[id]&&window._manInvEdit[id].goodsType) || data.goodsType || jnl[jIdx].goodsType || 'derevo';
+    var _isDrSave = _savedGt==='dr';
     jnl[jIdx] = Object.assign({}, jnl[jIdx], {
-      label:'Приёмка '+data.num,
+      label:'Приёмка '+data.num+(_isDrSave?' (ДР)':''),
       sub:(data.items||[]).length+' изд.'+(data.from?' · от '+data.from:''),
-      amount:newTotal, goodsEffect:newTotal, invId:id,
+      amount:newTotal,
+      goodsEffect: _isDrSave?0:newTotal,
+      goodsDrEffect: _isDrSave?newTotal:0,
+      goodsType: _savedGt,
+      invId:id,
       editedAt:new Date().toISOString()
     });
+    // Also update goodsType on the invoice record itself
+    data.goodsType = _savedGt;
     try{ logEntryEdit(before, jnl[jIdx]); }catch(e){}
   }
   _currentShiftView.journal = jnl;
@@ -12394,6 +12426,15 @@ function updateManInvTotal() {
 }
 
 var _manInvGoodsType = 'derevo';
+function setAdminInvType(invId, type){
+  window._manInvEdit[invId] = window._manInvEdit[invId]||{};
+  window._manInvEdit[invId].goodsType = type;
+  var btnD = document.getElementById('adminInvTypeDerevo_'+invId);
+  var btnDr = document.getElementById('adminInvTypeDr_'+invId);
+  if(btnD){ btnD.style.borderColor = type==='derevo'?'#c8f060':'#2e2e3e'; btnD.style.background = type==='derevo'?'#1e2a14':'#22222e'; btnD.style.color = type==='derevo'?'#c8f060':'#8888aa'; }
+  if(btnDr){ btnDr.style.borderColor = type==='dr'?'#a060f0':'#2e2e3e'; btnDr.style.background = type==='dr'?'#1e1a2e':'#22222e'; btnDr.style.color = type==='dr'?'#a060f0':'#8888aa'; }
+}
+
 function setManInvType(type){
   _manInvGoodsType = type;
   var btnD = document.getElementById('manInvTypeDerevo');
