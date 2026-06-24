@@ -13514,118 +13514,177 @@ function _adminRcvDateRange(){
   return {from:todayStr, to:todayStr};
 }
 
+function _rcvRowLabel(r){
+  if(r.invId){
+    var manI=JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+    var wsI=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+    var f=manI.concat(wsI).find(function(i){ return (i.id||i._id)===r.invId; });
+    if(f&&f.num) return 'Приёмка '+f.num;
+  }
+  return r.label||'';
+}
+
+var _adminRcvOpen = {}; // groupKey -> bool
+
+function adminRcvToggle(key){
+  _adminRcvOpen[key] = !_adminRcvOpen[key];
+  renderAdminRcvWo();
+}
+
 function renderAdminRcvWo(){
   var range = _adminRcvDateRange();
   var allShifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
   var type = _adminRcvType;
+  var manInvAll = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var wsInvAll = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  var allInvCache = manInvAll.concat(wsInvAll);
 
-  // Collect all relevant entries from all shifts
+  // Collect rows
   var rows = [];
   allShifts.forEach(function(sh){
     var sn = sh.shopName||'';
     if(_adminRcvShop && sn !== _adminRcvShop) return;
     var shDate = sh.date || (sh.openedAt||'').split('T')[0];
     if(shDate < range.from || shDate > range.to) return;
-    var jnl = sh.journal||[];
-    jnl.forEach(function(e){
+    (sh.journal||[]).forEach(function(e){
       if(e.type !== type) return;
-      var eDate = (e.ts||'').split('T')[0] || shDate;
-      rows.push({
-        shop: sn,
-        date: shDate,
-        ts: e.ts||shDate,
-        label: e.label||e.sub||'',
-        sub: e.sub||'',
-        amount: type==='receive' ? (e.goodsEffect||e.goodsDrEffect||e.amount||0) : (e.amount||0),
-        goodsType: e.goodsType||'derevo',
-        invId: e.invId||null,
-        items: e.items||[],
-        reason: e.reason||'',
-        entryId: e.id,
-        shiftId: sh.id
-      });
+      var amt = type==='receive' ? (e.goodsDrEffect && e.goodsType==='dr' ? e.goodsDrEffect : (e.goodsEffect||e.amount||0)) : (e.amount||0);
+      // Resolve inv num
+      var invNum = '';
+      if(e.invId){
+        var found = allInvCache.find(function(i){ return (i.id||i._id)===e.invId; });
+        if(found&&found.num) invNum = found.num;
+      }
+      rows.push({shop:sn, date:shDate, ts:e.ts||shDate, label:invNum?'Приёмка '+invNum:(e.label||e.sub||''), sub:e.sub||'', amount:amt, goodsType:e.goodsType||'derevo', invId:e.invId||null, items:e.items||[], reason:e.reason||''});
     });
-    // For receives: also check goodsReceives and drGoodsReceives arrays
     if(type==='receive'){
-      (sh.goodsReceives||[]).forEach(function(r){
-        rows.push({shop:sn, date:shDate, ts:shDate, label:'Приход Дерево', sub:r.name||r.article||'', amount:r.amt||r.amount||0, goodsType:'derevo', items:[], entryId:null, shiftId:sh.id});
-      });
-      (sh.drGoodsReceives||[]).forEach(function(r){
-        rows.push({shop:sn, date:shDate, ts:shDate, label:'Приход ДР', sub:r.name||r.article||'', amount:r.amt||r.amount||0, goodsType:'dr', items:[], entryId:null, shiftId:sh.id});
-      });
+      (sh.goodsReceives||[]).forEach(function(r){ rows.push({shop:sn,date:shDate,ts:shDate,label:'Приход Дерево',sub:r.name||'',amount:r.amt||r.amount||0,goodsType:'derevo',items:[]}); });
+      (sh.drGoodsReceives||[]).forEach(function(r){ rows.push({shop:sn,date:shDate,ts:shDate,label:'Приход ДР',sub:r.name||'',amount:r.amt||r.amount||0,goodsType:'dr',items:[]}); });
     }
   });
 
-  // Sort by date desc
   rows.sort(function(a,b){ return (b.ts||b.date).localeCompare(a.ts||a.date); });
 
-  // Summary
-  var totalWood = rows.filter(function(r){ return r.goodsType!=='dr'; }).reduce(function(s,r){ return s+r.amount; },0);
-  var totalDr = rows.filter(function(r){ return r.goodsType==='dr'; }).reduce(function(s,r){ return s+r.amount; },0);
-  var sumEl = document.getElementById('adminRcvSummary');
+  // Summary totals
+  var totalWood=0, totalDr=0;
+  rows.forEach(function(r){ if(r.goodsType==='dr') totalDr+=r.amount; else totalWood+=r.amount; });
+  var sumEl=document.getElementById('adminRcvSummary');
   if(sumEl){
-    sumEl.innerHTML = '<div style="display:flex;gap:8px;margin-bottom:4px">'+
-      '<div style="background:#1a2e1e;border:1px solid #2e4e2e;border-radius:10px;padding:8px 12px;flex:1">'+
-        '<div style="font-size:10px;color:#8888aa">🌳 Дерево</div>'+
-        '<div style="font-size:15px;font-weight:700;color:#c8f060">'+Math.round(totalWood).toLocaleString('ru-RU')+'₽</div>'+
-      '</div>'+
-      '<div style="background:#1e1a2e;border:1px solid #3e2e4e;border-radius:10px;padding:8px 12px;flex:1">'+
-        '<div style="font-size:10px;color:#8888aa">🛍 ДР Товар</div>'+
-        '<div style="font-size:15px;font-weight:700;color:#a060f0">'+Math.round(totalDr).toLocaleString('ru-RU')+'₽</div>'+
-      '</div>'+
-      '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:8px 12px;flex:1">'+
-        '<div style="font-size:10px;color:#8888aa">Итого</div>'+
-        '<div style="font-size:15px;font-weight:700;color:#f0f0f8">'+Math.round(totalWood+totalDr).toLocaleString('ru-RU')+'₽</div>'+
-      '</div>'+
+    sumEl.innerHTML='<div style="display:flex;gap:8px;margin-bottom:4px">'+
+      '<div style="background:#1a2e1e;border:1px solid #2e4e2e;border-radius:10px;padding:8px 12px;flex:1"><div style="font-size:10px;color:#8888aa">🌳 Дерево</div><div style="font-size:15px;font-weight:700;color:#c8f060">'+Math.round(totalWood).toLocaleString('ru-RU')+'₽</div></div>'+
+      '<div style="background:#1e1a2e;border:1px solid #3e2e4e;border-radius:10px;padding:8px 12px;flex:1"><div style="font-size:10px;color:#8888aa">🛍 ДР Товар</div><div style="font-size:15px;font-weight:700;color:#a060f0">'+Math.round(totalDr).toLocaleString('ru-RU')+'₽</div></div>'+
+      '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:8px 12px;flex:1"><div style="font-size:10px;color:#8888aa">Итого</div><div style="font-size:15px;font-weight:700;color:#f0f0f8">'+Math.round(totalWood+totalDr).toLocaleString('ru-RU')+'₽</div></div>'+
     '</div>'+
     '<div style="font-size:11px;color:#8888aa">'+rows.length+' записей · '+range.from+(range.from!==range.to?' — '+range.to:'')+'</div>';
   }
 
-  var listEl = document.getElementById('adminRcvList');
+  var listEl=document.getElementById('adminRcvList');
   if(!listEl) return;
-  if(!rows.length){
-    listEl.innerHTML = '<div class="empty"><div class="ei">'+(type==='receive'?'📥':'🗑')+'</div>Нет записей за период</div>';
-    return;
-  }
+  if(!rows.length){ listEl.innerHTML='<div class="empty"><div class="ei">'+(type==='receive'?'📥':'🗑')+'</div>Нет записей за период</div>'; return; }
 
-  listEl.innerHTML = rows.map(function(r){
-    var gtColor = r.goodsType==='dr' ? '#a060f0' : '#60f090';
-    var gtLabel = r.goodsType==='dr' ? '🛍 ДР' : '🌳';
-    var timeStr = r.ts ? new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '';
-    var itemsList = (r.items||[]).map(function(it){
-      return '<div style="font-size:11px;color:#8888aa;padding-left:8px">'+
-        (it.article||it.num?'№'+(it.article||it.num)+' ':'')+
-        (it.name||'')+(it.species?' · '+it.species:'')+(it.qty>1?' ×'+it.qty:'')+'</div>';
-    }).join('');
-    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:10px 12px;margin-bottom:8px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">'+
+  // Determine grouping level
+  // today/week → group by day
+  // month → group by day
+  // year/custom(>31d) → group by month then day
+  var groupByMonth = (_adminRcvPeriod==='year') ||
+    (_adminRcvPeriod==='custom' && (function(){
+      var f=document.getElementById('adminRcvFrom'), t=document.getElementById('adminRcvTo');
+      var df=new Date((f&&f.value)||range.from), dt=new Date((t&&t.value)||range.to);
+      return (dt-df)/(1000*86400)>31;
+    })());
+
+  function rowCard(r){
+    var gtColor=r.goodsType==='dr'?'#a060f0':'#60f090';
+    var gtLabel=r.goodsType==='dr'?'🛍 ДР':'🌳';
+    var timeStr=r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'';
+    return '<div style="background:#13131a;border:1px solid #2a2a3a;border-radius:10px;padding:10px 12px;margin-bottom:6px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
         '<div style="flex:1">'+
-          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'+
+          '<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">'+
             '<span style="font-size:10px;font-weight:700;color:'+gtColor+'">'+gtLabel+'</span>'+
-            '<span style="font-size:11px;color:#8888aa">'+r.shop+'</span>'+
-            '<span style="font-size:10px;color:#606080">'+r.date+(timeStr?' · '+timeStr:'')+'</span>'+
+            '<span style="font-size:10px;color:#8888aa">'+r.shop+'</span>'+
+            (timeStr?'<span style="font-size:10px;color:#606080">· '+timeStr+'</span>':'')+
           '</div>'+
-          '<div style="font-size:13px;font-weight:700">'+(function(){
-            // Try to get actual invoice number from stored invoices
-            if(r.invId){
-              var manInvs2=JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-              var wsInvs2=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-              var found2=manInvs2.concat(wsInvs2).find(function(i2){ return (i2.id||i2._id)===r.invId; });
-              if(found2&&found2.num) return 'Приёмка '+found2.num;
-            }
-            return r.label;
-          }())+'</div>'+
-          (r.sub&&r.sub!==r.label?'<div style="font-size:11px;color:#8888aa;margin-top:1px">'+r.sub+'</div>':'')+
-          (r.reason?'<div style="font-size:11px;color:#a060f0;margin-top:1px">'+r.reason+'</div>':'')+
-          itemsList+
+          '<div style="font-size:13px;font-weight:700">'+r.label+'</div>'+
+          (r.sub&&r.sub!==r.label?'<div style="font-size:11px;color:#8888aa">'+r.sub+'</div>':'')+
+          (r.reason?'<div style="font-size:11px;color:#a060f0">'+r.reason+'</div>':'')+
         '</div>'+
-        '<div style="text-align:right;flex-shrink:0;padding-left:10px">'+
-          '<div style="font-size:16px;font-weight:700;color:'+gtColor+'">'+Math.round(r.amount).toLocaleString('ru-RU')+'₽</div>'+
+        '<div style="text-align:right;padding-left:10px;flex-shrink:0">'+
+          '<div style="font-size:15px;font-weight:700;color:'+gtColor+'">'+Math.round(r.amount).toLocaleString('ru-RU')+'₽</div>'+
         '</div>'+
       '</div>'+
-      (r.invId ? '<button type="button" onclick="svOpenInvoiceFromReceive(\''+r.invId+'\')" style="font-size:11px;padding:4px 10px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#60c8f0;cursor:pointer">📋 Открыть накладную</button>' : '')+
+      (r.invId?'<button type="button" onclick="svOpenInvoiceFromReceive(\''+r.invId+'\')" style="font-size:11px;padding:3px 9px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#60c8f0;cursor:pointer;margin-top:5px">📋 Открыть накладную</button>':'')+
     '</div>';
-  }).join('');
+  }
+
+  function groupHeader(key, label, count, total, isOpen){
+    var totalStr = Math.round(total).toLocaleString('ru-RU')+'₽';
+    return '<div onpointerdown="event.preventDefault();adminRcvToggle(\''+key+'\')" '+
+      'style="background:#1a1a22;border:1px solid #3e3e4e;border-radius:12px;padding:10px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;cursor:pointer">'+
+      '<div>'+
+        '<div style="font-size:13px;font-weight:700">'+label+'</div>'+
+        '<div style="font-size:11px;color:#8888aa">'+count+' накладных · '+totalStr+'</div>'+
+      '</div>'+
+      '<div style="font-size:16px;color:#c8f060">'+(isOpen?'▲':'▼')+'</div>'+
+    '</div>';
+  }
+
+  var html = '';
+
+  if(groupByMonth){
+    // Group by month → day → rows
+    var byMonth = {};
+    rows.forEach(function(r){
+      var mm = r.date.slice(0,7); // yyyy-mm
+      if(!byMonth[mm]) byMonth[mm]={rows:[],total:0,count:0};
+      byMonth[mm].rows.push(r); byMonth[mm].total+=r.amount; byMonth[mm].count++;
+    });
+    var months = Object.keys(byMonth).sort().reverse();
+    months.forEach(function(mm){
+      var mData=byMonth[mm];
+      var mLabel=(function(){
+        var parts=mm.split('-');
+        var mNames=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+        return mNames[parseInt(parts[1],10)-1]+' '+parts[0];
+      })();
+      var mOpen=!!_adminRcvOpen['m_'+mm];
+      html+=groupHeader('m_'+mm,mLabel,mData.count,mData.total,mOpen);
+      if(mOpen){
+        // Group by day within month
+        var byDay={};
+        mData.rows.forEach(function(r){ var d=r.date; if(!byDay[d]) byDay[d]={rows:[],total:0,count:0}; byDay[d].rows.push(r); byDay[d].total+=r.amount; byDay[d].count++; });
+        var days=Object.keys(byDay).sort().reverse();
+        days.forEach(function(d){
+          var dData=byDay[d]; var parts=d.split('-');
+          var dLabel=parts[2]+'.'+parts[1]+'.'+parts[0];
+          var dKey='d_'+d; var dOpen=!!_adminRcvOpen[dKey];
+          html+='<div style="margin-left:12px">';
+          html+=groupHeader(dKey,dLabel,dData.count,dData.total,dOpen);
+          if(dOpen){ html+='<div style="margin-left:12px">'; dData.rows.forEach(function(r){ html+=rowCard(r); }); html+='</div>'; }
+          html+='</div>';
+        });
+      }
+    });
+  } else {
+    // Group by day → rows
+    var byDay2={};
+    rows.forEach(function(r){ var d=r.date; if(!byDay2[d]) byDay2[d]={rows:[],total:0,count:0}; byDay2[d].rows.push(r); byDay2[d].total+=r.amount; byDay2[d].count++; });
+    var days2=Object.keys(byDay2).sort().reverse();
+    days2.forEach(function(d){
+      var dData=byDay2[d]; var parts=d.split('-');
+      var dLabel=parts[2]+'.'+parts[1]+'.'+parts[0];
+      var dKey='d2_'+d; var dOpen=!!_adminRcvOpen[dKey];
+      // If only one day and period=today — show flat
+      if(days2.length===1 && _adminRcvPeriod==='today'){
+        dData.rows.forEach(function(r){ html+=rowCard(r); });
+      } else {
+        html+=groupHeader(dKey,dLabel,dData.count,dData.total,dOpen);
+        if(dOpen){ html+='<div style="margin-left:12px">'; dData.rows.forEach(function(r){ html+=rowCard(r); }); html+='</div>'; }
+      }
+    });
+  }
+
+  listEl.innerHTML = html||'<div class="empty"><div class="ei">📥</div>Нет записей</div>';
 }
 // ════ END ADMIN RECEIVES/WRITEOFFS ════
 
