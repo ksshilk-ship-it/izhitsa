@@ -3051,10 +3051,13 @@ function mergeRemoteJournal(remote){
   var localReceiveInvIds = {};
   journal.forEach(function(e){ if(e.type==='receive' && e.invId) localReceiveInvIds[e.invId]=true; });
   var added = 0;
+  var shiftOpenedAt = session && session.openedAt ? session.openedAt : null;
   remote.journal.forEach(function(e){
     if(!e.id || localIds[e.id]) return;
     if(tombstoned[e.id]) return; // was deliberately deleted on this or another device — never resurrect
     if(e.type==='receive' && e.invId && localReceiveInvIds[e.invId]) return; // already have this invoice's entry
+    // Don't pull in receive entries from before this shift opened — they belong to a past shift
+    if(e.type==='receive' && shiftOpenedAt && e.ts && e.ts < shiftOpenedAt) return;
     journal.push(e); added++;
     if(e.type==='receive' && e.invId) localReceiveInvIds[e.invId]=true;
   });
@@ -8185,7 +8188,37 @@ function svOpenInvoiceFromReceive(invId){
     var autoAll = getInvoices();
     inv = autoAll.find(function(i){ return String(i._id!=null?i._id:i.id)===invId; });
   }
-  if(!inv){ showToast('Накладная не найдена — возможно, удалена'); return; }
+  if(!inv){
+    // Накладная не в кэше — попробуем загрузить из Firestore напрямую
+    showToast('⏳ Загружаю накладную из Firestore...');
+    try{
+      db.collection('iz_manual_invoices').doc(invId).get({source:'server'}).then(function(snap){
+        if(snap.exists){
+          var data = snap.data();
+          if(data){
+            var manArr = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+            var exists = manArr.find(function(i){ return String(i._id||i.id)===invId; });
+            if(!exists){ manArr.push(Object.assign({id:invId},data)); localStorage.setItem('iz_manual_invoices',JSON.stringify(manArr)); }
+            svOpenInvoiceFromReceive(invId);
+          } else { showToast('Накладная не найдена — возможно, удалена'); }
+        } else {
+          // Try iz_invoices collection
+          db.collection('iz_invoices').doc(invId).get({source:'server'}).then(function(snap2){
+            if(snap2.exists){
+              var data2 = snap2.data();
+              if(data2){
+                var invArr = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+                var ex2 = invArr.find(function(i){ return String(i._id||i.id)===invId; });
+                if(!ex2){ invArr.push(Object.assign({id:invId},data2)); localStorage.setItem('iz_invoices',JSON.stringify(invArr)); }
+                svOpenInvoiceFromReceive(invId);
+              } else { showToast('Накладная не найдена — возможно, удалена'); }
+            } else { showToast('Накладная не найдена — возможно, удалена'); }
+          }).catch(function(){ showToast('Накладная не найдена — возможно, удалена'); });
+        }
+      }).catch(function(){ showToast('Накладная не найдена — возможно, удалена'); });
+    }catch(e){ showToast('Накладная не найдена — возможно, удалена'); }
+    return;
+  }
 
   document.getElementById('adminInvTitle').textContent = '📋 Накладная '+(inv.num||'');
   var body = document.getElementById('adminInvBody');
