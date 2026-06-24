@@ -6276,8 +6276,8 @@ function renderClose(){
     var woDr = writeoffs.filter(function(e){return e.goodsType==='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
 
     // Receives
-    var rcvWood = receives.filter(function(e){return !e.goodsType||e.goodsType==='derevo';}).reduce(function(a,e){return a+(e.goodsEffect||0);},0);
-    var rcvDr = receives.filter(function(e){return e.goodsType==='dr';}).reduce(function(a,e){return a+(e.goodsEffect||0);},0);
+    var rcvWood = receives.filter(function(e){return !e.goodsType||e.goodsType==='derevo';}).reduce(function(a,e){return a+(e.goodsEffect!=null?e.goodsEffect:0);},0);
+    var rcvDr = receives.filter(function(e){return e.goodsType==='dr';}).reduce(function(a,e){return a+(e.goodsDrEffect!=null?e.goodsDrEffect:(e.goodsEffect||0));},0);
 
     var cashEveEntered = parseFloat((document.getElementById('cashEveInput')||{}).value)||0;
 
@@ -7042,7 +7042,7 @@ function evaluateShiftIssues(sh){
   }
   var jRcvWood = jnl.filter(function(e){ return e.type==='receive' && e.goodsType!=='dr'; }).reduce(function(s,e){return s+(e.goodsEffect||e.amount||0);},0);
   var jWoWood = jnl.filter(function(e){ return e.type==='writeoff' && e.goodsType!=='dr'; }).reduce(function(s,e){return s+Math.abs(e.amount||0);},0);
-  var jRcvDr = jnl.filter(function(e){ return e.type==='receive' && e.goodsType==='dr'; }).reduce(function(s,e){return s+(e.goodsEffect||e.amount||0);},0);
+  var jRcvDr = jnl.filter(function(e){ return e.type==='receive' && e.goodsType==='dr'; }).reduce(function(s,e){return s+(e.goodsDrEffect!=null?e.goodsDrEffect:(e.goodsEffect||e.amount||0));},0);
   var jWoDr = jnl.filter(function(e){ return e.type==='writeoff' && e.goodsType==='dr'; }).reduce(function(s,e){return s+Math.abs(e.amount||0);},0);
   var manRcvWood = (sh.goodsReceives||[]).reduce(function(s,r){return s+(r.amt!=null?r.amt:(r.amount||0));},0);
   var manWoWood = (sh.goodsWriteoffs||[]).reduce(function(s,w){return s+(w.amt!=null?w.amt:(w.amount||0));},0);
@@ -7660,11 +7660,14 @@ function _renderShiftView(){
 
   rcvBody += '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
   var woodRcvCount = 0;
+  // Journal receive entries for Дерево (goodsType !== 'dr')
   receives.forEach(function(r, i){
+    if(r.goodsType === 'dr') return; // will show in ДР section
     var invFn = r.invId ? 'svOpenInvoiceFromReceive(\''+r.invId+'\')' : null;
-    rcvBody += rcvItem(r.sub||r.label||'Приход', r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#555568', r.goodsEffect||r.amount||0, '#60f090', 'svDeleteJEntry(\'receive\','+i+')', r.invId?null:'svToggleEdit(\'jrcv\','+i+')', invFn);
+    var amt = r.goodsEffect!=null ? r.goodsEffect : (r.amount||0);
+    rcvBody += rcvItem(r.sub||r.label||'Приход', r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#555568', amt, '#60f090', 'svDeleteJEntry(\'receive\','+i+')', r.invId?null:'svToggleEdit(\'jrcv\','+i+')', invFn);
     if(_svEditTarget && _svEditTarget.kind==='jrcv' && _svEditTarget.idx===i){
-      rcvBody += simpleEditForm('jrcv'+i, '#60f090', {kind:'jrcv', idx:i, saveFn:'svSaveJEntrySimple(\'receive\','+i+')', prefill:{sub:r.sub||r.label||'', amt:r.goodsEffect||r.amount||0}});
+      rcvBody += simpleEditForm('jrcv'+i, '#60f090', {kind:'jrcv', idx:i, saveFn:'svSaveJEntrySimple(\'receive\','+i+')', prefill:{sub:r.sub||r.label||'', amt:amt}});
     }
     woodRcvCount++;
   });
@@ -7680,6 +7683,14 @@ function _renderShiftView(){
 
   rcvBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
   var drRcvCount = 0;
+  // Journal receive entries for ДР (goodsType === 'dr')
+  receives.forEach(function(r, i){
+    if(r.goodsType !== 'dr') return;
+    var invFn = r.invId ? 'svOpenInvoiceFromReceive(\''+r.invId+'\')' : null;
+    var amt = r.goodsDrEffect!=null ? r.goodsDrEffect : (r.goodsEffect||r.amount||0);
+    rcvBody += rcvItem(r.sub||r.label||'Приход ДР', r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#a060f0', amt, '#a060f0', 'svDeleteJEntry(\'receive\','+i+')', r.invId?null:'svToggleEdit(\'jrcv\','+i+')', invFn);
+    drRcvCount++;
+  });
   drRcv.forEach(function(r, i){
     var lbl = (r.article?'№'+r.article+' ':'')+(r.name||'Приход ДР')+(r.species?' · '+r.species:'')+(r.qty?' × '+r.qty:'');
     rcvBody += rcvItem(lbl, '🛍 ДР Товар'+(r.price?' · '+f(r.price)+'/шт':''), '#a060f0', r.amt||0, '#a060f0', 'svDeleteDrRcv('+i+')', 'svToggleEdit(\'rcvDrArr\','+i+')');
