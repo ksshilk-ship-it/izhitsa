@@ -1113,6 +1113,7 @@ function checkForAppUpdate() {
       <button type="button" onclick="renameAllInvoices()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #f0a06055;background:#2a1e10;color:#f0a060;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">🔢 Переименовать все накладные по новому формату</button>
       <button type="button" onclick="startNameMatchReview()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #f0c06055;background:#2a2210;color:#f0c060;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">🔍 Проверить названия товаров (Дерево)</button>
       <button type="button" onclick="_speciesMatchQueue_active=false;startSpeciesMatchReview()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #60f0c055;background:#102a22;color:#60f0c0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">🌲 Проверить породы дерева</button>
+      <button type="button" onclick="_drMatchQueue_active=false;_speciesMatchQueue_active=false;startDrMatchReview()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #a060f055;background:#1e102a;color:#a060f0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">🛍 Проверить ДР Товар</button>
       <button type="button" onclick="rebuildGoodsDerevoFromHistory()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #60c8f055;background:#1a2e2e;color:#60c8f0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">📦 Собрать товары из истории в базу Дерево</button>
 
     </div>
@@ -13519,7 +13520,7 @@ function nameMatchShowNext(){
   openMo('nameMatchMo');
 }
 
-// nameMatchDecision and nameMatchFinish defined in species match section
+// nameMatchDecision and nameMatchFinish defined in DR match section
 
 function nameMatchApplyAll(){
   if(!_nameMatchApproved.length){
@@ -13696,30 +13697,7 @@ function nameMatchShowNextSpecies(){
   openMo('nameMatchMo');
 }
 
-function nameMatchDecision(approve){
-  if(_speciesMatchQueue_active){
-    if(approve) _speciesMatchApproved.push(_speciesMatchQueue[_speciesMatchIdx]);
-    else _speciesMatchSkipped++;
-    _speciesMatchIdx++;
-    nameMatchShowNextSpecies();
-  } else {
-    if(approve) _nameMatchApproved.push(_nameMatchQueue[_nameMatchIdx]);
-    else _nameMatchSkipped++;
-    _nameMatchIdx++;
-    nameMatchShowNext();
-  }
-}
-
-function nameMatchFinish(){
-  closeMo('nameMatchMo');
-  if(_speciesMatchQueue_active){
-    if(_speciesMatchApproved.length) speciesMatchApplyAll();
-    else showToast('Проверка завершена без изменений');
-  } else {
-    if(_nameMatchApproved.length) nameMatchApplyAll();
-    else showToast('Проверка завершена без изменений');
-  }
-}
+// nameMatchDecision and nameMatchFinish defined in DR match section
 
 function speciesMatchApplyAll(){
   if(!_speciesMatchApproved.length){
@@ -13786,6 +13764,196 @@ function speciesMatchApplyAll(){
   showToast('✅ Пород исправлено: '+changed+' · одобрено: '+_speciesMatchApproved.length+' · пропущено: '+_speciesMatchSkipped);
 }
 // ════ END SPECIES MATCH ════
+
+// ════ DR ТОВАР MATCH REVIEW ════
+var _drMatchQueue = [];
+var _drMatchIdx = 0;
+var _drMatchApproved = [];
+var _drMatchSkipped = 0;
+var _drMatchQueue_active = false;
+
+function startDrMatchReview(){
+  var catalogNames = getRefBook('iz_goods_dr');
+  var catalogSpecies = getRefBook('iz_dr_species');
+  if(!catalogNames.length && !catalogSpecies.length){ showToast('Базы ДР Товар пусты'); return; }
+
+  _drMatchQueue = [];
+  _drMatchApproved = [];
+  _drMatchSkipped = 0;
+
+  var seenNames = {}, seenSpecies = {};
+
+  function tryDrName(name, ctx){
+    if(!name||typeof name!=='string') return;
+    var key=name.toLowerCase().trim();
+    if(seenNames[key]) return;
+    if(!catalogNames.length) return;
+    var exactMatch=catalogNames.find(function(c){ return (c.name||c).toLowerCase().trim()===key; });
+    if(exactMatch) return;
+    var match=findBestMatch(name, catalogNames.map(function(c){ return {name:c.name||c}; }));
+    if(match){ seenNames[key]=match.match; _drMatchQueue.push({oldName:name,newName:match.match,score:match.score,ctx:ctx,field:'name'}); }
+  }
+
+  function tryDrSpecies(name, ctx){
+    if(!name||typeof name!=='string') return;
+    var key=name.toLowerCase().trim();
+    if(seenSpecies[key]) return;
+    if(!catalogSpecies.length) return;
+    var exactMatch=catalogSpecies.find(function(c){ return (c.name||c).toLowerCase().trim()===key; });
+    if(exactMatch) return;
+    var match=findBestMatch(name, catalogSpecies.map(function(c){ return {name:c.name||c}; }));
+    if(match){ seenSpecies[key]=match.match; _drMatchQueue.push({oldName:name,newName:match.match,score:match.score,ctx:ctx,field:'species'}); }
+  }
+
+  var shifts=JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+  shifts.forEach(function(sh){
+    (sh.journal||[]).forEach(function(e){
+      (e.items||[]).forEach(function(it){
+        if(it.goodsType!=='dr') return;
+        tryDrName(it.name, 'Смена '+sh.shopName+' · '+sh.date);
+        tryDrSpecies(it.species, 'Смена '+sh.shopName+' · '+sh.date);
+      });
+    });
+  });
+
+  var manInvs=JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  manInvs.forEach(function(inv){
+    if(inv.goodsType!=='dr') return;
+    (inv.items||[]).forEach(function(it){
+      tryDrName(it.name, 'Накладная '+(inv.num||'')+' · '+(inv.destName||inv.shopName||''));
+      tryDrSpecies(it.species, 'Накладная '+(inv.num||''));
+    });
+  });
+
+  var wsInvs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  wsInvs.forEach(function(inv){
+    (inv.items||[]).concat(inv.acceptedItems||[]).forEach(function(it){
+      if(it.goodsType!=='dr') return;
+      tryDrName(it.name, 'Накладная '+(inv.num||'')+' (мастерская)');
+      tryDrSpecies(it.species, 'Накладная '+(inv.num||''));
+    });
+  });
+
+  _drMatchQueue.sort(function(a,b){ return b.score-a.score; });
+
+  if(!_drMatchQueue.length){
+    showToast('Нет позиций ДР Товар требующих проверки');
+    return;
+  }
+
+  _drMatchIdx=0;
+  _drMatchQueue_active=true;
+  _speciesMatchQueue_active=false;
+  drMatchShowNext();
+}
+
+function drMatchShowNext(){
+  if(_drMatchIdx>=_drMatchQueue.length){
+    closeMo('nameMatchMo');
+    drMatchApplyAll();
+    return;
+  }
+  var item=_drMatchQueue[_drMatchIdx];
+  var fieldLabel = item.field==='species' ? '🛍 Состав/Вкус' : '🛍 Название ДР';
+  var prog=document.getElementById('nameMatchProgress');
+  var oldEl=document.getElementById('nameMatchOld');
+  var newEl=document.getElementById('nameMatchNew');
+  var ctxEl=document.getElementById('nameMatchCtx');
+  if(prog) prog.textContent=(_drMatchIdx+1)+' из '+_drMatchQueue.length+' · '+fieldLabel;
+  if(oldEl) oldEl.textContent=item.oldName;
+  if(newEl) newEl.textContent=item.newName;
+  if(ctxEl) ctxEl.textContent=item.ctx+' (схожесть: '+Math.round(item.score*100)+'%)';
+  openMo('nameMatchMo');
+}
+
+function nameMatchDecision(approve){
+  if(_drMatchQueue_active){
+    if(approve) _drMatchApproved.push(_drMatchQueue[_drMatchIdx]);
+    else _drMatchSkipped++;
+    _drMatchIdx++;
+    drMatchShowNext();
+  } else if(_speciesMatchQueue_active){
+    if(approve) _speciesMatchApproved.push(_speciesMatchQueue[_speciesMatchIdx]);
+    else _speciesMatchSkipped++;
+    _speciesMatchIdx++;
+    nameMatchShowNextSpecies();
+  } else {
+    if(approve) _nameMatchApproved.push(_nameMatchQueue[_nameMatchIdx]);
+    else _nameMatchSkipped++;
+    _nameMatchIdx++;
+    nameMatchShowNext();
+  }
+}
+
+function nameMatchFinish(){
+  closeMo('nameMatchMo');
+  if(_drMatchQueue_active){
+    if(_drMatchApproved.length) drMatchApplyAll(); else showToast('Проверка завершена без изменений');
+  } else if(_speciesMatchQueue_active){
+    if(_speciesMatchApproved.length) speciesMatchApplyAll(); else showToast('Проверка завершена без изменений');
+  } else {
+    if(_nameMatchApproved.length) nameMatchApplyAll(); else showToast('Проверка завершена без изменений');
+  }
+}
+
+function drMatchApplyAll(){
+  if(!_drMatchApproved.length){
+    showToast('ДР: проверка завершена · пропущено: '+_drMatchSkipped);
+    _drMatchQueue_active=false; return;
+  }
+  var renameNames={}, renameSpecies={};
+  _drMatchApproved.forEach(function(a){
+    if(a.field==='species') renameSpecies[a.oldName.toLowerCase().trim()]=a.newName;
+    else renameNames[a.oldName.toLowerCase().trim()]=a.newName;
+  });
+
+  function fixDrName(n){ if(!n) return n; return renameNames[n.toLowerCase().trim()]||n; }
+  function fixDrSp(n){ if(!n) return n; return renameSpecies[n.toLowerCase().trim()]||n; }
+
+  var changed=0;
+
+  var shifts=JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+  shifts.forEach(function(sh){
+    var shChanged=false;
+    (sh.journal||[]).forEach(function(e){
+      (e.items||[]).forEach(function(it){
+        if(it.goodsType!=='dr') return;
+        var nn=fixDrName(it.name); if(nn!==it.name){ it.name=nn; changed++; shChanged=true; }
+        var ns=fixDrSp(it.species); if(ns!==it.species){ it.species=ns; changed++; shChanged=true; }
+      });
+    });
+    if(shChanged) try{ db.collection('iz_shifts').doc(sh.id||sh._id).set(sh,{merge:true}); }catch(e){}
+  });
+  localStorage.setItem('iz_shifts',JSON.stringify(shifts));
+
+  var manInvs=JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  manInvs.forEach(function(inv){
+    var invChanged=false;
+    (inv.items||[]).forEach(function(it){
+      var nn=fixDrName(it.name); if(nn!==it.name){ it.name=nn; changed++; invChanged=true; }
+      var ns=fixDrSp(it.species); if(ns!==it.species){ it.species=ns; changed++; invChanged=true; }
+    });
+    if(invChanged){ var id=inv.id||inv._id; if(id) try{ db.collection('iz_manual_invoices').doc(id).set(inv,{merge:true}); }catch(e){} }
+  });
+  localStorage.setItem('iz_manual_invoices',JSON.stringify(manInvs));
+
+  var wsInvs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  wsInvs.forEach(function(inv){
+    var invChanged=false;
+    (inv.items||[]).concat(inv.acceptedItems||[]).forEach(function(it){
+      if(it.goodsType!=='dr') return;
+      var nn=fixDrName(it.name); if(nn!==it.name){ it.name=nn; changed++; invChanged=true; }
+      var ns=fixDrSp(it.species); if(ns!==it.species){ it.species=ns; changed++; invChanged=true; }
+    });
+    if(invChanged){ var id=inv.id||inv._id; if(id) try{ db.collection('iz_invoices').doc(id).set(inv,{merge:true}); }catch(e){} }
+  });
+  localStorage.setItem('iz_invoices',JSON.stringify(wsInvs));
+
+  _drMatchQueue_active=false;
+  showToast('✅ ДР исправлено: '+changed+' · одобрено: '+_drMatchApproved.length+' · пропущено: '+_drMatchSkipped);
+}
+// ════ END DR MATCH ════
+
 
 
 function runGlobalNameFix(){
