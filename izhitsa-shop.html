@@ -15003,24 +15003,33 @@ function renderStockPage(){
   // Summary
   var sumEl=document.getElementById('stockSummary');
   if(sumEl){
-    var woodQty=0,drQty=0,totalAmt=0;
+    var woodCount=0,drCount=0,totalAmt=0;
     filtered.forEach(function(it){
       var q=it.qty||0;
-      if(it.goodsType==='dr') drQty+=q; else woodQty+=q;
-      totalAmt+=q*(it.price||0);
+      var price=it.price||0;
+      if(_stockMode==='archive'){
+        // In archive: count positions, sum by price per unit
+        if(it.goodsType==='dr') drCount++; else woodCount++;
+        totalAmt+=price; // price per unit for archived items
+      } else {
+        if(it.goodsType==='dr') drCount+=q; else woodCount+=q;
+        totalAmt+=q*price;
+      }
     });
-    var modeLabel=_stockMode==='avail'?'в наличии':'в архиве';
+    var modeLabel=_stockMode==='avail'?'в наличии':'продано';
+    var woodLabel=_stockMode==='archive'?woodCount+' поз.':woodCount+' шт.';
+    var drLabel=_stockMode==='archive'?drCount+' поз.':drCount+' шт.';
     sumEl.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px">'+
       '<div style="background:#1a2e1e;border:1px solid #2e4e2e;border-radius:10px;padding:8px 12px;flex:1;min-width:70px">'+
         '<div style="font-size:10px;color:#8888aa">🌳 Дерево</div>'+
-        '<div style="font-size:16px;font-weight:700;color:#c8f060">'+woodQty+' шт.</div>'+
+        '<div style="font-size:16px;font-weight:700;color:#c8f060">'+woodLabel+'</div>'+
       '</div>'+
       '<div style="background:#1e1a2e;border:1px solid #3e2e4e;border-radius:10px;padding:8px 12px;flex:1;min-width:70px">'+
         '<div style="font-size:10px;color:#8888aa">🛍 ДР</div>'+
-        '<div style="font-size:16px;font-weight:700;color:#a060f0">'+drQty+' шт.</div>'+
+        '<div style="font-size:16px;font-weight:700;color:#a060f0">'+drLabel+'</div>'+
       '</div>'+
       '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:8px 12px;flex:1;min-width:70px">'+
-        '<div style="font-size:10px;color:#8888aa">💰 Сумма</div>'+
+        '<div style="font-size:10px;color:#8888aa">'+(_stockMode==='archive'?'💰 Стоимость':'💰 Сумма')+'</div>'+
         '<div style="font-size:13px;font-weight:700;color:#f0f0f8">'+Math.round(totalAmt).toLocaleString('ru-RU')+'₽</div>'+
       '</div>'+
     '</div>'+
