@@ -315,6 +315,11 @@ function checkForAppUpdate() {
           </div>
           <button type="button" onclick="addManInvItem()" class="btn sec" style="font-size:12px;margin-bottom:8px">＋ Добавить позицию</button>
           <div id="manInvTotal" style="font-size:13px;color:#8888aa;margin-bottom:8px"></div>
+          <!-- Тип товара -->
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <button type="button" id="manInvTypeDerevo" onpointerdown="event.preventDefault();setManInvType('derevo')" style="flex:1;padding:10px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:13px;font-weight:700;cursor:pointer">🌳 Дерево</button>
+            <button type="button" id="manInvTypeDr" onpointerdown="event.preventDefault();setManInvType('dr')" style="flex:1;padding:10px;border-radius:10px;border:2px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:13px;font-weight:700;cursor:pointer">🛍 ДР Товар</button>
+          </div>
           <button class="btn blue" onclick="saveManualInvoice()">📥 Принять на баланс</button>
         </div>
       </div>
@@ -12388,6 +12393,15 @@ function updateManInvTotal() {
     : '';
 }
 
+var _manInvGoodsType = 'derevo';
+function setManInvType(type){
+  _manInvGoodsType = type;
+  var btnD = document.getElementById('manInvTypeDerevo');
+  var btnDr = document.getElementById('manInvTypeDr');
+  if(btnD){ btnD.style.borderColor = type==='derevo'?'#c8f060':'#2e2e3e'; btnD.style.background = type==='derevo'?'#1e2a14':'#22222e'; btnD.style.color = type==='derevo'?'#c8f060':'#8888aa'; }
+  if(btnDr){ btnDr.style.borderColor = type==='dr'?'#a060f0':'#2e2e3e'; btnDr.style.background = type==='dr'?'#1e1a2e':'#22222e'; btnDr.style.color = type==='dr'?'#a060f0':'#8888aa'; }
+}
+
 function saveManualInvoice() {
   if(!_manInvItems.length) { showToast('Добавьте позиции'); return; }
   var num = (document.getElementById('manInvNum')||{}).value || 'НАК-???';
@@ -12411,6 +12425,7 @@ function saveManualInvoice() {
   var inv = {
     id: uid(), num: num, date: acceptedDateStr, docDate: docDate, from: from,
     destName: session.shopName,
+    goodsType: _manInvGoodsType,
     items: _manInvItems.map(function(it){ return Object.assign({},it); }),
     totalAmt: totalAmt,
     status: 'accepted',
@@ -12429,14 +12444,19 @@ function saveManualInvoice() {
   _manInvItems.forEach(function(item){
     autoSaveToItemBase(item.name, item.article, item.price, 'derevo');
   });
+  var _isDrInv = _manInvGoodsType === 'dr';
   journal.push({
     id:uid(), type:'receive', ts:_workingNowISO(), icon:'📥',
-    label:'Приёмка '+num,
+    label:'Приёмка '+num+(_isDrInv?' (ДР)':''),
     sub:_manInvItems.length+' изд.'+(from?' · от '+from:''),
     amount:totalAmt,
     amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
-    goodsEffect:totalAmt, invId:inv.id
+    goodsEffect: _isDrInv ? 0 : totalAmt,
+    goodsDrEffect: _isDrInv ? totalAmt : 0,
+    goodsType: _manInvGoodsType,
+    invId:inv.id
   });
+  _manInvGoodsType = 'derevo'; setManInvType('derevo'); // reset
   saveJ();
   // Reset form
   _manInvItems = [];
