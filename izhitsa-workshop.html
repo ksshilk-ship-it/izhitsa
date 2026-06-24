@@ -2305,7 +2305,7 @@ function renderMasterBlanks(){
   document.getElementById('mbAll').textContent      = myBlanks.length;
 
   // Заполнить списки автодополнения внеплановой заготовки
-  const names = [...new Set([...products.filter(p=>p.status!=='archive').map(p=>p.name), ...getItemNames()])];
+  const names = getItemNames();
   _acLists['selfBlankItem'] = names;
   _acLists['selfBlankWood'] = getWoods();
   _acLists['selfBlankSize'] = getSizes();
@@ -3980,8 +3980,7 @@ function toggleAdminCatalog(){
 let _deliveryList = [];
 
 function renderDeliveryPage(){
-  const activeProducts = products.filter(p=>p.status!=='archive');
-  const names = [...new Set([...activeProducts.map(p=>p.name), ...getItemNames()])];
+  const names = getItemNames();
   const woods = getWoods();
   const sizes = getSizes();
 
@@ -4962,7 +4961,7 @@ function getNextArtikulNumber(){
 }
 
 function addMaItemRow(){
-  const names = [...new Set([...products.filter(p=>p.status!=='archive').map(p=>p.name), ...getItemNames()])].sort((a,b)=>a.localeCompare(b,'ru'));
+  const names = getItemNames();
   const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
   _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', name:names[0]||'', wood:woods[0]||'', zp:0, price:0, qty:1});
   recalcMaAutoArtikuls();
@@ -4970,7 +4969,7 @@ function addMaItemRow(){
 }
 
 function renderMaItemsList(){
-  const names = [...new Set([...products.filter(p=>p.status!=='archive').map(p=>p.name), ...getItemNames()])].sort((a,b)=>a.localeCompare(b,'ru'));
+  const names = getItemNames();
   const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
   _maItems.forEach(it=>{
     _acLists['maName_'+it.rid] = names;
@@ -5282,7 +5281,7 @@ function openFiGroupForEdit(groupId){
 }
 
 function addFiItemRow(){
-  const names = [...new Set([...products.filter(p=>p.status!=='archive').map(p=>p.name), ...getItemNames()])];
+  const names = getItemNames();
   const woods = getWoods();
   _fiItems.push({rid:uid(), artikul:String(getNextArtikulNumber()), artikulMode:'auto', name:names[0]||'', wood:woods[0]||'', price:0, qty:1});
   renderFiItemsList();
