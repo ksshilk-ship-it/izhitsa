@@ -1295,17 +1295,37 @@ function acField(inputId, value, placeholder, onInputFn, onPickFn, extraArgsJson
 // просто передаём массив прямо при вызове acSuggest через замыкание ниже.
 const _acLists = {}; // inputId -> array of strings (обновляется перед рендером каждой формы)
 function acSuggest(inputId, onPick, extraArg){
-  const box = document.getElementById(inputId+'_sugg'); if(!box) return;
-  const val = (document.getElementById(inputId)?.value||'').trim().toLowerCase();
+  const input = document.getElementById(inputId);
+  const box = document.getElementById(inputId+'_sugg');
+  if(!box || !input) return;
+  const val = (input.value||'').trim().toLowerCase();
   const list = _acLists[inputId]||[];
   if(!val){ box.style.display='none'; box.innerHTML=''; return; }
   const matches = list.filter(s=>s.toLowerCase().indexOf(val)>=0).slice(0,8);
   if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
+
+  // Позиционируем через position:fixed по реальным координатам инпута на экране,
+  // чтобы список выходил за пределы overflow:auto родительского модала.
+  const rect = input.getBoundingClientRect();
+  box.style.position = 'fixed';
+  box.style.top  = (rect.bottom + 2) + 'px';
+  box.style.left  = rect.left + 'px';
+  box.style.width = rect.width + 'px';
+  box.style.zIndex = '9999';
+  box.style.maxHeight = '160px';
+  box.style.overflowY = 'auto';
+  box.style.background = 'var(--s1)';
+  box.style.border = '1px solid var(--border)';
+  box.style.borderRadius = '8px';
+  box.style.marginTop = '0';
+
   box.innerHTML = matches.map(m=>{
-    const args = extraArg!==undefined ? `'${String(m).replace(/'/g,"\\'")}', ${JSON.stringify(extraArg)}` : `'${String(m).replace(/'/g,"\\'")}'`;
-    return `<div onpointerdown="event.preventDefault();${onPick}(${args})" style="padding:8px 10px;font-size:12px;color:var(--text);border-bottom:1px solid var(--border);cursor:pointer">${m}</div>`;
+    const args = extraArg!==undefined
+      ? `'${String(m).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}', ${JSON.stringify(extraArg)}`
+      : `'${String(m).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}'`;
+    return `<div onpointerdown="event.preventDefault();${onPick}(${args})" style="padding:10px 12px;font-size:13px;color:var(--text);border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent">${m}</div>`;
   }).join('');
-  box.style.display='block';
+  box.style.display = 'block';
 }
 function acHideSugg(inputId){
   setTimeout(()=>{ const box=document.getElementById(inputId+'_sugg'); if(box) box.style.display='none'; }, 250);
@@ -5196,9 +5216,37 @@ async function provedMaAccept(){
 // ════════════════════════════════
 let _fiItems = [];      // позиции в текущей открытой группе
 let _fiGroups = [];     // все группы (из Firebase ws_first_inventory)
+let _fiCurrentGroupId = null; // null = новая группа, string = редактирование существующей
 
 function openFirstInventoryMo(){
-  document.getElementById('fiGroupName').value = '';
+  _fiCurrentGroupId = null;
+  const nameEl = document.getElementById('fiGroupName');
+  if(nameEl){ nameEl.value = ''; nameEl.removeAttribute('disabled'); }
+  const titleEl = document.querySelector('#firstInvMo .mt');
+  if(titleEl) titleEl.textContent = '🆕 Первая инвентаризация';
+  const saveBtn = document.querySelector('#firstInvMo .btn.green');
+  if(saveBtn) saveBtn.textContent = '💾 Сохранить группу';
+  const existingInfo = document.getElementById('fiExistingInfo');
+  if(existingInfo) existingInfo.innerHTML = '';
+  _fiItems = [];
+  addFiItemRow();
+  renderFiItemsList();
+  openMo('firstInvMo');
+}
+
+function openFiGroupForEdit(groupId){
+  const g = _fiGroups.find(x=>x.id===groupId); if(!g) return;
+  _fiCurrentGroupId = groupId;
+  const nameEl = document.getElementById('fiGroupName');
+  if(nameEl){ nameEl.value = g.groupName; nameEl.setAttribute('disabled','disabled'); }
+  // Меняем заголовок и кнопку сохранения
+  const titleEl = document.querySelector('#firstInvMo .mt');
+  if(titleEl) titleEl.textContent = '➕ Дополнить группу «' + g.groupName + '»';
+  const saveBtn = document.querySelector('#firstInvMo .btn.green');
+  if(saveBtn) saveBtn.textContent = '💾 Добавить товары в группу';
+  // Показываем уже существующие позиции для справки
+  const existingInfo = document.getElementById('fiExistingInfo');
+  if(existingInfo) existingInfo.innerHTML = g.positions.length ? `<div style="font-size:11px;color:var(--t2);margin-bottom:8px;padding:8px;background:var(--s2);border-radius:8px">Уже в группе: ${g.positions.length} поз. · ${g.positions.reduce((s,p)=>s+(p.qty||0),0)} шт. — добавьте новые товары ниже</div>` : '';
   _fiItems = [];
   addFiItemRow();
   renderFiItemsList();
@@ -5303,22 +5351,35 @@ async function saveFirstInvGroup(){
   if(!groupName){ showToast('Укажите название группы товаров'); return; }
   if(!_fiItems.length){ showToast('Добавьте хотя бы один товар'); return; }
 
-  const groupId = uid();
-  const positions = _fiItems.map(it=>({
+  const newPositions = _fiItems.map(it=>({
     rid: it.rid, artikul: it.artikul||'', name: it.name, wood: it.wood,
     price: it.price||0, qty: it.qty||1
   }));
 
   try{
-    await db.collection('ws_first_inventory').doc(groupId).set({
-      id: groupId, groupName, positions,
-      status: 'draft', // draft → active | archived
-      createdBy: session.name, createdById: session.id,
-      createdAt: now()
-    });
-    audit && audit('first_inventory_group_created',{groupName, count:positions.length});
-    closeMo('firstInvMo');
-    showToast(`✅ Группа «${groupName}» сохранена · ${positions.length} товаров`);
+    if(_fiCurrentGroupId){
+      // Режим дополнения: добавляем товары к существующей группе
+      const g = _fiGroups.find(x=>x.id===_fiCurrentGroupId); if(!g) return;
+      const merged = [...(g.positions||[]), ...newPositions];
+      await db.collection('ws_first_inventory').doc(_fiCurrentGroupId).update({
+        positions: merged, updatedAt: now(), updatedBy: session.name
+      });
+      audit && audit('first_inventory_group_updated',{groupName:g.groupName, added:newPositions.length});
+      closeMo('firstInvMo');
+      showToast(`✅ Добавлено ${newPositions.length} товар(ов) в группу «${g.groupName}»`);
+    } else {
+      // Новая группа
+      const groupId = uid();
+      await db.collection('ws_first_inventory').doc(groupId).set({
+        id: groupId, groupName, positions: newPositions,
+        status: 'draft',
+        createdBy: session.name, createdById: session.id,
+        createdAt: now()
+      });
+      audit && audit('first_inventory_group_created',{groupName, count:newPositions.length});
+      closeMo('firstInvMo');
+      showToast(`✅ Группа «${groupName}» сохранена · ${newPositions.length} товаров`);
+    }
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 
@@ -5350,9 +5411,13 @@ function renderFirstInventoryGroups(){
         <div style="display:flex;gap:8px;margin-top:10px">
           <button onclick="activateFirstInvGroup('${g.id}')" class="btn green" style="margin:0;flex:1;font-size:12px;padding:9px">✅ Активировать</button>
           <button onclick="archiveFirstInvGroup('${g.id}')" class="btn sec" style="margin:0;flex:1;font-size:12px;padding:9px">🗄 Архив</button>
-        </div>`:''}
+        </div>
+        <button onclick="openFiGroupForEdit('${g.id}')" class="btn" style="background:var(--a2);color:#000;margin-top:8px;font-size:12px;padding:9px">➕ Дополнить группу</button>`:''}
       ${g.status==='active'?`
-        <button onclick="archiveFirstInvGroup('${g.id}')" class="btn sec" style="margin-top:10px;font-size:12px;padding:9px">🗄 Перенести в архив</button>`:''}
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button onclick="openFiGroupForEdit('${g.id}')" class="btn" style="background:var(--a2);color:#000;flex:1;font-size:12px;padding:9px;margin:0">➕ Дополнить</button>
+          <button onclick="archiveFirstInvGroup('${g.id}')" class="btn sec" style="margin:0;flex:1;font-size:12px;padding:9px">🗄 В архив</button>
+        </div>`:''}
     </div>`;
   }).join('');
 }
@@ -5568,6 +5633,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
     <div class="fg"><label class="fl">Группа товаров</label>
       <input class="fi" id="fiGroupName" placeholder="Например: Столешницы дубовые">
     </div>
+
+    <div id="fiExistingInfo"></div>
 
     <div id="fiItemsList" style="margin:14px 0"></div>
 
