@@ -610,6 +610,35 @@ function checkForAppUpdate() {
 
   <!-- ADMIN PAGES -->
 
+  <!-- ADMIN RECEIVES/WRITEOFFS PAGE -->
+  <div class="page" id="pg-admin-rcv-wo">
+    <div class="stitle">Приходы и списания</div>
+    <!-- Period filter -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px" id="adminRcvPeriodChips">
+      <div onclick="setAdminRcvPeriod('today',this)" style="padding:6px 14px;border-radius:20px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">Сегодня</div>
+      <div onclick="setAdminRcvPeriod('week',this)" style="padding:6px 14px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">Неделя</div>
+      <div onclick="setAdminRcvPeriod('month',this)" style="padding:6px 14px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">Месяц</div>
+      <div onclick="setAdminRcvPeriod('year',this)" style="padding:6px 14px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">Год</div>
+      <div onclick="setAdminRcvPeriod('custom',this)" style="padding:6px 14px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">📅 Период</div>
+    </div>
+    <!-- Custom date range -->
+    <div id="adminRcvCustomRange" style="display:none;display:flex;gap:6px;margin-bottom:8px">
+      <input class="fi" type="date" id="adminRcvFrom" style="-webkit-appearance:none;color-scheme:dark;margin:0;flex:1" oninput="renderAdminRcvWo()">
+      <input class="fi" type="date" id="adminRcvTo" style="-webkit-appearance:none;color-scheme:dark;margin:0;flex:1" oninput="renderAdminRcvWo()">
+    </div>
+    <!-- Shop filter -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" id="adminRcvShopChips"></div>
+    <!-- Type toggle -->
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button type="button" id="adminRcvBtnRcv" onclick="adminRcvSetType('receive',this)" style="flex:1;padding:8px;border-radius:10px;border:2px solid #60f090;background:#1e2a14;color:#60f090;font-size:12px;font-weight:700;cursor:pointer">📥 Приходы</button>
+      <button type="button" id="adminRcvBtnWo" onclick="adminRcvSetType('writeoff',this)" style="flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">🗑 Списания</button>
+    </div>
+    <!-- Summary -->
+    <div id="adminRcvSummary" style="margin-bottom:10px"></div>
+    <!-- List -->
+    <div id="adminRcvList"></div>
+  </div>
+
   <!-- TODAY SHIFT -->
   <div class="page" id="pg-today">
     <div class="stitle">Главная</div>
@@ -4742,6 +4771,7 @@ function buildAdminTabs(){
     <button class="tab" onclick="showPg('sellers',this);renderSellersAdmin()"><div class="ti">👥</div><span>Роли</span></button>
     <button class="tab" onclick="showPg('shopsettings',this);renderShopSettings()"><div class="ti">⚙️</div><span>Настройки</span></button>
     <button class="tab" onclick="showPg('stock',this);initStockPage()"><div class="ti">📦</div><span>Склад</span></button>
+    <button class="tab" onclick="showPg('admin-rcv-wo',this);initAdminRcvWo()"><div class="ti">📥</div><span>Приходы</span></button>
     <button class="tab" onclick="exitShift()"><div class="ti">🚪</div><span>Выйти</span></button>`;
 }
 
@@ -13067,6 +13097,191 @@ function init(){
   if(saved){ session=saved; journal=JSON.parse(localStorage.getItem(KEY.journal)||'[]'); if(session.role==='shopadmin')startAdminApp(); else { startApp(); syncLiveShift(); } }
 }
 init();
+
+// ════════════════════════════════════════
+// ADMIN RECEIVES / WRITEOFFS PAGE
+// ════════════════════════════════════════
+var _adminRcvPeriod = 'today';
+var _adminRcvShop = '';
+var _adminRcvType = 'receive';
+
+function initAdminRcvWo(){
+  // Build shop chips
+  var chips = document.getElementById('adminRcvShopChips');
+  if(chips){
+    var shops = getShopNames().filter(function(s){ var t=getShopType(s); return t==='shop'||t==='offline'; });
+    chips.innerHTML = '<div onclick="adminRcvSetShop(\'\',this)" style="padding:5px 12px;border-radius:20px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">Все</div>' +
+      shops.map(function(s){ return '<div onclick="adminRcvSetShop(\''+s+'\',this)" style="padding:5px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:700;cursor:pointer">'+s+'</div>'; }).join('');
+  }
+  renderAdminRcvWo();
+}
+
+function setAdminRcvPeriod(p, el){
+  _adminRcvPeriod = p;
+  var chips = document.getElementById('adminRcvPeriodChips');
+  if(chips) chips.querySelectorAll('div').forEach(function(d){
+    d.style.borderColor='#2e2e3e'; d.style.background='#22222e'; d.style.color='#8888aa'; d.style.borderWidth='1px';
+  });
+  if(el){ el.style.borderColor='#c8f060'; el.style.background='#1e2a14'; el.style.color='#c8f060'; el.style.borderWidth='2px'; }
+  var cr = document.getElementById('adminRcvCustomRange');
+  if(cr) cr.style.display = p==='custom' ? 'flex' : 'none';
+  renderAdminRcvWo();
+}
+
+function adminRcvSetShop(shop, el){
+  _adminRcvShop = shop;
+  var chips = document.getElementById('adminRcvShopChips');
+  if(chips) chips.querySelectorAll('div').forEach(function(d){
+    d.style.borderColor='#2e2e3e'; d.style.background='#22222e'; d.style.color='#8888aa'; d.style.borderWidth='1px';
+  });
+  if(el){ el.style.borderColor='#c8f060'; el.style.background='#1e2a14'; el.style.color='#c8f060'; el.style.borderWidth='2px'; }
+  renderAdminRcvWo();
+}
+
+function adminRcvSetType(type, el){
+  _adminRcvType = type;
+  var btnR = document.getElementById('adminRcvBtnRcv');
+  var btnW = document.getElementById('adminRcvBtnWo');
+  if(type==='receive'){
+    if(btnR){ btnR.style.borderColor='#60f090'; btnR.style.background='#1e2a14'; btnR.style.color='#60f090'; btnR.style.borderWidth='2px'; }
+    if(btnW){ btnW.style.borderColor='#2e2e3e'; btnW.style.background='#22222e'; btnW.style.color='#8888aa'; btnW.style.borderWidth='1px'; }
+  } else {
+    if(btnW){ btnW.style.borderColor='#f06060'; btnW.style.background='#2a1e1e'; btnW.style.color='#f06060'; btnW.style.borderWidth='2px'; }
+    if(btnR){ btnR.style.borderColor='#2e2e3e'; btnR.style.background='#22222e'; btnR.style.color='#8888aa'; btnR.style.borderWidth='1px'; }
+  }
+  renderAdminRcvWo();
+}
+
+function _adminRcvDateRange(){
+  var now = new Date();
+  var todayStr = now.toISOString().split('T')[0];
+  if(_adminRcvPeriod==='today') return {from:todayStr, to:todayStr};
+  if(_adminRcvPeriod==='week'){
+    var d = new Date(now); d.setDate(d.getDate()-6);
+    return {from:d.toISOString().split('T')[0], to:todayStr};
+  }
+  if(_adminRcvPeriod==='month'){
+    var d = new Date(now); d.setDate(d.getDate()-29);
+    return {from:d.toISOString().split('T')[0], to:todayStr};
+  }
+  if(_adminRcvPeriod==='year'){
+    var d = new Date(now); d.setFullYear(d.getFullYear()-1);
+    return {from:d.toISOString().split('T')[0], to:todayStr};
+  }
+  if(_adminRcvPeriod==='custom'){
+    return {
+      from:(document.getElementById('adminRcvFrom')||{}).value||todayStr,
+      to:(document.getElementById('adminRcvTo')||{}).value||todayStr
+    };
+  }
+  return {from:todayStr, to:todayStr};
+}
+
+function renderAdminRcvWo(){
+  var range = _adminRcvDateRange();
+  var allShifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+  var type = _adminRcvType;
+
+  // Collect all relevant entries from all shifts
+  var rows = [];
+  allShifts.forEach(function(sh){
+    var sn = sh.shopName||'';
+    if(_adminRcvShop && sn !== _adminRcvShop) return;
+    var shDate = sh.date || (sh.openedAt||'').split('T')[0];
+    if(shDate < range.from || shDate > range.to) return;
+    var jnl = sh.journal||[];
+    jnl.forEach(function(e){
+      if(e.type !== type) return;
+      var eDate = (e.ts||'').split('T')[0] || shDate;
+      rows.push({
+        shop: sn,
+        date: shDate,
+        ts: e.ts||shDate,
+        label: e.label||e.sub||'',
+        sub: e.sub||'',
+        amount: type==='receive' ? (e.goodsEffect||e.goodsDrEffect||e.amount||0) : (e.amount||0),
+        goodsType: e.goodsType||'derevo',
+        invId: e.invId||null,
+        items: e.items||[],
+        reason: e.reason||'',
+        entryId: e.id,
+        shiftId: sh.id
+      });
+    });
+    // For receives: also check goodsReceives and drGoodsReceives arrays
+    if(type==='receive'){
+      (sh.goodsReceives||[]).forEach(function(r){
+        rows.push({shop:sn, date:shDate, ts:shDate, label:'Приход Дерево', sub:r.name||r.article||'', amount:r.amt||r.amount||0, goodsType:'derevo', items:[], entryId:null, shiftId:sh.id});
+      });
+      (sh.drGoodsReceives||[]).forEach(function(r){
+        rows.push({shop:sn, date:shDate, ts:shDate, label:'Приход ДР', sub:r.name||r.article||'', amount:r.amt||r.amount||0, goodsType:'dr', items:[], entryId:null, shiftId:sh.id});
+      });
+    }
+  });
+
+  // Sort by date desc
+  rows.sort(function(a,b){ return (b.ts||b.date).localeCompare(a.ts||a.date); });
+
+  // Summary
+  var totalWood = rows.filter(function(r){ return r.goodsType!=='dr'; }).reduce(function(s,r){ return s+r.amount; },0);
+  var totalDr = rows.filter(function(r){ return r.goodsType==='dr'; }).reduce(function(s,r){ return s+r.amount; },0);
+  var sumEl = document.getElementById('adminRcvSummary');
+  if(sumEl){
+    sumEl.innerHTML = '<div style="display:flex;gap:8px;margin-bottom:4px">'+
+      '<div style="background:#1a2e1e;border:1px solid #2e4e2e;border-radius:10px;padding:8px 12px;flex:1">'+
+        '<div style="font-size:10px;color:#8888aa">🌳 Дерево</div>'+
+        '<div style="font-size:15px;font-weight:700;color:#c8f060">'+Math.round(totalWood).toLocaleString('ru-RU')+'₽</div>'+
+      '</div>'+
+      '<div style="background:#1e1a2e;border:1px solid #3e2e4e;border-radius:10px;padding:8px 12px;flex:1">'+
+        '<div style="font-size:10px;color:#8888aa">🛍 ДР Товар</div>'+
+        '<div style="font-size:15px;font-weight:700;color:#a060f0">'+Math.round(totalDr).toLocaleString('ru-RU')+'₽</div>'+
+      '</div>'+
+      '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:8px 12px;flex:1">'+
+        '<div style="font-size:10px;color:#8888aa">Итого</div>'+
+        '<div style="font-size:15px;font-weight:700;color:#f0f0f8">'+Math.round(totalWood+totalDr).toLocaleString('ru-RU')+'₽</div>'+
+      '</div>'+
+    '</div>'+
+    '<div style="font-size:11px;color:#8888aa">'+rows.length+' записей · '+range.from+(range.from!==range.to?' — '+range.to:'')+'</div>';
+  }
+
+  var listEl = document.getElementById('adminRcvList');
+  if(!listEl) return;
+  if(!rows.length){
+    listEl.innerHTML = '<div class="empty"><div class="ei">'+(type==='receive'?'📥':'🗑')+'</div>Нет записей за период</div>';
+    return;
+  }
+
+  listEl.innerHTML = rows.map(function(r){
+    var gtColor = r.goodsType==='dr' ? '#a060f0' : '#60f090';
+    var gtLabel = r.goodsType==='dr' ? '🛍 ДР' : '🌳';
+    var timeStr = r.ts ? new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '';
+    var itemsList = (r.items||[]).map(function(it){
+      return '<div style="font-size:11px;color:#8888aa;padding-left:8px">'+
+        (it.article||it.num?'№'+(it.article||it.num)+' ':'')+
+        (it.name||'')+(it.species?' · '+it.species:'')+(it.qty>1?' ×'+it.qty:'')+'</div>';
+    }).join('');
+    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:10px 12px;margin-bottom:8px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">'+
+        '<div style="flex:1">'+
+          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'+
+            '<span style="font-size:10px;font-weight:700;color:'+gtColor+'">'+gtLabel+'</span>'+
+            '<span style="font-size:11px;color:#8888aa">'+r.shop+'</span>'+
+            '<span style="font-size:10px;color:#606080">'+r.date+(timeStr?' · '+timeStr:'')+'</span>'+
+          '</div>'+
+          '<div style="font-size:13px;font-weight:700">'+r.label+'</div>'+
+          (r.sub&&r.sub!==r.label?'<div style="font-size:11px;color:#8888aa;margin-top:1px">'+r.sub+'</div>':'')+
+          (r.reason?'<div style="font-size:11px;color:#a060f0;margin-top:1px">'+r.reason+'</div>':'')+
+          itemsList+
+        '</div>'+
+        '<div style="text-align:right;flex-shrink:0;padding-left:10px">'+
+          '<div style="font-size:16px;font-weight:700;color:'+gtColor+'">'+Math.round(r.amount).toLocaleString('ru-RU')+'₽</div>'+
+        '</div>'+
+      '</div>'+
+      (r.invId ? '<button type="button" onclick="svOpenInvoiceFromReceive(\''+r.invId+'\')" style="font-size:11px;padding:4px 10px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#60c8f0;cursor:pointer">📋 Открыть накладную</button>' : '')+
+    '</div>';
+  }).join('');
+}
+// ════ END ADMIN RECEIVES/WRITEOFFS ════
 
 // ═══════════════════════════════════════════════════
 // STOCK MODULE — iz_stock
