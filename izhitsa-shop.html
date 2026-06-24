@@ -567,6 +567,30 @@ function checkForAppUpdate() {
     <div id="personalShiftsList"></div>
   </div>
 
+  <!-- NAME MATCH REVIEW MODAL -->
+  <div class="mo" id="nameMatchMo" style="z-index:300">
+    <div class="md">
+      <div class="mh"></div>
+      <div class="mt">✏️ Проверка названий</div>
+      <div id="nameMatchProgress" style="font-size:11px;color:#8888aa;margin-bottom:10px;text-align:center"></div>
+      <div style="background:#1a1a22;border-radius:12px;padding:14px;margin-bottom:12px">
+        <div style="font-size:10px;color:#f06060;font-weight:700;margin-bottom:6px">БЫЛО</div>
+        <div id="nameMatchOld" style="font-size:15px;font-weight:700;word-break:break-word"></div>
+        <div id="nameMatchCtx" style="font-size:11px;color:#8888aa;margin-top:4px"></div>
+      </div>
+      <div style="font-size:20px;text-align:center;margin:4px 0">↓</div>
+      <div style="background:#1e2a14;border:1px solid #c8f060;border-radius:12px;padding:14px;margin-bottom:16px">
+        <div style="font-size:10px;color:#c8f060;font-weight:700;margin-bottom:6px">СТАНЕТ</div>
+        <div id="nameMatchNew" style="font-size:15px;font-weight:700;color:#c8f060;word-break:break-word"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button type="button" onclick="nameMatchDecision(false)" style="flex:1;padding:12px;border-radius:10px;border:1px solid #3e2e2e;background:#22222e;color:#f06060;font-size:14px;font-weight:700;cursor:pointer">✕ Пропустить</button>
+        <button type="button" onclick="nameMatchDecision(true)" style="flex:1;padding:12px;border-radius:10px;border:none;background:#c8f060;color:#0f0f13;font-size:14px;font-weight:700;cursor:pointer">✓ Заменить</button>
+      </div>
+      <button type="button" onclick="nameMatchFinish()" style="width:100%;margin-top:8px;padding:10px;border-radius:10px;border:1px solid #2e2e3e;background:none;color:#8888aa;font-size:12px;cursor:pointer">Завершить проверку</button>
+    </div>
+  </div>
+
   <!-- STOCK PAGE -->
   <div class="page" id="pg-stock">
     <div class="stitle" id="stockPageTitle">Склад</div>
@@ -1087,6 +1111,7 @@ function checkForAppUpdate() {
     <div class="stitle">⚙️ Настройки</div>
     <div style="margin-bottom:12px">
       <button type="button" onclick="renameAllInvoices()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #f0a06055;background:#2a1e10;color:#f0a060;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">🔢 Переименовать все накладные по новому формату</button>
+      <button type="button" onclick="startNameMatchReview()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #f0c06055;background:#2a2210;color:#f0c060;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">🔍 Проверить названия товаров (Дерево)</button>
       <button type="button" onclick="rebuildGoodsDerevoFromHistory()" style="width:100%;padding:12px;border-radius:10px;border:1px solid #60c8f055;background:#1a2e2e;color:#60c8f0;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px">📦 Собрать товары из истории в базу Дерево</button>
 
     </div>
@@ -13344,6 +13369,248 @@ function renameAllInvoices(){
     showToast('Ошибка: '+(e&&e.message||e));
   });
 }
+
+
+// ════════════════════════════════════════
+// NAME MATCH REVIEW TOOL
+// ════════════════════════════════════════
+
+var _nameMatchQueue = [];   // [{oldName, newName, type, path}]
+var _nameMatchIdx = 0;
+var _nameMatchApproved = [];
+var _nameMatchSkipped = 0;
+
+// Fuzzy similarity: what % of newName words appear in oldName
+function nameSimilarity(a, b){
+  var na = a.toLowerCase().trim();
+  var nb = b.toLowerCase().trim();
+  if(na === nb) return 1.0;
+  // Check if one contains the other
+  if(nb.indexOf(na) >= 0 || na.indexOf(nb) >= 0) return 0.85;
+  // Word overlap
+  var wa = na.split(/\s+/);
+  var wb = nb.split(/\s+/);
+  var matches = wa.filter(function(w){ return wb.indexOf(w) >= 0; }).length;
+  var score = matches / Math.max(wa.length, wb.length);
+  // Bonus if first word matches
+  if(wa[0] === wb[0]) score = Math.min(1, score + 0.2);
+  return score;
+}
+
+function findBestMatch(name, catalog){
+  var n = (name||'').toLowerCase().trim();
+  if(!n) return null;
+  var best = null, bestScore = 0;
+  catalog.forEach(function(cat){
+    var cn = (cat.name||cat).toLowerCase().trim();
+    var score = nameSimilarity(n, cn);
+    if(score > bestScore){ bestScore = score; best = cat; }
+  });
+  // Only suggest if score >= 0.4 and names differ
+  if(bestScore >= 0.4 && best){
+    var catName = best.name||best;
+    if(catName.toLowerCase().trim() !== n) return {match: catName, score: bestScore};
+  }
+  return null;
+}
+
+function startNameMatchReview(){
+  var catalog = getRefBook('iz_goods_derevo');
+  if(!catalog.length){ showToast('База товаров Дерево пуста'); return; }
+
+  _nameMatchQueue = [];
+  _nameMatchApproved = [];
+  _nameMatchSkipped = 0;
+
+  var seen = {}; // oldName -> newName, avoid duplicates
+
+  // Scan iz_shifts journal
+  var shifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+  shifts.forEach(function(sh){
+    (sh.journal||[]).forEach(function(e){
+      if(e.type !== 'sale' && e.type !== 'receive') return;
+      (e.items||[]).forEach(function(it){
+        if(!it.name || it.goodsType === 'dr') return;
+        var key = it.name.toLowerCase().trim();
+        if(seen[key]) return;
+        var match = findBestMatch(it.name, catalog);
+        if(match){
+          seen[key] = match.match;
+          _nameMatchQueue.push({
+            oldName: it.name,
+            newName: match.match,
+            score: match.score,
+            ctx: 'Смена ' + sh.shopName + ' · ' + sh.date
+          });
+        }
+      });
+    });
+  });
+
+  // Scan iz_manual_invoices
+  var manInvs = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  manInvs.forEach(function(inv){
+    if(inv.goodsType === 'dr') return;
+    (inv.items||[]).forEach(function(it){
+      if(!it.name) return;
+      var key = it.name.toLowerCase().trim();
+      if(seen[key]) return;
+      var match = findBestMatch(it.name, catalog);
+      if(match){
+        seen[key] = match.match;
+        _nameMatchQueue.push({
+          oldName: it.name,
+          newName: match.match,
+          score: match.score,
+          ctx: 'Накладная ' + (inv.num||'') + ' · ' + (inv.destName||inv.shopName||'')
+        });
+      }
+    });
+  });
+
+  // Scan iz_invoices (workshop)
+  var wsInvs = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  wsInvs.forEach(function(inv){
+    (inv.items||[]).forEach(function(it){
+      if(!it.name || it.goodsType === 'dr') return;
+      var key = it.name.toLowerCase().trim();
+      if(seen[key]) return;
+      var match = findBestMatch(it.name, catalog);
+      if(match){
+        seen[key] = match.match;
+        _nameMatchQueue.push({
+          oldName: it.name,
+          newName: match.match,
+          score: match.score,
+          ctx: 'Накладная ' + (inv.num||'') + ' (мастерская)'
+        });
+      }
+    });
+  });
+
+  // Sort by score desc (most confident first)
+  _nameMatchQueue.sort(function(a,b){ return b.score - a.score; });
+
+  if(!_nameMatchQueue.length){
+    showToast('Нет позиций требующих проверки');
+    return;
+  }
+
+  _nameMatchIdx = 0;
+  nameMatchShowNext();
+}
+
+function nameMatchShowNext(){
+  if(_nameMatchIdx >= _nameMatchQueue.length){
+    closeMo('nameMatchMo');
+    nameMatchApplyAll();
+    return;
+  }
+  var item = _nameMatchQueue[_nameMatchIdx];
+  var prog = document.getElementById('nameMatchProgress');
+  var oldEl = document.getElementById('nameMatchOld');
+  var newEl = document.getElementById('nameMatchNew');
+  var ctxEl = document.getElementById('nameMatchCtx');
+  if(prog) prog.textContent = (_nameMatchIdx+1) + ' из ' + _nameMatchQueue.length;
+  if(oldEl) oldEl.textContent = item.oldName;
+  if(newEl) newEl.textContent = item.newName;
+  if(ctxEl) ctxEl.textContent = item.ctx + ' (схожесть: ' + Math.round(item.score*100) + '%)';
+  openMo('nameMatchMo');
+}
+
+function nameMatchDecision(approve){
+  if(approve) _nameMatchApproved.push(_nameMatchQueue[_nameMatchIdx]);
+  else _nameMatchSkipped++;
+  _nameMatchIdx++;
+  nameMatchShowNext();
+}
+
+function nameMatchFinish(){
+  closeMo('nameMatchMo');
+  if(_nameMatchApproved.length) nameMatchApplyAll();
+  else showToast('Проверка завершена без изменений');
+}
+
+function nameMatchApplyAll(){
+  if(!_nameMatchApproved.length){
+    showToast('Проверка завершена · пропущено: '+_nameMatchSkipped);
+    return;
+  }
+  // Build rename map: oldName.lower -> newName
+  var renameMap = {};
+  _nameMatchApproved.forEach(function(a){ renameMap[a.oldName.toLowerCase().trim()] = a.newName; });
+
+  function fixName(name){
+    if(!name) return name;
+    return renameMap[name.toLowerCase().trim()] || name;
+  }
+
+  var changed = 0;
+
+  // Apply to iz_shifts
+  var shifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+  shifts.forEach(function(sh){
+    var shChanged = false;
+    (sh.journal||[]).forEach(function(e){
+      (e.items||[]).forEach(function(it){
+        var nn = fixName(it.name);
+        if(nn !== it.name){ it.name=nn; changed++; shChanged=true; }
+      });
+    });
+    if(shChanged){
+      try{ db.collection('iz_shifts').doc(sh.id||sh._id).set(sh,{merge:true}); }catch(e){}
+    }
+  });
+  localStorage.setItem('iz_shifts', JSON.stringify(shifts));
+
+  // Apply to iz_manual_invoices
+  var manInvs = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  manInvs.forEach(function(inv){
+    var invChanged = false;
+    (inv.items||[]).forEach(function(it){
+      var nn = fixName(it.name);
+      if(nn !== it.name){ it.name=nn; changed++; invChanged=true; }
+    });
+    if(invChanged){
+      var id=inv.id||inv._id;
+      if(id) try{ db.collection('iz_manual_invoices').doc(id).set(inv,{merge:true}); }catch(e){}
+    }
+  });
+  localStorage.setItem('iz_manual_invoices', JSON.stringify(manInvs));
+
+  // Apply to iz_invoices
+  var wsInvs = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  wsInvs.forEach(function(inv){
+    var invChanged = false;
+    (inv.items||[]).forEach(function(it){
+      var nn = fixName(it.name);
+      if(nn !== it.name){ it.name=nn; changed++; invChanged=true; }
+    });
+    (inv.acceptedItems||[]).forEach(function(it){
+      var nn = fixName(it.name);
+      if(nn !== it.name){ it.name=nn; changed++; invChanged=true; }
+    });
+    if(invChanged){
+      var id=inv.id||inv._id;
+      if(id) try{ db.collection('iz_invoices').doc(id).set(inv,{merge:true}); }catch(e){}
+    }
+  });
+  localStorage.setItem('iz_invoices', JSON.stringify(wsInvs));
+
+  // Apply to iz_stock
+  var stock = JSON.parse(localStorage.getItem('iz_stock')||'{}');
+  Object.keys(stock).forEach(function(sn){
+    Object.keys(stock[sn]||{}).forEach(function(key){
+      var it=stock[sn][key];
+      var nn=fixName(it.name);
+      if(nn!==it.name){ it.name=nn; changed++; }
+    });
+  });
+  localStorage.setItem('iz_stock', JSON.stringify(stock));
+
+  showToast('✅ Переименовано: '+changed+' позиций · одобрено: '+_nameMatchApproved.length+' · пропущено: '+_nameMatchSkipped);
+}
+// ════ END NAME MATCH REVIEW ════
 
 function runGlobalNameFix(){
   if(!confirm('Исправить регистр названий товаров во всех сменах, накладных и позициях? Это займёт несколько секунд.')) return;
