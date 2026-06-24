@@ -631,6 +631,7 @@ function checkForAppUpdate() {
         <option value="name">По наименованию</option>
         <option value="species">По породе / составу</option>
         <option value="type">По типу товара</option>
+        <option value="age">⏱ Время на складе</option>
       </select>
     </div>
 
@@ -6203,7 +6204,7 @@ function acceptInvoice(){
   const goodsTotal=accepted.reduce((s,a)=>s+a.factPrice,0);
   journal.push({id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',label:'Приёмка '+inv2.num,
     sub:inv2.items.length+' изд. · принял: '+who,amount:goodsTotal,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:goodsTotal});
-  try{ stockApplyReceive(session&&session.shopName, accepted, inv2.acceptedDate); }catch(e){}
+  try{ stockApplyReceive(session&&session.shopName, accepted, inv2.acceptedDate, inv2.goodsType); }catch(e){}
   saveJ(); try{ db.collection('iz_invoices').doc(currentInvId).set(inv2); }catch(e){}
   clearInvProgress(currentInvId);
   closeMo('invMo'); renderAll(); renderInvoices(); renderReceiveArchive(); showToast('✅ Накладная принята');
@@ -14497,18 +14498,20 @@ function stockUpdateQty(shopName,num,name,price,species,goodsType,size,qtyDelta,
 function stockApplySale(shopName,items){
   if(!shopName) return;
   items.forEach(function(it){
-    if(!it.num) return;
-    stockUpdateQty(shopName,it.num,it.name,it.price,it.species,it.goodsType,it.size,-(it.qty||1),null);
+    var artNum=it.article||it.num||it.artNum;
+    if(!artNum) return;
+    stockUpdateQty(shopName,artNum,it.name,it.price,it.species,it.goodsType,it.size,-(it.qty||1),null);
   });
 }
 
-function stockApplyReceive(shopName,items,date){
+function stockApplyReceive(shopName,items,date,invGoodsType){
   if(!shopName) return;
   items.forEach(function(it){
     var artNum=it.article||it.num||it.artNum;
     if(!artNum) return;
-    var gt=it.goodsType||(it.category==='dr'?'dr':'derevo');
-    stockUpdateQty(shopName,artNum,it.name,it.price||it.factPrice,it.species,gt,it.size||'',(it.qty||1),date);
+    var gt=it.goodsType||(it.category==='dr'?'dr':(invGoodsType||'derevo'));
+    var pr=it.price||it.factPrice||0;
+    stockUpdateQty(shopName,artNum,it.name,pr,it.species,gt,it.size||'',(it.qty||1),date);
   });
 }
 
@@ -14527,18 +14530,26 @@ function rebuildStock(showMsg){
     var date=inv.acceptedAt?inv.acceptedAt.split('T')[0]:(inv.date||'');
     // Use acceptedItems if available (has factPrice), fallback to items
     var itemsList=inv.acceptedItems||inv.items||[];
+    var invGoodsType = inv.goodsType || (inv.category==='dr'?'dr':'derevo');
     itemsList.forEach(function(it){
       var artNum=it.article||it.num||it.artNum;
-      if(!artNum) return;
+      // For DR items without article, use name as key
+      if(!artNum){
+        if(invGoodsType==='dr' && it.name) artNum='DR_'+(it.name||'').replace(/\s+/g,'_').slice(0,20);
+        else return;
+      }
       var key=String(artNum);
       var qty=it.qty||1;
       var pr=it.factPrice||it.price||0;
-      var gt=it.goodsType||(it.category==='dr'?'dr':'derevo');
+      // Use item-level goodsType first, fallback to invoice-level
+      var gt=it.goodsType||(it.category==='dr'?'dr':invGoodsType);
       if(!stock[sn][key]) stock[sn][key]={num:key,name:it.name||'',price:pr,species:it.species||'',goodsType:gt,size:it.size||'',qty:0,lastReceived:''};
       stock[sn][key].qty+=qty;
       if(date>(stock[sn][key].lastReceived||'')) stock[sn][key].lastReceived=date;
       if(it.name) stock[sn][key].name=it.name;
       if(pr) stock[sn][key].price=pr;
+      // Always preserve goodsType from invoice level if not on item
+      if(!it.goodsType && invGoodsType) stock[sn][key].goodsType=gt;
     });
   });
 
@@ -14551,16 +14562,18 @@ function rebuildStock(showMsg){
     if(!stock[sn]) stock[sn]={};
     var date=inv.acceptedAt?inv.acceptedAt.split('T')[0]:(inv.acceptedDate||inv.date||'');
     var itemsList=inv.acceptedItems||inv.items||[];
+    var wsInvGoodsType = inv.goodsType||(inv.category==='dr'?'dr':'derevo');
     itemsList.forEach(function(it){
       var artNum=it.article||it.num||it.artNum;
       if(!artNum) return;
       var key=String(artNum);
       var qty=it.qty||1;
       var pr=it.factPrice||it.price||0;
-      var gt=it.goodsType||'derevo';
+      var gt=it.goodsType||wsInvGoodsType||'derevo';
       if(!stock[sn][key]) stock[sn][key]={num:key,name:it.name||'',price:pr,species:it.species||'',goodsType:gt,size:it.size||'',qty:0,lastReceived:''};
       stock[sn][key].qty+=qty;
       if(date>(stock[sn][key].lastReceived||'')) stock[sn][key].lastReceived=date;
+      if(pr) stock[sn][key].price=pr;
     });
   });
 
@@ -14588,12 +14601,36 @@ function rebuildStock(showMsg){
         // Only count receive entries NOT linked to an already-counted invoice
         if(e.invId && countedInvIds[String(e.invId)]) return;
         // Manual receive in journal with article
-        if(e.article){
-          var key=String(e.article);
-          if(!stock[sn][key]) stock[sn][key]={num:key,name:e.name||'',price:e.amount||0,species:'',goodsType:'derevo',size:'',qty:0,lastReceived:''};
+        var rcvArt = e.article||(e.items&&e.items[0]&&(e.items[0].article||e.items[0].num));
+        var rcvGt = e.goodsType||'derevo';
+        if(rcvArt){
+          var key=String(rcvArt);
+          if(!stock[sn][key]) stock[sn][key]={num:key,name:e.name||'',price:e.amount||0,species:'',goodsType:rcvGt,size:'',qty:0,lastReceived:''};
           stock[sn][key].qty+=1;
+          stock[sn][key].goodsType=rcvGt;
           var d=e.ts?e.ts.split('T')[0]:'';
           if(d>(stock[sn][key].lastReceived||'')) stock[sn][key].lastReceived=d;
+        } else if(e.invId && !countedInvIds[String(e.invId)]){
+          // Receive linked to invoice not yet counted - look up invoice
+          var linkedInv = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]')
+            .concat(JSON.parse(localStorage.getItem('iz_invoices')||'[]'))
+            .find(function(i){ return (i.id||i._id)===e.invId; });
+          if(linkedInv){
+            var liGt = linkedInv.goodsType||(linkedInv.category==='dr'?'dr':'derevo');
+            var liDate = linkedInv.acceptedAt?linkedInv.acceptedAt.split('T')[0]:(linkedInv.date||'');
+            (linkedInv.items||[]).forEach(function(it){
+              var an=it.article||it.num||it.artNum;
+              if(!an && it.name) an='DR_'+(it.name||'').replace(/\s+/g,'_').slice(0,20);
+              if(!an) return;
+              var k=String(an);
+              var pr=it.factPrice||it.price||0;
+              var gt=it.goodsType||liGt;
+              if(!stock[sn][k]) stock[sn][k]={num:k,name:it.name||'',price:pr,species:it.species||'',goodsType:gt,size:'',qty:0,lastReceived:''};
+              stock[sn][k].qty+=(it.qty||1);
+              if(liDate>(stock[sn][k].lastReceived||'')) stock[sn][k].lastReceived=liDate;
+              countedInvIds[String(e.invId)]=true;
+            });
+          }
         }
       } else if(e.type==='writeoff'){
         (e.items||[]).forEach(function(it){
@@ -14657,13 +14694,30 @@ function stockDiagnostic(){
   var manInvs=JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   var wsInvs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
   var shifts=JSON.parse(localStorage.getItem('iz_shifts')||'[]');
-  var keys=[];
-  for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&k.indexOf('iz_')===0) keys.push(k); }
-  var msg='iz_manual_invoices (LS): '+manInvs.length+'\n';
-  msg+='iz_invoices accepted (LS): '+wsInvs.filter(function(i){return i.status==='accepted';}).length+'\n';
-  msg+='iz_shifts (LS): '+shifts.length+'\n';
-  msg+='\nLS ключи: '+keys.join(', ')+'\n';
-  msg+='\n→ Сейчас принудительно загружу из Firestore...';
+  // Check DR invoices
+  var drManInvs=manInvs.filter(function(i){return i.goodsType==='dr';});
+  var stock=getStock();
+  var drStockItems=0, totalStockItems=0;
+  Object.keys(stock).forEach(function(sn){
+    Object.keys(stock[sn]||{}).forEach(function(k){
+      totalStockItems++;
+      if(stock[sn][k].goodsType==='dr') drStockItems++;
+    });
+  });
+  var msg='iz_manual_invoices: '+manInvs.length+' (ДР: '+drManInvs.length+')'+'\n';
+  msg+='iz_invoices accepted: '+wsInvs.filter(function(i){return i.status==='accepted';}).length+'\n';
+  msg+='\niz_stock всего: '+totalStockItems+' позиций\n';
+  msg+='iz_stock ДР: '+drStockItems+' позиций\n';
+  // Show sample DR invoice items
+  if(drManInvs.length){
+    msg+='\nПример ДР накладной:\n';
+    var inv=drManInvs[0];
+    msg+='  goodsType='+inv.goodsType+'\n';
+    (inv.items||[]).slice(0,3).forEach(function(it){
+      msg+='  '+it.name+' goodsType='+it.goodsType+' price='+it.price+'\n';
+    });
+  }
+  msg+='\n→ Загружаю из Firestore...';
   alert(msg);
   // Show current journal receive entries with full date
   var jRcvDbg = journal.filter(function(e){ return e.type==='receive'; });
@@ -14754,7 +14808,53 @@ function stockOnFilterChange(){
       '<option value="derevo">🌳 Дерево</option>'+
       '<option value="dr">🛍 ДР Товар</option>'+
     '</select>';
+  } else if(filterBy==='age'){
+    // Age chips
+    container.innerHTML=
+      '<div style="font-size:11px;color:#8888aa;margin-bottom:6px">Товар на складе дольше:</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        '<div onpointerdown="event.preventDefault();stockSetAge(\'week\',this)" style="padding:6px 14px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">Недели</div>'+
+        '<div onpointerdown="event.preventDefault();stockSetAge(\'month\',this)" style="padding:6px 14px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">Месяца</div>'+
+        '<div onpointerdown="event.preventDefault();stockSetAge(\'quarter\',this)" style="padding:6px 14px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">Квартала</div>'+
+        '<div onpointerdown="event.preventDefault();stockSetAge(\'year\',this)" style="padding:6px 14px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">Года</div>'+
+        '<div onpointerdown="event.preventDefault();stockSetAge(\'custom\',this)" style="padding:6px 14px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">📅 Период</div>'+
+      '</div>'+
+      '<div id="stockAgeCustom" style="display:none;margin-top:8px;display:none">'+
+        '<div style="font-size:11px;color:#8888aa;margin-bottom:4px">Поступил с</div>'+
+        '<input class="fi" type="date" id="stockAgeDateFrom" style="-webkit-appearance:none;color-scheme:dark;margin:0;margin-bottom:6px" oninput="stockApplyFilter()">'+
+        '<div style="font-size:11px;color:#8888aa;margin-bottom:4px">по</div>'+
+        '<input class="fi" type="date" id="stockAgeDateTo" style="-webkit-appearance:none;color-scheme:dark;margin:0" oninput="stockApplyFilter()">'+
+      '</div>';
   }
+}
+
+var _stockAgeMode = ''; // 'week'|'month'|'quarter'|'year'|'custom'
+
+function stockSetAge(mode, el){
+  _stockAgeMode = mode;
+  // Update chip styles
+  var container = document.getElementById('stockFilterInput');
+  if(container){
+    var chips = container.querySelectorAll('div[onpointerdown]');
+    chips.forEach(function(c){
+      c.style.borderColor='#2e2e3e'; c.style.background='#22222e'; c.style.color='#8888aa'; c.style.borderWidth='1px';
+    });
+    if(el){ el.style.borderColor='#f0a060'; el.style.background='#2a1e10'; el.style.color='#f0a060'; el.style.borderWidth='2px'; }
+  }
+  var customDiv = document.getElementById('stockAgeCustom');
+  if(customDiv) customDiv.style.display = mode==='custom' ? 'block' : 'none';
+  stockApplyFilter();
+}
+
+function _stockAgeCutoff(){
+  // Returns the cutoff date string: items received BEFORE this date are "old"
+  var now = new Date();
+  if(_stockAgeMode==='week'){ now.setDate(now.getDate()-7); }
+  else if(_stockAgeMode==='month'){ now.setMonth(now.getMonth()-1); }
+  else if(_stockAgeMode==='quarter'){ now.setMonth(now.getMonth()-3); }
+  else if(_stockAgeMode==='year'){ now.setFullYear(now.getFullYear()-1); }
+  else { return null; }
+  return now.toISOString().split('T')[0];
 }
 
 function stockApplyFilter(){
@@ -14764,6 +14864,15 @@ function stockApplyFilter(){
   else if(filterBy==='name'){ _stockFilters.name = (document.getElementById('stockInputName')||{}).value||''; }
   else if(filterBy==='species'){ _stockFilters.species = (document.getElementById('stockInputSpecies')||{}).value||''; }
   else if(filterBy==='type'){ _stockFilters.type = (document.getElementById('stockInputType')||{}).value||''; }
+  else if(filterBy==='age'){
+    if(_stockAgeMode==='custom'){
+      _stockFilters.ageFrom = (document.getElementById('stockAgeDateFrom')||{}).value||'';
+      _stockFilters.ageTo = (document.getElementById('stockAgeDateTo')||{}).value||'';
+    } else if(_stockAgeMode){
+      _stockFilters.ageCutoff = _stockAgeCutoff();
+      _stockFilters.ageMode = _stockAgeMode;
+    }
+  }
   renderStockPage();
 }
 
@@ -14821,11 +14930,22 @@ function renderStockPage(){
     if(f.name && (it.name||'').toLowerCase().trim()!==f.name.toLowerCase().trim()) return false;
     if(f.species && (it.species||'')!==f.species) return false;
     if(f.type && it.goodsType!==f.type) return false;
+    // Age filter: show items received before the cutoff date
+    if(f.ageCutoff && it.lastReceived && it.lastReceived > f.ageCutoff) return false;
+    if(f.ageCutoff && !it.lastReceived) return false; // no date — exclude from "old" filter
+    if(f.ageFrom && it.lastReceived && it.lastReceived < f.ageFrom) return false;
+    if(f.ageTo && it.lastReceived && it.lastReceived > f.ageTo) return false;
     return true;
   });
 
   // Sort
+  var isAgeFilter = !!(_stockFilters.ageCutoff||_stockFilters.ageFrom);
   filtered.sort(function(a,b){
+    if(isAgeFilter){
+      // Oldest first (залежавшиеся сверху)
+      var rd=(a.lastReceived||'').localeCompare(b.lastReceived||'');
+      return rd!==0?rd:(a.name||'').localeCompare(b.name||'','ru');
+    }
     var rd=(b.lastReceived||'').localeCompare(a.lastReceived||'');
     return rd!==0?rd:(a.name||'').localeCompare(b.name||'','ru');
   });
@@ -14838,6 +14958,9 @@ function renderStockPage(){
     if(f.name) chips.push('Товар: '+f.name);
     if(f.species) chips.push('Порода: '+f.species);
     if(f.type) chips.push(f.type==='dr'?'🛍 ДР Товар':'🌳 Дерево');
+    var ageLabels={'week':'⏱ >1 недели','month':'⏱ >1 месяца','quarter':'⏱ >1 квартала','year':'⏱ >1 года'};
+    if(f.ageMode && ageLabels[f.ageMode]) chips.push(ageLabels[f.ageMode]);
+    if(f.ageFrom||f.ageTo) chips.push('⏱ период '+(f.ageFrom||'')+'—'+(f.ageTo||''));
     chipsEl.innerHTML=chips.map(function(c){
       return '<div style="padding:4px 10px;background:#1e2a14;border:1px solid #c8f060;border-radius:20px;font-size:11px;color:#c8f060">'+c+'</div>';
     }).join('');
