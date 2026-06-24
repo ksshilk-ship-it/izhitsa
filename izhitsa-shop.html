@@ -10419,10 +10419,19 @@ function activateRestoreShift(shop, date){
     var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
     // Remove any existing shift for this exact date+shop+source so re-activating
     // (e.g. after adding more psj entries) replaces it rather than duplicating.
+    var oldPsjShifts = shifts.filter(function(s){ return s.date===date && s.shopName===(shop||'') && s.source==='psj'; });
     shifts = shifts.filter(function(s){ return !(s.date===date && s.shopName===(shop||'') && s.source==='psj'); });
     shifts.unshift(shiftObj);
     localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
-    try { db.collection('iz_shifts').doc(shiftObj.id).set(shiftObj); } catch(e) {}
+    // Delete old psj shift docs from Firestore before saving new one
+    // so onSnapshot doesn't resurrect them and overwrite the new activation
+    try {
+      oldPsjShifts.forEach(function(old){
+        var oldId = old.id || old._id;
+        if(oldId) db.collection('iz_shifts').doc(oldId).delete().catch(function(){});
+      });
+      db.collection('iz_shifts').doc(shiftObj.id).set(shiftObj);
+    } catch(e) {}
   }
 
   var acts=JSON.parse(localStorage.getItem('iz_activations')||'[]');
