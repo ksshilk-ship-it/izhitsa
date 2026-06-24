@@ -1241,7 +1241,7 @@ function checkForAppUpdate() {
           <label class="fl">Наименование</label>
           <div style="display:flex;gap:6px">
             <input class="fi" id="siName" placeholder="Название" autocomplete="off"
-              oninput="checkItemDiff();psjSuggest('siName',getItemNames(_siItemGoodsType),'siPickName')"
+              oninput="checkItemDiff();psjSuggest('siName',getItemNames(_siItemGoodsType),'siPickName');siAutoDetectAndSetType(this.value)"
               onfocus="psjSuggest('siName',getItemNames(_siItemGoodsType),'siPickName')"
               onblur="psjHideSugg('siName')">
             <button type="button" onclick="siAddToGoods('siName')" style="background:#22222e;border:1px solid #c8f060;border-radius:10px;padding:0 14px;color:#c8f060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
@@ -1290,7 +1290,7 @@ function checkForAppUpdate() {
           <label class="fl">Наименование</label>
           <div style="display:flex;gap:6px">
             <input class="fi" id="siNameM" placeholder="Введите вручную" autocomplete="off"
-              oninput="psjSuggest('siNameM',getItemNames(_siItemGoodsType),'siPickNameM')"
+              oninput="psjSuggest('siNameM',getItemNames(_siItemGoodsType),'siPickNameM');siAutoDetectAndSetType(this.value)"
               onfocus="psjSuggest('siNameM',getItemNames(_siItemGoodsType),'siPickNameM')"
               onblur="psjHideSugg('siNameM')">
             <button type="button" onclick="siAddToGoods('siNameM')" style="background:#22222e;border:1px solid #c8f060;border-radius:10px;padding:0 14px;color:#c8f060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
@@ -4825,6 +4825,27 @@ function siCalcFromAmtM(){
 }
 
 var _siItemGoodsType = 'derevo';
+
+// Auto-detect goods type from item name
+function autoDetectGoodsTypeByName(name){
+  if(!name) return null;
+  var n = name.toLowerCase().trim();
+  // Check if name exists in DR catalog
+  var drItems = getRefBook('iz_goods_dr').map(function(g){return (g.name||g).toLowerCase();});
+  if(drItems.indexOf(n)>=0) return 'dr';
+  // Check if name exists in Derevo catalog
+  var woodItems = getRefBook('iz_goods_derevo').map(function(g){return (g.name||g).toLowerCase();});
+  if(woodItems.indexOf(n)>=0) return 'derevo';
+  return null; // unknown
+}
+
+function siAutoDetectAndSetType(name){
+  var detected = autoDetectGoodsTypeByName(name);
+  if(detected && detected !== _siItemGoodsType){
+    setSiItemType(detected);
+  }
+}
+
 function getSiSpeciesList(){
   // Для Дерево — породы дерева (iz_materials)
   // Для ДР Товар — вкус/состав (iz_dr_species)
@@ -9647,11 +9668,19 @@ function renderRefbookItemsShop(bookId, key){
   var c = document.getElementById('rbItems_'+bookId); if(!c) return;
   var items = getRefBook(key);
   if(!items.length){ c.innerHTML='<div style="font-size:11px;color:#555568;padding:6px 0">Нет записей</div>'; return; }
-  c.innerHTML = items.map(function(item, idx){
+  // Sort alphabetically by name
+  var sorted = items.slice().sort(function(a,b){
+    var na=(a.name||a).toLowerCase(), nb=(b.name||b).toLowerCase();
+    return na.localeCompare(nb,'ru');
+  });
+  c.innerHTML = sorted.map(function(item, sortedIdx){
     var name = item.name||item;
+    // Find real index in original array for delete
+    var realIdx = items.indexOf(item);
+    if(realIdx<0) realIdx = items.findIndex(function(it){ return (it.name||it)===(item.name||item); });
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#13131a;border-radius:8px;margin-bottom:6px">'+
       '<div style="font-size:12px">'+name+'</div>'+
-      '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+idx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer;padding:4px">✕</button>'+
+      '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+realIdx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer;padding:4px">✕</button>'+
     '</div>';
   }).join('');
 }
@@ -9661,6 +9690,7 @@ function addRefbookItemShop(bookId, key){
   if(!value){ showToast('Введите значение'); return; }
   var items = getRefBook(key);
   items.push({id:uid(), name:value});
+  items.sort(function(a,b){ return (a.name||a).toLowerCase().localeCompare((b.name||b).toLowerCase(),'ru'); });
   saveRefBookShop(key, items);
   input.value='';
   renderRefbookItemsShop(bookId, key);
@@ -12543,7 +12573,7 @@ function renderManInvItems() {
           '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">НАИМЕНОВАНИЕ</div>'+
           '<div style="display:flex;gap:4px">'+
             '<input class="fi" list="'+dlId+'" value="'+item.name+'" placeholder="Название" '+
-              'oninput="_manInvName('+i+',this.value)" style="margin:0;padding:8px;flex:1">'+
+              'oninput="_manInvName('+i+',this.value);siAutoDetectAndSetType(this.value)" style="margin:0;padding:8px;flex:1">'+
             '<button type="button" onclick="openAddItemModal(\'manInvName_'+i+'\',\'\',\'\')" '+
               'style="background:#c8f060;border:none;border-radius:8px;padding:6px 9px;font-weight:700;color:#0f0f13;cursor:pointer;font-size:14px;flex-shrink:0">＋</button>'+
           '</div>'+
