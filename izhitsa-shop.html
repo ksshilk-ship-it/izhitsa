@@ -833,6 +833,22 @@ function checkForAppUpdate() {
 
       <div class="card" style="margin-bottom:10px">
         <div class="ctitle">Ввести накладную вручную</div>
+
+        <!-- Load from file / ChatGPT -->
+        <div style="background:#1a2e1e;border:1px solid #2e4e2e;border-radius:10px;padding:10px;margin-bottom:12px">
+          <div style="font-size:10px;color:#8888aa;margin-bottom:6px;font-weight:700">📋 ЗАГРУЗИТЬ ИЗ ФАЙЛА (JSON от ChatGPT)</div>
+          <div onclick="document.getElementById('rstInvFileInput').click()"
+            style="border:2px dashed #60c8f0;border-radius:10px;padding:12px;text-align:center;cursor:pointer;margin-bottom:6px">
+            <div style="font-size:22px;margin-bottom:3px">📄</div>
+            <div style="font-size:12px;font-weight:700;color:#60c8f0">Выбрать файл накладной</div>
+            <div style="font-size:10px;color:#8888aa;margin-top:2px">.json — от ChatGPT или экспорт из Ижицы</div>
+            <input type="file" id="rstInvFileInput" accept=".json" style="display:none" onchange="rstLoadInvoiceFile(this)">
+          </div>
+          <button type="button" onclick="showInvChatGptPrompt()" style="width:100%;padding:8px;background:#1e2a14;border:1px solid #c8f060;border-radius:8px;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">📋 Инструкция для ChatGPT</button>
+          <div id="rstInvFileResult" style="margin-top:6px;font-size:11px"></div>
+        </div>
+
+        <div style="font-size:10px;color:#8888aa;text-align:center;margin-bottom:8px">— или заполните вручную —</div>
         <div class="fg"><label class="fl">Магазин-получатель</label><select class="fs" id="rstInvShop"></select></div>
         <div class="fg"><label class="fl">Дата накладной</label><input class="fi" type="date" id="rstInvDate" style="-webkit-appearance:none;color-scheme:dark"></div>
         <div class="fg"><label class="fl">Откуда (мастерская / поставщик)</label><input class="fi" id="rstInvFrom" placeholder="Мастерская Ижица"></div>
@@ -12023,6 +12039,59 @@ function rstInitInvoices() {
   loadPendingInvoices();
   renderAcceptedInvoices();
 }
+function rstLoadInvoiceFile(input){
+  var file = input.files && input.files[0];
+  if(!file) return;
+  var resultEl = document.getElementById('rstInvFileResult');
+  if(resultEl) resultEl.innerHTML = '⏳ Читаю файл...';
+  var reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      var data = JSON.parse(e.target.result);
+      var invs = Array.isArray(data) ? data : [data];
+      var inv = invs.find(function(i){ return i.items && i.items.length; }) || invs[0];
+      if(!inv){ if(resultEl) resultEl.innerHTML='<span style="color:#f06060">❌ Нет позиций в файле</span>'; return; }
+
+      // Fill header fields
+      var numEl=document.getElementById('rstInvNum');
+      var fromEl=document.getElementById('rstInvFrom');
+      var dateEl=document.getElementById('rstInvDate');
+      if(numEl && inv.num) numEl.value = inv.num;
+      if(fromEl && !fromEl.value) fromEl.value = inv.from||inv.destName||'Мастерская Ижица';
+      if(dateEl && inv.date && !dateEl.value){
+        // Normalize date: DD.MM.YYYY → YYYY-MM-DD
+        var d = inv.date;
+        if(d && d.indexOf('.')>0){
+          var p=d.split('.'); if(p.length===3) d=p[2]+'-'+p[1]+'-'+p[0];
+        }
+        dateEl.value = d;
+      }
+
+      // Fill items
+      _rstInvItems = (inv.items||[]).map(function(it){
+        return {
+          id: uid(),
+          num: it.article||it.num||it.artNum||'',
+          name: it.name||'',
+          species: it.species||'',
+          price: it.price||it.factPrice||0,
+          qty: it.qty||1,
+          goodsType: it.goodsType||(inv.goodsType||'derevo')
+        };
+      });
+      renderRstInvItems();
+      updateRstInvTotal();
+
+      var total = _rstInvItems.reduce(function(s,it){return s+(it.qty||1)*(it.price||0);},0);
+      if(resultEl) resultEl.innerHTML='<span style="color:#60f090">✅ Загружено '+_rstInvItems.length+' позиций · '+Math.round(total).toLocaleString('ru-RU')+'₽</span>';
+      input.value='';
+    }catch(err){
+      if(resultEl) resultEl.innerHTML='<span style="color:#f06060">❌ Ошибка: '+err.message+'</span>';
+    }
+  };
+  reader.readAsText(file);
+}
+
 function addRstInvItem() {
   rstInvItems.push({name:'',article:'',qty:1,price:0});
   renderRstInvItems();
