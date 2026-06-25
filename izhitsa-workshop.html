@@ -5861,18 +5861,27 @@ function openFiGroupDetail(groupId){
     active:   '<span style="color:var(--inc)">✅ На балансе склада</span>',
     archived: '<span style="color:var(--t2)">🗄 В архиве</span>'
   };
-  const totalQty = g.positions.reduce((s,p)=>s+(p.qty||0),0);
-  const totalSum = g.positions.reduce((s,p)=>s+(p.price||0)*(p.qty||0),0);
+  const totalQty = g.positions.reduce((s,p)=>s+(parseInt(p.qty)||1),0);
+  const totalSum = g.positions.reduce((s,p)=>s+(p.price||0)*(parseInt(p.qty)||1),0);
+  // Сколько ws_items реально создано из этой группы
+  const realCount = items.filter(i=>i.fromFirstInventory===groupId && i.status==='received').length;
+  const mismatch = g.status==='active' && realCount !== totalQty;
 
   document.getElementById('fiGroupDetailStatus').innerHTML = `
     <div style="background:var(--s2);border-radius:10px;padding:12px">
       <div class="at-row"><span class="at-lbl">Статус</span><span class="at-val">${statusMap[g.status]||g.status}</span></div>
-      <div class="at-row"><span class="at-lbl">Позиций</span><span class="at-val">${g.positions.length}</span></div>
-      <div class="at-row"><span class="at-lbl">Всего шт.</span><span class="at-val">${totalQty}</span></div>
+      <div class="at-row"><span class="at-lbl">Позиций в записи</span><span class="at-val">${g.positions.length}</span></div>
+      <div class="at-row"><span class="at-lbl">Ожидалось товаров</span><span class="at-val">${totalQty}</span></div>
+      ${g.status==='active'?`<div class="at-row"><span class="at-lbl">Создано на складе</span><span class="at-val" style="color:${mismatch?'var(--exp)':'var(--inc)'}">${realCount}${mismatch?' ⚠️ не совпадает':' ✅'}</span></div>`:''}
       <div class="at-row"><span class="at-lbl">Сумма</span><span class="at-val" style="color:var(--accent)">${fmt(totalSum)}</span></div>
       <div class="at-row"><span class="at-lbl">Создана</span><span class="at-val">${fmtDT(g.createdAt)}</span></div>
       ${g.activatedAt?`<div class="at-row"><span class="at-lbl">Активирована</span><span class="at-val">${fmtDT(g.activatedAt)}</span></div>`:''}
-    </div>`;
+    </div>
+    ${mismatch?`<div style="background:rgba(255,80,80,0.1);border:1px solid var(--exp);border-radius:8px;padding:10px;margin-top:8px;font-size:12px;color:var(--exp)">
+      ⚠️ Расхождение: в записи ${totalQty} шт., на складе ${realCount} шт. (разница: ${totalQty-realCount}).
+      Нажмите «➕ Дополнить группу» чтобы добавить недостающие позиции и активировать их.
+    </div>`:''}`;
+
 
   document.getElementById('fiGroupDetailPositions').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
