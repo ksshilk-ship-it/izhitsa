@@ -1835,12 +1835,13 @@ function checkForAppUpdate() {
     <div style="background:#1a2e1e;border:1px solid #2e4e2e;border-radius:10px;padding:10px;margin-bottom:10px">
       <div style="font-size:11px;color:#8888aa;margin-bottom:6px">📋 ЗАГРУЗИТЬ ИЗ НАКЛАДНОЙ (JSON)</div>
       <div onclick="document.getElementById('psjInvFileInput').click()"
-        style="border:2px dashed #60c8f0;border-radius:10px;padding:14px;text-align:center;cursor:pointer">
+        style="border:2px dashed #60c8f0;border-radius:10px;padding:14px;text-align:center;cursor:pointer;margin-bottom:8px">
         <div style="font-size:20px;margin-bottom:4px">📄</div>
         <div style="font-size:12px;font-weight:700;color:#60c8f0">Выбрать файл накладной</div>
-        <div style="font-size:10px;color:#8888aa;margin-top:2px">.json — экспорт из Ижицы</div>
+        <div style="font-size:10px;color:#8888aa;margin-top:2px">.json — экспорт из Ижицы или от ChatGPT</div>
         <input type="file" id="psjInvFileInput" accept=".json" style="display:none" onchange="psjLoadInvoiceFile(this)">
       </div>
+      <button type="button" onclick="showInvChatGptPrompt()" style="width:100%;padding:9px;background:#1e2a14;border:1px solid #c8f060;border-radius:9px;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">📋 Получить инструкцию для ChatGPT</button>
       <div id="psjInvFileResult" style="margin-top:8px;font-size:11px"></div>
     </div>
     <div style="font-size:10px;color:#8888aa;text-align:center;margin-bottom:8px">— или введите вручную —</div>
@@ -1849,6 +1850,18 @@ function checkForAppUpdate() {
     <div class="fg"><label class="fl">Откуда (для всех позиций)</label><input class="fi" id="psjRcvFrom" placeholder="Мастерская / поставщик" autocomplete="off"></div>
     <button class="btn blue" onclick="savePsjEntry('receive')">📥 Добавить приход</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('psjReceiveMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- INVOICE CHATGPT PROMPT MODAL -->
+<div class="mo" id="invChatGptPromptMo">
+  <div class="md">
+    <div class="mh"></div>
+    <div class="mt">📋 Инструкция для ChatGPT</div>
+    <div style="font-size:11px;color:#8888aa;margin-bottom:8px">Сфотографируйте накладную, откройте ChatGPT, прикрепите фото и вставьте текст ниже. ChatGPT пришлёт JSON-файл — загрузите его через кнопку «Выбрать файл накладной».</div>
+    <textarea id="invChatGptPromptText" readonly style="width:100%;height:220px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:10px;color:#f0f0f8;font-size:11px;font-family:monospace;margin-bottom:10px;box-sizing:border-box"></textarea>
+    <button class="btn" onclick="copyInvChatGptPrompt()">📋 Скопировать</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('invChatGptPromptMo')">Закрыть</button>
   </div>
 </div>
 
@@ -11187,6 +11200,57 @@ function psjSetItemGoods(group, i, type){
 
 function psjAddSaleItem(){ _psjSaleItems.push(_psjNewItem()); renderPsjItems('sale'); }
 function psjAddWoItem(){ _psjWoItems.push(_psjNewItem({reason:''})); renderPsjItems('wo'); }
+
+
+function showInvChatGptPrompt(){
+  var prompt =
+    'Ты распознаёшь накладную на товар по фото.\n\n'+
+    'ВАЖНО — формат ответа:\n'+
+    '- Без вступлений, без пояснений, без рассуждений вслух.\n'+
+    '- Сразу создай и пришли JSON-файл для скачивания (не печатай JSON текстом в чате).\n'+
+    '- Если фото несколько — пришли ОДИН файл со всеми позициями.\n\n'+
+    'Структура JSON-файла — один объект:\n\n'+
+    '{\n'+
+    '  "num": "номер накладной если виден, иначе null",\n'+
+    '  "date": "ГГГГ-ММ-ДД если дата видна, иначе null",\n'+
+    '  "from": "откуда пришёл товар если указано",\n'+
+    '  "goodsType": "derevo",\n'+
+    '  "items": [\n'+
+    '    {\n'+
+    '      "article": "артикул или номер изделия если есть, иначе null",\n'+
+    '      "name": "наименование товара",\n'+
+    '      "species": "порода дерева если указана, иначе null",\n'+
+    '      "qty": 1,\n'+
+    '      "price": 1500\n'+
+    '    }\n'+
+    '  ]\n'+
+    '}\n\n'+
+    'Правила распознавания:\n'+
+    '- "article" — артикул, номер изделия, штрихкод, любой код товара. Если не указан — null.\n'+
+    '- "name" — название изделия: Доска, Менажница, Ложка, Подсвечник и т.д.\n'+
+    '- "species" — порода дерева: Дуб, Каштан, Орех грецкий, Акация и т.д. Если не указана — null.\n'+
+    '- "qty" — количество штук. Если не указано — 1.\n'+
+    '- "price" — цена за штуку в рублях, число без знака ₽. Если не читается — 0.\n'+
+    '- "goodsType": "derevo" для деревянных изделий, "dr" если это свечи, косметика, другой не-деревянный товар.\n'+
+    '- Распознай ВСЕ строки накладной, ничего не пропускай.\n'+
+    '- Если строка плохо читается — впиши лучшую догадку, не пропускай.\n'+
+    '- Год не указан — считай 2026.';
+  var el = document.getElementById('invChatGptPromptText');
+  if(el) el.value = prompt;
+  openMo('invChatGptPromptMo');
+}
+
+function copyInvChatGptPrompt(){
+  var ta = document.getElementById('invChatGptPromptText');
+  if(!ta) return;
+  ta.select();
+  try{
+    document.execCommand('copy');
+    showToast('✅ Скопировано');
+  }catch(e){
+    showToast('Скопируйте текст вручную');
+  }
+}
 
 // ════ PSJ INVOICE FILE IMPORT ════
 function psjLoadInvoiceFile(input){
