@@ -386,10 +386,40 @@ function applyUpdate() {
           <div id="manualAcceptHistory"></div>
         </div>
       </div>
-      <div class="card"><div class="ctitle">📦 На складе</div><div id="whStockList"></div></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
-        <button class="btn green" onclick="openShipmentMo()">🚚 Отгрузка</button>
-        <button class="btn" style="background:var(--a2)" onclick="openManualStockMo()">➕ Добавить товар</button>
+      <!-- Подвкладки: Остатки / Отгрузка -->
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <div id="whStockTab1" onclick="setWhStockTab('stock')" style="flex:1;padding:9px;text-align:center;border-radius:8px;background:var(--accent);color:#000;font-weight:700;font-size:13px;cursor:pointer">📦 Остатки</div>
+        <div id="whStockTab2" onclick="setWhStockTab('ship')" style="flex:1;padding:9px;text-align:center;border-radius:8px;background:var(--s2);color:var(--t2);font-size:13px;cursor:pointer;border:1px solid var(--border)">🚚 Отгрузка</div>
+      </div>
+
+      <!-- ОСТАТКИ -->
+      <div id="whStockBlock">
+        <!-- Поиск + сортировка -->
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <input class="fi" id="whStockSearch" placeholder="🔍 Поиск..." style="flex:1" oninput="renderStockGroups()">
+          <button onclick="toggleStockSort()" id="whSortBtn" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:12px;white-space:nowrap">↑ Цена</button>
+        </div>
+        <div id="whStockGroups"></div>
+        <button class="btn" style="background:var(--a2);margin-top:8px" onclick="openManualStockMo()">➕ Добавить товар</button>
+      </div>
+
+      <!-- ОТГРУЗКА -->
+      <div id="whShipBlock" style="display:none">
+        <!-- Магазин -->
+        <div class="fg" style="margin-bottom:8px">
+          <label class="fl">Магазин назначения</label>
+          <select class="fs" id="whShipDest"></select>
+        </div>
+        <!-- Поиск + сортировка -->
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <input class="fi" id="whShipSearch" placeholder="🔍 По артикулу / наименованию..." style="flex:1" oninput="renderShipList()">
+          <button onclick="toggleShipSort()" id="whShipSortBtn" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:12px;white-space:nowrap">↑ Цена</button>
+        </div>
+        <!-- Выбрано -->
+        <div id="whShipSelected" style="display:none;background:var(--s2);border-radius:10px;padding:10px;margin-bottom:8px;font-size:12px"></div>
+        <!-- Список -->
+        <div id="whShipList"></div>
+        <button class="btn green" style="margin-top:10px" onclick="createShipmentFromTab()">🚚 Отгрузить выбранные</button>
       </div>
     </div>
 
@@ -2553,29 +2583,190 @@ function renderWarehouse(){
       <div style="font-size:20px;color:var(--t2)">›</div>
     </div>`).join(''):'<div style="font-size:12px;color:var(--t2);padding:6px 0">Нет изделий на приёмке</div>';
 
-  const sl=document.getElementById('whStockList');
-  sl.innerHTML=stock.length?stock.map(item=>{
-    const num = item.artikul || (item.itemNum && !item.itemNum.startsWith('НАЧ-') ? item.itemNum : '');
-    return `
-    <div class="li">
-      <div class="li-ico" style="background:#1e2a14">📦</div>
-      <div class="li-info">
-        <div class="li-name">${num?'№'+num+' ':''}${item.name||item.itemName||'—'}</div>
-        <div class="li-sub">🌳 ${item.wood||'—'}${item.size?' · '+item.size:''} · ${fmt(item.price||0)}</div>
-        <div class="li-sub">Принято: ${fmtDT(item.receivedAt)}</div>
-      </div>
-      <span class="badge b-received">${fmt(item.price||0)}</span>
-    </div>`;}).join(''):'<div style="font-size:12px;color:var(--t2);padding:6px 0">Склад пуст</div>';
+  const sl=document.getElementById('whStockGroups');
+  if(sl) renderStockGroups();
 
   // Если мы на архивной вкладке — обновить и её
   if(_whTab==='archive') renderArchiveWarehouse();
 }
 
+// ════ СКЛАД: ОСТАТКИ ПО ГРУППАМ + ОТГРУЗКА ════
+let _whStockSortAsc = true;
+let _whShipSortAsc  = true;
+let _whShipSelected = new Set();
+let _whStockTab     = 'stock';
+
+function setWhStockTab(tab){
+  _whStockTab = tab;
+  const t1=document.getElementById('whStockTab1'), t2=document.getElementById('whStockTab2');
+  const b1=document.getElementById('whStockBlock'), b2=document.getElementById('whShipBlock');
+  if(tab==='stock'){
+    t1.style.background='var(--accent)'; t1.style.color='#000'; t1.style.border='none';
+    t2.style.background='var(--s2)'; t2.style.color='var(--t2)'; t2.style.border='1px solid var(--border)';
+    b1.style.display='block'; b2.style.display='none';
+    renderStockGroups();
+  } else {
+    t2.style.background='var(--accent)'; t2.style.color='#000'; t2.style.border='none';
+    t1.style.background='var(--s2)'; t1.style.color='var(--t2)'; t1.style.border='1px solid var(--border)';
+    b2.style.display='block'; b1.style.display='none';
+    _whShipSelected.clear();
+    renderShipList();
+    // Заполнить магазины
+    const sel=document.getElementById('whShipDest');
+    if(sel && sel.options.length===0){
+      const shops=JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
+      sel.innerHTML=shops.map(s=>`<option value="${s}">${s}</option>`).join('');
+    }
+  }
+}
+
+function toggleStockSort(){
+  _whStockSortAsc = !_whStockSortAsc;
+  document.getElementById('whSortBtn').textContent = (_whStockSortAsc?'↑':'↓')+' Цена';
+  renderStockGroups();
+}
+
+function toggleShipSort(){
+  _whShipSortAsc = !_whShipSortAsc;
+  document.getElementById('whShipSortBtn').textContent = (_whShipSortAsc?'↑':'↓')+' Цена';
+  renderShipList();
+}
+
+function renderStockGroups(){
+  const c = document.getElementById('whStockGroups'); if(!c) return;
+  const q = (document.getElementById('whStockSearch')?.value||'').toLowerCase().trim();
+  let stock = items.filter(i=>i.status==='received');
+  if(q) stock = stock.filter(i=>((i.name||i.itemName||'')+(i.artikul||'')+(i.wood||'')+(i.size||'')).toLowerCase().includes(q));
+
+  if(!stock.length){
+    c.innerHTML='<div class="empty" style="padding:16px 0"><div class="ei">📦</div>Нет товаров</div>';
+    return;
+  }
+
+  // Группируем по наименованию
+  const groups = {};
+  stock.forEach(item=>{
+    const name = item.name||item.itemName||'—';
+    if(!groups[name]) groups[name]={name, items:[], total:0, sum:0};
+    groups[name].items.push(item);
+    groups[name].total++;
+    groups[name].sum += item.price||0;
+  });
+
+  // Сортировка внутри группы по цене
+  Object.values(groups).forEach(g=>{
+    g.items.sort((a,b)=> _whStockSortAsc ? (a.price||0)-(b.price||0) : (b.price||0)-(a.price||0));
+  });
+
+  // Группы по алфавиту
+  const sorted = Object.values(groups).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+
+  c.innerHTML = sorted.map(g=>{
+    const isOpen = q || document.getElementById('wsg_'+CSS.escape(g.name))?.classList.contains('open');
+    return `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <div onclick="toggleStockGroup('${g.name.replace(/'/g,"\\'")}')" style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--s2);cursor:pointer">
+        <div>
+          <div style="font-size:14px;font-weight:700">${g.name}</div>
+          <div style="font-size:11px;color:var(--t2)">${g.total} шт. · ${fmt(g.sum)}</div>
+        </div>
+        <span id="wsgarrow_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="font-size:18px;color:var(--t2);transition:transform .2s">${isOpen?'▲':'▼'}</span>
+      </div>
+      <div id="wsg_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="display:${isOpen?'block':'none'};padding:0 12px">
+        ${g.items.map(item=>{
+          const num = item.artikul || (item.itemNum && !item.itemNum.startsWith('НАЧ-') ? item.itemNum : '');
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <div style="font-size:12px;font-weight:600">${num?'№'+num+' ':''}${item.wood||'—'}${item.size?' · '+item.size:''}</div>
+              <div style="font-size:11px;color:var(--t2)">Принято: ${fmtDT(item.receivedAt)}</div>
+            </div>
+            <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleStockGroup(name){
+  const id = 'wsg_'+name.replace(/[^а-яёa-z0-9]/gi,'_');
+  const arrowId = 'wsgarrow_'+name.replace(/[^а-яёa-z0-9]/gi,'_');
+  const el = document.getElementById(id);
+  const arrow = document.getElementById(arrowId);
+  if(!el) return;
+  const open = el.style.display==='block';
+  el.style.display = open ? 'none' : 'block';
+  if(arrow) arrow.textContent = open ? '▼' : '▲';
+}
+
+function renderShipList(){
+  const c = document.getElementById('whShipList'); if(!c) return;
+  const q = (document.getElementById('whShipSearch')?.value||'').toLowerCase().trim();
+  let stock = items.filter(i=>i.status==='received');
+  if(q) stock = stock.filter(i=>((i.name||i.itemName||'')+(i.artikul||'')+(i.wood||'')).toLowerCase().includes(q));
+  stock.sort((a,b)=> _whShipSortAsc ? (a.price||0)-(b.price||0) : (b.price||0)-(a.price||0));
+
+  if(!stock.length){
+    c.innerHTML='<div style="font-size:12px;color:var(--t2);padding:10px 0">Нет товаров на складе</div>';
+    return;
+  }
+  c.innerHTML = stock.map(item=>{
+    const sel = _whShipSelected.has(item._id);
+    const num = item.artikul || (item.itemNum && !item.itemNum.startsWith('НАЧ-') ? item.itemNum : '');
+    return `<div onclick="toggleWhShipSel('${item._id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;background:${sel?'rgba(80,255,150,0.07)':''}">
+      <div style="width:22px;height:22px;border-radius:6px;border:2px solid ${sel?'var(--inc)':'var(--border)'};background:${sel?'var(--inc)':'var(--s2)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;color:#000">${sel?'✓':''}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${item.name||item.itemName||'—'}${num?' · <span style="color:var(--t2)">№'+num+'</span>':''}</div>
+        <div style="font-size:11px;color:var(--t2)">🌳 ${item.wood||'—'}${item.size?' · '+item.size:''}</div>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:var(--accent);flex-shrink:0">${fmt(item.price||0)}</div>
+    </div>`;
+  }).join('');
+  updateShipSelected();
+}
+
+function toggleWhShipSel(id){
+  if(_whShipSelected.has(id)) _whShipSelected.delete(id);
+  else _whShipSelected.add(id);
+  renderShipList();
+}
+
+function updateShipSelected(){
+  const el = document.getElementById('whShipSelected'); if(!el) return;
+  const cnt = _whShipSelected.size;
+  if(!cnt){ el.style.display='none'; return; }
+  const sum = items.filter(i=>_whShipSelected.has(i._id)).reduce((s,i)=>s+(i.price||0),0);
+  el.style.display='block';
+  el.innerHTML=`Выбрано: <b>${cnt} шт.</b> · Сумма: <b style="color:var(--accent)">${fmt(sum)}</b>`;
+}
+
+function createShipmentFromTab(){
+  if(!_whShipSelected.size){ showToast('Выберите товары для отгрузки'); return; }
+  const dest = document.getElementById('whShipDest')?.value;
+  if(!dest){ showToast('Выберите магазин'); return; }
+  const shipItems = items.filter(i=>_whShipSelected.has(i._id));
+  const allNums = shipments.map(s=>parseInt((s.num||'').replace('НАК-',''))||0);
+  const nextNum = allNums.length ? Math.max(...allNums)+1 : 1;
+  const shipNum = 'НАК-'+String(nextNum).padStart(3,'0');
+  const shipDoc = {
+    num:shipNum, destName:dest,
+    items:shipItems.map(i=>({_id:i._id,itemNum:i.itemNum,artikul:i.artikul||'',name:i.name||i.itemName,wood:i.wood||'',price:i.price||0})),
+    createdById:session.id, createdByName:session.name,
+    status:'pending', createdAt:now()
+  };
+  db.collection('ws_shipments').add(shipDoc).then(()=>{
+    const batch=db.batch();
+    shipItems.forEach(i=>{
+      batch.update(db.collection('ws_items').doc(i._id),{status:'shipped',shippedAt:now(),shippedTo:dest,shipmentNum:shipNum});
+    });
+    return batch.commit();
+  }).then(()=>{
+    _whShipSelected.clear();
+    showToast(`✅ Накладная ${shipNum} → ${dest} · ${shipItems.length} шт.`);
+    setWhStockTab('stock');
+  }).catch(e=>showToast('Ошибка: '+e.message));
+}
 function renderArchiveWarehouse(){
   const isAdmin = session.role==='администратор';
-
-  // Черновики видны только администратору
-  const draftCard = document.getElementById('whArchDraftCard');
   const shipBtn   = document.getElementById('whArchShipBtn');
   if(draftCard) draftCard.style.display = isAdmin ? 'block' : 'none';
   if(shipBtn)   shipBtn.style.display   = isAdmin ? 'block' : 'none';
