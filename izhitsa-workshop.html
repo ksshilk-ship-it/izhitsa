@@ -1331,8 +1331,9 @@ function acSuggest(inputId, onPick, extraArg){
     var extraSafe = extraArg!==undefined ? String(extraArg).replace(/\\/g,'\\\\').replace(/'/g,"\\'") : null;
     var args = extraSafe!==null ? "'"+safe+"', '"+extraSafe+"'" : "'"+safe+"'";
     return '<div style="padding:14px 16px;font-size:15px;color:var(--text);border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,0.1);user-select:none;-webkit-user-select:none" '
-      +'ontouchstart="this.style.background=\'rgba(255,255,255,0.08)\'" '
-      +'ontouchend="this.style.background=\'\';event.preventDefault();'+onPick+'('+args+');acHideSugg(\''+inputId+'\')" '
+      +'ontouchstart="_acTouchStartY=event.touches[0].clientY;_acTouchMoved=false;this.style.background=\'rgba(255,255,255,0.06)\'" '
+      +'ontouchmove="_acTouchMoved=Math.abs(event.touches[0].clientY-_acTouchStartY)>8;if(_acTouchMoved)this.style.background=\'\'" '
+      +'ontouchend="this.style.background=\'\';if(!_acTouchMoved){event.preventDefault();'+onPick+'('+args+');acHideSugg(\''+inputId+'\')}" '
       +'onmousedown="event.preventDefault();'+onPick+'('+args+');acHideSugg(\''+inputId+'\')" '
       +'>'+m+'</div>';
   }).join('');
@@ -1350,6 +1351,8 @@ function acHideSugg(inputId){
 
 // Глобальный обработчик: скрываем суггест при тапе вне него
 let _acActiveInputId = null;
+let _acTouchStartY = 0;
+let _acTouchMoved = false;
 document.addEventListener('touchstart', function(e){
   if(!_acActiveInputId) return;
   var box = document.getElementById(_acActiveInputId+'_sugg');
