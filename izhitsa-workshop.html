@@ -2548,16 +2548,18 @@ function renderWarehouse(){
     </div>`).join(''):'<div style="font-size:12px;color:var(--t2);padding:6px 0">Нет изделий на приёмке</div>';
 
   const sl=document.getElementById('whStockList');
-  sl.innerHTML=stock.length?stock.map(item=>`
+  sl.innerHTML=stock.length?stock.map(item=>{
+    const num = item.artikul || (item.itemNum && !item.itemNum.startsWith('НАЧ-') ? item.itemNum : '');
+    return `
     <div class="li">
       <div class="li-ico" style="background:#1e2a14">📦</div>
       <div class="li-info">
-        <div class="li-name">№${item.itemNum||'—'} ${item.name||item.itemName}</div>
-        <div class="li-sub">🌳 ${item.wood||'—'} · ${fmt(item.price||0)}</div>
+        <div class="li-name">${num?'№'+num+' ':''}${item.name||item.itemName||'—'}</div>
+        <div class="li-sub">🌳 ${item.wood||'—'}${item.size?' · '+item.size:''} · ${fmt(item.price||0)}</div>
         <div class="li-sub">Принято: ${fmtDT(item.receivedAt)}</div>
       </div>
       <span class="badge b-received">${fmt(item.price||0)}</span>
-    </div>`).join(''):'<div style="font-size:12px;color:var(--t2);padding:6px 0">Склад пуст</div>';
+    </div>`;}).join(''):'<div style="font-size:12px;color:var(--t2);padding:6px 0">Склад пуст</div>';
 
   // Если мы на архивной вкладке — обновить и её
   if(_whTab==='archive') renderArchiveWarehouse();
@@ -5674,22 +5676,29 @@ async function activateFirstInvGroup(groupId){
   try{
     const batch = db.batch();
     g.positions.forEach(p=>{
-      for(let q=0; q<(p.qty||1); q++){
+      const qty = parseInt(p.qty)||1;
+      const baseArtikul = parseInt(p.artikul);
+      for(let q=0; q<qty; q++){
+        // Артикул: если числовой и qty>1 — последовательно, иначе как есть
+        let artikul = p.artikul||'';
+        if(!isNaN(baseArtikul) && qty>1) artikul = String(baseArtikul+q);
         const ref = db.collection('ws_items').doc();
         batch.set(ref, {
-          id: uid(), name: p.name, itemName: p.name, wood: p.wood,
-          artikul: p.artikul||'', price: p.price||0, zp: 0, zpPaid: false,
+          id: uid(), name: p.name||'', itemName: p.name||'', wood: p.wood||'',
+          size: p.size||'',
+          artikul: artikul, price: p.price||0, zp: 0, zpPaid: false,
           masterId: '', masterName: 'Начальный остаток',
           status: 'received',
           createdAt: now(), receivedAt: now(),
           isManual: true, fromFirstInventory: g.id,
-          itemNum: 'НАЧ-'+uid().toUpperCase()
+          itemNum: artikul || ('НАЧ-'+g.id.slice(-4).toUpperCase()+'-'+(q+1))
         });
       }
     });
     await batch.commit();
     await db.collection('ws_first_inventory').doc(groupId).update({status:'active', activatedAt: now(), activatedBy: session.name});
     audit && audit('first_inventory_group_activated',{groupName:g.groupName, count:g.positions.length});
+    closeMo('fiGroupDetailMo');
     showToast(`✅ Группа «${g.groupName}» поставлена на баланс склада`);
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
