@@ -13121,18 +13121,20 @@ function renderManInvItems() {
 }
 
 function _manInvName(i, val) { _manInvItems[i].name = val; updateManInvTotal(); saveManInvDraft(); }
-function _manInvPickName_0(val){ _manInvPickNameAt(0,val); }
-function _manInvPickName_1(val){ _manInvPickNameAt(1,val); }
-function _manInvPickName_2(val){ _manInvPickNameAt(2,val); }
-function _manInvPickName_3(val){ _manInvPickNameAt(3,val); }
-function _manInvPickName_4(val){ _manInvPickNameAt(4,val); }
-function _manInvPickName_5(val){ _manInvPickNameAt(5,val); }
+// Generate picker functions for up to 50 invoice positions
 function _manInvPickNameAt(i,val){
   if(_manInvItems[i]!=null){ _manInvItems[i].name=val; siAutoDetectAndSetType(val); }
   var el=document.getElementById('manInvName_'+i); if(el) el.value=val;
   updateManInvTotal(); saveManInvDraft();
   renderManInvItems();
 }
+(function(){
+  for(var _ii=0;_ii<50;_ii++){
+    (function(idx){
+      window['_manInvPickName_'+idx]=function(val){ _manInvPickNameAt(idx,val); };
+    })(_ii);
+  }
+})();
 
 function _manInvNameBlurCheck(el){ var catKey = (_manInvGoodsType==='dr') ? 'iz_goods_dr' : 'iz_goods_derevo'; dupCheckField(el, catKey); }
 
