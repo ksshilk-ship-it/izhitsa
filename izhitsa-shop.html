@@ -290,6 +290,20 @@ function checkForAppUpdate() {
         </div>
         <div class="card" style="margin-bottom:10px">
           <div class="ctitle">Новая накладная</div>
+          <!-- File / ChatGPT import -->
+          <div style="background:#1a2e1e;border:1px solid #2e4e2e;border-radius:10px;padding:10px;margin-bottom:10px">
+            <div style="font-size:10px;color:#8888aa;margin-bottom:6px;font-weight:700">📋 ЗАГРУЗИТЬ ИЗ ФАЙЛА (JSON от ChatGPT)</div>
+            <div onclick="document.getElementById('manInvFileInput').click()"
+              style="border:2px dashed #60c8f0;border-radius:10px;padding:12px;text-align:center;cursor:pointer;margin-bottom:6px">
+              <div style="font-size:22px;margin-bottom:3px">📄</div>
+              <div style="font-size:12px;font-weight:700;color:#60c8f0">Выбрать файл накладной</div>
+              <div style="font-size:10px;color:#8888aa;margin-top:2px">.json — от ChatGPT или экспорт из Ижицы</div>
+              <input type="file" id="manInvFileInput" accept=".json" style="display:none" onchange="manInvLoadFile(this)">
+            </div>
+            <button type="button" onclick="showInvChatGptPrompt()" style="width:100%;padding:8px;background:#1e2a14;border:1px solid #c8f060;border-radius:8px;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">📋 Инструкция для ChatGPT</button>
+            <div id="manInvFileResult" style="margin-top:6px;font-size:11px"></div>
+          </div>
+          <div style="font-size:10px;color:#8888aa;text-align:center;margin-bottom:8px">— или заполните вручную —</div>
           <div class="row2">
             <div class="fg"><label class="fl">Номер накладной</label>
               <input class="fi" id="manInvNum" placeholder="НАК-001" oninput="saveManInvDraft()">
@@ -13084,6 +13098,53 @@ function renderManInvItems() {
 
 function _manInvName(i, val) { _manInvItems[i].name = val; updateManInvTotal(); saveManInvDraft(); }
 function _manInvNameBlurCheck(el){ var catKey = (_manInvGoodsType==='dr') ? 'iz_goods_dr' : 'iz_goods_derevo'; dupCheckField(el, catKey); }
+
+function manInvLoadFile(input){
+  var file = input.files && input.files[0];
+  if(!file) return;
+  var resultEl = document.getElementById('manInvFileResult');
+  if(resultEl) resultEl.innerHTML='⏳ Читаю файл...';
+  var reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      var data = JSON.parse(e.target.result);
+      var invs = Array.isArray(data) ? data : [data];
+      var inv = invs.find(function(i){ return i.items && i.items.length; }) || invs[0];
+      if(!inv){ if(resultEl) resultEl.innerHTML='<span style="color:#f06060">❌ Нет позиций в файле</span>'; return; }
+
+      // Fill header
+      var numEl=document.getElementById('manInvNum');
+      var fromEl=document.getElementById('manInvFrom');
+      var dateEl=document.getElementById('manInvDate');
+      if(numEl && inv.num) numEl.value=inv.num;
+      if(fromEl && !fromEl.value) fromEl.value=inv.from||inv.destName||'Мастерская Ижица';
+      if(dateEl && inv.date && !dateEl.value){
+        var d=inv.date;
+        if(d && d.indexOf('.')>0){ var p=d.split('.'); if(p.length===3) d=p[2]+'-'+p[1]+'-'+p[0]; }
+        dateEl.value=d;
+      }
+      // Set goods type from invoice
+      var gt = inv.goodsType||'derevo';
+      setManInvType(gt);
+
+      // Fill items
+      _manInvItems = (inv.items||[]).map(function(it){
+        return { article:it.article||it.num||it.artNum||'', name:it.name||'', species:it.species||'', price:it.price||it.factPrice||0, qty:it.qty||1, goodsType:it.goodsType||gt };
+      });
+      _manInvExpanded = -1;
+      renderManInvItems();
+      updateManInvTotal();
+      saveManInvDraft();
+
+      var total=_manInvItems.reduce(function(s,it){return s+(it.qty||1)*(it.price||0);},0);
+      if(resultEl) resultEl.innerHTML='<span style="color:#60f090">✅ Загружено '+_manInvItems.length+' позиций · '+Math.round(total).toLocaleString('ru-RU')+'₽</span>';
+      input.value='';
+    }catch(err){
+      if(resultEl) resultEl.innerHTML='<span style="color:#f06060">❌ Ошибка: '+err.message+'</span>';
+    }
+  };
+  reader.readAsText(file);
+}
 function _manInvArt(i, val) { _manInvItems[i].article = val; saveManInvDraft(); }
 function _manInvSpecies(i, val) { if(_manInvItems[i]) _manInvItems[i].species = val; saveManInvDraft(); }
 var _manInvSpeciesActive = 0;
