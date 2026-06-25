@@ -198,6 +198,7 @@ function checkForAppUpdate() {
       <input class="fi" type="password" id="loginPass" placeholder="••••">
     </div>
     <div id="loginErr" style="color:#f06060;font-size:12px;margin-bottom:8px;display:none"></div>
+    <div id="loginRestoreBanner" style="display:none;background:#2a1e14;border:1px solid #f0a060;border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:11px;color:#f0a060">⚠️ Найдена восстановительная смена. Нажмите «Открыть смену» для новой обычной смены.</div>
     <button id="previewModeBtn" type="button" onclick="startPreviewMode()"
       style="display:none;width:100%;padding:12px;background:#1e1a2e;color:#a060f0;border:1px solid #a060f0;border-radius:12px;font-family:Unbounded,sans-serif;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:8px">
       🔍 Режим просмотра (тест)
@@ -3434,6 +3435,20 @@ function doLogin(){
   // they're back in the app, regardless of which day it was opened.
   var existing = JSON.parse(localStorage.getItem(KEY.session)||'null');
   var sameSeller = existing && (existing.sellerId===sellerId || existing.sellerName===seller.name);
+  // Never auto-restore a restore/psj shift as a real shift — skip it
+  if(existing && (existing.isRestoreShift || existing.source==='psj' || existing.backfilled)){
+    existing = null;
+    // Clear the stale restore session from localStorage so it doesn't interfere
+    localStorage.removeItem(KEY.session);
+    localStorage.removeItem(KEY.journal);
+  }
+  // Also check if restoreSession belongs to this seller and clear it
+  var restoreS = JSON.parse(localStorage.getItem(KEY.restoreSession)||'null');
+  if(restoreS && (restoreS.sellerId===sellerId || restoreS.sellerName===seller.name) && restoreS.shopName===shopName){
+    // Show info banner — the restore session exists but won't block login
+    var rb = document.getElementById('loginRestoreBanner');
+    if(rb) rb.style.display='block';
+  }
   if(existing && existing.role!=='shopadmin' && sameSeller && existing.shopName===shopName){
     // Before trusting this local session, double-check Firestore doesn't
     // already have this exact shift marked closed — that would mean the
