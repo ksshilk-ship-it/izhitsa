@@ -3169,101 +3169,154 @@ function saveZPPayments(d){ localStorage.setItem('ws_zp_payments', JSON.stringif
 function getNextPayDate(masterId){ return localStorage.getItem('ws_next_pay_'+masterId)||''; }
 function saveNextPayDate(masterId, date){ localStorage.setItem('ws_next_pay_'+masterId, date); }
 
+function getEarnedByEmployee(empId){
+  // Начислено: изделия (для мастеров) + доп.работы (для всех) + прочие ручные работы
+  const itemsEarned = items.filter(i=>i.masterId===empId && i.zpPaid).reduce((s,i)=>s+(i.zp||0),0);
+  const extraEarned = extraWorks.filter(w=>w.masterId===empId && w.zpPaid).reduce((s,w)=>s+(w.zp||0),0);
+  const otEarned    = otherTasks.filter(t=>t.masterId===empId && t.manualEntry)
+                        .reduce((s,t)=>s+(t.entries||[]).reduce((ss,e)=>ss+(e.sum||0),0),0);
+  return itemsEarned + extraEarned + otEarned;
+}
+
 function renderZPay(){
   const c = document.getElementById('zpayContent'); if(!c) return;
-  const masters = getEmployees().filter(e=>e.role==='мастер');
-  if(!masters.length){ c.innerHTML='<div class="empty"><div class="ei">👤</div>Нет мастеров</div>'; return; }
+  const wsRoles = ['мастер','заготовщик','кладовщик','управляющий'];
+  const emps = getEmployees().filter(e=>wsRoles.includes(e.role) && !e._builtin);
+  if(!emps.length){ c.innerHTML='<div class="empty"><div class="ei">👤</div>Нет сотрудников</div>'; return; }
   const payments = getZPPayments();
 
-  c.innerHTML = masters.map(m=>{
-    // Earned: all items + extra works with zp
-    const earned = [
-      ...items.filter(i=>i.masterId===m.id && i.zpPaid).reduce((s,i)=>s+(i.zp||0), 0),
-      ...extraWorks.filter(w=>w.masterId===m.id && w.zpPaid).reduce((s,w)=>s+(w.zp||0), 0)
-    ];
-    const totalEarned = items.filter(i=>i.masterId===m.id && i.zpPaid).reduce((s,i)=>s+(i.zp||0),0)
-                      + extraWorks.filter(w=>w.masterId===m.id && w.zpPaid).reduce((s,w)=>s+(w.zp||0),0);
-    const masterPays = payments.filter(p=>p.masterId===m.id);
-    const totalPaid  = masterPays.reduce((s,p)=>s+(p.amount||0), 0);
-    const balance    = totalEarned - totalPaid;
-    const nextDate   = getNextPayDate(m.id);
-    const nextDays   = nextDate ? Math.ceil((new Date(nextDate)-new Date())/(1000*60*60*24)) : null;
+  // Итоговая строка сверху
+  let totalDebt = 0;
 
-    return `<div class="card" style="border-color:${balance>0?'var(--a5)':'var(--border)'}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
-        <div>
-          <div style="font-size:15px;font-weight:700">${m.name}</div>
-          <div style="font-size:11px;color:var(--t2);margin-top:2px">🔨 Мастер</div>
-        </div>
-        <button onclick="openZPPay('${m.id}','${m.name}')" class="btn" style="width:auto;padding:7px 14px;font-size:11px;margin:0">💳 Выплатить</button>
+  c.innerHTML = emps.map(m=>{
+    const totalEarned = getEarnedByEmployee(m.id);
+    const masterPays  = payments.filter(p=>p.masterId===m.id);
+    const totalPaid   = masterPays.reduce((s,p)=>s+(p.amount||0),0);
+    const balance     = totalEarned - totalPaid;
+    totalDebt += Math.max(0, balance);
+
+    const roleIcon = {мастер:'🔨',заготовщик:'🪚',кладовщик:'📦',управляющий:'👑'}[m.role]||'👤';
+    const lastPay  = masterPays.slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
+
+    return `<div class="li" onclick="openZPEmployeeDetail('${m.id}')" style="cursor:pointer;border-left:3px solid ${balance>0?'var(--exp)':balance<0?'var(--a2)':'var(--border)'}">
+      <div class="li-ico" style="background:var(--s2)">${roleIcon}</div>
+      <div class="li-info">
+        <div class="li-name">${m.name}</div>
+        <div class="li-sub">${m.role} · нач: ${fmt(totalEarned)} · выпл: ${fmt(totalPaid)}</div>
+        ${lastPay?`<div class="li-sub" style="color:var(--t2)">Последняя: ${lastPay.date} · ${fmt(lastPay.amount)}</div>`:'<div class="li-sub" style="color:var(--t2)">Выплат ещё не было</div>'}
       </div>
-      <div class="at-row"><span class="at-lbl">Заработано всего</span><span class="at-val" style="color:var(--inc)">+${fmt(totalEarned)}</span></div>
-      <div class="at-row"><span class="at-lbl">Выплачено</span><span class="at-val" style="color:var(--t2)">−${fmt(totalPaid)}</span></div>
-      <div class="at-row" style="border-top:2px solid var(--border);padding-top:8px;margin-top:4px">
-        <span class="at-lbl" style="font-weight:700;color:var(--text)">${balance>=0?'Мы должны':'Переплата'}</span>
-        <span class="at-val" style="color:${balance>0?'var(--exp)':'var(--inc)'};font-size:15px">${fmt(Math.abs(balance))}</span>
+      <div style="text-align:right;min-width:70px">
+        <div style="font-size:14px;font-weight:700;color:${balance>0?'var(--exp)':balance<0?'var(--a2)':'var(--t2)'}">${balance>0?'−':''}${fmt(Math.abs(balance))}</div>
+        <div style="font-size:10px;color:var(--t2)">${balance>0?'долг':balance<0?'переплата':'закрыто'}</div>
       </div>
-      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <span style="font-size:11px;color:var(--t2)">Следующая выплата:</span>
-          <span style="font-size:12px;font-weight:600;color:${nextDays!==null&&nextDays<=3?'var(--exp)':'var(--a2)'}">${nextDate?nextDate+(nextDays!==null?' (через '+Math.max(0,nextDays)+' дн.)':''):'не указана'}</span>
-        </div>
-        <input type="date" value="${nextDate}" onchange="saveNextPayDate('${m.id}',this.value);renderZPay()"
-          style="width:100%;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Golos Text',sans-serif;font-size:13px;outline:none">
-      </div>
-      ${masterPays.length?`<div style="margin-top:10px"><div style="font-size:10px;color:var(--t2);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">История выплат</div>
-        ${masterPays.slice().reverse().slice(0,5).map(p=>`<div class="at-row"><span class="at-lbl">${p.date}${p.comment?' · '+p.comment:''}</span><span class="at-val" style="color:var(--inc)">−${fmt(p.amount)}</span></div>`).join('')}
-      </div>`:''}
     </div>`;
   }).join('');
+}
+
+let _zpCurrentEmpId = null;
+let _zpCurrentMethod = 'cash';
+
+function setZpMethod(method){
+  _zpCurrentMethod = method;
+  const cash = document.getElementById('zpMethodCash');
+  const tr   = document.getElementById('zpMethodTransfer');
+  if(method==='cash'){
+    cash.style.background='var(--accent)'; cash.style.color='#000'; cash.style.fontWeight='700'; cash.style.border='none';
+    tr.style.background='var(--s2)'; tr.style.color='var(--t2)'; tr.style.fontWeight='400'; tr.style.border='1px solid var(--border)';
+  } else {
+    tr.style.background='var(--accent)'; tr.style.color='#000'; tr.style.fontWeight='700'; tr.style.border='none';
+    cash.style.background='var(--s2)'; cash.style.color='var(--t2)'; cash.style.fontWeight='400'; cash.style.border='1px solid var(--border)';
+  }
+}
+
+function openZPEmployeeDetail(empId){
+  const emp = getEmployees().find(e=>e.id===empId); if(!emp) return;
+  _zpCurrentEmpId = empId;
+  document.getElementById('zpEmpDetailName').textContent = emp.name+' · '+emp.role;
+
+  const totalEarned = getEarnedByEmployee(empId);
+  const payments    = getZPPayments().filter(p=>p.masterId===empId);
+  const totalPaid   = payments.reduce((s,p)=>s+(p.amount||0),0);
+  const balance     = totalEarned - totalPaid;
+
+  document.getElementById('zpEmpDetailBalance').innerHTML = `
+    <div style="background:var(--s2);border-radius:12px;padding:14px">
+      <div class="at-row"><span class="at-lbl">Начислено</span><span class="at-val" style="color:var(--inc)">+${fmt(totalEarned)}</span></div>
+      <div class="at-row"><span class="at-lbl">Выплачено</span><span class="at-val">−${fmt(totalPaid)}</span></div>
+      <div class="at-row" style="border-top:2px solid var(--border);padding-top:8px;margin-top:4px">
+        <span class="at-lbl" style="font-weight:700">${balance>=0?'Мы должны':'Переплата'}</span>
+        <span class="at-val" style="font-size:16px;color:${balance>0?'var(--exp)':balance<0?'var(--a2)':'var(--t2)'};font-weight:700">${fmt(Math.abs(balance))}</span>
+      </div>
+    </div>`;
+
+  const hist = document.getElementById('zpEmpDetailHistory');
+  if(!payments.length){
+    hist.innerHTML = '<div style="font-size:13px;color:var(--t2);padding:10px 0">Выплат ещё не было</div>';
+  } else {
+    const methodIcon = {cash:'💵',transfer:'💳'};
+    hist.innerHTML = payments.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(p=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-size:13px;font-weight:700">${p.date} ${methodIcon[p.method]||'💵'} ${p.method==='transfer'?'Перевод':'Наличные'}</div>
+          ${p.comment?`<div style="font-size:11px;color:var(--t2)">${p.comment}</div>`:''}
+          <div style="font-size:11px;color:var(--t2)">Внёс: ${p.by||'—'}</div>
+        </div>
+        <div style="font-size:14px;font-weight:700;color:var(--inc)">−${fmt(p.amount)}</div>
+      </div>`).join('');
+  }
+  openMo('zpEmployeeDetailMo');
+}
+
+function openZPPayFromDetail(){
+  const emp = getEmployees().find(e=>e.id===_zpCurrentEmpId); if(!emp) return;
+  openZPPay(_zpCurrentEmpId, emp.name);
 }
 
 let currentZPMasterId = null;
 function openZPPay(masterId, masterName){
   currentZPMasterId = masterId;
+  _zpCurrentEmpId   = masterId;
   document.getElementById('zpPayTitle').textContent = 'Выплата: '+masterName;
   document.getElementById('zpPayAmt').value = '';
   document.getElementById('zpPayComment').value = '';
-  const nextDate = getNextPayDate(masterId);
-  // Set next week by default
-  const nd = new Date(); nd.setDate(nd.getDate()+7);
-  document.getElementById('zpNextDate').value = nextDate || nd.toISOString().split('T')[0];
-  const payments = getZPPayments().filter(p=>p.masterId===masterId);
-  document.getElementById('zpPayHistory').innerHTML = payments.length
-    ? '<div style="font-size:10px;color:var(--t2);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">История выплат</div>'
-      + payments.slice().reverse().slice(0,5).map(p=>`<div class="at-row"><span class="at-lbl">${p.date}${p.comment?' · '+p.comment:''}</span><span class="at-val" style="color:var(--inc)">−${fmt(p.amount)}</span></div>`).join('')
-    : '';
+  document.getElementById('zpPayDate').value = new Date().toISOString().split('T')[0];
+  _zpCurrentMethod = 'cash';
+  setZpMethod('cash');
   openMo('zpPayMo');
 }
 
-function saveZPPayment(){
+async function saveZPPayment(){
   const amount = parseFloat(document.getElementById('zpPayAmt').value)||0;
   if(!amount){ showToast('Введите сумму'); return; }
-  const comment  = document.getElementById('zpPayComment').value;
-  const nextDate = document.getElementById('zpNextDate').value;
-  const date = new Date().toISOString().split('T')[0];
-  const month = date.slice(0,7);
-  const payments = getZPPayments();
+  const comment  = document.getElementById('zpPayComment').value.trim();
+  const date     = document.getElementById('zpPayDate').value || new Date().toISOString().split('T')[0];
+  const method   = _zpCurrentMethod;
+  const month    = date.slice(0,7);
+
   const payEntry = {
     id:uid(), masterId:currentZPMasterId,
-    amount, comment, date, month,
+    amount, comment, date, month, method,
     createdAt: now(), by: session.name
   };
+
+  const payments = getZPPayments();
   payments.push(payEntry);
   saveZPPayments(payments);
-  if(nextDate) saveNextPayDate(currentZPMasterId, nextDate);
 
-  // Сохраняем в Firebase
-  db.collection('ws_zp_payments').add({masterId:currentZPMasterId,amount,comment,date,month,createdAt:now(),by:session.name}).catch(console.error);
+  try{
+    await db.collection('ws_zp_payments').add(payEntry);
+  }catch(e){ console.error('zp pay save', e); }
 
   // Синхронизируем в localStorage мастера для его ЗП-страницы
   const masterPayKey = 'ws_zp_payments_'+currentZPMasterId;
-  const masterPays = JSON.parse(localStorage.getItem(masterPayKey)||'[]');
+  const masterPays   = JSON.parse(localStorage.getItem(masterPayKey)||'[]');
   masterPays.unshift(payEntry);
   localStorage.setItem(masterPayKey, JSON.stringify(masterPays.slice(0,100)));
 
   closeMo('zpPayMo');
   renderZPay();
+  // Обновить детальную карточку если открыта
+  if(document.getElementById('zpEmployeeDetailMo').style.display==='flex') openZPEmployeeDetail(currentZPMasterId);
   showToast(`✅ Выплата ${fmt(amount)} зафиксирована`);
 }
 
@@ -4961,7 +5014,7 @@ function getNextArtikulNumber(){
 function addMaItemRow(){
   const names = getItemNames();
   const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
-  _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', name:names[0]||'', wood:woods[0]||'', zp:0, price:0, qty:1});
+  _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', name:'', wood:'', zp:0, price:0, qty:1});
   recalcMaAutoArtikuls();
   renderMaItemsList();
 }
@@ -5281,7 +5334,7 @@ function openFiGroupForEdit(groupId){
 function addFiItemRow(){
   const names = getItemNames();
   const woods = getWoods();
-  _fiItems.push({rid:uid(), artikul:String(getNextArtikulNumber()), artikulMode:'auto', name:names[0]||'', wood:woods[0]||'', price:0, qty:1});
+  _fiItems.push({rid:uid(), artikul:String(getNextArtikulNumber()), artikulMode:'auto', name:'', wood:'', price:0, qty:1});
   renderFiItemsList();
 }
 
@@ -5581,13 +5634,35 @@ document.addEventListener('DOMContentLoaded', ()=>{
 <!-- ZP PAYMENT MODAL -->
 <div class="mo" id="zpPayMo">
   <div class="md"><div class="mh"></div><div class="mt" id="zpPayTitle">Выплата ЗП</div>
-    <div id="zpPayHistory" style="margin-bottom:14px"></div>
-    <div class="sep"></div>
-    <div class="fg"><label class="fl">Сумма выплаты (₽)</label><input class="fi" type="number" id="zpPayAmt" inputmode="numeric" placeholder="0"></div>
-    <div class="fg"><label class="fl">Дата следующей выплаты</label><input class="fi" type="date" id="zpNextDate"></div>
-    <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="zpPayComment" placeholder="Аванс, зарплата за неделю..."></div>
-    <button class="btn" onclick="saveZPPayment()">💳 Зафиксировать выплату</button>
-    <button class="btn sec" style="margin-top:8px" onclick="closeMo('zpPayMo')">Закрыть</button>
+    <div class="fg"><label class="fl">Сумма выплаты (₽)</label>
+      <input class="fi" type="number" id="zpPayAmt" inputmode="numeric" placeholder="0">
+    </div>
+    <div class="fg"><label class="fl">Дата выплаты</label>
+      <input class="fi" type="date" id="zpPayDate">
+    </div>
+    <div class="fg"><label class="fl">Способ</label>
+      <div style="display:flex;gap:8px">
+        <div id="zpMethodCash" onclick="setZpMethod('cash')" style="flex:1;text-align:center;padding:9px;border-radius:8px;font-size:13px;cursor:pointer;background:var(--accent);color:#000;font-weight:700">💵 Наличные</div>
+        <div id="zpMethodTransfer" onclick="setZpMethod('transfer')" style="flex:1;text-align:center;padding:9px;border-radius:8px;font-size:13px;cursor:pointer;background:var(--s2);color:var(--t2);border:1px solid var(--border)">💳 Перевод</div>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Комментарий</label>
+      <input class="fi" id="zpPayComment" placeholder="Аванс, зарплата за неделю...">
+    </div>
+    <button class="btn green" onclick="saveZPPayment()">💳 Зафиксировать выплату</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('zpPayMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- ДЕТАЛИ СОТРУДНИКА — ВЫПЛАТЫ -->
+<div class="mo" id="zpEmployeeDetailMo">
+  <div class="md"><div class="mh"></div>
+    <div class="mt" id="zpEmpDetailName">Сотрудник</div>
+    <div id="zpEmpDetailBalance" style="margin-bottom:14px"></div>
+    <button class="btn green" style="margin-bottom:14px" onclick="openZPPayFromDetail()">➕ Внести выплату</button>
+    <div class="ctitle">История выплат</div>
+    <div id="zpEmpDetailHistory"></div>
+    <button class="btn sec" style="margin-top:14px" onclick="closeMo('zpEmployeeDetailMo')">Закрыть</button>
   </div>
 </div>
 
