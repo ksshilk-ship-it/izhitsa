@@ -5584,11 +5584,19 @@ function openFiGroupDetail(groupId){
     </div>`;
 
   document.getElementById('fiGroupDetailPositions').innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="ctitle" style="margin:0">Позиции (${g.positions.length})</div>
     </div>
+    <div style="position:relative;margin-bottom:10px">
+      <input class="fi" id="fiGroupSearchInput" placeholder="🔍 Поиск по наименованию, артикулу..."
+        oninput="filterFiGroupPositions()" autocomplete="off"
+        style="padding-right:36px">
+      <button onclick="document.getElementById('fiGroupSearchInput').value='';filterFiGroupPositions()"
+        style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px;padding:0">✕</button>
+    </div>
+    <div id="fiGroupPositionsList">
     ${g.positions.map((p,i)=>`
-      <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div class="fi-pos-row" data-search="${((p.name||'')+(p.artikul||'')+(p.wood||'')+(p.size||'')).toLowerCase()}" style="padding:10px 0;border-bottom:1px solid var(--border)">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
           <div style="flex:1">
             <div style="font-size:13px;font-weight:700">${p.name||'—'}${p.artikul?' · '+p.artikul:''}</div>
@@ -5600,7 +5608,8 @@ function openFiGroupDetail(groupId){
             <button onclick="deleteFiPosition('${g.id}','${p.rid}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 8px;color:var(--exp);cursor:pointer;font-size:13px">🗑</button>
           </div>
         </div>
-      </div>`).join('')}`;
+      </div>`).join('')}
+    </div>`;
 
   let actions = '';
   if(g.status==='draft'){
@@ -5621,6 +5630,20 @@ function openFiGroupDetail(groupId){
   document.getElementById('fiGroupDetailActions').innerHTML = actions;
 
   openMo('fiGroupDetailMo');
+}
+
+function filterFiGroupPositions(){
+  const q = (document.getElementById('fiGroupSearchInput')?.value||'').toLowerCase().trim();
+  const rows = document.querySelectorAll('#fiGroupPositionsList .fi-pos-row');
+  let found = 0;
+  rows.forEach(function(row){
+    const matches = !q || (row.getAttribute('data-search')||'').indexOf(q)>=0;
+    row.style.display = matches ? '' : 'none';
+    if(matches) found++;
+  });
+  // Показываем счётчик найденных
+  const input = document.getElementById('fiGroupSearchInput');
+  if(input) input.style.borderColor = (q && found===0) ? 'var(--exp)' : '';
 }
 
 async function deleteFiGroup(groupId){
