@@ -1377,6 +1377,7 @@ function acPickMaName(val, rid){ const el=document.getElementById('maName_'+rid)
 function acPickMaWood(val, rid){ const el=document.getElementById('maWood_'+rid); if(el) el.value=val; acHideSugg('maWood_'+rid); updateMaItem(rid,'wood',val); }
 function acPickFiName(val, rid){ const el=document.getElementById('fiName_'+rid); if(el) el.value=val; acHideSugg('fiName_'+rid); updateFiItem(rid,'name',val); }
 function acPickFiWood(val, rid){ const el=document.getElementById('fiWood_'+rid); if(el) el.value=val; acHideSugg('fiWood_'+rid); updateFiItem(rid,'wood',val); }
+function acPickFiSize(val, rid){ const el=document.getElementById('fiSize_'+rid); if(el) el.value=val; acHideSugg('fiSize_'+rid); updateFiItem(rid,'size',val); }
 function openMo(id){document.getElementById(id).classList.add('open');}
 function closeMo(id){document.getElementById(id).classList.remove('open');}
 function showPg(name,el){
@@ -5014,7 +5015,7 @@ function getNextArtikulNumber(){
 function addMaItemRow(){
   const names = getItemNames();
   const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
-  _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', name:'', wood:'', zp:0, price:0, qty:1});
+  _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', name:'', wood:'', zp:0, price:0, qty:''});
   recalcMaAutoArtikuls();
   renderMaItemsList();
 }
@@ -5046,7 +5047,7 @@ function renderMaItemsList(){
         ${(parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto' ? `<div style="font-size:11px;color:var(--accent);margin-top:5px">Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}</div>` : ''}
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Количество одинаковых изделий</label>
-        <input class="fi" type="number" inputmode="numeric" min="1" value="${it.qty||1}" oninput="updateMaItem('${it.rid}','qty',this.value)" placeholder="1">
+        <input class="fi" type="number" inputmode="numeric" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" placeholder="1">
         <div style="font-size:11px;color:var(--t2);margin-top:4px">Если сдано несколько одинаковых изделий по одной цене — укажите количество, остальные поля заполните один раз</div>
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label>
@@ -5334,7 +5335,7 @@ function openFiGroupForEdit(groupId){
 function addFiItemRow(){
   const names = getItemNames();
   const woods = getWoods();
-  _fiItems.push({rid:uid(), artikul:String(getNextArtikulNumber()), artikulMode:'auto', name:'', wood:'', price:0, qty:1});
+  _fiItems.push({rid:uid(), artikul:String(getNextArtikulNumber()), artikulMode:'auto', name:'', wood:'', price:0, qty:''});
   renderFiItemsList();
 }
 
@@ -5360,9 +5361,11 @@ function setFiArtikulMode(rid, mode){
 function renderFiItemsList(){
   const names = getItemNames();
   const woods = getWoods();
+  const sizes = getSizes();
   _fiItems.forEach(it=>{
     _acLists['fiName_'+it.rid] = names;
     _acLists['fiWood_'+it.rid] = woods;
+    _acLists['fiSize_'+it.rid] = sizes;
   });
   const c = document.getElementById('fiItemsList'); if(!c) return;
   c.innerHTML = _fiItems.map((it,i)=>`
@@ -5404,12 +5407,23 @@ function renderFiItemsList(){
           <button onclick="_fiPendingWoodTarget='${it.rid}';openAddWoodMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
         </div>
       </div>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">Размер</label>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;position:relative">
+            <input class="fi" id="fiSize_${it.rid}" value="${(it.size||'').replace(/"/g,'&quot;')}" placeholder="Начните вводить..." autocomplete="off"
+              oninput="updateFiItem('${it.rid}','size',this.value);acSuggest('fiSize_${it.rid}','acPickFiSize','${it.rid}')"
+              onfocus="acSuggest('fiSize_${it.rid}','acPickFiSize','${it.rid}')">
+            <div id="fiSize_${it.rid}_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
+          </div>
+          <button onclick="openAddSizeMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+        </div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div class="fg"><label class="fl">Цена (₽)</label>
           <input class="fi" type="number" inputmode="numeric" value="${it.price||''}" oninput="updateFiItem('${it.rid}','price',this.value)" placeholder="0">
         </div>
         <div class="fg"><label class="fl">Количество</label>
-          <input class="fi" type="number" inputmode="numeric" value="${it.qty||1}" oninput="updateFiItem('${it.rid}','qty',this.value)" placeholder="1">
+          <input class="fi" type="number" inputmode="numeric" value="${it.qty||''}" oninput="updateFiItem('${it.rid}','qty',this.value)" placeholder="1">
         </div>
       </div>
       <div style="text-align:right;font-size:12px;color:var(--t2);margin-top:6px">Сумма: <span style="color:var(--accent);font-weight:700">${fmt((it.price||0)*(it.qty||0))}</span></div>
@@ -5430,7 +5444,7 @@ async function saveFirstInvGroup(){
   if(!_fiItems.length){ showToast('Добавьте хотя бы один товар'); return; }
 
   const newPositions = _fiItems.map(it=>({
-    rid: it.rid, artikul: it.artikul||'', name: it.name, wood: it.wood,
+    rid: it.rid, artikul: it.artikul||'', name: it.name, wood: it.wood, size: it.size||'',
     price: it.price||0, qty: it.qty||1
   }));
 
@@ -5518,7 +5532,7 @@ function openFiGroupDetail(groupId){
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div>
             <div style="font-size:13px;font-weight:700">${p.name||'—'}${p.artikul?' · '+p.artikul:''}</div>
-            <div style="font-size:11px;color:var(--t2)">${p.wood||''} · ${p.qty||1} шт. · ${fmt(p.price||0)}/шт.</div>
+            <div style="font-size:11px;color:var(--t2)">${p.wood||''}${p.size?' · '+p.size:''} · ${p.qty||1} шт. · ${fmt(p.price||0)}/шт.</div>
           </div>
           <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt((p.price||0)*(p.qty||1))}</div>
         </div>
