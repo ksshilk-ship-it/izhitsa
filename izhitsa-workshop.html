@@ -559,31 +559,28 @@ function applyUpdate() {
   <div class="page" id="pg-inventory">
     <div class="stitle">🔍 Инвентаризация</div>
 
-    <!-- Ввод артикула -->
-    <div class="card" style="border-color:var(--a2)" id="invScanCard">
-      <div class="ctitle">Сканировать / ввести артикул</div>
-      <div style="display:flex;gap:8px">
-        <input class="fi" id="invArtInput" placeholder="Введите артикул..." style="flex:1" onkeydown="if(event.key==='Enter')scanInvItem()">
-        <button onclick="scanInvItem()" style="background:var(--a2);border:none;border-radius:10px;padding:0 16px;color:#000;font-weight:700;cursor:pointer;font-size:14px">🔍</button>
-      </div>
-      <div id="invScanResult" style="margin-top:8px;display:none"></div>
-      <button onclick="showInventoryDiff()" id="invFinishBtn" style="display:none;margin-top:10px" class="btn" style="background:var(--a5)">📋 Подвести итог</button>
-    </div>
-
     <!-- Статус -->
     <div class="srow" id="invStats" style="display:none">
-      <div class="sc"><div class="sc-v" id="invChecked" style="color:var(--inc)">0</div><div class="sc-l">Проверено ✅</div></div>
-      <div class="sc"><div class="sc-v" id="invMissing" style="color:var(--exp)">0</div><div class="sc-l">Недостача ❌</div></div>
-      <div class="sc"><div class="sc-v" id="invExtra" style="color:var(--a4)">0</div><div class="sc-l">Излишек ⚠️</div></div>
+      <div class="sc"><div class="sc-v" id="invChecked" style="color:var(--inc)">0</div><div class="sc-l">Нашли ✅</div></div>
+      <div class="sc"><div class="sc-v" id="invMissing" style="color:var(--exp)">0</div><div class="sc-l">Не нашли ❌</div></div>
+      <div class="sc"><div class="sc-v" id="invRemain" style="color:var(--a2)">0</div><div class="sc-l">Не проверено</div></div>
     </div>
 
     <!-- Список склада для проверки -->
     <div class="card" id="invListCard">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div class="ctitle" style="margin:0">Товары на складе</div>
-        <button onclick="startInventory()" id="invStartBtn" style="background:var(--a2);border:none;border-radius:8px;padding:6px 12px;color:#000;font-size:12px;font-weight:700;cursor:pointer">▶ Начать</button>
+        <button onclick="startInventory()" id="invStartBtn" style="background:var(--a2);border:none;border-radius:8px;padding:6px 12px;color:#000;font-size:12px;font-weight:700;cursor:pointer">▶ Начать сверку</button>
+      </div>
+      <!-- Поиск — показывается только в режиме сверки -->
+      <div id="invSearchWrap" style="display:none;margin-bottom:8px">
+        <input class="fi" id="invSearchInput" placeholder="🔍 Поиск по наименованию, артикулу..."
+          oninput="filterInvList()" autocomplete="off">
       </div>
       <div id="invItemsList"></div>
+      <div id="invFinishWrap" style="display:none;margin-top:12px">
+        <button onclick="showInventoryDiff()" class="btn" style="background:var(--a5)">📋 Подвести итог</button>
+      </div>
       <button onclick="openFirstInventoryMo()" id="invFirstTimeBtn" style="display:none;margin-top:10px" class="btn green">🆕 Первая инвентаризация (внести остатки)</button>
     </div>
 
@@ -4363,13 +4360,15 @@ async function saveManualStock(){
 // ИНВЕНТАРИЗАЦИЯ
 // ════════════════════════════════
 let _invItems   = [];   // товары на складе по системе
-let _invChecked = new Set(); // id отмеченных
+let _invChecked = new Set(); // id отмеченных как "нашли"
+let _invMissing = new Set(); // id отмеченных как "не нашли"
 let _invExtra   = [];   // лишние (введены но не в базе)
 let _invStarted = false;
 
 function renderInventoryPage(){
   _invItems   = items.filter(i=>i.status==='received' && !i.isArchiveDraft);
   _invChecked = new Set();
+  _invMissing = new Set();
   _invExtra   = [];
   _invStarted = false;
   renderInvList();
@@ -4377,23 +4376,106 @@ function renderInventoryPage(){
   renderFirstInventoryGroups();
   document.getElementById('invStats').style.display    = 'none';
   document.getElementById('invDiffSection').style.display = 'none';
+  document.getElementById('invSearchWrap').style.display = 'none';
+  document.getElementById('invFinishWrap').style.display = 'none';
   document.getElementById('invStartBtn').style.display    = _invItems.length ? 'block' : 'none';
   document.getElementById('invFirstTimeBtn').style.display = _invItems.length ? 'none' : 'block';
-  document.getElementById('invArtInput').value = '';
-  document.getElementById('invScanResult').style.display = 'none';
 }
 
 function startInventory(){
   _invStarted = true;
-  _invChecked = new Set();
+  _invChecked = new Set();   // id позиций отмеченных как "нашли"
+  _invMissing = new Set();   // id позиций отмеченных как "не нашли"
   _invExtra   = [];
   document.getElementById('invStats').style.display = 'grid';
   document.getElementById('invStartBtn').style.display = 'none';
-  document.getElementById('invFinishBtn').style.display = 'block';
-  document.getElementById('invArtInput').focus();
+  document.getElementById('invSearchWrap').style.display = 'block';
+  document.getElementById('invFinishWrap').style.display = 'block';
   renderInvList();
   updateInvStats();
-  showToast('✅ Инвентаризация начата. Вводите артикулы.');
+  showToast('✅ Сверка начата. Отмечайте каждую позицию.');
+}
+
+function renderInvList(){
+  const c = document.getElementById('invItemsList'); if(!c) return;
+  if(!_invItems.length){
+    c.innerHTML = '<div class="empty" style="padding:10px 0"><div class="ei">📦</div>Склад пуст</div>';
+    return;
+  }
+
+  if(!_invStarted){
+    // До начала — просто список
+    c.innerHTML = _invItems.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','ru')).map(item=>`
+      <div style="padding:9px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:13px;font-weight:600">${item.name||item.itemName||'—'}${item.artikul?' · '+item.artikul:''}</div>
+        <div style="font-size:11px;color:var(--t2)">${item.wood||''}${item.size?' · '+item.size:''} · ${fmt(item.price||0)}</div>
+      </div>`).join('');
+    return;
+  }
+
+  // В режиме сверки — каждая позиция с кнопками
+  const sorted = _invItems.slice().sort((a,b)=>{
+    // Сначала не проверенные, потом нашли, потом не нашли
+    const stateA = _invMissing.has(a._id)?2:_invChecked.has(a._id)?1:0;
+    const stateB = _invMissing.has(b._id)?2:_invChecked.has(b._id)?1:0;
+    if(stateA!==stateB) return stateA-stateB;
+    return (a.name||'').localeCompare(b.name||'','ru');
+  });
+
+  c.innerHTML = sorted.map(item=>{
+    const found   = _invChecked.has(item._id);
+    const missing = _invMissing.has(item._id);
+    const neutral = !found && !missing;
+    const bgColor = found ? 'rgba(80,255,150,0.07)' : missing ? 'rgba(255,80,80,0.07)' : '';
+    return `<div class="inv-row" data-search="${((item.name||item.itemName||'')+(item.artikul||'')+(item.wood||'')).toLowerCase()}"
+      style="padding:10px 0;border-bottom:1px solid var(--border);background:${bgColor}">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600">${item.name||item.itemName||'—'}${item.artikul?' · <span style="color:var(--t2)">'+item.artikul+'</span>':''}</div>
+          <div style="font-size:11px;color:var(--t2)">${item.wood||''}${item.size?' · '+item.size:''} · ${fmt(item.price||0)}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button onpointerdown="event.preventDefault();markInvItem('${item._id}','found')"
+            style="padding:7px 10px;border-radius:8px;border:1px solid ${found?'var(--inc)':'var(--border)'};background:${found?'rgba(80,255,150,0.2)':'var(--s2)'};color:${found?'var(--inc)':'var(--t2)'};cursor:pointer;font-size:15px">✅</button>
+          <button onpointerdown="event.preventDefault();markInvItem('${item._id}','missing')"
+            style="padding:7px 10px;border-radius:8px;border:1px solid ${missing?'var(--exp)':'var(--border)'};background:${missing?'rgba(255,80,80,0.2)':'var(--s2)'};color:${missing?'var(--exp)':'var(--t2)'};cursor:pointer;font-size:15px">❌</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function markInvItem(id, state){
+  if(state==='found'){
+    _invChecked.add(id);
+    _invMissing.delete(id);
+  } else {
+    _invMissing.add(id);
+    _invChecked.delete(id);
+  }
+  updateInvStats();
+  renderInvList();
+  // Восстановить поиск если был
+  const q = document.getElementById('invSearchInput')?.value;
+  if(q) filterInvList();
+}
+
+function filterInvList(){
+  const q = (document.getElementById('invSearchInput')?.value||'').toLowerCase().trim();
+  document.querySelectorAll('#invItemsList .inv-row').forEach(row=>{
+    row.style.display = (!q || (row.dataset.search||'').includes(q)) ? '' : 'none';
+  });
+}
+
+function updateInvStats(){
+  const total   = _invItems.length;
+  const checked = _invChecked.size;
+  const missing = _invMissing.size;
+  const remain  = total - checked - missing;
+  const el = id=>document.getElementById(id);
+  if(el('invChecked')) el('invChecked').textContent = checked;
+  if(el('invMissing')) el('invMissing').textContent = missing;
+  if(el('invRemain'))  el('invRemain').textContent  = remain;
 }
 
 function renderInvList(){
@@ -4427,7 +4509,7 @@ function renderInvList(){
       </div>
       <div style="text-align:right">
         <div style="font-size:13px;font-weight:700;color:${color}">${checked}/${total}</div>
-        <div style="font-size:10px;color:var(--t2)">шт.</div>
+        <div style="font-size:10px;color:var(--t2)">${_invStarted ? 'найд./ожид.' : 'шт.'}</div>
       </div>
     </div>`;
   }).join('');
