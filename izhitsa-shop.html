@@ -2522,7 +2522,8 @@ function isOfflineType(name){ return getShopType(name)==='offline'; }
 function saveJ(){ localStorage.setItem(restoreMode?KEY.restoreJournal:KEY.journal,JSON.stringify(journal)); }
 
 function loadAndCleanJournal(){
-  var raw = JSON.parse(localStorage.getItem(KEY.journal)||'[]');
+  var isRestore = restoreMode;
+  var raw = JSON.parse(localStorage.getItem(isRestore?KEY.restoreJournal:KEY.journal)||'[]');
   if(!session || !session.openedAt) return raw;
   var shiftDate = session.openedAt.split('T')[0];
   return raw.filter(function(e){
@@ -3316,6 +3317,7 @@ function manualSync(){
 var _liveShiftListenUnsub = null;
 function startLiveShiftListener(){
   if(!session || session.isPreview) return;
+  if(restoreMode) return; // restore shifts are local only
   if(!session.shiftId){ session.shiftId = uid(); saveS(); }
   stopLiveShiftListener();
   try{
@@ -10497,6 +10499,9 @@ function enterRestoreMode(meta){
   }
   // Иначе — открываем стандартную форму "Наличные на утро / Остаток товара",
   // как при открытии обычной смены, только с датой = выбранный прошедший день.
+  // Clear any stale restore journal from previous restore sessions
+  localStorage.removeItem(KEY.restoreJournal);
+  localStorage.removeItem(KEY.restoreSession);
   session = null; journal = [];
   pendingSession = {shopName:meta.shop, sellerName:meta.sellerName, sellerId:meta.sellerId, _restoreOpenedAt: meta.date+'T09:00:00.000Z'};
   openMorningModal();
