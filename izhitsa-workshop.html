@@ -2675,12 +2675,18 @@ function renderStockGroups(){
       <div id="wsg_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="display:${isOpen?'block':'none'};padding:0 12px">
         ${g.items.map(item=>{
           const num = item.artikul || (item.itemNum && !item.itemNum.startsWith('НАЧ-') ? item.itemNum : '');
+          const isAdmin = session && (session.role==='администратор'||session.role==='управляющий');
           return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
-            <div>
+            <div style="flex:1">
               <div style="font-size:12px;font-weight:600">${num?'№'+num+' ':''}${item.wood||'—'}${item.size?' · '+item.size:''}</div>
               <div style="font-size:11px;color:var(--t2)">Принято: ${fmtDT(item.receivedAt)}</div>
             </div>
-            <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</div>
+              ${isAdmin?`
+              <button onclick="openStockItemEdit('${item._id}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--a2);cursor:pointer;font-size:12px">✏️</button>
+              <button onclick="deleteStockItem('${item._id}','${(item.name||item.itemName||'').replace(/'/g,"\\'")}');" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--exp);cursor:pointer;font-size:12px">🗑</button>`:''}
+            </div>
           </div>`;
         }).join('')}
       </div>
@@ -4959,8 +4965,52 @@ function deleteOtCategory(i){
   renderOtCategoriesList();
 }
 
-// ════════════════════════════════
-// РУЧНОЕ ВНЕСЕНИЕ ПРОЧИХ РАБОТ (Кладовщик)
+// ════ РЕДАКТИРОВАНИЕ ТОВАРОВ НА СКЛАДЕ (Администратор) ════
+let _sieItemId = null;
+
+function acPickSieName(val){ const el=document.getElementById('sieNameInput'); if(el) el.value=val; acHideSugg('sieNameInput'); }
+function acPickSieWood(val){ const el=document.getElementById('sieWoodInput'); if(el) el.value=val; acHideSugg('sieWoodInput'); }
+function acPickSieSize(val){ const el=document.getElementById('sieSizeInput'); if(el) el.value=val; acHideSugg('sieSizeInput'); }
+
+function openStockItemEdit(itemId){
+  const item = items.find(i=>i._id===itemId); if(!item) return;
+  _sieItemId = itemId;
+  _acLists['sieNameInput'] = getItemNames();
+  _acLists['sieWoodInput'] = getWoods();
+  _acLists['sieSizeInput'] = getSizes();
+  document.getElementById('sieNameInput').value  = item.name||item.itemName||'';
+  document.getElementById('sieWoodInput').value  = item.wood||'';
+  document.getElementById('sieSizeInput').value  = item.size||'';
+  document.getElementById('sieArtikul').value    = item.artikul||'';
+  document.getElementById('siePrice').value      = item.price||'';
+  openMo('stockItemEditMo');
+}
+
+async function saveStockItemEdit(){
+  if(!_sieItemId){ showToast('Ошибка: товар не найден'); return; }
+  const name    = document.getElementById('sieNameInput').value.trim();
+  const wood    = document.getElementById('sieWoodInput').value.trim();
+  const size    = document.getElementById('sieSizeInput').value.trim();
+  const artikul = document.getElementById('sieArtikul').value.trim();
+  const price   = parseFloat(document.getElementById('siePrice').value)||0;
+  if(!name){ showToast('Укажите наименование'); return; }
+  try{
+    await db.collection('ws_items').doc(_sieItemId).update({
+      name, itemName: name, wood, size, artikul, price,
+      editedAt: now(), editedBy: session.name
+    });
+    closeMo('stockItemEditMo');
+    showToast('✅ Товар обновлён');
+  }catch(e){ showToast('Ошибка: '+e.message); }
+}
+
+async function deleteStockItem(itemId, name){
+  if(!confirm(`Удалить товар «${name}» со склада?\n\nЭто действие нельзя отменить.`)) return;
+  try{
+    await db.collection('ws_items').doc(itemId).delete();
+    showToast(`🗑 Товар «${name}» удалён`);
+  }catch(e){ showToast('Ошибка: '+e.message); }
+}
 // Та же база ws_other_tasks, но запись ведётся по дням вручную,
 // а не через старт/пауза/финиш самого мастера в приложении.
 // ════════════════════════════════
@@ -5879,8 +5929,10 @@ function openFiGroupDetail(groupId){
     </div>
     ${mismatch?`<div style="background:rgba(255,80,80,0.1);border:1px solid var(--exp);border-radius:8px;padding:10px;margin-top:8px;font-size:12px;color:var(--exp)">
       ⚠️ Расхождение: в записи ${totalQty} шт., на складе ${realCount} шт. (разница: ${totalQty-realCount}).
-      Нажмите «➕ Дополнить группу» чтобы добавить недостающие позиции и активировать их.
-    </div>`:''}`;
+    </div>
+    <button class="btn" style="background:var(--a4);color:#000;margin-top:8px" onclick="reactivateFiGroup('${groupId}')">
+      🔄 Доактивировать недостающие (${totalQty-realCount} шт.)
+    </button>`:''}`;
 
 
   document.getElementById('fiGroupDetailPositions').innerHTML = `
@@ -5985,6 +6037,62 @@ async function activateFirstInvGroup(groupId){
     audit && audit('first_inventory_group_activated',{groupName:g.groupName, count:g.positions.length});
     closeMo('fiGroupDetailMo');
     showToast(`✅ Группа «${g.groupName}» поставлена на баланс склада`);
+  }catch(e){ showToast('Ошибка: '+e.message); }
+}
+
+async function reactivateFiGroup(groupId){
+  const g = _fiGroups.find(x=>x.id===groupId); if(!g) return;
+
+  // Найдём все ws_items уже созданные из этой группы
+  const existing = items.filter(i=>i.fromFirstInventory===groupId && i.status==='received');
+  const existingArtikuls = new Set(existing.map(i=>i.artikul).filter(Boolean));
+  const existingCount = existing.length;
+
+  // Ожидаемое полное количество
+  const totalQty = g.positions.reduce((s,p)=>s+(parseInt(p.qty)||1),0);
+  const missing = totalQty - existingCount;
+
+  if(missing<=0){ showToast('Всё уже на складе — расхождений нет'); return; }
+
+  if(!confirm(`Создать недостающие ${missing} шт. на складе из группы «${g.groupName}»?`)) return;
+
+  try{
+    showToast(`Создаём ${missing} позиций...`);
+    const batch = db.batch();
+    let created = 0;
+
+    g.positions.forEach(p=>{
+      const qty = parseInt(p.qty)||1;
+      const baseArtikul = parseInt(p.artikul);
+
+      for(let q=0; q<qty; q++){
+        let artikul = p.artikul||'';
+        if(!isNaN(baseArtikul) && qty>1) artikul = String(baseArtikul+q);
+
+        // Пропускаем если такой артикул уже есть на складе
+        if(artikul && existingArtikuls.has(artikul)) continue;
+
+        // Пропускаем если без артикула — считаем по числу уже созданных из этой позиции
+        // (упрощение: создаём только разницу)
+        const ref = db.collection('ws_items').doc();
+        batch.set(ref, {
+          id: uid(), name: p.name||'', itemName: p.name||'', wood: p.wood||'',
+          size: p.size||'', artikul: artikul, price: p.price||0,
+          zp: 0, zpPaid: false, masterId: '', masterName: 'Начальный остаток',
+          status: 'received', createdAt: now(), receivedAt: now(),
+          isManual: true, fromFirstInventory: g.id,
+          itemNum: artikul || ('НАЧ-'+g.id.slice(-4).toUpperCase()+'-'+(existingCount+created+1))
+        });
+        created++;
+        if(artikul) existingArtikuls.add(artikul);
+      }
+    });
+
+    if(created===0){ showToast('Нет новых позиций для добавления — возможно все артикулы уже созданы'); return; }
+
+    await batch.commit();
+    closeMo('fiGroupDetailMo');
+    showToast(`✅ Доактивировано: +${created} шт. на складе`);
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 
@@ -6188,6 +6296,44 @@ document.addEventListener('DOMContentLoaded', ()=>{
     <div id="otDetailContent"></div>
     <div id="otDetailActions"></div>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('otTaskDetailMo')">Закрыть</button>
+  </div>
+</div>
+
+<!-- РЕДАКТИРОВАНИЕ ТОВАРА НА СКЛАДЕ (Администратор) -->
+<div class="mo" id="stockItemEditMo">
+  <div class="md"><div class="mh"></div><div class="mt">✏️ Редактировать товар</div>
+    <div class="fg"><label class="fl">Наименование</label>
+      <div style="position:relative">
+        <input class="fi" id="sieNameInput" placeholder="Начните вводить..." autocomplete="off"
+          oninput="acSuggest('sieNameInput','acPickSieName')"
+          onfocus="acSuggest('sieNameInput','acPickSieName')">
+        <div id="sieNameInput_sugg" style="display:none"></div>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Порода дерева</label>
+      <div style="position:relative">
+        <input class="fi" id="sieWoodInput" placeholder="Начните вводить..." autocomplete="off"
+          oninput="acSuggest('sieWoodInput','acPickSieWood')"
+          onfocus="acSuggest('sieWoodInput','acPickSieWood')">
+        <div id="sieWoodInput_sugg" style="display:none"></div>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Размер</label>
+      <div style="position:relative">
+        <input class="fi" id="sieSizeInput" placeholder="Начните вводить..." autocomplete="off"
+          oninput="acSuggest('sieSizeInput','acPickSieSize')"
+          onfocus="acSuggest('sieSizeInput','acPickSieSize')">
+        <div id="sieSizeInput_sugg" style="display:none"></div>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Артикул</label>
+      <input class="fi" id="sieArtikul" placeholder="Артикул">
+    </div>
+    <div class="fg"><label class="fl">Цена (₽)</label>
+      <input class="fi" type="number" inputmode="numeric" id="siePrice" placeholder="0">
+    </div>
+    <button class="btn green" style="margin-top:8px" onclick="saveStockItemEdit()">💾 Сохранить</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('stockItemEditMo')">Отмена</button>
   </div>
 </div>
 
