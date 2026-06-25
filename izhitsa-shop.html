@@ -3493,10 +3493,13 @@ function doLogin(){
         snap.forEach(function(doc){
           var d=doc.data();
           if(d.shopName!==shopName) return;
+          // Ignore restore/psj shifts — they are historical and don't block real shifts
+          if(d.isRestoreShift || d.source==='psj' || d.backfilled) return;
           if(d.sellerName===seller.name) sameSellerShift=d;
           else if(!otherSellerShift) otherSellerShift=d;
         });
-        if(sameSellerShift){
+        // Only restore into same-seller shift if it's a real (non-restore) shift
+        if(sameSellerShift && !sameSellerShift.isRestoreShift && !sameSellerShift.backfilled){
           session = {shopName:sameSellerShift.shopName, sellerName:sameSellerShift.sellerName, sellerId:sellerId,
             shiftId:sameSellerShift.id, openedAt:sameSellerShift.openedAt,
             cashMorning:sameSellerShift.cashMorning, goodsMorning:sameSellerShift.goodsMorning,
