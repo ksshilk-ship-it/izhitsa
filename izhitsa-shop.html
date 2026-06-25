@@ -13022,10 +13022,7 @@ function renderManInvItems() {
     var isOpen = (i === expandIdx);
     var isFilled = !!(item.name || item.article);
     var summary = (item.article?'№'+item.article+' ':'')+(item.name||'—')+(item.species?' · '+item.species:'')+(item.qty>1?' × '+item.qty:'')+(item.price?' · '+item.price+'₽':'');
-    var dlId = 'manInvDl_'+i;
-    var dlHtml = '<datalist id="'+dlId+'">'+items.slice(0,50).map(function(it){
-      return '<option value="'+it.name+'"'+(it.num?' data-num="'+it.num+'"':'')+'>';
-    }).join('')+'</datalist>';
+    var dlId = 'manInvDl_'+i; // kept for compat but not used
 
     // Collapsed row
     if(!isOpen && isFilled){
@@ -13058,9 +13055,12 @@ function renderManInvItems() {
         '</div>'+
         '<div style="flex:1">'+
           '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">НАИМЕНОВАНИЕ</div>'+
-          '<div style="display:flex;gap:4px">'+
-            '<input class="fi" list="'+dlId+'" value="'+item.name+'" placeholder="Название" '+
-              'oninput="_manInvName('+i+',this.value);siAutoDetectAndSetType(this.value)" style="margin:0;padding:8px;flex:1">'+
+          '<div style="display:flex;gap:4px;position:relative">'+
+            '<input class="fi" id="manInvName_'+i+'" value="'+item.name+'" placeholder="Название" autocomplete="off" '+
+              'oninput="_manInvName('+i+',this.value);siAutoDetectAndSetType(this.value);psjSuggest(\'manInvName_'+i+'\',_manInvNameOptions(),\'_manInvPickName_'+i+'\')" '+
+              'onfocus="psjSuggest(\'manInvName_'+i+'\',_manInvNameOptions(),\'_manInvPickName_'+i+'\')" '+
+              'onblur="psjHideSugg(\'manInvName_'+i+'\')" style="margin:0;padding:8px;flex:1">'+
+            '<div id="manInvName_'+i+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:25;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:180px;overflow-y:auto;margin-top:2px"></div>'+
             '<button type="button" onclick="openAddItemModal(\'manInvName_'+i+'\',\'\',\'\')" '+
               'style="background:#c8f060;border:none;border-radius:8px;padding:6px 9px;font-weight:700;color:#0f0f13;cursor:pointer;font-size:14px;flex-shrink:0">＋</button>'+
           '</div>'+
@@ -13097,6 +13097,19 @@ function renderManInvItems() {
 }
 
 function _manInvName(i, val) { _manInvItems[i].name = val; updateManInvTotal(); saveManInvDraft(); }
+function _manInvPickName_0(val){ _manInvPickNameAt(0,val); }
+function _manInvPickName_1(val){ _manInvPickNameAt(1,val); }
+function _manInvPickName_2(val){ _manInvPickNameAt(2,val); }
+function _manInvPickName_3(val){ _manInvPickNameAt(3,val); }
+function _manInvPickName_4(val){ _manInvPickNameAt(4,val); }
+function _manInvPickName_5(val){ _manInvPickNameAt(5,val); }
+function _manInvPickNameAt(i,val){
+  if(_manInvItems[i]!=null){ _manInvItems[i].name=val; siAutoDetectAndSetType(val); }
+  var el=document.getElementById('manInvName_'+i); if(el) el.value=val;
+  updateManInvTotal(); saveManInvDraft();
+  renderManInvItems();
+}
+
 function _manInvNameBlurCheck(el){ var catKey = (_manInvGoodsType==='dr') ? 'iz_goods_dr' : 'iz_goods_derevo'; dupCheckField(el, catKey); }
 
 function manInvLoadFile(input){
@@ -13557,19 +13570,39 @@ function deleteManualInvoice(id){
 }
 
 function getItemsBase() {
-  var detailed = JSON.parse(localStorage.getItem('iz_items')||'[]');
-  // Merge in simple-name entries from the "База товаров" refbook (Настройки)
-  // so they appear as suggestions even if they have no article/price yet.
-  var goods = getRefBook('iz_goods');
+  // Primary source: iz_goods_derevo + iz_goods_dr (actual catalogs)
   var existingNames = {};
-  detailed.forEach(function(it){ if(it.name) existingNames[it.name]=true; });
-  goods.forEach(function(g){
+  var detailed = [];
+
+  // Add from both catalogs, deduplicated, sorted alphabetically
+  var allCatalog = getRefBook('iz_goods_derevo').concat(getRefBook('iz_goods_dr'));
+  allCatalog.forEach(function(g){
     var name = (g && g.name) || (typeof g==='string' ? g : '');
-    if(name && !existingNames[name]){
+    if(!name) return;
+    var norm = name.toLowerCase().trim();
+    if(!existingNames[norm]){
+      existingNames[norm] = true;
       detailed.push({name:name, num:'', price:0, category:''});
-      existingNames[name]=true;
     }
   });
+
+  // Merge legacy iz_items (has article numbers) - only if name not already present
+  var legacy = JSON.parse(localStorage.getItem('iz_items')||'[]');
+  legacy.forEach(function(it){
+    if(!it.name) return;
+    var norm = it.name.toLowerCase().trim();
+    if(!existingNames[norm]){
+      existingNames[norm] = true;
+      detailed.push(it);
+    } else {
+      // Update existing entry with article if available
+      var found = detailed.find(function(d){ return d.name.toLowerCase().trim()===norm; });
+      if(found && it.num && !found.num) found.num = it.num;
+    }
+  });
+
+  // Sort alphabetically
+  detailed.sort(function(a,b){ return (a.name||'').localeCompare(b.name||'','ru'); });
   return detailed;
 }
 function autoSaveToItemBase(name, num, price, category){
