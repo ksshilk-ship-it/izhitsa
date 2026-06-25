@@ -1378,6 +1378,58 @@ function acPickMaWood(val, rid){ const el=document.getElementById('maWood_'+rid)
 function acPickFiName(val, rid){ const el=document.getElementById('fiName_'+rid); if(el) el.value=val; acHideSugg('fiName_'+rid); updateFiItem(rid,'name',val); }
 function acPickFiWood(val, rid){ const el=document.getElementById('fiWood_'+rid); if(el) el.value=val; acHideSugg('fiWood_'+rid); updateFiItem(rid,'wood',val); }
 function acPickFiSize(val, rid){ const el=document.getElementById('fiSize_'+rid); if(el) el.value=val; acHideSugg('fiSize_'+rid); updateFiItem(rid,'size',val); }
+function acPickFpeName(val){ const el=document.getElementById('fpeNameInput'); if(el) el.value=val; acHideSugg('fpeNameInput'); }
+function acPickFpeWood(val){ const el=document.getElementById('fpeWoodInput'); if(el) el.value=val; acHideSugg('fpeWoodInput'); }
+function acPickFpeSize(val){ const el=document.getElementById('fpeSizeInput'); if(el) el.value=val; acHideSugg('fpeSizeInput'); }
+
+let _fpeGroupId = null;
+let _fpeRid = null;
+
+function openFiPositionEdit(groupId, rid){
+  const g = _fiGroups.find(x=>x.id===groupId); if(!g) return;
+  const p = g.positions.find(x=>x.rid===rid); if(!p) return;
+  _fpeGroupId = groupId;
+  _fpeRid = rid;
+  _acLists['fpeNameInput'] = getItemNames();
+  _acLists['fpeWoodInput'] = getWoods();
+  _acLists['fpeSizeInput'] = getSizes();
+  document.getElementById('fpeNameInput').value  = p.name||'';
+  document.getElementById('fpeWoodInput').value  = p.wood||'';
+  document.getElementById('fpeSizeInput').value  = p.size||'';
+  document.getElementById('fpeArtikul').value    = p.artikul||'';
+  document.getElementById('fpePrice').value      = p.price||'';
+  document.getElementById('fpeQty').value        = p.qty||'';
+  openMo('fiPositionEditMo');
+}
+
+async function saveFiPositionEdit(){
+  const g = _fiGroups.find(x=>x.id===_fpeGroupId); if(!g) return;
+  const p = g.positions.find(x=>x.rid===_fpeRid); if(!p) return;
+  p.name    = document.getElementById('fpeNameInput').value.trim();
+  p.wood    = document.getElementById('fpeWoodInput').value.trim();
+  p.size    = document.getElementById('fpeSizeInput').value.trim();
+  p.artikul = document.getElementById('fpeArtikul').value.trim();
+  p.price   = parseFloat(document.getElementById('fpePrice').value)||0;
+  p.qty     = parseFloat(document.getElementById('fpeQty').value)||1;
+  try{
+    await db.collection('ws_first_inventory').doc(_fpeGroupId).update({positions: g.positions, updatedAt: now()});
+    closeMo('fiPositionEditMo');
+    openFiGroupDetail(_fpeGroupId);
+    showToast('✅ Позиция обновлена');
+  }catch(e){ showToast('Ошибка: '+e.message); }
+}
+
+async function deleteFiPosition(groupId, rid){
+  const g = _fiGroups.find(x=>x.id===groupId); if(!g) return;
+  const p = g.positions.find(x=>x.rid===rid);
+  if(!confirm('Удалить позицию «'+(p?p.name||'—':'')+'»?')) return;
+  g.positions = g.positions.filter(x=>x.rid!==rid);
+  try{
+    await db.collection('ws_first_inventory').doc(groupId).update({positions: g.positions, updatedAt: now()});
+    openFiGroupDetail(groupId);
+    showToast('🗑 Позиция удалена');
+  }catch(e){ showToast('Ошибка: '+e.message); }
+}
 function openMo(id){document.getElementById(id).classList.add('open');}
 function closeMo(id){document.getElementById(id).classList.remove('open');}
 function showPg(name,el){
@@ -5526,15 +5578,21 @@ function openFiGroupDetail(groupId){
     </div>`;
 
   document.getElementById('fiGroupDetailPositions').innerHTML = `
-    <div class="ctitle">Позиции</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div class="ctitle" style="margin:0">Позиции (${g.positions.length})</div>
+    </div>
     ${g.positions.map((p,i)=>`
-      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div>
+      <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <div style="flex:1">
             <div style="font-size:13px;font-weight:700">${p.name||'—'}${p.artikul?' · '+p.artikul:''}</div>
-            <div style="font-size:11px;color:var(--t2)">${p.wood||''}${p.size?' · '+p.size:''} · ${p.qty||1} шт. · ${fmt(p.price||0)}/шт.</div>
+            <div style="font-size:11px;color:var(--t2);margin-top:2px">${p.wood||''}${p.size?' · '+p.size:''} · ${p.qty||1} шт. · ${fmt(p.price||0)}/шт.</div>
           </div>
-          <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt((p.price||0)*(p.qty||1))}</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt((p.price||0)*(p.qty||1))}</div>
+            <button onclick="openFiPositionEdit('${g.id}','${p.rid}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 8px;color:var(--a2);cursor:pointer;font-size:13px">✏️</button>
+            <button onclick="deleteFiPosition('${g.id}','${p.rid}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 8px;color:var(--exp);cursor:pointer;font-size:13px">🗑</button>
+          </div>
         </div>
       </div>`).join('')}`;
 
@@ -5802,6 +5860,49 @@ document.addEventListener('DOMContentLoaded', ()=>{
     <div id="fiGroupDetailPositions" style="margin-bottom:14px"></div>
     <div id="fiGroupDetailActions"></div>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('fiGroupDetailMo')">Закрыть</button>
+  </div>
+</div>
+
+<!-- РЕДАКТИРОВАНИЕ ПОЗИЦИИ ИНВЕНТАРИЗАЦИИ -->
+<div class="mo" id="fiPositionEditMo">
+  <div class="md"><div class="mh"></div><div class="mt">✏️ Редактировать позицию</div>
+    <div class="fg"><label class="fl">Наименование</label>
+      <div style="position:relative">
+        <input class="fi" id="fpeNameInput" placeholder="Начните вводить..." autocomplete="off"
+          oninput="acSuggest('fpeNameInput','acPickFpeName')"
+          onfocus="acSuggest('fpeNameInput','acPickFpeName')">
+        <div id="fpeNameInput_sugg" style="display:none"></div>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Порода дерева</label>
+      <div style="position:relative">
+        <input class="fi" id="fpeWoodInput" placeholder="Начните вводить..." autocomplete="off"
+          oninput="acSuggest('fpeWoodInput','acPickFpeWood')"
+          onfocus="acSuggest('fpeWoodInput','acPickFpeWood')">
+        <div id="fpeWoodInput_sugg" style="display:none"></div>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Размер</label>
+      <div style="position:relative">
+        <input class="fi" id="fpeSizeInput" placeholder="Начните вводить..." autocomplete="off"
+          oninput="acSuggest('fpeSizeInput','acPickFpeSize')"
+          onfocus="acSuggest('fpeSizeInput','acPickFpeSize')">
+        <div id="fpeSizeInput_sugg" style="display:none"></div>
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Артикул</label>
+      <input class="fi" id="fpeArtikul" placeholder="Артикул">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="fg"><label class="fl">Цена (₽)</label>
+        <input class="fi" type="number" inputmode="numeric" id="fpePrice" placeholder="0">
+      </div>
+      <div class="fg"><label class="fl">Количество</label>
+        <input class="fi" type="number" inputmode="numeric" id="fpeQty" placeholder="1">
+      </div>
+    </div>
+    <button class="btn green" style="margin-top:8px" onclick="saveFiPositionEdit()">💾 Сохранить</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('fiPositionEditMo')">Отмена</button>
   </div>
 </div>
 
