@@ -12119,19 +12119,44 @@ function addRstInvItem() {
   rstInvItems.push({name:'',article:'',qty:1,price:0});
   renderRstInvItems();
 }
+// Named picker functions for rstInv (one per position index)
+var _rstPickFns = {};
+function _rstMakePick(i){
+  return function(val){
+    rstInvItems[i].name=val;
+    var el=document.getElementById('rstInvName_'+i); if(el) el.value=val;
+    rstCalcInvTotal();
+  };
+}
+
 function renderRstInvItems() {
   var c = document.getElementById('rstInvItems'); if(!c) return;
   if(!rstInvItems.length) { c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:4px">Нет позиций</div>'; return; }
+  var names = _manInvNameOptions();
+  // Register picker functions
+  rstInvItems.forEach(function(_,i){
+    window['_rstPick_'+i] = function(val){
+      rstInvItems[i].name=val;
+      var el=document.getElementById('rstInvName_'+i); if(el) el.value=val;
+      rstCalcInvTotal();
+    };
+  });
   c.innerHTML = rstInvItems.map(function(item,i){
     return '<div style="background:#1a1a22;border-radius:10px;padding:10px;margin-bottom:6px">' +
-      '<div style="display:flex;gap:6px;margin-bottom:6px">' +
-        '<input class="fi" placeholder="Название" value="'+item.name+'" oninput="rstInvItems['+i+'].name=this.value;rstCalcInvTotal()" style="flex:2;margin:0">' +
-        '<input class="fi" placeholder="Арт." value="'+item.article+'" oninput="rstInvItems['+i+'].article=this.value" style="flex:1;margin:0">' +
+      '<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">' +
+        '<input class="fi" placeholder="Арт." value="'+(item.article||item.num||'')+'" oninput="rstInvItems['+i+'].article=this.value;rstInvItems['+i+'].num=this.value" style="flex:0 0 80px;margin:0;font-size:12px">' +
+        '<div style="flex:1;position:relative">' +
+          '<input class="fi" id="rstInvName_'+i+'" placeholder="Наименование" value="'+item.name+'" autocomplete="off" ' +
+            'oninput="rstInvItems['+i+'].name=this.value;rstCalcInvTotal();psjSuggest(\'rstInvName_'+i+'\',_manInvNameOptions(),\'_rstPick_'+i+'\')" ' +
+            'onfocus="psjSuggest(\'rstInvName_'+i+'\',_manInvNameOptions(),\'_rstPick_'+i+'\')" ' +
+            'onblur="psjHideSugg(\'rstInvName_'+i+'\')" style="margin:0;font-size:12px;width:100%">' +
+          '<div id="rstInvName_'+i+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:25;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>' +
+        '</div>' +
+        '<button onpointerdown="event.preventDefault();rstInvItems.splice('+i+',1);renderRstInvItems();rstCalcInvTotal()" style="flex-shrink:0;background:none;border:1px solid #3e2e2e;border-radius:8px;padding:5px 8px;color:#f06060;font-size:12px;cursor:pointer">✕</button>' +
       '</div>' +
-      '<div style="display:flex;gap:6px;align-items:center">' +
-        '<input class="fi" type="number" placeholder="Кол-во" value="'+item.qty+'" oninput="rstInvItems['+i+'].qty=parseFloat(this.value)||1;rstCalcInvTotal()" style="flex:1;margin:0" inputmode="numeric">' +
-        '<input class="fi" type="number" placeholder="Цена ₽" value="'+item.price+'" oninput="rstInvItems['+i+'].price=parseFloat(this.value)||0;rstCalcInvTotal()" style="flex:1;margin:0" inputmode="numeric">' +
-        '<button onclick="rstInvItems.splice('+i+',1);renderRstInvItems();rstCalcInvTotal()" style="background:none;border:1px solid #3e2e2e;border-radius:8px;padding:6px 8px;color:#f06060;font-size:12px;cursor:pointer">✕</button>' +
+      '<div style="display:flex;gap:6px">' +
+        '<input class="fi" type="number" placeholder="Кол" value="'+item.qty+'" oninput="rstInvItems['+i+'].qty=parseFloat(this.value)||1;rstCalcInvTotal()" style="flex:0 0 70px;margin:0;font-size:12px" inputmode="numeric">' +
+        '<input class="fi" type="number" placeholder="Цена ₽" value="'+item.price+'" oninput="rstInvItems['+i+'].price=parseFloat(this.value)||0;rstCalcInvTotal()" style="flex:1;margin:0;font-size:12px" inputmode="numeric">' +
       '</div>' +
     '</div>';
   }).join('');
@@ -13586,8 +13611,12 @@ function getItemsBase() {
   });
 
   // Merge legacy iz_items (has article numbers) - only if name not already present
+  var _itmTombs = JSON.parse(localStorage.getItem('iz_goods_derevo_deleted')||'[]')
+    .concat(JSON.parse(localStorage.getItem('iz_goods_dr_deleted')||'[]'));
   var legacy = JSON.parse(localStorage.getItem('iz_items')||'[]');
   legacy.forEach(function(it){
+    // Skip if in tombstone list
+    if(_itmTombs.indexOf((it.name||'').toLowerCase().trim())>=0) return;
     if(!it.name) return;
     var norm = it.name.toLowerCase().trim();
     if(!existingNames[norm]){
