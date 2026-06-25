@@ -3105,6 +3105,8 @@ function renderPersonalTab(){
   var avgZpNoTravel = shiftsCount ? totalZpCalcNoTravel/shiftsCount : 0;
   var avgZpWithTravel = shiftsCount ? totalZpCalcWithTravel/shiftsCount : 0;
   var totalDiff = rows.reduce(function(s,r){ return s+r.z.diff; },0);
+  // Total actually earned (fact taken) = totalCalc - totalDiff
+  var totalZpFact = totalZpCalcWithTravel - totalDiff;
 
   var fmt2 = function(n){ return Math.round(n).toLocaleString('ru-RU')+'₽'; };
   function sCell(label,val,color){
@@ -3121,10 +3123,17 @@ function renderPersonalTab(){
         sCell('🧾 Средний чек', fmt2(avgCheck), '#f0c060')+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'+
-        sCell('💵 Заработок/смену (без проезда)', fmt2(avgZpNoTravel), '#a060f0')+
-        sCell('💵 Заработок/смену (с проездом)', fmt2(avgZpWithTravel), '#a060f0')+
+        sCell('💵 Средний заработок/смену (без проезда)', fmt2(avgZpNoTravel), '#a060f0')+
+        sCell('💵 Средний заработок/смену (с проездом)', fmt2(avgZpWithTravel), '#a060f0')+
       '</div>'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;background:#0f0f13;border-radius:8px;padding:10px 12px;margin-top:4px">'+
+      '<div style="background:#1a2e1e;border:2px solid #c8f060;border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'+
+        '<div>'+
+          '<div style="font-size:10px;color:#8888aa;margin-bottom:2px">💰 ИТОГО ЗАРАБОТАНО ЗА ПЕРИОД</div>'+
+          '<div style="font-size:10px;color:#555568">(фактически взято с проездом)</div>'+
+        '</div>'+
+        '<div style="font-size:22px;font-weight:900;color:#c8f060">'+fmt2(totalZpFact)+'</div>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;background:#0f0f13;border-radius:8px;padding:10px 12px">'+
         '<span style="font-size:11px;color:#8888aa">Итог за период: расчётная ЗП минус фактически взятая</span>'+
         '<span style="font-size:15px;font-weight:800;color:'+diffColorTotal+'">'+(totalDiff>0?'+':'')+fmt2(totalDiff)+'</span>'+
       '</div>'+
