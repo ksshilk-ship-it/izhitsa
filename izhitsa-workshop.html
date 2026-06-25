@@ -1302,14 +1302,21 @@ function acSuggest(inputId, onPick, extraArg){
 
   const val = (input.value||'').trim().toLowerCase();
   const list = _acLists[inputId]||[];
-  if(!val){ acHideSugg(inputId); return; }
-  const matches = list.filter(function(s){ return s.toLowerCase().indexOf(val)>=0; }).slice(0,8);
+  if(!list.length){ acHideSugg(inputId); return; }
+
+  // Пустое поле — показываем весь список, с вводом — фильтруем
+  const matches = val
+    ? list.filter(function(s){ return s.toLowerCase().indexOf(val)>=0; })
+    : list.slice();
+
   if(!matches.length){ acHideSugg(inputId); return; }
 
   // Перемещаем бокс в body, чтобы он был вне любого overflow-контейнера
   if(box.parentElement !== document.body) document.body.appendChild(box);
 
   const rect = input.getBoundingClientRect();
+  // Высота: при полном списке — больше (до 260px), при фильтрации — компактнее
+  const maxH = val ? 200 : 260;
   box.style.cssText = [
     'display:block',
     'position:fixed',
@@ -1317,7 +1324,7 @@ function acSuggest(inputId, onPick, extraArg){
     'left:'+rect.left+'px',
     'width:'+rect.width+'px',
     'z-index:99999',
-    'max-height:200px',
+    'max-height:'+maxH+'px',
     'overflow-y:auto',
     'background:var(--s1)',
     'border:1px solid var(--border)',
@@ -1330,12 +1337,18 @@ function acSuggest(inputId, onPick, extraArg){
     var safe = String(m).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     var extraSafe = extraArg!==undefined ? String(extraArg).replace(/\\/g,'\\\\').replace(/'/g,"\\'") : null;
     var args = extraSafe!==null ? "'"+safe+"', '"+extraSafe+"'" : "'"+safe+"'";
-    return '<div style="padding:14px 16px;font-size:15px;color:var(--text);border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,0.1);user-select:none;-webkit-user-select:none" '
+    // Подсвечиваем совпавшую часть при фильтрации
+    var label = m;
+    if(val){
+      var idx = m.toLowerCase().indexOf(val);
+      if(idx>=0) label = m.slice(0,idx)+'<b>'+m.slice(idx,idx+val.length)+'</b>'+m.slice(idx+val.length);
+    }
+    return '<div style="padding:13px 16px;font-size:15px;color:var(--text);border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,0.1);user-select:none;-webkit-user-select:none" '
       +'ontouchstart="_acTouchStartY=event.touches[0].clientY;_acTouchMoved=false;this.style.background=\'rgba(255,255,255,0.06)\'" '
       +'ontouchmove="_acTouchMoved=Math.abs(event.touches[0].clientY-_acTouchStartY)>8;if(_acTouchMoved)this.style.background=\'\'" '
       +'ontouchend="this.style.background=\'\';if(!_acTouchMoved){event.preventDefault();'+onPick+'('+args+');acHideSugg(\''+inputId+'\')}" '
       +'onmousedown="event.preventDefault();'+onPick+'('+args+');acHideSugg(\''+inputId+'\')" '
-      +'>'+m+'</div>';
+      +'>'+label+'</div>';
   }).join('');
 
   _acActiveInputId = inputId;
