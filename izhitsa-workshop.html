@@ -648,6 +648,15 @@ function applyUpdate() {
           <button onclick="openOtCategoriesMo()" class="btn sec" style="font-size:11px;padding:8px">🛠 Виды работ</button>
         </div>
       </div>
+
+      <!-- Служебные операции (только администратор) -->
+      <div class="card" id="adminServiceOps" style="border-color:var(--a4)">
+        <div class="ctitle">🔧 Служебные операции</div>
+        <button class="btn" style="background:var(--a4);color:#000;margin-bottom:8px" onclick="fixNachArtikuls()">
+          🔢 Исправить артикулы «НАЧ-...» на нормальные
+        </button>
+        <div style="font-size:11px;color:var(--t2)">Находит все товары на складе с автоматически сгенерированными длинными артикулами и заменяет их на порядковые числа</div>
+      </div>
     </div>
 
     <div id="adminExtraPanel"></div>
@@ -5719,7 +5728,35 @@ async function archiveFirstInvGroup(groupId){
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 
-// ════════ BOOT ════════
+// Исправляет артикулы вида НАЧ-... на нормальные порядковые числа
+async function fixNachArtikuls(){
+  const badItems = items.filter(i=>i.itemNum && i.itemNum.startsWith('НАЧ-'));
+  if(!badItems.length){
+    showToast('Нет позиций с длинными артикулами — всё уже в порядке');
+    return;
+  }
+  if(!confirm(`Найдено ${badItems.length} позиций с длинными артикулами. Заменить на порядковые числа?`)) return;
+
+  // Найдём максимальный текущий числовой артикул в базе
+  let maxNum = 0;
+  items.forEach(i=>{
+    const n = parseInt(i.artikul||i.itemNum||'');
+    if(!isNaN(n) && n>maxNum) maxNum=n;
+  });
+
+  try{
+    showToast('Обновляем артикулы...');
+    const batch = db.batch();
+    badItems.forEach(i=>{
+      maxNum++;
+      const newArtikul = String(maxNum);
+      const ref = db.collection('ws_items').doc(i._id);
+      batch.update(ref, {artikul: newArtikul, itemNum: newArtikul});
+    });
+    await batch.commit();
+    showToast(`✅ Исправлено ${badItems.length} артикулов`);
+  }catch(e){ showToast('Ошибка: '+e.message); }
+}
 document.addEventListener('DOMContentLoaded', ()=>{
   startWsSyncListeners();
   startWsStaffSync();
