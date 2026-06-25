@@ -2643,14 +2643,15 @@ function renderStockGroups(){
     return;
   }
 
-  // Группируем по наименованию
+  // Группируем по наименованию (нормализуем: trim + нижний регистр как ключ)
   const groups = {};
   stock.forEach(item=>{
-    const name = item.name||item.itemName||'—';
-    if(!groups[name]) groups[name]={name, items:[], total:0, sum:0};
-    groups[name].items.push(item);
-    groups[name].total++;
-    groups[name].sum += item.price||0;
+    const rawName = (item.name||item.itemName||'—').trim();
+    const key = rawName.toLowerCase();
+    if(!groups[key]) groups[key]={name: rawName, items:[], total:0, sum:0};
+    groups[key].items.push(item);
+    groups[key].total++;
+    groups[key].sum += item.price||0;
   });
 
   // Сортировка внутри группы по цене
@@ -4597,9 +4598,10 @@ function renderInvList(){
 
   const groups = {};
   _invItems.forEach(item=>{
-    const name = item.name||item.itemName||'—';
-    if(!groups[name]) groups[name]={name, items:[]};
-    groups[name].items.push(item);
+    const rawName = (item.name||item.itemName||'—').trim();
+    const key = rawName.toLowerCase();
+    if(!groups[key]) groups[key]={name: rawName, items:[]};
+    groups[key].items.push(item);
   });
   const sortedGroups = Object.values(groups).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
 
@@ -4688,7 +4690,8 @@ function markInvItem(id, state){
 }
 
 function markInvGroup(name, state){
-  _invItems.filter(i=>(i.name||i.itemName||'—')===name).forEach(i=>{
+  const normName = name.trim().toLowerCase();
+  _invItems.filter(i=>((i.name||i.itemName||'—').trim().toLowerCase())===normName).forEach(i=>{
     if(state==='found'){ _invChecked.add(i._id); _invMissing.delete(i._id); }
     else { _invMissing.add(i._id); _invChecked.delete(i._id); }
   });
