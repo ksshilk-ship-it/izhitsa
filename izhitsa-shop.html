@@ -1831,6 +1831,19 @@ function checkForAppUpdate() {
 <div class="mo" id="psjReceiveMo">
   <div class="md">
     <div class="mh"></div><div class="mt">Приход товара (задним числом)</div>
+    <!-- Load from invoice file -->
+    <div style="background:#1a2e1e;border:1px solid #2e4e2e;border-radius:10px;padding:10px;margin-bottom:10px">
+      <div style="font-size:11px;color:#8888aa;margin-bottom:6px">📋 ЗАГРУЗИТЬ ИЗ НАКЛАДНОЙ (JSON)</div>
+      <div onclick="document.getElementById('psjInvFileInput').click()"
+        style="border:2px dashed #60c8f0;border-radius:10px;padding:14px;text-align:center;cursor:pointer">
+        <div style="font-size:20px;margin-bottom:4px">📄</div>
+        <div style="font-size:12px;font-weight:700;color:#60c8f0">Выбрать файл накладной</div>
+        <div style="font-size:10px;color:#8888aa;margin-top:2px">.json — экспорт из Ижицы</div>
+        <input type="file" id="psjInvFileInput" accept=".json" style="display:none" onchange="psjLoadInvoiceFile(this)">
+      </div>
+      <div id="psjInvFileResult" style="margin-top:8px;font-size:11px"></div>
+    </div>
+    <div style="font-size:10px;color:#8888aa;text-align:center;margin-bottom:8px">— или введите вручную —</div>
     <div id="psjRcvItems"></div>
     <button type="button" onclick="psjAddRcvItem()" style="width:100%;padding:9px;background:none;border:1px dashed #60c8f0;border-radius:9px;color:#60c8f0;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:10px">+ Добавить позицию</button>
     <div class="fg"><label class="fl">Откуда (для всех позиций)</label><input class="fi" id="psjRcvFrom" placeholder="Мастерская / поставщик" autocomplete="off"></div>
@@ -11169,6 +11182,54 @@ function psjSetItemGoods(group, i, type){
 
 function psjAddSaleItem(){ _psjSaleItems.push(_psjNewItem()); renderPsjItems('sale'); }
 function psjAddWoItem(){ _psjWoItems.push(_psjNewItem({reason:''})); renderPsjItems('wo'); }
+
+// ════ PSJ INVOICE FILE IMPORT ════
+function psjLoadInvoiceFile(input){
+  var file = input.files && input.files[0];
+  if(!file) return;
+  var resultEl = document.getElementById('psjInvFileResult');
+  if(resultEl) resultEl.innerHTML = '⏳ Читаю файл...';
+  var reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      var data = JSON.parse(e.target.result);
+      // Support array of invoices or single invoice
+      var invs = Array.isArray(data) ? data : [data];
+      // Take first invoice that has items
+      var inv = invs.find(function(i){ return i.items && i.items.length; });
+      if(!inv){
+        if(resultEl) resultEl.innerHTML = '<span style="color:#f06060">❌ Накладная без позиций</span>';
+        return;
+      }
+      // Fill form fields
+      var fromEl = document.getElementById('psjRcvFrom');
+      if(fromEl && !fromEl.value) fromEl.value = inv.from || inv.destName || inv.shopName || 'Мастерская Ижица';
+      // Fill items into _psjRcvItems
+      _psjRcvItems = (inv.items||[]).map(function(it){
+        return {
+          id: uid(),
+          num: it.article||it.num||it.artNum||'',
+          name: it.name||'',
+          species: it.species||'',
+          price: it.price||it.factPrice||0,
+          qty: it.qty||1,
+          goodsType: it.goodsType||(inv.goodsType||'derevo')
+        };
+      });
+      renderPsjItems('rcv');
+      var total = _psjRcvItems.reduce(function(s,it){return s+(it.qty||1)*(it.price||0);},0);
+      if(resultEl) resultEl.innerHTML = '<span style="color:#60f090">✅ Загружено '+_psjRcvItems.length+' позиций · '+Math.round(total).toLocaleString('ru-RU')+'₽</span><br>'+
+        '<span style="font-size:10px;color:#8888aa">'+(inv.num||'')+'</span>';
+      // Clear file input for re-use
+      input.value='';
+    }catch(err){
+      if(resultEl) resultEl.innerHTML = '<span style="color:#f06060">❌ Ошибка: '+err.message+'</span>';
+    }
+  };
+  reader.readAsText(file);
+}
+// ════ END PSJ INVOICE FILE IMPORT ════
+
 function psjAddRcvItem(){ _psjRcvItems.push(_psjNewItem()); renderPsjItems('rcv'); }
 function psjAddStaffItem(){ _psjStaffItems.push(_psjNewItem({retail:0})); renderPsjItems('staff'); }
 
