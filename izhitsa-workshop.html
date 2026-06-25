@@ -4587,123 +4587,113 @@ function startInventory(){
   showToast('✅ Сверка начата. Отмечайте каждую позицию.');
 }
 
+
 function renderInvList(){
   const c = document.getElementById('invItemsList'); if(!c) return;
   if(!_invItems.length){
-    c.innerHTML = '<div class="empty" style="padding:10px 0"><div class="ei">📦</div>Склад пуст</div>';
+    c.innerHTML = '<div class="empty" style="padding:16px 0"><div class="ei">📦</div>Склад пуст</div>';
     return;
   }
+
+  const groups = {};
+  _invItems.forEach(item=>{
+    const name = item.name||item.itemName||'—';
+    if(!groups[name]) groups[name]={name, items:[]};
+    groups[name].items.push(item);
+  });
+  const sortedGroups = Object.values(groups).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
 
   if(!_invStarted){
-    // До начала — просто список
-    c.innerHTML = _invItems.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','ru')).map(item=>`
-      <div style="padding:9px 0;border-bottom:1px solid var(--border)">
-        <div style="font-size:13px;font-weight:600">${item.name||item.itemName||'—'}${item.artikul?' · '+item.artikul:''}</div>
-        <div style="font-size:11px;color:var(--t2)">${item.wood||''}${item.size?' · '+item.size:''} · ${fmt(item.price||0)}</div>
-      </div>`).join('');
+    c.innerHTML = sortedGroups.map(g=>{
+      const id = 'invg_'+g.name.replace(/[^а-яёa-z0-9]/gi,'_');
+      return `<div style="margin-bottom:6px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+        <div onclick="toggleInvGroup('${id}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--s2);cursor:pointer">
+          <div style="font-size:13px;font-weight:700">${g.name}</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:12px;color:var(--t2)">${g.items.length} шт.</span>
+            <span id="${id}_arrow" style="color:var(--t2)">▼</span>
+          </div>
+        </div>
+        <div id="${id}" style="display:none;padding:0 12px">
+          ${g.items.map(item=>`
+            <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
+              <span style="font-weight:600">${item.artikul?'№'+item.artikul+' ':''}</span>
+              <span style="color:var(--t2)">${item.wood||''}${item.size?' · '+item.size:''}</span>
+              <span style="float:right;color:var(--accent)">${fmt(item.price||0)}</span>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    }).join('');
     return;
   }
 
-  // В режиме сверки — каждая позиция с кнопками
-  const sorted = _invItems.slice().sort((a,b)=>{
-    // Сначала не проверенные, потом нашли, потом не нашли
-    const stateA = _invMissing.has(a._id)?2:_invChecked.has(a._id)?1:0;
-    const stateB = _invMissing.has(b._id)?2:_invChecked.has(b._id)?1:0;
-    if(stateA!==stateB) return stateA-stateB;
-    return (a.name||'').localeCompare(b.name||'','ru');
-  });
-
-  c.innerHTML = sorted.map(item=>{
-    const found   = _invChecked.has(item._id);
-    const missing = _invMissing.has(item._id);
-    const neutral = !found && !missing;
-    const bgColor = found ? 'rgba(80,255,150,0.07)' : missing ? 'rgba(255,80,80,0.07)' : '';
-    return `<div class="inv-row" data-search="${((item.name||item.itemName||'')+(item.artikul||'')+(item.wood||'')).toLowerCase()}"
-      style="padding:10px 0;border-bottom:1px solid var(--border);background:${bgColor}">
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="flex:1">
-          <div style="font-size:13px;font-weight:600">${item.name||item.itemName||'—'}${item.artikul?' · <span style="color:var(--t2)">'+item.artikul+'</span>':''}</div>
-          <div style="font-size:11px;color:var(--t2)">${item.wood||''}${item.size?' · '+item.size:''} · ${fmt(item.price||0)}</div>
+  c.innerHTML = sortedGroups.map(g=>{
+    const found   = g.items.filter(i=>_invChecked.has(i._id)).length;
+    const missing = g.items.filter(i=>_invMissing.has(i._id)).length;
+    const total   = g.items.length;
+    const allFound = found===total;
+    const allMiss  = missing===total;
+    const bgH = allFound?'rgba(80,255,150,0.1)':allMiss?'rgba(255,80,80,0.1)':'var(--s2)';
+    const icon = allFound?'✅':allMiss?'❌':(found>0||missing>0)?'⚠️':'○';
+    const id = 'invg_'+g.name.replace(/[^а-яёa-z0-9]/gi,'_');
+    return `<div style="margin-bottom:6px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      <div onclick="toggleInvGroup('${id}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:${bgH};cursor:pointer">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:16px">${icon}</span>
+          <div>
+            <div style="font-size:13px;font-weight:700">${g.name}</div>
+            <div style="font-size:11px;color:var(--t2)">✅${found} ❌${missing} ○${total-found-missing} / ${total}</div>
+          </div>
         </div>
-        <div style="display:flex;gap:6px;flex-shrink:0">
-          <button onpointerdown="event.preventDefault();markInvItem('${item._id}','found')"
-            style="padding:7px 10px;border-radius:8px;border:1px solid ${found?'var(--inc)':'var(--border)'};background:${found?'rgba(80,255,150,0.2)':'var(--s2)'};color:${found?'var(--inc)':'var(--t2)'};cursor:pointer;font-size:15px">✅</button>
-          <button onpointerdown="event.preventDefault();markInvItem('${item._id}','missing')"
-            style="padding:7px 10px;border-radius:8px;border:1px solid ${missing?'var(--exp)':'var(--border)'};background:${missing?'rgba(255,80,80,0.2)':'var(--s2)'};color:${missing?'var(--exp)':'var(--t2)'};cursor:pointer;font-size:15px">❌</button>
+        <span id="${id}_arrow" style="color:var(--t2)">▼</span>
+      </div>
+      <div id="${id}" style="display:none;padding:0 12px">
+        ${g.items.map(item=>{
+          const isF=_invChecked.has(item._id), isM=_invMissing.has(item._id);
+          return `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);background:${isF?'rgba(80,255,150,0.07)':isM?'rgba(255,80,80,0.07)':''}">
+            <div style="flex:1">
+              <div style="font-size:12px;font-weight:600">${item.artikul?'№'+item.artikul+' ':''}${item.wood||'—'}${item.size?' · '+item.size:''}</div>
+              <div style="font-size:11px;color:var(--t2)">${fmt(item.price||0)}</div>
+            </div>
+            <button onpointerdown="event.preventDefault();markInvItem('${item._id}','found')"
+              style="padding:6px 9px;border-radius:8px;border:1px solid ${isF?'var(--inc)':'var(--border)'};background:${isF?'rgba(80,255,150,0.2)':'var(--s2)'};color:${isF?'var(--inc)':'var(--t2)'};cursor:pointer;font-size:14px">✅</button>
+            <button onpointerdown="event.preventDefault();markInvItem('${item._id}','missing')"
+              style="padding:6px 9px;border-radius:8px;border:1px solid ${isM?'var(--exp)':'var(--border)'};background:${isM?'rgba(255,80,80,0.2)':'var(--s2)'};color:${isM?'var(--exp)':'var(--t2)'};cursor:pointer;font-size:14px">❌</button>
+          </div>`;
+        }).join('')}
+        <div style="padding:8px 0;display:flex;gap:8px">
+          <button onpointerdown="event.preventDefault();markInvGroup('${g.name.replace(/'/g,"\\'")}','found')"
+            style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--inc);background:rgba(80,255,150,0.1);color:var(--inc);cursor:pointer;font-size:12px;font-weight:700">✅ Все нашли</button>
+          <button onpointerdown="event.preventDefault();markInvGroup('${g.name.replace(/'/g,"\\'")}','missing')"
+            style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--exp);background:rgba(255,80,80,0.1);color:var(--exp);cursor:pointer;font-size:12px;font-weight:700">❌ Все отсутствуют</button>
         </div>
       </div>
     </div>`;
   }).join('');
+}
+
+function toggleInvGroup(id){
+  const el=document.getElementById(id), arrow=document.getElementById(id+'_arrow');
+  if(!el) return;
+  const open=el.style.display==='block';
+  el.style.display=open?'none':'block';
+  if(arrow) arrow.textContent=open?'▼':'▲';
 }
 
 function markInvItem(id, state){
-  if(state==='found'){
-    _invChecked.add(id);
-    _invMissing.delete(id);
-  } else {
-    _invMissing.add(id);
-    _invChecked.delete(id);
-  }
+  if(state==='found'){ _invChecked.add(id); _invMissing.delete(id); }
+  else { _invMissing.add(id); _invChecked.delete(id); }
   updateInvStats();
   renderInvList();
-  // Восстановить поиск если был
-  const q = document.getElementById('invSearchInput')?.value;
-  if(q) filterInvList();
 }
 
-function filterInvList(){
-  const q = (document.getElementById('invSearchInput')?.value||'').toLowerCase().trim();
-  document.querySelectorAll('#invItemsList .inv-row').forEach(row=>{
-    row.style.display = (!q || (row.dataset.search||'').includes(q)) ? '' : 'none';
+function markInvGroup(name, state){
+  _invItems.filter(i=>(i.name||i.itemName||'—')===name).forEach(i=>{
+    if(state==='found'){ _invChecked.add(i._id); _invMissing.delete(i._id); }
+    else { _invMissing.add(i._id); _invChecked.delete(i._id); }
   });
-}
-
-function updateInvStats(){
-  const total   = _invItems.length;
-  const checked = _invChecked.size;
-  const missing = _invMissing.size;
-  const remain  = total - checked - missing;
-  const el = id=>document.getElementById(id);
-  if(el('invChecked')) el('invChecked').textContent = checked;
-  if(el('invMissing')) el('invMissing').textContent = missing;
-  if(el('invRemain'))  el('invRemain').textContent  = remain;
-}
-
-function renderInvList(){
-  const c = document.getElementById('invItemsList'); if(!c) return;
-
-  // Группируем по наименованию+порода+размер
-  const groups = {};
-  _invItems.forEach(item=>{
-    const key = `${item.name||item.itemName}|${item.wood||''}|${item.size||''}|${item.artikul||''}`;
-    if(!groups[key]) groups[key] = {name:item.name||item.itemName, wood:item.wood, size:item.size, artikul:item.artikul, ids:[]};
-    groups[key].ids.push(item._id);
-  });
-
-  if(!Object.keys(groups).length){
-    c.innerHTML = '<div class="empty" style="padding:10px 0"><div class="ei">📦</div>Склад пуст</div>';
-    return;
-  }
-
-  c.innerHTML = Object.entries(groups).map(([key, g])=>{
-    const total   = g.ids.length;
-    const checked = g.ids.filter(id=>_invChecked.has(id)).length;
-    const allDone = checked===total;
-    const partial = checked>0 && checked<total;
-    const color   = allDone ? 'var(--inc)' : partial ? 'var(--a4)' : _invStarted ? 'var(--exp)' : 'var(--t2)';
-    const icon    = allDone ? '✅' : partial ? '⚠️' : _invStarted ? '❌' : '○';
-    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
-      <div style="font-size:20px;width:24px;text-align:center;flex-shrink:0">${icon}</div>
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:600">${g.name}</div>
-        <div style="font-size:11px;color:var(--t2)">${g.wood?'🌳 '+g.wood+' ':''}${g.size?'📐 '+g.size+' ':''}${g.artikul?'· '+g.artikul:''}</div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:13px;font-weight:700;color:${color}">${checked}/${total}</div>
-        <div style="font-size:10px;color:var(--t2)">${_invStarted ? 'найд./ожид.' : 'шт.'}</div>
-      </div>
-    </div>`;
-  }).join('');
+  updateInvStats();
+  renderInvList();
 }
 
 function scanInvItem(){
@@ -4747,11 +4737,12 @@ function scanInvItem(){
 
 function updateInvStats(){
   const checked = _invChecked.size;
-  const missing = _invItems.filter(i=>!_invChecked.has(i._id)).length;
-  const extra   = _invExtra.reduce((s,e)=>s+e.qty, 0);
-  document.getElementById('invChecked').textContent = checked;
-  document.getElementById('invMissing').textContent = missing;
-  document.getElementById('invExtra').textContent   = extra;
+  const missing = _invMissing.size;
+  const remain  = _invItems.length - checked - missing;
+  const el = id=>document.getElementById(id);
+  if(el('invChecked')) el('invChecked').textContent = checked;
+  if(el('invMissing')) el('invMissing').textContent = missing;
+  if(el('invRemain'))  el('invRemain').textContent  = Math.max(0, remain);
 }
 
 function showInventoryDiff(){
