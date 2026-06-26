@@ -13991,12 +13991,9 @@ function uploadToGitHub(){
   // Step 1: get current SHA
   fetch(apiBase, {
     headers: {'Authorization': 'token '+token, 'Accept': 'application/vnd.github.v3+json'}
-  }).then(function(r){
-    if(!r.ok){ throw new Error('GitHub API: HTTP '+r.status+' при чтении SHA'); }
-    return r.json();
-  }).then(function(meta){
+  }).then(function(r){ return r.json(); }).then(function(meta){
     var sha = meta.sha;
-    if(!sha){ throw new Error('Нет SHA: '+(meta.message||JSON.stringify(meta))); }
+    if(!sha){ throw new Error('Не удалось получить SHA файла: '+(meta.message||'')); }
     if(statusEl) statusEl.innerHTML='⏳ Читаю приложение...';
 
     // Step 2: read selected file or fall back to current page
@@ -14006,7 +14003,7 @@ function uploadToGitHub(){
       filePromise = new Promise(function(resolve, reject){
         var reader = new FileReader();
         reader.onload = function(e){ resolve(e.target.result); };
-        reader.onerror = function(){ reject(new Error('Ошибка чтения файла')); };
+        reader.onerror = reject;
         reader.readAsText(fileInput.files[0]);
       });
     } else {
@@ -14031,19 +14028,14 @@ function uploadToGitHub(){
           sha: sha,
           branch: 'main'
         })
-      }).then(function(r){
-        var status = r.status;
-        return r.json().then(function(j){ return {status: status, body: j}; });
       });
     });
-  }).then(function(res){
-    var result = res.body;
-    var httpStatus = res.status;
+  }).then(function(r){ return r.json(); }).then(function(result){
     if(result.content && result.content.sha){
       if(statusEl) statusEl.innerHTML='<span style="color:#60f090">✅ Загружено! GitHub Pages обновится через 1-2 минуты.</span>';
       if(tokenEl) tokenEl.value='';
     } else {
-      if(statusEl) statusEl.innerHTML='<span style="color:#f06060">❌ HTTP '+httpStatus+': '+(result.message||JSON.stringify(result))+'</span>';
+      if(statusEl) statusEl.innerHTML='<span style="color:#f06060">❌ Ошибка: '+(result.message||JSON.stringify(result))+'</span>';
     }
   }).catch(function(err){
     if(statusEl) statusEl.innerHTML='<span style="color:#f06060">❌ '+err.message+'</span>';
