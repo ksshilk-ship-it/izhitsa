@@ -1444,13 +1444,14 @@ function openFiPositionEdit(groupId, rid){
   _fpeRid = rid;
   _acLists['fpeNameInput'] = getItemNames();
   _acLists['fpeWoodInput'] = getWoods();
-  _acLists['fpeSizeInput'] = getSizes();
   document.getElementById('fpeNameInput').value  = p.name||'';
   document.getElementById('fpeWoodInput').value  = p.wood||'';
-  document.getElementById('fpeSizeInput').value  = p.size||'';
   document.getElementById('fpeArtikul').value    = p.artikul||'';
   document.getElementById('fpePrice').value      = p.price||'';
   document.getElementById('fpeQty').value        = p.qty||'';
+  // Рендерим три поля размера
+  const wrap = document.getElementById('fpeSizeFieldsWrap');
+  if(wrap) wrap.innerHTML = sizeFieldsHtml('fpeSz', p.size||'');
   openMo('fiPositionEditMo');
 }
 
@@ -1459,7 +1460,7 @@ async function saveFiPositionEdit(){
   const p = g.positions.find(x=>x.rid===_fpeRid); if(!p) return;
   p.name    = document.getElementById('fpeNameInput').value.trim();
   p.wood    = document.getElementById('fpeWoodInput').value.trim();
-  p.size    = document.getElementById('fpeSizeInput').value.trim();
+  p.size    = getSizeFromFields('fpeSz');
   p.artikul = document.getElementById('fpeArtikul').value.trim();
   p.price   = parseFloat(document.getElementById('fpePrice').value)||0;
   p.qty     = parseFloat(document.getElementById('fpeQty').value)||1;
@@ -2138,6 +2139,45 @@ function deleteWood(i){
   saveWoods(woods);
   renderWoodSelect();
   renderWoodList();
+}
+
+// ════════ РАЗМЕР: ДЛИНА × ШИРИНА × ВЫСОТА ════════
+// Собирает строку размера из трёх полей (пропускает пустые)
+function buildSize(l, w, h){
+  const parts = [l,w,h].map(v=>String(v||'').trim()).filter(Boolean);
+  return parts.join('×');
+}
+// Разбирает строку размера обратно в три поля
+function parseSize(size){
+  const parts = (size||'').split(/[×xхXХ\*]/);
+  return { l: parts[0]||'', w: parts[1]||'', h: parts[2]||'' };
+}
+// Генерирует HTML трёх полей размера с общим id-префиксом
+function sizeFieldsHtml(prefix, currentSize){
+  const s = parseSize(currentSize);
+  return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+    <div><label class="fl" style="font-size:10px">Длина (мм)</label>
+      <input class="fi" type="number" inputmode="numeric" id="${prefix}L" value="${s.l}" placeholder="—" oninput="updateSizeField('${prefix}')"></div>
+    <div><label class="fl" style="font-size:10px">Ширина (мм)</label>
+      <input class="fi" type="number" inputmode="numeric" id="${prefix}W" value="${s.w}" placeholder="—" oninput="updateSizeField('${prefix}')"></div>
+    <div><label class="fl" style="font-size:10px">Высота (мм)</label>
+      <input class="fi" type="number" inputmode="numeric" id="${prefix}H" value="${s.h}" placeholder="—" oninput="updateSizeField('${prefix}')"></div>
+  </div>
+  <div id="${prefix}Preview" style="font-size:11px;color:var(--t2);margin-top:4px;min-height:16px">${currentSize?'📐 '+currentSize:''}</div>`;
+}
+function updateSizeField(prefix){
+  const l=document.getElementById(prefix+'L')?.value||'';
+  const w=document.getElementById(prefix+'W')?.value||'';
+  const h=document.getElementById(prefix+'H')?.value||'';
+  const built = buildSize(l,w,h);
+  const prev = document.getElementById(prefix+'Preview');
+  if(prev) prev.textContent = built ? '📐 '+built : '';
+}
+function getSizeFromFields(prefix){
+  const l=document.getElementById(prefix+'L')?.value||'';
+  const w=document.getElementById(prefix+'W')?.value||'';
+  const h=document.getElementById(prefix+'H')?.value||'';
+  return buildSize(l,w,h);
 }
 
 // ════════ СПРАВОЧНИК РАЗМЕРОВ ════════
@@ -4977,12 +5017,12 @@ function openStockItemEdit(itemId){
   _sieItemId = itemId;
   _acLists['sieNameInput'] = getItemNames();
   _acLists['sieWoodInput'] = getWoods();
-  _acLists['sieSizeInput'] = getSizes();
   document.getElementById('sieNameInput').value  = item.name||item.itemName||'';
   document.getElementById('sieWoodInput').value  = item.wood||'';
-  document.getElementById('sieSizeInput').value  = item.size||'';
   document.getElementById('sieArtikul').value    = item.artikul||'';
   document.getElementById('siePrice').value      = item.price||'';
+  const wrap = document.getElementById('sieSizeFieldsWrap');
+  if(wrap) wrap.innerHTML = sizeFieldsHtml('sieSz', item.size||'');
   openMo('stockItemEditMo');
 }
 
@@ -4990,7 +5030,7 @@ async function saveStockItemEdit(){
   if(!_sieItemId){ showToast('Ошибка: товар не найден'); return; }
   const name    = document.getElementById('sieNameInput').value.trim();
   const wood    = document.getElementById('sieWoodInput').value.trim();
-  const size    = document.getElementById('sieSizeInput').value.trim();
+  const size    = getSizeFromFields('sieSz');
   const artikul = document.getElementById('sieArtikul').value.trim();
   const price   = parseFloat(document.getElementById('siePrice').value)||0;
   if(!name){ showToast('Укажите наименование'); return; }
@@ -5807,15 +5847,7 @@ function renderFiItemsList(){
         </div>
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Размер</label>
-        <div style="display:flex;gap:8px">
-          <div style="flex:1;position:relative">
-            <input class="fi" id="fiSize_${it.rid}" value="${(it.size||'').replace(/"/g,'&quot;')}" placeholder="Начните вводить..." autocomplete="off"
-              oninput="updateFiItem('${it.rid}','size',this.value);acSuggest('fiSize_${it.rid}','acPickFiSize','${it.rid}')"
-              onfocus="acSuggest('fiSize_${it.rid}','acPickFiSize','${it.rid}')">
-            <div id="fiSize_${it.rid}_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
-          </div>
-          <button onclick="openAddSizeMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
-        </div>
+        ${sizeFieldsHtml('fiSz_'+it.rid, it.size||'')}
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div class="fg"><label class="fl">Цена (₽)</label>
@@ -5843,7 +5875,8 @@ async function saveFirstInvGroup(){
   if(!_fiItems.length){ showToast('Добавьте хотя бы один товар'); return; }
 
   const newPositions = _fiItems.map(it=>({
-    rid: it.rid, artikul: it.artikul||'', name: it.name, wood: it.wood, size: it.size||'',
+    rid: it.rid, artikul: it.artikul||'', name: it.name, wood: it.wood,
+    size: getSizeFromFields('fiSz_'+it.rid) || it.size||'',
     price: it.price||0, qty: it.qty||1
   }));
 
@@ -6319,12 +6352,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       </div>
     </div>
     <div class="fg"><label class="fl">Размер</label>
-      <div style="position:relative">
-        <input class="fi" id="sieSizeInput" placeholder="Начните вводить..." autocomplete="off"
-          oninput="acSuggest('sieSizeInput','acPickSieSize')"
-          onfocus="acSuggest('sieSizeInput','acPickSieSize')">
-        <div id="sieSizeInput_sugg" style="display:none"></div>
-      </div>
+      <div id="sieSizeFieldsWrap"></div>
     </div>
     <div class="fg"><label class="fl">Артикул</label>
       <input class="fi" id="sieArtikul" placeholder="Артикул">
@@ -6393,12 +6421,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       </div>
     </div>
     <div class="fg"><label class="fl">Размер</label>
-      <div style="position:relative">
-        <input class="fi" id="fpeSizeInput" placeholder="Начните вводить..." autocomplete="off"
-          oninput="acSuggest('fpeSizeInput','acPickFpeSize')"
-          onfocus="acSuggest('fpeSizeInput','acPickFpeSize')">
-        <div id="fpeSizeInput_sugg" style="display:none"></div>
-      </div>
+      <div id="fpeSizeFieldsWrap"></div>
     </div>
     <div class="fg"><label class="fl">Артикул</label>
       <input class="fi" id="fpeArtikul" placeholder="Артикул">
