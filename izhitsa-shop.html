@@ -1185,6 +1185,12 @@ function checkForAppUpdate() {
       <div style="font-size:11px;font-weight:700;color:#c8f060;margin-bottom:8px">🚀 ОБНОВИТЬ ПРИЛОЖЕНИЕ НА GITHUB</div>
       <div style="font-size:11px;color:#8888aa;margin-bottom:8px">Загружает актуальный файл напрямую через API. Токен сохраняется локально на устройстве.</div>
       <input class="fi" id="ghTokenInput" type="password" placeholder="GitHub токен (ghp_...)" autocomplete="off" style="margin-bottom:8px;font-family:monospace;font-size:12px" onfocus="if(!this.value){var t=localStorage.getItem('iz_gh_token');if(t)this.value=t;}">
+      <div style="font-size:10px;color:#8888aa;margin-bottom:4px">Выберите новый файл от Клода:</div>
+      <div onclick="document.getElementById('ghFileInput').click()" style="border:2px dashed #c8f060;border-radius:10px;padding:12px;text-align:center;cursor:pointer;margin-bottom:8px">
+        <div style="font-size:20px;margin-bottom:3px">📄</div>
+        <div style="font-size:12px;font-weight:700;color:#c8f060" id="ghFileName">Выбрать файл izhitsa-shop.html</div>
+        <input type="file" id="ghFileInput" accept=".html" style="display:none" onchange="document.getElementById('ghFileName').textContent=this.files[0]?this.files[0].name:'Выбрать файл'">
+      </div>
       <button type="button" onpointerdown="event.preventDefault();uploadToGitHub()" style="width:100%;padding:10px;border-radius:10px;border:none;background:#c8f060;color:#0f0f13;font-size:13px;font-weight:700;cursor:pointer">⬆️ Загрузить на GitHub Pages</button>
       <div id="ghUploadStatus" style="margin-top:8px;font-size:11px;color:#8888aa"></div>
     </div>
@@ -13990,8 +13996,20 @@ function uploadToGitHub(){
     if(!sha){ throw new Error('Не удалось получить SHA файла: '+(meta.message||'')); }
     if(statusEl) statusEl.innerHTML='⏳ Читаю приложение...';
 
-    // Step 2: get current HTML as text
-    return fetch(window.location.href).then(function(r){ return r.text(); }).then(function(html){
+    // Step 2: read selected file or fall back to current page
+    var fileInput = document.getElementById('ghFileInput');
+    var filePromise;
+    if(fileInput && fileInput.files && fileInput.files[0]){
+      filePromise = new Promise(function(resolve, reject){
+        var reader = new FileReader();
+        reader.onload = function(e){ resolve(e.target.result); };
+        reader.onerror = reject;
+        reader.readAsText(fileInput.files[0]);
+      });
+    } else {
+      filePromise = fetch(window.location.href).then(function(r){ return r.text(); });
+    }
+    return filePromise.then(function(html){
       // Step 3: encode to base64
       var b64 = btoa(unescape(encodeURIComponent(html)));
       if(statusEl) statusEl.innerHTML='⏳ Загружаю на GitHub ('+Math.round(b64.length/1024)+' КБ)...';
