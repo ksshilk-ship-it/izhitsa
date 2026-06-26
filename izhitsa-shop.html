@@ -868,6 +868,12 @@ function checkForAppUpdate() {
         <div class="fg"><label class="fl">Дата накладной</label><input class="fi" type="date" id="rstInvDate" style="-webkit-appearance:none;color-scheme:dark"></div>
         <div class="fg"><label class="fl">Откуда (мастерская / поставщик)</label><input class="fi" id="rstInvFrom" placeholder="Мастерская Ижица"></div>
         <div class="fg"><label class="fl">Номер накладной</label><input class="fi" id="rstInvNum" placeholder="№"></div>
+        <div class="fg"><label class="fl">Тип товара</label>
+          <div style="display:flex;gap:8px">
+            <button type="button" id="rstInvTypeDerevo" onpointerdown="event.preventDefault();setRstInvType('derevo')" style="flex:1;padding:8px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">🌳 Дерево</button>
+            <button type="button" id="rstInvTypeDr" onpointerdown="event.preventDefault();setRstInvType('dr')" style="flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">🛍 ДР Товар</button>
+          </div>
+        </div>
         <div class="ctitle" style="margin-top:4px">Позиции</div>
         <div id="rstInvItems" style="margin-bottom:8px"></div>
         <button class="btn sec" style="font-size:12px;margin-bottom:8px" onclick="addRstInvItem()">＋ Добавить позицию</button>
@@ -3862,14 +3868,35 @@ function getMorningCashDiff(){
   return {hasDiff: parts.length>0, parts: parts};
 }
 function calcGoodsMorning(shopName){
-  var prev=getPrevShift(shopName); if(!prev) return 0;
+  var prev = restoreMode ? getPrevShiftByDate(shopName) : getPrevShift(shopName);
+  if(!prev) return 0;
   if(prev.goodsEvening!=null) return prev.goodsEvening;
   var g=prev.goodsMorning||0; (prev.journal||[]).forEach(function(e){g+=(e.goodsEffect||0);}); return Math.max(0,g);
 }
 function calcGoodsDrMorning(shopName){
-  var prev=getPrevShift(shopName); if(!prev) return 0;
+  var prev = restoreMode ? getPrevShiftByDate(shopName) : getPrevShift(shopName);
+  if(!prev) return 0;
   if(prev.goodsDrEvening!=null) return prev.goodsDrEvening;
   var g=prev.goodsDrMorning||0; (prev.journal||[]).forEach(function(e){g+=(e.goodsDrEffect||0);}); return Math.max(0,g);
+}
+
+// For restore mode: find previous shift by shift DATE (not closedAt)
+// so late-closed restore shifts don't pollute the goods morning value
+function getPrevShiftByDate(shopName){
+  var targetDate = pendingSession && pendingSession._restoreOpenedAt
+    ? pendingSession._restoreOpenedAt.split('T')[0]
+    : new Date().toISOString().split('T')[0];
+  var all = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  return all.filter(function(s){
+    if(!s.shopName || s.shopName!==shopName) return false;
+    if(s.isRestoreShift || s.backfilled || s.source==='psj') return false;
+    var sDate = (s.date||(s.openedAt||'').split('T')[0]);
+    return sDate < targetDate;
+  }).sort(function(a,b){
+    var da=(a.date||(a.openedAt||'').split('T')[0]);
+    var db2=(b.date||(b.openedAt||'').split('T')[0]);
+    return db2.localeCompare(da);
+  })[0]||null;
 }
 function saveAdminAlert(data){
   var alerts=JSON.parse(localStorage.getItem('iz_admin_alerts')||'[]');
@@ -12093,6 +12120,8 @@ function rstLoadInvoiceFile(input){
       var inv = invs.find(function(i){ return i.items && i.items.length; }) || invs[0];
       if(!inv){ if(resultEl) resultEl.innerHTML='<span style="color:#f06060">❌ Нет позиций в файле</span>'; return; }
 
+      // Set goodsType from file
+      var fileGt2=inv.goodsType||'derevo'; _rstInvGoodsType=fileGt2; if(typeof setRstInvType==='function') setRstInvType(fileGt2);
       // Fill header fields
       var numEl=document.getElementById('rstInvNum');
       var fromEl=document.getElementById('rstInvFrom');
@@ -12185,6 +12214,16 @@ function rstCalcInvTotal() {
   var el = document.getElementById('rstInvTotal');
   if(el) el.textContent = rstInvItems.length ? 'Итого: '+Math.round(total).toLocaleString('ru-RU')+'₽ · '+rstInvItems.length+' позиций' : '';
 }
+var _rstInvGoodsType = 'derevo';
+
+function setRstInvType(gt){
+  _rstInvGoodsType = gt;
+  var btnD=document.getElementById('rstInvTypeDerevo');
+  var btnDr=document.getElementById('rstInvTypeDr');
+  if(btnD){ btnD.style.borderWidth=gt==='derevo'?'2px':'1px'; btnD.style.borderColor=gt==='derevo'?'#c8f060':'#2e2e3e'; btnD.style.background=gt==='derevo'?'#1e2a14':'#22222e'; btnD.style.color=gt==='derevo'?'#c8f060':'#8888aa'; }
+  if(btnDr){ btnDr.style.borderWidth=gt==='dr'?'2px':'1px'; btnDr.style.borderColor=gt==='dr'?'#a060f0':'#2e2e3e'; btnDr.style.background=gt==='dr'?'#1e102a':'#22222e'; btnDr.style.color=gt==='dr'?'#a060f0':'#8888aa'; }
+}
+
 function saveRstInvoice() {
   var shop = (document.getElementById('rstInvShop')||{}).value||'';
   var date = (document.getElementById('rstInvDate')||{}).value||new Date().toISOString().split('T')[0];
@@ -12192,9 +12231,11 @@ function saveRstInvoice() {
   var num = (document.getElementById('rstInvNum')||{}).value||uid().substring(0,6);
   if(!rstInvItems.length){showToast('Добавьте позиции');return;}
   var totalAmt = rstInvItems.reduce(function(s,i){return s+(i.qty||1)*(i.price||0);},0);
+  var gt = _rstInvGoodsType||'derevo';
   var inv = {
     id:uid(), date:date, shopName:shop, from:from, num:num,
-    items:rstInvItems.map(function(i){return Object.assign({},i);}),
+    goodsType:gt,
+    items:rstInvItems.map(function(i){return Object.assign({goodsType:gt},i);}),
     totalAmt:totalAmt, isArchive:true, source:'restore',
     status:'accepted', acceptedAt:new Date().toISOString()
   };
@@ -12205,15 +12246,20 @@ function saveRstInvoice() {
   // Add to psj as receive entries
   var entries = getPsjEntries();
   inv.items.forEach(function(item){
+    var itemAmt=(item.qty||1)*(item.price||0);
+    var isDr=(item.goodsType||gt)==='dr';
     entries.push({id:uid(),date:date,shopName:shop,sellerName:'',type:'receive',
-      ts:_workingNowISO(),label:'Приход товара',
+      ts:_workingNowISO(),label:'Приход '+(isDr?'ДР Товар':'Дерево'),
       sub:item.name+(item.article?' №'+item.article:'')+'· накл. '+num+' от '+from,
-      amount:(item.qty||1)*(item.price||0),amtSign:'+',
+      amount:itemAmt,amtSign:'+',
+      goodsType:isDr?'dr':'derevo',
+      goodsEffect:isDr?0:itemAmt,
+      goodsDrEffect:isDr?itemAmt:0,
       cashEffect:0,cardEffect:0,discEffect:0,isArchive:true,source:'invoice_restore'
     });
   });
   savePsjEntries(entries);
-  rstInvItems=[];
+  rstInvItems=[]; _rstInvGoodsType='derevo'; setRstInvType('derevo');
   document.getElementById('rstInvFrom').value='';
   document.getElementById('rstInvNum').value='';
   renderRstInvItems(); renderAcceptedInvoices();
