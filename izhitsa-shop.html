@@ -12307,15 +12307,51 @@ function acceptPendingInvoice(docId) {
   loadPendingInvoices(); renderAcceptedInvoices();
   showToast('✅ Накладная принята');
 }
+function toggleArchiveInvType(invId, idx){
+  var invs = JSON.parse(localStorage.getItem('iz_archive_invoices')||'[]');
+  var inv = invs.find(function(i){ return i.id===invId; });
+  if(!inv) return;
+  var newType = (inv.goodsType==='dr') ? 'derevo' : 'dr';
+  if(!confirm('Изменить тип с "'+(inv.goodsType==='dr'?'ДР Товар':'Дерево')+'" на "'+(newType==='dr'?'ДР Товар':'Дерево')+'"?')) return;
+  inv.goodsType = newType;
+  (inv.items||[]).forEach(function(it){ it.goodsType=newType; });
+  localStorage.setItem('iz_archive_invoices', JSON.stringify(invs));
+  try{ db.collection('iz_archive_invoices').doc(invId).set(inv,{merge:true}); }catch(e){}
+  // Also update psj entries for this invoice
+  var entries = getPsjEntries();
+  entries.forEach(function(e){
+    if(e.source==='invoice_restore' && e.sub && e.sub.indexOf(inv.num)>=0){
+      e.goodsType = newType;
+      var amt = e.amount||0;
+      e.goodsEffect = newType==='dr' ? 0 : amt;
+      e.goodsDrEffect = newType==='dr' ? amt : 0;
+    }
+  });
+  savePsjEntries(entries);
+  renderAcceptedInvoices();
+  showToast('✅ Тип изменён на '+(newType==='dr'?'ДР Товар':'Дерево'));
+}
+
 function renderAcceptedInvoices() {
   var c=document.getElementById('rstAcceptedInvoices'); if(!c) return;
   var invs=JSON.parse(localStorage.getItem('iz_archive_invoices')||'[]');
   if(!invs.length){c.innerHTML='<div class="empty"><div class="ei">📦</div>Нет принятых</div>';return;}
-  c.innerHTML=invs.slice(0,20).map(function(inv){
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px">'+
-      '<div><div style="font-size:13px;font-weight:700">📋 №'+inv.num+' · '+inv.date+'</div>'+
-      '<div style="font-size:11px;color:#8888aa">'+inv.shopName+' · '+(inv.items||[]).length+' поз. · '+Math.round(inv.totalAmt||0).toLocaleString('ru-RU')+'₽</div></div>'+
-      '<div style="font-size:10px;color:#60f090;font-weight:700">✅</div></div>';
+  c.innerHTML=invs.slice(0,20).map(function(inv,idx){
+    var gt=inv.goodsType||'derevo';
+    var gtLabel=gt==='dr'?'🛍 ДР':'🌳 Дерево';
+    var gtColor=gt==='dr'?'#a060f0':'#c8f060';
+    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px;padding:10px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+        '<div>'+
+          '<div style="font-size:13px;font-weight:700">📋 №'+inv.num+' · '+inv.date+'</div>'+
+          '<div style="font-size:11px;color:#8888aa">'+inv.shopName+' · '+(inv.items||[]).length+' поз. · '+Math.round(inv.totalAmt||0).toLocaleString('ru-RU')+'₽</div>'+
+        '</div>'+
+        '<span style="font-size:11px;font-weight:700;color:'+gtColor+'">'+gtLabel+'</span>'+
+      '</div>'+
+      '<div style="display:flex;gap:6px">'+
+        '<button type="button" onpointerdown="event.preventDefault();toggleArchiveInvType(\''+inv.id+'\','+idx+')" style="flex:1;padding:6px;border-radius:8px;border:1px solid '+gtColor+';background:none;color:'+gtColor+';font-size:11px;font-weight:700;cursor:pointer">⇄ Изменить тип</button>'+
+      '</div>'+
+    '</div>';
   }).join('');
 }
 
