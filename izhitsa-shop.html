@@ -2597,13 +2597,7 @@ function loadAndCleanJournal(){
   var shiftDate = session.openedAt.split('T')[0];
   return raw.filter(function(e){
     if(e.type === 'receive'){
-      // В restore-режиме не фильтруем по дате — там накладные могут быть
-      // за любой день (напр. накладная от 04.06 принимается в смену 06.06).
-      // Фильтрацию «чужих» приходов делаем только для живой (не restore) смены.
-      if(isRestore) return true;
-      // Для живой смены: приход принадлежит смене по дате накладной (invDate),
-      // а не по дате занесения (ts). Это не даёт приходам из restore-смены
-      // попасть в живую смену через Firestore merge.
+      if(isRestore) return true; // в restore-режиме не фильтруем по дате
       var effectiveDate = e.invDate || (e.ts ? e.ts.split('T')[0] : null);
       if(effectiveDate && effectiveDate < shiftDate) return false;
     }
@@ -3314,7 +3308,7 @@ function mergeRemoteJournal(remote){
     if(!e.id || localIds[e.id]) return;
     if(tombstoned[e.id]) return; // was deliberately deleted on this or another device — never resurrect
     if(e.type==='receive' && e.invId && localReceiveInvIds[e.invId]) return; // already have this invoice's entry
-    // Don't pull in receive entries from before this shift's date — they belong to a past shift.
+    // Don't pull in receive entries from before this shift's date.
     // Use invDate (explicit invoice date) if present, otherwise fall back to ts.
     if(e.type==='receive' && shiftOpenedAt){
       var shiftDateStr = shiftOpenedAt.split('T')[0];
@@ -3326,8 +3320,7 @@ function mergeRemoteJournal(remote){
   });
   if(added>0 || purged>0){
     journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
-    // Final purge: remove any receive entries older than shift date.
-    // Use invDate if present so invoices dated before shift don't pollute the journal.
+    // Final purge: remove any receive entries older than shift date (use invDate).
     if(session && session.openedAt){
       var shiftDate = session.openedAt.split('T')[0];
       journal = journal.filter(function(e){
@@ -6435,11 +6428,8 @@ function acceptInvoice(){
   }
   const inv2=JSON.parse(JSON.stringify(inv));
   const accepted=inv2.items.map((it,i)=>({...it,factPrice:(invCheckState[i]&&invCheckState[i].factPrice!=null?invCheckState[i].factPrice:it.price),ok:(invCheckState[i]&&invCheckState[i].ok)||false}));
-  // acceptedDate = дата приёмки (сегодня); inv.date = дата на накладной (когда отгружено)
-  // ts журнальной записи берём из даты накладной — тогда приход привязан к дню
-  // накладной, а не к дню нажатия «Принять», и не попадает в чужую смену при мерже.
   var _invDateForTs = inv.date || _workingNowISO().split('T')[0];
-  var _invTs = _invDateForTs + _workingNowISO().slice(10); // дата накладной + текущее время суток
+  var _invTs = _invDateForTs + _workingNowISO().slice(10);
   inv2.status='accepted'; inv2.acceptedBy=who; inv2.acceptedDate=new Date().toISOString().split('T')[0]; inv2.acceptedItems=accepted;
   const idx=invs.findIndex(i=>(i.id||i._id)===currentInvId); invs[idx]=inv2; saveInvoices(invs);
   const goodsTotal=accepted.reduce((s,a)=>s+a.factPrice,0);
@@ -7036,9 +7026,7 @@ function _closeShiftReal(){
   // и продолжает показываться как "незакрытая смена" в архиве администратора.
   var finalReportId = session.shiftId || uid();
   if(restoreMode){
-    // session.sellerName теперь содержит префикс 'Восст. ' — для поиска оригинальной
-    // смены в localStorage убираем его чтобы найти запись продавца без префикса.
-    var _origSellerName = session.sellerName ? session.sellerName.replace(/^Восст\. /, '') : session.sellerName;
+    var _origSellerName = session.sellerName ? session.sellerName.replace(/^Восст. /, '') : session.sellerName;
     var allExisting = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
     var origOpen = allExisting.find(function(s){
       return s.shopName===session.shopName &&
@@ -7078,17 +7066,12 @@ function _closeShiftReal(){
     // за эту дату и закрыть их — это покрывает случай, когда оригинальный
     // shiftId продавца не совпадает с нашим (т.к. мы создали новую restore-сессию
     // с uid()), и оригинал так и лежит в Firestore со status:'open'.
-    // Закрываем старую открытую запись по date ИЛИ по openedAt содержащему нужную дату
-    // (продавец мог открыть смену в тот же день, тогда date='2026-06-06',
-    //  но у нас restore-сессия с тем же openedAt — ищем оба варианта)
     var _closeOldOpen = function(snap){
       snap.forEach(function(doc){
         if(doc.id!==report.id){
           doc.ref.set(Object.assign({},doc.data(),{
-            status:'closed',
-            closedAt:report.closedAt,
-            closedByRestore:true,
-            restoreShiftId:report.id
+            status:'closed', closedAt:report.closedAt,
+            closedByRestore:true, restoreShiftId:report.id
           }),{merge:true});
         }
       });
@@ -7100,8 +7083,6 @@ function _closeShiftReal(){
         .where('status','==','open')
         .get().then(_closeOldOpen).catch(function(){});
     }catch(e){}
-    // Запасной запрос: некоторые старые смены могут не иметь поля date,
-    // но openedAt начинается с нужной даты
     try{
       db.collection('iz_shifts')
         .where('shopName','==',report.shopName)
@@ -8443,6 +8424,7 @@ function _renderShiftView(){
       '<button onclick="svForceCloseShift()" style="width:100%;padding:9px;background:#2e2a14;border:1px solid #f0c060;border-radius:9px;font-weight:700;font-size:12px;color:#f0c060;cursor:pointer;margin-bottom:10px">🔐 Принудительно закрыть смену</button>'
       :'');
 
+  var pullReceivesHtml = '<button onclick="svPullReceivesFromInvoices()" style="width:100%;padding:9px;background:#1a2e1e;border:1px solid #60f090;border-radius:9px;font-weight:700;font-size:12px;color:#60f090;cursor:pointer;margin-bottom:8px">📥 Подтянуть приходы из накладных</button>';
   // Delete-shift button — deliberately placed at the very bottom, below all
   // accordions, and made larger/more prominent than the rest of the
   // controls, so it isn't sitting right next to routine editing actions
@@ -8461,6 +8443,7 @@ function _renderShiftView(){
     acc('wo', '🗑', 'Списания', '#f06060', woAllLen||null, woBody) +
     acc('exp', '💸', 'Расходы', '#f0a060', (expenses.length||(zp||inkass||otherExp||drInkass||drSupplier?1:0))||null, expBody) +
     acc('staff', '🛒', 'Покупки сотрудников', '#a060f0', staffArr.length||null, staffBody) +
+    pullReceivesHtml +
     deleteShiftHtml;
 }
 
@@ -8885,6 +8868,57 @@ function svForceCloseShift(){
   _currentShiftView = shifts[idx];
   _renderShiftView();
   showToast('🔐 Смена принудительно закрыта. Если она снова появится как открытая, найдите устройство продавца и закройте смену там, либо выйдите из её сессии.');
+}
+function svPullReceivesFromInvoices(){
+  if(!_currentShiftView) return;
+  var sh = JSON.parse(JSON.stringify(_currentShiftView));
+  var shDate = sh.date || (sh.openedAt ? sh.openedAt.split('T')[0] : '');
+  var shShop = sh.shopName || '';
+  if(!shDate){ showToast('Неизвестна дата смены'); return; }
+  var jnl = sh.journal ? sh.journal.slice() : [];
+  var existingInvIds = {};
+  jnl.forEach(function(e){ if(e.invId) existingInvIds[e.invId]=true; });
+  var added = 0;
+  var archInvs = JSON.parse(localStorage.getItem('iz_archive_invoices')||'[]');
+  archInvs.filter(function(inv){
+    var invDate = inv.date || (inv.acceptedAt ? inv.acceptedAt.split('T')[0] : '');
+    return invDate===shDate && (!shShop || inv.shopName===shShop) && !existingInvIds[inv.id];
+  }).forEach(function(inv){
+    var isDr = (inv.goodsType||'derevo')==='dr';
+    var amt = inv.totalAmt || (inv.items||[]).reduce(function(s,i){return s+(i.qty||1)*(i.price||0);},0);
+    jnl.push({id:uid(),type:'receive',ts:shDate+'T12:00:00.000Z',
+      label:'Приёмка '+(inv.num||''),
+      sub:(inv.items||[]).length+' изд. · от '+(inv.from||''),
+      amount:amt,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,
+      goodsType:isDr?'dr':'derevo',goodsEffect:isDr?0:amt,goodsDrEffect:isDr?amt:0,
+      invId:inv.id,restoredBy:'pullReceives'});
+    existingInvIds[inv.id]=true; added++;
+  });
+  var manInvs = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  manInvs.filter(function(inv){
+    var iid = String(inv._id!=null?inv._id:inv.id);
+    return inv.date===shDate && (!shShop || inv.destName===shShop) && !existingInvIds[iid];
+  }).forEach(function(inv){
+    var iid = String(inv._id!=null?inv._id:inv.id);
+    var isDr = (inv.goodsType||'derevo')==='dr';
+    var amt = inv.totalAmt || (inv.items||[]).reduce(function(s,i){return s+(i.qty||1)*(i.price||0);},0);
+    jnl.push({id:uid(),type:'receive',ts:shDate+'T12:00:00.000Z',
+      label:'Приёмка '+(inv.num||''),
+      sub:(inv.items||[]).length+' изд. · от '+(inv.from||''),
+      amount:amt,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,
+      goodsType:isDr?'dr':'derevo',goodsEffect:isDr?0:amt,goodsDrEffect:isDr?amt:0,
+      invId:iid,restoredBy:'pullReceives'});
+    existingInvIds[iid]=true; added++;
+  });
+  if(!added){ showToast('Накладных за '+shDate+' не найдено'); return; }
+  sh.journal = jnl;
+  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var idx = shifts.findIndex(function(s){ return (s.id||s._id)===(sh.id||sh._id); });
+  if(idx>=0){ shifts[idx]=sh; localStorage.setItem(KEY.shifts,JSON.stringify(shifts)); }
+  try{ db.collection('iz_shifts').doc(sh.id||sh._id).set(sh); }catch(e){}
+  _currentShiftView = sh;
+  _renderShiftView();
+  showToast('✅ Подтянуто приходов: '+added);
 }
 function svDeleteShift(){
   if(!confirm('Удалить смену целиком? Это действие нельзя отменить.')) return;
@@ -10688,9 +10722,6 @@ function exitRestoreMode(opts){
     session = liveS; journal = liveJ;
     localStorage.removeItem(KEY.liveSessionBackup);
     localStorage.removeItem(KEY.liveJournalBackup);
-    // sellerRestoreMode = продавец зашёл через ограниченный вход для восстановления
-    // его role была принудительно установлена в 'shopadmin' только для ограниченного
-    // доступа к restore-странице — после выхода он НЕ должен попадать в admin-режим
     if(session.role==='shopadmin' && !session.sellerRestoreMode){ startAdminApp(); }
     else if(session.sellerRestoreMode){ startSellerRestoreApp(); }
     else { startApp(); syncLiveShift(); }
@@ -10749,9 +10780,6 @@ function goToRestoreShiftCheck(){
 }
 
 function confirmAndCloseRestoreShift(){
-  // Если мы сейчас в полноценном restore-режиме (restoreMode=true) — смену нужно
-  // закрывать через таб «Закрыть» внутри самой смены, а не через эту кнопку.
-  // Эта кнопка предназначена только для старого PSJ-потока (ручной ввод задним числом).
   if(restoreMode){
     showToast('ℹ️ Перейдите в таб «Закрыть» внутри смены для закрытия');
     showPg('close', document.querySelector('.tab[onclick*="close"]') || document.querySelector('.tab')); try{ renderClose(); }catch(e){}
@@ -12319,26 +12347,6 @@ function saveRstInvoice() {
     });
   });
   savePsjEntries(entries);
-  // Also add a single receive entry to the restore shift journal so it shows on
-  // the main page and in the Приход tab of the restore shift
-  if(restoreMode){
-    var totalAmt2 = inv.totalAmt||0;
-    var isDrInv = gt==='dr';
-    var jEntry = {
-      id:uid(), type:'receive', ts:_workingNowISO(),
-      label:'Приход '+(isDrInv?'ДР Товар':'Дерево'),
-      sub:'Накл. '+num+' от '+from+' · '+inv.items.length+' позиций',
-      amount:totalAmt2, amtSign:'+',
-      invId:inv.id,
-      goodsType:isDrInv?'dr':'derevo',
-      goodsEffect:isDrInv?0:totalAmt2,
-      goodsDrEffect:isDrInv?totalAmt2:0,
-      cashEffect:0, cardEffect:0, staffEffect:0,
-      isArchive:true, source:'invoice_restore'
-    };
-    journal.push(jEntry);
-    saveJ();
-  }
   rstInvItems=[]; _rstInvGoodsType='derevo'; setRstInvType('derevo');
   document.getElementById('rstInvFrom').value='';
   document.getElementById('rstInvNum').value='';
@@ -13073,7 +13081,6 @@ function renderReceiveArchive(){
 // shifts go through an administrator.
 function _receiveStillInOpenShift(inv){
   var iid = String(inv._id!=null?inv._id:inv.id);
-  // In restore mode: always allow editing (admin opened this restore shift)
   if(restoreMode) return true;
   return journal.some(function(e){
     if(e.type!=='receive') return false;
@@ -13444,12 +13451,6 @@ function saveManualInvoice() {
   var totalAmt = _manInvItems.reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); }, 0);
   if(from) saveSupplier(from);
   var now = new Date();
-  // inv.date is the накладная's FILING date — i.e. when the seller actually
-  // pressed "Принять на баланс" — NOT the docDate above. Накладные are
-  // shipped from the workshop on one date but often physically counted in
-  // and accepted at the shop on a later one; everywhere this накладная is
-  // listed/grouped by date, it must show up under the day it was accepted,
-  // not the day it was written.
   // In restore mode use the shift's own date so the invoice lands under the right day.
   var acceptedDateStr = (restoreMode && restoreMeta && restoreMeta.date) ? restoreMeta.date
     : now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
@@ -13553,11 +13554,6 @@ function editManualInvoice(id){
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата приёмки</label><input class="fi" type="date" id="maninv_date_'+id+'" value="'+(inv.date||'')+'" style="margin:0;padding:7px;-webkit-appearance:none;color-scheme:dark"></div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата накладной</label><input class="fi" type="date" id="maninv_docdate_'+id+'" value="'+(inv.docDate||inv.date||'')+'" style="margin:0;padding:7px;-webkit-appearance:none;color-scheme:dark"></div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">От кого</label><input class="fi" id="maninv_from_'+id+'" value="'+(inv.from||'')+'" style="margin:0;padding:7px"></div>'+
-    '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ТИП ТОВАРА</div>'+
-    '<div style="display:flex;gap:8px;margin-bottom:8px">'+
-      '<button type="button" id="maninv_gt_derevo_'+id+'" onpointerdown="event.preventDefault();_setManInvEditGt(\''+id+'\',\'derevo\')" style="flex:1;padding:7px;border-radius:10px;border:'+(((inv.goodsType||'derevo')!=='dr')?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(((inv.goodsType||'derevo')!=='dr')?'#1e2a14':'#22222e')+';color:'+(((inv.goodsType||'derevo')!=='dr')?'#c8f060':'#8888aa')+';font-size:12px;font-weight:700;cursor:pointer">🌳 Дерево</button>'+
-      '<button type="button" id="maninv_gt_dr_'+id+'" onpointerdown="event.preventDefault();_setManInvEditGt(\''+id+'\',\'dr\')" style="flex:1;padding:7px;border-radius:10px;border:'+((inv.goodsType==='dr')?'2px solid #a060f0':'1px solid #2e2e3e')+';background:'+((inv.goodsType==='dr')?'#1e1a2e':'#22222e')+';color:'+((inv.goodsType==='dr')?'#a060f0':'#8888aa')+';font-size:12px;font-weight:700;cursor:pointer">🛍 ДР Товар</button>'+
-    '</div>'+
     '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (арт. · наим. · порода · кол-во · цена)</div>'+
     '<div id="maninv_items_'+id+'"></div>'+
     '<button type="button" onclick="addManInvEditItem(\''+id+'\')" class="btn sec" style="font-size:12px;margin:6px 0 0">＋ Добавить позицию</button>'+
@@ -13711,7 +13707,6 @@ function saveManualInvoiceEdit(id){
   data.date = (document.getElementById('maninv_date_'+id)||{}).value || data.date;
   data.docDate = (document.getElementById('maninv_docdate_'+id)||{}).value || data.docDate;
   data.from = (document.getElementById('maninv_from_'+id)||{}).value || data.from;
-  // Apply goodsType from toggle (if user changed it during edit)
   if(window._manInvEditGt && window._manInvEditGt[id]) data.goodsType = window._manInvEditGt[id];
   data.totalAmt = (data.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
   data.editedAt = new Date().toISOString();
@@ -13747,16 +13742,15 @@ function saveManualInvoiceEdit(id){
   (data.items||[]).forEach(function(item){
     autoSaveToItemBase(item.name, item.article, item.price, 'derevo');
   });
-  var _isEditDr = (data.goodsType||'derevo')==='dr';
   journal.push({
     id:uid(), type:'receive', ts:preservedTs, icon:'📥',
-    label:'Приёмка '+data.num+(_isEditDr?' (ДР)':''),
+    label:'Приёмка '+data.num,
     sub:(data.items||[]).length+' изд.'+(data.from?' · от '+data.from:''),
     amount:data.totalAmt,
     amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
     goodsType: data.goodsType||'derevo',
-    goodsEffect: _isEditDr ? 0 : data.totalAmt,
-    goodsDrEffect: _isEditDr ? data.totalAmt : 0,
+    goodsEffect: (data.goodsType||'derevo')==='dr' ? 0 : data.totalAmt,
+    goodsDrEffect: (data.goodsType||'derevo')==='dr' ? data.totalAmt : 0,
     invId:id, editedAt:new Date().toISOString()
   });
   saveJ();
@@ -14121,14 +14115,10 @@ function uploadToGitHub(){
           sha: sha,
           branch: 'main'
         })
-      }).then(function(r){
-        var status = r.status;
-        return r.json().then(function(j){ return {status: status, body: j}; });
-      });
+      }).then(function(r){ var s=r.status; return r.json().then(function(j){ return {status:s,body:j}; }); });
     });
   }).then(function(res){
-    var result = res.body;
-    var httpStatus = res.status;
+    var result=res.body; var httpStatus=res.status;
     if(result.content && result.content.sha){
       if(statusEl) statusEl.innerHTML='<span style="color:#60f090">✅ Загружено! GitHub Pages обновится через 1-2 минуты.</span>';
       if(tokenEl) tokenEl.value='';
