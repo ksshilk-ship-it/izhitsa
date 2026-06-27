@@ -7755,13 +7755,15 @@ function evaluateShiftIssues(sh){
     });
     var prevChk = candidatesChk.sort(function(a,b){ return new Date(b.openedAt)-new Date(a.openedAt); })[0] || null;
     if(!prevChk) return;
-    if(prevChk.cashEvening!=null && Math.abs((sh.cashMorning||0)-prevChk.cashEvening)>=1){
+    // Пропускаем проверку если предыдущая смена имеет cashEvening=0 —
+    // это признак незакрытой/некорректной смены, а не реального расхождения.
+    if(prevChk.cashEvening!=null && prevChk.cashEvening>0 && Math.abs((sh.cashMorning||0)-prevChk.cashEvening)>=1){
       issues.push({code:'morn_cash_diff_t', label:'💵 Нал утро (Дерево) не сходится с вечером пред. смены ('+fmt(prevChk.cashEvening)+')'});
     }
-    if(prevChk.drCashEvening!=null && Math.abs((sh.cashDrMorning||0)-prevChk.drCashEvening)>=1){
+    if(prevChk.drCashEvening!=null && prevChk.drCashEvening>0 && Math.abs((sh.cashDrMorning||0)-prevChk.drCashEvening)>=1){
       issues.push({code:'morn_cash_diff_g', label:'💵 Нал утро (ДР Товар) не сходится с вечером пред. смены ('+fmt(prevChk.drCashEvening)+')'});
     }
-    if(prevChk.cashStaffEvening!=null && Math.abs((sh.cashStaffMorning||0)-prevChk.cashStaffEvening)>=1){
+    if(prevChk.cashStaffEvening!=null && prevChk.cashStaffEvening>0 && Math.abs((sh.cashStaffMorning||0)-prevChk.cashStaffEvening)>=1){
       issues.push({code:'morn_cash_diff_s', label:'💵 Нал утро (Покупки сотрудников) не сходится с вечером пред. смены ('+fmt(prevChk.cashStaffEvening)+')'});
     }
   })();
