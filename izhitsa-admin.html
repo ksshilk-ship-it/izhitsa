@@ -545,6 +545,21 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <div id="diagResult" style="font-size:11px;font-family:monospace;white-space:pre-wrap;color:var(--t1);background:var(--bg);border-radius:6px;padding:10px;display:none;max-height:400px;overflow-y:auto"></div>
     </div>
 
+    <!-- GitHub Upload -->
+    <div class="card" style="margin-bottom:16px;background:#1a2e1e;border:1px solid #2e4e2e">
+      <div style="font-size:11px;font-weight:700;color:#c8f060;margin-bottom:8px">🚀 ОБНОВИТЬ ПРИЛОЖЕНИЕ НА GITHUB</div>
+      <div style="font-size:11px;color:#8888aa;margin-bottom:8px">Загружает актуальный файл напрямую через API. Токен сохраняется локально на устройстве.</div>
+      <input class="fi" id="ghAdminTokenInput" type="password" placeholder="GitHub токен (ghp_...)" autocomplete="off" style="margin-bottom:8px;font-family:monospace;font-size:12px" onfocus="if(!this.value){var t=localStorage.getItem('iz_gh_token');if(t)this.value=t;}">
+      <div style="font-size:10px;color:#8888aa;margin-bottom:4px">Выберите новый файл от Клода:</div>
+      <div onpointerdown="document.getElementById('ghAdminFileInput').click()" style="border:2px dashed #c8f060;border-radius:10px;padding:12px;text-align:center;cursor:pointer;margin-bottom:8px">
+        <div style="font-size:20px;margin-bottom:3px">📄</div>
+        <div style="font-size:12px;font-weight:700;color:#c8f060" id="ghAdminFileName">Выбрать файл izhitsa-admin.html</div>
+        <input type="file" id="ghAdminFileInput" accept=".html" style="display:none" onchange="document.getElementById('ghAdminFileName').textContent=this.files[0]?this.files[0].name:'Выбрать файл'">
+      </div>
+      <button type="button" onpointerdown="event.preventDefault();uploadAdminToGitHub()" style="width:100%;padding:10px;border-radius:10px;border:none;background:#c8f060;color:#0f0f13;font-size:13px;font-weight:700;cursor:pointer">⬆️ Загрузить на GitHub Pages</button>
+      <div id="ghAdminUploadStatus" style="margin-top:8px;font-size:11px;color:#8888aa"></div>
+    </div>
+
     <!-- 12 COLLAPSED REFERENCE BOOKS -->
     <div style="margin-top:16px">
       <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:12px">📚 Справочники системы</div>
@@ -3793,6 +3808,60 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
 
+
+function uploadAdminToGitHub(){
+  var tokenEl = document.getElementById('ghAdminTokenInput');
+  var statusEl = document.getElementById('ghAdminUploadStatus');
+  var token = (tokenEl && tokenEl.value.trim()) || localStorage.getItem('iz_gh_token') || '';
+  if(!token){ if(statusEl) statusEl.innerHTML='<span style="color:#f06060">❌ Введите токен</span>'; return; }
+  localStorage.setItem('iz_gh_token', token);
+  if(statusEl) statusEl.innerHTML='⏳ Читаю текущий файл с GitHub...';
+  var owner = 'ksshilk-ship-it';
+  var repo = 'izhitsa';
+  var path = 'izhitsa-admin.html';
+  var apiBase = 'https://api.github.com/repos/'+owner+'/'+repo+'/contents/'+path;
+  fetch(apiBase, {
+    headers: {'Authorization': 'token '+token, 'Accept': 'application/vnd.github.v3+json'}
+  }).then(function(r){
+    if(!r.ok){ throw new Error('GitHub API: HTTP '+r.status+' при чтении SHA'); }
+    return r.json();
+  }).then(function(meta){
+    var sha = meta.sha;
+    if(!sha){ throw new Error('Нет SHA: '+(meta.message||JSON.stringify(meta))); }
+    if(statusEl) statusEl.innerHTML='⏳ Читаю файл...';
+    var fileInput = document.getElementById('ghAdminFileInput');
+    var filePromise;
+    if(fileInput && fileInput.files && fileInput.files[0]){
+      filePromise = new Promise(function(resolve, reject){
+        var reader = new FileReader();
+        reader.onload = function(e){ resolve(e.target.result); };
+        reader.onerror = function(){ reject(new Error('Ошибка чтения файла')); };
+        reader.readAsText(fileInput.files[0]);
+      });
+    } else {
+      filePromise = fetch(window.location.href).then(function(r){ return r.text(); });
+    }
+    return filePromise.then(function(html){
+      var b64 = btoa(unescape(encodeURIComponent(html)));
+      if(statusEl) statusEl.innerHTML='⏳ Загружаю на GitHub ('+Math.round(b64.length/1024)+' КБ)...';
+      return fetch(apiBase, {
+        method: 'PUT',
+        headers: {'Authorization': 'token '+token, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json'},
+        body: JSON.stringify({message: 'Update izhitsa-admin via in-app upload', content: b64, sha: sha, branch: 'main'})
+      }).then(function(r){ var s=r.status; return r.json().then(function(j){ return {status:s,body:j}; }); });
+    });
+  }).then(function(res){
+    var result=res.body, httpStatus=res.status;
+    if(result.content && result.content.sha){
+      if(statusEl) statusEl.innerHTML='<span style="color:#60f090">✅ Загружено! GitHub Pages обновится через 1-2 минуты.</span>';
+      if(tokenEl) tokenEl.value='';
+    } else {
+      if(statusEl) statusEl.innerHTML='<span style="color:#f06060">❌ HTTP '+httpStatus+': '+(result.message||JSON.stringify(result))+'</span>';
+    }
+  }).catch(function(err){
+    if(statusEl) statusEl.innerHTML='<span style="color:#f06060">❌ '+err.message+'</span>';
+  });
+}
 
 selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
 });
