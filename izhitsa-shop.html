@@ -8875,6 +8875,35 @@ function svPullReceivesFromInvoices(){
   var shDate = sh.date || (sh.openedAt ? sh.openedAt.split('T')[0] : '');
   var shShop = sh.shopName || '';
   if(!shDate){ showToast('Неизвестна дата смены'); return; }
+
+  showToast('⏳ Загружаю накладные с сервера...');
+
+  // Принудительно тянем все три коллекции с сервера перед поиском —
+  // локальный кеш может не содержать накладные с других устройств
+  var colls = [
+    {name:'iz_archive_invoices', key:'iz_archive_invoices'},
+    {name:'iz_manual_invoices',  key:'iz_manual_invoices'},
+    {name:'iz_invoices',         key:'iz_invoices'},
+  ];
+  var fetches = colls.map(function(c){
+    return db.collection(c.name).get().then(function(snap){
+      var docs = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
+      // Мержим с локальными (не перезаписываем полностью — могут быть локальные черновики)
+      var local = JSON.parse(localStorage.getItem(c.key)||'[]');
+      var byId = {};
+      local.forEach(function(x){ byId[x._id||x.id||''] = x; });
+      docs.forEach(function(x){ byId[x._id||x.id||''] = x; });
+      var merged = Object.values(byId).filter(function(x){ return x._id||x.id; });
+      localStorage.setItem(c.key, JSON.stringify(merged));
+    }).catch(function(e){ console.warn('fetch err', c.name, e); });
+  });
+
+  Promise.all(fetches).then(function(){
+    _svPullReceivesFromInvoicesExec(sh, shDate, shShop);
+  });
+}
+
+function _svPullReceivesFromInvoicesExec(sh, shDate, shShop){
   var jnl = sh.journal ? sh.journal.slice() : [];
   var existingInvIds = {};
   jnl.forEach(function(e){ if(e.invId) existingInvIds[e.invId]=true; });
