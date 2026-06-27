@@ -12274,6 +12274,26 @@ function saveRstInvoice() {
     });
   });
   savePsjEntries(entries);
+  // Also add a single receive entry to the restore shift journal so it shows on
+  // the main page and in the Приход tab of the restore shift
+  if(restoreMode){
+    var totalAmt2 = inv.totalAmt||0;
+    var isDrInv = gt==='dr';
+    var jEntry = {
+      id:uid(), type:'receive', ts:_workingNowISO(),
+      label:'Приход '+(isDrInv?'ДР Товар':'Дерево'),
+      sub:'Накл. '+num+' от '+from+' · '+inv.items.length+' позиций',
+      amount:totalAmt2, amtSign:'+',
+      invId:inv.id,
+      goodsType:isDrInv?'dr':'derevo',
+      goodsEffect:isDrInv?0:totalAmt2,
+      goodsDrEffect:isDrInv?totalAmt2:0,
+      cashEffect:0, cardEffect:0, staffEffect:0,
+      isArchive:true, source:'invoice_restore'
+    };
+    journal.push(jEntry);
+    saveJ();
+  }
   rstInvItems=[]; _rstInvGoodsType='derevo'; setRstInvType('derevo');
   document.getElementById('rstInvFrom').value='';
   document.getElementById('rstInvNum').value='';
@@ -13008,10 +13028,12 @@ function renderReceiveArchive(){
 // shifts go through an administrator.
 function _receiveStillInOpenShift(inv){
   var iid = String(inv._id!=null?inv._id:inv.id);
+  // In restore mode: always allow editing (admin opened this restore shift)
+  if(restoreMode) return true;
   return journal.some(function(e){
     if(e.type!=='receive') return false;
     if(inv._src==='manual') return e.invId===iid;
-    return e.label==='Приёмка '+inv.num; // auto-накладные don't carry invId on their entry
+    return e.label==='Приёмка '+inv.num;
   });
 }
 function openRcvArchiveDate(date){
