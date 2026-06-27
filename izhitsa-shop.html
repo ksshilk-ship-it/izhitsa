@@ -4620,8 +4620,21 @@ function renderNoShiftCard(shopName){
 function goodsMovementLedger(shift, drMode){
   var morning = drMode ? (shift.goodsDrMorning||0) : (shift.goodsMorning||0);
   var effField = drMode ? 'goodsDrEffect' : 'goodsEffect';
-  var jEntries = (shift.journal||[]).filter(function(e){ return (e[effField]||0)!==0; })
-    .map(function(e){ return {ts:e.ts||'', eff:e[effField]||0, icon:e.icon, label:e.label||e.sub||e.type, manual:false}; });
+  var jEntries = (shift.journal||[]).filter(function(e){
+    if((e[effField]||0)!==0) return true;
+    // Старые записи покупок сотрудников могли не иметь goodsEffect — используем retail как fallback
+    if(e.type==='staff' && !drMode && (e.goodsType||'wood')!=='dr' && (e.retail||e.opt)>0 && !(e.goodsEffect)) return true;
+    if(e.type==='staff' && drMode && e.goodsType==='dr' && (e.retail||e.opt)>0 && !(e.goodsDrEffect)) return true;
+    return false;
+  }).map(function(e){
+    var eff = (e[effField]||0);
+    // Fallback для старых staff-записей без goodsEffect
+    if(e.type==='staff' && eff===0){
+      var retail = e.retail || e.opt || 0;
+      eff = -retail;
+    }
+    return {ts:e.ts||'', eff:eff, icon:e.icon||'🛒', label:e.label||e.sub||e.type, manual:false};
+  });
   var rcvArr = drMode ? (shift.drGoodsReceives||[]) : (shift.goodsReceives||[]);
   var woArr = drMode ? (shift.drGoodsWriteoffs||[]) : (shift.goodsWriteoffs||[]);
   var arrEntries = rcvArr.map(function(r){
@@ -4680,8 +4693,17 @@ function renderShiftDetail(shift){
   var cashWood = (shift.cashMorning||0) + journal.reduce(function(s,e){return s+(e.cashEffect||0);},0);
   var cashDr = (shift.cashDrMorning||0) + journal.reduce(function(s,e){return s+(e.cashDrEffect||0);},0);
   var cashStaff = (shift.cashStaffMorning||0) + journal.reduce(function(s,e){return s+(e.staffEffect||0);},0);
-  var goodsWood = (shift.goodsMorning||0) + journal.reduce(function(s,e){return s+(e.goodsEffect||0);},0);
-  var goodsDr = (shift.goodsDrMorning||0) + journal.reduce(function(s,e){return s+(e.goodsDrEffect||0);},0);
+  var goodsWood = (shift.goodsMorning||0) + journal.reduce(function(s,e){
+    var eff = e.goodsEffect||0;
+    // Fallback для старых staff-записей без goodsEffect
+    if(e.type==='staff' && eff===0 && (e.goodsType||'wood')!=='dr' && (e.retail||e.opt)) eff = -(e.retail||e.opt||0);
+    return s+eff;
+  },0);
+  var goodsDr = (shift.goodsDrMorning||0) + journal.reduce(function(s,e){
+    var eff = e.goodsDrEffect||0;
+    if(e.type==='staff' && eff===0 && e.goodsType==='dr' && (e.retail||e.opt)) eff = -(e.retail||e.opt||0);
+    return s+eff;
+  },0);
 
   // ── Sales totals by payment method, split by goods type ──
   // Each sale entry already carries cashEffect/cardEffect (Дерево portion)
@@ -7776,8 +7798,15 @@ function evaluateShiftIssues(sh){
   var manRcvDr = (sh.drGoodsReceives||[]).reduce(function(s,r){return s+(r.amt!=null?r.amt:(r.amount||0));},0);
   var manWoDr = (sh.drGoodsWriteoffs||[]).reduce(function(s,w){return s+(w.amt!=null?w.amt:(w.amount||0));},0);
 
-  var calcEveWood = (sh.goodsMorning||0) + jRcvWood + manRcvWood - jWoWood - manWoWood - grossSold(false);
-  var calcEveDr = (sh.goodsDrMorning||0) + jRcvDr + manRcvDr - jWoDr - manWoDr - grossSold(true);
+  // Покупки сотрудников: списываются по розничной цене (retail или opt).
+  // Новые записи имеют goodsEffect:-retail; старые — только retail/opt без goodsEffect.
+  var jStaffWood = jnl.filter(function(e){ return e.type==='staff' && (e.goodsType||'wood')!=='dr'; })
+    .reduce(function(s,e){ return s + Math.abs(e.goodsEffect || e.retail || e.opt || 0); }, 0);
+  var jStaffDr = jnl.filter(function(e){ return e.type==='staff' && e.goodsType==='dr'; })
+    .reduce(function(s,e){ return s + Math.abs(e.goodsDrEffect || e.retail || e.opt || 0); }, 0);
+
+  var calcEveWood = (sh.goodsMorning||0) + jRcvWood + manRcvWood - jWoWood - manWoWood - grossSold(false) - jStaffWood;
+  var calcEveDr = (sh.goodsDrMorning||0) + jRcvDr + manRcvDr - jWoDr - manWoDr - grossSold(true) - jStaffDr;
 
   if(sh.goodsEvening==null || sh.goodsEvening<=0){
     issues.push({code:'eve_wood_zero', label:'🌳 Остаток товара (Дерево) на вечер не занесён'});
@@ -9280,8 +9309,16 @@ function svRecalcGoodsEvening(){
   var sh = _currentShiftView; if(!sh) return;
   var goods = sh.goodsMorning||0, goodsDr = sh.goodsDrMorning||0;
   (sh.journal||[]).forEach(function(e){
-    goods += (e.goodsEffect||0);
-    goodsDr += (e.goodsDrEffect||0);
+    var ge = e.goodsEffect || 0;
+    var gde = e.goodsDrEffect || 0;
+    // Старые записи покупок сотрудников могли не иметь goodsEffect — fallback на retail/opt
+    if(e.type==='staff' && ge===0 && gde===0){
+      var retail = e.retail || e.opt || 0;
+      if((e.goodsType||'wood')!=='dr') ge = -retail;
+      else gde = -retail;
+    }
+    goods += ge;
+    goodsDr += gde;
   });
   (sh.goodsReceives||[]).forEach(function(r){ goods += (r.amt!=null?r.amt:(r.amount||0)); });
   (sh.drGoodsReceives||[]).forEach(function(r){ goodsDr += (r.amt!=null?r.amt:(r.amount||0)); });
