@@ -4517,17 +4517,59 @@ function renderAlertsPage(){
   // Sort shops alphabetically
   var sortedShops=Object.keys(grouped).sort();
 
+  // Track open/closed state per shop and per date group
+  if(!window._alertsOpen) window._alertsOpen = {};
+
   c.innerHTML=sortedShops.map(function(shop){
     var shopAlerts=grouped[shop];
-    // Sort by date desc within shop
     shopAlerts.sort(function(a,b){
       return (b.createdAt||b.date||'').localeCompare(a.createdAt||a.date||'');
     });
-    return '<div style="margin-bottom:12px">'+
-      '<div style="font-size:11px;font-weight:700;color:#8888aa;text-transform:uppercase;letter-spacing:1px;padding:6px 0 4px">'+shop+'</div>'+
-      '<div style="background:#1a0f0f;border:1px solid #f06060;border-radius:12px;padding:0 12px">'+
-        shopAlerts.map(alertCard).join('')+
+    // Group by date within shop
+    var byDate={};
+    shopAlerts.forEach(function(a){
+      var d=a.date||'—';
+      if(!byDate[d]) byDate[d]=[];
+      byDate[d].push(a);
+    });
+    var sortedDates=Object.keys(byDate).sort(function(a,b){return b.localeCompare(a);});
+    var shopKey='shop_'+shop;
+    var shopOpen = window._alertsOpen[shopKey]!==false; // default open
+    var shopCount=shopAlerts.length;
+
+    var datesHtml=sortedDates.map(function(date){
+      var dateAlerts=byDate[date];
+      var dateKey='date_'+shop+'_'+date;
+      var dateOpen = window._alertsOpen[dateKey]!==false; // default open
+      var dateCount=dateAlerts.length;
+      return '<div style="margin-bottom:6px">'+
+        // Date header
+        '<div onpointerdown="event.preventDefault();window._alertsOpen[''+dateKey+'']=!'+dateOpen+';renderAlertsPage()" '+
+          'style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#22222e;border-radius:8px;cursor:pointer;margin-bottom:'+(dateOpen?'4px':'0')+'">'+
+          '<span style="font-size:11px;color:#8888aa;font-weight:700">'+date+'</span>'+
+          '<div style="display:flex;align-items:center;gap:6px">'+
+            '<span style="background:#f06060;color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700">'+dateCount+'</span>'+
+            '<span style="color:#8888aa;font-size:11px">'+(dateOpen?'▾':'▸')+'</span>'+
+          '</div>'+
+        '</div>'+
+        // Date alerts
+        (dateOpen?'<div style="background:#1a0f0f;border:1px solid #3e1e1e;border-radius:10px;padding:0 10px">'+
+          dateAlerts.map(alertCard).join('')+
+        '</div>':'')+
+      '</div>';
+    }).join('');
+
+    return '<div style="margin-bottom:14px">'+
+      // Shop header (collapsible)
+      '<div onpointerdown="event.preventDefault();window._alertsOpen[''+shopKey+'']=!'+shopOpen+';renderAlertsPage()" '+
+        'style="display:flex;justify-content:space-between;align-items:center;padding:7px 2px;cursor:pointer;margin-bottom:'+(shopOpen?'6px':'0')+'">'+
+        '<span style="font-size:12px;font-weight:700;color:#f0f0f8;text-transform:uppercase;letter-spacing:.5px">'+shop+'</span>'+
+        '<div style="display:flex;align-items:center;gap:6px">'+
+          '<span style="background:#f06060;color:#fff;border-radius:10px;padding:1px 8px;font-size:10px;font-weight:700">'+shopCount+'</span>'+
+          '<span style="color:#8888aa;font-size:13px">'+(shopOpen?'▾':'▸')+'</span>'+
+        '</div>'+
       '</div>'+
+      (shopOpen?datesHtml:'')+
     '</div>';
   }).join('');
 }
