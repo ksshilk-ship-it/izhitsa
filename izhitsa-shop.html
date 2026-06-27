@@ -169,14 +169,14 @@ function checkForAppUpdate() {
   <div style="display:flex;gap:10px;margin-bottom:16px">
     <div id="btnSeller"
       style="flex:1;background:#1e2a14;border:2px solid #c8f060;border-radius:14px;padding:16px 8px;text-align:center;cursor:pointer"
-      onclick="pick('seller')">
+      onpointerdown="event.preventDefault();pick('seller')">
       <div style="font-size:26px;margin-bottom:6px;pointer-events:none">🏪</div>
       <div style="font-family:Unbounded,sans-serif;font-size:11px;font-weight:700;color:#c8f060;pointer-events:none">Продавец</div>
       <div style="font-size:10px;color:#8888aa;margin-top:3px;pointer-events:none">Открыть смену</div>
     </div>
     <div id="btnAdmin"
       style="flex:1;background:#22222e;border:2px solid #2e2e3e;border-radius:14px;padding:16px 8px;text-align:center;cursor:pointer"
-      onclick="pick('shopadmin')">
+      onpointerdown="event.preventDefault();pick('shopadmin')">
       <div style="font-size:26px;margin-bottom:6px;pointer-events:none">🔐</div>
       <div style="font-family:Unbounded,sans-serif;font-size:11px;font-weight:700;color:#8888aa;pointer-events:none">Администратор</div>
       <div style="font-size:10px;color:#8888aa;margin-top:3px;pointer-events:none">Полный доступ</div>
@@ -4468,6 +4468,7 @@ function alertCard(a){
 }
 
 var _alertsShopFilter = '';
+function _setAlertOpen(key, val){ if(!window._alertsOpen) window._alertsOpen={}; window._alertsOpen[key]=val; }
 
 function renderAlertsPage(){
   var c=document.getElementById('alertsPageContent'); if(!c) return;
@@ -4544,7 +4545,7 @@ function renderAlertsPage(){
       var dateCount=dateAlerts.length;
       return '<div style="margin-bottom:6px">'+
         // Date header
-        '<div onpointerdown="event.preventDefault();window._alertsOpen[''+dateKey+'']=!'+dateOpen+';renderAlertsPage()" '+
+        '<div onpointerdown="event.preventDefault();_setAlertOpen(\''+dateKey+'\','+(!dateOpen)+');renderAlertsPage()" '+
           'style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#22222e;border-radius:8px;cursor:pointer;margin-bottom:'+(dateOpen?'4px':'0')+'">'+
           '<span style="font-size:11px;color:#8888aa;font-weight:700">'+date+'</span>'+
           '<div style="display:flex;align-items:center;gap:6px">'+
@@ -4561,7 +4562,7 @@ function renderAlertsPage(){
 
     return '<div style="margin-bottom:14px">'+
       // Shop header (collapsible)
-      '<div onpointerdown="event.preventDefault();window._alertsOpen[''+shopKey+'']=!'+shopOpen+';renderAlertsPage()" '+
+      '<div onpointerdown="event.preventDefault();_setAlertOpen(\''+shopKey+'\','+(!shopOpen)+');renderAlertsPage()" '+
         'style="display:flex;justify-content:space-between;align-items:center;padding:7px 2px;cursor:pointer;margin-bottom:'+(shopOpen?'6px':'0')+'">'+
         '<span style="font-size:12px;font-weight:700;color:#f0f0f8;text-transform:uppercase;letter-spacing:.5px">'+shop+'</span>'+
         '<div style="display:flex;align-items:center;gap:6px">'+
