@@ -1668,8 +1668,12 @@ function checkForAppUpdate() {
       <div class="fg" style="margin:0;flex:1"><label class="fl">Цена (₽)</label><input class="fi" type="number" id="spPrice" placeholder="0" inputmode="numeric" oninput="spCalcRetail()"></div>
       <div class="fg" style="margin:0;width:80px"><label class="fl">Кол-во</label><input class="fi" type="number" id="spQty" placeholder="1" inputmode="numeric" value="1" oninput="spCalcRetail()"></div>
     </div>
-    <div class="fg" style="margin:6px 0 0"><label class="fl">Сумма / Цена розница (₽)</label><input class="fi" type="number" id="spRetail" placeholder="0" inputmode="numeric" oninput="spCalcFromRetail()" style="border-color:#c8f060;color:#c8f060;font-weight:700"></div>
-    <div class="fg"><label class="fl">К оплате (₽)</label><input class="fi" type="number" id="spPay" placeholder="0" inputmode="numeric"></div>
+    <div class="fg" style="margin:6px 0 0"><label class="fl">Розничная цена (₽) — списывается с остатка товара</label><input class="fi" type="number" id="spRetail" placeholder="0" inputmode="numeric" oninput="spCalcFromRetail();spCalcPay()" style="border-color:#c8f060;color:#c8f060;font-weight:700"></div>
+    <div style="display:flex;gap:8px;margin-bottom:0">
+      <div class="fg" style="margin:0;flex:1"><label class="fl">Скидка сотруднику %</label><input class="fi" type="number" id="spDiscPct" placeholder="0" inputmode="numeric" min="0" max="100" oninput="spCalcPay()" style="border-color:#a060f0;color:#a060f0;font-weight:700"></div>
+      <div class="fg" style="margin:0;flex:1"><label class="fl" style="color:#60f090">К оплате (₽)</label><input class="fi" type="number" id="spPay" placeholder="0" inputmode="numeric" oninput="spCalcDiscFromPay()" style="border-color:#60f090;color:#60f090;font-weight:700"></div>
+    </div>
+    <div id="spPayHint" style="font-size:11px;color:#8888aa;margin-bottom:4px;margin-top:-2px;padding:0 2px"></div>
     <div class="fg"><label class="fl">Способ оплаты</label>
       <div class="pay-chips">
         <div class="pc active" onclick="setStaffPayM('cash',this)">💵 Нал</div>
@@ -6126,6 +6130,28 @@ function lookupSpItem(num){
 function spCalcRetail(){
   var price=parseFloat(gv('spPrice'))||0, qty=parseFloat(gv('spQty'))||1;
   var retEl=document.getElementById('spRetail'); if(retEl) retEl.value = (price*qty)||'';
+  spCalcPay();
+}
+function spCalcPay(){
+  var retail=parseFloat(gv('spRetail'))||0;
+  var pct=parseFloat(gv('spDiscPct'))||0;
+  var pay = Math.round(retail*(1-pct/100));
+  var payEl=document.getElementById('spPay'); if(payEl) payEl.value = retail>0 ? pay : '';
+  var hint=document.getElementById('spPayHint');
+  if(hint && retail>0 && pct>0){
+    hint.textContent = '💸 Розница '+Math.round(retail)+'₽ − '+pct+'% = '+pay+'₽ — платит сотрудник';
+  } else if(hint){ hint.textContent=''; }
+}
+function spCalcDiscFromPay(){
+  var retail=parseFloat(gv('spRetail'))||0;
+  var pay=parseFloat(gv('spPay'))||0;
+  var pctEl=document.getElementById('spDiscPct');
+  if(pctEl && retail>0) pctEl.value = Math.round((1-pay/retail)*100);
+  var hint=document.getElementById('spPayHint');
+  if(hint && retail>0 && pay>0 && pay<retail){
+    var pct=Math.round((1-pay/retail)*100);
+    hint.textContent = '💸 Розница '+Math.round(retail)+'₽ − '+pct+'% = '+Math.round(pay)+'₽';
+  } else if(hint){ hint.textContent=''; }
 }
 function spCalcFromRetail(){
   var ret=parseFloat(gv('spRetail'))||0, qty=parseFloat(gv('spQty'))||1;
@@ -6135,16 +6161,19 @@ function saveStaff(){
   const who=gv('spWho'),item=gv('spItem'),pay=parseFloat(gv('spPay'))||0;
   if(!who||!item||!pay){showToast('Заполните поля');return;}
   const retail=parseFloat(gv('spRetail'))||0;
+  const discPct=parseFloat(gv('spDiscPct'))||0;
   const species=gv('spSpecies'), num=gv('spNum'), qty=parseFloat(gv('spQty'))||1;
   const payL={cash:'💵 Нал',terminal:'💳 Терминал',sbp:'📱 СБП',transfer:'🏦 Перевод'}[staffPayMethod];
   const isCard=staffPayMethod!=='cash';
   journal.push({id:uid(),type:'staff',ts:_workingNowISO(),icon:'🛒',label:'Покупка сотр.: '+who,
-    sub:(num?'№'+num+' ':'')+item+(species?' · '+species:'')+(qty&&qty!==1?' × '+qty:'')+' · '+fmt(retail)+' · '+fmt(pay)+' '+payL,
+    sub:(num?'№'+num+' ':'')+item+(species?' · '+species:'')+(qty&&qty!==1?' × '+qty:'')+' · розн. '+fmt(retail)+(discPct?' −'+discPct+'%':'')+' → '+fmt(pay)+' '+payL,
     amount:pay,amtCls:'neu',
     goodsType:spGoodsType,species,article:num,qty,price:parseFloat(gv('spPrice'))||0,
+    retail:retail,discPct:discPct,
     cashEffect:0,cardEffect:isCard?pay:0,staffEffect:staffPayMethod==='cash'?pay:0,
     goodsEffect:spGoodsType==='dr'?0:-retail, goodsDrEffect:spGoodsType==='dr'?-retail:0});
-  saveJ(); ['spWho','spNum','spItem','spSpecies','spPrice','spRetail','spPay','spComment'].forEach(id=>{var el=document.getElementById(id); if(el) el.value='';});
+  saveJ(); ['spWho','spNum','spItem','spSpecies','spPrice','spRetail','spPay','spDiscPct','spComment'].forEach(id=>{var el=document.getElementById(id); if(el) el.value='';});
+  var spHint=document.getElementById('spPayHint'); if(spHint) spHint.textContent='';
   var qtyEl=document.getElementById('spQty'); if(qtyEl) qtyEl.value='1';
   setSpGoods('derevo');
   var _spN=gv('spNum'),_spSh=session&&session.shopName;
