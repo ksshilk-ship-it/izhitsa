@@ -8120,7 +8120,9 @@ function _renderShiftView(){
     if(Math.abs(val)<1) return '<span style="font-size:10px;color:#60f090;font-weight:700">✅ '+(okLabel||'сходится')+'</span>';
     return '<span style="font-size:10px;color:#f06060;font-weight:700">⚠️ '+(val>0?'+':'')+f(val)+'</span>';
   }
-  var anyDiff = (cashDiffVal!=null && Math.abs(cashDiffVal)>=1) || (cashDrDiffVal!=null && Math.abs(cashDrDiffVal)>=1) || (cashStaffDiffVal!=null && Math.abs(cashStaffDiffVal)>=1) || Math.abs(zpDiff)>=1 || !!sh.hasCashDiff || actCash==null || (sh.forceClosedBy && actCashDr==null) || morningWoodMismatch || morningDrMismatch;
+  // zpDiff намеренно исключён из anyDiff — расхождение ЗП не делает весь
+  // отчёт красным, оно подсвечивается только в строке «Разница ЗП+проезд».
+  var anyDiff = (cashDiffVal!=null && Math.abs(cashDiffVal)>=1) || (cashDrDiffVal!=null && Math.abs(cashDrDiffVal)>=1) || (cashStaffDiffVal!=null && Math.abs(cashStaffDiffVal)>=1) || !!sh.hasCashDiff || actCash==null || (sh.forceClosedBy && actCashDr==null) || morningWoodMismatch || morningDrMismatch;
   var _goodsIssues = evaluateShiftIssues(sh).issues.filter(function(i){ return i.code.indexOf('wood')>=0 || i.code.indexOf('_dr_')>=0; });
   if(_goodsIssues.length) anyDiff = true;
   if(morningGoodsMismatch || morningDrGoodsMismatch) anyDiff = true;
