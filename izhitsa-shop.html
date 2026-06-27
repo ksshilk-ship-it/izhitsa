@@ -10657,7 +10657,11 @@ function exitRestoreMode(opts){
     session = liveS; journal = liveJ;
     localStorage.removeItem(KEY.liveSessionBackup);
     localStorage.removeItem(KEY.liveJournalBackup);
-    if(session.role==='shopadmin'){ startAdminApp(); }
+    // sellerRestoreMode = продавец зашёл через ограниченный вход для восстановления
+    // его role была принудительно установлена в 'shopadmin' только для ограниченного
+    // доступа к restore-странице — после выхода он НЕ должен попадать в admin-режим
+    if(session.role==='shopadmin' && !session.sellerRestoreMode){ startAdminApp(); }
+    else if(session.sellerRestoreMode){ startSellerRestoreApp(); }
     else { startApp(); syncLiveShift(); }
     switchRst('shifts');
     renderRestoreShiftState();
@@ -13914,7 +13918,7 @@ function init(){
   // Init role selection — seller by default
   pick('seller');
   const saved=JSON.parse(localStorage.getItem(KEY.session)||'null');
-  if(saved){ session=saved; journal=loadAndCleanJournal(); if(session.role==='shopadmin')startAdminApp(); else { startApp(); syncLiveShift(); } }
+  if(saved){ session=saved; journal=loadAndCleanJournal(); if(session.role==='shopadmin' && !session.sellerRestoreMode)startAdminApp(); else if(session.sellerRestoreMode){ startSellerRestoreApp(); } else { startApp(); syncLiveShift(); } }
 }
 init();
 
