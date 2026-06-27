@@ -2319,6 +2319,17 @@ function svEditSale(idx){
     if(md) md.appendChild(delBtn);
   }
 }
+function svAddSaleToArchive(){
+  if(!_currentShiftView) return;
+  openMo('saleMo');
+  resetSaleForm();
+  _svArchiveEditId = '__new__';
+  _editSaleEntryId = null;
+  var mt = document.querySelector('#saleMo .mt'); if(mt) mt.textContent = '➕ Добавить продажу в смену';
+  // Remove delete button if it exists from a previous edit
+  var modal = document.getElementById('saleMo');
+  if(modal){ var existingDel=modal.querySelector('.sale-edit-del-btn'); if(existingDel) existingDel.remove(); }
+}
 let currentInvId = null, invCheckState = [];
 let currentLookupItem = null;
 let currentEditShiftId = null;
@@ -5768,6 +5779,22 @@ function saveSale(){
   // journal (via svPersist) instead of the live seller session/journal.
   if(_svArchiveEditId && _currentShiftView){
     var jnlArch = _currentShiftView.journal||[];
+    // __new__ — добавление новой продажи в закрытую смену
+    if(_svArchiveEditId === '__new__'){
+      var newEntry = Object.assign({id:uid(),type:'sale'}, newEntryData);
+      // ts привязываем к дате смены + текущее время
+      var shDate2 = (_currentShiftView.date||(_currentShiftView.openedAt||'').split('T')[0])||new Date().toISOString().split('T')[0];
+      var nowTime = new Date();
+      newEntry.ts = shDate2+'T'+String(nowTime.getHours()).padStart(2,'0')+':'+String(nowTime.getMinutes()).padStart(2,'0')+':'+String(nowTime.getSeconds()).padStart(2,'0')+'.000Z';
+      newEntry.addedToArchive = true;
+      jnlArch.push(newEntry);
+      _currentShiftView.journal = jnlArch;
+      svPersist();
+      _svArchiveEditId = null;
+      resetSaleForm(); closeMo('saleMo'); _renderShiftView();
+      showToast('✅ Продажа добавлена в смену');
+      return;
+    }
     var idxArch = jnlArch.findIndex(function(e){ return e.id===_svArchiveEditId; });
     if(idxArch<0){ showToast('Запись не найдена'); _svArchiveEditId=null; _savingSale=false; return; }
     var beforeArch = Object.assign({}, jnlArch[idxArch]);
@@ -8165,6 +8192,7 @@ function _renderShiftView(){
         '</div>';
     });
     salesBody += '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:700"><span>Итого</span><span style="color:#c8f060">'+f(totalRev)+'</span></div>';
+    salesBody += '<button onpointerdown="event.preventDefault();svAddSaleToArchive()" style="width:100%;margin-top:10px;padding:9px;border-radius:9px;border:1px dashed #c8f060;background:none;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">➕ Добавить продажу</button>';
   } else {
     // aggregate
     salesBody += '<div style="font-size:10px;color:#c8f060;margin-bottom:5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
@@ -8177,6 +8205,7 @@ function _renderShiftView(){
     if(drDisc) salesBody += row('🎁 Скидка', f(drDisc), '#8888aa');
     salesBody += '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:700;border-top:1px solid #2e2e3e;margin-top:4px"><span>Итого</span><span style="color:#c8f060">'+f(totalRev+drTot)+'</span></div>';
     salesBody += '<div style="font-size:11px;color:#555568;margin-top:4px">Детализация продаж недоступна — смена без журнала</div>';
+    salesBody += '<button onpointerdown="event.preventDefault();svAddSaleToArchive()" style="width:100%;margin-top:10px;padding:9px;border-radius:9px;border:1px dashed #c8f060;background:none;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">➕ Добавить продажу</button>';
   }
 
   // ── ПРОДАННЫЕ ТОВАРЫ body (aggregated by item name, same as live shift view) ──
