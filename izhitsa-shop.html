@@ -10718,6 +10718,14 @@ function goToRestoreShiftCheck(){
 }
 
 function confirmAndCloseRestoreShift(){
+  // Если мы сейчас в полноценном restore-режиме (restoreMode=true) — смену нужно
+  // закрывать через таб «Закрыть» внутри самой смены, а не через эту кнопку.
+  // Эта кнопка предназначена только для старого PSJ-потока (ручной ввод задним числом).
+  if(restoreMode){
+    showToast('ℹ️ Перейдите в таб «Закрыть» внутри смены для закрытия');
+    showPg('close', document.querySelector('.tab[onclick*="close"]') || document.querySelector('.tab')); try{ renderClose(); }catch(e){}
+    return;
+  }
   var cashMorn=gv('psCashMorn'), cashEve=gv('psCashEve');
   if(cashMorn===''||cashEve===''){
     if(!confirm('Поля кассы (нал утро/вечер) не заполнены. Закрыть смену без проверки?')) return;
@@ -10728,8 +10736,6 @@ function confirmAndCloseRestoreShift(){
   saveRestoreShift(null);
   renderRestoreShiftState();
   if(wasRestricted){
-    // Never route a restricted seller into the cross-seller "Список смен" —
-    // that view exposes (and lets them act on) everyone else's entries.
     showToast('🔒 Смена сохранена. Администратор проверит и подтвердит её в общей статистике.');
   } else {
     switchRstShTab('list');
