@@ -1140,6 +1140,27 @@ function checkForAppUpdate() {
     </div>
   </div>
 
+  
+  <div class="page" id="pg-seller-stats">
+    <div class="stitle" style="margin-bottom:10px">📊 Статистика продавцов</div>
+    <!-- FILTERS -->
+    <div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+        <button id="ss_p_m" onpointerdown="event.preventDefault();setSsPeriod('month')" style="flex:1;min-width:60px;padding:6px;border-radius:8px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">Месяц</button>
+        <button id="ss_p_q" onpointerdown="event.preventDefault();setSsPeriod('quarter')" style="flex:1;min-width:60px;padding:6px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:700;cursor:pointer">Квартал</button>
+        <button id="ss_p_y" onpointerdown="event.preventDefault();setSsPeriod('year')" style="flex:1;min-width:60px;padding:6px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:700;cursor:pointer">Год</button>
+        <button id="ss_p_c" onpointerdown="event.preventDefault();setSsPeriod('custom')" style="flex:1;min-width:60px;padding:6px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:700;cursor:pointer">Период</button>
+      </div>
+      <div id="ss_custom_dates" style="display:none;display:flex;gap:6px;margin-bottom:8px">
+        <input type="date" id="ss_date_from" style="flex:1;background:#22222e;border:1px solid #3e3e4e;border-radius:8px;padding:6px;color:#f0f0f8;font-size:12px;-webkit-appearance:none;color-scheme:dark" onchange="renderSellerStats()">
+        <input type="date" id="ss_date_to" style="flex:1;background:#22222e;border:1px solid #3e3e4e;border-radius:8px;padding:6px;color:#f0f0f8;font-size:12px;-webkit-appearance:none;color-scheme:dark" onchange="renderSellerStats()">
+      </div>
+      <div style="font-size:10px;color:#8888aa;margin-bottom:4px">Магазин</div>
+      <div id="ss_shop_chips" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+    </div>
+    <!-- CONTENT -->
+    <div id="ss_content"></div>
+  </div>
   <div class="page" id="pg-sellers">
     <div class="stitle">Управление сотрудниками</div>
 
@@ -5070,6 +5091,212 @@ function adminSaveInvoice(id){
   showToast('✅ Накладная сохранена');
 }
 
+
+// ════ SELLER STATS ════
+var _ssPeriod = 'month';
+var _ssShop = 'all';
+
+function setSsPeriod(p){
+  _ssPeriod = p;
+  ['month','quarter','year','custom'].forEach(function(x){
+    var btn = document.getElementById('ss_p_'+x[0]+(x==='custom'?'c':x==='quarter'?'q':x==='year'?'y':'m'));
+    if(!btn) return;
+    var active = x===p;
+    btn.style.border = active ? '2px solid #c8f060' : '1px solid #2e2e3e';
+    btn.style.background = active ? '#1e2a14' : '#22222e';
+    btn.style.color = active ? '#c8f060' : '#8888aa';
+  });
+  var cdEl = document.getElementById('ss_custom_dates');
+  if(cdEl) cdEl.style.display = p==='custom' ? 'flex' : 'none';
+  renderSellerStats();
+}
+
+function _ssDateRange(){
+  var now = new Date();
+  var y = now.getFullYear(), m = now.getMonth();
+  if(_ssPeriod==='month'){
+    var from = y+'-'+String(m+1).padStart(2,'0')+'-01';
+    var to = y+'-'+String(m+1).padStart(2,'0')+'-31';
+    return {from:from, to:to};
+  }
+  if(_ssPeriod==='quarter'){
+    var q = Math.floor(m/3);
+    var qm = q*3;
+    var from = y+'-'+String(qm+1).padStart(2,'0')+'-01';
+    var toM = qm+3; var toY = y;
+    if(toM>12){toM-=12;toY++;}
+    var to = toY+'-'+String(toM).padStart(2,'0')+'-31';
+    return {from:from, to:to};
+  }
+  if(_ssPeriod==='year'){
+    return {from:y+'-01-01', to:y+'-12-31'};
+  }
+  if(_ssPeriod==='custom'){
+    var f=(document.getElementById('ss_date_from')||{}).value||'';
+    var t=(document.getElementById('ss_date_to')||{}).value||'';
+    return {from:f||'2000-01-01', to:t||'2099-12-31'};
+  }
+  return {from:'2000-01-01', to:'2099-12-31'};
+}
+
+function renderSellerStats(){
+  var range = _ssDateRange();
+  var allShifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]')
+    .filter(function(s){ return s.status==='closed' && !s.isRestoreShift && !s.backfilled && s.sellerName && s.date>=range.from && s.date<=range.to; });
+
+  // Shop filter chips
+  var shops = ['all'];
+  allShifts.forEach(function(s){ if(s.shopName && shops.indexOf(s.shopName)<0) shops.push(s.shopName); });
+  var chipEl = document.getElementById('ss_shop_chips');
+  if(chipEl){
+    chipEl.innerHTML = shops.map(function(sh){
+      var active = _ssShop===sh;
+      return '<button onpointerdown="event.preventDefault();_ssShop=\''+sh+'\';renderSellerStats()" style="padding:5px 10px;border-radius:20px;border:'+(active?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(active?'#1e2a14':'#22222e')+';color:'+(active?'#c8f060':'#8888aa')+';font-size:11px;font-weight:'+(active?'700':'400')+';cursor:pointer">'+( sh==='all'?'Все магазины':sh)+'</button>';
+    }).join('');
+  }
+
+  var shifts = _ssShop==='all' ? allShifts : allShifts.filter(function(s){ return s.shopName===_ssShop; });
+
+  // Per-seller aggregation
+  var sellers = {};
+  shifts.forEach(function(s){
+    var name = s.sellerName || '—';
+    // Strip Восст. prefix for stats grouping
+    name = name.replace(/^Восст\. /, '');
+    if(!sellers[name]) sellers[name] = {name:name, shifts:0, revenue:0, drRevenue:0,
+      sales:0, items:0, checks:[], zp:0, travel:0, cashDiffs:0, hasCashDiff:0,
+      goodsMorning:[], goodsEvening:[], shops:{}};
+    var sel = sellers[name];
+    sel.shifts++;
+    // Revenue
+    var rev = s.totalRevenue || (s.cashRevenue||0)+(s.cardRevenue||0)+(s.totalDiscount||0);
+    var drRev = s.drTotalRevenue || 0;
+    sel.revenue += rev;
+    sel.drRevenue += drRev;
+    // Sales count and items
+    var sc = s.salesCount || 0;
+    sel.sales += sc;
+    // Count items from journal if available
+    var jnl = s.journal || [];
+    var shiftItems = 0;
+    jnl.filter(function(e){return e.type==='sale';}).forEach(function(e){
+      shiftItems += (e.items ? e.items.length : (e.qty||1));
+    });
+    sel.items += shiftItems;
+    if(sc>0) sel.checks.push(rev/sc);
+    // ZP
+    var zpAmt = s.zp || 0;
+    var travelAmt = s.travel || 0;
+    sel.zp += zpAmt;
+    sel.travel += travelAmt;
+    // Cash diff
+    if(s.hasCashDiff) sel.hasCashDiff++;
+    // Shops
+    if(s.shopName) sel.shops[s.shopName] = (sel.shops[s.shopName]||0)+1;
+  });
+
+  var selArr = Object.values(sellers).sort(function(a,b){ return b.revenue-a.revenue; });
+
+  if(!selArr.length){
+    document.getElementById('ss_content').innerHTML = '<div class="empty"><div class="ei">📊</div>Нет смен за выбранный период</div>';
+    return;
+  }
+
+  var fmt = function(n){ return Math.round(n).toLocaleString('ru-RU'); };
+  var fmtK = function(n){ return n>=1000 ? (Math.round(n/100)/10)+'к' : Math.round(n)+''; };
+
+  // Rating block
+  var ratingHtml = '<div style="font-size:12px;font-weight:700;color:#c8f060;margin-bottom:8px;letter-spacing:.5px">🏆 РЕЙТИНГ ПО ВЫРУЧКЕ</div>';
+  var medals = ['🥇','🥈','🥉'];
+  ratingHtml += selArr.map(function(sel, i){
+    var pct = selArr[0].revenue > 0 ? Math.round(sel.revenue/selArr[0].revenue*100) : 0;
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #2e2e3e">'+
+      '<div style="font-size:16px;width:22px;text-align:center">'+(medals[i]||'#'+(i+1))+'</div>'+
+      '<div style="flex:1">'+
+        '<div style="font-size:13px;font-weight:700">'+sel.name+'</div>'+
+        '<div style="margin-top:3px;background:#2e2e3e;border-radius:4px;height:4px">'+
+          '<div style="background:#c8f060;border-radius:4px;height:4px;width:'+pct+'%"></div>'+
+        '</div>'+
+      '</div>'+
+      '<div style="text-align:right">'+
+        '<div style="font-size:13px;font-weight:700;color:#c8f060">'+fmt(sel.revenue)+'₽</div>'+
+        '<div style="font-size:10px;color:#8888aa">'+sel.shifts+' смен</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  // Per-seller cards
+  var cardsHtml = selArr.map(function(sel){
+    var avgRev = sel.shifts>0 ? sel.revenue/sel.shifts : 0;
+    var avgCheck = sel.checks.length>0 ? sel.checks.reduce(function(s,x){return s+x;},0)/sel.checks.length : 0;
+    var avgSales = sel.shifts>0 ? sel.sales/sel.shifts : 0;
+    var avgItems = sel.sales>0 ? sel.items/sel.sales : 0;
+    var avgZp = sel.shifts>0 ? sel.zp/sel.shifts : 0;
+    var avgZpTravel = sel.shifts>0 ? (sel.zp+sel.travel)/sel.shifts : 0;
+    var shopsStr = Object.keys(sel.shops).map(function(sh){ return sh+'('+sel.shops[sh]+')'; }).join(', ');
+
+    function row(label, val, color){
+      return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e1e2e;font-size:12px">'+
+        '<span style="color:#8888aa">'+label+'</span>'+
+        '<span style="font-weight:700;color:'+(color||'#f0f0f8')+'">'+val+'</span>'+
+      '</div>';
+    }
+
+    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
+        '<div style="font-size:14px;font-weight:700">'+sel.name+'</div>'+
+        '<div style="font-size:11px;color:#8888aa;text-align:right">'+shopsStr+'</div>'+
+      '</div>'+
+      '<div style="font-size:10px;color:#c8f060;font-weight:700;margin-bottom:4px;letter-spacing:.5px">СМЕНЫ</div>'+
+      row('Всего смен', sel.shifts)+
+      row('Выручка итого', fmt(sel.revenue)+'₽', '#c8f060')+
+      (sel.drRevenue>0?row('Выручка ДР итого', fmt(sel.drRevenue)+'₽', '#a060f0'):'')+
+      row('Средняя выручка / смена', fmt(avgRev)+'₽', '#c8f060')+
+      '<div style="font-size:10px;color:#60c8f0;font-weight:700;margin:8px 0 4px;letter-spacing:.5px">ПРОДАЖИ</div>'+
+      row('Всего продаж', sel.sales)+
+      row('Средний чек', fmt(avgCheck)+'₽', '#60c8f0')+
+      row('Продаж / смена', avgSales.toFixed(1))+
+      (sel.items>0?row('Позиций в чеке (ср.)', avgItems.toFixed(1)):'')+
+      '<div style="font-size:10px;color:#60f090;font-weight:700;margin:8px 0 4px;letter-spacing:.5px">ЗАРПЛАТА</div>'+
+      row('ЗП итого', fmt(sel.zp)+'₽', '#60f090')+
+      row('Проезд итого', fmt(sel.travel)+'₽')+
+      row('Средняя ЗП / смена (без проезда)', fmt(avgZp)+'₽', '#60f090')+
+      row('Средняя ЗП / смена (с проездом)', fmt(avgZpTravel)+'₽', '#60f090')+
+      (sel.hasCashDiff>0?'<div style="font-size:10px;color:#f06060;font-weight:700;margin:8px 0 4px;letter-spacing:.5px">КАССОВЫЕ РАСХОЖДЕНИЯ</div>'+
+      row('Смен с расхождением', sel.hasCashDiff, '#f06060'):'')+
+    '</div>';
+  }).join('');
+
+  var totalRev = selArr.reduce(function(s,x){return s+x.revenue;},0);
+  var totalShifts = selArr.reduce(function(s,x){return s+x.shifts;},0);
+  var totalZp = selArr.reduce(function(s,x){return s+x.zp;},0);
+
+  var summaryHtml = '<div style="background:#1e2a14;border:1px solid #2e4e2e;border-radius:12px;padding:12px;margin-bottom:10px">'+
+    '<div style="font-size:11px;color:#c8f060;font-weight:700;margin-bottom:6px">📈 ИТОГО ПО ПЕРИОДУ</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      '<div style="flex:1;min-width:80px;background:#22222e;border-radius:8px;padding:8px;text-align:center">'+
+        '<div style="font-size:11px;color:#8888aa">Выручка</div>'+
+        '<div style="font-size:14px;font-weight:700;color:#c8f060">'+fmtK(totalRev)+'₽</div>'+
+      '</div>'+
+      '<div style="flex:1;min-width:80px;background:#22222e;border-radius:8px;padding:8px;text-align:center">'+
+        '<div style="font-size:11px;color:#8888aa">Смен</div>'+
+        '<div style="font-size:14px;font-weight:700;color:#f0f0f8">'+totalShifts+'</div>'+
+      '</div>'+
+      '<div style="flex:1;min-width:80px;background:#22222e;border-radius:8px;padding:8px;text-align:center">'+
+        '<div style="font-size:11px;color:#8888aa">ФОТ (ЗП)</div>'+
+        '<div style="font-size:14px;font-weight:700;color:#60f090">'+fmtK(totalZp)+'₽</div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+
+  document.getElementById('ss_content').innerHTML =
+    summaryHtml +
+    '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">'+ratingHtml+'</div>'+
+    '<div style="font-size:12px;font-weight:700;color:#8888aa;margin:12px 0 8px;letter-spacing:.5px">КАРТОЧКИ ПРОДАВЦОВ</div>'+
+    cardsHtml;
+}
+// ════ END SELLER STATS ════
+
 function buildAdminTabs(){
   const t=document.getElementById('mainTabs'); t.style.display='flex';
   t.innerHTML=`
@@ -5082,6 +5309,7 @@ function buildAdminTabs(){
     <button class="tab" onclick="showPg('shopsettings',this);renderShopSettings()"><div class="ti">⚙️</div><span>Настройки</span></button>
     <button class="tab" onclick="showPg('stock',this);initStockPage()"><div class="ti">📦</div><span>Склад</span></button>
     <button class="tab" onclick="showPg('admin-rcv-wo',this);initAdminRcvWo()"><div class="ti">📥</div><span>Приходы</span></button>
+    <button class="tab" onclick="showPg('seller-stats',this);renderSellerStats()"><div class="ti">📊</div><span>Продавцы</span></button>
     <button class="tab" onclick="exitShift()"><div class="ti">🚪</div><span>Выйти</span></button>`;
 }
 
@@ -8875,35 +9103,6 @@ function svPullReceivesFromInvoices(){
   var shDate = sh.date || (sh.openedAt ? sh.openedAt.split('T')[0] : '');
   var shShop = sh.shopName || '';
   if(!shDate){ showToast('Неизвестна дата смены'); return; }
-
-  showToast('⏳ Загружаю накладные с сервера...');
-
-  // Принудительно тянем все три коллекции с сервера перед поиском —
-  // локальный кеш может не содержать накладные с других устройств
-  var colls = [
-    {name:'iz_archive_invoices', key:'iz_archive_invoices'},
-    {name:'iz_manual_invoices',  key:'iz_manual_invoices'},
-    {name:'iz_invoices',         key:'iz_invoices'},
-  ];
-  var fetches = colls.map(function(c){
-    return db.collection(c.name).get().then(function(snap){
-      var docs = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
-      // Мержим с локальными (не перезаписываем полностью — могут быть локальные черновики)
-      var local = JSON.parse(localStorage.getItem(c.key)||'[]');
-      var byId = {};
-      local.forEach(function(x){ byId[x._id||x.id||''] = x; });
-      docs.forEach(function(x){ byId[x._id||x.id||''] = x; });
-      var merged = Object.values(byId).filter(function(x){ return x._id||x.id; });
-      localStorage.setItem(c.key, JSON.stringify(merged));
-    }).catch(function(e){ console.warn('fetch err', c.name, e); });
-  });
-
-  Promise.all(fetches).then(function(){
-    _svPullReceivesFromInvoicesExec(sh, shDate, shShop);
-  });
-}
-
-function _svPullReceivesFromInvoicesExec(sh, shDate, shShop){
   var jnl = sh.journal ? sh.journal.slice() : [];
   var existingInvIds = {};
   jnl.forEach(function(e){ if(e.invId) existingInvIds[e.invId]=true; });
@@ -8959,18 +9158,7 @@ function _svPullReceivesFromInvoicesExec(sh, shDate, shShop){
     _addEntry(inv, iid, isDr, amt);
   });
 
-  if(!added){
-    // Диагностика: покажем что реально есть в каждой коллекции
-    var diagLines = ['Накладных за '+shDate+' (магазин: '+shShop+') не найдено\n'];
-    diagLines.push('iz_archive_invoices: '+archInvs.length+' всего');
-    archInvs.slice(0,3).forEach(function(i){ diagLines.push('  date='+i.date+' acceptedAt='+i.acceptedAt+' shop='+i.shopName); });
-    diagLines.push('iz_manual_invoices: '+manInvs.length+' всего');
-    manInvs.slice(0,3).forEach(function(i){ diagLines.push('  date='+i.date+' acceptedAt='+i.acceptedAt+' destName='+i.destName); });
-    diagLines.push('iz_invoices: '+shopInvs.length+' всего');
-    shopInvs.slice(0,3).forEach(function(i){ diagLines.push('  acceptedDate='+i.acceptedDate+' date='+i.date+' status='+i.status+' dest='+i.destName); });
-    showToast(diagLines.join('\n'));
-    return;
-  }
+  if(!added){ showToast('Накладных за '+shDate+' не найдено (проверены iz_archive_invoices, iz_manual_invoices, iz_invoices)'); return; }
   sh.journal = jnl;
   var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   var idx = shifts.findIndex(function(s){ return (s.id||s._id)===(sh.id||sh._id); });
