@@ -8930,7 +8930,18 @@ function svPullReceivesFromInvoices(){
     _addEntry(inv, iid, isDr, amt);
   });
 
-  if(!added){ showToast('Накладных за '+shDate+' не найдено (проверены iz_archive_invoices, iz_manual_invoices, iz_invoices)'); return; }
+  if(!added){
+    // Диагностика: покажем что реально есть в каждой коллекции
+    var diagLines = ['Накладных за '+shDate+' (магазин: '+shShop+') не найдено\n'];
+    diagLines.push('iz_archive_invoices: '+archInvs.length+' всего');
+    archInvs.slice(0,3).forEach(function(i){ diagLines.push('  date='+i.date+' acceptedAt='+i.acceptedAt+' shop='+i.shopName); });
+    diagLines.push('iz_manual_invoices: '+manInvs.length+' всего');
+    manInvs.slice(0,3).forEach(function(i){ diagLines.push('  date='+i.date+' acceptedAt='+i.acceptedAt+' destName='+i.destName); });
+    diagLines.push('iz_invoices: '+shopInvs.length+' всего');
+    shopInvs.slice(0,3).forEach(function(i){ diagLines.push('  acceptedDate='+i.acceptedDate+' date='+i.date+' status='+i.status+' dest='+i.destName); });
+    showToast(diagLines.join('\n'));
+    return;
+  }
   sh.journal = jnl;
   var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   var idx = shifts.findIndex(function(s){ return (s.id||s._id)===(sh.id||sh._id); });
