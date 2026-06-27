@@ -9333,13 +9333,93 @@ function svRecalcGoodsEvening(){
 }
 // skipGoodsRecalc=true только для svSaveTovar() — там admin вписывает
 // «Остаток вечер» вручную и сознательно, пересчитывать поверх него нельзя.
+
+// ════ CASCADE GOODS UPDATE ════
+// При изменении остатка вечер в одной смене — автоматически обновляем
+// goodsMorning следующих смен того же магазина по цепочке.
+function svCascadeGoodsUpdate(startShift, allShifts){
+  var shop = startShift.shopName;
+  // Берём все смены того же магазина, открытые ПОСЛЕ текущей, сортируем по дате
+  var later = allShifts.filter(function(s){
+    return s.shopName===shop && s.id!==startShift.id &&
+           s.openedAt && startShift.openedAt && s.openedAt > startShift.openedAt;
+  }).sort(function(a,b){ return a.openedAt < b.openedAt ? -1 : 1; });
+
+  var prevEvening = startShift.goodsEvening;
+  var prevDrEvening = startShift.drGoodsEvening;
+  var changed = [];
+
+  later.forEach(function(s){
+    var updated = false;
+    // Обновляем goodsMorning если оно совпадало с вечером предыдущей смены
+    // ИЛИ если разница небольшая (продавец не менял вручную)
+    if(prevEvening != null && s.goodsMorning != null){
+      s.goodsMorning = prevEvening;
+      updated = true;
+    }
+    if(prevDrEvening != null && s.goodsDrMorning != null){
+      s.goodsDrMorning = prevDrEvening;
+      updated = true;
+    }
+    if(updated){
+      // Пересчитываем goodsEvening этой смены на основе нового утра + движений
+      var jnl = s.journal || [];
+      var newEveWood = (s.goodsMorning||0);
+      var newEveDr = (s.goodsDrMorning||0);
+      jnl.forEach(function(e){
+        var ge = e.goodsEffect || 0;
+        var gde = e.goodsDrEffect || 0;
+        if(e.type==='staff' && ge===0 && gde===0){
+          var retail = e.retail || e.opt || 0;
+          if((e.goodsType||'wood')!=='dr') ge = -retail;
+          else gde = -retail;
+        }
+        newEveWood += ge;
+        newEveDr += gde;
+      });
+      // Учитываем goodsReceives и drGoodsReceives (legacy массивы)
+      (s.goodsReceives||[]).forEach(function(r){ newEveWood += (r.amt||0); });
+      (s.drGoodsReceives||[]).forEach(function(r){ newEveDr += (r.amt||0); });
+      // Учитываем goodsWriteoffs и drGoodsWriteoffs
+      (s.goodsWriteoffs||[]).forEach(function(r){ newEveWood -= (r.amt||0); });
+      (s.drGoodsWriteoffs||[]).forEach(function(r){ newEveDr -= (r.amt||0); });
+      // Продажи (если нет journal — из totalRevenue)
+      if(!jnl.length){
+        newEveWood -= (s.totalRevenue||0);
+      }
+      s.goodsEvening = Math.round(newEveWood);
+      s.drGoodsEvening = Math.round(newEveDr);
+      // prevEvening для следующей итерации
+      prevEvening = s.goodsEvening;
+      prevDrEvening = s.drGoodsEvening;
+      changed.push(s);
+    } else {
+      // Продавец вручную ввёл другое значение — цепочка обрывается
+      prevEvening = s.goodsEvening;
+      prevDrEvening = s.drGoodsEvening;
+    }
+  });
+  return changed;
+}
+// ════ END CASCADE ════
+
 function svPersist(skipGoodsRecalc){
   if(!skipGoodsRecalc) svRecalcGoodsEvening();
   var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   var idx=shifts.findIndex(function(s){return (s.id||s._id)===_currentShiftView.id;}); if(idx<0) return;
   shifts[idx]=_currentShiftView;
+  // Каскадный пересчёт: обновляем goodsMorning следующих смен по цепочке
+  var cascadeChanged = svCascadeGoodsUpdate(_currentShiftView, shifts);
+  cascadeChanged.forEach(function(s){
+    var ci=shifts.findIndex(function(x){return (x.id||x._id)===(s.id||s._id);});
+    if(ci>=0) shifts[ci]=s;
+    try{db.collection('iz_shifts').doc(s.id||s._id).set(s);}catch(e){}
+  });
   localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
   try{db.collection('iz_shifts').doc(_currentShiftView.id).set(_currentShiftView);}catch(e){}
+  if(cascadeChanged.length){
+    showToast('✅ Сохранено · обновлено остаток в '+cascadeChanged.length+' послед. сменах');
+  }
   renderShiftHistory();
 }
 
