@@ -2596,10 +2596,16 @@ function loadAndCleanJournal(){
   if(!session || !session.openedAt) return raw;
   var shiftDate = session.openedAt.split('T')[0];
   return raw.filter(function(e){
-    // Remove receive entries from a different day than the shift
-    if(e.type === 'receive' && e.ts){
-      var eDate = e.ts.split('T')[0];
-      if(eDate < shiftDate) return false;
+    if(e.type === 'receive'){
+      // В restore-режиме не фильтруем по дате — там накладные могут быть
+      // за любой день (напр. накладная от 04.06 принимается в смену 06.06).
+      // Фильтрацию «чужих» приходов делаем только для живой (не restore) смены.
+      if(isRestore) return true;
+      // Для живой смены: приход принадлежит смене по дате накладной (invDate),
+      // а не по дате занесения (ts). Это не даёт приходам из restore-смены
+      // попасть в живую смену через Firestore merge.
+      var effectiveDate = e.invDate || (e.ts ? e.ts.split('T')[0] : null);
+      if(effectiveDate && effectiveDate < shiftDate) return false;
     }
     return true;
   });
@@ -3308,25 +3314,27 @@ function mergeRemoteJournal(remote){
     if(!e.id || localIds[e.id]) return;
     if(tombstoned[e.id]) return; // was deliberately deleted on this or another device — never resurrect
     if(e.type==='receive' && e.invId && localReceiveInvIds[e.invId]) return; // already have this invoice's entry
-    // Don't pull in receive entries from before this shift's date — they belong to a past shift
+    // Don't pull in receive entries from before this shift's date — they belong to a past shift.
+    // Use invDate (explicit invoice date) if present, otherwise fall back to ts.
     if(e.type==='receive' && shiftOpenedAt){
       var shiftDateStr = shiftOpenedAt.split('T')[0];
-      if(e.ts){
-        var eDateStr = e.ts.split('T')[0];
-        // Block if entry date is strictly before shift date
-        if(eDateStr < shiftDateStr) return;
-      }
+      var eDateStr = e.invDate || (e.ts ? e.ts.split('T')[0] : null);
+      if(eDateStr && eDateStr < shiftDateStr) return;
     }
     journal.push(e); added++;
     if(e.type==='receive' && e.invId) localReceiveInvIds[e.invId]=true;
   });
   if(added>0 || purged>0){
     journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
-    // Final purge: remove any receive entries older than shift date
+    // Final purge: remove any receive entries older than shift date.
+    // Use invDate if present so invoices dated before shift don't pollute the journal.
     if(session && session.openedAt){
       var shiftDate = session.openedAt.split('T')[0];
       journal = journal.filter(function(e){
-        if(e.type==='receive' && e.ts && e.ts.split('T')[0] < shiftDate) return false;
+        if(e.type==='receive'){
+          var effDate = e.invDate || (e.ts ? e.ts.split('T')[0] : null);
+          if(effDate && effDate < shiftDate) return false;
+        }
         return true;
       });
     }
@@ -6427,11 +6435,16 @@ function acceptInvoice(){
   }
   const inv2=JSON.parse(JSON.stringify(inv));
   const accepted=inv2.items.map((it,i)=>({...it,factPrice:(invCheckState[i]&&invCheckState[i].factPrice!=null?invCheckState[i].factPrice:it.price),ok:(invCheckState[i]&&invCheckState[i].ok)||false}));
+  // acceptedDate = дата приёмки (сегодня); inv.date = дата на накладной (когда отгружено)
+  // ts журнальной записи берём из даты накладной — тогда приход привязан к дню
+  // накладной, а не к дню нажатия «Принять», и не попадает в чужую смену при мерже.
+  var _invDateForTs = inv.date || _workingNowISO().split('T')[0];
+  var _invTs = _invDateForTs + _workingNowISO().slice(10); // дата накладной + текущее время суток
   inv2.status='accepted'; inv2.acceptedBy=who; inv2.acceptedDate=new Date().toISOString().split('T')[0]; inv2.acceptedItems=accepted;
   const idx=invs.findIndex(i=>(i.id||i._id)===currentInvId); invs[idx]=inv2; saveInvoices(invs);
   const goodsTotal=accepted.reduce((s,a)=>s+a.factPrice,0);
-  journal.push({id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',label:'Приёмка '+inv2.num,
-    sub:inv2.items.length+' изд. · принял: '+who,amount:goodsTotal,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:goodsTotal});
+  journal.push({id:uid(),type:'receive',ts:_invTs,icon:'📥',label:'Приёмка '+inv2.num,
+    sub:inv2.items.length+' изд. · принял: '+who,amount:goodsTotal,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:goodsTotal,invDate:_invDateForTs});
   try{ stockApplyReceive(session&&session.shopName, accepted, inv2.acceptedDate, inv2.goodsType); }catch(e){}
   saveJ(); try{ db.collection('iz_invoices').doc(currentInvId).set(inv2); }catch(e){}
   clearInvProgress(currentInvId);
@@ -7061,23 +7074,37 @@ function _closeShiftReal(){
     // за эту дату и закрыть их — это покрывает случай, когда оригинальный
     // shiftId продавца не совпадает с нашим (т.к. мы создали новую restore-сессию
     // с uid()), и оригинал так и лежит в Firestore со status:'open'.
+    // Закрываем старую открытую запись по date ИЛИ по openedAt содержащему нужную дату
+    // (продавец мог открыть смену в тот же день, тогда date='2026-06-06',
+    //  но у нас restore-сессия с тем же openedAt — ищем оба варианта)
+    var _closeOldOpen = function(snap){
+      snap.forEach(function(doc){
+        if(doc.id!==report.id){
+          doc.ref.set(Object.assign({},doc.data(),{
+            status:'closed',
+            closedAt:report.closedAt,
+            closedByRestore:true,
+            restoreShiftId:report.id
+          }),{merge:true});
+        }
+      });
+    };
     try{
       db.collection('iz_shifts')
         .where('shopName','==',report.shopName)
         .where('date','==',report.date)
         .where('status','==','open')
-        .get().then(function(snap){
-          snap.forEach(function(doc){
-            if(doc.id!==report.id){
-              doc.ref.set(Object.assign({},doc.data(),{
-                status:'closed',
-                closedAt:report.closedAt,
-                closedByRestore:true,
-                restoreShiftId:report.id
-              }),{merge:true});
-            }
-          });
-        });
+        .get().then(_closeOldOpen).catch(function(){});
+    }catch(e){}
+    // Запасной запрос: некоторые старые смены могут не иметь поля date,
+    // но openedAt начинается с нужной даты
+    try{
+      db.collection('iz_shifts')
+        .where('shopName','==',report.shopName)
+        .where('openedAt','>=',report.date+'T00:00:00')
+        .where('openedAt','<=',report.date+'T23:59:59')
+        .where('status','==','open')
+        .get().then(_closeOldOpen).catch(function(){});
     }catch(e){}
     localStorage.removeItem(KEY.restoreSession); localStorage.removeItem(KEY.restoreJournal);
     session=null; journal=[];
