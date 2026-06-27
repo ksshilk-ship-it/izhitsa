@@ -7036,9 +7036,13 @@ function _closeShiftReal(){
   // и продолжает показываться как "незакрытая смена" в архиве администратора.
   var finalReportId = session.shiftId || uid();
   if(restoreMode){
+    // session.sellerName теперь содержит префикс 'Восст. ' — для поиска оригинальной
+    // смены в localStorage убираем его чтобы найти запись продавца без префикса.
+    var _origSellerName = session.sellerName ? session.sellerName.replace(/^Восст\. /, '') : session.sellerName;
     var allExisting = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
     var origOpen = allExisting.find(function(s){
-      return s.shopName===session.shopName && s.sellerName===session.sellerName &&
+      return s.shopName===session.shopName &&
+        (s.sellerName===session.sellerName || s.sellerName===_origSellerName) &&
         s.date===openedDateStr && (s.status==='open'||!s.closedAt) && s.id!==session.shiftId;
     });
     if(origOpen && origOpen.id) finalReportId = origOpen.id;
@@ -10646,7 +10650,7 @@ function enterRestoreMode(meta){
   localStorage.removeItem(KEY.restoreJournal);
   localStorage.removeItem(KEY.restoreSession);
   session = null; journal = [];
-  pendingSession = {shopName:meta.shop, sellerName:meta.sellerName, sellerId:meta.sellerId, _restoreOpenedAt: meta.date+'T09:00:00.000Z'};
+  pendingSession = {shopName:meta.shop, sellerName:'Восст. '+(meta.sellerName||''), sellerId:meta.sellerId, _restoreOpenedAt: meta.date+'T09:00:00.000Z', isRestoreShift:true};
   openMorningModal();
 }
 function exitRestoreMode(opts){
