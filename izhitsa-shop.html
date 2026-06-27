@@ -8879,38 +8879,58 @@ function svPullReceivesFromInvoices(){
   var existingInvIds = {};
   jnl.forEach(function(e){ if(e.invId) existingInvIds[e.invId]=true; });
   var added = 0;
-  var archInvs = JSON.parse(localStorage.getItem('iz_archive_invoices')||'[]');
-  archInvs.filter(function(inv){
-    var invDate = inv.date || (inv.acceptedAt ? inv.acceptedAt.split('T')[0] : '');
-    return invDate===shDate && (!shShop || inv.shopName===shShop) && !existingInvIds[inv.id];
-  }).forEach(function(inv){
-    var isDr = (inv.goodsType||'derevo')==='dr';
-    var amt = inv.totalAmt || (inv.items||[]).reduce(function(s,i){return s+(i.qty||1)*(i.price||0);},0);
+
+  function _addEntry(inv, iid, isDr, amt){
     jnl.push({id:uid(),type:'receive',ts:shDate+'T12:00:00.000Z',
       label:'Приёмка '+(inv.num||''),
-      sub:(inv.items||[]).length+' изд. · от '+(inv.from||''),
-      amount:amt,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,
-      goodsType:isDr?'dr':'derevo',goodsEffect:isDr?0:amt,goodsDrEffect:isDr?amt:0,
-      invId:inv.id,restoredBy:'pullReceives'});
-    existingInvIds[inv.id]=true; added++;
-  });
-  var manInvs = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-  manInvs.filter(function(inv){
-    var iid = String(inv._id!=null?inv._id:inv.id);
-    return inv.date===shDate && (!shShop || inv.destName===shShop) && !existingInvIds[iid];
-  }).forEach(function(inv){
-    var iid = String(inv._id!=null?inv._id:inv.id);
-    var isDr = (inv.goodsType||'derevo')==='dr';
-    var amt = inv.totalAmt || (inv.items||[]).reduce(function(s,i){return s+(i.qty||1)*(i.price||0);},0);
-    jnl.push({id:uid(),type:'receive',ts:shDate+'T12:00:00.000Z',
-      label:'Приёмка '+(inv.num||''),
-      sub:(inv.items||[]).length+' изд. · от '+(inv.from||''),
+      sub:(inv.items||[]).length+' изд. · от '+(inv.from||inv.destName||''),
       amount:amt,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,
       goodsType:isDr?'dr':'derevo',goodsEffect:isDr?0:amt,goodsDrEffect:isDr?amt:0,
       invId:iid,restoredBy:'pullReceives'});
     existingInvIds[iid]=true; added++;
+  }
+
+  // 1. iz_archive_invoices (restore-накладные, принятые вручную в restore-смене)
+  var archInvs = JSON.parse(localStorage.getItem('iz_archive_invoices')||'[]');
+  archInvs.filter(function(inv){
+    var d1 = inv.date || ''; var d2 = inv.acceptedAt ? inv.acceptedAt.split('T')[0] : '';
+    return (d1===shDate || d2===shDate) && (!shShop || inv.shopName===shShop) && !existingInvIds[inv.id];
+  }).forEach(function(inv){
+    var isDr=(inv.goodsType||'derevo')==='dr';
+    var amt=inv.totalAmt||(inv.items||[]).reduce(function(s,i){return s+(i.qty||1)*(i.price||0);},0);
+    _addEntry(inv, inv.id, isDr, amt);
   });
-  if(!added){ showToast('Накладных за '+shDate+' не найдено'); return; }
+
+  // 2. iz_manual_invoices (вручную введённые через форму накладной в смене)
+  var manInvs = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  manInvs.filter(function(inv){
+    var iid=String(inv._id!=null?inv._id:inv.id);
+    var d1=inv.date||''; var d2=inv.acceptedAt?inv.acceptedAt.split('T')[0]:'';
+    return (d1===shDate||d2===shDate) && (!shShop||inv.destName===shShop) && !existingInvIds[iid];
+  }).forEach(function(inv){
+    var iid=String(inv._id!=null?inv._id:inv.id);
+    var isDr=(inv.goodsType||'derevo')==='dr';
+    var amt=inv.totalAmt||(inv.items||[]).reduce(function(s,i){return s+(i.qty||1)*(i.price||0);},0);
+    _addEntry(inv, iid, isDr, amt);
+  });
+
+  // 3. iz_invoices (накладные из мастерской — ищем по acceptedDate = дата приёмки)
+  var shopInvs = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  shopInvs.filter(function(inv){
+    var iid=String(inv.id||inv._id||'');
+    var accepted = inv.status==='accepted';
+    var d1=inv.acceptedDate||''; var d2=inv.acceptedAt?inv.acceptedAt.split('T')[0]:''; var d3=inv.date||'';
+    return accepted && (d1===shDate||d2===shDate||d3===shDate) &&
+           (!shShop||(inv.destName===shShop||inv.shopName===shShop)) && !existingInvIds[iid];
+  }).forEach(function(inv){
+    var iid=String(inv.id||inv._id||'');
+    var isDr=(inv.goodsType||'derevo')==='dr';
+    var items=inv.acceptedItems||inv.items||[];
+    var amt=items.reduce(function(s,i){return s+(i.factPrice||i.price||0);},0);
+    _addEntry(inv, iid, isDr, amt);
+  });
+
+  if(!added){ showToast('Накладных за '+shDate+' не найдено (проверены iz_archive_invoices, iz_manual_invoices, iz_invoices)'); return; }
   sh.journal = jnl;
   var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   var idx = shifts.findIndex(function(s){ return (s.id||s._id)===(sh.id||sh._id); });
