@@ -11587,6 +11587,7 @@ function saveManInvDraft(){
   if(!session) return;
   var draft = {
     num: gv('manInvNum')||'', date: gv('manInvDate')||'', from: gv('manInvFrom')||'',
+    goodsType: _manInvGoodsType||'derevo',
     items: _manInvItems
   };
   if(!draft.num && !draft.from && !_manInvItems.length){
@@ -11603,6 +11604,7 @@ function loadManInvDraft(){
     var draft = JSON.parse(raw);
     if(!draft) return false;
     _manInvItems = draft.items||[];
+    if(draft.goodsType) { _manInvGoodsType=draft.goodsType; setManInvType(draft.goodsType); }
     var numEl=document.getElementById('manInvNum'); if(numEl && draft.num) numEl.value=draft.num;
     var dateEl=document.getElementById('manInvDate'); if(dateEl && draft.date) dateEl.value=draft.date;
     var fromEl=document.getElementById('manInvFrom'); if(fromEl && draft.from) fromEl.value=draft.from;
@@ -12041,8 +12043,9 @@ function saveManualInvoice() {
   existing.unshift(inv);
   localStorage.setItem('iz_manual_invoices', JSON.stringify(existing));
   try { db.collection('iz_manual_invoices').doc(inv.id).set(inv); } catch(e){}
+  var _gt4save = _manInvGoodsType || 'derevo';
   _manInvItems.forEach(function(item){
-    autoSaveToItemBase(item.name, item.article, item.price, 'derevo');
+    autoSaveToItemBase(item.name, item.article, item.price, _gt4save);
   });
   var _isDrInv = _manInvGoodsType === 'dr';
   journal.push({
