@@ -4328,8 +4328,8 @@ function renderSellerStats(){
   var range=_ssDateRange();
   var allShifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]').filter(function(s){
     if(s.status!=='closed'||!s.sellerName) return false;
-    if((s.sellerName||'').indexOf('Восст.')===0) return false;
-    if(s.sellerName==='Ксения'&&(s.totalRevenue||0)===0) return false;
+    // Тестовый аккаунт Ксения с нулевой выручкой — исключаем
+    if(s.sellerName==='Ксения'&&(s.totalRevenue||0)===0&&(s.cashRevenue||0)===0) return false;
     return s.date>=range.from&&s.date<=range.to;
   });
   var shops=['all'];
@@ -4342,6 +4342,7 @@ function renderSellerStats(){
   var shifts=_ssShop==='all'?allShifts:allShifts.filter(function(s){return s.shopName===_ssShop;});
   var sellers={};
   shifts.forEach(function(s){
+    // Убираем префикс Восст. чтобы смены восстановления суммировались с основными
     var name=(s.sellerName||'—').replace(/^Восст. /,'');
     if(!sellers[name])sellers[name]={name:name,shifts:0,revenue:0,sales:0,checks:[],zp:0,travel:0,hasCashDiff:0,shops:{}};
     var sel=sellers[name];
@@ -10496,7 +10497,11 @@ function generatePeriodReport(){
   var byShop={};
   filtered.forEach(function(s){if(!byShop[s.shopName])byShop[s.shopName]={n:0,cash:0,card:0,disc:0};var sh=byShop[s.shopName];sh.n++;sh.cash+=s.cashRevenue||0;sh.card+=s.cardRevenue||0;sh.disc+=s.totalDiscount||0;});
   var bySeller={};
-  filtered.forEach(function(s){var k=s.sellerName||'—';if(!bySeller[k])bySeller[k]={n:0,rev:0};bySeller[k].n++;bySeller[k].rev+=(s.cashRevenue||0)+(s.cardRevenue||0)+(s.totalDiscount||0);});
+  filtered.forEach(function(s){
+    var k=(s.sellerName||'—').replace(/^Восст. /,'');
+    if(!bySeller[k])bySeller[k]={n:0,rev:0};
+    bySeller[k].n++; bySeller[k].rev+=(s.cashRevenue||0)+(s.cardRevenue||0)+(s.totalDiscount||0);
+  });
   var prPct=function(n){return totRev>0?' <span style="color:#555568;font-size:11px">('+Math.round(n/totRev*100)+'%)</span>':'';};
   var Rp=function(lbl,val,col,sp){return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span style="color:#8888aa">'+lbl+'</span><span style="color:'+(col||'#f0f0f8')+';font-weight:700">'+f2(val)+(sp?prPct(val):'')+'</span></div>';};
   var html='<div style="background:#1e2a14;border:1px solid #c8f060;border-radius:12px;padding:12px;margin-bottom:10px">'+
