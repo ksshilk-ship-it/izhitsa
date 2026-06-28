@@ -6069,7 +6069,10 @@ function validateClose(){
   const staffCashEveVal = (document.getElementById('staffCashEveInput')||{}).value||'';
   const staffCashEve = parseFloat(staffCashEveVal)||0;
   const staffCv = document.getElementById('staffCashValidation');
-  if(!cashEveVal || (drBlockVisible && !drCashEveVal) || !staffCashEveVal){
+  // Если покупок сотрудников не было — поле кассы сотрудников не обязательно (считается 0)
+  var hasStaffPurchases = journal.some(function(e){return e.type==='staff';});
+  var staffCashEveRequired = hasStaffPurchases || (session.cashStaffMorning||0) > 0;
+  if(!cashEveVal || (drBlockVisible && !drCashEveVal) || (staffCashEveRequired && !staffCashEveVal)){
     if(cv) cv.innerHTML = '';
     if(drCv) drCv.innerHTML = '';
     if(staffCv) staffCv.innerHTML = '';
@@ -6168,7 +6171,9 @@ function _closeShiftReal(){
     if(Math.abs(drCashDiff)>=1){showToast('⛔ Неверный остаток наличных ДР — пересчитайте кассу');return;}
   }
   const staffCashEveVal=(document.getElementById('staffCashEveInput')||{}).value||'';
-  if(!staffCashEveVal){showToast('Введите остаток наличных вечер (Покупки сотрудников)');return;}
+  var _hasStaff=journal.some(function(e){return e.type==='staff';});
+  var _staffReq=_hasStaff||(session.cashStaffMorning||0)>0;
+  if(_staffReq&&!staffCashEveVal){showToast('Введите остаток наличных вечер (Покупки сотрудников)');return;}
   const staffCashEve=parseFloat(staffCashEveVal)||0;
   const expectedCashStaff=(session.cashStaffMorning||0)+t.staff;
   const staffCashDiff=Math.round(staffCashEve-expectedCashStaff);
