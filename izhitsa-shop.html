@@ -9517,9 +9517,16 @@ function activateRestoreShift(shop, date){
     var shiftObj = {
       id: uid(), source: 'psj', isArchive: true, backfilled: true, activated: true, activatedAt: new Date().toISOString(),
       shopName: shop||'', sellerName: sellerName, date: date,
-      openedAt: date+'T09:00:00.000Z', closedAt: date+'T21:00:00.000Z',
+      openedAt: date+'T09:00:00.000Z', closedAt: date+'T21:00:00.000Z', status: 'closed',
       cashRevenue: cashRev, cardRevenue: cardRev, totalDiscount: disc,
-      zp: zpExp, travel: travelExp, inkass: inkassExp, otherExp: exp - zpExp - travelExp - inkassExp,
+      totalRevenue: cashRev + cardRev + disc,
+      salesCount: journalForShift.filter(function(e){return e.type==='sale';}).length,
+      zp: zpExp, travel: travelExp, inkass: inkassExp,
+      otherExp: exp - zpExp - travelExp - inkassExp,
+      supplierExp: journalForShift.filter(function(e){return e.type==='expense'&&e.expType==='supplier'&&e.goodsType!=='dr';}).reduce(function(s,e){return s+e.amount;},0),
+      drInkass: journalForShift.filter(function(e){return e.type==='expense'&&e.expType==='inkass'&&e.goodsType==='dr';}).reduce(function(s,e){return s+e.amount;},0),
+      drSupplierAmt: journalForShift.filter(function(e){return e.type==='expense'&&e.expType==='supplier'&&e.goodsType==='dr';}).reduce(function(s,e){return s+e.amount;},0),
+      expenses: journalForShift.filter(function(e){return e.type==='expense';}),
       journal: journalForShift,
       savedAt: new Date().toISOString(), savedBy: (session&&session.name)||'Admin'
     };
@@ -10191,11 +10198,20 @@ function savePsjAsShift() {
       cashEffect:e.cashEffect||0, cardEffect:e.cardEffect||0, staffEffect:0, goodsEffect: e.type==='sale'?-(e.amount||0): e.type==='receive'?(e.amount||0): e.type==='writeoff'?-(e.amount||0):0 };
   });
   var shift = {
-    id: uid(), source: 'psj', isArchive: true, backfilled: true,
+    id: uid(), source: 'psj', isArchive: true, backfilled: true, status: 'closed',
     shopName: shopName, sellerName: sellerName, date: date,
     openedAt: date+'T09:00:00.000Z', closedAt: date+'T21:00:00.000Z',
     cashRevenue: cashRev, cardRevenue: cardRev, totalDiscount: disc,
-    zp: 0, inkass: 0, otherExp: exp,
+    totalRevenue: cashRev + cardRev + disc,
+    salesCount: journal.filter(function(e){return e.type==='sale';}).length,
+    zp: journal.filter(function(e){return e.type==='expense'&&e.expType==='zp';}).reduce(function(s,e){return s+e.amount;},0),
+    travel: journal.filter(function(e){return e.type==='expense'&&e.expType==='travel';}).reduce(function(s,e){return s+e.amount;},0),
+    inkass: journal.filter(function(e){return e.type==='expense'&&e.expType==='inkass'&&e.goodsType!=='dr';}).reduce(function(s,e){return s+e.amount;},0),
+    otherExp: journal.filter(function(e){return e.type==='expense'&&e.expType==='other'&&e.goodsType!=='dr';}).reduce(function(s,e){return s+e.amount;},0),
+    supplierExp: journal.filter(function(e){return e.type==='expense'&&e.expType==='supplier'&&e.goodsType!=='dr';}).reduce(function(s,e){return s+e.amount;},0),
+    drInkass: journal.filter(function(e){return e.type==='expense'&&e.expType==='inkass'&&e.goodsType==='dr';}).reduce(function(s,e){return s+e.amount;},0),
+    drSupplierAmt: journal.filter(function(e){return e.type==='expense'&&e.expType==='supplier'&&e.goodsType==='dr';}).reduce(function(s,e){return s+e.amount;},0),
+    expenses: journal.filter(function(e){return e.type==='expense';}),
     journal: journal,
     savedAt: new Date().toISOString(), savedBy: (session&&session.name)||'Admin'
   };
@@ -10613,26 +10629,34 @@ function generatePeriodReport(){
       (totZp?Rp('💰 ФОТ (ЗП)',totZp,'#f06060',true):'')+
       (totTravel?Rp('🚕 Проезд',totTravel,'#f0a060',true):'')+
       (function(){
-        if(!totInkass && !totSupplier && !totOther) return '';
+        if(!totInkass && !totSupplier && !totOther && !totDrInkass && !totDrSupplier && !totDrOther) return '';
         var inkRows=[], supRows=[], othRows=[], drInkRows=[], drSupRows=[], drOthRows=[];
         filtered.forEach(function(s){
           var exps = s.expenses||[];
           // Дерево инкассация
-          exps.filter(function(e){return e.expType==='inkass'&&e.goodsType!=='dr';}).forEach(function(e){
-            inkRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.comment||''});
-          });
+          if(exps.length){
+            exps.filter(function(e){return e.expType==='inkass'&&e.goodsType!=='dr';}).forEach(function(e){
+              inkRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||e.sub||''});
+            });
+          } else if(s.inkass){
+            inkRows.push({date:s.date,shop:s.shopName,amt:s.inkass,note:s.inkassComment||''});
+          }
           // ДР инкассация из expenses[]
           exps.filter(function(e){return e.expType==='inkass'&&e.goodsType==='dr';}).forEach(function(e){
-            drInkRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.comment||''});
+            drInkRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||e.sub||''});
           });
           // Также из s.drInkass (PSJ)
           if((s.drInkass||0)>0&&!exps.some(function(e){return e.expType==='inkass'&&e.goodsType==='dr';})){
             drInkRows.push({date:s.date,shop:s.shopName,amt:s.drInkass,note:''});
           }
           // Дерево поставщики
-          exps.filter(function(e){return e.expType==='supplier'&&e.goodsType!=='dr';}).forEach(function(e){
-            supRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||''});
-          });
+          if(exps.length){
+            exps.filter(function(e){return e.expType==='supplier'&&e.goodsType!=='dr';}).forEach(function(e){
+              supRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||''});
+            });
+          } else if(s.supplierExp){
+            supRows.push({date:s.date,shop:s.shopName,amt:s.supplierExp,note:s.supplierName||''});
+          }
           // ДР поставщики
           exps.filter(function(e){return e.expType==='supplier'&&e.goodsType==='dr';}).forEach(function(e){
             drSupRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||''});
@@ -10642,11 +10666,11 @@ function generatePeriodReport(){
           }
           // Прочие Дерево
           exps.filter(function(e){return e.expType==='other'&&e.goodsType!=='dr';}).forEach(function(e){
-            othRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.comment||''});
+            othRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||''});
           });
           // Прочие ДР
           exps.filter(function(e){return e.expType==='other'&&e.goodsType==='dr';}).forEach(function(e){
-            drOthRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.comment||''});
+            drOthRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||''});
           });
           // Fallback: s.otherExp — scalar field for shifts that don't use expenses array
           if((s.otherExp||0)>0 && !exps.some(function(e){return e.expType==='other'&&e.goodsType!=='dr';})){
@@ -11440,9 +11464,18 @@ function activateArchivePeriod(){
     var shiftObj = {
       id: uid(), source: 'psj', isArchive: true, backfilled: true, activated: true, activatedAt: new Date().toISOString(),
       shopName: gShop, sellerName: sellerName, date: gDate,
-      openedAt: gDate+'T09:00:00.000Z', closedAt: gDate+'T21:00:00.000Z',
+      openedAt: gDate+'T09:00:00.000Z', closedAt: gDate+'T21:00:00.000Z', status: 'closed',
       cashRevenue: cashRev, cardRevenue: cardRev, totalDiscount: disc,
-      zp: 0, inkass: 0, otherExp: exp,
+      totalRevenue: cashRev + cardRev + disc,
+      salesCount: journalForShift.filter(function(e){return e.type==='sale';}).length,
+      zp: journalForShift.filter(function(e){return e.type==='expense'&&e.expType==='zp';}).reduce(function(s,e){return s+e.amount;},0),
+      travel: journalForShift.filter(function(e){return e.type==='expense'&&e.expType==='travel';}).reduce(function(s,e){return s+e.amount;},0),
+      inkass: journalForShift.filter(function(e){return e.type==='expense'&&e.expType==='inkass'&&e.goodsType!=='dr';}).reduce(function(s,e){return s+e.amount;},0),
+      otherExp: journalForShift.filter(function(e){return e.type==='expense'&&e.expType==='other'&&e.goodsType!=='dr';}).reduce(function(s,e){return s+e.amount;},0),
+      supplierExp: journalForShift.filter(function(e){return e.type==='expense'&&e.expType==='supplier'&&e.goodsType!=='dr';}).reduce(function(s,e){return s+e.amount;},0),
+      drInkass: journalForShift.filter(function(e){return e.type==='expense'&&e.expType==='inkass'&&e.goodsType==='dr';}).reduce(function(s,e){return s+e.amount;},0),
+      drSupplierAmt: journalForShift.filter(function(e){return e.type==='expense'&&e.expType==='supplier'&&e.goodsType==='dr';}).reduce(function(s,e){return s+e.amount;},0),
+      expenses: journalForShift.filter(function(e){return e.type==='expense';}),
       journal: journalForShift,
       savedAt: new Date().toISOString(), savedBy: (session&&session.name)||'Admin'
     };
