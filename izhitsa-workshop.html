@@ -353,74 +353,29 @@ function applyUpdate() {
 
   <!-- WAREHOUSE (кладовщик) -->
   <div class="page" id="pg-warehouse">
+    <div class="stitle">📦 Склад</div>
 
-    <!-- Переключатель вкладок -->
+    <!-- Переключатель: Остатки / Архив -->
     <div style="display:flex;gap:8px;margin-bottom:12px">
-      <div id="whTab1" onclick="setWhTab('real')" style="flex:1;padding:10px;text-align:center;border-radius:10px;background:var(--accent);color:#000;font-weight:700;font-size:13px;cursor:pointer">
-        📦 Реальное время
-      </div>
-      <div id="whTab2" onclick="setWhTab('archive')" style="flex:1;padding:10px;text-align:center;border-radius:10px;background:var(--s2);color:var(--t2);font-size:13px;cursor:pointer;border:1px solid var(--border)">
-        🗄 Архив
-      </div>
+      <div id="whTab1" onclick="setWhTab('real')" style="flex:1;padding:10px;text-align:center;border-radius:10px;background:var(--accent);color:#000;font-weight:700;font-size:13px;cursor:pointer">📦 Остатки</div>
+      <div id="whTab2" onclick="setWhTab('archive')" style="flex:1;padding:10px;text-align:center;border-radius:10px;background:var(--s2);color:var(--t2);font-size:13px;cursor:pointer;border:1px solid var(--border)">🗄 Архив</div>
     </div>
 
-    <!-- ВКЛАДКА 1: Реальное время -->
+    <!-- ОСТАТКИ -->
     <div id="whReal">
-      <div id="whNotifications"></div>
-      <div class="srow">
-        <div class="sc"><div class="sc-v" id="whPending" style="color:var(--a4)">0</div><div class="sc-l">Ждут приёмки</div></div>
+      <div class="srow" style="margin-bottom:10px">
         <div class="sc"><div class="sc-v" id="whStock" style="color:var(--accent)">0</div><div class="sc-l">На складе</div></div>
+        <div class="sc"><div class="sc-v" id="whPending" style="color:var(--a4)">0</div><div class="sc-l">На приёмке</div></div>
         <div class="sc"><div class="sc-v" id="whShipped" style="color:var(--a2)">0</div><div class="sc-l">Отгружено</div></div>
       </div>
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <div class="ctitle" style="margin:0">📥 Ожидают приёмки</div>
-        </div>
-        <div style="display:flex;gap:8px;margin-bottom:10px">
-          <div id="pendSubTab1" onclick="setPendSubTab('auto')" style="flex:1;padding:8px;text-align:center;border-radius:8px;background:var(--accent);color:#000;font-weight:700;font-size:12px;cursor:pointer">От мастеров</div>
-          <div id="pendSubTab2" onclick="setPendSubTab('manual')" style="flex:1;padding:8px;text-align:center;border-radius:8px;background:var(--s2);color:var(--t2);font-size:12px;cursor:pointer;border:1px solid var(--border)">➕ Вручную</div>
-        </div>
-        <div id="pendAutoBlock"><div id="whPendingList"></div></div>
-        <div id="pendManualBlock" style="display:none">
-          <button class="btn green" style="margin-bottom:10px" onclick="openManualAcceptMo()">➕ Новая приёмка от мастера</button>
-          <div id="manualAcceptHistory"></div>
-        </div>
+      <div id="whNotifications"></div>
+      <!-- Поиск + сортировка -->
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input class="fi" id="whStockSearch" placeholder="🔍 Поиск..." style="flex:1" oninput="renderStockGroups()">
+        <button onclick="toggleStockSort()" id="whSortBtn" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:12px;white-space:nowrap">↑ Цена</button>
       </div>
-      <!-- Подвкладки: Остатки / Отгрузка -->
-      <div style="display:flex;gap:8px;margin-bottom:10px">
-        <div id="whStockTab1" onclick="setWhStockTab('stock')" style="flex:1;padding:9px;text-align:center;border-radius:8px;background:var(--accent);color:#000;font-weight:700;font-size:13px;cursor:pointer">📦 Остатки</div>
-        <div id="whStockTab2" onclick="setWhStockTab('ship')" style="flex:1;padding:9px;text-align:center;border-radius:8px;background:var(--s2);color:var(--t2);font-size:13px;cursor:pointer;border:1px solid var(--border)">🚚 Отгрузка</div>
-      </div>
-
-      <!-- ОСТАТКИ -->
-      <div id="whStockBlock">
-        <!-- Поиск + сортировка -->
-        <div style="display:flex;gap:8px;margin-bottom:8px">
-          <input class="fi" id="whStockSearch" placeholder="🔍 Поиск..." style="flex:1" oninput="renderStockGroups()">
-          <button onclick="toggleStockSort()" id="whSortBtn" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:12px;white-space:nowrap">↑ Цена</button>
-        </div>
-        <div id="whStockGroups"></div>
-        <button class="btn" style="background:var(--a2);margin-top:8px" onclick="openManualStockMo()">➕ Добавить товар</button>
-      </div>
-
-      <!-- ОТГРУЗКА -->
-      <div id="whShipBlock" style="display:none">
-        <!-- Магазин -->
-        <div class="fg" style="margin-bottom:8px">
-          <label class="fl">Магазин назначения</label>
-          <select class="fs" id="whShipDest"></select>
-        </div>
-        <!-- Поиск + сортировка -->
-        <div style="display:flex;gap:8px;margin-bottom:8px">
-          <input class="fi" id="whShipSearch" placeholder="🔍 По артикулу / наименованию..." style="flex:1" oninput="renderShipList()">
-          <button onclick="toggleShipSort()" id="whShipSortBtn" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:12px;white-space:nowrap">↑ Цена</button>
-        </div>
-        <!-- Выбрано -->
-        <div id="whShipSelected" style="display:none;background:var(--s2);border-radius:10px;padding:10px;margin-bottom:8px;font-size:12px"></div>
-        <!-- Список -->
-        <div id="whShipList"></div>
-        <button class="btn green" style="margin-top:10px" onclick="createShipmentFromTab()">🚚 Отгрузить выбранные</button>
-      </div>
+      <div id="whStockGroups"></div>
+      <button class="btn" style="background:var(--a2);margin-top:10px" onclick="openManualStockMo()">➕ Добавить товар</button>
     </div>
 
     <!-- ВКЛАДКА 2: Архив -->
@@ -519,6 +474,60 @@ function applyUpdate() {
     </div>
   </div>
 
+  </div>
+
+  <!-- ОТГРУЗКА (кладовщик) -->
+  <div class="page" id="pg-shipment">
+    <div class="stitle">🚚 Отгрузка</div>
+
+    <!-- Подвкладки: Новая / Архив -->
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div id="shipTab1" onclick="setShipTab('new')" style="flex:1;padding:9px;text-align:center;border-radius:10px;background:var(--accent);color:#000;font-weight:700;font-size:13px;cursor:pointer">🚚 Новая отгрузка</div>
+      <div id="shipTab2" onclick="setShipTab('archive')" style="flex:1;padding:9px;text-align:center;border-radius:10px;background:var(--s2);color:var(--t2);font-size:13px;cursor:pointer;border:1px solid var(--border)">🗄 Архив</div>
+    </div>
+
+    <!-- НОВАЯ ОТГРУЗКА -->
+    <div id="shipNewBlock">
+      <div class="fg" style="margin-bottom:8px">
+        <label class="fl">Магазин назначения</label>
+        <select class="fs" id="shipPageDest" onchange="renderShipPageList()"></select>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input class="fi" id="shipPageSearch" placeholder="🔍 По артикулу / наименованию..." style="flex:1" oninput="renderShipPageList()">
+        <button onclick="toggleShipPageSort()" id="shipPageSortBtn" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:12px;white-space:nowrap">↑ Цена</button>
+      </div>
+      <div id="shipPageSelected" style="display:none;background:var(--s2);border-radius:10px;padding:10px;margin-bottom:8px;font-size:12px;color:var(--text)"></div>
+      <div id="shipPageGroups"></div>
+      <button class="btn green" style="margin-top:10px" onclick="createShipmentFromPage()">🚚 Отгрузить выбранные</button>
+    </div>
+
+    <!-- АРХИВ ОТГРУЗОК -->
+    <div id="shipArchiveBlock" style="display:none">
+      <div id="shipArchiveList"></div>
+    </div>
+  </div>
+
+  <!-- ПРИЁМКА (кладовщик) -->
+  <div class="page" id="pg-receiving">
+    <div class="stitle">📥 Приёмка</div>
+
+    <div class="srow" style="margin-bottom:10px">
+      <div class="sc"><div class="sc-v" id="rcvPending" style="color:var(--a4)">0</div><div class="sc-l">Ожидают</div></div>
+      <div class="sc"><div class="sc-v" id="rcvToday" style="color:var(--inc)">0</div><div class="sc-l">Принято сегодня</div></div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <div id="rcvTab1" onclick="setRcvTab('auto')" style="flex:1;padding:8px;text-align:center;border-radius:8px;background:var(--accent);color:#000;font-weight:700;font-size:12px;cursor:pointer">От мастеров</div>
+      <div id="rcvTab2" onclick="setRcvTab('manual')" style="flex:1;padding:8px;text-align:center;border-radius:8px;background:var(--s2);color:var(--t2);font-size:12px;cursor:pointer;border:1px solid var(--border)">➕ Вручную</div>
+    </div>
+
+    <div id="rcvAutoBlock">
+      <div id="rcvPendingList"></div>
+    </div>
+    <div id="rcvManualBlock" style="display:none">
+      <button class="btn green" style="margin-bottom:10px" onclick="openManualAcceptMo()">➕ Новая приёмка от мастера</button>
+      <div id="rcvManualHistory"></div>
+    </div>
   </div>
 
   <!-- ПРОЧИЕ РАБОТЫ (мастер) -->
@@ -1294,7 +1303,7 @@ let extraWorkCats = JSON.parse(localStorage.getItem('ws_extra_cats')||'["Шли�
 const ROLES = {
   заготовщик:    {tabs:['dash','blanks','extrawork'], label:'🪚 Заготовщик'},
   мастер:        {tabs:['dash','masterblanks','mywork','othertasks','delivery','zp'], label:'🔨 Мастер'},
-  кладовщик:     {tabs:['dash','warehouse','inventory','catalog','otmanual'], label:'📦 Кладовщик'},
+  кладовщик:     {tabs:['warehouse','shipment','receiving','inventory','otmanual'], label:'📦 Кладовщик'},
   управляющий:   {tabs:['dash','warehouse','zp','zpay','stats','admin'], label:'👑 Управляющий'},
   администратор: {tabs:['dash','warehouse','zp','zpay','stats','admin','import'], label:'🛡 Администратор'},
 };
@@ -1308,8 +1317,10 @@ const TAB_CFG = {
   othertasks:   {icon:'🛠', label:'Прочие', page:'pg-othertasks'},
   otmanual:     {icon:'🛠', label:'Раб.время', page:'pg-otmanual'},
   delivery:  {icon:'📬', label:'Сдача', page:'pg-delivery'},
-  warehouse: {icon:'📦', label:'Склад', page:'pg-warehouse'},
-  inventory: {icon:'🔍', label:'Инвент.', page:'pg-inventory'},
+  warehouse: {icon:'📦', label:'Склад',    page:'pg-warehouse'},
+  shipment:  {icon:'🚚', label:'Отгрузка', page:'pg-shipment'},
+  receiving: {icon:'📥', label:'Приёмка',  page:'pg-receiving'},
+  inventory: {icon:'🔍', label:'Инвент.',  page:'pg-inventory'},
   catalog:   {icon:'📋', label:'Каталог', page:'pg-catalog'},
   zp:        {icon:'💰', label:'ЗП', page:'pg-zp'},
   zpay:      {icon:'💳', label:'Выплаты', page:'pg-zpay'},
@@ -1511,6 +1522,8 @@ function showPg(name,el){
   if(name==='otmanual')     renderOtManualPage();
   if(name==='blanks')       renderBlanks();
   if(name==='warehouse') renderWarehouse();
+  if(name==='shipment')  renderShipmentPage();
+  if(name==='receiving') renderReceivingPage();
   if(name==='inventory') renderInventoryPage();
   if(name==='delivery')  renderDeliveryPage();
   if(name==='catalog')   renderCatalogPage();
@@ -2612,36 +2625,252 @@ function setWhTab(tab){
   }
 }
 
+// ════ ОТГРУЗКА — отдельная страница ════
+let _shipPageSortAsc = true;
+let _shipPageSelected = new Set();
+let _shipPageTab = 'new';
+
+function renderShipmentPage(){
+  _shipPageSelected.clear();
+  setShipTab('new');
+  // Заполнить магазины
+  const sel = document.getElementById('shipPageDest');
+  if(sel){
+    const shops = JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
+    sel.innerHTML = shops.map(s=>`<option value="${s}">${s}</option>`).join('');
+  }
+  renderShipPageList();
+}
+
+function setShipTab(tab){
+  _shipPageTab = tab;
+  const t1=document.getElementById('shipTab1'), t2=document.getElementById('shipTab2');
+  const b1=document.getElementById('shipNewBlock'), b2=document.getElementById('shipArchiveBlock');
+  if(tab==='new'){
+    t1.style.background='var(--accent)'; t1.style.color='#000'; t1.style.fontWeight='700'; t1.style.border='none';
+    t2.style.background='var(--s2)'; t2.style.color='var(--t2)'; t2.style.fontWeight='400'; t2.style.border='1px solid var(--border)';
+    b1.style.display='block'; b2.style.display='none';
+    renderShipPageList();
+  } else {
+    t2.style.background='var(--accent)'; t2.style.color='#000'; t2.style.fontWeight='700'; t2.style.border='none';
+    t1.style.background='var(--s2)'; t1.style.color='var(--t2)'; t1.style.fontWeight='400'; t1.style.border='1px solid var(--border)';
+    b2.style.display='block'; b1.style.display='none';
+    renderShipArchive();
+  }
+}
+
+function toggleShipPageSort(){
+  _shipPageSortAsc = !_shipPageSortAsc;
+  document.getElementById('shipPageSortBtn').textContent = (_shipPageSortAsc?'↑':'↓')+' Цена';
+  renderShipPageList();
+}
+
+function renderShipPageList(){
+  const c = document.getElementById('shipPageGroups'); if(!c) return;
+  const q = (document.getElementById('shipPageSearch')?.value||'').toLowerCase().trim();
+  let stock = items.filter(i=>i.status==='received');
+  if(q) stock = stock.filter(i=>((i.name||i.itemName||'')+(i.artikul||'')+(i.wood||'')).toLowerCase().includes(q));
+
+  if(!stock.length){ c.innerHTML='<div style="font-size:13px;color:var(--t2);padding:16px 0;text-align:center">Склад пуст</div>'; updateShipPageSelected(); return; }
+
+  // Группируем по наименованию
+  const groups = {};
+  stock.forEach(item=>{
+    const raw = (item.name||item.itemName||'—').trim();
+    const key = raw.toLowerCase();
+    if(!groups[key]) groups[key]={name:raw, items:[]};
+    groups[key].items.push(item);
+  });
+  const sorted = Object.values(groups).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+
+  c.innerHTML = sorted.map(g=>{
+    const selCount = g.items.filter(i=>_shipPageSelected.has(i._id)).length;
+    const id = 'spg_'+g.name.replace(/[^а-яёa-z0-9]/gi,'_');
+    g.items.sort((a,b)=>_shipPageSortAsc?(a.price||0)-(b.price||0):(b.price||0)-(a.price||0));
+    return `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <div onclick="toggleShipGroup('${id}')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 12px;background:var(--s2);cursor:pointer">
+        <div>
+          <div style="font-size:14px;font-weight:700">${g.name}</div>
+          <div style="font-size:11px;color:var(--t2)">${g.items.length} шт.${selCount?` · <span style="color:var(--inc)">выбрано ${selCount}</span>`:''}</div>
+        </div>
+        <span id="${id}_arrow" style="color:var(--t2)">▼</span>
+      </div>
+      <div id="${id}" style="display:${q?'block':'none'};padding:0 12px">
+        ${g.items.map(item=>{
+          const sel = _shipPageSelected.has(item._id);
+          const num = item.artikul||(item.itemNum&&!item.itemNum.startsWith('НАЧ-')?item.itemNum:'');
+          return `<div onclick="toggleShipPageItem('${item._id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;background:${sel?'rgba(80,255,150,0.07)':''}">
+            <div style="width:22px;height:22px;border-radius:6px;border:2px solid ${sel?'var(--inc)':'var(--border)'};background:${sel?'var(--inc)':'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;color:#000;font-weight:700">${sel?'✓':''}</div>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:600">${num?'№'+num+' ':''}${item.wood||'—'}${item.size?' · '+item.size:''}</div>
+            </div>
+            <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</div>
+          </div>`;
+        }).join('')}
+        <div style="padding:8px 0">
+          <button onpointerdown="event.preventDefault();selectAllShipGroup('${g.name}')" style="width:100%;padding:7px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--t2);cursor:pointer;font-size:12px">☑ Выбрать все ${g.name}</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  updateShipPageSelected();
+}
+
+function toggleShipGroup(id){
+  const el=document.getElementById(id), arrow=document.getElementById(id+'_arrow');
+  if(!el) return;
+  const open=el.style.display==='block';
+  el.style.display=open?'none':'block';
+  if(arrow) arrow.textContent=open?'▼':'▲';
+}
+
+function toggleShipPageItem(id){
+  if(_shipPageSelected.has(id)) _shipPageSelected.delete(id);
+  else _shipPageSelected.add(id);
+  renderShipPageList();
+}
+
+function selectAllShipGroup(name){
+  const norm = name.trim().toLowerCase();
+  const groupItems = items.filter(i=>i.status==='received'&&(i.name||i.itemName||'').trim().toLowerCase()===norm);
+  const allSel = groupItems.every(i=>_shipPageSelected.has(i._id));
+  groupItems.forEach(i=>{ if(allSel) _shipPageSelected.delete(i._id); else _shipPageSelected.add(i._id); });
+  renderShipPageList();
+}
+
+function updateShipPageSelected(){
+  const el=document.getElementById('shipPageSelected'); if(!el) return;
+  const cnt=_shipPageSelected.size;
+  if(!cnt){ el.style.display='none'; return; }
+  const sum=items.filter(i=>_shipPageSelected.has(i._id)).reduce((s,i)=>s+(i.price||0),0);
+  el.style.display='block';
+  el.innerHTML=`Выбрано: <b>${cnt} шт.</b> · Сумма: <b style="color:var(--accent)">${fmt(sum)}</b>`;
+}
+
+async function createShipmentFromPage(){
+  if(!_shipPageSelected.size){ showToast('Выберите товары для отгрузки'); return; }
+  const dest = document.getElementById('shipPageDest')?.value;
+  if(!dest){ showToast('Выберите магазин'); return; }
+  const shipItems = items.filter(i=>_shipPageSelected.has(i._id));
+  const allNums = shipments.map(s=>parseInt((s.num||'').replace(/[^0-9]/g,''))||0);
+  const nextNum = allNums.length ? Math.max(...allNums)+1 : 1;
+  const shipNum = 'НАК-'+String(nextNum).padStart(3,'0');
+  const shipDoc = {
+    num:shipNum, destName:dest,
+    items:shipItems.map(i=>({_id:i._id,itemNum:i.itemNum,artikul:i.artikul||'',name:i.name||i.itemName,wood:i.wood||'',price:i.price||0})),
+    createdById:session.id, createdByName:session.name,
+    status:'pending', createdAt:now()
+  };
+  try{
+    await db.collection('ws_shipments').add(shipDoc);
+    const batch=db.batch();
+    shipItems.forEach(i=>batch.update(db.collection('ws_items').doc(i._id),{status:'shipped',shippedAt:now(),shippedTo:dest,shipmentNum:shipNum}));
+    await batch.commit();
+    _shipPageSelected.clear();
+    showToast(`✅ ${shipNum} → ${dest} · ${shipItems.length} шт.`);
+    setShipTab('archive');
+  }catch(e){ showToast('Ошибка: '+e.message); }
+}
+
+function renderShipArchive(){
+  const c=document.getElementById('shipArchiveList'); if(!c) return;
+  const list=shipments.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+  if(!list.length){ c.innerHTML='<div style="font-size:13px;color:var(--t2);padding:16px 0;text-align:center">Отгрузок пока нет</div>'; return; }
+  c.innerHTML=list.map(s=>`
+    <div class="card" style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:14px;font-weight:700">${s.num||'—'}</div>
+          <div style="font-size:12px;color:var(--t2)">${s.destName||'—'} · ${fmtDT(s.createdAt)}</div>
+          <div style="font-size:12px;color:var(--t2)">${(s.items||[]).length} шт. · ${fmt((s.items||[]).reduce((sum,i)=>sum+(i.price||0),0))}</div>
+        </div>
+        <span style="font-size:11px;color:var(--a4)">✅</span>
+      </div>
+    </div>`).join('');
+}
+
+// ════ ПРИЁМКА — отдельная страница ════
+let _rcvTab = 'auto';
+
+function renderReceivingPage(){
+  const pending = items.filter(i=>i.status==='delivered');
+  const today = new Date().toDateString();
+  const todayCount = items.filter(i=>i.status==='received' && i.receivedAt && new Date(i.receivedAt).toDateString()===today).length;
+  const rp=document.getElementById('rcvPending'), rt=document.getElementById('rcvToday');
+  if(rp) rp.textContent=pending.length;
+  if(rt) rt.textContent=todayCount;
+  setRcvTab(_rcvTab);
+}
+
+function setRcvTab(tab){
+  _rcvTab=tab;
+  const t1=document.getElementById('rcvTab1'),t2=document.getElementById('rcvTab2');
+  const b1=document.getElementById('rcvAutoBlock'),b2=document.getElementById('rcvManualBlock');
+  if(tab==='auto'){
+    t1.style.background='var(--accent)';t1.style.color='#000';t1.style.fontWeight='700';t1.style.border='none';
+    t2.style.background='var(--s2)';t2.style.color='var(--t2)';t2.style.fontWeight='400';t2.style.border='1px solid var(--border)';
+    b1.style.display='block';b2.style.display='none';
+    renderRcvPendingList();
+  } else {
+    t2.style.background='var(--accent)';t2.style.color='#000';t2.style.fontWeight='700';t2.style.border='none';
+    t1.style.background='var(--s2)';t1.style.color='var(--t2)';t1.style.fontWeight='400';t1.style.border='1px solid var(--border)';
+    b2.style.display='block';b1.style.display='none';
+    // История ручных приёмок
+    const hist=document.getElementById('rcvManualHistory'); if(!hist) return;
+    // Переиспользуем существующий рендер
+    if(typeof renderManualAcceptHistory==='function') renderManualAcceptHistory('rcvManualHistory');
+  }
+}
+
+function renderRcvPendingList(){
+  const c=document.getElementById('rcvPendingList'); if(!c) return;
+  const pending=items.filter(i=>i.status==='delivered');
+  if(!pending.length){ c.innerHTML='<div style="font-size:13px;color:var(--t2);padding:16px 0;text-align:center">Нет изделий на приёмке</div>'; return; }
+  c.innerHTML=pending.map(item=>{
+    const num=item.artikul||(item.itemNum&&!item.itemNum.startsWith('НАЧ-')?item.itemNum:'');
+    return `<div class="li">
+      <div class="li-ico" style="background:#2a1a14">📬</div>
+      <div class="li-info">
+        <div class="li-name">${item.name||item.itemName||'—'}${num?' · №'+num:''}</div>
+        <div class="li-sub">🌳 ${item.wood||'—'} · ${fmt(item.price||0)}</div>
+        <div class="li-sub">Мастер: ${item.masterName||'—'}</div>
+      </div>
+      <button onclick="acceptItemFromRcv('${item._id}')" style="background:var(--inc);border:none;border-radius:8px;padding:7px 10px;color:#000;cursor:pointer;font-size:13px;font-weight:700;flex-shrink:0">✅</button>
+    </div>`;
+  }).join('');
+}
+
+async function acceptItemFromRcv(itemId){
+  try{
+    await db.collection('ws_items').doc(itemId).update({status:'received', receivedAt:now(), receivedBy:session.name});
+    showToast('✅ Товар принят на склад');
+  }catch(e){ showToast('Ошибка: '+e.message); }
+}
+
 function renderWarehouse(){
-  // Реальный склад — только НЕ черновики
   const realItems = items.filter(i=>!i.isArchiveDraft);
   const pending = realItems.filter(i=>i.status==='delivered');
   const stock   = realItems.filter(i=>i.status==='received');
   const shipped = realItems.filter(i=>i.status==='shipped');
 
-  document.getElementById('whPending').textContent=pending.length;
-  document.getElementById('whStock').textContent=stock.length;
-  document.getElementById('whShipped').textContent=shipped.length;
+  const elPend=document.getElementById('whPending'), elStock=document.getElementById('whStock'), elShip=document.getElementById('whShipped');
+  if(elPend) elPend.textContent=pending.length;
+  if(elStock) elStock.textContent=stock.length;
+  if(elShip) elShip.textContent=shipped.length;
 
   const wn=document.getElementById('whNotifications');
-  wn.innerHTML=pending.length?`<div class="notif warn" style="margin-bottom:12px"><div class="notif-ico">🔔</div><div class="notif-body"><div class="notif-title">${pending.length} изделий ждут приёмки</div><div class="notif-sub">Мастера сдали изделия на склад</div></div></div>`:'';
+  if(wn) wn.innerHTML=pending.length?`<div class="notif warn" style="margin-bottom:12px"><div class="notif-ico">🔔</div><div class="notif-body"><div class="notif-title">${pending.length} изделий ждут приёмки</div><div class="notif-sub">Перейдите во вкладку «Приёмка»</div></div></div>`:'';
 
-  const pl=document.getElementById('whPendingList');
-  pl.innerHTML=pending.length?pending.map(item=>`
-    <div class="li" onclick="openItemAccept('${item._id}')">
-      <div class="li-ico" style="background:#2a1e14">🔨</div>
-      <div class="li-info">
-        <div class="li-name">${item.name||item.itemName}</div>
-        <div class="li-sub">👤 ${item.masterName} · 🌳 ${item.wood||'—'}</div>
-        <div class="li-sub">Сдано: ${fmtDT(item.deliveredAt)} · Время: ${elapsed(item.startedAt,item.deliveredAt)}</div>
-      </div>
-      <div style="font-size:20px;color:var(--t2)">›</div>
-    </div>`).join(''):'<div style="font-size:12px;color:var(--t2);padding:6px 0">Нет изделий на приёмке</div>';
+  renderStockGroups();
 
-  const sl=document.getElementById('whStockGroups');
-  if(sl) renderStockGroups();
+  // Обновить счётчики страницы приёмки если она уже в DOM
+  const rp=document.getElementById('rcvPending'), rt=document.getElementById('rcvToday');
+  if(rp) rp.textContent=pending.length;
+  const today=new Date().toDateString();
+  const todayCount=realItems.filter(i=>i.status==='received'&&i.receivedAt&&new Date(i.receivedAt).toDateString()===today).length;
+  if(rt) rt.textContent=todayCount;
+  renderRcvPendingList();
 
-  // Если мы на архивной вкладке — обновить и её
   if(_whTab==='archive') renderArchiveWarehouse();
 }
 
