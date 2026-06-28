@@ -4344,14 +4344,14 @@ function renderSellerStats(){
   shifts.forEach(function(s){
     // Убираем префикс Восст. чтобы смены восстановления суммировались с основными
     var name=(s.sellerName||'—').replace(/^Восст. /,'');
-    if(!sellers[name])sellers[name]={name:name,shifts:0,revenue:0,sales:0,checks:[],zp:0,travel:0,hasCashDiff:0,shops:{}};
+    if(!sellers[name])sellers[name]={name:name,shifts:0,revenue:0,sales:0,checks:[],zp:0,zpFact:0,travel:0,hasCashDiff:0,shops:{}};
     var sel=sellers[name];
     sel.shifts++;
     var rev=(s.cashRevenue||0)+(s.cardRevenue||0)+(s.totalDiscount||0);
     sel.revenue+=rev;
     var sc=s.salesCount||0; sel.sales+=sc;
     if(sc>0) sel.checks.push(rev/sc);
-    sel.zp+=s.zp||0; sel.travel+=s.travel||0;
+    sel.zp+=s.zp||0; sel.zpFact+=(s.zpFact||s.zp||0); sel.travel+=s.travel||0;
     if(s.hasCashDiff) sel.hasCashDiff++;
     if(s.shopName) sel.shops[s.shopName]=(sel.shops[s.shopName]||0)+1;
   });
@@ -4390,6 +4390,48 @@ function renderSellerStats(){
     var avgZpT=sel.shifts>0?(sel.zp+sel.travel)/sel.shifts:0;
     var shopsStr=Object.keys(sel.shops).map(function(sh){return sh+'('+sel.shops[sh]+')';}).join(', ');
     function row(lbl,val,col){return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e1e2e;font-size:12px"><span style="color:#8888aa">'+lbl+'</span><span style="font-weight:700;color:'+(col||'#f0f0f8')+'">'+val+'</span></div>';}
+    // Calendar
+    var calKey='ss_cal_'+sel.name.replace(/\s/g,'_');
+    var calOpen=window._ssCalOpen&&window._ssCalOpen[calKey];
+    // Build calendar data
+    var calShifts=shifts.filter(function(s){return (s.sellerName||'').replace(/^Восст\. /,'')===sel.name;});
+    var calByDate={};
+    calShifts.forEach(function(s){calByDate[s.date]=(calByDate[s.date]||[]);calByDate[s.date].push(s.shopName);});
+    // Generate calendar HTML
+    var calHtml='';
+    if(calOpen){
+      var dates=Object.keys(calByDate).sort();
+      if(dates.length){
+        var firstD=new Date(dates[0]),lastD=new Date(dates[dates.length-1]);
+        // Group by month
+        var months={};
+        dates.forEach(function(d){var m=d.substring(0,7);if(!months[m])months[m]=[];months[m].push(d);});
+        var mnames=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+        calHtml='<div style="margin-top:8px;background:#111118;border-radius:8px;padding:8px;overflow-x:auto">';
+        Object.keys(months).sort().forEach(function(mk){
+          var p=mk.split('-');
+          calHtml+='<div style="font-size:10px;color:#8888aa;font-weight:700;margin-bottom:4px">'+mnames[parseInt(p[1])-1]+' '+p[0]+'</div>';
+          calHtml+='<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:8px">';
+          months[mk].forEach(function(d){
+            var shops=calByDate[d];
+            var dd=new Date(d);
+            var dayNames=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+            var dn=dayNames[dd.getDay()];
+            var isWE=dd.getDay()===0||dd.getDay()===6;
+            var multi=shops.length>1;
+            calHtml+='<div style="text-align:center;width:36px;background:'+(isWE?'#1e2a14':'#1a1a22')+';border:1px solid '+(multi?'#a060f0':'#c8f060')+';border-radius:6px;padding:3px 2px">'+
+              '<div style="font-size:9px;color:#8888aa">'+dn+'</div>'+
+              '<div style="font-size:11px;font-weight:700;color:'+(multi?'#a060f0':'#c8f060')+'">'+dd.getDate()+'</div>'+
+              (multi?'<div style="font-size:8px;color:#a060f0">2М</div>':'<div style="font-size:8px;color:#555568">'+shops[0].replace('Роза Хутор','РХ').replace('Горки','Г')+'</div>')+
+            '</div>';
+          });
+          calHtml+='</div>';
+        });
+        calHtml+='</div>';
+      }
+    }
+    // ZP debt
+    var zpDebt=sel.zp-sel.zpFact;
     return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
         '<div style="font-size:14px;font-weight:700">'+sel.name+'</div>'+
@@ -4399,10 +4441,19 @@ function renderSellerStats(){
       row('Ср. выручка / смену',fmt(avgRev)+'₽','#c8f060')+
       row('Продаж итого',sel.sales)+
       row('Ср. чек',fmt(avgCheck)+'₽','#60c8f0')+
-      row('ЗП итого',fmt(sel.zp)+'₽','#60f090')+
+      '<div style="border-top:1px solid #2e2e3e;margin:6px 0 4px"></div>'+
+      '<div style="font-size:10px;color:#60f090;font-weight:700;margin-bottom:4px">ЗАРПЛАТА</div>'+
+      row('ЗП начислена',fmt(sel.zp)+'₽','#60f090')+
+      row('ЗП взято (факт)',fmt(sel.zpFact)+'₽','#f0a060')+
+      row('Долг/Переплата',fmt(Math.abs(zpDebt))+'₽ '+(zpDebt>0?'← долг':zpDebt<0?'→ переплата':'✔ оплачено'),zpDebt>0?'#f06060':zpDebt<0?'#a060f0':'#60f090')+
       row('Ср. ЗП / смену',fmt(avgZp)+'₽','#60f090')+
-      row('Ср. ЗП+проезд',fmt(avgZpT)+'₽','#60f090')+
       (sel.hasCashDiff>0?row('Расхождения кассы',sel.hasCashDiff+' смен','#f06060'):'')+
+      '<div onpointerdown="event.preventDefault();if(!window._ssCalOpen)window._ssCalOpen={};window._ssCalOpen[\''+calKey+'\']='+(calOpen?'false':'true')+';renderSellerStats()" '+
+        'style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;margin-top:4px;cursor:pointer;border-top:1px solid #2e2e3e">'+
+        '<span style="font-size:11px;color:#8888aa">📅 Календарь смен ('+Object.keys(calByDate).length+')</span>'+
+        '<span style="color:#8888aa;font-size:12px">'+(calOpen?'▾':'▸')+'</span>'+
+      '</div>'+
+      calHtml+
     '</div>';
   }).join('');
   cont.innerHTML=html;
@@ -6150,6 +6201,7 @@ function _closeShiftReal(){
     morningDiff,prevCashEvening:(prev&&prev.cashEvening)||null,
     salesCount:sales.length,totalRevenue:sales.reduce((s,e)=>s+e.totalPaid,0),
     cashRevenue:cashSales,cardRevenue:termEve,expenses:expArr,zp:zpExp,travel:travelExp,inkass:inkass,otherExp:otherExpAmt,
+    zpFact:zpExp,
     supplierExp:supplierExpAmt,drSupplierAmt:drSupplierExpAmt,drOtherExp:drOtherExpAmt,
     drInkass:(sh.drInkass||0)+drInkassFromExp,
     totalDiscount:sales.reduce((s,e)=>s+(e.discount||0),0),journal:[...journal]};
