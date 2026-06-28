@@ -4460,6 +4460,17 @@ function renderSellerStats(){
 }
 
 
+function svPushToFirestore(shiftId){
+  if(!shiftId){showToast('Нет ID смены');return;}
+  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var sh=shifts.find(function(s){return (s.id||s._id)===shiftId;});
+  if(!sh){showToast('Смена не найдена');return;}
+  db.collection('iz_shifts').doc(shiftId).set(sh).then(function(){
+    showToast('✅ Смена отправлена в Firestore');
+  }).catch(function(e){
+    showToast('❌ Ошибка: '+e.message);
+  });
+}
 function svRepairExpenses(shiftId){
   // Пересчитывает zp/travel/inkass/otherExp из expenses[] для старых PSJ-смен
   var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
@@ -7397,6 +7408,7 @@ function _renderShiftView(){
       :'');
   var sid2=sh.id||sh._id||'';
   var repairExpHtml=(sh.backfilled||sh.isArchive||sh.source==='psj')?'<button onpointerdown="event.preventDefault();svRepairExpenses(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a1a2e;border:1px solid #a060f0;border-radius:9px;font-weight:700;font-size:12px;color:#a060f0;cursor:pointer;margin-bottom:8px">🔧 Пересчитать расходы (ЗП/проезд/прочие)</button>':'';
+  var pushFirestoreHtml='<button onpointerdown="event.preventDefault();svPushToFirestore(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a2a1e;border:1px solid #60f090;border-radius:9px;font-weight:700;font-size:12px;color:#60f090;cursor:pointer;margin-bottom:8px">☁️ Синхронизировать смену в Firestore</button>';
   var deleteShiftHtml = '<button onclick="svDeleteShift()" style="width:100%;padding:16px;background:#2e1a1a;border:2px solid #f06060;border-radius:12px;font-weight:700;font-size:14px;color:#f06060;cursor:pointer;margin-top:14px">🗑 Удалить смену целиком</button>';
   document.getElementById('editShiftBody').innerHTML =
     summaryHtml +
@@ -7409,6 +7421,7 @@ function _renderShiftView(){
     acc('wo', '🗑', 'Списания', '#f06060', woAllLen||null, woBody) +
     acc('exp', '💸', 'Расходы', '#f0a060', (expenses.length||(zp||inkass||otherExp||drInkass||drSupplier?1:0))||null, expBody) +
     acc('staff', '🛒', 'Покупки сотрудников', '#a060f0', staffArr.length||null, staffBody) +
+    pushFirestoreHtml +
     repairExpHtml +
     deleteShiftHtml;
 }
