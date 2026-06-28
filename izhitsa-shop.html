@@ -10567,25 +10567,29 @@ function generatePeriodReport(){
   var modeLabel=prMode==='archive'?'🗄 Архив':prMode==='live'?'📊 Живые':'🔗 Все данные';
   var c=document.getElementById('periodReportBody');
   if(!filtered.length){c.innerHTML='<div class="empty"><div class="ei">📊</div>Нет данных ('+modeLabel+')</div>';return;}
-  var totCash=0,totCard=0,totDisc=0,totZp=0,totTravel=0,totInkass=0,totOther=0,totSupplier=0,totDrInkass=0,totDrSupplier=0;
+  var totCash=0,totCard=0,totDisc=0,totZp=0,totTravel=0,totInkass=0,totOther=0,totSupplier=0,totDrInkass=0,totDrSupplier=0,totDrOther=0;
   filtered.forEach(function(s){
     totCash+=s.cashRevenue||0;totCard+=s.cardRevenue||0;totDisc+=s.totalDiscount||0;
-    totZp+=s.zp||0;totTravel+=s.travel||0;totInkass+=s.inkass||0;totOther+=s.otherExp||0;totSupplier+=s.supplierExp||0;
-    totDrInkass+=s.drInkass||0;totDrSupplier+=s.drSupplierAmt||0;
-    // Также из expenses[] для живых смен где goodsType==='dr'
-    if(s.expenses&&s.expenses.length){
-      if(!s.drInkass) totDrInkass+=s.expenses.filter(function(e){return e.expType==='inkass'&&e.goodsType==='dr';}).reduce(function(a,e){return a+e.amount;},0);
-      if(!s.drSupplierAmt) totDrSupplier+=s.expenses.filter(function(e){return e.expType==='supplier'&&e.goodsType==='dr';}).reduce(function(a,e){return a+e.amount;},0);
-    }
-    if(s.expenses&&s.expenses.length){
-      if(!s.zp)totZp+=s.expenses.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
-      if(!s.travel)totTravel+=s.expenses.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+e.amount;},0);
-      if(!s.inkass)totInkass+=s.expenses.filter(function(e){return e.expType==='inkass';}).reduce(function(a,e){return a+e.amount;},0);
-      if(!s.otherExp)totOther+=s.expenses.filter(function(e){return e.expType==='other';}).reduce(function(a,e){return a+e.amount;},0);
-      if(!s.supplierExp)totSupplier+=s.expenses.filter(function(e){return e.expType==='supplier';}).reduce(function(a,e){return a+e.amount;},0);
+    // Всегда пересчитываем из expenses[] если они есть — это точнее сохранённых полей
+    // т.к. старые смены могли сохранить ДР инкассацию в s.inkass вместо s.drInkass
+    var exps=s.expenses||[];
+    if(exps.length){
+      totZp+=exps.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
+      totTravel+=exps.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+e.amount;},0);
+      totInkass+=exps.filter(function(e){return e.expType==='inkass'&&e.goodsType!=='dr';}).reduce(function(a,e){return a+e.amount;},0);
+      totOther+=exps.filter(function(e){return e.expType==='other'&&e.goodsType!=='dr';}).reduce(function(a,e){return a+e.amount;},0);
+      totSupplier+=exps.filter(function(e){return e.expType==='supplier'&&e.goodsType!=='dr';}).reduce(function(a,e){return a+e.amount;},0);
+      totDrInkass+=exps.filter(function(e){return e.expType==='inkass'&&e.goodsType==='dr';}).reduce(function(a,e){return a+e.amount;},0);
+      totDrSupplier+=exps.filter(function(e){return e.expType==='supplier'&&e.goodsType==='dr';}).reduce(function(a,e){return a+e.amount;},0);
+      totDrOther+=exps.filter(function(e){return e.expType==='other'&&e.goodsType==='dr';}).reduce(function(a,e){return a+e.amount;},0);
+    } else {
+      // Fallback на сохранённые поля для PSJ-смен без expenses[]
+      totZp+=s.zp||0;totTravel+=s.travel||0;totInkass+=s.inkass||0;
+      totOther+=s.otherExp||0;totSupplier+=s.supplierExp||0;
+      totDrInkass+=s.drInkass||0;totDrSupplier+=s.drSupplierAmt||0;
     }
   });
-  var totRev=totCash+totCard+totDisc,totExp=totZp+totTravel+totInkass+totOther+totSupplier+totDrInkass+totDrSupplier;
+  var totRev=totCash+totCard+totDisc,totExp=totZp+totTravel+totInkass+totOther+totSupplier+totDrInkass+totDrSupplier+totDrOther;
   var f2=function(n){return Math.round(n||0).toLocaleString('ru-RU')+'₽';};
   var R=function(lbl,val,col){return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span style="color:#8888aa">'+lbl+'</span><span style="color:'+(col||'#f0f0f8')+';font-weight:700">'+f2(val)+'</span></div>';};
   var byShop={};
@@ -10677,7 +10681,7 @@ function generatePeriodReport(){
                collapsible('other','📋 Прочие',totOther,othRows,'#8888aa',false)+
                (drInkRows.length?collapsible('drinkass','🏦 Инкассация ДР',drInkRows.reduce(function(s,r){return s+r.amt;},0),drInkRows,'#a060f0',false):'')+
                (drSupRows.length?collapsible('drsupplier','📦 Поставщик ДР',drSupRows.reduce(function(s,r){return s+r.amt;},0),drSupRows,'#a060f0',false):'')+
-               (drOthRows.length?collapsible('drother','📋 Прочие ДР',drOthRows.reduce(function(s,r){return s+r.amt;},0),drOthRows,'#a060f0',false):'');
+               (drOthRows.length||totDrOther?collapsible('drother','📋 Прочие ДР',Math.max(drOthRows.reduce(function(s,r){return s+r.amt;},0),totDrOther),drOthRows,'#a060f0',false):'');
       })()+
     '</div>':'')+'</div>';
   if(Object.keys(byShop).length>1){
