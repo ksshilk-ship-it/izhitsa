@@ -6093,12 +6093,16 @@ function _closeShiftReal(){
   const cashEve=parseFloat(cashEveVal)||0;
   const t=calcTotals();
   const expArr=journal.filter(e=>e.type==='expense');
-  const inkass=expArr.filter(e=>e.expType==='inkass').reduce((s,e)=>s+e.amount,0);
+  const inkass=expArr.filter(e=>e.expType==='inkass'&&e.goodsType!=='dr').reduce((s,e)=>s+e.amount,0);
+  const drInkassFromExp=expArr.filter(e=>e.expType==='inkass'&&e.goodsType==='dr').reduce((s,e)=>s+e.amount,0);
   const termEve=t.card, staffEve=t.staff;
   const cashSales=journal.filter(e=>e.type==='sale').reduce((s,e)=>s+(e.cashPart||0),0);
   const zpExp=expArr.filter(e=>e.expType==='zp').reduce((s,e)=>s+e.amount,0);
   const travelExp=expArr.filter(e=>e.expType==='travel').reduce((s,e)=>s+e.amount,0);
-  const otherExpAmt=expArr.filter(e=>e.expType==='other').reduce((s,e)=>s+e.amount,0);
+  const otherExpAmt=expArr.filter(e=>e.expType==='other'&&e.goodsType!=='dr').reduce((s,e)=>s+e.amount,0);
+  const supplierExpAmt=expArr.filter(e=>e.expType==='supplier'&&e.goodsType!=='dr').reduce((s,e)=>s+e.amount,0);
+  const drSupplierExpAmt=expArr.filter(e=>e.expType==='supplier'&&e.goodsType==='dr').reduce((s,e)=>s+e.amount,0);
+  const drOtherExpAmt=expArr.filter(e=>e.expType==='other'&&e.goodsType==='dr').reduce((s,e)=>s+e.amount,0);
   const expectedCash=t.cash;
   const cashDiff=Math.round(cashEve-expectedCash);
   if(Math.abs(cashDiff)>=1){showToast('⛔ Неверный остаток наличных — пересчитайте кассу');return;}
@@ -6146,6 +6150,8 @@ function _closeShiftReal(){
     morningDiff,prevCashEvening:(prev&&prev.cashEvening)||null,
     salesCount:sales.length,totalRevenue:sales.reduce((s,e)=>s+e.totalPaid,0),
     cashRevenue:cashSales,cardRevenue:termEve,expenses:expArr,zp:zpExp,travel:travelExp,inkass:inkass,otherExp:otherExpAmt,
+    supplierExp:supplierExpAmt,drSupplierAmt:drSupplierExpAmt,drOtherExp:drOtherExpAmt,
+    drInkass:(sh.drInkass||0)+drInkassFromExp,
     totalDiscount:sales.reduce((s,e)=>s+(e.discount||0),0),journal:[...journal]};
   if(Math.abs(cashDiff)>=1||morningDiff>1){
     saveAdminAlert({type:'cash_diff',shopName:session.shopName,sellerName:session.sellerName,
@@ -10552,20 +10558,42 @@ function generatePeriodReport(){
       (totTravel?Rp('🚕 Проезд',totTravel,'#f0a060',true):'')+
       (function(){
         if(!totInkass && !totSupplier && !totOther) return '';
-        var inkRows=[], supRows=[], othRows=[];
+        var inkRows=[], supRows=[], othRows=[], drInkRows=[], drSupRows=[], drOthRows=[];
         filtered.forEach(function(s){
           var exps = s.expenses||[];
-          exps.filter(function(e){return e.expType==='inkass';}).forEach(function(e){
+          // Дерево инкассация
+          exps.filter(function(e){return e.expType==='inkass'&&e.goodsType!=='dr';}).forEach(function(e){
             inkRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.comment||''});
           });
-          exps.filter(function(e){return e.expType==='supplier';}).forEach(function(e){
+          // ДР инкассация из expenses[]
+          exps.filter(function(e){return e.expType==='inkass'&&e.goodsType==='dr';}).forEach(function(e){
+            drInkRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.comment||''});
+          });
+          // Также из s.drInkass (PSJ)
+          if((s.drInkass||0)>0&&!exps.some(function(e){return e.expType==='inkass'&&e.goodsType==='dr';})){
+            drInkRows.push({date:s.date,shop:s.shopName,amt:s.drInkass,note:''});
+          }
+          // Дерево поставщики
+          exps.filter(function(e){return e.expType==='supplier'&&e.goodsType!=='dr';}).forEach(function(e){
             supRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||''});
           });
-          exps.filter(function(e){return e.expType==='other';}).forEach(function(e){
+          // ДР поставщики
+          exps.filter(function(e){return e.expType==='supplier'&&e.goodsType==='dr';}).forEach(function(e){
+            drSupRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||''});
+          });
+          if((s.drSupplierAmt||0)>0&&!exps.some(function(e){return e.expType==='supplier'&&e.goodsType==='dr';})){
+            drSupRows.push({date:s.date,shop:s.shopName,amt:s.drSupplierAmt,note:s.drSupplierName||''});
+          }
+          // Прочие Дерево
+          exps.filter(function(e){return e.expType==='other'&&e.goodsType!=='dr';}).forEach(function(e){
             othRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.comment||''});
           });
+          // Прочие ДР
+          exps.filter(function(e){return e.expType==='other'&&e.goodsType==='dr';}).forEach(function(e){
+            drOthRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.comment||''});
+          });
           // Fallback: s.otherExp — scalar field for shifts that don't use expenses array
-          if((s.otherExp||0)>0 && !exps.some(function(e){return e.expType==='other';})){
+          if((s.otherExp||0)>0 && !exps.some(function(e){return e.expType==='other'&&e.goodsType!=='dr';})){
             othRows.push({date:s.date,shop:s.shopName,amt:s.otherExp,note:s.expComment||''});
           }
         });
@@ -10595,8 +10623,9 @@ function generatePeriodReport(){
         return collapsible('inkass','🏦 Инкассация',totInkass,inkRows,'#f0a060',false)+
                collapsible('supplier','📦 Оплата поставщикам',totSupplier,supRows,'#f0a060',false)+
                collapsible('other','📋 Прочие',totOther,othRows,'#8888aa',false)+
-               (totDrInkass?collapsible('drinkass','🏦 Инкассация ДР',totDrInkass,filtered.filter(function(s){return s.drInkass>0;}).map(function(s){return {date:s.date,shop:s.shopName,amt:s.drInkass,note:''};}),'#a060f0',false):'')+
-               (totDrSupplier?collapsible('drsupplier','📦 Поставщик ДР',totDrSupplier,filtered.filter(function(s){return s.drSupplierAmt>0;}).map(function(s){return {date:s.date,shop:s.shopName,amt:s.drSupplierAmt,note:s.drSupplierName||''};}),'#a060f0',false):'');
+               (drInkRows.length?collapsible('drinkass','🏦 Инкассация ДР',drInkRows.reduce(function(s,r){return s+r.amt;},0),drInkRows,'#a060f0',false):'')+
+               (drSupRows.length?collapsible('drsupplier','📦 Поставщик ДР',drSupRows.reduce(function(s,r){return s+r.amt;},0),drSupRows,'#a060f0',false):'')+
+               (drOthRows.length?collapsible('drother','📋 Прочие ДР',drOthRows.reduce(function(s,r){return s+r.amt;},0),drOthRows,'#a060f0',false):'');
       })()+
     '</div>':'')+'</div>';
   if(Object.keys(byShop).length>1){
