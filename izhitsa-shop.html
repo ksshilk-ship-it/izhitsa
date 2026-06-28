@@ -4356,7 +4356,7 @@ function renderSellerStats(){
   shifts.forEach(function(s){
     // Убираем префикс Восст. чтобы смены восстановления суммировались с основными
     var name=(s.sellerName||'—').replace(/^Восст. /,'');
-    if(!sellers[name])sellers[name]={name:name,shifts:0,revenue:0,sales:0,checks:[],zp:0,zpFact:0,travel:0,hasCashDiff:0,shops:{}};
+    if(!sellers[name])sellers[name]={name:name,shifts:0,revenue:0,sales:0,checks:[],zp:0,zpFact:0,travel:0,hasCashDiff:0,shops:{},disc:0,discCash:0,discSales:0};
     var sel=sellers[name];
     sel.shifts++;
     var rev=(s.cashRevenue||0)+(s.cardRevenue||0)+(s.totalDiscount||0);
@@ -4364,6 +4364,14 @@ function renderSellerStats(){
     var sc=s.salesCount||0; sel.sales+=sc;
     if(sc>0) sel.checks.push(rev/sc);
     sel.zp+=s.zp||0; sel.zpFact+=(s.zpFact||s.zp||0); sel.travel+=s.travel||0;
+    sel.disc+=s.totalDiscount||0;
+    // Скидки по наличным — из journal
+    (s.journal||[]).forEach(function(e){
+      if(e.type==='sale'&&(e.discount||0)>0){
+        sel.discSales++;
+        if((e.cashPart||e.cashEffect||0)>0) sel.discCash+=(e.discount||0);
+      }
+    });
     if(s.hasCashDiff) sel.hasCashDiff++;
     if(s.shopName) sel.shops[s.shopName]=(sel.shops[s.shopName]||0)+1;
   });
@@ -4382,6 +4390,27 @@ function renderSellerStats(){
       '<div style="flex:1;min-width:80px;background:#22222e;border-radius:8px;padding:8px;text-align:center"><div style="font-size:11px;color:#8888aa">Смен</div><div style="font-size:14px;font-weight:700;color:#f0f0f8">'+totalShifts+'</div></div>'+
       '<div style="flex:1;min-width:80px;background:#22222e;border-radius:8px;padding:8px;text-align:center"><div style="font-size:11px;color:#8888aa">ФОТ</div><div style="font-size:14px;font-weight:700;color:#60f090">'+fmt(totalZp)+'₽</div></div>'+
     '</div></div>'+
+  (function(){
+    var dt='<div style="background:#1a1a14;border:1px solid #3e3e2e;border-radius:12px;padding:12px;margin-bottom:10px">'+
+      '<div style="font-size:11px;color:#f0a060;font-weight:700;margin-bottom:8px">🎁 СРАВНЕНИЕ СКИДОК ПО ПРОДАВЦАМ</div>'+
+      '<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:4px;font-size:10px;color:#8888aa;margin-bottom:4px;padding:0 2px">'+
+        '<div>Продавец</div><div>Скидки</div><div>%</div><div>нал</div>'+
+      '</div>'+
+      selArr.map(function(sel){
+        var discPct=sel.revenue>0?Math.round(sel.disc/(sel.revenue+sel.disc)*100):0;
+        var cashPct=sel.disc>0?Math.round(sel.discCash/sel.disc*100):0;
+        var riskColor=discPct>=15?'#f06060':discPct>=8?'#f0a060':'#60f090';
+        return '<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:4px;padding:5px 2px;border-top:1px solid #2e2e2e;font-size:11px">'+
+          '<div style="font-weight:700">'+sel.name+'</div>'+
+          '<div style="color:#f0a060">'+(sel.disc?Math.round(sel.disc).toLocaleString('ru-RU')+'₽':'0')+'</div>'+
+          '<div style="color:'+riskColor+';font-weight:700">'+discPct+'%</div>'+
+          '<div style="color:'+(cashPct>=70?'#f06060':'#8888aa')+'">'+(sel.disc?cashPct+'%':'—')+'</div>'+
+        '</div>';
+      }).join('')+
+      '<div style="font-size:10px;color:#8888aa;margin-top:8px;padding-top:6px;border-top:1px solid #2e2e2e">🟢 0-7% норма · 🟡 8-14% внимание · 🔴 15%+ подозрительно</div>'+
+    '</div>';
+    return dt;
+  })()+
   '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">'+
     '<div style="font-size:12px;font-weight:700;color:#c8f060;margin-bottom:8px">🏆 РЕЙТИНГ</div>'+
     selArr.map(function(sel,i){
@@ -4453,6 +4482,22 @@ function renderSellerStats(){
       row('Ср. выручка / смену',fmt(avgRev)+'₽','#c8f060')+
       row('Продаж итого',sel.sales)+
       row('Ср. чек',fmt(avgCheck)+'₽','#60c8f0')+
+      '<div style="border-top:1px solid #2e2e3e;margin:6px 0 4px"></div>'+
+      (function(){
+        if(!sel.disc) return '';
+        var discPct=sel.revenue>0?Math.round(sel.disc/(sel.revenue+sel.disc)*100):0;
+        var cashDiscPct=sel.disc>0?Math.round(sel.discCash/sel.disc*100):0;
+        var avgDiscPerSale=sel.discSales>0?Math.round(sel.disc/sel.discSales):0;
+        var riskLvl=discPct>=15?'🔴 Высокий':discPct>=8?'🟡 Средний':'🟢 Норма';
+        return '<div style="background:#1a1a14;border:1px solid #3e3e2e;border-radius:10px;padding:10px;margin-bottom:6px">'+
+          '<div style="font-size:10px;color:#f0a060;font-weight:700;margin-bottom:6px">🎁 АНАЛИЗ СКИДОК '+riskLvl+'</div>'+
+          row('Скидки итого',fmt(sel.disc)+'₽','#f0a060')+
+          row('Скидки % от выручки',discPct+'%',discPct>=15?'#f06060':discPct>=8?'#f0a060':'#60f090')+
+          row('Скидки по наличным',fmt(sel.discCash)+'₽ ('+cashDiscPct+'%)',cashDiscPct>=70?'#f06060':'#f0a060')+
+          row('Продаж со скидкой',sel.discSales+' шт.')+
+          row('Ср. скидка за сделку',fmt(avgDiscPerSale)+'₽','#f0a060')+
+        '</div>';
+      })()+
       '<div style="border-top:1px solid #2e2e3e;margin:6px 0 4px"></div>'+
       '<div style="font-size:10px;color:#60f090;font-weight:700;margin-bottom:4px">ЗАРПЛАТА</div>'+
       row('ЗП начислена',fmt(sel.zp)+'₽','#60f090')+
