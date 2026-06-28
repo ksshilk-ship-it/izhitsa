@@ -9410,10 +9410,15 @@ function activateRestoreShift(shop, date){
   if(entriesForShift.length){
     var sellerName = '';
     for(var i=entriesForShift.length-1;i>=0;i--){ if(entriesForShift[i].sellerName){ sellerName=entriesForShift[i].sellerName; break; } }
-    var cashRev=0, cardRev=0, disc=0, exp=0;
+    var cashRev=0, cardRev=0, disc=0, exp=0, zpExp=0, travelExp=0, inkassExp=0;
     var journalForShift = entriesForShift.map(function(e){
       cashRev += e.cashEffect||0; cardRev += e.cardEffect||0; disc += e.discEffect||0;
-      if(e.type==='expense') exp += e.amount||0;
+      if(e.type==='expense'){
+        exp += e.amount||0;
+        if(e.expType==='zp') zpExp += e.amount||0;
+        else if(e.expType==='travel') travelExp += e.amount||0;
+        else if(e.expType==='inkass') inkassExp += e.amount||0;
+      }
       return { id:e.id, type:e.type, ts:e.date+'T12:00:00.000Z', icon: {sale:'💰',writeoff:'🗑️',receive:'📥',expense:'💸',staff:'🛒'}[e.type]||'📝',
         label:e.label, sub:e.sub, amount:e.amount, amtCls:e.type==='sale'?'pos':'exp', amtSign:e.amtSign,
         goodsType: e.goodsType, items: e.items, who: e.who, opt: e.opt, retail: e.retail, from: e.from, expType: e.expType,
@@ -9424,7 +9429,7 @@ function activateRestoreShift(shop, date){
       shopName: shop||'', sellerName: sellerName, date: date,
       openedAt: date+'T09:00:00.000Z', closedAt: date+'T21:00:00.000Z',
       cashRevenue: cashRev, cardRevenue: cardRev, totalDiscount: disc,
-      zp: 0, inkass: 0, otherExp: exp,
+      zp: zpExp, travel: travelExp, inkass: inkassExp, otherExp: exp - zpExp - travelExp - inkassExp,
       journal: journalForShift,
       savedAt: new Date().toISOString(), savedBy: (session&&session.name)||'Admin'
     };
@@ -10472,10 +10477,11 @@ function generatePeriodReport(){
   var modeLabel=prMode==='archive'?'🗄 Архив':prMode==='live'?'📊 Живые':'🔗 Все данные';
   var c=document.getElementById('periodReportBody');
   if(!filtered.length){c.innerHTML='<div class="empty"><div class="ei">📊</div>Нет данных ('+modeLabel+')</div>';return;}
-  var totCash=0,totCard=0,totDisc=0,totZp=0,totTravel=0,totInkass=0,totOther=0,totSupplier=0;
+  var totCash=0,totCard=0,totDisc=0,totZp=0,totTravel=0,totInkass=0,totOther=0,totSupplier=0,totDrInkass=0,totDrSupplier=0;
   filtered.forEach(function(s){
     totCash+=s.cashRevenue||0;totCard+=s.cardRevenue||0;totDisc+=s.totalDiscount||0;
     totZp+=s.zp||0;totTravel+=s.travel||0;totInkass+=s.inkass||0;totOther+=s.otherExp||0;totSupplier+=s.supplierExp||0;
+    totDrInkass+=s.drInkass||0;totDrSupplier+=s.drSupplierAmt||0;
     if(s.expenses&&s.expenses.length){
       if(!s.zp)totZp+=s.expenses.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
       if(!s.travel)totTravel+=s.expenses.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+e.amount;},0);
@@ -10484,7 +10490,7 @@ function generatePeriodReport(){
       if(!s.supplierExp)totSupplier+=s.expenses.filter(function(e){return e.expType==='supplier';}).reduce(function(a,e){return a+e.amount;},0);
     }
   });
-  var totRev=totCash+totCard+totDisc,totExp=totZp+totTravel+totInkass+totOther+totSupplier;
+  var totRev=totCash+totCard+totDisc,totExp=totZp+totTravel+totInkass+totOther+totSupplier+totDrInkass+totDrSupplier;
   var f2=function(n){return Math.round(n||0).toLocaleString('ru-RU')+'₽';};
   var R=function(lbl,val,col){return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span style="color:#8888aa">'+lbl+'</span><span style="color:'+(col||'#f0f0f8')+';font-weight:700">'+f2(val)+'</span></div>';};
   var byShop={};
@@ -10547,7 +10553,9 @@ function generatePeriodReport(){
         }
         return collapsible('inkass','🏦 Инкассация',totInkass,inkRows,'#f0a060',false)+
                collapsible('supplier','📦 Оплата поставщикам',totSupplier,supRows,'#f0a060',false)+
-               collapsible('other','📋 Прочие',totOther,othRows,'#8888aa',false);
+               collapsible('other','📋 Прочие',totOther,othRows,'#8888aa',false)+
+               (totDrInkass?collapsible('drinkass','🏦 Инкассация ДР',totDrInkass,filtered.filter(function(s){return s.drInkass>0;}).map(function(s){return {date:s.date,shop:s.shopName,amt:s.drInkass,note:''};}),'#a060f0',false):'')+
+               (totDrSupplier?collapsible('drsupplier','📦 Поставщик ДР',totDrSupplier,filtered.filter(function(s){return s.drSupplierAmt>0;}).map(function(s){return {date:s.date,shop:s.shopName,amt:s.drSupplierAmt,note:s.drSupplierName||''};}),'#a060f0',false):'');
       })()+
     '</div>':'')+'</div>';
   if(Object.keys(byShop).length>1){
