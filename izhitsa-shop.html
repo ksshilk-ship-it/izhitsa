@@ -948,6 +948,24 @@ function checkForAppUpdate() {
     </div>
     </div>
   </div>
+  <div class="page" id="pg-seller-stats">
+    <div class="stitle" style="margin-bottom:10px">📊 Статистика продавцов</div>
+    <div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+        <button id="ss_p_m" onpointerdown="event.preventDefault();setSsPeriod('month')" style="flex:1;min-width:60px;padding:6px;border-radius:8px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">Месяц</button>
+        <button id="ss_p_q" onpointerdown="event.preventDefault();setSsPeriod('quarter')" style="flex:1;min-width:60px;padding:6px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:700;cursor:pointer">Квартал</button>
+        <button id="ss_p_y" onpointerdown="event.preventDefault();setSsPeriod('year')" style="flex:1;min-width:60px;padding:6px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:700;cursor:pointer">Год</button>
+        <button id="ss_p_c" onpointerdown="event.preventDefault();setSsPeriod('custom')" style="flex:1;min-width:60px;padding:6px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:700;cursor:pointer">Период</button>
+      </div>
+      <div id="ss_custom_dates" style="display:none;gap:6px;margin-bottom:8px">
+        <input type="date" id="ss_date_from" style="flex:1;background:#22222e;border:1px solid #3e3e4e;border-radius:8px;padding:6px;color:#f0f0f8;font-size:12px;-webkit-appearance:none;color-scheme:dark" onchange="renderSellerStats()">
+        <input type="date" id="ss_date_to" style="flex:1;background:#22222e;border:1px solid #3e3e4e;border-radius:8px;padding:6px;color:#f0f0f8;font-size:12px;-webkit-appearance:none;color-scheme:dark" onchange="renderSellerStats()">
+      </div>
+      <div style="font-size:10px;color:#8888aa;margin-bottom:4px">Магазин</div>
+      <div id="ss_shop_chips" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+    </div>
+    <div id="ss_content"></div>
+  </div>
   <div class="page" id="pg-sellers">
     <div class="stitle">Управление сотрудниками</div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -4279,6 +4297,116 @@ function adminSaveInvoice(id){
   renderAdminInvoices();
   showToast('✅ Накладная сохранена');
 }
+
+var _ssPeriod = 'month';
+var _ssShop = 'all';
+function setSsPeriod(p){
+  _ssPeriod=p;
+  var map={month:'m',quarter:'q',year:'y',custom:'c'};
+  ['month','quarter','year','custom'].forEach(function(x){
+    var btn=document.getElementById('ss_p_'+map[x]);
+    if(!btn) return;
+    var active=x===p;
+    btn.style.border=active?'2px solid #c8f060':'1px solid #2e2e3e';
+    btn.style.background=active?'#1e2a14':'#22222e';
+    btn.style.color=active?'#c8f060':'#8888aa';
+  });
+  var cd=document.getElementById('ss_custom_dates');
+  if(cd) cd.style.display=p==='custom'?'flex':'none';
+  renderSellerStats();
+}
+function _ssDateRange(){
+  var now=new Date(),y=now.getFullYear(),m=now.getMonth();
+  if(_ssPeriod==='month') return {from:y+'-'+String(m+1).padStart(2,'0')+'-01',to:y+'-'+String(m+1).padStart(2,'0')+'-31'};
+  if(_ssPeriod==='quarter'){var q=Math.floor(m/3),qm=q*3;return {from:y+'-'+String(qm+1).padStart(2,'0')+'-01',to:y+'-'+String(qm+3).padStart(2,'0')+'-31'};}
+  if(_ssPeriod==='year') return {from:y+'-01-01',to:y+'-12-31'};
+  var f=(document.getElementById('ss_date_from')||{}).value||'';
+  var t=(document.getElementById('ss_date_to')||{}).value||'';
+  return {from:f||'2000-01-01',to:t||'2099-12-31'};
+}
+function renderSellerStats(){
+  var range=_ssDateRange();
+  var allShifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]').filter(function(s){
+    if(s.status!=='closed'||!s.sellerName) return false;
+    if((s.sellerName||'').indexOf('Восст.')===0) return false;
+    if(s.sellerName==='Ксения'&&(s.totalRevenue||0)===0) return false;
+    return s.date>=range.from&&s.date<=range.to;
+  });
+  var shops=['all'];
+  allShifts.forEach(function(s){if(s.shopName&&shops.indexOf(s.shopName)<0)shops.push(s.shopName);});
+  var chipEl=document.getElementById('ss_shop_chips');
+  if(chipEl) chipEl.innerHTML=shops.map(function(sh){
+    var active=_ssShop===sh;
+    return '<button onpointerdown="event.preventDefault();_ssShop=\''+sh+'\';renderSellerStats()" style="padding:5px 10px;border-radius:20px;border:'+(active?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(active?'#1e2a14':'#22222e')+';color:'+(active?'#c8f060':'#8888aa')+';font-size:11px;font-weight:'+(active?'700':'400')+';cursor:pointer">'+(sh==='all'?'Все магазины':sh)+'</button>';
+  }).join('');
+  var shifts=_ssShop==='all'?allShifts:allShifts.filter(function(s){return s.shopName===_ssShop;});
+  var sellers={};
+  shifts.forEach(function(s){
+    var name=(s.sellerName||'—').replace(/^Восст. /,'');
+    if(!sellers[name])sellers[name]={name:name,shifts:0,revenue:0,sales:0,checks:[],zp:0,travel:0,hasCashDiff:0,shops:{}};
+    var sel=sellers[name];
+    sel.shifts++;
+    var rev=(s.cashRevenue||0)+(s.cardRevenue||0)+(s.totalDiscount||0);
+    sel.revenue+=rev;
+    var sc=s.salesCount||0; sel.sales+=sc;
+    if(sc>0) sel.checks.push(rev/sc);
+    sel.zp+=s.zp||0; sel.travel+=s.travel||0;
+    if(s.hasCashDiff) sel.hasCashDiff++;
+    if(s.shopName) sel.shops[s.shopName]=(sel.shops[s.shopName]||0)+1;
+  });
+  var selArr=Object.values(sellers).sort(function(a,b){return b.revenue-a.revenue;});
+  var cont=document.getElementById('ss_content');
+  if(!selArr.length){cont.innerHTML='<div class="empty"><div class="ei">📊</div>Нет смен за период</div>';return;}
+  var fmt=function(n){return Math.round(n).toLocaleString('ru-RU');};
+  var totalRev=selArr.reduce(function(s,x){return s+x.revenue;},0);
+  var totalShifts=selArr.reduce(function(s,x){return s+x.shifts;},0);
+  var totalZp=selArr.reduce(function(s,x){return s+x.zp;},0);
+  var medals=['🥇','🥈','🥉'];
+  var html='<div style="background:#1e2a14;border:1px solid #2e4e2e;border-radius:12px;padding:12px;margin-bottom:10px">'+
+    '<div style="font-size:11px;color:#c8f060;font-weight:700;margin-bottom:6px">📈 ИТОГО ЗА ПЕРИОД</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      '<div style="flex:1;min-width:80px;background:#22222e;border-radius:8px;padding:8px;text-align:center"><div style="font-size:11px;color:#8888aa">Выручка</div><div style="font-size:14px;font-weight:700;color:#c8f060">'+fmt(totalRev)+'₽</div></div>'+
+      '<div style="flex:1;min-width:80px;background:#22222e;border-radius:8px;padding:8px;text-align:center"><div style="font-size:11px;color:#8888aa">Смен</div><div style="font-size:14px;font-weight:700;color:#f0f0f8">'+totalShifts+'</div></div>'+
+      '<div style="flex:1;min-width:80px;background:#22222e;border-radius:8px;padding:8px;text-align:center"><div style="font-size:11px;color:#8888aa">ФОТ</div><div style="font-size:14px;font-weight:700;color:#60f090">'+fmt(totalZp)+'₽</div></div>'+
+    '</div></div>'+
+  '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">'+
+    '<div style="font-size:12px;font-weight:700;color:#c8f060;margin-bottom:8px">🏆 РЕЙТИНГ</div>'+
+    selArr.map(function(sel,i){
+      var pct=totalRev>0?Math.round(sel.revenue/totalRev*100):0;
+      return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #2e2e3e">'+
+        '<div style="font-size:16px;width:22px;text-align:center">'+(medals[i]||'#'+(i+1))+'</div>'+
+        '<div style="flex:1"><div style="font-size:13px;font-weight:700">'+sel.name+'</div>'+
+          '<div style="margin-top:3px;background:#2e2e3e;border-radius:4px;height:4px">'+
+            '<div style="background:#c8f060;border-radius:4px;height:4px;width:'+pct+'%"></div></div></div>'+
+        '<div style="text-align:right"><div style="font-size:13px;font-weight:700;color:#c8f060">'+fmt(sel.revenue)+'₽</div>'+
+          '<div style="font-size:10px;color:#8888aa">'+sel.shifts+' смен</div></div></div>';
+    }).join('')+'</div>'+
+  '<div style="font-size:12px;font-weight:700;color:#8888aa;margin:12px 0 8px">КАРТОЧКИ</div>'+
+  selArr.map(function(sel){
+    var avgRev=sel.shifts>0?sel.revenue/sel.shifts:0;
+    var avgCheck=sel.checks.length>0?sel.checks.reduce(function(s,x){return s+x;},0)/sel.checks.length:0;
+    var avgZp=sel.shifts>0?sel.zp/sel.shifts:0;
+    var avgZpT=sel.shifts>0?(sel.zp+sel.travel)/sel.shifts:0;
+    var shopsStr=Object.keys(sel.shops).map(function(sh){return sh+'('+sel.shops[sh]+')';}).join(', ');
+    function row(lbl,val,col){return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e1e2e;font-size:12px"><span style="color:#8888aa">'+lbl+'</span><span style="font-weight:700;color:'+(col||'#f0f0f8')+'">'+val+'</span></div>';}
+    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
+        '<div style="font-size:14px;font-weight:700">'+sel.name+'</div>'+
+        '<div style="font-size:10px;color:#8888aa">'+shopsStr+'</div></div>'+
+      row('Смен',sel.shifts)+
+      row('Выручка итого',fmt(sel.revenue)+'₽','#c8f060')+
+      row('Ср. выручка / смену',fmt(avgRev)+'₽','#c8f060')+
+      row('Продаж итого',sel.sales)+
+      row('Ср. чек',fmt(avgCheck)+'₽','#60c8f0')+
+      row('ЗП итого',fmt(sel.zp)+'₽','#60f090')+
+      row('Ср. ЗП / смену',fmt(avgZp)+'₽','#60f090')+
+      row('Ср. ЗП+проезд',fmt(avgZpT)+'₽','#60f090')+
+      (sel.hasCashDiff>0?row('Расхождения кассы',sel.hasCashDiff+' смен','#f06060'):'')+
+    '</div>';
+  }).join('');
+  cont.innerHTML=html;
+}
+
 function buildAdminTabs(){
   const t=document.getElementById('mainTabs'); t.style.display='flex';
   t.innerHTML=`
@@ -4290,6 +4418,7 @@ function buildAdminTabs(){
     <button class="tab" onclick="showPg('shopsettings',this);renderShopSettings()"><div class="ti">⚙️</div><span>Настройки</span></button>
     <button class="tab" onclick="showPg('stock',this);initStockPage()"><div class="ti">📦</div><span>Склад</span></button>
     <button class="tab" onclick="showPg('admin-rcv-wo',this);initAdminRcvWo()"><div class="ti">📥</div><span>Приходы</span></button>
+    <button class="tab" onclick="showPg('seller-stats',this);renderSellerStats()"><div class="ti">📊</div><span>Продавцы</span></button>
     <button class="tab" onclick="exitShift()"><div class="ti">🚪</div><span>Выйти</span></button>`;
 }
 function renderJournal(){
