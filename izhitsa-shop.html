@@ -10388,6 +10388,10 @@ function generatePeriodReport(){
           exps.filter(function(e){return e.expType==='other';}).forEach(function(e){
             othRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.comment||''});
           });
+          // Fallback: s.otherExp — scalar field for shifts that don't use expenses array
+          if((s.otherExp||0)>0 && !exps.some(function(e){return e.expType==='other';})){
+            othRows.push({date:s.date,shop:s.shopName,amt:s.otherExp,note:s.expComment||''});
+          }
         });
         inkRows.sort(function(a,b){return b.date.localeCompare(a.date);});
         supRows.sort(function(a,b){return b.date.localeCompare(a.date);});
