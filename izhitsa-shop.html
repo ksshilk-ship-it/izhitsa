@@ -1105,10 +1105,12 @@ function checkForAppUpdate() {
     <div style="background:#0f0a1a;border:1px solid #a060f0;border-radius:10px;padding:10px;margin-bottom:6px">
       <label style="font-size:10px;color:#a060f0;font-weight:700">🛍 ДР Товар (наличные)</label>
       <input class="fi" type="number" id="morningCashDr" placeholder="0" inputmode="numeric" style="font-size:18px;font-weight:700;text-align:center;border-color:#a060f0;margin-top:4px" oninput="checkMorningValid()">
+      <div id="morningCashDrHint" style="font-size:11px;margin-top:3px;display:none"></div>
     </div>
     <div style="background:#0a0f13;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-bottom:10px">
       <label style="font-size:10px;color:#60c8f0;font-weight:700">🛒 Покупки сотрудников</label>
       <input class="fi" type="number" id="morningCashStaff" placeholder="0" inputmode="numeric" style="font-size:18px;font-weight:700;text-align:center;border-color:#60c8f0;margin-top:4px" oninput="checkMorningValid()">
+      <div id="morningCashStaffHint" style="font-size:11px;margin-top:3px;display:none"></div>
     </div>
     <div style="font-size:10px;font-weight:700;color:#f0c060;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">📦 Остаток товара на утро</div>
     <div style="background:#1a150a;border:1px solid #f0c060;border-radius:10px;padding:10px;margin-bottom:6px">
@@ -3180,15 +3182,25 @@ function checkMorningValid(){
   var goodsOk = _goodsMornMode==='auto' || filledNonNeg('morningGoods');
   var goodsDrOk = _goodsDrMode==='auto' || filledNonNeg('morningGoodsDr');
   var allOk = cashOk && cashDrOk && cashStaffOk && goodsOk && goodsDrOk;
-  if(cashOk){
-    const num = parseFloat(document.getElementById('morningCash').value);
-    hint.style.display='block'; hint.textContent='✓ '+fmt(num)+' — принято'; hint.style.color='#60f090';
-    const prev=getPrevShift((pendingSession&&pendingSession.shopName)||'');
-    if((prev&&prev.cashEvening)!=null&&Math.abs(num-prev.cashEvening)>1){
-      hint.style.color='#f0a060';
-      hint.textContent='⚠️ Отличается от вечера прошлой смены ('+fmt(prev.cashEvening)+')';
-    }
-  } else { hint.style.display='none'; }
+  var prev=getPrevShift((pendingSession&&pendingSession.shopName)||'');
+  function checkHint(ok, inputId, hintId, prevVal, color){
+    var h=document.getElementById(hintId);
+    if(!h) return;
+    if(ok){
+      var num=parseFloat(document.getElementById(inputId).value);
+      h.style.display='block';
+      if(prevVal!=null && prevVal>=100 && Math.abs(num-prevVal)<=1){
+        h.textContent='✅ Сходится с вечером пред. смены'; h.style.color='#60f090';
+      } else if(prevVal!=null && prevVal>=100){
+        h.textContent='✅ Принято'; h.style.color='#60f090';
+      } else {
+        h.textContent='✅ Принято'; h.style.color='#60f090';
+      }
+    } else { h.style.display='none'; }
+  }
+  checkHint(cashOk,'morningCash','morningCashHint',prev&&prev.cashEvening,'#c8f060');
+  checkHint(cashDrOk,'morningCashDr','morningCashDrHint',prev&&prev.drCashEvening,'#a060f0');
+  checkHint(cashStaffOk,'morningCashStaff','morningCashStaffHint',prev&&prev.cashStaffEvening,'#60c8f0');
   if(allOk){ btn.disabled=false; btn.style.opacity='1'; }
   else { btn.disabled=true; btn.style.opacity='.4'; }
 }
