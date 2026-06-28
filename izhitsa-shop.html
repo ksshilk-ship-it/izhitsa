@@ -4408,6 +4408,34 @@ function renderSellerStats(){
   cont.innerHTML=html;
 }
 
+
+function svRepairExpenses(shiftId){
+  // Пересчитывает zp/travel/inkass/otherExp из expenses[] для старых PSJ-смен
+  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var idx=shifts.findIndex(function(s){return (s.id||s._id)===shiftId;});
+  if(idx<0){showToast('Смена не найдена');return;}
+  var sh=shifts[idx];
+  var exps=sh.journal?sh.journal.filter(function(e){return e.type==='expense';}):[];
+  if(!exps.length&&!(sh.expenses&&sh.expenses.length)){showToast('Нет расходов для пересчёта');return;}
+  var src=sh.expenses&&sh.expenses.length?sh.expenses:exps;
+  var zpR=0,travR=0,inkR=0,othR=0;
+  src.forEach(function(e){
+    var t=e.expType||'other',a=e.amount||0;
+    if(t==='zp')zpR+=a;
+    else if(t==='travel')travR+=a;
+    else if(t==='inkass')inkR+=a;
+    else othR+=a;
+  });
+  sh.zp=zpR;sh.travel=travR;sh.inkass=inkR;sh.otherExp=othR;
+  shifts[idx]=sh;
+  localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+  try{db.collection('iz_shifts').doc(shiftId).set(sh);}catch(e){}
+  if(_currentShiftView&&(_currentShiftView.id===shiftId||_currentShiftView._id===shiftId)){
+    _currentShiftView=sh;_renderShiftView();
+  }
+  showToast('✅ Расходы пересчитаны');
+}
+
 function buildAdminTabs(){
   const t=document.getElementById('mainTabs'); t.style.display='flex';
   t.innerHTML=`
@@ -7304,6 +7332,8 @@ function _renderShiftView(){
       '<div style="background:#2e2a14;border:1px solid #f0c060;border-radius:9px;padding:8px 10px;margin-bottom:8px;font-size:11px;color:#f0c060">⚠️ Эта смена ещё не закрыта продавцом (статус "открыта"). Если просто удалить, она может появиться снова, когда устройство продавца синхронизируется.</div>'+
       '<button onclick="svForceCloseShift()" style="width:100%;padding:9px;background:#2e2a14;border:1px solid #f0c060;border-radius:9px;font-weight:700;font-size:12px;color:#f0c060;cursor:pointer;margin-bottom:10px">🔐 Принудительно закрыть смену</button>'
       :'');
+  var sid2=sh.id||sh._id||'';
+  var repairExpHtml=(sh.backfilled||sh.isArchive||sh.source==='psj')?'<button onpointerdown="event.preventDefault();svRepairExpenses(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a1a2e;border:1px solid #a060f0;border-radius:9px;font-weight:700;font-size:12px;color:#a060f0;cursor:pointer;margin-bottom:8px">🔧 Пересчитать расходы (ЗП/проезд/прочие)</button>':'';
   var deleteShiftHtml = '<button onclick="svDeleteShift()" style="width:100%;padding:16px;background:#2e1a1a;border:2px solid #f06060;border-radius:12px;font-weight:700;font-size:14px;color:#f06060;cursor:pointer;margin-top:14px">🗑 Удалить смену целиком</button>';
   document.getElementById('editShiftBody').innerHTML =
     summaryHtml +
@@ -7316,6 +7346,7 @@ function _renderShiftView(){
     acc('wo', '🗑', 'Списания', '#f06060', woAllLen||null, woBody) +
     acc('exp', '💸', 'Расходы', '#f0a060', (expenses.length||(zp||inkass||otherExp||drInkass||drSupplier?1:0))||null, expBody) +
     acc('staff', '🛒', 'Покупки сотрудников', '#a060f0', staffArr.length||null, staffBody) +
+    repairExpHtml +
     deleteShiftHtml;
 }
 var _svOpenAccs = {};
@@ -10483,6 +10514,11 @@ function generatePeriodReport(){
     totCash+=s.cashRevenue||0;totCard+=s.cardRevenue||0;totDisc+=s.totalDiscount||0;
     totZp+=s.zp||0;totTravel+=s.travel||0;totInkass+=s.inkass||0;totOther+=s.otherExp||0;totSupplier+=s.supplierExp||0;
     totDrInkass+=s.drInkass||0;totDrSupplier+=s.drSupplierAmt||0;
+    // Также из expenses[] для живых смен где goodsType==='dr'
+    if(s.expenses&&s.expenses.length){
+      if(!s.drInkass) totDrInkass+=s.expenses.filter(function(e){return e.expType==='inkass'&&e.goodsType==='dr';}).reduce(function(a,e){return a+e.amount;},0);
+      if(!s.drSupplierAmt) totDrSupplier+=s.expenses.filter(function(e){return e.expType==='supplier'&&e.goodsType==='dr';}).reduce(function(a,e){return a+e.amount;},0);
+    }
     if(s.expenses&&s.expenses.length){
       if(!s.zp)totZp+=s.expenses.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
       if(!s.travel)totTravel+=s.expenses.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+e.amount;},0);
