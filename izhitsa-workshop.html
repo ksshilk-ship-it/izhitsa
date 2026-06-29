@@ -598,60 +598,42 @@ function applyUpdate() {
   <div class="page" id="pg-inventory">
     <div class="stitle">🔍 Инвентаризация</div>
 
-    <!-- Статус -->
-    <div class="srow" id="invStats" style="display:none">
-      <div class="sc"><div class="sc-v" id="invChecked" style="color:var(--inc)">0</div><div class="sc-l">Нашли ✅</div></div>
-      <div class="sc"><div class="sc-v" id="invMissing" style="color:var(--exp)">0</div><div class="sc-l">Не нашли ❌</div></div>
-      <div class="sc"><div class="sc-v" id="invRemain" style="color:var(--a2)">0</div><div class="sc-l">Не проверено</div></div>
+    <!-- Режим: история / активная сверка -->
+    <div id="invHistoryMode">
+
+      <!-- ВНЕСЕНИЕ ОСТАТКОВ — группы первой инвентаризации -->
+      <div id="invFiSection">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:13px;font-weight:700;color:var(--text)">📋 Внесение остатков на склад</div>
+          <button onclick="openFirstInventoryMo()" style="background:var(--a2);border:none;border-radius:8px;padding:6px 12px;color:#000;font-size:12px;font-weight:700;cursor:pointer">➕ Группа</button>
+        </div>
+        <div id="invFiGroupsList"></div>
+      </div>
+
+      <!-- ИСТОРИЯ СВЕРОК — заголовок и кнопка рендерятся в JS -->
+      <div id="invHistorySection">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 8px">
+          <div id="invHistoryTitle" style="font-size:13px;font-weight:700;color:var(--text)">🔍 Последняя сверка</div>
+          <button class="btn" style="background:var(--accent);color:#000;padding:6px 12px;font-size:12px" onclick="startNewInventory()">▶ Начать сверку</button>
+        </div>
+        <div id="invHistoryList">
+          <div style="font-size:13px;color:var(--t2);text-align:center;padding:12px 0">Загрузка...</div>
+        </div>
+      </div>
     </div>
 
-    <!-- Список склада для проверки -->
-    <div class="card" id="invListCard">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div class="ctitle" style="margin:0">Товары на складе</div>
-        <button onclick="startInventory()" id="invStartBtn" style="background:var(--a2);border:none;border-radius:8px;padding:6px 12px;color:#000;font-size:12px;font-weight:700;cursor:pointer">▶ Начать сверку</button>
+    <!-- Активная сверка -->
+    <div id="invActiveMode" style="display:none">
+      <div class="srow" style="margin-bottom:10px">
+        <div class="sc"><div class="sc-v" id="invChecked" style="color:var(--inc)">0</div><div class="sc-l">Нашли ✅</div></div>
+        <div class="sc"><div class="sc-v" id="invMissing" style="color:var(--exp)">0</div><div class="sc-l">Не нашли ❌</div></div>
+        <div class="sc"><div class="sc-v" id="invRemain" style="color:var(--a2)">0</div><div class="sc-l">Не проверено</div></div>
       </div>
-      <!-- Поиск — показывается только в режиме сверки -->
-      <div id="invSearchWrap" style="display:none;margin-bottom:8px">
-        <input class="fi" id="invSearchInput" placeholder="🔍 Поиск по наименованию, артикулу..."
-          oninput="filterInvList()" autocomplete="off">
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button onclick="finishInventory()" class="btn green" style="flex:1">📋 Завершить и сохранить</button>
+        <button onclick="cancelInventory()" class="btn sec" style="flex:0 0 auto">✕</button>
       </div>
-      <div id="invItemsList"></div>
-      <div id="invFinishWrap" style="display:none;margin-top:12px">
-        <button onclick="showInventoryDiff()" class="btn" style="background:var(--a5)">📋 Подвести итог</button>
-      </div>
-      <button onclick="openFirstInventoryMo()" id="invFirstTimeBtn" style="display:none;margin-top:10px" class="btn green">🆕 Первая инвентаризация (внести остатки)</button>
-    </div>
-
-    <!-- Группы первой инвентаризации -->
-    <div id="fiGroupsSection" style="display:none">
-      <div class="stitle" style="font-size:14px;margin-top:14px">Группы инвентаризации</div>
-      <div id="fiGroupsList"></div>
-      <button onclick="openFirstInventoryMo()" class="btn" style="background:var(--a2);margin-top:6px">➕ Добавить ещё группу</button>
-    </div>
-
-    <!-- Расхождения -->
-    <div id="invDiffSection" style="display:none">
-      <div class="card" style="border-color:var(--exp)" id="invMissingCard">
-        <div class="ctitle" style="color:var(--exp)">❌ Недостача (в системе есть, по факту нет)</div>
-        <div id="invMissingList"></div>
-      </div>
-      <div class="card" style="border-color:var(--a4)" id="invExtraCard">
-        <div class="ctitle" style="color:var(--a4)">⚠️ Излишек (по факту есть, в системе нет)</div>
-        <div id="invExtraList"></div>
-      </div>
-      <div class="card" style="border-color:var(--inc)">
-        <div class="ctitle" style="color:var(--inc)">📋 Итог инвентаризации</div>
-        <div id="invSummary"></div>
-      </div>
-      <button class="btn green" onclick="applyInventory()" id="invApplyBtn">✅ Применить и обновить остатки</button>
-      <button class="btn sec" style="margin-top:8px" onclick="resetInventory()">↩️ Начать заново</button>
-    </div>
-
-    <!-- История -->
-    <div class="card" style="margin-top:8px">
-      <div class="ctitle">История инвентаризаций</div>
-      <div id="invHistory"></div>
+      <div id="invGroupsList"></div>
     </div>
   </div>
 
@@ -1304,8 +1286,8 @@ const ROLES = {
   заготовщик:    {tabs:['dash','blanks','extrawork'], label:'🪚 Заготовщик'},
   мастер:        {tabs:['dash','masterblanks','mywork','othertasks','delivery','zp'], label:'🔨 Мастер'},
   кладовщик:     {tabs:['warehouse','shipment','receiving','inventory','otmanual'], label:'📦 Кладовщик'},
-  управляющий:   {tabs:['dash','warehouse','zp','zpay','stats','admin'], label:'👑 Управляющий'},
-  администратор: {tabs:['dash','warehouse','zp','zpay','stats','admin','import'], label:'🛡 Администратор'},
+  управляющий:   {tabs:['dash','warehouse','zp','zpay','stats','inventory','admin'], label:'👑 Управляющий'},
+  администратор: {tabs:['dash','warehouse','zp','zpay','stats','inventory','admin','import'], label:'🛡 Администратор'},
 };
 
 const TAB_CFG = {
@@ -1908,8 +1890,9 @@ function startListeners(){
   },console.error);
   // Первая инвентаризация (внесение остатков с нуля)
   db.collection('ws_first_inventory').orderBy('createdAt','desc').onSnapshot(snap=>{
-    _fiGroups = snap.docs.map(d=>d.data());
+    _fiGroups = snap.docs.map(d=>({id:d.id,...d.data()}));
     renderFirstInventoryGroups();
+    renderInvFiGroups();
   },console.error);
 }
 
@@ -4841,110 +4824,246 @@ async function saveManualStock(){
 // ════════════════════════════════
 // ИНВЕНТАРИЗАЦИЯ
 // ════════════════════════════════
-let _invItems   = [];   // товары на складе по системе
-let _invChecked = new Set(); // id отмеченных как "нашли"
-let _invMissing = new Set(); // id отмеченных как "не нашли"
-let _invExtra   = [];   // лишние (введены но не в базе)
+
+// ════════ ИНВЕНТАРИЗАЦИЯ — ИСТОРИЯ СВЕРОК ════════
+let _invItems   = [];
+let _invChecked = new Set();
+let _invMissing = new Set();
 let _invStarted = false;
+let _invHistories = [];
 
 function renderInventoryPage(){
-  _invItems   = items.filter(i=>i.status==='received' && !i.isArchiveDraft);
+  _invItems = items.filter(i=>i.status==='received' && !i.isArchiveDraft);
   _invChecked = new Set();
   _invMissing = new Set();
-  _invExtra   = [];
   _invStarted = false;
-  renderInvList();
-  renderInvHistory();
-  renderFirstInventoryGroups();
-  document.getElementById('invStats').style.display    = 'none';
-  document.getElementById('invDiffSection').style.display = 'none';
-  document.getElementById('invSearchWrap').style.display = 'none';
-  document.getElementById('invFinishWrap').style.display = 'none';
-  document.getElementById('invStartBtn').style.display    = _invItems.length ? 'block' : 'none';
-  document.getElementById('invFirstTimeBtn').style.display = _invItems.length ? 'none' : 'block';
+  const hm = document.getElementById('invHistoryMode');
+  const am = document.getElementById('invActiveMode');
+  if(hm) hm.style.display='block';
+  if(am) am.style.display='none';
+  renderInvFiGroups();
+  if(!_invHistories.length) loadInvHistories();
+  else renderInventoryHistory();
 }
 
-function startInventory(){
-  _invStarted = true;
-  _invChecked = new Set();   // id позиций отмеченных как "нашли"
-  _invMissing = new Set();   // id позиций отмеченных как "не нашли"
-  _invExtra   = [];
-  document.getElementById('invStats').style.display = 'grid';
-  document.getElementById('invStartBtn').style.display = 'none';
-  document.getElementById('invSearchWrap').style.display = 'block';
-  document.getElementById('invFinishWrap').style.display = 'block';
-  renderInvList();
-  updateInvStats();
-  showToast('✅ Сверка начата. Отмечайте каждую позицию.');
+function isInvAdmin(){
+  return session && (session.role==='администратор' || session.role==='управляющий');
 }
 
+function renderInvFiGroups(){
+  const c = document.getElementById('invFiGroupsList'); if(!c) return;
+  const admin = isInvAdmin();
 
-function renderInvList(){
-  const c = document.getElementById('invItemsList'); if(!c) return;
-  if(!_invItems.length){
-    c.innerHTML = '<div class="empty" style="padding:16px 0"><div class="ei">📦</div>Склад пуст</div>';
+  if(!_fiGroups.length){
+    c.innerHTML='<div style="font-size:12px;color:var(--t2);padding:8px 0">Групп пока нет. Нажмите «➕ Группа» чтобы начать вносить товары.</div>';
     return;
   }
 
-  const groups = {};
-  _invItems.forEach(item=>{
-    const rawName = (item.name||item.itemName||'—').trim();
-    const key = rawName.toLowerCase();
-    if(!groups[key]) groups[key]={name: rawName, items:[]};
-    groups[key].items.push(item);
-  });
-  const sortedGroups = Object.values(groups).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+  const sorted = _fiGroups.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
 
-  if(!_invStarted){
-    c.innerHTML = sortedGroups.map(g=>{
-      const id = 'invg_'+g.name.replace(/[^а-яёa-z0-9]/gi,'_');
-      return `<div style="margin-bottom:6px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
-        <div onclick="toggleInvGroup('${id}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--s2);cursor:pointer">
-          <div style="font-size:13px;font-weight:700">${g.name}</div>
-          <div style="display:flex;align-items:center;gap:10px">
-            <span style="font-size:12px;color:var(--t2)">${g.items.length} шт.</span>
-            <span id="${id}_arrow" style="color:var(--t2)">▼</span>
-          </div>
+  if(!admin){
+    // ══ КЛАДОВЩИК: простой список без дат и аналитики ══
+    c.innerHTML = sorted.map(g=>{
+      const gQty  = g.positions.reduce((s,p)=>s+(parseInt(p.qty)||1),0);
+      const gReal = items.filter(i=>i.fromFirstInventory===g.id && i.status==='received').length;
+      const gMiss = g.status==='active' && gReal<gQty;
+      const icon  = {draft:'⏳',active:'✅',archived:'🗄'}[g.status]||'';
+      return `<div onclick="openFiGroupDetail('${g.id}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid ${gMiss?'var(--exp)':'var(--border)'};border-radius:10px;margin-bottom:6px;cursor:pointer;background:${gMiss?'rgba(255,80,80,0.05)':'var(--s2)'}">
+        <div>
+          <div style="font-size:13px;font-weight:600">${icon} ${g.groupName}</div>
+          <div style="font-size:11px;color:var(--t2)">${g.positions.length} поз. · ${gQty} шт.</div>
+          ${gMiss?`<div style="font-size:11px;color:var(--exp)">⚠️ Не все активированы (${gReal}/${gQty})</div>`:''}
         </div>
-        <div id="${id}" style="display:none;padding:0 12px">
-          ${g.items.map(item=>`
-            <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
-              <span style="font-weight:600">${item.artikul?'№'+item.artikul+' ':''}</span>
-              <span style="color:var(--t2)">${item.wood||''}${item.size?' · '+item.size:''}</span>
-              <span style="float:right;color:var(--accent)">${fmt(item.price||0)}</span>
-            </div>`).join('')}
-        </div>
+        <span style="font-size:18px;color:var(--t2)">›</span>
       </div>`;
     }).join('');
     return;
   }
 
-  c.innerHTML = sortedGroups.map(g=>{
-    const found   = g.items.filter(i=>_invChecked.has(i._id)).length;
-    const missing = g.items.filter(i=>_invMissing.has(i._id)).length;
-    const total   = g.items.length;
-    const allFound = found===total;
-    const allMiss  = missing===total;
-    const bgH = allFound?'rgba(80,255,150,0.1)':allMiss?'rgba(255,80,80,0.1)':'var(--s2)';
-    const icon = allFound?'✅':allMiss?'❌':(found>0||missing>0)?'⚠️':'○';
-    const id = 'invg_'+g.name.replace(/[^а-яёa-z0-9]/gi,'_');
-    return `<div style="margin-bottom:6px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
-      <div onclick="toggleInvGroup('${id}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:${bgH};cursor:pointer">
+  // ══ АДМИНИСТРАТОР/УПРАВЛЯЮЩИЙ: группировка по датам с аналитикой ══
+  const byDate = {};
+  sorted.forEach(g=>{
+    const d   = new Date(g.createdAt);
+    const key = d.toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
+    if(!byDate[key]) byDate[key]={date:key, groups:[], ts: d};
+    byDate[key].groups.push(g);
+  });
+
+  c.innerHTML = Object.values(byDate).sort((a,b)=>b.ts-a.ts).map(({date,groups})=>{
+    const totalPositions = groups.reduce((s,g)=>s+g.positions.length,0);
+    const totalQty       = groups.reduce((s,g)=>s+g.positions.reduce((ss,p)=>ss+(parseInt(p.qty)||1),0),0);
+    const activeCount    = groups.filter(g=>g.status==='active').length;
+    const draftCount     = groups.filter(g=>g.status==='draft').length;
+    const totalSum       = groups.reduce((s,g)=>s+g.positions.reduce((ss,p)=>ss+(p.price||0)*(parseInt(p.qty)||1),0),0);
+    const realOnStock    = groups.reduce((s,g)=>s+items.filter(i=>i.fromFirstInventory===g.id&&i.status==='received').length,0);
+    const mismatch       = activeCount>0 && realOnStock<totalQty;
+
+    return `<div style="margin-bottom:10px;border:1px solid ${mismatch?'var(--exp)':draftCount?'var(--a4)':'var(--border)'};border-radius:12px;overflow:hidden">
+      <div style="padding:10px 12px;background:var(--s2);border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:13px;font-weight:700">${date}</div>
+          <div style="font-size:11px;color:var(--t2)">${groups.length} гр. · ${totalPositions} поз. · ${fmt(totalSum)}</div>
+        </div>
+        <div style="margin-top:5px;display:flex;gap:10px;flex-wrap:wrap">
+          ${activeCount?`<span style="font-size:11px;color:var(--inc)">✅ Активировано: ${activeCount}</span>`:''}
+          ${draftCount?`<span style="font-size:11px;color:var(--a4)">⏳ Черновики: ${draftCount}</span>`:''}
+          ${mismatch
+            ?`<span style="font-size:11px;color:var(--exp);font-weight:700">⚠️ На складе ${realOnStock} из ${totalQty} шт. — расхождение!</span>`
+            :activeCount?`<span style="font-size:11px;color:var(--inc)">📦 На складе: ${realOnStock} шт.</span>`:''}
+        </div>
+      </div>
+      ${groups.map(g=>{
+        const gQty  = g.positions.reduce((s,p)=>s+(parseInt(p.qty)||1),0);
+        const gSum  = g.positions.reduce((s,p)=>s+(p.price||0)*(parseInt(p.qty)||1),0);
+        const gReal = items.filter(i=>i.fromFirstInventory===g.id&&i.status==='received').length;
+        const gMiss = g.status==='active' && gReal<gQty;
+        const icon  = {draft:'⏳',active:'✅',archived:'🗄'}[g.status]||'';
+        const tCreate = new Date(g.createdAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+        const tActive = g.activatedAt ? new Date(g.activatedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : null;
+        return `<div onclick="openFiGroupDetail('${g.id}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;background:${gMiss?'rgba(255,80,80,0.05)':''}">
+          <div>
+            <div style="font-size:13px;font-weight:600">${icon} ${g.groupName}</div>
+            <div style="font-size:11px;color:var(--t2)">${gQty} шт. · ${fmt(gSum)}</div>
+            <div style="font-size:10px;color:var(--t2)">Внесено в ${tCreate}${tActive?' · Активировано в '+tActive:''}</div>
+            ${gMiss?`<div style="font-size:11px;color:var(--exp)">⚠️ На складе ${gReal}/${gQty} — нажмите для доактивации</div>`:''}
+          </div>
+          <span style="font-size:18px;color:var(--t2)">›</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+}
+
+function loadInvHistories(){
+  db.collection('ws_inventories').orderBy('createdAt','desc').limit(50).get().then(snap=>{
+    _invHistories = snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderInventoryHistory();
+  }).catch(()=>{ renderInventoryHistory(); });
+}
+
+function renderInventoryHistory(){
+  const c = document.getElementById('invHistoryList'); if(!c) return;
+  const admin = isInvAdmin();
+  const titleEl = document.getElementById('invHistoryTitle');
+  if(titleEl) titleEl.textContent = admin ? '🔍 История сверок' : '🔍 Последняя сверка';
+
+  if(!_invHistories.length){
+    c.innerHTML = admin
+      ? `<div style="font-size:13px;color:var(--t2);text-align:center;padding:12px 0">Сверок ещё не было</div>`
+      : `<div style="font-size:12px;color:var(--t2);padding:8px 0">Сверок ещё не проводилось</div>`;
+    return;
+  }
+
+  const sorted = _invHistories.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+
+  if(!admin){
+    // Кладовщик: только итог последней сверки
+    const last = sorted[0];
+    const d = new Date(last.createdAt);
+    const dateStr = d.toLocaleDateString('ru-RU',{day:'numeric',month:'long'});
+    const miss = last.missingCount||0;
+    c.innerHTML = `<div style="background:${miss?'rgba(255,80,80,0.07)':'rgba(80,255,150,0.07)'};border:1px solid ${miss?'var(--exp)':'var(--inc)'};border-radius:12px;padding:12px">
+      <div style="font-size:12px;color:var(--t2);margin-bottom:4px">Последняя сверка · ${dateStr}</div>
+      <div style="font-size:14px;font-weight:700;color:${miss?'var(--exp)':'var(--inc)'}">${miss?'⚠️ Расхождений: '+miss+' шт.':'✅ Всё в порядке — расхождений нет'}</div>
+    </div>`;
+    return;
+  }
+
+  // Администратор/Управляющий: полная история
+  c.innerHTML = sorted.map(h=>{
+    const d = new Date(h.createdAt);
+    const dateStr = d.toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
+    const timeStr = d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+    const miss = h.missingCount||0;
+    return `<div onclick="openInvHistoryDetail('${h.id}')" style="padding:12px;border:1px solid var(--border);border-radius:12px;margin-bottom:8px;cursor:pointer;background:${miss===0?'rgba(80,255,150,0.05)':'rgba(255,80,80,0.05)'}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div><div style="font-size:14px;font-weight:700">${dateStr}</div>
+          <div style="font-size:11px;color:var(--t2)">${timeStr} · ${h.by||'—'}</div></div>
+        <span style="font-size:18px">${miss===0?'✅':'⚠️'}</span>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:8px">
+        <span style="font-size:12px;color:var(--t2)">Всего: ${h.totalCount||0}</span>
+        <span style="font-size:12px;color:var(--inc)">✅ ${h.foundCount||0}</span>
+        <span style="font-size:12px;color:${miss?'var(--exp)':'var(--t2)'}">❌ ${miss}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openInvHistoryDetail(id){
+  const h = _invHistories.find(x=>x.id===id); if(!h) return;
+  const d = new Date(h.createdAt);
+  const dateStr = d.toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'})+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('invHistDetailTitle').textContent = 'Сверка '+dateStr;
+  const missing = h.missingItems||[];
+  document.getElementById('invHistDetailContent').innerHTML = `
+    <div style="background:var(--s2);border-radius:10px;padding:12px;margin-bottom:12px">
+      <div class="at-row"><span class="at-lbl">Дата</span><span class="at-val">${dateStr}</span></div>
+      <div class="at-row"><span class="at-lbl">Провёл</span><span class="at-val">${h.by||'—'}</span></div>
+      <div class="at-row"><span class="at-lbl">Всего</span><span class="at-val">${h.totalCount||0} шт.</span></div>
+      <div class="at-row"><span class="at-lbl">Найдено ✅</span><span class="at-val" style="color:var(--inc)">${h.foundCount||0} шт.</span></div>
+      <div class="at-row"><span class="at-lbl">Не найдено ❌</span><span class="at-val" style="color:${missing.length?'var(--exp)':'var(--inc)'}">${missing.length} шт.</span></div>
+    </div>
+    ${missing.length?`<div class="ctitle" style="color:var(--exp)">❌ Не найденные позиции</div>
+      ${missing.map(m=>`<div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:13px;font-weight:600">${m.name||'—'}${m.artikul?' · №'+m.artikul:''}</div>
+        <div style="font-size:11px;color:var(--t2)">${m.wood||''}${m.size?' · '+m.size:''} · ${fmt(m.price||0)}</div>
+      </div>`).join('')}`
+    :'<div style="color:var(--inc);font-size:13px;padding:8px 0">✅ Все позиции найдены — расхождений нет</div>'}`;
+  openMo('invHistoryDetailMo');
+}
+
+function startNewInventory(){
+  _invItems = items.filter(i=>i.status==='received' && !i.isArchiveDraft);
+  if(!_invItems.length){ showToast('Склад пуст — нечего проверять'); return; }
+  _invChecked = new Set();
+  _invMissing = new Set();
+  _invStarted = true;
+  document.getElementById('invHistoryMode').style.display='none';
+  document.getElementById('invActiveMode').style.display='block';
+  renderInvGroups();
+  updateInvStats();
+}
+
+function cancelInventory(){
+  if(!confirm('Отменить текущую сверку? Прогресс будет потерян.')) return;
+  renderInventoryPage();
+}
+
+function renderInvGroups(){
+  const c = document.getElementById('invGroupsList'); if(!c) return;
+  const groups = {};
+  _invItems.forEach(item=>{
+    const raw=(item.name||item.itemName||'—').trim();
+    const key=raw.toLowerCase();
+    if(!groups[key]) groups[key]={name:raw,items:[]};
+    groups[key].items.push(item);
+  });
+  const sortedGroups=Object.values(groups).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+  c.innerHTML=sortedGroups.map(g=>{
+    const found=g.items.filter(i=>_invChecked.has(i._id)).length;
+    const miss=g.items.filter(i=>_invMissing.has(i._id)).length;
+    const total=g.items.length;
+    const allOk=found===total, allMiss=miss===total;
+    const bgH=allOk?'rgba(80,255,150,0.1)':allMiss?'rgba(255,80,80,0.1)':'var(--s2)';
+    const icon=allOk?'✅':allMiss?'❌':(found>0||miss>0)?'⚠️':'○';
+    const id='invg_'+g.name.replace(/[^а-яёa-z0-9]/gi,'_');
+    return `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      <div onclick="toggleInvGroup('${id}')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 12px;background:${bgH};cursor:pointer">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:16px">${icon}</span>
-          <div>
-            <div style="font-size:13px;font-weight:700">${g.name}</div>
-            <div style="font-size:11px;color:var(--t2)">✅${found} ❌${missing} ○${total-found-missing} / ${total}</div>
-          </div>
+          <div><div style="font-size:13px;font-weight:700">${g.name}</div>
+            <div style="font-size:11px;color:var(--t2)">✅${found} ❌${miss} ○${total-found-miss}/${total}</div></div>
         </div>
         <span id="${id}_arrow" style="color:var(--t2)">▼</span>
       </div>
       <div id="${id}" style="display:none;padding:0 12px">
         ${g.items.map(item=>{
-          const isF=_invChecked.has(item._id), isM=_invMissing.has(item._id);
+          const isF=_invChecked.has(item._id),isM=_invMissing.has(item._id);
+          const num=item.artikul||(item.itemNum&&!item.itemNum.startsWith('НАЧ-')?item.itemNum:'');
           return `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);background:${isF?'rgba(80,255,150,0.07)':isM?'rgba(255,80,80,0.07)':''}">
             <div style="flex:1">
-              <div style="font-size:12px;font-weight:600">${item.artikul?'№'+item.artikul+' ':''}${item.wood||'—'}${item.size?' · '+item.size:''}</div>
+              <div style="font-size:12px;font-weight:600">${num?'№'+num+' ':''}${item.wood||'—'}${item.size?' · '+item.size:''}</div>
               <div style="font-size:11px;color:var(--t2)">${fmt(item.price||0)}</div>
             </div>
             <button onpointerdown="event.preventDefault();markInvItem('${item._id}','found')"
@@ -4965,206 +5084,69 @@ function renderInvList(){
 }
 
 function toggleInvGroup(id){
-  const el=document.getElementById(id), arrow=document.getElementById(id+'_arrow');
+  const el=document.getElementById(id),arrow=document.getElementById(id+'_arrow');
   if(!el) return;
   const open=el.style.display==='block';
   el.style.display=open?'none':'block';
   if(arrow) arrow.textContent=open?'▼':'▲';
 }
 
-function markInvItem(id, state){
-  if(state==='found'){ _invChecked.add(id); _invMissing.delete(id); }
-  else { _invMissing.add(id); _invChecked.delete(id); }
-  updateInvStats();
-  renderInvList();
+function markInvItem(id,state){
+  if(state==='found'){_invChecked.add(id);_invMissing.delete(id);}
+  else{_invMissing.add(id);_invChecked.delete(id);}
+  updateInvStats(); renderInvGroups();
 }
 
-function markInvGroup(name, state){
-  const normName = name.trim().toLowerCase();
-  _invItems.filter(i=>((i.name||i.itemName||'—').trim().toLowerCase())===normName).forEach(i=>{
-    if(state==='found'){ _invChecked.add(i._id); _invMissing.delete(i._id); }
-    else { _invMissing.add(i._id); _invChecked.delete(i._id); }
+function markInvGroup(name,state){
+  const norm=name.trim().toLowerCase();
+  _invItems.filter(i=>((i.name||i.itemName||'—').trim().toLowerCase())===norm).forEach(i=>{
+    if(state==='found'){_invChecked.add(i._id);_invMissing.delete(i._id);}
+    else{_invMissing.add(i._id);_invChecked.delete(i._id);}
   });
-  updateInvStats();
-  renderInvList();
-}
-
-function scanInvItem(){
-  if(!_invStarted){ showToast('Сначала нажмите «▶ Начать»'); return; }
-  const raw = (document.getElementById('invArtInput')||{}).value.trim();
-  if(!raw){ showToast('Введите артикул'); return; }
-
-  // Ищем по артикулу, затем по названию
-  const found = _invItems.filter(i=>
-    (i.artikul && i.artikul.toLowerCase()===raw.toLowerCase()) ||
-    (i.itemNum && i.itemNum.toLowerCase()===raw.toLowerCase()) ||
-    ((i.name||i.itemName||'').toLowerCase().includes(raw.toLowerCase()))
-  );
-
-  const resEl = document.getElementById('invScanResult');
-  resEl.style.display = 'block';
-
-  if(!found.length){
-    // Не найден — излишек
-    const alreadyExtra = _invExtra.find(e=>e.artikul===raw);
-    if(alreadyExtra){ alreadyExtra.qty++; }
-    else { _invExtra.push({artikul:raw, name:raw, qty:1}); }
-    resEl.innerHTML = `<div style="background:#2a1a14;border-radius:8px;padding:10px;color:var(--a4)">⚠️ Артикул <strong>${raw}</strong> не найден в базе — добавлен в излишки</div>`;
-  } else {
-    // Нашли — отмечаем первый непроверенный
-    const unchecked = found.find(i=>!_invChecked.has(i._id));
-    if(unchecked){
-      _invChecked.add(unchecked._id);
-      const item = unchecked;
-      resEl.innerHTML = `<div style="background:#1a2a14;border-radius:8px;padding:10px;color:var(--inc)">✅ <strong>${item.name||item.itemName}</strong>${item.wood?' · 🌳 '+item.wood:''}${item.size?' · 📐 '+item.size:''} — отмечено</div>`;
-    } else {
-      resEl.innerHTML = `<div style="background:#2a2a14;border-radius:8px;padding:10px;color:var(--a4)">⚠️ Все экземпляры «${found[0].name||found[0].itemName}» уже отмечены (${found.length} шт.)</div>`;
-    }
-  }
-
-  document.getElementById('invArtInput').value = '';
-  document.getElementById('invArtInput').focus();
-  updateInvStats();
-  renderInvList();
+  updateInvStats(); renderInvGroups();
 }
 
 function updateInvStats(){
-  const checked = _invChecked.size;
-  const missing = _invMissing.size;
-  const remain  = _invItems.length - checked - missing;
-  const el = id=>document.getElementById(id);
-  if(el('invChecked')) el('invChecked').textContent = checked;
-  if(el('invMissing')) el('invMissing').textContent = missing;
-  if(el('invRemain'))  el('invRemain').textContent  = Math.max(0, remain);
+  const ch=_invChecked.size,mi=_invMissing.size,re=Math.max(0,_invItems.length-ch-mi);
+  const el=id=>document.getElementById(id);
+  if(el('invChecked')) el('invChecked').textContent=ch;
+  if(el('invMissing')) el('invMissing').textContent=mi;
+  if(el('invRemain'))  el('invRemain').textContent=re;
 }
 
-function showInventoryDiff(){
-  const missing = _invItems.filter(i=>!_invChecked.has(i._id));
-  const extra   = _invExtra;
-
-  // Группируем недостачу
-  const missByKey = {};
-  missing.forEach(i=>{
-    const k = (i.name||i.itemName)+'|'+(i.wood||'')+'|'+(i.size||'');
-    if(!missByKey[k]) missByKey[k]={name:i.name||i.itemName,wood:i.wood,size:i.size,ids:[],price:i.price||0};
-    missByKey[k].ids.push(i._id);
-  });
-
-  const missCard = document.getElementById('invMissingCard');
-  const missEl   = document.getElementById('invMissingList');
-  if(missing.length){
-    missCard.style.display='block';
-    missEl.innerHTML = Object.values(missByKey).map(g=>`
-      <div class="at-row">
-        <span class="at-lbl">${g.name}${g.wood?' · 🌳 '+g.wood:''}${g.size?' · 📐 '+g.size:''}</span>
-        <span class="at-val" style="color:var(--exp)">−${g.ids.length} шт.</span>
-      </div>`).join('');
-  } else {
-    missCard.style.display='none';
-  }
-
-  const extraCard = document.getElementById('invExtraCard');
-  const extraEl   = document.getElementById('invExtraList');
-  if(extra.length){
-    extraCard.style.display='block';
-    extraEl.innerHTML = extra.map(e=>`
-      <div class="at-row">
-        <span class="at-lbl">${e.name}</span>
-        <span class="at-val" style="color:var(--a4)">+${e.qty} шт.</span>
-      </div>`).join('');
-  } else {
-    extraCard.style.display='none';
-  }
-
-  const totalChecked = _invChecked.size;
-  document.getElementById('invSummary').innerHTML = `
-    <div style="font-size:13px;line-height:2">
-      ✅ Совпало: <strong style="color:var(--inc)">${totalChecked} шт.</strong><br>
-      ❌ Недостача: <strong style="color:var(--exp)">${missing.length} шт.</strong><br>
-      ⚠️ Излишек: <strong style="color:var(--a4)">${extra.reduce((s,e)=>s+e.qty,0)} шт.</strong>
-    </div>`;
-
-  document.getElementById('invDiffSection').style.display = 'block';
-  document.getElementById('invListCard').scrollIntoView({behavior:'smooth'});
+function finishInventory(){
+  const total=_invItems.length,found=_invChecked.size,miss=_invMissing.size,unch=total-found-miss;
+  const missingItems=_invItems.filter(i=>_invMissing.has(i._id)).map(i=>({
+    _id:i._id,name:i.name||i.itemName||'',artikul:i.artikul||'',wood:i.wood||'',size:i.size||'',price:i.price||0
+  }));
+  document.getElementById('invFinishContent').innerHTML=`
+    <div style="background:var(--s2);border-radius:10px;padding:14px;margin-bottom:12px">
+      <div class="at-row"><span class="at-lbl">Всего на складе</span><span class="at-val">${total} шт.</span></div>
+      <div class="at-row"><span class="at-lbl">Найдено ✅</span><span class="at-val" style="color:var(--inc)">${found} шт.</span></div>
+      <div class="at-row"><span class="at-lbl">Не найдено ❌</span><span class="at-val" style="color:${miss?'var(--exp)':'var(--inc)'}">${miss} шт.</span></div>
+      ${unch?`<div class="at-row"><span class="at-lbl">Не проверено</span><span class="at-val" style="color:var(--a4)">${unch} шт.</span></div>`:''}
+    </div>
+    ${miss?`<div style="font-size:12px;color:var(--exp);margin-bottom:8px">⚠️ ${miss} позиций не найдено. Сохранятся в отчёт.</div>`:'<div style="font-size:12px;color:var(--inc);margin-bottom:8px">✅ Всё найдено — расхождений нет!</div>'}`;
+  openMo('invFinishMo');
 }
 
-async function applyInventory(){
-  const btn = document.getElementById('invApplyBtn');
-  btn.disabled = true; btn.textContent = '⏳ Применяю...';
-
-  const missing = _invItems.filter(i=>!_invChecked.has(i._id));
-
-  // Списываем недостающие — меняем статус на write_off
-  for(let i=0; i<missing.length; i+=400){
-    const chunk = missing.slice(i,i+400);
-    const batch = db.batch();
-    chunk.forEach(item=>{
-      batch.update(db.collection('ws_items').doc(item._id),{
-        status:'write_off',
-        writtenOffAt: now(),
-        writtenOffBy: session.name,
-        writtenOffReason: 'инвентаризация'
-      });
-    });
-    await batch.commit().catch(console.error);
-  }
-
-  // Добавляем излишки на склад
-  if(_invExtra.length){
-    const batch = db.batch();
-    _invExtra.forEach(e=>{
-      for(let q=0; q<e.qty; q++){
-        const ref = db.collection('ws_items').doc();
-        batch.set(ref,{
-          id:uid(), name:e.name, itemName:e.name, artikul:e.artikul||'',
-          status:'received', masterId:'', masterName:'Инвентаризация',
-          addedBy:session.name, createdAt:now(), receivedAt:now(),
-          isManual:true, isInventoryExtra:true,
-          itemNum:'ИНВ-'+uid().toUpperCase()
-        });
-      }
-    });
-    await batch.commit().catch(console.error);
-  }
-
-  // Сохранить историю
-  const hist = JSON.parse(localStorage.getItem('ws_inventory_history')||'[]');
-  hist.unshift({
-    date: now().split('T')[0],
-    by: session.name,
-    checked: _invChecked.size,
-    missing: missing.length,
-    extra: _invExtra.reduce((s,e)=>s+e.qty,0)
-  });
-  localStorage.setItem('ws_inventory_history', JSON.stringify(hist.slice(0,20)));
-
-  btn.disabled=false;
-  showToast(`✅ Инвентаризация применена: −${missing.length} недостача, +${_invExtra.reduce((s,e)=>s+e.qty,0)} излишки`);
-  renderInventoryPage();
+async function saveInventoryResult(){
+  const total=_invItems.length,found=_invChecked.size,miss=_invMissing.size;
+  const missingItems=_invItems.filter(i=>_invMissing.has(i._id)).map(i=>({
+    _id:i._id,name:i.name||i.itemName||'',artikul:i.artikul||'',wood:i.wood||'',size:i.size||'',price:i.price||0
+  }));
+  const record={id:uid(),createdAt:now(),by:session.name,byId:session.id,
+    totalCount:total,foundCount:found,missingCount:miss,missingItems};
+  try{
+    await db.collection('ws_inventories').doc(record.id).set(record);
+    _invHistories.unshift(record);
+    closeMo('invFinishMo');
+    renderInventoryPage();
+    showToast('✅ Сверка сохранена');
+  }catch(e){showToast('Ошибка: '+e.message);}
 }
 
-function resetInventory(){ renderInventoryPage(); }
-
-function renderInvHistory(){
-  const c = document.getElementById('invHistory'); if(!c) return;
-  const hist = JSON.parse(localStorage.getItem('ws_inventory_history')||'[]');
-  if(!hist.length){
-    c.innerHTML='<div style="font-size:12px;color:var(--t2);padding:8px 0">Инвентаризаций ещё не было</div>';
-    return;
-  }
-  c.innerHTML = hist.map(h=>`
-    <div class="at-row">
-      <span class="at-lbl">${h.date} · ${h.by}<br>
-        <span style="font-size:10px">✅ ${h.checked} · ❌ −${h.missing} · ⚠️ +${h.extra}</span>
-      </span>
-    </div>`).join('');
-}
-
-// Кнопка «Подвести итог» — показывается когда начата инвентаризация
-function checkInvProgress(){
-  if(!_invStarted) return;
-  showInventoryDiff();
-}
+// === NEW INV FUNCTIONS INSERTED ABOVE ===
 
 // ════════════════════════════════
 // ПРИБЫТИЕ НА РАБОТУ
@@ -6478,6 +6460,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   renderEmployeeList();
   if(session) startApp();
   setSync(navigator.onLine?'online':'offline');
+  // Загружаем историю инвентаризаций в фоне
+  setTimeout(loadInvHistories, 2000);
   // Init date defaults
   const todayStr = new Date().toISOString().split('T')[0];
   const blankD = document.getElementById('blankDate'); if(blankD) blankD.value = todayStr;
@@ -6689,6 +6673,24 @@ document.addEventListener('DOMContentLoaded', ()=>{
 </div>
 
 <!-- ДЕТАЛИ ГРУППЫ ИНВЕНТАРИЗАЦИИ -->
+<!-- ИТОГ СВЕРКИ -->
+<div class="mo" id="invFinishMo">
+  <div class="md"><div class="mh"></div><div class="mt">📋 Итог сверки</div>
+    <div id="invFinishContent" style="margin-bottom:14px"></div>
+    <button class="btn green" onclick="saveInventoryResult()">💾 Сохранить итог</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('invFinishMo')">Продолжить сверку</button>
+  </div>
+</div>
+
+<!-- ДЕТАЛИ СВЕРКИ ИЗ ИСТОРИИ -->
+<div class="mo" id="invHistoryDetailMo">
+  <div class="md"><div class="mh"></div>
+    <div class="mt" id="invHistDetailTitle">Сверка</div>
+    <div id="invHistDetailContent"></div>
+    <button class="btn sec" style="margin-top:14px" onclick="closeMo('invHistoryDetailMo')">Закрыть</button>
+  </div>
+</div>
+
 <div class="mo" id="fiGroupDetailMo">
   <div class="md"><div class="mh"></div>
     <div class="mt" id="fiGroupDetailTitle">Группа</div>
