@@ -663,15 +663,27 @@ db.enablePersistence({synchronizeTabs:true}).catch(function(e){ console.log('Per
 
 var _adminSyncUnsubs = {};
 var ADMIN_SYNC_SETTINGS = {
-  'iz_admin_users':      {doc:'admins',        field:'admins'},
-  'iz_shops':            {doc:'shops',         field:'shops'},
-  'iz_sellers':          {doc:'sellers',       field:'sellers'},
-  'iz_shop_zp_settings': {doc:'zp',            field:'zp'},
-  'iz_items':            {doc:'items',         field:'items'},
-  'iz_sales_sources':    {doc:'sales_sources', field:'data'},
-  'iz_plan_data':        {doc:'plan',          field:'data'},
-  'iz_debits':           {doc:'debits',        field:'data'},
-  'iz_ws_employees':     {doc:'ws_employees',  field:'data'},
+  'iz_admin_users':      {doc:'admins',              field:'admins'},
+  'iz_shops':            {doc:'shops',               field:'shops'},
+  'iz_sellers':          {doc:'sellers',             field:'sellers'},
+  'iz_shop_zp_settings': {doc:'zp',                 field:'zp'},
+  'iz_items':            {doc:'items',               field:'items'},
+  'iz_sales_sources':    {doc:'sales_sources',       field:'data'},
+  'iz_plan_data':        {doc:'plan',                field:'data'},
+  'iz_debits':           {doc:'debits',              field:'data'},
+  'iz_ws_employees':     {doc:'ws_employees',        field:'data'},
+  // Справочники товаров — те же что в izhitsa-shop.html
+  'iz_species':          {doc:'species',             field:'list'},
+  'iz_accounts':         {doc:'accounts',            field:'accounts'},
+  'iz_payment_methods':  {doc:'payment_methods',     field:'data'},
+  'iz_suppliers':        {doc:'suppliers',           field:'data'},
+  'iz_goods':            {doc:'goods',               field:'data'},
+  'iz_goods_derevo':     {doc:'goods_derevo',        field:'data'},
+  'iz_goods_dr':         {doc:'goods_dr',            field:'data'},
+  'iz_dr_species':       {doc:'dr_species',          field:'data'},
+  'iz_materials':        {doc:'materials',           field:'data'},
+  'iz_work_schedules':   {doc:'work_schedules',      field:'data'},
+  'iz_employee_statuses':{doc:'employee_statuses',   field:'data'},
 };
 function adminSyncListen(lsKey) {
   var m = ADMIN_SYNC_SETTINGS[lsKey]; if(!m || _adminSyncUnsubs[lsKey]) return;
@@ -867,12 +879,22 @@ function adminManualSync() {
   ];
 
   var settingsDocs = [
-    {doc: 'staff',       key: 'iz_staff',             field: 'staff'},
-    {doc: 'shops',       key: 'iz_shops',             field: 'shops'},
-    {doc: 'accounts',    key: 'iz_accounts',          field: 'accounts'},
-    {doc: 'items',       key: 'iz_items',             field: 'items'},
-    {doc: 'pay_methods', key: 'iz_pay_methods',       field: 'pay_methods'},
-    {doc: 'zp_settings', key: 'iz_shop_zp_settings',  field: 'zp_settings'},
+    {doc: 'staff',              key: 'iz_staff',              field: 'staff'},
+    {doc: 'shops',              key: 'iz_shops',              field: 'shops'},
+    {doc: 'accounts',           key: 'iz_accounts',           field: 'accounts'},
+    {doc: 'items',              key: 'iz_items',              field: 'items'},
+    {doc: 'pay_methods',        key: 'iz_payment_methods',    field: 'data'},
+    {doc: 'zp',                 key: 'iz_shop_zp_settings',   field: 'zp'},
+    {doc: 'sales_sources',      key: 'iz_sales_sources',      field: 'data'},
+    {doc: 'suppliers',          key: 'iz_suppliers',          field: 'data'},
+    {doc: 'goods',              key: 'iz_goods',              field: 'data'},
+    {doc: 'goods_derevo',       key: 'iz_goods_derevo',       field: 'data'},
+    {doc: 'goods_dr',           key: 'iz_goods_dr',           field: 'data'},
+    {doc: 'species',            key: 'iz_species',            field: 'list'},
+    {doc: 'dr_species',         key: 'iz_dr_species',         field: 'data'},
+    {doc: 'materials',          key: 'iz_materials',          field: 'data'},
+    {doc: 'work_schedules',     key: 'iz_work_schedules',     field: 'data'},
+    {doc: 'employee_statuses',  key: 'iz_employee_statuses',  field: 'data'},
   ];
 
   var promises = [];
@@ -2223,18 +2245,22 @@ function saveRefBook(key, data) {
 
 function renderRefBooks() {
   var refBooks = [
-    {id: 'sources', icon: '🏪', name: 'Точки и каналы продаж', key: 'iz_sales_sources'},
-    {id: 'accounts', icon: '🏦', name: 'Счета и кассы', key: 'iz_accounts'},
-    {id: 'payments', icon: '💳', name: 'Способы оплаты', key: 'iz_payment_methods'},
-    {id: 'salary', icon: '💰', name: 'Формулы расчета ЗП', key: 'iz_salary_formulas'},
-    {id: 'goods', icon: '📦', name: 'База товаров', key: 'iz_goods'},
-    {id: 'suppliers', icon: '🚚', name: 'База поставщиков', key: 'iz_suppliers'},
-    {id: 'expenses', icon: '📊', name: 'Статьи расходов', key: 'iz_expense_items'},
-    {id: 'works', icon: '🛠️', name: 'Доп. работы', key: 'iz_additional_works'},
-    {id: 'sizes', icon: '📏', name: 'Размеры изделий', key: 'iz_sizes'},
-    {id: 'materials', icon: '💎', name: 'Породы изделий', key: 'iz_materials'},
-    {id: 'statuses', icon: '👤', name: 'Статусы сотрудников', key: 'iz_employee_statuses'},
-    {id: 'schedules', icon: '⏰', name: 'Графики работы', key: 'iz_work_schedules'}
+    {id: 'sources',    icon: '🏪', name: 'Точки и каналы продаж',        key: 'iz_sales_sources'},
+    {id: 'accounts',   icon: '🏦', name: 'Счета и кассы',                key: 'iz_accounts'},
+    {id: 'payments',   icon: '💳', name: 'Способы оплаты',               key: 'iz_payment_methods'},
+    {id: 'salary',     icon: '💰', name: 'Формулы расчета ЗП',           key: 'iz_salary_formulas'},
+    {id: 'goods',      icon: '📦', name: 'База товаров (общая)',          key: 'iz_goods'},
+    {id: 'goods_derevo', icon: '🌳', name: 'База товаров — Дерево',      key: 'iz_goods_derevo'},
+    {id: 'goods_dr',   icon: '🛍', name: 'База товаров — ДР Товар',      key: 'iz_goods_dr'},
+    {id: 'suppliers',  icon: '🚚', name: 'База поставщиков',             key: 'iz_suppliers'},
+    {id: 'expenses',   icon: '📊', name: 'Статьи расходов',              key: 'iz_expense_items'},
+    {id: 'works',      icon: '🛠️', name: 'Доп. работы',                  key: 'iz_additional_works'},
+    {id: 'sizes',      icon: '📏', name: 'Размеры изделий',              key: 'iz_sizes'},
+    {id: 'materials',  icon: '💎', name: 'Породы дерева',                key: 'iz_materials'},
+    {id: 'species',    icon: '🌿', name: 'Породы (species)',             key: 'iz_species'},
+    {id: 'dr_species', icon: '🍬', name: 'Вкус / Состав (ДР Товар)',     key: 'iz_dr_species'},
+    {id: 'statuses',   icon: '👤', name: 'Статусы сотрудников',          key: 'iz_employee_statuses'},
+    {id: 'schedules',  icon: '⏰', name: 'Графики работы',               key: 'iz_work_schedules'}
   ];
   
   var html = '';
