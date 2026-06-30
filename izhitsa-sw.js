@@ -1,93 +1,107 @@
-// Ижица Service Worker v4 — network-first для HTML, cache-first для статики
-// ВАЖНО: увеличивай версию при каждом обновлении файлов
-const CACHE_NAME = 'izhitsa-v4';
-const BUILD_DATE = '2026-06-11';
+// Ижица Service Worker — офлайн-режим для shop-модуля
+// Кэширует HTML-приложение и Firebase SDK, чтобы приложение запускалось без интернета.
 
-const HTML_FILES = [
+const CACHE_NAME = 'izhitsa-shop-v1';
+const CACHE_URLS = [
   './izhitsa-shop.html',
-  './izhitsa-admin.html', 
-  './izhitsa-workshop.html',
-  './izhitsa-install.html',
+  './manifest-shop.json',
+  'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js',
+  'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js'
 ];
 
-// INSTALL — кешируем при первой загрузке
+// Установка — кэшируем критичные файлы сразу
 self.addEventListener('install', function(event) {
-  console.log('[SW v4] Installing...');
-  self.skipWaiting(); // Активируемся немедленно, не ждём закрытия старых вкладок
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
-      return Promise.allSettled(
-        HTML_FILES.map(function(url) {
-          // Всегда загружаем свежую версию при install
-          return fetch(url + '?v=' + BUILD_DATE, {cache: 'no-store'})
-            .then(function(r) { if(r.ok) cache.put(url, r); })
-            .catch(function(){});
-        })
-      );
+      return cache.addAll(CACHE_URLS).catch(function(err) {
+        // Если что-то не закэшировалось (например нет сети при первой установке) — не валим всю установку
+        console.log('[SW] Частичная ошибка кэширования:', err);
+      });
     })
   );
 });
 
-// ACTIVATE — удаляем ВСЕ старые кеши
+// Активация — чистим старые кэши
 self.addEventListener('activate', function(event) {
-  console.log('[SW v4] Activating, clearing old caches...');
   event.waitUntil(
-    caches.keys().then(function(keys) {
+    caches.keys().then(function(names) {
       return Promise.all(
-        keys.filter(function(k){ return k !== CACHE_NAME; })
-          .map(function(k){ console.log('[SW] Deleting cache:', k); return caches.delete(k); })
+        names.filter(function(n) { return n !== CACHE_NAME; })
+             .map(function(n) { return caches.delete(n); })
       );
-    }).then(function(){ return self.clients.claim(); })
+    }).then(function() { return self.clients.claim(); })
   );
 });
 
-// FETCH — network-first для HTML, cache-first для остального
+// Стратегия: Network First для HTML (чтобы обновления подхватывались сразу при наличии сети),
+// Cache First для Firebase SDK (эти файлы версионированы и не меняются),
+// при отсутствии сети — отдаём из кэша.
 self.addEventListener('fetch', function(event) {
-  if(event.request.method !== 'GET') return;
   var url = event.request.url;
-  
-  // Firestore — только сеть, никогда не кешировать
-  if(url.includes('firestore.googleapis.com') || 
-     url.includes('firebase.google.com') ||
-     url.includes('googleapis.com/google.firestore')) return;
 
-  var isHTML = url.endsWith('.html') || HTML_FILES.some(function(f){
-    return url.includes(f.replace('./',''));
-  });
+  // Не трогаем запросы к Firestore API — они должны идти напрямую в сеть
+  // (offline persistence в Firestore сам разберётся с очередью)
+  if (url.indexOf('firestore.googleapis.com') >= 0 ||
+      url.indexOf('googleapis.com') >= 0 && url.indexOf('firebasejs') < 0) {
+    return;
+  }
 
-  if(isHTML) {
-    // Network-first: всегда пробуем сеть для HTML
-    event.respondWith(
-      fetch(event.request, {cache: 'no-cache'})
-        .then(function(response) {
-          if(response && response.status === 200) {
-            var clone = response.clone();
-            caches.open(CACHE_NAME).then(function(cache){ cache.put(event.request, clone); });
-          }
-          return response;
-        })
-        .catch(function() {
-          // Нет сети — отдаём из кеша
-          return caches.match(event.request);
-        })
-    );
-  } else {
-    // Cache-first для статики (иконки, манифесты)
+  // Firebase SDK — Cache First (статичные версионированные файлы)
+  if (url.indexOf('gstatic.com/firebasejs') >= 0) {
     event.respondWith(
       caches.match(event.request).then(function(cached) {
-        var networkFetch = fetch(event.request)
-          .then(function(r) {
-            if(r && r.status === 200) {
-              caches.open(CACHE_NAME).then(function(c){ c.put(event.request, r.clone()); });
-            }
-            return r;
-          }).catch(function(){ return cached; });
-        return cached || networkFetch;
+        if (cached) return cached;
+        return fetch(event.request).then(function(resp) {
+          var respClone = resp.clone();
+          caches.open(CACHE_NAME).then(function(cache) {
+            cache.put(event.request, respClone);
+          });
+          return resp;
+        });
       })
     );
+    return;
   }
+
+  // HTML-страница и манифест — Network First с fallback на кэш
+  if (event.request.mode === 'navigate' || url.indexOf('.html') >= 0 || url.indexOf('manifest') >= 0) {
+    event.respondWith(
+      fetch(event.request).then(function(resp) {
+        var respClone = resp.clone();
+        caches.open(CACHE_NAME).then(function(cache) {
+          cache.put(event.request, respClone);
+        });
+        return resp;
+      }).catch(function() {
+        return caches.match(event.request).then(function(cached) {
+          if (cached) return cached;
+          // Последний fallback — попробовать отдать главный HTML файл
+          return caches.match('./izhitsa-shop.html');
+        });
+      })
+    );
+    return;
+  }
+
+  // Всё остальное — Cache First с обновлением в фоне
+  event.respondWith(
+    caches.match(event.request).then(function(cached) {
+      var fetchPromise = fetch(event.request).then(function(resp) {
+        var respClone = resp.clone();
+        caches.open(CACHE_NAME).then(function(cache) {
+          cache.put(event.request, respClone);
+        });
+        return resp;
+      }).catch(function() { return cached; });
+      return cached || fetchPromise;
+    })
+  );
 });
 
+// Сообщение от страницы — пропустить ожидание и активироваться сразу
 self.addEventListener('message', function(event) {
-  if(event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
