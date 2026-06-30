@@ -6087,10 +6087,20 @@ function getNextArtikulNumber(){
   return max+1;
 }
 
+// Реальный последний (максимальный) порядковый номер артикула во всей системе
+function getMaxSystemArtikul(){
+  let max = 0;
+  products.forEach(p=>{
+    const n = parseInt(String(p.artikul||'').replace(/\D/g,''),10);
+    if(!isNaN(n) && n>max) max = n;
+  });
+  return max;
+}
+
 function addMaItemRow(){
   const names = getItemNames();
   const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
-  _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', name:'', wood:'', zp:0, price:0, qty:''});
+  _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', artikulManual:false, name:'', wood:'', zp:0, price:0, qty:''});
   recalcMaAutoArtikuls();
   renderMaItemsList();
 }
@@ -6116,9 +6126,11 @@ function renderMaItemsList(){
           <div onclick="setMaArtikulMode('${it.rid}','manual')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='manual'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='manual'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='manual'?'var(--accent)':'var(--border)'}">Вручную</div>
           <div onclick="setMaArtikulMode('${it.rid}','none')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='none'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='none'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='none'?'var(--accent)':'var(--border)'}">Без артикула</div>
         </div>
-        <input class="fi" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode!=='manual'?'disabled':''}
-          oninput="updateMaItem('${it.rid}','artikul',this.value)" placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
-          style="${it.artikulMode!=='manual'?'opacity:0.6':''}">
+        <input class="fi" type="text" inputmode="numeric" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
+          oninput="${it.artikulMode==='auto'?`updateMaAutoArtikul('${it.rid}',this.value)`:`updateMaItem('${it.rid}','artikul',this.value)`}"
+          placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
+          style="${it.artikulMode==='none'?'opacity:0.6':''}">
+        ${it.artikulMode==='auto'?`<div style="font-size:11px;color:var(--t2);margin-top:5px">Последний номер в системе: ${getMaxSystemArtikul()}. По умолчанию — следующий по порядку, можно ввести свой</div>`:''}
         ${(parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto' ? `<div style="font-size:11px;color:var(--accent);margin-top:5px">Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}</div>` : ''}
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Количество одинаковых изделий</label>
@@ -6161,7 +6173,19 @@ function renderMaItemsList(){
 function setMaArtikulMode(rid, mode){
   const it = _maItems.find(x=>x.rid===rid); if(!it) return;
   it.artikulMode = mode;
+  it.artikulManual = false;
   if(mode==='none') it.artikul = '';
+  recalcMaAutoArtikuls();
+  renderMaItemsList();
+}
+
+// Ручной ввод номера в окошке "Авто" — пользователь меняет, от какого номера
+// начинается автонумерация. Все последующие позиции в режиме "авто" продолжат
+// цепочку от введённого значения.
+function updateMaAutoArtikul(rid, val){
+  const it = _maItems.find(x=>x.rid===rid); if(!it) return;
+  it.artikul = val;
+  it.artikulManual = true;
   recalcMaAutoArtikuls();
   renderMaItemsList();
 }
@@ -6188,9 +6212,16 @@ function recalcMaAutoArtikuls(){
   });
   _maItems.forEach(it=>{
     if(it.artikulMode==='auto'){
-      base += 1;
-      it.artikul = String(base);
-      base += (parseInt(it.qty,10)||1) - 1;
+      if(it.artikulManual){
+        // Пользователь вручную задал номер для этой позиции — не перезаписываем его,
+        // но продолжаем цепочку для последующих позиций от этого значения.
+        const n = parseInt(String(it.artikul||'').replace(/\D/g,''),10);
+        base = (!isNaN(n) ? n : base+1) + (parseInt(it.qty,10)||1) - 1;
+      } else {
+        base += 1;
+        it.artikul = String(base);
+        base += (parseInt(it.qty,10)||1) - 1;
+      }
     }
   });
 }
@@ -6433,7 +6464,7 @@ function openFiGroupForEdit(groupId){
 function addFiItemRow(){
   const names = getItemNames();
   const woods = getWoods();
-  _fiItems.push({rid:uid(), artikul:'', artikulMode:'none', name:'', wood:'', price:0, qty:''});
+  _fiItems.push({rid:uid(), artikul:'', artikulMode:'none', artikulManual:false, name:'', wood:'', price:0, qty:''});
   renderFiItemsList();
 }
 
@@ -6454,8 +6485,16 @@ function updateFiItem(rid, field, val){
 function setFiArtikulMode(rid, mode){
   const it = _fiItems.find(x=>x.rid===rid); if(!it) return;
   it.artikulMode = mode;
+  it.artikulManual = false;
   if(mode==='auto') it.artikul = String(getNextArtikulNumber());
   if(mode==='none') it.artikul = '';
+  renderFiItemsList();
+}
+
+function updateFiAutoArtikul(rid, val){
+  const it = _fiItems.find(x=>x.rid===rid); if(!it) return;
+  it.artikul = val;
+  it.artikulManual = true;
   renderFiItemsList();
 }
 
@@ -6482,9 +6521,11 @@ function renderFiItemsList(){
           <div onclick="setFiArtikulMode('${it.rid}','manual')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='manual'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='manual'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='manual'?'var(--accent)':'var(--border)'}">Вручную</div>
           <div onclick="setFiArtikulMode('${it.rid}','none')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='none'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='none'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='none'?'var(--accent)':'var(--border)'}">Без артикула</div>
         </div>
-        <input class="fi" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode!=='manual'?'disabled':''}
-          oninput="updateFiItem('${it.rid}','artikul',this.value)" placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
-          style="${it.artikulMode!=='manual'?'opacity:0.6':''}">
+        <input class="fi" type="text" inputmode="numeric" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
+          oninput="${it.artikulMode==='auto'?`updateFiAutoArtikul('${it.rid}',this.value)`:`updateFiItem('${it.rid}','artikul',this.value)`}"
+          placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
+          style="${it.artikulMode==='none'?'opacity:0.6':''}">
+        ${it.artikulMode==='auto'?`<div style="font-size:11px;color:var(--t2);margin-top:5px">Последний номер в системе: ${getMaxSystemArtikul()}. По умолчанию — следующий по порядку, можно ввести свой</div>`:''}
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label>
         <div style="display:flex;gap:8px">
