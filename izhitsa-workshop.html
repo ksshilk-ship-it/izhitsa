@@ -1292,6 +1292,51 @@ if(_offlineNoFirebase){
   db.enablePersistence({synchronizeTabs:true}).catch(e=>console.log('Persist:',e.code));
 }
 
+// ════════ ОФФЛАЙН-ОЧЕРЕДЬ (outbox) ════════
+// Пока приложение открыто и Firestore SDK загружен — Firestore сам кеширует
+// записи локально (enablePersistence выше) и досылает их при появлении сети.
+// Но если страница открывается, когда интернета нет вообще (Firebase SDK с CDN
+// не успел скачаться) — db выше становится "заглушкой", всегда отклоняющей
+// запись. Чтобы данные в этом случае не терялись — дублируем такие записи в
+// localStorage и отправляем их в Firestore, как только SDK станет доступен.
+function _outboxRead(){ try{ return JSON.parse(localStorage.getItem('ws_outbox')||'[]'); }catch(e){ return []; } }
+function _outboxWrite(arr){ try{ localStorage.setItem('ws_outbox', JSON.stringify(arr)); }catch(e){} }
+function outboxPush(col, docId, payload){
+  const arr = _outboxRead();
+  arr.push({id: docId, col, payload, ts: Date.now()});
+  _outboxWrite(arr);
+  if(typeof setSync==='function') setSync(navigator.onLine?'online':'offline');
+}
+function outboxCount(){ return _outboxRead().length; }
+// Универсальная обёртка для записи — используйте её вместо
+// db.collection(x).doc(y).set(z), чтобы данные не терялись офлайн.
+function dbSet(col, docId, payload){
+  if(_offlineNoFirebase){
+    outboxPush(col, docId, payload);
+    return Promise.resolve({_queuedOffline:true});
+  }
+  return db.collection(col).doc(docId).set(payload);
+}
+async function outboxFlush(){
+  if(_offlineNoFirebase) return; // ждём, пока появится реальный Firestore
+  const arr = _outboxRead();
+  if(!arr.length) return;
+  const remaining = [];
+  for(const entry of arr){
+    try{ await db.collection(entry.col).doc(entry.id).set(entry.payload); }
+    catch(e){ remaining.push(entry); }
+  }
+  _outboxWrite(remaining);
+  if(remaining.length < arr.length){
+    showToast && showToast(`📤 Отправлено ${arr.length-remaining.length} отложенных записей`);
+    renderManualAcceptHistory && renderManualAcceptHistory();
+  }
+  if(typeof setSync==='function') setSync(navigator.onLine?'online':'offline');
+}
+if(!_offlineNoFirebase){ setTimeout(outboxFlush, 1500); }
+window.addEventListener('online', outboxFlush);
+setInterval(function(){ if(navigator.onLine) outboxFlush(); }, 20000); // подстраховка на случай, если событие 'online' не сработало
+
 // ════ WORKSHOP SYNC LAYER ════
 var _wsSyncUnsubs = {};
 var WS_SYNC_SETTINGS = {
@@ -1355,7 +1400,9 @@ function setSync(s){
   const dot=document.getElementById('sdot'),txt=document.getElementById('stxt');
   if(!dot||!txt)return;
   dot.style.background=s==='online'?'#60f090':s==='offline'?'#f06060':'#c8f060';
-  txt.textContent=s==='online'?'Онлайн — синхронизировано':s==='offline'?'Офлайн — данные сохранятся':'Синхронизация...';
+  const pending = (typeof outboxCount==='function') ? outboxCount() : 0;
+  const pendingSuffix = pending ? ` · ⏳ ${pending} не отправлено` : '';
+  txt.textContent=(s==='online'?'Онлайн — синхронизировано':s==='offline'?'Офлайн — данные сохранятся':'Синхронизация...') + pendingSuffix;
 }
 
 // ════════ STATE ════════
@@ -6015,9 +6062,12 @@ function setPendSubTab(tab){
 
 function openManualAcceptMo(){
   const sel = document.getElementById('maMaster');
-  if(sel) sel.innerHTML = getEmployees().filter(e=>e.role==='мастер').map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+  const masters = getEmployees().filter(e=>e.role==='мастер');
+  if(sel) sel.innerHTML = masters.map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+  if(!masters.length) showToast('⚠️ В системе нет ни одного мастера — добавьте мастера в разделе сотрудников, иначе приёмку не сохранить');
   document.getElementById('maDate').value = new Date().toISOString().slice(0,10);
   _maItems = [];
+  _maExpandedRid = null;
   addMaItemRow(); // одна строка по умолчанию
   renderMaItemsList();
   openMo('manualAcceptMo');
@@ -6129,12 +6179,54 @@ function getMaxSystemArtikul(){
   return max;
 }
 
+let _maExpandedRid = null; // rid позиции, открытой для редактирования (остальные свёрнуты)
+
 function addMaItemRow(){
   const names = getItemNames();
   const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
-  _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', artikulManual:false, name:'', wood:'', zp:0, price:0, qty:''});
+  const newItem = {rid:uid(), artikul:'', artikulMode:'auto', artikulManual:false, name:'', wood:'', zp:0, price:0, qty:'',
+    _copyName:true, _copyWood:true, _copyPrice:true, _copyZp:true};
+  _maItems.push(newItem);
+  _maExpandedRid = newItem.rid; // новая позиция всегда открывается, остальные сворачиваются
   recalcMaAutoArtikuls();
   renderMaItemsList();
+}
+
+function toggleMaItemExpand(rid){
+  _maExpandedRid = (_maExpandedRid===rid) ? null : rid;
+  renderMaItemsList();
+}
+
+function maItemSummaryLine(it){
+  const qty = parseInt(it.qty,10)||1;
+  let artLabel = '—';
+  if(it.artikulMode!=='none' && it.artikul){
+    const n = parseInt(it.artikul,10);
+    artLabel = (qty>1 && !isNaN(n)) ? `№${it.artikul}–${n+qty-1}` : `№${it.artikul}`;
+  }
+  return `${it.name||'<span style="color:var(--t2)">(без наименования)</span>'} · ${it.wood||'—'} · ${qty} шт · ${fmt(it.price||0)}₽ · ${artLabel}`;
+}
+
+function duplicateMaItemRow(rid){
+  const idx = _maItems.findIndex(x=>x.rid===rid); if(idx<0) return;
+  const src = _maItems[idx];
+  const copy = {rid:uid(), artikul:'', artikulMode:'auto', artikulManual:false,
+    name: src._copyName ? src.name : '',
+    wood: src._copyWood ? src.wood : '',
+    zp:   src._copyZp ? (src.zp||0) : 0,
+    price:src._copyPrice ? (src.price||0) : 0,
+    qty:'',
+    _copyName:true, _copyWood:true, _copyPrice:true, _copyZp:true};
+  _maItems.splice(idx+1, 0, copy);
+  _maExpandedRid = copy.rid;
+  recalcMaAutoArtikuls();
+  renderMaItemsList();
+  showToast('📋 Позиция скопирована');
+}
+
+function setMaCopyFlag(rid, field, checked){
+  const it = _maItems.find(x=>x.rid===rid); if(!it) return;
+  it[field] = checked;
 }
 
 function renderMaItemsList(){
@@ -6145,11 +6237,30 @@ function renderMaItemsList(){
     _acLists['maWood_'+it.rid] = woods;
   });
   const c = document.getElementById('maItemsList'); if(!c) return;
-  c.innerHTML = _maItems.map((it,i)=>`
-    <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:10px;border:1px solid var(--border)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <span style="font-size:11px;color:var(--t2);font-weight:700">Позиция ${i+1}</span>
-        ${_maItems.length>1?`<button onclick="removeMaItemRow('${it.rid}')" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>`:''}
+  c.innerHTML = _maItems.map((it,i)=>{
+    if(it.rid !== _maExpandedRid){
+      // ═══ СВЁРНУТЫЙ ВИД — одна строка с краткой инфой ═══
+      return `
+      <div onclick="toggleMaItemExpand('${it.rid}')" style="background:var(--s2);border-radius:10px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer">
+        <div style="min-width:0">
+          <div style="font-size:10px;color:var(--t2);font-weight:700;margin-bottom:2px">Позиция ${i+1}</div>
+          <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${maItemSummaryLine(it)}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <button onclick="event.stopPropagation();duplicateMaItemRow('${it.rid}')" title="Скопировать позицию" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--t2);cursor:pointer;font-size:13px">⎘</button>
+          ${_maItems.length>1?`<button onclick="event.stopPropagation();removeMaItemRow('${it.rid}')" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>`:''}
+          <span style="color:var(--t2);font-size:12px">▾</span>
+        </div>
+      </div>`;
+    }
+    // ═══ РАЗВЁРНУТЫЙ ВИД — полная форма редактирования ═══
+    return `
+    <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:10px;border:1px solid var(--accent)">
+      <div onclick="toggleMaItemExpand('${it.rid}')" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;cursor:pointer">
+        <span style="font-size:11px;color:var(--accent);font-weight:700">Позиция ${i+1} · редактирование ▴</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${_maItems.length>1?`<button onclick="event.stopPropagation();removeMaItemRow('${it.rid}')" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>`:''}
+        </div>
       </div>
       <div class="fg" style="margin-bottom:8px">
         <label class="fl">Артикул</label>
@@ -6199,7 +6310,22 @@ function renderMaItemsList(){
           <input class="fi" type="number" inputmode="numeric" value="${it.price||''}" oninput="updateMaItem('${it.rid}','price',this.value)" placeholder="0">
         </div>
       </div>
-    </div>`).join('');
+      <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
+        <div style="font-size:11px;color:var(--t2);margin-bottom:6px">При копировании этой позиции переносить:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--t2);cursor:pointer">
+            <input type="checkbox" ${it._copyName?'checked':''} onchange="setMaCopyFlag('${it.rid}','_copyName',this.checked)">Наименование</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--t2);cursor:pointer">
+            <input type="checkbox" ${it._copyWood?'checked':''} onchange="setMaCopyFlag('${it.rid}','_copyWood',this.checked)">Древесина</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--t2);cursor:pointer">
+            <input type="checkbox" ${it._copyPrice?'checked':''} onchange="setMaCopyFlag('${it.rid}','_copyPrice',this.checked)">Цена</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--t2);cursor:pointer">
+            <input type="checkbox" ${it._copyZp?'checked':''} onchange="setMaCopyFlag('${it.rid}','_copyZp',this.checked)">ЗП мастеру</label>
+        </div>
+        <button onclick="duplicateMaItemRow('${it.rid}')" style="width:100%;background:var(--s1);border:1px solid var(--border);border-radius:9px;padding:8px;color:var(--t1);cursor:pointer;font-size:12px;font-weight:600">⎘ Создать копию позиции с отмеченными полями</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function setMaArtikulMode(rid, mode){
@@ -6260,16 +6386,33 @@ function recalcMaAutoArtikuls(){
 
 function removeMaItemRow(rid){
   _maItems = _maItems.filter(x=>x.rid!==rid);
+  if(_maExpandedRid===rid) _maExpandedRid = _maItems.length ? _maItems[_maItems.length-1].rid : null;
   recalcMaAutoArtikuls();
   renderMaItemsList();
 }
 
+let _maSaving = false;
 async function saveManualAccept(){
+  if(_maSaving) return; // защита от повторного нажатия, пока идёт сохранение
   const masterId = document.getElementById('maMaster')?.value;
   const date     = document.getElementById('maDate')?.value;
   if(!masterId){ showToast('Выберите мастера'); return; }
   if(!date){ showToast('Укажите дату сдачи'); return; }
   if(!_maItems.length){ showToast('Добавьте хотя бы одно изделие'); return; }
+
+  // Проверяем, что у каждой позиции указано наименование — иначе раскрываем
+  // первую проблемную позицию и прерываем сохранение, чтобы не уйти "в никуда"
+  const badItem = _maItems.find(it=>!it.name || !String(it.name).trim());
+  if(badItem){
+    _maExpandedRid = badItem.rid;
+    renderMaItemsList();
+    showToast('⚠️ Укажите наименование изделия — позиция раскрыта для исправления');
+    return;
+  }
+  if(typeof db==='undefined' || !db){
+    showToast('⚠️ Внутренняя ошибка хранилища — обратитесь к разработчику');
+    return;
+  }
 
   const master = getEmployees().find(e=>e.id===masterId);
   const batchId = uid();
@@ -6288,20 +6431,39 @@ async function saveManualAccept(){
     }
   });
 
+  _maSaving = true;
+  const saveBtn = document.querySelector('#manualAcceptMo .btn.green');
+  if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = '⏳ Сохранение...'; }
+  const payload = {
+    id: batchId, masterId, masterName: master?.name||'',
+    deliveredDate: date,
+    createdBy: session.name, createdById: session.id,
+    createdAt: now(),
+    status: 'open', // open → done (после "Провести")
+    positions
+  };
   try{
-    await db.collection('ws_master_acceptances').doc(batchId).set({
-      id: batchId, masterId, masterName: master?.name||'',
-      deliveredDate: date,
-      createdBy: session.name, createdById: session.id,
-      createdAt: now(),
-      status: 'open', // open → done (после "Провести")
-      positions
-    });
+    const res = await dbSet('ws_master_acceptances', batchId, payload);
     audit && audit('manual_acceptance_created',{masterName:master?.name, date, count:positions.length});
     closeMo('manualAcceptMo');
-    showToast(`✅ Приёмка от ${master?.name||''} сохранена · ${positions.length} позиций`);
+    if(res && res._queuedOffline){
+      showToast(`📥 Нет интернета — приёмка от ${master?.name||''} сохранена на устройстве и отправится автоматически, как только появится связь`);
+    } else {
+      showToast(`✅ Приёмка от ${master?.name||''} сохранена · ${positions.length} позиций`);
+    }
     renderManualAcceptHistory();
-  }catch(e){ showToast('Ошибка: '+e.message); }
+  }catch(e){
+    // Сюда попадаем, только если реальный Firestore был доступен, но запись всё
+    // равно не прошла (например, ошибка прав доступа) — это не "офлайн",
+    // поэтому на всякий случай тоже кладём данные в очередь, чтобы не потерять их.
+    outboxPush('ws_master_acceptances', batchId, payload);
+    closeMo('manualAcceptMo');
+    showToast(`📥 Не удалось отправить сразу (${e.message}) — приёмка сохранена на устройстве, попробуем отправить ещё раз автоматически`);
+    renderManualAcceptHistory();
+  }finally{
+    _maSaving = false;
+    if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = '💾 Сохранить приёмку'; }
+  }
 }
 
 function renderManualAcceptHistory(){
