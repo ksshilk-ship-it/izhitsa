@@ -1341,7 +1341,7 @@ setInterval(function(){ if(navigator.onLine) outboxFlush(); }, 20000); // под
 var _wsSyncUnsubs = {};
 var WS_SYNC_SETTINGS = {
   'ws_employees':   {doc:'ws_employees', field:'data'},
-  'ws_item_names':  {doc:'goods',        field:'data', shared:true},   // ↔ shop/admin "iz_goods"
+  'ws_item_names':  {doc:'goods',        field:'data', shared:true},   // ↔ shop/admin "iz_goods" (если не синхронизируется — проверь имя документа)
   'ws_woods':       {doc:'materials',    field:'data', shared:true},   // ↔ shop/admin "iz_materials"
   'ws_sizes':       {doc:'sizes',        field:'data', shared:true},   // ↔ shop/admin "iz_sizes"
   'ws_extra_cats':  {doc:'ws_extra_cats',field:'data'},
@@ -1358,22 +1358,36 @@ function _wsNormalizeShared(val){
 function _wsDenormalizeShared(names){
   return names.map(function(n){ return {id: n, name: n}; });
 }
+
+let _wsSyncDebug = {};
+
 function wsSyncListen(lsKey) {
   var m = WS_SYNC_SETTINGS[lsKey]; if(!m || _wsSyncUnsubs[lsKey]) return;
+  // Попытаемся загрузить данные, и запомним, откуда они пришли
+  _wsSyncDebug[lsKey] = 'waiting...';
+  
   _wsSyncUnsubs[lsKey] = db.collection('iz_settings').doc(m.doc).onSnapshot(function(snap){
-    if(!snap.exists) return;
+    if(!snap.exists) {
+      _wsSyncDebug[lsKey] = 'no data in iz_settings/'+m.doc;
+      return;
+    }
     var val = snap.data()[m.field];
     if(val !== undefined){
       var stored = m.shared ? _wsNormalizeShared(val) : val;
       localStorage.setItem(lsKey, JSON.stringify(stored));
+      _wsSyncDebug[lsKey] = 'synced from iz_settings/'+m.doc;
       // Обновить открытые селекты сразу, если функции рендера уже определены
       try{
         if(lsKey==='ws_item_names' && typeof renderItemNameSelect==='function') renderItemNameSelect();
         if(lsKey==='ws_woods' && typeof renderWoodSelect==='function') renderWoodSelect();
         if(lsKey==='ws_sizes' && typeof renderSizeSelect==='function') renderSizeSelect();
       }catch(e){}
+    } else {
+      _wsSyncDebug[lsKey] = 'field not found: '+m.field;
     }
-  }, function(e){ console.log('ws sync err', lsKey, e.code||e); });
+  }, function(err){
+    _wsSyncDebug[lsKey] = 'error: '+err.message;
+  });
 }
 function wsSyncSave(lsKey, data) {
   localStorage.setItem(lsKey, JSON.stringify(data));
@@ -1385,6 +1399,13 @@ function wsSyncSave(lsKey, data) {
 }
 function startWsSyncListeners() {
   Object.keys(WS_SYNC_SETTINGS).forEach(wsSyncListen);
+  // Показываем статус синхронизации в консоли
+  setTimeout(function(){
+    console.log('📊 Статус синхронизации данных workshop:', _wsSyncDebug);
+    if(_wsSyncDebug['ws_item_names'] && _wsSyncDebug['ws_item_names'].includes('error')){
+      console.warn('⚠️ Товары не синхронизируются! Проверь путь в WS_SYNC_SETTINGS[ws_item_names]');
+    }
+  }, 2000);
 }
 
 
@@ -1508,14 +1529,15 @@ function acSuggest(inputId, onPick, extraArg){
     'top:'+(rect.bottom+2)+'px',
     'left:'+rect.left+'px',
     'width:'+rect.width+'px',
-    'z-index:99999',
+    'z-index:9999999',
     'max-height:'+maxH+'px',
     'overflow-y:auto',
     'background:var(--s1)',
     'border:1px solid var(--border)',
     'border-radius:10px',
     'box-shadow:0 8px 32px rgba(0,0,0,.7)',
-    '-webkit-overflow-scrolling:touch'
+    '-webkit-overflow-scrolling:touch',
+    'pointer-events:auto'
   ].join(';');
 
   box.innerHTML = matches.map(function(m){
@@ -1543,14 +1565,15 @@ function acHideSugg(inputId){
   var id = inputId || _acActiveInputId;
   if(!id) return;
   var box = document.getElementById(id+'_sugg');
-  if(box){ box.style.display='none'; box.innerHTML=''; }
+  if(box){ box.style.display='none'; box.innerHTML=''; box.style.pointerEvents='none'; }
   if(id===_acActiveInputId) _acActiveInputId = null;
 }
 
-// Глобальный обработчик: скрываем суггест при тапе вне него
+// Глобальные обработчики: скрываем dropdown при клике вне, нажатии Escape или на другие модали
 let _acActiveInputId = null;
 let _acTouchStartY = 0;
 let _acTouchMoved = false;
+
 document.addEventListener('touchstart', function(e){
   if(!_acActiveInputId) return;
   var box = document.getElementById(_acActiveInputId+'_sugg');
@@ -1558,6 +1581,23 @@ document.addEventListener('touchstart', function(e){
   if(!box || box.style.display==='none') return;
   if(box.contains(e.target) || (input && input.contains(e.target))) return;
   acHideSugg(_acActiveInputId);
+}, {passive:true});
+
+// Также закрываем dropdown при mousedown вне его
+document.addEventListener('mousedown', function(e){
+  if(!_acActiveInputId) return;
+  var box = document.getElementById(_acActiveInputId+'_sugg');
+  var input = document.getElementById(_acActiveInputId);
+  if(!box || box.style.display==='none') return;
+  if(box.contains(e.target) || (input && input.contains(e.target))) return;
+  acHideSugg(_acActiveInputId);
+}, {passive:true});
+
+// Закрываем dropdown при нажатии Escape
+document.addEventListener('keydown', function(e){
+  if(e.key==='Escape' && _acActiveInputId){
+    acHideSugg(_acActiveInputId);
+  }
 }, {passive:true});
 function acPickBlankName(val){ const el=document.getElementById('blankName'); if(el) el.value=val; acHideSugg('blankName'); }
 function acPickBlankWood(val){ const el=document.getElementById('blankWood'); if(el) el.value=val; acHideSugg('blankWood'); }
@@ -2262,6 +2302,11 @@ function renderDash(){
 
 // ════════ СПРАВОЧНИК НАИМЕНОВАНИЙ ИЗДЕЛИЙ ════════
 function getItemNames(){
+  // ВАЖНО: Данные товаров должны синхронизироваться из shop/admin приложения.
+  // Если видишь устаревшие товары, проверь путь синхронизации:
+  // - В shop/admin товары пишутся в: iz_settings/goods/{field:'data'} или iz_settings/iz_goods
+  // - Workshop слушает: iz_settings/goods (см. WS_SYNC_SETTINGS выше)
+  // - Если путь неправильный, измени 'goods' на правильное имя документа в WS_SYNC_SETTINGS
   const arr = JSON.parse(localStorage.getItem('ws_item_names')||'["Столешница","Подоконник","Столешница барная","Полка","Дверь","Фасад","Панель","Тумба","Тумба прикроватная","Комод"]');
   return arr.slice().sort((a,b)=>a.localeCompare(b,'ru'));
 }
@@ -6151,13 +6196,33 @@ function openDuplicateScanMo(){
   openMo('dupScanMo');
 }
 
-function getNextArtikulNumber(){
+// Последний присвоенный номер артикула берём из истории ПРИЁМОК (а не из
+// текущего остатка на складе) — так как товар с максимальным номером мог
+// быть уже отгружен и пропасть со склада, а нумерация всё равно должна
+// продолжаться от реально последнего выданного номера, а не от того, что
+// сейчас физически числится в остатках.
+function getMaxAcceptedArtikul(){
   let max = 0;
-  items.forEach(p=>{
-    if(p.status!=='received') return;
-    const n = parseInt(String(p.artikul||'').replace(/\D/g,''),10);
-    if(!isNaN(n) && n>max) max = n;
+  _maHistory.forEach(acc=>{
+    (acc.positions||[]).forEach(p=>{
+      const n = parseInt(String(p.artikul||'').replace(/\D/g,''),10);
+      if(!isNaN(n) && n>max) max = n;
+    });
   });
+  // Первая инвентаризация тоже может присваивать номера — учитываем и её
+  if(typeof _fiGroups!=='undefined'){
+    _fiGroups.forEach(g=>{
+      (g.positions||[]).forEach(p=>{
+        const n = parseInt(String(p.artikul||'').replace(/\D/g,''),10);
+        if(!isNaN(n) && n>max) max = n;
+      });
+    });
+  }
+  return max;
+}
+
+function getNextArtikulNumber(){
+  let max = getMaxAcceptedArtikul();
   // Также учитываем уже добавленные в текущей форме приёмки позиции —
   // каждая позиция с qty>1 резервирует диапазон последовательных номеров
   _maItems.forEach(it=>{
@@ -6170,15 +6235,10 @@ function getNextArtikulNumber(){
   return max+1;
 }
 
-// Реальный последний (максимальный) порядковый номер артикула во всей системе
+// Реальный последний (максимальный) порядковый номер, который когда-либо
+// присваивался при приёмке от мастера (см. getMaxAcceptedArtikul выше)
 function getMaxSystemArtikul(){
-  let max = 0;
-  items.forEach(p=>{
-    if(p.status!=='received') return;
-    const n = parseInt(String(p.artikul||'').replace(/\D/g,''),10);
-    if(!isNaN(n) && n>max) max = n;
-  });
-  return max;
+  return getMaxAcceptedArtikul();
 }
 
 let _maExpandedRid = null; // rid позиции, открытой для редактирования (остальные свёрнуты)
@@ -6387,12 +6447,7 @@ function updateMaItem(rid, field, val){
 // учитывая что позиция с qty>1 занимает диапазон из qty номеров подряд.
 // Нужно при изменении количества штук в любой строке, чтобы не было коллизий.
 function recalcMaAutoArtikuls(){
-  let base = 0;
-  items.forEach(p=>{
-    if(p.status!=='received') return;
-    const n = parseInt(String(p.artikul||'').replace(/\D/g,''),10);
-    if(!isNaN(n) && n>base) base = n;
-  });
+  let base = getMaxAcceptedArtikul();
   _maItems.forEach(it=>{
     if(it.artikulMode==='auto'){
       if(it.artikulManual){
