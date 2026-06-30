@@ -212,6 +212,9 @@ function applyUpdate() {
       <div class="role-card" data-role="управляющий" onclick="selectRole('управляющий',this)">
         <div class="ri">👑</div><div class="rn">Управляющий</div><div class="rs">Полный доступ</div>
       </div>
+      <div class="role-card" data-role="владелец" onclick="selectRole('владелец',this)">
+        <div class="ri">💼</div><div class="rn">Владелец</div><div class="rs">Просмотр и аналитика</div>
+      </div>
     </div>
     <div style="margin-top:8px">
       <div class="role-card" data-role="администратор" onclick="selectRole('администратор',this)">
@@ -726,6 +729,37 @@ function applyUpdate() {
   </div>
 
   <!-- STATS PAGE -->
+  <!-- ВЛАДЕЛЕЦ: ОБЗОР БИЗНЕСА -->
+  <div class="page" id="pg-owner">
+    <div class="stitle">💼 Обзор бизнеса</div>
+    <div id="ownerFilter" style="display:flex;gap:7px;margin-bottom:10px;overflow-x:auto">
+      <div class="fchip active" onclick="setOwnerPeriod('month',this)">Месяц</div>
+      <div class="fchip" onclick="setOwnerPeriod('lastmonth',this)">Прош. мес.</div>
+      <div class="fchip" onclick="setOwnerPeriod('week',this)">Неделя</div>
+      <div class="fchip" onclick="setOwnerPeriod('quarter',this)">Квартал</div>
+      <div class="fchip" onclick="setOwnerPeriod('all',this)">Всё время</div>
+    </div>
+    <div id="ownerDashContent"></div>
+  </div>
+
+  <!-- ВЛАДЕЛЕЦ: ПЕРСОНАЛ -->
+  <div class="page" id="pg-ownerstaff">
+    <div class="stitle">👥 Персонал</div>
+    <div style="display:flex;gap:7px;margin-bottom:10px;overflow-x:auto" id="ownerStaffFilter">
+      <div class="fchip active" onclick="setOwnerStaffRole('all',this)">Все</div>
+      <div class="fchip" onclick="setOwnerStaffRole('мастер',this)">🔨 Мастера</div>
+      <div class="fchip" onclick="setOwnerStaffRole('заготовщик',this)">🪚 Заготовщики</div>
+      <div class="fchip" onclick="setOwnerStaffRole('кладовщик',this)">📦 Кладовщики</div>
+    </div>
+    <div id="ownerStaffContent"></div>
+  </div>
+
+  <!-- ВЛАДЕЛЕЦ: СКЛАД (просмотр) -->
+  <div class="page" id="pg-ownerwarehouse">
+    <div class="stitle">📦 Склад — обзор</div>
+    <div id="ownerWhContent"></div>
+  </div>
+
   <div class="page" id="pg-stats">
     <div class="stitle">Статистика производства</div>
     <div id="statsFilter" style="display:flex;gap:7px;margin-bottom:10px;overflow-x:auto">
@@ -1288,6 +1322,7 @@ const ROLES = {
   кладовщик:     {tabs:['warehouse','shipment','receiving','inventory','otmanual'], label:'📦 Кладовщик'},
   управляющий:   {tabs:['dash','warehouse','zp','zpay','stats','inventory','admin'], label:'👑 Управляющий'},
   администратор: {tabs:['dash','warehouse','zp','zpay','stats','inventory','admin','import'], label:'🛡 Администратор'},
+  владелец:      {tabs:['owner','ownerstaff','ownerwarehouse','stats'], label:'💼 Владелец'},
 };
 
 const TAB_CFG = {
@@ -1309,6 +1344,9 @@ const TAB_CFG = {
   stats:     {icon:'📊', label:'Статистика', page:'pg-stats'},
   admin:     {icon:'⚙️', label:'Настройки', page:'pg-admin'},
   import:    {icon:'📥', label:'Загрузка', page:'pg-import'},
+  owner:        {icon:'💼', label:'Обзор',     page:'pg-owner'},
+  ownerstaff:   {icon:'👥', label:'Персонал',  page:'pg-ownerstaff'},
+  ownerwarehouse: {icon:'📦', label:'Склад',   page:'pg-ownerwarehouse'},
 };
 
 // ════════ UTILS ════════
@@ -1512,6 +1550,9 @@ function showPg(name,el){
   if(name==='zp')        renderZP();
   if(name==='zpay')      renderZPay();
   if(name==='stats')     renderStats();
+  if(name==='owner')     renderOwnerDash();
+  if(name==='ownerstaff') renderOwnerStaff();
+  if(name==='ownerwarehouse') renderOwnerWarehouse();
   if(name==='admin')     renderAdmin();
   if(name==='import')    renderImportPage();
   if(name==='extrawork') { renderExtraWorkList(); }
@@ -3866,6 +3907,202 @@ async function saveZPPayment(){
 // STATISTICS
 // ════════════════════════════════
 let statsPeriod = 'month';
+// ════════ ВЛАДЕЛЕЦ: АНАЛИТИКА (read-only) ════════
+let _ownerPeriod = 'month';
+
+function ownerPeriodDates(preset){
+  const now = new Date();
+  let from, to = new Date().toISOString().split('T')[0];
+  if(preset==='week'){ const d=new Date(); d.setDate(d.getDate()-7); from=d.toISOString().split('T')[0]; }
+  else if(preset==='month'){ from=new Date(now.getFullYear(),now.getMonth(),1).toISOString().split('T')[0]; to=new Date(now.getFullYear(),now.getMonth()+1,0).toISOString().split('T')[0]; }
+  else if(preset==='lastmonth'){ from=new Date(now.getFullYear(),now.getMonth()-1,1).toISOString().split('T')[0]; to=new Date(now.getFullYear(),now.getMonth(),0).toISOString().split('T')[0]; }
+  else if(preset==='quarter'){ const q=Math.floor(now.getMonth()/3); from=new Date(now.getFullYear(),q*3,1).toISOString().split('T')[0]; to=new Date(now.getFullYear(),q*3+3,0).toISOString().split('T')[0]; }
+  else { from='2020-01-01'; }
+  return {from, to};
+}
+
+function ownerFilterByPeriod(arr, dateField){
+  const {from,to} = ownerPeriodDates(_ownerPeriod);
+  return arr.filter(i=>{
+    if(!i[dateField] || i.isArchiveDraft) return false;
+    const d = i[dateField].split('T')[0];
+    if(from && d<from) return false;
+    if(to && d>to) return false;
+    return true;
+  });
+}
+
+function setOwnerPeriod(p, el){
+  _ownerPeriod = p;
+  document.querySelectorAll('#ownerFilter .fchip').forEach(c=>c.classList.remove('active'));
+  if(el) el.classList.add('active');
+  renderOwnerDash();
+}
+
+function renderOwnerDash(){
+  const c = document.getElementById('ownerDashContent'); if(!c) return;
+
+  const periodItems = ownerFilterByPeriod(items.filter(i=>i.status==='received'||i.status==='shipped'), 'receivedAt');
+  const periodExtra  = ownerFilterByPeriod(extraWorks.filter(w=>w.zpPaid), 'createdAt');
+  const periodShip   = ownerFilterByPeriod(shipments, 'createdAt');
+
+  const totalRevenue = periodItems.reduce((s,i)=>s+(i.price||0),0);
+  const totalZP       = periodItems.reduce((s,i)=>s+(i.zp||0),0) + periodExtra.reduce((s,w)=>s+(w.zp||0),0);
+  const margin        = totalRevenue - totalZP;
+
+  const stockNow    = items.filter(i=>i.status==='received').length;
+  const stockSum     = items.filter(i=>i.status==='received').reduce((s,i)=>s+(i.price||0),0);
+  const pendingNow   = items.filter(i=>i.status==='delivered').length;
+
+  const activeStaff = getEmployees().filter(e=>e.role!=='владелец' && !e._builtin).length;
+  const masterCount = getEmployees().filter(e=>e.role==='мастер').length;
+
+  // ЗП выплачено vs начислено (общий долг по бизнесу)
+  const allPayments = getZPPayments();
+  const allEmps = getEmployees().filter(e=>['мастер','заготовщик','кладовщик','управляющий'].includes(e.role) && !e._builtin);
+  let totalEarned=0, totalPaid=0;
+  allEmps.forEach(e=>{
+    totalEarned += getEarnedByEmployee(e.id);
+    totalPaid += allPayments.filter(p=>p.masterId===e.id).reduce((s,p)=>s+(p.amount||0),0);
+  });
+  const totalDebt = Math.max(0, totalEarned-totalPaid);
+
+  c.innerHTML = `
+    <div class="card" style="background:linear-gradient(135deg,#1e2a14,#1a221e);border-color:var(--accent);margin-bottom:10px">
+      <div class="ctitle">Выручка за период</div>
+      <div style="font-family:'Unbounded',sans-serif;font-size:28px;font-weight:700;color:var(--accent)">${fmt(totalRevenue)}</div>
+      <div style="display:flex;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid rgba(200,240,96,.2);font-size:12px">
+        <span style="color:var(--t2)">ЗП мастерам: ${fmt(totalZP)}</span>
+        <span style="font-weight:700;color:var(--inc)">Маржа: ${fmt(margin)}</span>
+      </div>
+    </div>
+
+    <div class="srow" style="margin-bottom:10px">
+      <div class="sc"><div class="sc-v" style="color:var(--accent)">${periodItems.length}</div><div class="sc-l">Изделий продано</div></div>
+      <div class="sc"><div class="sc-v" style="color:var(--a2)">${periodShip.length}</div><div class="sc-l">Отгрузок</div></div>
+      <div class="sc"><div class="sc-v" style="color:var(--a4)">${masterCount}</div><div class="sc-l">Мастеров</div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:10px">
+      <div class="ctitle">📦 Склад сейчас</div>
+      <div class="at-row"><span class="at-lbl">Товаров на складе</span><span class="at-val">${stockNow} шт.</span></div>
+      <div class="at-row"><span class="at-lbl">Стоимость остатков</span><span class="at-val" style="color:var(--accent)">${fmt(stockSum)}</span></div>
+      <div class="at-row"><span class="at-lbl">Ожидают приёмки</span><span class="at-val" style="color:${pendingNow?'var(--a4)':'var(--t2)'}">${pendingNow} шт.</span></div>
+    </div>
+
+    <div class="card" style="margin-bottom:10px">
+      <div class="ctitle">💰 Зарплатный фонд</div>
+      <div class="at-row"><span class="at-lbl">Начислено всего</span><span class="at-val" style="color:var(--inc)">${fmt(totalEarned)}</span></div>
+      <div class="at-row"><span class="at-lbl">Выплачено</span><span class="at-val">${fmt(totalPaid)}</span></div>
+      <div class="at-row" style="border-top:1px solid var(--border);padding-top:6px;margin-top:4px">
+        <span class="at-lbl" style="font-weight:700">Текущий долг по ЗП</span>
+        <span class="at-val" style="color:${totalDebt?'var(--exp)':'var(--inc)'};font-weight:700">${fmt(totalDebt)}</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ctitle">👥 Сотрудников активно</div>
+      <div style="font-size:24px;font-weight:700;color:var(--accent);font-family:'Unbounded',sans-serif">${activeStaff}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:4px">Подробности — во вкладке «Персонал»</div>
+    </div>`;
+}
+
+// ════ ВЛАДЕЛЕЦ: ПЕРСОНАЛ ════
+let _ownerStaffRoleFilter = 'all';
+
+function setOwnerStaffRole(role, el){
+  _ownerStaffRoleFilter = role;
+  document.querySelectorAll('#ownerStaffFilter .fchip').forEach(c=>c.classList.remove('active'));
+  if(el) el.classList.add('active');
+  renderOwnerStaff();
+}
+
+function renderOwnerStaff(){
+  const c = document.getElementById('ownerStaffContent'); if(!c) return;
+  let emps = getEmployees().filter(e=>['мастер','заготовщик','кладовщик','управляющий'].includes(e.role) && !e._builtin);
+  if(_ownerStaffRoleFilter!=='all') emps = emps.filter(e=>e.role===_ownerStaffRoleFilter);
+
+  if(!emps.length){ c.innerHTML='<div class="empty"><div class="ei">👤</div>Нет сотрудников</div>'; return; }
+
+  const payments = getZPPayments();
+  const roleIcon = {мастер:'🔨',заготовщик:'🪚',кладовщик:'📦',управляющий:'👑'};
+
+  c.innerHTML = emps.map(e=>{
+    // Изделия (для мастера)
+    const myItems = items.filter(i=>i.masterId===e.id && (i.status==='received'||i.status==='shipped'));
+    const itemsCount = myItems.length;
+    const itemsRevenue = myItems.reduce((s,i)=>s+(i.price||0),0);
+    const avgTime = myItems.filter(i=>i.startedAt&&i.receivedAt).length
+      ? myItems.filter(i=>i.startedAt&&i.receivedAt).reduce((s,i)=>s+(new Date(i.receivedAt)-new Date(i.startedAt)),0) / myItems.filter(i=>i.startedAt&&i.receivedAt).length / 3600000
+      : null;
+    // ЗП
+    const earned = getEarnedByEmployee(e.id);
+    const paid = payments.filter(p=>p.masterId===e.id).reduce((s,p)=>s+(p.amount||0),0);
+    const debt = earned-paid;
+    // Прочие работы
+    const myOt = otherTasks.filter(t=>t.masterId===e.id && t.manualEntry);
+    const otSum = myOt.reduce((s,t)=>s+(t.entries||[]).reduce((ss,en)=>ss+(en.sum||0),0),0);
+
+    return `<div class="card" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <div style="font-size:15px;font-weight:700">${roleIcon[e.role]||'👤'} ${e.name}</div>
+          <div style="font-size:11px;color:var(--t2)">${e.role}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:14px;font-weight:700;color:${debt>0?'var(--exp)':'var(--t2)'}">${debt>0?'Долг '+fmt(debt):'Без долга'}</div>
+        </div>
+      </div>
+      ${itemsCount?`
+      <div class="at-row"><span class="at-lbl">Изделий сделано</span><span class="at-val">${itemsCount} шт.</span></div>
+      <div class="at-row"><span class="at-lbl">Выручка с изделий</span><span class="at-val" style="color:var(--accent)">${fmt(itemsRevenue)}</span></div>
+      ${avgTime?`<div class="at-row"><span class="at-lbl">Среднее время на изделие</span><span class="at-val">${avgTime.toFixed(1)}ч</span></div>`:''}
+      `:''}
+      ${otSum?`<div class="at-row"><span class="at-lbl">Прочие работы</span><span class="at-val">${fmt(otSum)}</span></div>`:''}
+      <div class="at-row" style="border-top:1px solid var(--border);padding-top:6px;margin-top:4px">
+        <span class="at-lbl">Начислено всего</span><span class="at-val" style="color:var(--inc)">${fmt(earned)}</span>
+      </div>
+      <div class="at-row"><span class="at-lbl">Выплачено</span><span class="at-val">${fmt(paid)}</span></div>
+    </div>`;
+  }).join('');
+}
+
+// ════ ВЛАДЕЛЕЦ: СКЛАД (просмотр) ════
+function renderOwnerWarehouse(){
+  const c = document.getElementById('ownerWhContent'); if(!c) return;
+  const stock = items.filter(i=>i.status==='received');
+  const pending = items.filter(i=>i.status==='delivered');
+  const shippedTotal = items.filter(i=>i.status==='shipped').length;
+
+  const stockSum = stock.reduce((s,i)=>s+(i.price||0),0);
+
+  // Группировка по наименованию
+  const groups = {};
+  stock.forEach(item=>{
+    const raw=(item.name||item.itemName||'—').trim();
+    const key=raw.toLowerCase();
+    if(!groups[key]) groups[key]={name:raw,count:0,sum:0};
+    groups[key].count++;
+    groups[key].sum+=(item.price||0);
+  });
+  const sortedGroups = Object.values(groups).sort((a,b)=>b.sum-a.sum);
+
+  c.innerHTML = `
+    <div class="srow" style="margin-bottom:10px">
+      <div class="sc"><div class="sc-v" style="color:var(--accent)">${stock.length}</div><div class="sc-l">На складе</div></div>
+      <div class="sc"><div class="sc-v" style="color:var(--a4)">${pending.length}</div><div class="sc-l">Ждут приёмки</div></div>
+      <div class="sc"><div class="sc-v" style="color:var(--a2)">${shippedTotal}</div><div class="sc-l">Отгружено всего</div></div>
+    </div>
+    <div class="card" style="margin-bottom:10px">
+      <div class="ctitle">Стоимость остатков</div>
+      <div style="font-family:'Unbounded',sans-serif;font-size:24px;font-weight:700;color:var(--accent)">${fmt(stockSum)}</div>
+    </div>
+    <div class="card">
+      <div class="ctitle">По категориям товаров</div>
+      ${sortedGroups.map(g=>`<div class="at-row"><span class="at-lbl">${g.name} (${g.count} шт.)</span><span class="at-val">${fmt(g.sum)}</span></div>`).join('')}
+    </div>`;
+}
+
 function setStatsPeriod(p, el){
   statsPeriod = p;
   document.querySelectorAll('#statsFilter .fchip').forEach(c=>c.classList.remove('active'));
