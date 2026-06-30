@@ -129,6 +129,34 @@ function hardRefreshApp() {
 function checkForAppUpdate() {
   if(_swReg && _swReg.update) { try{ _swReg.update(); }catch(e){} }
 }
+// ════ OFFLINE/ONLINE STATUS BANNER ════
+function _renderConnStatus(){
+  var el = document.getElementById('connStatusBanner');
+  if(!el) return;
+  if(!navigator.onLine){
+    el.style.display='flex';
+    el.style.background='#2e1a14';
+    el.style.borderColor='#f0a060';
+    el.innerHTML='<span style="color:#f0a060;font-size:12px">📡 Нет интернета — работаю с локальными данными</span>';
+  } else if(typeof firebase==='undefined' || (typeof _offlineNoFirebase!=='undefined' && _offlineNoFirebase)){
+    el.style.display='flex';
+    el.style.background='#2e1a14';
+    el.style.borderColor='#f0a060';
+    el.innerHTML='<span style="color:#f0a060;font-size:12px">⏳ Подключаюсь к облаку...</span>';
+  } else {
+    el.style.display='none';
+  }
+}
+window.addEventListener('online', function(){
+  _renderConnStatus();
+  // Если при первом офлайн-запуске Firebase не загрузился — перезагружаем страницу
+  // чтобы подхватить настоящий SDK теперь когда сеть появилась
+  if(typeof _offlineNoFirebase!=='undefined' && _offlineNoFirebase){
+    setTimeout(function(){ window.location.reload(); }, 800);
+  }
+});
+window.addEventListener('offline', _renderConnStatus);
+document.addEventListener('DOMContentLoaded', _renderConnStatus);
 </script>
   <link rel="manifest" href="manifest-shop.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -142,6 +170,7 @@ function checkForAppUpdate() {
   <meta name="application-name" content="Ижица — Магазин">
 </head>
 <body>
+<div id="connStatusBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;justify-content:center;padding:6px 12px;border-bottom:1px solid;align-items:center"></div>
 <div id="loginScreen" style="display:flex;flex-direction:column;min-height:100dvh;padding:32px 20px 24px;padding-top:calc(32px + env(safe-area-inset-top, 0px));background:#0f0f13">
   <div style="font-family:Unbounded,sans-serif;font-size:26px;font-weight:700;color:#c8f060;margin-bottom:4px">Ижица</div>
   <div style="font-size:12px;color:#8888aa;margin-bottom:20px">Модуль магазина</div>
@@ -1776,16 +1805,45 @@ function pick(role) {
     renderLoginSellers();
   }
 }
-firebase.initializeApp({
-  apiKey:"AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
-  authDomain:"izhitsa-6327c.firebaseapp.com",
-  projectId:"izhitsa-6327c",
-  storageBucket:"izhitsa-6327c.firebasestorage.app",
-  messagingSenderId:"1025102190040",
-  appId:"1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
-});
-const db = firebase.firestore();
-db.enablePersistence({synchronizeTabs:true}).catch(e=>console.log('Persist:',e.code));
+var db;
+var _offlineNoFirebase = (typeof firebase === 'undefined');
+if(_offlineNoFirebase){
+  // Firebase SDK не успел загрузиться (например первый запуск офлайн до кэширования SW).
+  // Создаём заглушку, чтобы остальной код приложения не падал, а UI рендерился на localStorage.
+  console.log('[App] Firebase SDK недоступен — работаю в офлайн-режиме без облака');
+  var _stubDoc = function(){
+    var ref = {};
+    ref.get = function(){ return Promise.reject(new Error('offline')); };
+    ref.set = function(){ return Promise.reject(new Error('offline')); };
+    ref.delete = function(){ return Promise.reject(new Error('offline')); };
+    ref.onSnapshot = function(onNext, onErr){ if(onErr) onErr({code:'offline'}); return function(){}; };
+    ref.collection = function(){ return _stubCollection(); };
+    return ref;
+  };
+  var _stubCollection = function(){
+    var col = {};
+    col.doc = function(){ return _stubDoc(); };
+    col.get = function(){ return Promise.reject(new Error('offline')); };
+    col.add = function(){ return Promise.reject(new Error('offline')); };
+    col.onSnapshot = function(onNext, onErr){ if(onErr) onErr({code:'offline'}); return function(){}; };
+    col.where = function(){ return col; };
+    col.orderBy = function(){ return col; };
+    col.limit = function(){ return col; };
+    return col;
+  };
+  db = { collection: function(){ return _stubCollection(); } };
+} else {
+  firebase.initializeApp({
+    apiKey:"AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
+    authDomain:"izhitsa-6327c.firebaseapp.com",
+    projectId:"izhitsa-6327c",
+    storageBucket:"izhitsa-6327c.firebasestorage.app",
+    messagingSenderId:"1025102190040",
+    appId:"1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
+  });
+  db = firebase.firestore();
+  db.enablePersistence({synchronizeTabs:true}).catch(e=>console.log('Persist:',e.code));
+}
 var _syncUnsubs = {};
 var SYNC_SETTINGS = {
   'iz_admin_shops':      {doc:'sales_sources', field:'data'},
