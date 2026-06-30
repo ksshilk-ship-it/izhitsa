@@ -156,7 +156,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 var _newSW = null;
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
-    navigator.serviceWorker.register('./izhitsa-sw.js', {scope: './'})
+    navigator.serviceWorker.register('./izhitsa-workshop-sw.js', {scope: './'})
       .then(function(reg) {
         setInterval(function(){ reg.update(); }, 5 * 60 * 1000);
         reg.addEventListener('updatefound', function() {
@@ -1254,16 +1254,43 @@ function applyUpdate() {
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script>
-firebase.initializeApp({
-  apiKey:"AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
-  authDomain:"izhitsa-6327c.firebaseapp.com",
-  projectId:"izhitsa-6327c",
-  storageBucket:"izhitsa-6327c.firebasestorage.app",
-  messagingSenderId:"1025102190040",
-  appId:"1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
-});
-const db = firebase.firestore();
-db.enablePersistence({synchronizeTabs:true}).catch(e=>console.log('Persist:',e.code));
+var db;
+var _offlineNoFirebase = (typeof firebase === 'undefined');
+if(_offlineNoFirebase){
+  console.log('[App] Firebase SDK недоступен — работаю в офлайн-режиме без облака');
+  var _stubDoc = function(){
+    var ref = {};
+    ref.get = function(){ return Promise.reject(new Error('offline')); };
+    ref.set = function(){ return Promise.reject(new Error('offline')); };
+    ref.delete = function(){ return Promise.reject(new Error('offline')); };
+    ref.onSnapshot = function(onNext, onErr){ if(onErr) onErr({code:'offline'}); return function(){}; };
+    ref.collection = function(){ return _stubCollection(); };
+    return ref;
+  };
+  var _stubCollection = function(){
+    var col = {};
+    col.doc = function(){ return _stubDoc(); };
+    col.get = function(){ return Promise.reject(new Error('offline')); };
+    col.add = function(){ return Promise.reject(new Error('offline')); };
+    col.onSnapshot = function(onNext, onErr){ if(onErr) onErr({code:'offline'}); return function(){}; };
+    col.where = function(){ return col; };
+    col.orderBy = function(){ return col; };
+    col.limit = function(){ return col; };
+    return col;
+  };
+  db = { collection: function(){ return _stubCollection(); } };
+} else {
+  firebase.initializeApp({
+    apiKey:"AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
+    authDomain:"izhitsa-6327c.firebaseapp.com",
+    projectId:"izhitsa-6327c",
+    storageBucket:"izhitsa-6327c.firebasestorage.app",
+    messagingSenderId:"1025102190040",
+    appId:"1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
+  });
+  db = firebase.firestore();
+  db.enablePersistence({synchronizeTabs:true}).catch(e=>console.log('Persist:',e.code));
+}
 
 // ════ WORKSHOP SYNC LAYER ════
 var _wsSyncUnsubs = {};
@@ -1317,7 +1344,12 @@ function startWsSyncListeners() {
 
 
 
-window.addEventListener('online', ()=>setSync('online'));
+window.addEventListener('online', ()=>{
+  setSync('online');
+  if(typeof _offlineNoFirebase!=='undefined' && _offlineNoFirebase){
+    setTimeout(function(){ window.location.reload(); }, 800);
+  }
+});
 window.addEventListener('offline', ()=>setSync('offline'));
 function setSync(s){
   const dot=document.getElementById('sdot'),txt=document.getElementById('stxt');

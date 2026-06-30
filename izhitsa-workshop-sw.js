@@ -1,9 +1,9 @@
-// Ижица Service Worker — офлайн-режим для admin-модуля
+// Ижица Service Worker — офлайн-режим для workshop-модуля
 // Кэширует HTML-приложение и Firebase SDK, чтобы приложение запускалось без интернета.
 
-const CACHE_NAME = 'izhitsa-admin-v1';
+const CACHE_NAME = 'izhitsa-workshop-v1';
 const CACHE_URLS = [
-  './izhitsa-admin.html',
+  './izhitsa-workshop.html',
   'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js'
 ];
@@ -13,7 +13,7 @@ self.addEventListener('install', function(event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
       return cache.addAll(CACHE_URLS).catch(function(err) {
-        console.log('[SW admin] Частичная ошибка кэширования:', err);
+        console.log('[SW workshop] Частичная ошибка кэширования:', err);
       });
     })
   );
@@ -61,7 +61,7 @@ self.addEventListener('fetch', function(event) {
       }).catch(function() {
         return caches.match(event.request).then(function(cached) {
           if (cached) return cached;
-          return caches.match('./izhitsa-admin.html');
+          return caches.match('./izhitsa-workshop.html');
         });
       })
     );
