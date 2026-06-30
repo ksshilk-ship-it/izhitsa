@@ -932,23 +932,46 @@ function applyUpdate() {
 
 <!-- ADMIN SETUP -->
 <div class="mo" id="adminSetupMo">
-  <div class="md"><div class="mh"></div><div class="mt">⚙️ Сотрудники мастерской</div>
+  <div class="md"><div class="mh"></div><div class="mt">⚙️ Сотрудники</div>
     <div id="employeeList" style="margin-bottom:14px"></div>
-    <div class="sep"></div>
-    <div class="fg"><label class="fl">Имя сотрудника</label><input class="fi" id="empName" placeholder="Иванов Иван"></div>
-    <div class="fg"><label class="fl">Должность</label>
-      <select class="fs" id="empRole">
-        <option value="заготовщик">🪚 Заготовщик</option>
-        <option value="мастер">🔨 Мастер</option>
-        <option value="кладовщик">📦 Кладовщик</option>
-        <option value="управляющий">👑 Управляющий</option>
-        <option value="администратор">🛡 Администратор</option>
-      </select>
+    <button class="btn green" style="margin-bottom:10px" onclick="openEmpEditMo(null)">➕ Добавить сотрудника</button>
+    <button class="btn sec" onclick="closeMo('adminSetupMo')">Закрыть</button>
+  </div>
+</div>
+
+<!-- EMPLOYEE EDIT/CREATE (full multi-role) -->
+<div class="mo" id="empEditMo">
+  <div class="md"><div class="mh"></div><div class="mt" id="empEditTitle">Сотрудник</div>
+
+    <div class="fg"><label class="fl">Имя сотрудника</label><input class="fi" id="eeName" placeholder="Иванов Иван"></div>
+    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="text" id="eePass" placeholder="••••" style="-webkit-text-security:disc"></div>
+
+    <div class="ctitle" style="margin-top:10px">Роли в системе (можно несколько)</div>
+
+    <div style="font-size:11px;color:var(--t2);font-weight:700;margin:8px 0 4px">📊 Администрирование</div>
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px"><input type="checkbox" id="eeRoleAdmin" style="width:18px;height:18px">Администратор системы</label>
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px"><input type="checkbox" id="eeRoleOwner" style="width:18px;height:18px">Владелец бизнеса</label>
+
+    <div style="font-size:11px;color:var(--t2);font-weight:700;margin:10px 0 4px">🏭 Мастерская</div>
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px"><input type="checkbox" id="eeRoleMaster" style="width:18px;height:18px">Мастер</label>
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px"><input type="checkbox" id="eeRoleZagot" style="width:18px;height:18px">Заготовщик</label>
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px"><input type="checkbox" id="eeRoleKlad" style="width:18px;height:18px">Кладовщик</label>
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px"><input type="checkbox" id="eeRoleUpr" style="width:18px;height:18px">Управляющий мастерской</label>
+
+    <div class="fg" style="margin-top:8px"><label class="fl">ЗП ставка мастерской (₽/изделие)</label>
+      <input class="fi" type="number" inputmode="numeric" id="eeRate" placeholder="0">
     </div>
-    <div class="fg"><label class="fl">Ставка ЗП (₽/изделие, для мастера)</label><input class="fi" type="number" id="empRate" placeholder="0" inputmode="numeric"></div>
-    <div class="fg"><label class="fl">Пароль</label><input class="fi" type="password" id="empPass" placeholder="Придумайте пароль"></div>
-    <button class="btn" onclick="addEmployee()">Добавить сотрудника</button>
-    <button class="btn sec" style="margin-top:8px" onclick="closeMo('adminSetupMo')">Закрыть</button>
+
+    <div class="ctitle" style="margin-top:10px">Статус сотрудника</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div id="eeStatusActive" onclick="setEeStatus('active')" style="text-align:center;padding:9px;border-radius:8px;font-size:12px;cursor:pointer;background:var(--accent);color:#000;font-weight:700">Активный</div>
+      <div id="eeStatusVacation" onclick="setEeStatus('vacation')" style="text-align:center;padding:9px;border-radius:8px;font-size:12px;cursor:pointer;background:var(--s2);color:var(--t2);border:1px solid var(--border)">Отпуск</div>
+      <div id="eeStatusFired" onclick="setEeStatus('fired')" style="text-align:center;padding:9px;border-radius:8px;font-size:12px;cursor:pointer;background:var(--s2);color:var(--t2);border:1px solid var(--border)">Уволен</div>
+      <div id="eeStatusTrial" onclick="setEeStatus('trial')" style="text-align:center;padding:9px;border-radius:8px;font-size:12px;cursor:pointer;background:var(--s2);color:var(--t2);border:1px solid var(--border)">Стажёр</div>
+    </div>
+
+    <button class="btn green" onclick="saveEmpEdit()">💾 Сохранить</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('empEditMo')">Отмена</button>
   </div>
 </div>
 
@@ -1567,15 +1590,16 @@ function getStaff() {
 function getEmployees(){
   // Returns all ws-staff from iz_staff + ws_employees fallback
   var wsRoles = ['мастер','заготовщик','кладовщик','управляющий'];
+  var roleMap = {owner:'владелец'}; // системные коды → русское отображаемое название
   var result = [];
   var staff = getStaff();
   if(staff.length) {
     staff.forEach(function(s){
-      if(!s.roles || s.blocked) return;
-      var hasWs = s.roles.some(function(r){ return wsRoles.indexOf(r)>=0; });
+      if(!s.roles || s.blocked || s.archived) return;
+      var hasWs = s.roles.some(function(r){ return wsRoles.indexOf(r)>=0 || r==='owner'; });
       if(!hasWs) return;
-      // Use first ws-role as primary role for display
-      var r = s.roles.find(function(r){ return wsRoles.indexOf(r)>=0; })||'мастер';
+      var rRaw = s.roles.find(function(r){ return wsRoles.indexOf(r)>=0 || r==='owner'; })||'мастер';
+      var r = roleMap[rRaw] || rRaw;
       if(!result.some(function(e){ return e.id===s.id; })) {
         result.push({id:s.id, name:s.name, pass:s.pass, role:r, roles:s.roles, rate:s.wsRate||0, blocked:false});
       }
@@ -1643,21 +1667,21 @@ function startWsStaffSync() {
 
 function _fillLoginList(role) {
   var emps;
+  var roleAliasMap = {владелец:'owner'};
+  var sysRole = roleAliasMap[role] || role;
   if(role === 'администратор') {
     var adminRoles = ['admin','owner','accountant'];
     var staffAdmins = getStaff().filter(function(s){
-      return s.roles && s.roles.some(function(r){ return adminRoles.indexOf(r)>=0; }) && !s.blocked;
+      return s.roles && s.roles.some(function(r){ return adminRoles.indexOf(r)>=0; }) && !s.blocked && !s.archived;
     }).map(function(s){ return {id:s.id, name:s.name}; });
     emps = [{id:'__superadmin__', name:'Администратор (системный)'}].concat(staffAdmins);
   } else {
     // Show everyone who has this role in their roles[]
-    emps = getEmployees().filter(function(e){
-      if(e.blocked) return false;
-      if(e._builtin) return false; // exclude superadmin from ws roles
-      if(e.roles && e.roles.indexOf(role) >= 0) return true;
-      if(e.role === role) return true;
-      return false;
-    });
+    emps = getStaff().filter(function(s){
+      if(s.blocked || s.archived) return false;
+      if(!s.roles) return false;
+      return s.roles.indexOf(sysRole) >= 0;
+    }).map(function(s){ return {id:s.id, name:s.name}; });
   }
   var sel = document.getElementById('loginUser');
   if(sel) {
@@ -1702,63 +1726,170 @@ function logAddPayment(employeeName, amount){ logAction('ADD_PAYMENT', {employee
 function logLogin(username){ logAction('LOGIN', {username:username}); }
 function logLogout(){ logAction('LOGOUT', {user: session ? session.name : 'unknown'}); }
 
-function addEmployee(){
-  const name=document.getElementById('empName').value.trim();
-  const role=document.getElementById('empRole').value;
-  const rate=parseFloat(document.getElementById('empRate').value)||0;
-  const pass=document.getElementById('empPass').value;
-  if(!name||!pass){showToast('Заполните имя и пароль');return;}
-
-  // Пишем напрямую в единую базу сотрудников iz_staff (источник правды — admin.html),
-  // чтобы новый сотрудник сразу был виден везде: мастерская, shop, admin.
-  const staff = getStaff();
-  if(staff.some(s=>s.name.toLowerCase()===name.toLowerCase())){
-    showToast('Сотрудник с таким именем уже есть'); return;
-  }
-  staff.push({
-    id: uid(), name, pass, roles: [role], wsRate: rate,
-    blocked: false, createdAt: now(), updatedAt: now(), createdBy: session.name
-  });
-  localStorage.setItem('iz_staff', JSON.stringify(staff));
-  db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}).catch(console.error);
-
-  logAddEmployee(name, role);
-  ['empName','empPass','empRate'].forEach(id=>document.getElementById(id).value='');
-  renderEmployeeList();
-  renderAdmin();
-  showToast('✅ Сотрудник добавлен');
-}
+// ════════ УПРАВЛЕНИЕ ПЕРСОНАЛОМ (мультиролевая модель, единая с shop.html) ════════
+const WS_ROLE_ICONS = {
+  admin:'🔐', owner:'👑', accountant:'📊',
+  мастер:'🔨', заготовщик:'🪚', кладовщик:'📦', управляющий:'👑'
+};
+const WS_ROLE_LABELS = {
+  admin:'Администратор', owner:'Владелец', accountant:'Бухгалтер',
+  мастер:'Мастер', заготовщик:'Заготовщик', кладовщик:'Кладовщик', управляющий:'Управляющий мастерской'
+};
 
 function renderEmployeeList(){
-  const c=document.getElementById('employeeList');if(!c)return;
-  const emps=getEmployees();
-  if(!emps.length){c.innerHTML='<div style="font-size:12px;color:var(--t2)">Сотрудников нет</div>';return;}
-  const roleIcons={заготовщик:'🪚',мастер:'🔨',кладовщик:'📦',управляющий:'👑'};
-  c.innerHTML=emps.map((e,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
-    <div style="font-size:20px">${roleIcons[e.role]||'👤'}</div>
-    <div style="flex:1"><div style="font-size:13px;font-weight:600">${e.name}</div><div style="font-size:11px;color:var(--t2)">${e.role}${e.rate?' · '+fmt(e.rate)+'/изд.':''}</div></div>
-    <button onclick="delEmployee(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>
-  </div>`).join('');
+  const c=document.getElementById('employeeList'); if(!c) return;
+  const staff = getStaff().filter(s=>!s._builtin);
+  if(!staff.length){ c.innerHTML='<div style="font-size:12px;color:var(--t2)">Сотрудников нет</div>'; return; }
+
+  c.innerHTML = staff.map(s=>{
+    const roles = s.roles||[];
+    const roleBadges = roles.map(r=>{
+      const icon = WS_ROLE_ICONS[r]||'👤';
+      const label = WS_ROLE_LABELS[r]||r;
+      return `${icon} ${label}`;
+    }).join(' · ');
+    const statusMap = {active:'🟢 Активный', vacation:'🟡 Отпуск', fired:'🔴 Уволен', trial:'🔵 Стажёр'};
+    const statusText = statusMap[s.wsStatus] || (s.blocked?'🔴 Заблокирован':'🟢 Активный');
+    return `<div style="padding:12px;border:1px solid var(--border);border-radius:12px;margin-bottom:8px;${s.blocked?'opacity:0.6':''}">
+      <div style="font-size:14px;font-weight:700">${s.name}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:3px">${roleBadges||'без ролей'}</div>
+      <div style="font-size:11px;margin-top:4px">${statusText}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-top:10px">
+        <button onclick="openEmpEditMo('${s.id}')" style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 4px;color:var(--a2);cursor:pointer;font-size:14px">✏️</button>
+        <button onclick="toggleEmpBlock('${s.id}')" style="background:var(--s2);border:1px solid ${s.blocked?'var(--inc)':'var(--exp)'};border-radius:8px;padding:8px 4px;color:${s.blocked?'var(--inc)':'var(--exp)'};cursor:pointer;font-size:11px;font-weight:700">${s.blocked?'Разблок.':'Блок.'}</button>
+        <button onclick="archiveEmp('${s.id}')" style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 4px;color:var(--a4);cursor:pointer;font-size:14px">📥</button>
+        <button onclick="delEmployeeById('${s.id}')" style="background:var(--s2);border:1px solid var(--exp);border-radius:8px;padding:8px 4px;color:var(--exp);cursor:pointer;font-size:14px">✕</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
-function delEmployee(i){
-  const emps=getEmployees();
-  if((emps[i]&&emps[i]._builtin)){showToast('Нельзя удалить встроенного администратора');return;}
-  const target = emps[i];
-  // Удаляем из единой базы iz_staff если сотрудник там, иначе из легаси ws_employees
-  const staff = getStaff();
-  const staffIdx = staff.findIndex(s=>s.id===target.id);
-  if(staffIdx>=0){
-    staff.splice(staffIdx,1);
-    localStorage.setItem('iz_staff', JSON.stringify(staff));
-    db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}).catch(console.error);
+let _eeEditId = null;
+let _eeStatus = 'active';
+
+function setEeStatus(status){
+  _eeStatus = status;
+  const map = {active:'eeStatusActive', vacation:'eeStatusVacation', fired:'eeStatusFired', trial:'eeStatusTrial'};
+  Object.values(map).forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    el.style.background='var(--s2)'; el.style.color='var(--t2)'; el.style.fontWeight='400'; el.style.border='1px solid var(--border)';
+  });
+  const active = document.getElementById(map[status]);
+  if(active){ active.style.background='var(--accent)'; active.style.color='#000'; active.style.fontWeight='700'; active.style.border='none'; }
+}
+
+function openEmpEditMo(staffId){
+  _eeEditId = staffId;
+  const titleEl = document.getElementById('empEditTitle');
+  ['eeRoleAdmin','eeRoleOwner','eeRoleMaster','eeRoleZagot','eeRoleKlad','eeRoleUpr'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.checked=false;
+  });
+  document.getElementById('eeName').value='';
+  document.getElementById('eePass').value='';
+  document.getElementById('eeRate').value='';
+  setEeStatus('active');
+
+  if(staffId){
+    const s = getStaff().find(x=>x.id===staffId); if(!s) return;
+    titleEl.textContent = '✏️ '+s.name;
+    document.getElementById('eeName').value = s.name||'';
+    document.getElementById('eePass').value = s.pass||'';
+    document.getElementById('eeRate').value = s.wsRate||'';
+    const roles = s.roles||[];
+    const setChecked=(id,role)=>{ const el=document.getElementById(id); if(el) el.checked=roles.indexOf(role)>=0; };
+    setChecked('eeRoleAdmin','admin');
+    setChecked('eeRoleOwner','owner');
+    setChecked('eeRoleMaster','мастер');
+    setChecked('eeRoleZagot','заготовщик');
+    setChecked('eeRoleKlad','кладовщик');
+    setChecked('eeRoleUpr','управляющий');
+    setEeStatus(s.wsStatus||'active');
   } else {
-    const legacy = JSON.parse(localStorage.getItem('ws_employees')||'[]');
-    const lidx = legacy.findIndex(e=>e.id===target.id);
-    if(lidx>=0){ legacy.splice(lidx,1); saveEmployees(legacy); }
+    titleEl.textContent = '➕ Новый сотрудник';
   }
+  openMo('empEditMo');
+}
+
+async function saveEmpEdit(){
+  const name = document.getElementById('eeName').value.trim();
+  const pass = document.getElementById('eePass').value;
+  const rate = parseFloat(document.getElementById('eeRate').value)||0;
+  if(!name||!pass){ showToast('Заполните имя и пароль'); return; }
+
+  const roles = [];
+  if(document.getElementById('eeRoleAdmin').checked) roles.push('admin');
+  if(document.getElementById('eeRoleOwner').checked) roles.push('owner');
+  if(document.getElementById('eeRoleMaster').checked) roles.push('мастер');
+  if(document.getElementById('eeRoleZagot').checked) roles.push('заготовщик');
+  if(document.getElementById('eeRoleKlad').checked) roles.push('кладовщик');
+  if(document.getElementById('eeRoleUpr').checked) roles.push('управляющий');
+
+  if(!roles.length){ showToast('Выберите хотя бы одну роль'); return; }
+
+  const staff = getStaff();
+
+  if(_eeEditId){
+    const idx = staff.findIndex(s=>s.id===_eeEditId);
+    if(idx<0){ showToast('Сотрудник не найден'); return; }
+    staff[idx] = {
+      ...staff[idx],
+      name, pass, roles, wsRate: rate, wsStatus: _eeStatus,
+      blocked: _eeStatus==='fired' ? true : staff[idx].blocked,
+      updatedAt: now()
+    };
+  } else {
+    if(staff.some(s=>s.name.toLowerCase()===name.toLowerCase())){ showToast('Сотрудник с таким именем уже есть'); return; }
+    staff.push({
+      id: uid(), name, pass, roles, wsRate: rate, wsStatus: _eeStatus,
+      blocked: _eeStatus==='fired',
+      createdAt: now(), updatedAt: now(), createdBy: session.name
+    });
+  }
+
+  localStorage.setItem('iz_staff', JSON.stringify(staff));
+  try{ await db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}); }catch(e){}
+
+  closeMo('empEditMo');
   renderEmployeeList();
   renderAdmin();
+  showToast('✅ Сохранено');
+}
+
+async function toggleEmpBlock(staffId){
+  const staff = getStaff();
+  const idx = staff.findIndex(s=>s.id===staffId); if(idx<0) return;
+  staff[idx].blocked = !staff[idx].blocked;
+  staff[idx].updatedAt = now();
+  localStorage.setItem('iz_staff', JSON.stringify(staff));
+  try{ await db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}); }catch(e){}
+  renderEmployeeList();
+  showToast(staff[idx].blocked ? '🔒 Заблокирован' : '🔓 Разблокирован');
+}
+
+async function archiveEmp(staffId){
+  if(!confirm('Перенести сотрудника в архив? Он перестанет быть виден в активных списках, но данные сохранятся.')) return;
+  const staff = getStaff();
+  const idx = staff.findIndex(s=>s.id===staffId); if(idx<0) return;
+  staff[idx].archived = true;
+  staff[idx].blocked = true;
+  staff[idx].updatedAt = now();
+  localStorage.setItem('iz_staff', JSON.stringify(staff));
+  try{ await db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}); }catch(e){}
+  renderEmployeeList();
+  showToast('📥 Перенесён в архив');
+}
+
+async function delEmployeeById(staffId){
+  if(!confirm('Удалить сотрудника без возможности восстановления?')) return;
+  const staff = getStaff();
+  const idx = staff.findIndex(s=>s.id===staffId); if(idx<0) return;
+  staff.splice(idx,1);
+  localStorage.setItem('iz_staff', JSON.stringify(staff));
+  try{ await db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}); }catch(e){}
+  renderEmployeeList();
+  renderAdmin();
+  showToast('🗑 Сотрудник удалён');
 }
 
 // selectRole defined above with _fillLoginList
