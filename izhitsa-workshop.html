@@ -6153,7 +6153,8 @@ function openDuplicateScanMo(){
 
 function getNextArtikulNumber(){
   let max = 0;
-  products.forEach(p=>{
+  items.forEach(p=>{
+    if(p.status!=='received') return;
     const n = parseInt(String(p.artikul||'').replace(/\D/g,''),10);
     if(!isNaN(n) && n>max) max = n;
   });
@@ -6172,7 +6173,8 @@ function getNextArtikulNumber(){
 // Реальный последний (максимальный) порядковый номер артикула во всей системе
 function getMaxSystemArtikul(){
   let max = 0;
-  products.forEach(p=>{
+  items.forEach(p=>{
+    if(p.status!=='received') return;
     const n = parseInt(String(p.artikul||'').replace(/\D/g,''),10);
     if(!isNaN(n) && n>max) max = n;
   });
@@ -6244,7 +6246,7 @@ function renderMaItemsList(){
       <div onclick="toggleMaItemExpand('${it.rid}')" style="background:var(--s2);border-radius:10px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer">
         <div style="min-width:0">
           <div style="font-size:10px;color:var(--t2);font-weight:700;margin-bottom:2px">Позиция ${i+1}</div>
-          <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${maItemSummaryLine(it)}</div>
+          <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="maSummary_${it.rid}">${maItemSummaryLine(it)}</div>
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
           <button onclick="event.stopPropagation();duplicateMaItemRow('${it.rid}')" title="Скопировать позицию" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--t2);cursor:pointer;font-size:13px">⎘</button>
@@ -6269,12 +6271,12 @@ function renderMaItemsList(){
           <div onclick="setMaArtikulMode('${it.rid}','manual')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='manual'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='manual'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='manual'?'var(--accent)':'var(--border)'}">Вручную</div>
           <div onclick="setMaArtikulMode('${it.rid}','none')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='none'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='none'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='none'?'var(--accent)':'var(--border)'}">Без артикула</div>
         </div>
-        <input class="fi" type="text" inputmode="numeric" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
+        ${it.artikulMode==='auto'?`<div style="background:var(--s1);border:1px solid var(--border);border-radius:9px;padding:8px 10px;margin-bottom:8px;font-size:12px;color:var(--t2)">Последний номер в системе: <b style="color:var(--text)">${getMaxSystemArtikul()}</b></div>`:''}
+        <input class="fi" type="text" inputmode="numeric" id="maArtikulInput_${it.rid}" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
           oninput="${it.artikulMode==='auto'?`updateMaAutoArtikul('${it.rid}',this.value)`:`updateMaItem('${it.rid}','artikul',this.value)`}"
           placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
           style="${it.artikulMode==='none'?'opacity:0.6':''}">
-        ${it.artikulMode==='auto'?`<div style="font-size:11px;color:var(--t2);margin-top:5px">Последний номер в системе: ${getMaxSystemArtikul()}. По умолчанию — следующий по порядку, можно ввести свой</div>`:''}
-        ${(parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto' ? `<div style="font-size:11px;color:var(--accent);margin-top:5px">Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}</div>` : ''}
+        <div id="maArtikulHint_${it.rid}" style="font-size:11px;color:var(--accent);margin-top:5px">${(parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto' ? `Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}` : ''}</div>
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Количество одинаковых изделий</label>
         <input class="fi" type="number" inputmode="numeric" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" placeholder="1">
@@ -6337,15 +6339,37 @@ function setMaArtikulMode(rid, mode){
   renderMaItemsList();
 }
 
+// Точечно обновляет только подпись текущей позиции (если она свёрнута) и
+// подсказку диапазона артикулов внутри открытой карточки — БЕЗ пересборки
+// всего списка через innerHTML. Это нужно, чтобы при наборе номера с
+// клавиатуры поле ввода не теряло фокус и клавиатура не закрывалась
+// после каждой введённой цифры.
+function refreshMaDynamicBits(){
+  _maItems.forEach(it=>{
+    if(it.rid===_maExpandedRid){
+      const hintEl = document.getElementById('maArtikulHint_'+it.rid);
+      if(hintEl){
+        hintEl.textContent = (parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto'
+          ? `Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}`
+          : '';
+      }
+    } else {
+      const sumEl = document.getElementById('maSummary_'+it.rid);
+      if(sumEl) sumEl.innerHTML = maItemSummaryLine(it);
+    }
+  });
+}
+
 // Ручной ввод номера в окошке "Авто" — пользователь меняет, от какого номера
 // начинается автонумерация. Все последующие позиции в режиме "авто" продолжат
-// цепочку от введённого значения.
+// цепочку от введённого значения. Полную перерисовку списка НЕ делаем —
+// иначе на мобильных это закрывает клавиатуру после каждой цифры.
 function updateMaAutoArtikul(rid, val){
   const it = _maItems.find(x=>x.rid===rid); if(!it) return;
   it.artikul = val;
   it.artikulManual = true;
   recalcMaAutoArtikuls();
-  renderMaItemsList();
+  refreshMaDynamicBits();
 }
 
 function updateMaItem(rid, field, val){
@@ -6353,7 +6377,7 @@ function updateMaItem(rid, field, val){
   if(field==='qty'){
     it.qty = Math.max(1, parseInt(val,10)||1);
     recalcMaAutoArtikuls();
-    renderMaItemsList();
+    refreshMaDynamicBits(); // без полной перерисовки — не теряем фокус поля
     return;
   }
   it[field] = (field==='zp'||field==='price') ? (parseFloat(val)||0) : val;
@@ -6364,7 +6388,8 @@ function updateMaItem(rid, field, val){
 // Нужно при изменении количества штук в любой строке, чтобы не было коллизий.
 function recalcMaAutoArtikuls(){
   let base = 0;
-  products.forEach(p=>{
+  items.forEach(p=>{
+    if(p.status!=='received') return;
     const n = parseInt(String(p.artikul||'').replace(/\D/g,''),10);
     if(!isNaN(n) && n>base) base = n;
   });
