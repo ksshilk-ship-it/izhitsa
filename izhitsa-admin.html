@@ -9,7 +9,7 @@
   --bg:#0f0f13;--s1:#1a1f18;--s2:#22282a;--border:#2e3530;
   --accent:#c8f060;--a2:#60c8f0;--a3:#f06090;--a4:#f0a060;--a5:#a060f0;
   --text:#f0f0f8;--t2:#8888aa;--t3:#555568;
-  --inc:#60f090;--exp:#f06060;--r:14px;--tabh:62px;
+  --inc:#60f090;--exp:#f06060;--r:14px;--tabh:78px;
 }
 html{background:var(--bg);color:var(--text)}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -49,12 +49,12 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .hdr-role{font-size:10px;color:var(--t2)}
 .exit-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--t2);cursor:pointer;font-size:11px;padding:5px 9px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
 
-.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:var(--tabh);background:var(--s1);border-top:1px solid var(--border);display:none;z-index:100;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
-.tab{flex-shrink:0;min-width:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--t2);font-size:9px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-weight:500;border:none;background:none;padding:0 8px}
+.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:calc(var(--tabh) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--s1);border-top:1px solid var(--border);display:none;z-index:100;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+.tab{flex-shrink:0;min-width:84px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;color:var(--t2);font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-weight:500;border:none;background:none;padding:0 10px;height:100%}
 .tab.active{color:var(--accent)}
-.ti{font-size:18px;line-height:1}
+.ti{font-size:25px;line-height:1}
 
-.page{display:none;padding:12px 16px;padding-bottom:calc(var(--tabh)+16px)}
+.page{display:none;padding:12px 16px;padding-bottom:calc(var(--tabh) + env(safe-area-inset-bottom) + 16px)}
 .page.active{display:block;animation:fi .2s ease}
 @keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 
@@ -362,15 +362,20 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </div>
     
     <div id="plCustomDates" style="display:none;margin-bottom:10px" class="row2">
-      <div><label class="fl">С даты</label><input class="fi" type="date" id="plFrom" onchange="renderPL()"></div>
-      <div><label class="fl">По дату</label><input class="fi" type="date" id="plTo" onchange="renderPL()"></div>
+      <div><label class="fl">С даты</label><input class="fi" type="date" id="plFrom" onchange="renderPL();renderPLMargin();"></div>
+      <div><label class="fl">По дату</label><input class="fi" type="date" id="plTo" onchange="renderPL();renderPLMargin();"></div>
     </div>
     
     <div class="card" style="background:var(--bg);border:1px solid var(--border)">
       <div class="ctitle">📊 Прибыль и убыток</div>
       <div id="plTable"></div>
     </div>
-    
+
+    <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-top:16px">
+      <div class="ctitle">🪵 Маржинальность по товарам</div>
+      <div id="plMarginTable"></div>
+    </div>
+
     <div class="card" style="background:var(--bg);border:1px solid var(--border);margin-top:16px">
       <div class="ctitle">📈 План vs Факт</div>
       <div id="plBudget"></div>
@@ -460,13 +465,16 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <div class="page" id="pg-prod">
     <div class="stitle">🏭 Мастерская</div>
     <div class="pchips">
-      <div class="pc active" onclick="setProdPeriod('month',this)">Месяц</div>
       <div class="pc" onclick="setProdPeriod('week',this)">Неделя</div>
+      <div class="pc active" onclick="setProdPeriod('month',this)">Месяц</div>
+      <div class="pc" onclick="setProdPeriod('quarter',this)">Квартал</div>
       <div class="pc" onclick="setProdPeriod('year',this)">Год</div>
     </div>
-    
+
+    <div id="wsSummaryData"></div>
+
     <div class="card">
-      <div class="ctitle">Сотрудники мастерской</div>
+      <div class="ctitle">👷 По мастерам</div>
       <div id="wsEmployeesData"></div>
     </div>
   </div>
@@ -551,7 +559,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       <div style="font-size:11px;color:#8888aa;margin-bottom:8px">Загружает актуальный файл напрямую через API. Токен сохраняется локально на устройстве.</div>
       <input class="fi" id="ghAdminTokenInput" type="password" placeholder="GitHub токен (ghp_...)" autocomplete="off" style="margin-bottom:8px;font-family:monospace;font-size:12px" onfocus="if(!this.value){var t=localStorage.getItem('iz_gh_token');if(t)this.value=t;}">
       <div style="font-size:10px;color:#8888aa;margin-bottom:4px">Выберите новый файл от Клода:</div>
-      <div onpointerdown="document.getElementById('ghAdminFileInput').click()" style="border:2px dashed #c8f060;border-radius:10px;padding:12px;text-align:center;cursor:pointer;margin-bottom:8px">
+      <div onclick="document.getElementById('ghAdminFileInput').click()" style="border:2px dashed #c8f060;border-radius:10px;padding:12px;text-align:center;cursor:pointer;margin-bottom:8px">
         <div style="font-size:20px;margin-bottom:3px">📄</div>
         <div style="font-size:12px;font-weight:700;color:#c8f060" id="ghAdminFileName">Выбрать файл izhitsa-admin.html</div>
         <input type="file" id="ghAdminFileInput" accept=".html" style="display:none" onchange="document.getElementById('ghAdminFileName').textContent=this.files[0]?this.files[0].name:'Выбрать файл'">
@@ -874,6 +882,8 @@ function adminManualSync() {
     {col: 'ws_shipments',      key: 'ws_shipments'},
     {col: 'ws_other_tasks',    key: 'ws_other_tasks'},
     {col: 'ws_master_returns', key: 'ws_master_returns'},
+    {col: 'ws_blanks',         key: 'ws_blanks'},
+    {col: 'ws_zp_payments',    key: 'ws_zp_payments'},
     {col: 'iz_invoices',       key: 'iz_invoices'},
     {col: 'iz_admin_alerts',   key: 'iz_admin_alerts'},
   ];
@@ -941,7 +951,7 @@ function adminManualSync() {
     else if(tab === 'shops') renderShops();
     else if(tab === 'analytics') renderAnalytics();
     else if(tab === 'prod') renderProduction();
-    else if(tab === 'pl') { renderPL(); renderPLBudget(); }
+    else if(tab === 'pl') { renderPL(); renderPLMargin(); renderPLBudget(); }
     showToast('🔄 Загружено ' + totalLoaded + ' записей');
   }).catch(function(e){
     showToast('⚠️ Ошибка обновления: ' + (e.message||e));
@@ -1268,7 +1278,7 @@ function doLogin() {
     if(typeof populateSalesSourcesList==='function') populateSalesSourcesList();
     if(typeof populateSourcesForOp==='function') populateSourcesForOp();
     populateShopCheckboxes();
-    renderPL(); renderShops(); renderPLBudget(); renderDebts();
+    renderPL(); renderPLMargin(); renderShops(); renderPLBudget(); renderDebts();
     if(typeof renderDashboard==='function') renderDashboard();
     return;
   }
@@ -2220,7 +2230,7 @@ function switchTab(tab, el) {
   if(el) el.classList.add('active');
   if(tab === 'staff') { renderUnifiedStaff(); openAddStaffModal; }
   if(tab === 'settings') { renderSettingsPage(); renderRefBooks(); }
-  if(tab === 'pl') renderPL();
+  if(tab === 'pl') { renderPL(); renderPLMargin(); }
   if(tab === 'debt') renderDebts();
   if(tab === 'analytics') renderAnalytics();
   if(tab === 'audit') renderAuditLog();
@@ -3025,6 +3035,32 @@ function startSyncListeners() {
       console.error('❌ ws_shipments sync error:', err);
     });
   } catch(e) {}
+
+  // Listen to ws_blanks (заготовки — для воронки производства)
+  try {
+    db.collection('ws_blanks').onSnapshot(function(snap) {
+      var blanks = [];
+      snap.forEach(function(doc) {
+        blanks.push(Object.assign({id: doc.id}, doc.data()));
+      });
+      localStorage.setItem('ws_blanks', JSON.stringify(blanks));
+    }, function(err) {
+      console.error('❌ ws_blanks sync error:', err);
+    });
+  } catch(e) {}
+
+  // Listen to ws_zp_payments (выплаты мастерам)
+  try {
+    db.collection('ws_zp_payments').onSnapshot(function(snap) {
+      var pays = [];
+      snap.forEach(function(doc) {
+        pays.push(Object.assign({id: doc.id}, doc.data()));
+      });
+      localStorage.setItem('ws_zp_payments', JSON.stringify(pays));
+    }, function(err) {
+      console.error('❌ ws_zp_payments sync error:', err);
+    });
+  } catch(e) {}
 }
 
 function setProdPeriod(period, el) {
@@ -3036,72 +3072,174 @@ function setProdPeriod(period, el) {
 function renderProduction() {
   var period = document.querySelector('#pg-prod .pchips .pc.active');
   var periodLabel = period ? period.textContent.trim() : 'Месяц';
-  var periodKey = {'Месяц':'month','Неделя':'week','Год':'year'}[periodLabel] || 'month';
+  var periodKey = {'Неделя':'week','Месяц':'month','Квартал':'quarter','Год':'year'}[periodLabel] || 'month';
   var range = getDateRange(periodKey);
-  
+
   try {
     var wsItems = JSON.parse(localStorage.getItem('ws_items') || '[]');
+    var wsBlanks = JSON.parse(localStorage.getItem('ws_blanks') || '[]');
     var wsShipments = JSON.parse(localStorage.getItem('ws_shipments') || '[]');
     var wsOtherTasks = JSON.parse(localStorage.getItem('ws_other_tasks') || '[]');
+    var wsZpPayments = JSON.parse(localStorage.getItem('ws_zp_payments') || '[]');
     var staff = JSON.parse(localStorage.getItem('iz_staff') || '[]');
-    
-    // Filter by period
-    var items = wsItems.filter(function(it) {
-      var itemDate = it.createdAt ? it.createdAt.split('T')[0] : '';
-      return itemDate >= range.from && itemDate <= range.to;
+
+    function inRange(dateStr){ return dateStr && dateStr >= range.from && dateStr <= range.to; }
+    function dayOf(iso){ return iso ? iso.split('T')[0] : ''; }
+
+    // Изделия, созданные за период
+    var items = wsItems.filter(function(it){ return inRange(dayOf(it.createdAt)); });
+    // Заготовки, выданные за период (включая ещё не принятые — для просрочки)
+    var blanksInRange = wsBlanks.filter(function(b){ return inRange(dayOf(b.createdAt)); });
+    // Все непринятые заготовки (для просрочки, независимо от периода создания)
+    var openBlanks = wsBlanks.filter(function(b){ return b.status === 'new'; });
+
+    // ── Общая воронка по статусам ──
+    var statusCounts = {};
+    items.forEach(function(it){
+      var st = it.status || 'in_work';
+      statusCounts[st] = (statusCounts[st]||0) + 1;
     });
-    
-    var shipments = wsShipments.filter(function(sh) {
-      return sh.date >= range.from && sh.date <= range.to;
+    var blanksOpenCount = openBlanks.length;
+    var blanksAcceptedInRange = blanksInRange.filter(function(b){ return b.status==='accepted'; }).length;
+
+    // Просроченные заготовки (висят > 2 дней без принятия в работу)
+    var now = new Date();
+    var overdueBlanks = openBlanks.filter(function(b){
+      if(!b.createdAt) return false;
+      var ageDays = (now - new Date(b.createdAt)) / (1000*60*60*24);
+      return ageDays > 2;
     });
-    
-    // Stats by master
-    var masterStats = {};
-    var typeStats = {};
-    var statusStats = {ready: 0, shipped: 0, processing: 0, blank: 0, returned: 0};
-    
-    items.forEach(function(it) {
-      var masterId = it.masterId;
-      if(!masterStats[masterId]) masterStats[masterId] = {items: 0, revenue: 0};
-      masterStats[masterId].items += 1;
-      masterStats[masterId].revenue += (it.price || 0);
-      
-      var type = it.name || 'Неизвестно';
-      if(!typeStats[type]) typeStats[type] = {count: 0, revenue: 0};
-      typeStats[type].count += 1;
-      typeStats[type].revenue += (it.price || 0);
-      
-      var status = it.status || 'processing';
-      if(statusStats[status] !== undefined) statusStats[status] += 1;
+
+    // ── По мастерам ──
+    var byMaster = {};
+    function ensureMaster(id, name){
+      if(!byMaster[id]) byMaster[id] = {
+        name: name || ('Мастер #'+String(id).substring(0,4)),
+        itemsCount: 0, itemsValue: 0,
+        statusCounts: {},
+        blanksOpen: 0, blanksOverdue: 0,
+        zpAccrued: 0, zpPaid: 0,
+        firstDate: null, lastDate: null
+      };
+      return byMaster[id];
+    }
+
+    items.forEach(function(it){
+      var m = ensureMaster(it.masterId, it.masterName);
+      m.itemsCount++;
+      m.itemsValue += (it.price||0);
+      var st = it.status || 'in_work';
+      m.statusCounts[st] = (m.statusCounts[st]||0) + 1;
+      m.zpAccrued += (it.zp || it.masterRate || 0);
+      var d = dayOf(it.createdAt);
+      if(d){
+        if(!m.firstDate || d < m.firstDate) m.firstDate = d;
+        if(!m.lastDate || d > m.lastDate) m.lastDate = d;
+      }
     });
-    
-    // Update wsEmployeesData with master stats
-    var wsHtml = '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
-      '<tr style="border-bottom:1px solid var(--border);text-align:left;color:var(--t2)">' +
-        '<th style="padding:6px;text-align:left">Мастер</th><th style="padding:6px;text-align:right">Изделий</th><th style="padding:6px;text-align:right">Стоимость</th><th style="padding:6px;text-align:right">Темп (шт/дн)</th>' +
-      '</tr>';
-    
-    Object.keys(masterStats).forEach(function(masterId) {
-      var stat = masterStats[masterId];
-      var masterName = 'Мастер #' + masterId.substring(0, 4);
-      staff.forEach(function(s) { if(s.id === masterId) masterName = s.name; });
-      
-      var daysCount = range.to === range.from ? 1 : Math.ceil((new Date(range.to) - new Date(range.from)) / (1000 * 60 * 60 * 24));
-      var pace = Math.round(100 * stat.items / Math.max(daysCount, 1)) / 100;
-      
-      wsHtml += '<tr style="border-bottom:1px solid var(--border)">' +
-        '<td style="padding:8px;font-weight:600">🔨 ' + masterName + '</td>' +
-        '<td style="padding:8px;text-align:right">' + stat.items + '</td>' +
-        '<td style="padding:8px;text-align:right;color:var(--inc)">₽ ' + stat.revenue.toLocaleString('ru-RU') + '</td>' +
-        '<td style="padding:8px;text-align:right">' + pace + '</td>' +
-      '</tr>';
+    openBlanks.forEach(function(b){
+      var m = ensureMaster(b.masterId, b.masterName);
+      m.blanksOpen++;
+      var ageDays = b.createdAt ? (now - new Date(b.createdAt))/(1000*60*60*24) : 0;
+      if(ageDays > 2) m.blanksOverdue++;
     });
-    wsHtml += '</table>';
-    document.getElementById('wsEmployeesData').innerHTML = wsHtml;
-    
+    // Доп. работы (сдельные/почасовые) — тоже считаем как начисление мастеру
+    wsOtherTasks.forEach(function(t){
+      if(!inRange(dayOf(t.finishedAt||t.createdAt))) return;
+      if(t.status !== 'done') return;
+      var m = ensureMaster(t.masterId, t.masterName);
+      m.zpAccrued += (t.pay || (t.entries||[]).reduce(function(s,e){return s+(e.sum||0);},0));
+    });
+    // Выплаты ЗП за период
+    wsZpPayments.forEach(function(p){
+      if(!inRange(p.date)) return;
+      var m = ensureMaster(p.masterId, p.masterName || (function(){
+        var st = staff.find(function(s){return s.id===p.masterId;});
+        return st ? st.name : null;
+      })());
+      m.zpPaid += (p.amount||0);
+    });
+
+    var masterEntries = Object.entries(byMaster).sort(function(a,b){ return b[1].itemsValue - a[1].itemsValue; });
+
+    // ── Общая сводка ──
+    var totalItems = items.length;
+    var totalValue = items.reduce(function(s,it){return s+(it.price||0);},0);
+    var totalZpAccrued = masterEntries.reduce(function(s,e){return s+e[1].zpAccrued;},0);
+    var totalZpPaid = masterEntries.reduce(function(s,e){return s+e[1].zpPaid;},0);
+    var zpDebt = totalZpAccrued - totalZpPaid;
+
+    var statusLabels = {
+      new:'🆕 Новые', in_work:'🔨 В работе', done:'✅ Готово',
+      shipped:'🚚 Отгружено', received:'📦 Принято магазином',
+      warehouse:'🏬 На складе', active:'▶️ Активно', paused:'⏸ На паузе',
+      archived:'🗄 В архиве', pending:'⏳ Ожидает'
+    };
+
+    function fmt(n){ return Math.round(n||0).toLocaleString('ru-RU'); }
+
+    // Summary block
+    var summaryHtml = '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+      '<div class="ctitle">📊 Сводка производства</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">'+
+        _kpi('Изделий сделано', totalItems, 'var(--inc)', '')+
+        _kpi('Общая стоимость', fmt(totalValue), 'var(--inc)', ' ₽')+
+        _kpi('Заготовок в очереди', blanksOpenCount, overdueBlanks.length>0?'var(--exp)':'var(--t1)', '')+
+        _kpi('Просрочено (>2дн)', overdueBlanks.length, overdueBlanks.length>0?'var(--exp)':'var(--inc)', '')+
+      '</div>'+
+      _row('💰 ЗП начислено', '<b>'+fmt(totalZpAccrued)+' ₽</b>')+
+      _row('✅ ЗП выплачено', '<b>'+fmt(totalZpPaid)+' ₽</b>')+
+      _row('⚠️ Долг по ЗП', '<b style="color:'+(zpDebt>0?'var(--exp)':'var(--inc)')+'">'+fmt(zpDebt)+' ₽</b>')+
+    '</div>';
+
+    if(overdueBlanks.length > 0) {
+      summaryHtml += '<div class="card" style="background:#2e1a1a;border:1px solid var(--exp);margin-bottom:12px">'+
+        '<div class="ctitle" style="color:var(--exp)">⚠️ Просроченные заготовки</div>'+
+        overdueBlanks.slice(0,5).map(function(b){
+          var ageDays = Math.floor((now - new Date(b.createdAt))/(1000*60*60*24));
+          return '<div style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'+
+            '<div><div style="font-weight:600;font-size:12px">'+(b.itemName||'—')+(b.qty>1?' × '+b.qty:'')+'</div><div style="font-size:11px;color:var(--t2)">👤 '+(b.masterName||'—')+' · 🌳 '+(b.wood||'—')+'</div></div>'+
+            '<div style="font-size:12px;font-weight:700;color:var(--exp)">'+ageDays+' дн</div>'+
+          '</div>';
+        }).join('')+
+        (overdueBlanks.length>5?'<div style="text-align:center;font-size:11px;color:var(--t2);padding:6px">и ещё '+(overdueBlanks.length-5)+'...</div>':'')+
+      '</div>';
+    }
+
+    document.getElementById('wsSummaryData').innerHTML = summaryHtml;
+
+    // ── Карточки по мастерам ──
+    var mastersHtml = masterEntries.length ? masterEntries.map(function(e){
+      var name = e[1].name, m = e[1];
+      var workDays = (m.firstDate && m.lastDate)
+        ? Math.max(1, Math.round((new Date(m.lastDate)-new Date(m.firstDate))/(1000*60*60*24))+1)
+        : 1;
+      var pace = (m.itemsCount / workDays).toFixed(1);
+      var debt = m.zpAccrued - m.zpPaid;
+      var statusBadges = Object.keys(m.statusCounts).map(function(st){
+        return '<span style="font-size:10px;background:var(--bg);border-radius:5px;padding:2px 6px;margin-right:4px">'+(statusLabels[st]||st)+': '+m.statusCounts[st]+'</span>';
+      }).join('');
+
+      return '<div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:8px">'+
+        '<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--t1)">🔨 '+name+'</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;margin-bottom:8px">'+
+          _sellKpi('Изделий', String(m.itemsCount), 'var(--t1)')+
+          _sellKpi('Стоимость', fmt(m.itemsValue)+' ₽', 'var(--inc)')+
+          _sellKpi('Темп', pace+' шт/день', 'var(--t1)')+
+          _sellKpi('В очереди', String(m.blanksOpen)+(m.blanksOverdue?' ⚠️'+m.blanksOverdue:''), m.blanksOverdue?'var(--exp)':'var(--t1)')+
+          _sellKpi('ЗП начислено', fmt(m.zpAccrued)+' ₽', 'var(--a4)')+
+          _sellKpi('Долг по ЗП', fmt(debt)+' ₽', debt>0?'var(--exp)':'var(--inc)')+
+        '</div>'+
+        (statusBadges?'<div style="margin-top:4px">'+statusBadges+'</div>':'')+
+      '</div>';
+    }).join('') : '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных за период</div>';
+
+    document.getElementById('wsEmployeesData').innerHTML = mastersHtml;
+
   } catch(e) {
     console.error('renderProduction error:', e);
-    document.getElementById('wsEmployeesData').innerHTML = '<div style="color:var(--t2);font-size:12px">Ошибка загрузки данных</div>';
+    var el2 = document.getElementById('wsEmployeesData');
+    if(el2) el2.innerHTML = '<div style="color:var(--exp);font-size:12px;padding:12px">Ошибка: '+e.message+'</div>';
   }
 }
 
@@ -3438,10 +3576,10 @@ function renderShops() {
   }
 }
 
-function _kpi(label, val, color) {
+function _kpi(label, val, color, suffix) {
   return '<div style="background:var(--s2);border-radius:8px;padding:10px">'+
     '<div style="font-size:11px;color:var(--t2)">'+label+'</div>'+
-    '<div style="font-size:14px;font-weight:700;color:'+color+'">'+val+'</div>'+
+    '<div style="font-size:14px;font-weight:700;color:'+color+'">'+val+(suffix||'')+'</div>'+
   '</div>';
 }
 function _row(label, valHtml) {
@@ -3507,6 +3645,7 @@ function setPLPeriod(period, btn) {
   }
   
   renderPL();
+  renderPLMargin();
   renderPLBudget();
 }
 
@@ -3629,6 +3768,109 @@ function renderPL() {
   
   document.getElementById('plTable').innerHTML = html;
 }
+
+function renderPLMargin() {
+  var el = document.getElementById('plMarginTable');
+  if(!el) return;
+  try {
+    var activePeriodBtn = document.querySelector('#pg-pl .pchips .pc.active');
+    var periodLabel = activePeriodBtn ? activePeriodBtn.textContent.trim() : 'Месяц';
+    var range;
+    if(periodLabel.includes('Период')) {
+      var fv = document.getElementById('plFrom').value, tv = document.getElementById('plTo').value;
+      var td = getTodayKey();
+      range = {from: fv||td, to: tv||td};
+    } else {
+      var pk = {'Неделя':'week','Месяц':'month','Год':'year'}[periodLabel] || 'month';
+      range = getDateRange(pk);
+    }
+
+    var shifts = getShiftsInRange(range.from, range.to);
+    var wsItems = JSON.parse(localStorage.getItem('ws_items') || '[]');
+
+    // Себестоимость по «Наименование · Порода» — средняя цена изготовления
+    // изделия мастерской (price), какие реально были произведены (учитываем все,
+    // не только за период продажи — себестоимость по технологии стабильна)
+    var costByKey = {};
+    wsItems.forEach(function(it){
+      var key = (it.name||it.itemName||'') + ' · ' + (it.wood||'—');
+      if(!it.name && !it.itemName) return;
+      if(!costByKey[key]) costByKey[key] = {sum:0, count:0};
+      costByKey[key].sum += (it.price||0);
+      costByKey[key].count += 1;
+    });
+    function avgCost(key){
+      var c = costByKey[key];
+      return c && c.count ? c.sum/c.count : null;
+    }
+
+    // Продажи по «Наименование · Порода» за период (из журнала смен)
+    var salesByKey = {};
+    shifts.forEach(function(s){
+      (s.journal||[]).forEach(function(entry){
+        if(entry.type !== 'sale') return;
+        (entry.items||[]).forEach(function(it){
+          var key = (it.name||'')+' · '+(it.species||'—');
+          if(!it.name) return;
+          if(!salesByKey[key]) salesByKey[key] = {qty:0, revenue:0};
+          salesByKey[key].qty += (it.qty||1);
+          salesByKey[key].revenue += (it.amt!=null?it.amt:(it.price||0)*(it.qty||1));
+        });
+      });
+    });
+
+    function fmt(n){ return Math.round(n||0).toLocaleString('ru-RU'); }
+
+    var rows = Object.entries(salesByKey).map(function(e){
+      var key = e[0], sale = e[1];
+      var cost = avgCost(key);
+      var costTotal = cost!=null ? cost*sale.qty : null;
+      var margin = cost!=null ? sale.revenue - costTotal : null;
+      var marginPct = (cost!=null && sale.revenue>0) ? Math.round(100*margin/sale.revenue) : null;
+      return {key:key, qty:sale.qty, revenue:sale.revenue, cost:costTotal, margin:margin, marginPct:marginPct};
+    }).sort(function(a,b){ return (b.margin||0)-(a.margin||0); });
+
+    if(!rows.length) {
+      el.innerHTML = '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">Нет данных о продажах за период</div>';
+      return;
+    }
+
+    var totalRevenue = rows.reduce(function(s,r){return s+r.revenue;},0);
+    var totalCost = rows.reduce(function(s,r){return s+(r.cost||0);},0);
+    var totalMargin = totalRevenue - totalCost;
+    var knownCostRows = rows.filter(function(r){return r.cost!=null;});
+    var unknownCostCount = rows.length - knownCostRows.length;
+
+    var html = '<div style="display:flex;justify-content:space-between;padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px">'+
+      '<span style="font-size:12px;color:var(--t2)">Общая маржа по товарам с известной себестоимостью</span>'+
+      '<span style="font-weight:700;font-size:13px;color:'+(totalMargin>=0?'var(--inc)':'var(--exp)')+'">'+fmt(totalMargin)+' ₽</span>'+
+    '</div>';
+    if(unknownCostCount > 0) {
+      html += '<div style="font-size:10px;color:var(--t2);margin-bottom:8px">⚠️ У '+unknownCostCount+' товар(ов) нет данных о себестоимости из мастерской — не учтены в марже</div>';
+    }
+
+    html += rows.map(function(r){
+      var costStr = r.cost!=null ? fmt(r.cost)+' ₽' : '—';
+      var marginStr = r.margin!=null ? fmt(r.margin)+' ₽' : '—';
+      var pctStr = r.marginPct!=null ? ' ('+r.marginPct+'%)' : '';
+      var marginColor = r.margin==null ? 'var(--t2)' : (r.margin>=0 ? 'var(--inc)' : 'var(--exp)');
+      return '<div style="padding:8px;background:var(--s2);border-radius:6px;margin-bottom:6px">'+
+        '<div style="font-weight:600;font-size:12px;margin-bottom:4px">'+r.key+'</div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t2)">'+
+          '<span>'+r.qty+' шт · выручка '+fmt(r.revenue)+' ₽</span>'+
+          '<span>себест. '+costStr+'</span>'+
+        '</div>'+
+        '<div style="text-align:right;font-weight:700;font-size:12px;color:'+marginColor+'">маржа: '+marginStr+pctStr+'</div>'+
+      '</div>';
+    }).join('');
+
+    el.innerHTML = html;
+  } catch(e) {
+    console.error('renderPLMargin error:', e);
+    el.innerHTML = '<div style="color:var(--exp);padding:12px;font-size:12px">Ошибка: '+e.message+'</div>';
+  }
+}
+
 
 function renderPLBudget() {
   // Получим текущие фактические значения

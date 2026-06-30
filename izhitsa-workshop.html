@@ -376,7 +376,10 @@ function applyUpdate() {
         <button onclick="toggleStockSort()" id="whSortBtn" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:12px;white-space:nowrap">↑ Цена</button>
       </div>
       <div id="whStockGroups"></div>
-      <button class="btn" style="background:var(--a2);margin-top:10px" onclick="openManualStockMo()">➕ Добавить товар</button>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn" style="background:var(--a2);flex:1" onclick="openManualStockMo()">➕ Добавить товар</button>
+        <button class="btn sec" style="flex:0 0 auto" onclick="openDuplicateScanMo()">🔍 Задвоения</button>
+      </div>
     </div>
 
     <!-- ВКЛАДКА 2: Архив -->
@@ -5121,6 +5124,17 @@ async function saveManualStock(){
   const comment = (document.getElementById('msComment')||{}).value.trim();
   if(!name){ showToast('Укажите название'); return; }
 
+  if(artikul && !_msDupChecked){
+    const dup = findDuplicateByArtikul(artikul);
+    if(dup){
+      showDuplicateWarning(dup,
+        ()=>{ _msDupChecked=true; saveManualStock(); _msDupChecked=false; },
+        ()=>{ showToast('Добавление отклонено — артикул уже на складе'); }
+      );
+      return;
+    }
+  }
+
   const batch = db.batch();
   for(let i=0; i<qty; i++){
     const ref = db.collection('ws_items').doc();
@@ -5141,6 +5155,7 @@ async function saveManualStock(){
     showToast(`✅ Добавлено ${qty} шт. «${name}» на склад`);
   } catch(e){ showToast('Ошибка: '+e.message); }
 }
+let _msDupChecked = false;
 
 // ════════════════════════════════
 // ИНВЕНТАРИЗАЦИЯ
@@ -5977,6 +5992,83 @@ function openManualAcceptMo(){
 }
 
 // Следующий сквозной номер артикула по базе товаров мастерской (древесина)
+// ════════ ПРОВЕРКА ДУБЛЕЙ ПО АРТИКУЛУ ════════
+// Ищет товар на складе с таким же артикулом (среди status:'received')
+function findDuplicateByArtikul(artikul){
+  if(!artikul || !String(artikul).trim()) return null;
+  const a = String(artikul).trim();
+  return items.find(i=>i.status==='received' && String(i.artikul||'').trim()===a) || null;
+}
+
+// Показывает модал с инфо о найденном дубле, вызывает onAccept() или onReject()
+let _dupOnAccept = null;
+let _dupOnReject = null;
+function showDuplicateWarning(existingItem, onAccept, onReject){
+  _dupOnAccept = onAccept;
+  _dupOnReject = onReject;
+  const num = existingItem.artikul || existingItem.itemNum || '—';
+  document.getElementById('dupWarningContent').innerHTML = `
+    <div style="background:rgba(255,180,0,0.1);border:1px solid var(--a4);border-radius:10px;padding:12px;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;color:var(--a4)">⚠️ Такой артикул уже есть на складе</div>
+    </div>
+    <div style="background:var(--s2);border-radius:10px;padding:12px">
+      <div class="at-row"><span class="at-lbl">Артикул</span><span class="at-val">№${num}</span></div>
+      <div class="at-row"><span class="at-lbl">Наименование</span><span class="at-val">${existingItem.name||existingItem.itemName||'—'}</span></div>
+      <div class="at-row"><span class="at-lbl">Порода</span><span class="at-val">${existingItem.wood||'—'}</span></div>
+      ${existingItem.size?`<div class="at-row"><span class="at-lbl">Размер</span><span class="at-val">${existingItem.size}</span></div>`:''}
+      <div class="at-row"><span class="at-lbl">Цена</span><span class="at-val" style="color:var(--accent)">${fmt(existingItem.price||0)}</span></div>
+      <div class="at-row"><span class="at-lbl">Принято</span><span class="at-val">${fmtDT(existingItem.receivedAt)}</span></div>
+      ${existingItem.masterName?`<div class="at-row"><span class="at-lbl">От кого</span><span class="at-val">${existingItem.masterName}</span></div>`:''}
+    </div>
+    <div style="font-size:12px;color:var(--t2);margin-top:10px">Сверьте данные. Если это действительно новый товар — нажмите «Принять», он будет добавлен дополнительно. Если это повтор — нажмите «Отклонить».</div>`;
+  openMo('dupWarningMo');
+}
+function dupWarningAccept(){
+  closeMo('dupWarningMo');
+  if(_dupOnAccept) _dupOnAccept();
+  _dupOnAccept=null; _dupOnReject=null;
+}
+function dupWarningReject(){
+  closeMo('dupWarningMo');
+  if(_dupOnReject) _dupOnReject();
+  _dupOnAccept=null; _dupOnReject=null;
+}
+
+// ════ ПОИСК ДУБЛЕЙ ПО ВСЕМУ СКЛАДУ (кнопка) ════
+function findAllDuplicates(){
+  const stock = items.filter(i=>i.status==='received' && i.artikul && String(i.artikul).trim());
+  const byArtikul = {};
+  stock.forEach(i=>{
+    const a = String(i.artikul).trim();
+    if(!byArtikul[a]) byArtikul[a]=[];
+    byArtikul[a].push(i);
+  });
+  const dupes = Object.entries(byArtikul).filter(([a,list])=>list.length>1);
+  return dupes;
+}
+
+function openDuplicateScanMo(){
+  const dupes = findAllDuplicates();
+  const c = document.getElementById('dupScanContent');
+  if(!dupes.length){
+    c.innerHTML = `<div style="text-align:center;padding:20px 0"><div style="font-size:32px;margin-bottom:8px">✅</div><div style="font-size:14px;color:var(--inc);font-weight:700">Задвоений не найдено</div><div style="font-size:12px;color:var(--t2);margin-top:4px">Все артикулы на складе уникальны</div></div>`;
+  } else {
+    c.innerHTML = `<div style="font-size:13px;color:var(--exp);font-weight:700;margin-bottom:10px">⚠️ Найдено ${dupes.length} артикул(ов) с задвоением</div>` +
+      dupes.map(([artikul, list])=>`
+        <div style="border:1px solid var(--exp);border-radius:10px;margin-bottom:8px;overflow:hidden">
+          <div style="padding:9px 12px;background:rgba(255,80,80,0.1);font-size:13px;font-weight:700">№${artikul} — ${list.length} шт.</div>
+          ${list.map(i=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-top:1px solid var(--border)">
+            <div>
+              <div style="font-size:12px;font-weight:600">${i.name||i.itemName||'—'}</div>
+              <div style="font-size:11px;color:var(--t2)">${i.wood||''}${i.size?' · '+i.size:''} · ${fmt(i.price||0)} · ${fmtDT(i.receivedAt)}</div>
+            </div>
+            <button onclick="deleteStockItem('${i._id}','${(i.name||i.itemName||'').replace(/'/g,"\\'")}');closeMo('dupScanMo')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:5px 9px;color:var(--exp);cursor:pointer;font-size:12px;flex-shrink:0">🗑</button>
+          </div>`).join('')}
+        </div>`).join('');
+  }
+  openMo('dupScanMo');
+}
+
 function getNextArtikulNumber(){
   let max = 0;
   products.forEach(p=>{
@@ -6209,6 +6301,7 @@ function setMaPosStatus(accId, rid, status){
   openMaDetail(accId); // перерисовать
 }
 
+let _maDupChecked = new Set();
 async function provedMaAccept(){
   const accId = document.getElementById('maProvedBtn').getAttribute('data-acc-id');
   const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
@@ -6222,6 +6315,28 @@ async function provedMaAccept(){
   const postDate = now(); // дата приёмки кладовщиком — именно сегодня
   const accepted = acc.positions.filter(p=>p.status==='accepted');
   const defects   = acc.positions.filter(p=>p.status==='defect');
+
+  // Проверка задвоений по артикулу среди принятых позиций
+  if(!_maDupChecked) _maDupChecked = new Set();
+  for(const p of accepted){
+    if(!p.artikul || !String(p.artikul).trim()) continue;
+    const pKey = accId+'_'+(p.id||p.artikul);
+    if(_maDupChecked.has(pKey)) continue;
+    const dup = findDuplicateByArtikul(p.artikul);
+    if(dup){
+      showDuplicateWarning(dup,
+        ()=>{ _maDupChecked.add(pKey); provedMaAccept(); },
+        ()=>{
+          p.status = 'defect'; // отклонённую позицию переводим в брак, чтобы не зависала в pending
+          p.rejectedAsDuplicate = true;
+          showToast('Позиция отклонена как дубль — переведена в брак для разбора');
+          openMaDetail(accId);
+        }
+      );
+      return;
+    }
+  }
+  _maDupChecked = new Set();
 
   try{
     // 1) Принятые — на баланс склада, датой приёмки кладовщиком
@@ -6416,10 +6531,31 @@ function renderFiTotals(){
   const sumEl = document.getElementById('fiTotalSum'); if(sumEl) sumEl.textContent = fmt(totalSum);
 }
 
+let _fiDupChecked = new Set();
 async function saveFirstInvGroup(){
   const groupName = document.getElementById('fiGroupName')?.value.trim();
   if(!groupName){ showToast('Укажите название группы товаров'); return; }
   if(!_fiItems.length){ showToast('Добавьте хотя бы один товар'); return; }
+
+  // Проверка задвоений по артикулу (пропускаем уже подтверждённые позиции)
+  for(const it of _fiItems){
+    if(!it.artikul || !String(it.artikul).trim()) continue;
+    if(_fiDupChecked.has(it.rid)) continue;
+    const dup = findDuplicateByArtikul(it.artikul);
+    if(dup){
+      const ridCopy = it.rid;
+      showDuplicateWarning(dup,
+        ()=>{ _fiDupChecked.add(ridCopy); saveFirstInvGroup(); },
+        ()=>{
+          _fiItems = _fiItems.filter(x=>x.rid!==ridCopy);
+          renderFiItemsList();
+          showToast('Позиция отклонена — артикул уже на складе');
+        }
+      );
+      return;
+    }
+  }
+  _fiDupChecked = new Set();
 
   const newPositions = _fiItems.map(it=>({
     rid: it.rid, artikul: it.artikul||'', name: it.name, wood: it.wood,
@@ -7023,6 +7159,25 @@ document.addEventListener('DOMContentLoaded', ()=>{
 </div>
 
 <!-- РЕДАКТИРОВАНИЕ ПОЗИЦИИ ИНВЕНТАРИЗАЦИИ -->
+<!-- ПРЕДУПРЕЖДЕНИЕ О ДУБЛЕ ПО АРТИКУЛУ -->
+<div class="mo" id="dupWarningMo">
+  <div class="md"><div class="mh"></div><div class="mt">⚠️ Возможное задвоение</div>
+    <div id="dupWarningContent"></div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn" style="background:var(--inc);color:#000;flex:1" onclick="dupWarningAccept()">✅ Принять</button>
+      <button class="btn" style="background:var(--exp);flex:1" onclick="dupWarningReject()">✕ Отклонить</button>
+    </div>
+  </div>
+</div>
+
+<!-- СКАНЕР ЗАДВОЕНИЙ ПО ВСЕМУ СКЛАДУ -->
+<div class="mo" id="dupScanMo">
+  <div class="md"><div class="mh"></div><div class="mt">🔍 Проверка задвоений</div>
+    <div id="dupScanContent"></div>
+    <button class="btn sec" style="margin-top:14px" onclick="closeMo('dupScanMo')">Закрыть</button>
+  </div>
+</div>
+
 <div class="mo" id="fiPositionEditMo">
   <div class="md"><div class="mh"></div><div class="mt">✏️ Редактировать позицию</div>
     <div class="fg"><label class="fl">Наименование</label>
