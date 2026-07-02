@@ -172,7 +172,6 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <meta name="application-name" content="Ижица — Администратор">
 </head>
 <body>
-<div id="connStatusBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;justify-content:center;padding:6px 12px;border-bottom:1px solid;align-items:center"></div>
 
 <!-- LOGIN SCREEN -->
 <div id="loginScreen">
@@ -314,41 +313,81 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <!-- OPERATIONS -->
   <div class="page" id="pg-op">
     <div class="stitle">➕ Операция</div>
-    
+
+    <!-- Переключатель типа -->
     <div class="txtype">
       <button class="txt-btn i" id="txb-inc" onclick="setTxType('income')">＋ Доход</button>
       <button class="txt-btn" id="txb-exp" onclick="setTxType('expense')">− Расход</button>
       <button class="txt-btn" id="txb-tr" onclick="setTxType('transfer')">⇄ Перевод</button>
     </div>
-    
-    <div class="card">
+
+    <!-- Режим: Внести / Архив (для Доход и Расход) -->
+    <div id="opModeBar" style="display:flex;gap:8px;margin-bottom:12px">
+      <button id="opModeAdd" onclick="setOpMode('add')"
+        style="flex:1;padding:8px;border-radius:10px;border:none;background:var(--accent);color:#0f0f13;font-weight:700;font-size:13px;cursor:pointer">
+        ✏️ Внести
+      </button>
+      <button id="opModeArchive" onclick="setOpMode('archive')"
+        style="flex:1;padding:8px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--t1);font-weight:600;font-size:13px;cursor:pointer">
+        📋 Архив
+      </button>
+    </div>
+
+    <!-- ФОРМА ВНЕСЕНИЯ -->
+    <div id="opFormBlock" class="card">
       <div class="fg">
         <label class="fl">Сумма (₽)</label>
         <input class="fi" type="number" id="opAmt" placeholder="0" inputmode="numeric">
       </div>
-      
-      <div class="fg" id="opSourceFg">
-        <label class="fl">Источник продаж</label>
-        <select class="fs" id="opSource"></select>
+
+      <!-- Доход: источник + категория -->
+      <div id="opSourceFg">
+        <div class="fg">
+          <label class="fl">Источник / канал продаж</label>
+          <select class="fs" id="opSource"></select>
+        </div>
+        <div class="fg">
+          <label class="fl">Категория дохода</label>
+          <select class="fs" id="opIncomeCategory">
+            <option value="">— выбрать —</option>
+          </select>
+        </div>
       </div>
-      
-      <div class="fg" id="opCategoryFg" style="display:none">
-        <label class="fl">Статья расхода</label>
-        <input class="fi" type="text" id="opCategory" placeholder="Например: Аренда, ЗП, Доставка">
+
+      <!-- Расход: статья из справочника -->
+      <div id="opCategoryFg" style="display:none">
+        <div class="fg">
+          <label class="fl">Статья расхода</label>
+          <select class="fs" id="opCategory">
+            <option value="">— выбрать статью —</option>
+          </select>
+        </div>
       </div>
-      
+
       <div class="fg">
         <label class="fl">Описание</label>
-        <input class="fi" id="opDesc" placeholder="Заметка об операции (опционально)">
+        <input class="fi" id="opDesc" placeholder="Заметка (опционально)">
       </div>
-      
+
       <div class="fg">
         <label class="fl">Дата</label>
         <input class="fi" type="date" id="opDate">
       </div>
-      
-      <button class="btn" onclick="saveOperation()" style="margin-bottom:8px">💾 Сохранить операцию</button>
-      <button class="btn sec" onclick="clearOperationForm()" style="margin-bottom:0">Очистить форму</button>
+
+      <button class="btn" onpointerdown="event.preventDefault();saveOperation()" style="margin-bottom:8px">💾 Сохранить операцию</button>
+      <button class="btn sec" onclick="clearOperationForm()">Очистить</button>
+    </div>
+
+    <!-- АРХИВ -->
+    <div id="opArchiveBlock" style="display:none">
+      <!-- Фильтры архива -->
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <select id="opArchiveCat" class="fs" style="flex:1;min-width:120px" onchange="renderOpArchive()">
+          <option value="">Все категории</option>
+        </select>
+        <input type="month" id="opArchiveMonth" class="fi" style="flex:1;min-width:120px" onchange="renderOpArchive()">
+      </div>
+      <div id="opArchiveList"></div>
     </div>
   </div>
 
@@ -659,43 +698,16 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <script>
 
 // ════ FIREBASE + SYNC LAYER ════
-var db;
-var _offlineNoFirebase = (typeof firebase === 'undefined');
-if(_offlineNoFirebase){
-  console.log('[App] Firebase SDK недоступен — работаю в офлайн-режиме без облака');
-  var _stubDoc = function(){
-    var ref = {};
-    ref.get = function(){ return Promise.reject(new Error('offline')); };
-    ref.set = function(){ return Promise.reject(new Error('offline')); };
-    ref.delete = function(){ return Promise.reject(new Error('offline')); };
-    ref.onSnapshot = function(onNext, onErr){ if(onErr) onErr({code:'offline'}); return function(){}; };
-    ref.collection = function(){ return _stubCollection(); };
-    return ref;
-  };
-  var _stubCollection = function(){
-    var col = {};
-    col.doc = function(){ return _stubDoc(); };
-    col.get = function(){ return Promise.reject(new Error('offline')); };
-    col.add = function(){ return Promise.reject(new Error('offline')); };
-    col.onSnapshot = function(onNext, onErr){ if(onErr) onErr({code:'offline'}); return function(){}; };
-    col.where = function(){ return col; };
-    col.orderBy = function(){ return col; };
-    col.limit = function(){ return col; };
-    return col;
-  };
-  db = { collection: function(){ return _stubCollection(); } };
-} else {
-  firebase.initializeApp({
-    apiKey:"AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
-    authDomain:"izhitsa-6327c.firebaseapp.com",
-    projectId:"izhitsa-6327c",
-    storageBucket:"izhitsa-6327c.firebasestorage.app",
-    messagingSenderId:"1025102190040",
-    appId:"1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
-  });
-  db = firebase.firestore();
-  db.enablePersistence({synchronizeTabs:true}).catch(function(e){ console.log('Persist:',e.code); });
-}
+firebase.initializeApp({
+  apiKey:"AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
+  authDomain:"izhitsa-6327c.firebaseapp.com",
+  projectId:"izhitsa-6327c",
+  storageBucket:"izhitsa-6327c.firebasestorage.app",
+  messagingSenderId:"1025102190040",
+  appId:"1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
+});
+const db = firebase.firestore();
+db.enablePersistence({synchronizeTabs:true}).catch(function(e){ console.log('Persist:',e.code); });
 
 var _adminSyncUnsubs = {};
 var ADMIN_SYNC_SETTINGS = {
@@ -1304,7 +1316,7 @@ function doLogin() {
     document.getElementById('hdrRole').textContent = 'admin';
     populateSellers(); populateWsEmployees(); populateAdminUsers();
     if(typeof populateSalesSourcesList==='function') populateSalesSourcesList();
-    if(typeof populateSourcesForOp==='function') populateSourcesForOp();
+    if(typeof populateSourcesForOp==='function') populateCategorySelects();
     populateShopCheckboxes();
     renderPL(); renderPLMargin(); renderShops(); renderPLBudget(); renderDebts();
     if(typeof renderDashboard==='function') renderDashboard();
@@ -1351,7 +1363,7 @@ function doLogin() {
   populateWsEmployees();
   populateAdminUsers();
   populateSalesSourcesList();
-  populateSourcesForOp();
+  populateCategorySelects();
   populateShopCheckboxes();
   renderPL();
   renderShops();
@@ -1763,62 +1775,211 @@ function addAdminUser() {
 
 let currentTxType = 'income';
 
+var _currentOpMode = 'add'; // 'add' | 'archive'
+
 function setTxType(type) {
   currentTxType = type;
-  document.querySelectorAll('.txtype .txt-btn').forEach(b => b.classList.remove('i','e','t'));
+  document.querySelectorAll('.txtype .txt-btn').forEach(function(b){ b.classList.remove('i','e','t'); });
   document.getElementById('txb-inc').classList.remove('i');
   document.getElementById('txb-exp').classList.remove('e');
   document.getElementById('txb-tr').classList.remove('t');
-  
+
+  var modeBar = document.getElementById('opModeBar');
+
   if(type === 'income') {
     document.getElementById('txb-inc').classList.add('i');
     document.getElementById('opSourceFg').style.display = 'block';
     document.getElementById('opCategoryFg').style.display = 'none';
+    if(modeBar) modeBar.style.display = 'flex';
   } else if(type === 'expense') {
     document.getElementById('txb-exp').classList.add('e');
     document.getElementById('opSourceFg').style.display = 'none';
     document.getElementById('opCategoryFg').style.display = 'block';
+    if(modeBar) modeBar.style.display = 'flex';
   } else {
     document.getElementById('txb-tr').classList.add('t');
     document.getElementById('opSourceFg').style.display = 'none';
     document.getElementById('opCategoryFg').style.display = 'none';
+    // Для перевода нет архива — всегда показываем форму
+    if(modeBar) modeBar.style.display = 'none';
+    setOpMode('add');
+    return;
   }
+  populateCategorySelects();
+  setOpMode(_currentOpMode);
+}
+
+function setOpMode(mode) {
+  _currentOpMode = mode;
+  var addBtn = document.getElementById('opModeAdd');
+  var archBtn = document.getElementById('opModeArchive');
+  var formBlock = document.getElementById('opFormBlock');
+  var archBlock = document.getElementById('opArchiveBlock');
+  if(!addBtn) return;
+
+  if(mode === 'add') {
+    addBtn.style.background = 'var(--accent)';
+    addBtn.style.color = '#0f0f13';
+    archBtn.style.background = 'var(--s2)';
+    archBtn.style.color = 'var(--t1)';
+    formBlock.style.display = 'block';
+    archBlock.style.display = 'none';
+  } else {
+    addBtn.style.background = 'var(--s2)';
+    addBtn.style.color = 'var(--t1)';
+    archBtn.style.background = 'var(--accent)';
+    archBtn.style.color = '#0f0f13';
+    formBlock.style.display = 'none';
+    archBlock.style.display = 'block';
+    renderOpArchive();
+  }
+}
+
+// Заполняет select'ы категорий из справочников
+function populateCategorySelects() {
+  // Статьи расходов из iz_expense_items
+  var expItems = [];
+  try { expItems = JSON.parse(localStorage.getItem('iz_expense_items') || '[]'); } catch(e){}
+  var expSel = document.getElementById('opCategory');
+  if(expSel) {
+    var expVal = expSel.value;
+    expSel.innerHTML = '<option value="">— выбрать статью —</option>' +
+      expItems.map(function(it){
+        var name = typeof it === 'string' ? it : (it.name || it.title || '');
+        return '<option value="'+name+'">'+name+'</option>';
+      }).join('');
+    if(expVal) expSel.value = expVal;
+  }
+
+  // Категории доходов — из iz_income_categories или фиксированный список
+  var incItems = [];
+  try { incItems = JSON.parse(localStorage.getItem('iz_income_categories') || '[]'); } catch(e){}
+  if(!incItems.length) incItems = ['Продажи магазина','Продажи ТГ канал','ОПТ','Мастерская','Прочее'];
+  var incSel = document.getElementById('opIncomeCategory');
+  if(incSel) {
+    var incVal = incSel.value;
+    incSel.innerHTML = '<option value="">— выбрать —</option>' +
+      incItems.map(function(it){
+        var name = typeof it === 'string' ? it : (it.name || '');
+        return '<option value="'+name+'">'+name+'</option>';
+      }).join('');
+    if(incVal) incSel.value = incVal;
+  }
+
+  // Источники для Доход
+  populateCategorySelects();
+
+  // Фильтр категорий в архиве
+  var archCatSel = document.getElementById('opArchiveCat');
+  if(archCatSel) {
+    var catList = currentTxType === 'expense' ? expItems : incItems;
+    var archVal = archCatSel.value;
+    archCatSel.innerHTML = '<option value="">Все категории</option>' +
+      catList.map(function(it){
+        var name = typeof it === 'string' ? it : (it.name || it.title || '');
+        return '<option value="'+name+'">'+name+'</option>';
+      }).join('');
+    if(archVal) archCatSel.value = archVal;
+  }
+}
+
+// Архив операций по текущему типу (доход/расход) с фильтром по категории и месяцу
+function renderOpArchive() {
+  var el = document.getElementById('opArchiveList');
+  if(!el) return;
+  try {
+    var txs = getTransactions();
+    var catFilter = (document.getElementById('opArchiveCat')||{}).value || '';
+    var monthFilter = (document.getElementById('opArchiveMonth')||{}).value || '';
+
+    // Установим текущий месяц по умолчанию
+    if(!monthFilter) {
+      var now2 = new Date();
+      monthFilter = now2.getFullYear()+'-'+String(now2.getMonth()+1).padStart(2,'0');
+      var mEl = document.getElementById('opArchiveMonth');
+      if(mEl && !mEl.value) mEl.value = monthFilter;
+    }
+
+    var filtered = txs.filter(function(tx){
+      if(tx.type !== currentTxType) return false;
+      var txMonth = (tx.date||'').substring(0,7);
+      if(monthFilter && txMonth !== monthFilter) return false;
+      var txCat = tx.category || tx.source || '';
+      if(catFilter && txCat !== catFilter) return false;
+      return true;
+    }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+
+    if(!filtered.length) {
+      el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--t2);font-size:13px">Нет записей за этот период</div>';
+      return;
+    }
+
+    var total = filtered.reduce(function(s,tx){ return s+(tx.amount||0); }, 0);
+    var typeLabel = currentTxType === 'income' ? 'доходов' : 'расходов';
+    var typeColor = currentTxType === 'income' ? 'var(--inc)' : 'var(--exp)';
+
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:10px">'+
+      '<span style="font-size:12px;color:var(--t2)">Итого '+typeLabel+'</span>'+
+      '<span style="font-weight:700;font-size:15px;color:'+typeColor+'">'+Math.round(total).toLocaleString('ru-RU')+' ₽</span>'+
+    '</div>';
+
+    html += filtered.map(function(tx){
+      var cat = tx.category || tx.source || '—';
+      var dateStr = (tx.date||'').substring(0,10);
+      return '<div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:8px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+          '<div style="flex:1">'+
+            '<div style="font-weight:600;font-size:13px;color:'+typeColor+'">'+(tx.amount||0).toLocaleString('ru-RU')+' ₽</div>'+
+            '<div style="font-size:12px;color:var(--t1);margin-top:2px">🏷 '+cat+'</div>'+
+            (tx.desc?'<div style="font-size:11px;color:var(--t2);margin-top:2px">'+tx.desc+'</div>':'')+
+          '</div>'+
+          '<div style="text-align:right;flex-shrink:0;margin-left:8px">'+
+            '<div style="font-size:11px;color:var(--t2)">'+dateStr+'</div>'+
+            '<div style="font-size:10px;color:var(--t3);margin-top:2px">'+(tx.createdBy||'')+'</div>'+
+            '<button onpointerdown="event.preventDefault();deleteTx(\''+tx.id+'\')" style="margin-top:4px;background:none;border:1px solid #f0606060;border-radius:5px;color:var(--exp);font-size:10px;padding:2px 6px;cursor:pointer">✕</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--exp);padding:12px;font-size:12px">Ошибка: '+e.message+'</div>';
+  }
+}
+
+function deleteTx(txId) {
+  if(!confirm('Удалить эту запись?')) return;
+  var txs = getTransactions().filter(function(tx){ return tx.id !== txId; });
+  saveTransactions(txs);
+  renderOpArchive();
 }
 
 function populateSourcesForOp() {
-  const sources = getSalesSources();
-  const select = document.getElementById('opSource');
-  select.innerHTML = sources.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+  var sources = getSalesSources();
+  var select = document.getElementById('opSource');
+  if(!select) return;
+  select.innerHTML = sources.map(function(s){
+    var name = typeof s === 'string' ? s : (s.name || '');
+    return '<option value="'+name+'">'+name+'</option>';
+  }).join('');
 }
 
 function saveOperation() {
-  const amt = parseFloat(gv('opAmt'));
-  const source = gv('opSource');
-  const category = gv('opCategory');
-  const desc = gv('opDesc');
-  const date = gv('opDate');
-  
-  if(!amt || amt <= 0) {
-    alert('Введите сумму больше 0');
-    return;
-  }
-  
-  if(!date) {
-    alert('Выберите дату');
-    return;
-  }
-  
-  if(currentTxType === 'income' && !source) {
-    alert('Выберите источник продаж');
-    return;
-  }
-  
-  if(currentTxType === 'expense' && !category) {
-    alert('Введите статью расхода');
-    return;
-  }
-  
-  const txs = getTransactions();
+  var amt = parseFloat(document.getElementById('opAmt').value||'0');
+  var source = (document.getElementById('opSource')||{}).value || '';
+  var expCat = (document.getElementById('opCategory')||{}).value || '';
+  var incCat = (document.getElementById('opIncomeCategory')||{}).value || '';
+  var category = currentTxType === 'expense' ? expCat : incCat;
+  var desc = document.getElementById('opDesc').value || '';
+  var date = document.getElementById('opDate').value || '';
+
+  if(!amt || amt <= 0) { alert('Введите сумму больше 0'); return; }
+  if(!date) { alert('Выберите дату'); return; }
+  if(currentTxType === 'income' && !source) { alert('Выберите источник'); return; }
+  if(currentTxType === 'expense' && !expCat) { alert('Выберите статью расхода'); return; }
+
+  var txs = getTransactions();
   txs.push({
     id: uid(),
     type: currentTxType,
@@ -1828,19 +1989,19 @@ function saveOperation() {
     desc: desc,
     date: date + 'T00:00:00',
     createdAt: now(),
-    createdBy: session.name
+    createdBy: session ? (session.name||'') : ''
   });
-  
+
   saveTransactions(txs);
-  logAddOperation(currentTxType, amt, source, category);
+  try { logAddOperation(currentTxType, amt, source, category); } catch(e){}
   clearOperationForm();
   renderDashboard();
-  alert('✅ Операция сохранена');
+
+  // Показываем подтверждение — без alert(), просто тост
+  showToast('✅ Операция сохранена: '+(amt||0).toLocaleString('ru-RU')+' ₽ / '+(category||source));
 }
 
 
-
-// ════ UNIFIED STAFF SYSTEM ════
 // Single source of truth: iz_staff in Firestore
 // Each staff member has: id, name, pass, roles[], shops[], wsRate, blocked
 
@@ -2265,6 +2426,7 @@ function switchTab(tab, el) {
   if(tab === 'dash') renderDashboard();
   if(tab === 'shops') { initShopFilterBar(); renderShops(); }
   if(tab === 'prod') renderProduction();
+  if(tab === 'op') { populateCategorySelects(); setTxType(currentTxType||'income'); }
 }
 
 // Override old addSellerFromStaff / addWsEmployee / addAdminUser for compatibility
@@ -4091,7 +4253,7 @@ document.addEventListener('DOMContentLoaded', function() {
       populateWsEmployees();
       populateAdminUsers();
       populateSalesSourcesList();
-      populateSourcesForOp();
+      populateCategorySelects();
       populateShopCheckboxes();
       renderDashboard();
       setTxType('income');
@@ -4213,32 +4375,6 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
-// ════ OFFLINE/ONLINE STATUS BANNER ════
-function _renderConnStatus(){
-  var el = document.getElementById('connStatusBanner');
-  if(!el) return;
-  if(!navigator.onLine){
-    el.style.display='flex';
-    el.style.background='#2e1a14';
-    el.style.borderColor='#f0a060';
-    el.innerHTML='<span style="color:#f0a060;font-size:12px">📡 Нет интернета — работаю с локальными данными</span>';
-  } else if(typeof _offlineNoFirebase!=='undefined' && _offlineNoFirebase){
-    el.style.display='flex';
-    el.style.background='#2e1a14';
-    el.style.borderColor='#f0a060';
-    el.innerHTML='<span style="color:#f0a060;font-size:12px">⏳ Подключаюсь к облаку...</span>';
-  } else {
-    el.style.display='none';
-  }
-}
-window.addEventListener('online', function(){
-  _renderConnStatus();
-  if(typeof _offlineNoFirebase!=='undefined' && _offlineNoFirebase){
-    setTimeout(function(){ window.location.reload(); }, 800);
-  }
-});
-window.addEventListener('offline', _renderConnStatus);
-document.addEventListener('DOMContentLoaded', _renderConnStatus);
 </script>
 
 </html>
