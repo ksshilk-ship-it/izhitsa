@@ -1479,7 +1479,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
       <div class="fg" style="margin:0;flex:1"><label class="fl">Цена (₽)</label><input class="fi" type="text" id="spPrice" placeholder="0" inputmode="numeric" oninput="spCalcRetail()"></div>
       <div class="fg" style="margin:0;width:80px"><label class="fl">Кол-во</label><input class="fi" type="text" id="spQty" placeholder="1" inputmode="numeric" value="1" oninput="spCalcRetail()"></div>
     </div>
-    <div class="fg" style="margin:6px 0 0"><label class="fl">Сумма / Цена розница (₽)</label><input class="fi" type="text" id="spRetail" placeholder="0" inputmode="numeric" oninput="spCalcFromRetail()" style="border-color:#c8f060;color:#c8f060;font-weight:700"></div>
+    <div class="fg" style="margin:6px 0 0"><label class="fl">Сумма / Цена розница (₽)</label><input class="fi" type="text" id="spRetail" placeholder="0" inputmode="numeric" oninput="document.getElementById('spRetail').dataset.manualRetail='1';spCalcFromRetail();spCalcPay()" style="border-color:#c8f060;color:#c8f060;font-weight:700"></div>
     <div class="fg"><label class="fl">К оплате (₽)</label><input class="fi" type="text" id="spPay" placeholder="0" inputmode="numeric"></div>
     <div class="fg"><label class="fl">Способ оплаты</label>
       <div class="pay-chips">
@@ -6707,8 +6707,13 @@ function evaluateShiftIssues(sh){
   var manWoWood = (sh.goodsWriteoffs||[]).reduce(function(s,w){return s+(w.amt!=null?w.amt:(w.amount||0));},0);
   var manRcvDr = (sh.drGoodsReceives||[]).reduce(function(s,r){return s+(r.amt!=null?r.amt:(r.amount||0));},0);
   var manWoDr = (sh.drGoodsWriteoffs||[]).reduce(function(s,w){return s+(w.amt!=null?w.amt:(w.amount||0));},0);
-  var calcEveWood = (sh.goodsMorning||0) + jRcvWood + manRcvWood - jWoWood - manWoWood - grossSold(false);
-  var calcEveDr = (sh.goodsDrMorning||0) + jRcvDr + manRcvDr - jWoDr - manWoDr - grossSold(true);
+  // Покупки сотрудников вычитаются по розничной цене (retail/opt)
+  var jStaffWood = jnl.filter(function(e){ return e.type==='staff' && (e.goodsType||'wood')!=='dr'; })
+    .reduce(function(s,e){ return s + Math.abs(e.goodsEffect || e.retail || e.opt || 0); }, 0);
+  var jStaffDr = jnl.filter(function(e){ return e.type==='staff' && e.goodsType==='dr'; })
+    .reduce(function(s,e){ return s + Math.abs(e.goodsDrEffect || e.retail || e.opt || 0); }, 0);
+  var calcEveWood = (sh.goodsMorning||0) + jRcvWood + manRcvWood - jWoWood - manWoWood - grossSold(false) - jStaffWood;
+  var calcEveDr = (sh.goodsDrMorning||0) + jRcvDr + manRcvDr - jWoDr - manWoDr - grossSold(true) - jStaffDr;
   if(sh.goodsEvening==null || sh.goodsEvening<=0){
     issues.push({code:'eve_wood_zero', label:'🌳 Остаток товара (Дерево) на вечер не занесён'});
   } else if(Math.abs((sh.goodsEvening||0) - calcEveWood) >= 1){
@@ -7418,7 +7423,7 @@ function _renderShiftView(){
     if(_svEditTarget && _svEditTarget.kind==='staff' && _svEditTarget.idx===realIdx){
       html += editItemForm('eStaff'+realIdx, '#a060f0', {kind:'staff', idx:realIdx, who:true, retail:true,
         saveFn:'svSaveStaffEdit('+realIdx+',\'eStaff'+realIdx+'\')',
-        prefill:{who:who, art:s.article||'', name:s.item||s.sub||'', species:s.species||'', price:0, qty:s.qty||1, amt:opt, retail:retail}});
+        prefill:{who:who, art:s.article||'', name:s.item||s.sub||'', species:s.species||'', price:s.price||s.opt||0, qty:s.qty||1, amt:opt, retail:retail}});
     }
     return html;
   }
@@ -7710,7 +7715,13 @@ function svSaveStaffEdit(idx, formId){
   var before = Object.assign({}, target);
   if(who) target.who = who;
   target.article = d.art; target.item = d.name; target.species = d.species;
-  target.qty = d.qty; target.opt = d.amt; target.amount = d.amt; target.retail = retail;
+  target.qty = d.qty; target.price = d.price; target.opt = d.amt; target.amount = d.amt; target.retail = retail;
+  // Пересчитываем goodsEffect и goodsDrEffect из retail
+  var isWoodStaff = (target.goodsType||'wood') !== 'dr';
+  if(retail > 0){
+    target.goodsEffect = isWoodStaff ? -retail : 0;
+    target.goodsDrEffect = isWoodStaff ? 0 : -retail;
+  }
   target.editedBy=(session&&(session.name||session.sellerName))||'admin';
   target.editedAt=new Date().toISOString();
   target.editReason=d.reason;
