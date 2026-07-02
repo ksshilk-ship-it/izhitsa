@@ -1365,13 +1365,6 @@ function startWsSyncListeners() {
 
 
 
-window.addEventListener('online', ()=>{
-  setSync('online');
-  if(typeof _offlineNoFirebase!=='undefined' && _offlineNoFirebase){
-    setTimeout(function(){ window.location.reload(); }, 800);
-  }
-});
-window.addEventListener('offline', ()=>setSync('offline'));
 function setSync(s){
   const dot=document.getElementById('sdot'),txt=document.getElementById('stxt');
   if(!dot||!txt)return;
@@ -7316,8 +7309,153 @@ function initTrashTab() {
   }
 }
 
+// ════════ OFFLINE MODE & SYNC ════════
+let _isOnline = navigator.onLine;
+let _syncInProgress = false;
+let _offlineCacheReady = false;
+
+// Загрузить приложение из кэша (localStorage)
+function initOfflineMode(){
+  console.log('[OFFLINE] Loading from localStorage...');
+  
+  // Загружаем сохранённые данные
+  const cached = {
+    items: JSON.parse(localStorage.getItem('ws_items') || '[]'),
+    products: JSON.parse(localStorage.getItem('ws_item_names') || '[]'),
+    woods: JSON.parse(localStorage.getItem('ws_woods') || '[]'),
+    sizes: JSON.parse(localStorage.getItem('ws_sizes') || '[]'),
+    staff: JSON.parse(localStorage.getItem('ws_staff') || '[]'),
+    maHistory: JSON.parse(localStorage.getItem('ws_master_acceptances_list') || '[]'),
+    fiGroups: JSON.parse(localStorage.getItem('ws_first_inventory_list') || '[]'),
+  };
+  
+  items = cached.items;
+  products = cached.products;
+  _allWoods = cached.woods;
+  _allSizes = cached.sizes;
+  _staff = cached.staff;
+  _maHistory = cached.maHistory;
+  _fiGroups = cached.fiGroups;
+  
+  // Показываем UI с кэшированными данными
+  if(session) {
+    showPage(ROLES[session.role]?.page || 'pg-dash');
+    renderEmployeeList();
+    renderDash();
+    renderMyWork();
+    renderWarehouse();
+    renderZP();
+    renderAdmin();
+  }
+  
+  _offlineCacheReady = true;
+  console.log('[OFFLINE] Ready! Items:', items.length, 'Staff:', _staff.length);
+}
+
+// Когда вернулся интернет — синхронизировать
+async function syncOnlineData(){
+  if(_syncInProgress || !_isOnline) return;
+  _syncInProgress = true;
+  
+  console.log('[SYNC] Starting sync with Firebase...');
+  
+  try{
+    // 1. Загружаем свежие данные с Firebase
+    const itemsSnap = await db.collection('ws_items').get();
+    items = itemsSnap.docs.map(d => ({_id: d.id, ...d.data()}));
+    localStorage.setItem('ws_items', JSON.stringify(items));
+    
+    const staffSnap = await db.collection('ws_staff').get();
+    _staff = staffSnap.docs.map(d => ({_id: d.id, ...d.data()}));
+    localStorage.setItem('ws_staff', JSON.stringify(_staff));
+    
+    const maSnap = await db.collection('ws_master_acceptances').get();
+    _maHistory = maSnap.docs.map(d => ({_id: d.id, ...d.data()}));
+    localStorage.setItem('ws_master_acceptances_list', JSON.stringify(_maHistory));
+    
+    const fiSnap = await db.collection('ws_first_inventory').get();
+    _fiGroups = fiSnap.docs.map(d => ({id: d.id, ...d.data()}));
+    localStorage.setItem('ws_first_inventory_list', JSON.stringify(_fiGroups));
+    
+    // 2. Отправляем очередь оффлайн-данных
+    await outboxFlush();
+    
+    // 3. Проверяем открытые смены
+    await checkOpenShifts();
+    
+    // 4. Обновляем UI
+    if(session){
+      renderDash();
+      renderMyWork();
+      renderWarehouse();
+      renderZP();
+      renderRcvPendingList();
+    }
+    
+    console.log('[SYNC] ✅ Sync complete!');
+    showToast('✅ Данные синхронизированы');
+    
+  }catch(e){
+    console.error('[SYNC] Error:', e.message);
+    showToast('⚠️ Ошибка синхронизации: ' + e.message);
+  }finally{
+    _syncInProgress = false;
+  }
+}
+
+// Проверить наличие открытых смен
+async function checkOpenShifts(){
+  try{
+    const shiftsSnap = await db.collection('ws_shifts').where('status','==','open').get();
+    const openShifts = shiftsSnap.docs.map(d => ({id: d.id, ...d.data()}));
+    
+    if(openShifts.length > 0){
+      console.log('[SHIFTS] Open shifts found:', openShifts.length);
+      showToast(`⚠️ Открытые смены: ${openShifts.length}`);
+    }
+  }catch(e){
+    console.log('[SHIFTS] Error checking shifts:', e.message);
+  }
+}
+
+// Обработчик изменения статуса интернета
+window.addEventListener('online', () => {
+  _isOnline = true;
+  console.log('[ONLINE] ✅ Internet connected!');
+  setSync('online');
+  setTimeout(() => syncOnlineData(), 500);
+});
+
+window.addEventListener('offline', () => {
+  _isOnline = false;
+  console.log('[OFFLINE] ❌ Internet disconnected');
+  setSync('offline');
+});
+
 document.addEventListener('DOMContentLoaded', ()=>{
+  console.log('[INIT] App starting...');
+  
+  // Показать интерфейс сразу (без ожидания Firebase)
+  if(session) {
+    initOfflineMode();
+    showPage(ROLES[session.role]?.page || 'pg-dash');
+  }
+  
+  // Если есть интернет — подключиться и синхронизировать
+  _isOnline = navigator.onLine;
+  setSync(_isOnline ? 'online' : 'offline');
+  
+  if(_isOnline){
+    // Небольшая задержка, чтобы Firebase успел инициализироваться
+    setTimeout(() => {
+      startWsSyncListeners();
+      startWsStaffSync();
+      syncOnlineData();
+    }, 1000);
+  }
+  
   initTrashTab();
+  console.log('[INIT] ✅ App ready! Online:', _isOnline);
 });
 </script>
 
