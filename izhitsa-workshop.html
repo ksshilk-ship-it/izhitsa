@@ -2102,7 +2102,9 @@ function startListeners(){
   }
   // Shops from admin
   db.collection('iz_admin_shops').onSnapshot(snap=>{
-    const shops=snap.docs.map(d=>d.data().name).filter(Boolean);
+    let shops=snap.docs.map(d=>d.data().name).filter(Boolean);
+    // Исправляем неправильные названия точек продаж
+    shops = shops.map(s => s.replace('ОПИТ', 'ОПТ'));
     const sel=document.getElementById('shipDest');
     if(sel) sel.innerHTML=shops.length?shops.map(s=>`<option>${s}</option>`).join(''):'<option>Дерево</option>';
   },()=>{});
@@ -3129,7 +3131,7 @@ function toggleShipSort(){
 function renderStockGroups(){
   const c = document.getElementById('whStockGroups'); if(!c) return;
   const q = (document.getElementById('whStockSearch')?.value||'').toLowerCase().trim();
-  let stock = items.filter(i=>i.status==='received');
+  let stock = items.filter(i=>i.status==='received' && !i.deletedAt);
   if(q) stock = stock.filter(i=>((i.name||i.itemName||'')+(i.artikul||'')+(i.wood||'')+(i.size||'')).toLowerCase().includes(q));
 
   if(!stock.length){
@@ -3137,64 +3139,146 @@ function renderStockGroups(){
     return;
   }
 
-  // Группируем по наименованию (нормализуем: trim + нижний регистр как ключ)
-  const groups = {};
-  stock.forEach(item=>{
-    const rawName = (item.name||item.itemName||'—').trim();
-    const key = rawName.toLowerCase();
-    if(!groups[key]) groups[key]={name: rawName, items:[], total:0, sum:0};
-    groups[key].items.push(item);
-    groups[key].total++;
-    groups[key].sum += item.price||0;
-  });
+  // Разделяем на две категории
+  const active = stock.filter(i=>!i.isShopArchived);
+  const archived = stock.filter(i=>i.isShopArchived);
 
-  // Сортировка внутри группы по цене
-  Object.values(groups).forEach(g=>{
-    g.items.sort((a,b)=> _whStockSortAsc ? (a.price||0)-(b.price||0) : (b.price||0)-(a.price||0));
-  });
+  let html = '';
 
-  // Группы по алфавиту
-  const sorted = Object.values(groups).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+  // ═══ ГРУППА 1: ТОВАРЫ ПОД ОТГРУЗКУ ═══
+  if(active.length){
+    const groups1 = {};
+    active.forEach(item=>{
+      const rawName = (item.name||item.itemName||'—').trim();
+      const key = rawName.toLowerCase();
+      if(!groups1[key]) groups1[key]={name: rawName, items:[], total:0, sum:0};
+      groups1[key].items.push(item);
+      groups1[key].total++;
+      groups1[key].sum += item.price||0;
+    });
+    
+    Object.values(groups1).forEach(g=>{
+      g.items.sort((a,b)=> _whStockSortAsc ? (a.price||0)-(b.price||0) : (b.price||0)-(a.price||0));
+    });
+    
+    const sorted1 = Object.values(groups1).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+    const totalQty1 = sorted1.reduce((s,g)=>s+g.total,0);
+    const totalSum1 = sorted1.reduce((s,g)=>s+g.sum,0);
 
-  c.innerHTML = sorted.map(g=>{
-    const isOpen = q || document.getElementById('wsg_'+CSS.escape(g.name))?.classList.contains('open');
-    return `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:12px;overflow:hidden">
-      <div onclick="toggleStockGroup('${g.name.replace(/'/g,"\\'")}')" style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--s2);cursor:pointer">
+    html += `<div style="margin-bottom:14px;border:2px solid var(--accent);border-radius:12px;overflow:hidden">
+      <div onclick="toggleStockCategory('active')" style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--accent);color:#000;font-weight:700;cursor:pointer">
         <div>
-          <div style="font-size:14px;font-weight:700">${g.name}</div>
-          <div style="font-size:11px;color:var(--t2)">${g.total} шт. · ${fmt(g.sum)}</div>
+          <div style="font-size:14px">📦 Товары под отгрузку</div>
+          <div style="font-size:11px;opacity:0.8">${totalQty1} шт. · ${fmt(totalSum1)}</div>
         </div>
-        <span id="wsgarrow_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="font-size:18px;color:var(--t2);transition:transform .2s">${isOpen?'▲':'▼'}</span>
+        <span id="stockCatArrow_active" style="font-size:18px;transition:transform .2s">▲</span>
       </div>
-      <div id="wsg_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="display:${isOpen?'block':'none'};padding:0 12px">
-        ${g.items.map(item=>{
-          const num = item.artikul || (item.itemNum && !item.itemNum.startsWith('НАЧ-') ? item.itemNum : '');
-          const isAdmin = session && (session.role==='администратор'||session.role==='управляющий');
-          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
-            <div style="flex:1">
-              <div style="font-size:12px;font-weight:600">${num?'№'+num+' ':''}${item.wood||'—'}${item.size?' · '+item.size:''}</div>
-              <div style="font-size:11px;color:var(--t2)">Принято: ${fmtDT(item.receivedAt)}</div>
+      <div id="stockCat_active" style="padding:0 12px">
+        ${sorted1.map(g=>{
+          const isOpen = q || document.getElementById('wsg_'+CSS.escape(g.name))?.classList.contains('open');
+          return `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:8px">
+            <div onclick="toggleStockGroup('${g.name.replace(/'/g,"\\'")}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);cursor:pointer">
+              <div>
+                <div style="font-size:13px;font-weight:700">${g.name}</div>
+                <div style="font-size:10px;color:var(--t2)">${g.total} шт. · ${fmt(g.sum)}</div>
+              </div>
+              <span id="wsgarrow_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="font-size:16px;color:var(--t2);transition:transform .2s">${isOpen?'▲':'▼'}</span>
             </div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</div>
-              ${isAdmin?`
-              <button onclick="openStockItemEdit('${item._id}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--a2);cursor:pointer;font-size:12px">✏️</button>
-              <button onclick="deleteStockItem('${item._id}','${(item.name||item.itemName||'').replace(/'/g,"\\'")}');" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--exp);cursor:pointer;font-size:12px">🗑</button>`:''}
+            <div id="wsg_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="display:${isOpen?'block':'none'};padding:0 12px">
+              ${g.items.map(item=>{
+                const num = item.artikul || (item.itemNum && !item.itemNum.startsWith('НАЧ-') ? item.itemNum : '');
+                const isAdmin = session && (session.role==='администратор'||session.role==='управляющий');
+                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
+                  <div style="flex:1">
+                    <div style="font-size:12px;font-weight:600">${num?'№'+num+' ':''}${item.wood||'—'}${item.size?' · '+item.size:''}</div>
+                    <div style="font-size:11px;color:var(--t2)">Принято: ${fmtDT(item.receivedAt)}</div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</div>
+                    ${isAdmin?`
+                    <button onclick="openStockItemEdit('${item._id}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--a2);cursor:pointer;font-size:12px">✏️</button>
+                    <button onclick="deleteStockItem('${item._id}','${(item.name||item.itemName||'').replace(/'/g,"\\'")}');" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--exp);cursor:pointer;font-size:12px">🗑</button>`:''}
+                  </div>
+                </div>`;
+              }).join('')}
             </div>
           </div>`;
         }).join('')}
       </div>
     </div>`;
-  }).join('');
+  }
+
+  // ═══ ГРУППА 2: АРХИВНЫЕ ТОВАРЫ ═══
+  if(archived.length){
+    const groups2 = {};
+    archived.forEach(item=>{
+      const rawName = (item.name||item.itemName||'—').trim();
+      const key = rawName.toLowerCase();
+      if(!groups2[key]) groups2[key]={name: rawName, items:[], total:0, sum:0};
+      groups2[key].items.push(item);
+      groups2[key].total++;
+      groups2[key].sum += item.price||0;
+    });
+    
+    Object.values(groups2).forEach(g=>{
+      g.items.sort((a,b)=> _whStockSortAsc ? (a.price||0)-(b.price||0) : (b.price||0)-(a.price||0));
+    });
+    
+    const sorted2 = Object.values(groups2).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+    const totalQty2 = sorted2.reduce((s,g)=>s+g.total,0);
+    const totalSum2 = sorted2.reduce((s,g)=>s+g.sum,0);
+
+    html += `<div style="margin-bottom:14px;border:2px solid var(--border);border-radius:12px;overflow:hidden">
+      <div onclick="toggleStockCategory('archived')" style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--s1);cursor:pointer;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--t2)">🗄 Архивные товары</div>
+          <div style="font-size:11px;color:var(--t2)">${totalQty2} шт. · ${fmt(totalSum2)}</div>
+        </div>
+        <span id="stockCatArrow_archived" style="font-size:18px;color:var(--t2);transition:transform .2s">▼</span>
+      </div>
+      <div id="stockCat_archived" style="display:none;padding:0 12px">
+        ${sorted2.map(g=>{
+          const isOpen = q || document.getElementById('wsg_'+CSS.escape(g.name))?.classList.contains('open');
+          return `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:8px">
+            <div onclick="toggleStockGroup('${g.name.replace(/'/g,"\\'")}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);cursor:pointer">
+              <div>
+                <div style="font-size:13px;font-weight:700">${g.name}</div>
+                <div style="font-size:10px;color:var(--t2)">${g.total} шт. · ${fmt(g.sum)}</div>
+              </div>
+              <span id="wsgarrow_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="font-size:16px;color:var(--t2);transition:transform .2s">${isOpen?'▲':'▼'}</span>
+            </div>
+            <div id="wsg_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="display:${isOpen?'block':'none'};padding:0 12px">
+              ${g.items.map(item=>{
+                const num = item.artikul || (item.itemNum && !item.itemNum.startsWith('НАЧ-') ? item.itemNum : '');
+                const isAdmin = session && (session.role==='администратор'||session.role==='управляющий');
+                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
+                  <div style="flex:1">
+                    <div style="font-size:12px;font-weight:600">${num?'№'+num+' ':''}${item.wood||'—'}${item.size?' · '+item.size:''}</div>
+                    <div style="font-size:11px;color:var(--t2)">Принято: ${fmtDT(item.receivedAt)}</div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</div>
+                    ${isAdmin?`
+                    <button onclick="openStockItemEdit('${item._id}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--a2);cursor:pointer;font-size:12px">✏️</button>
+                    <button onclick="deleteStockItem('${item._id}','${(item.name||item.itemName||'').replace(/'/g,"\\'")}');" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--exp);cursor:pointer;font-size:12px">🗑</button>`:''}
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  c.innerHTML = html;
 }
 
-function toggleStockGroup(name){
-  const id = 'wsg_'+name.replace(/[^а-яёa-z0-9]/gi,'_');
-  const arrowId = 'wsgarrow_'+name.replace(/[^а-яёa-z0-9]/gi,'_');
-  const el = document.getElementById(id);
-  const arrow = document.getElementById(arrowId);
+function toggleStockCategory(category){
+  const el = document.getElementById('stockCat_'+category);
+  const arrow = document.getElementById('stockCatArrow_'+category);
   if(!el) return;
-  const open = el.style.display==='block';
+  const open = el.style.display === 'block';
   el.style.display = open ? 'none' : 'block';
   if(arrow) arrow.textContent = open ? '▼' : '▲';
 }
@@ -5661,10 +5745,10 @@ async function saveStockItemEdit(){
 }
 
 async function deleteStockItem(itemId, name){
-  if(!confirm(`Удалить товар «${name}» со склада?\n\nЭто действие нельзя отменить.`)) return;
+  if(!confirm(`Переместить товар в корзину?\n\n«${name}»\n\nВы сможете восстановить его из корзины в любой момент.`)) return;
   try{
-    await db.collection('ws_items').doc(itemId).delete();
-    showToast(`🗑 Товар «${name}» удалён`);
+    await softDeleteItem('ws_items', itemId, 'товар');
+    renderStockGroups();
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 // Та же база ws_other_tasks, но запись ведётся по дням вручную,
@@ -6154,9 +6238,32 @@ function getMaxSystemArtikul(){
 function addMaItemRow(){
   const names = getItemNames();
   const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
-  _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', artikulManual:false, name:'', wood:'', zp:0, price:0, qty:''});
+  _maItems.push({
+    rid:uid(), artikul:'', artikulMode:'auto', artikulManual:false, 
+    name:'', wood:'', zp:0, price:0, qty:'',
+    _copyName:true, _copyWood:true, _copyPrice:true, _copyZp:true
+  });
   recalcMaAutoArtikuls();
   renderMaItemsList();
+}
+
+function duplicateMaItemRow(rid){
+  const idx = _maItems.findIndex(x=>x.rid===rid); 
+  if(idx<0) return;
+  const src = _maItems[idx];
+  const copy = {
+    rid:uid(), artikul:'', artikulMode:'auto', artikulManual:false,
+    name: src._copyName ? src.name : '',
+    wood: src._copyWood ? src.wood : '',
+    zp: src._copyZp ? (src.zp||0) : 0,
+    price: src._copyPrice ? (src.price||0) : 0,
+    qty: '',
+    _copyName:true, _copyWood:true, _copyPrice:true, _copyZp:true
+  };
+  _maItems.splice(idx+1, 0, copy);
+  recalcMaAutoArtikuls();
+  renderMaItemsList();
+  showToast('📋 Позиция скопирована');
 }
 
 function renderMaItemsList(){
@@ -6185,7 +6292,7 @@ function renderMaItemsList(){
           placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
           style="${it.artikulMode==='none'?'opacity:0.6':''}">
         ${it.artikulMode==='auto'?`<div style="font-size:11px;color:var(--t2);margin-top:5px">Последний номер в системе: ${getMaxSystemArtikul()}. По умолчанию — следующий по порядку, можно ввести свой</div>`:''}
-        ${(parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto' ? `<div style="font-size:11px;color:var(--accent);margin-top:5px">Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}</div>` : ''}
+        <div id="maArtikulHint_${it.rid}" style="font-size:11px;color:var(--accent);margin-top:5px">${(parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto' ? `Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}` : ''}</div>
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Количество одинаковых изделий</label>
         <input class="fi" type="number" inputmode="numeric" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" placeholder="1">
@@ -6233,15 +6340,37 @@ function setMaArtikulMode(rid, mode){
   renderMaItemsList();
 }
 
+// Точечно обновляет только подпись текущей позиции (если она свёрнута) и
+// подсказку диапазона артикулов внутри открытой карточки — БЕЗ пересборки
+// всего списка через innerHTML. Это нужно, чтобы при наборе номера с
+// клавиатуры поле ввода не теряло фокус и клавиатура не закрывалась
+// после каждой введённой цифры.
+function refreshMaDynamicBits(){
+  _maItems.forEach(it=>{
+    if(it.rid===_maExpandedRid){
+      const hintEl = document.getElementById('maArtikulHint_'+it.rid);
+      if(hintEl){
+        hintEl.textContent = (parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto'
+          ? `Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}`
+          : '';
+      }
+    } else {
+      const sumEl = document.getElementById('maSummary_'+it.rid);
+      if(sumEl) sumEl.innerHTML = maItemSummaryLine(it);
+    }
+  });
+}
+
 // Ручной ввод номера в окошке "Авто" — пользователь меняет, от какого номера
 // начинается автонумерация. Все последующие позиции в режиме "авто" продолжат
-// цепочку от введённого значения.
+// цепочку от введённого значения. Полную перерисовку списка НЕ делаем —
+// иначе на мобильных это закрывает клавиатуру после каждой цифры.
 function updateMaAutoArtikul(rid, val){
   const it = _maItems.find(x=>x.rid===rid); if(!it) return;
   it.artikul = val;
   it.artikulManual = true;
   recalcMaAutoArtikuls();
-  renderMaItemsList();
+  refreshMaDynamicBits();
 }
 
 function updateMaItem(rid, field, val){
@@ -6249,7 +6378,7 @@ function updateMaItem(rid, field, val){
   if(field==='qty'){
     it.qty = Math.max(1, parseInt(val,10)||1);
     recalcMaAutoArtikuls();
-    renderMaItemsList();
+    refreshMaDynamicBits(); // без полной перерисовки — не теряем фокус поля
     return;
   }
   it[field] = (field==='zp'||field==='price') ? (parseFloat(val)||0) : val;
@@ -7108,14 +7237,18 @@ async function showTrashList() {
     const deletedMaSnap = await db.collection('ws_master_acceptances').where('deletedAt','!=',null).get();
     const deletedMa = deletedMaSnap.docs.map(d => ({id:d.id, type:'ma', ...d.data()}));
     
+    // Загружаем удалённые товары со склада
+    const deletedItemsSnap = await db.collection('ws_items').where('deletedAt','!=',null).get();
+    const deletedItems = deletedItemsSnap.docs.map(d => ({id:d.id, type:'item', ...d.data()}));
+    
     // Объединяем всё
-    let allDeleted = [...deletedFi, ...deletedMa];
+    let allDeleted = [...deletedFi, ...deletedMa, ...deletedItems];
     
     // Фильтруем по типу
     if(_trashCurrentFilter !== 'all') {
       if(_trashCurrentFilter === 'fi') allDeleted = allDeleted.filter(i => i.type === 'fi');
       else if(_trashCurrentFilter === 'ma') allDeleted = allDeleted.filter(i => i.type === 'ma');
-      else if(_trashCurrentFilter === 'other') allDeleted = allDeleted.filter(i => !['fi','ma'].includes(i.type));
+      else if(_trashCurrentFilter === 'other') allDeleted = allDeleted.filter(i => !['fi','ma','item'].includes(i.type));
     }
     
     // Сортируем по времени удаления (новые сверху)
@@ -7127,9 +7260,22 @@ async function showTrashList() {
     }
     
     container.innerHTML = allDeleted.map(item => {
-      const label = item.type === 'fi' ? ('🆕 Инвентаризация: ' + (item.groupName || 'без названия')) 
-                  : item.type === 'ma' ? ('📥 Приёмка от ' + (item.masterName || 'мастера'))
-                  : ('Другое: ' + (item.name || item.id));
+      let label = '';
+      let collection = '';
+      if(item.type === 'fi') {
+        label = '🆕 Инвентаризация: ' + (item.groupName || 'без названия');
+        collection = 'ws_first_inventory';
+      } else if(item.type === 'ma') {
+        label = '📥 Приёмка от ' + (item.masterName || 'мастера');
+        collection = 'ws_master_acceptances';
+      } else if(item.type === 'item') {
+        label = '📦 Товар: ' + ((item.name||item.itemName||'') + (item.artikul ? ' №' + item.artikul : ''));
+        collection = 'ws_items';
+      } else {
+        label = 'Другое: ' + (item.name || item.id);
+        collection = '';
+      }
+      
       const delTime = item.deletedAt ? new Date(item.deletedAt).toLocaleString('ru-RU') : 'неизвестно';
       const delBy = item.deletedBy || 'неизвестно';
       
@@ -7144,9 +7290,9 @@ async function showTrashList() {
           </div>
         </div>
         <div style="display:flex;gap:8px">
-          <button onclick="restoreFromTrash('${item.type === 'fi' ? 'ws_first_inventory' : 'ws_master_acceptances'}','${item.id}')" 
+          <button onclick="restoreFromTrash('${collection}','${item.id}')" 
                   class="btn green" style="flex:1;font-size:12px">↩️ Восстановить</button>
-          <button onclick="permanentlyDeleteFromTrash('${item.type === 'fi' ? 'ws_first_inventory' : 'ws_master_acceptances'}','${item.id}','${(label||'').replace(/"/g,'&quot;')}')" 
+          <button onclick="permanentlyDeleteFromTrash('${collection}','${item.id}','${(label||'').replace(/"/g,'&quot;')}')" 
                   class="btn" style="flex:1;font-size:12px;background:var(--exp)">🗑 Удалить навсегда</button>
         </div>
       </div>`;
@@ -7359,9 +7505,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
     <div class="fg"><label class="fl">Мастер</label><select class="fs" id="maMaster"></select></div>
     <div class="fg"><label class="fl">Дата сдачи</label><input class="fi" type="date" id="maDate"></div>
 
+    <button class="btn" style="background:var(--a2);margin-bottom:10px" onclick="addMaItemRow()">➕ Добавить изделие</button>
+
     <div id="maItemsList" style="margin:14px 0"></div>
 
-    <button class="btn" style="background:var(--a2);margin-bottom:10px" onclick="addMaItemRow()">➕ Добавить изделие</button>
     <button class="btn green" onclick="saveManualAccept()">💾 Сохранить приёмку</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('manualAcceptMo')">Отмена</button>
   </div>
