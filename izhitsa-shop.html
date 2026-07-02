@@ -149,11 +149,60 @@ function _renderConnStatus(){
 }
 window.addEventListener('online', function(){
   _renderConnStatus();
-  // Если при первом офлайн-запуске Firebase не загрузился — перезагружаем страницу
-  // чтобы подхватить настоящий SDK теперь когда сеть появилась
   if(typeof _offlineNoFirebase!=='undefined' && _offlineNoFirebase){
+    // Firebase SDK не был загружен — перезагружаем страницу чтобы подхватить SDK
     setTimeout(function(){ window.location.reload(); }, 800);
+    return;
   }
+  // Firebase SDK есть — переподключаем слушателей и принудительно тянем свежие данные
+  setTimeout(function(){
+    try{
+      // 1. Переподключаем onSnapshot слушателей если они отвалились
+      //    (сбрасываем _syncUnsubs чтобы syncListen не пропустил уже "зарегистрированные")
+      Object.keys(_syncUnsubs).forEach(function(k){
+        try{ if(typeof _syncUnsubs[k]==='function') _syncUnsubs[k](); }catch(e){}
+        delete _syncUnsubs[k];
+      });
+      if(typeof startSyncListeners==='function') startSyncListeners();
+    }catch(e){ console.log('sync reconnect err', e); }
+
+    // 2. Принудительно тянем свежие данные для критичных коллекций
+    try{
+      // Актуальный список сотрудников (для проверки при входе)
+      db.collection('iz_settings').doc('staff').get({source:'server'}).then(function(snap){
+        if(snap.exists && snap.data().data){
+          localStorage.setItem('iz_staff', JSON.stringify(snap.data().data));
+        }
+      }).catch(function(){});
+
+      // Актуальные открытые смены (чтобы не было ложной блокировки)
+      db.collection('iz_shifts').where('status','==','open').get({source:'server'}).then(function(snap){
+        var local = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+        var freshIds = {};
+        snap.forEach(function(doc){
+          freshIds[doc.id] = true;
+          var exists = local.findIndex(function(s){ return (s.id||s._id)===doc.id; });
+          if(exists>=0) local[exists] = Object.assign(local[exists], doc.data(), {id:doc.id});
+          else local.push(Object.assign({id:doc.id}, doc.data()));
+        });
+        // Если смена числилась открытой локально но в облаке её нет среди открытых — закрыта
+        local = local.map(function(s){
+          if((s.status==='open') && s.id && !freshIds[s.id]){
+            return Object.assign({}, s, {status:'closed'});
+          }
+          return s;
+        });
+        localStorage.setItem('iz_shifts', JSON.stringify(local));
+      }).catch(function(){});
+    }catch(e){ console.log('fresh data err', e); }
+
+    // 3. Синхронизировать текущую открытую смену если она есть
+    try{ if(typeof syncLiveShift==='function') syncLiveShift(); }catch(e){}
+
+    // 4. Обновить UI
+    try{ if(typeof renderAll==='function') renderAll(); }catch(e){}
+    try{ if(typeof renderTodayShift==='function') renderTodayShift(); }catch(e){}
+  }, 1000); // небольшая задержка чтобы сеть стабилизировалась
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
@@ -3085,14 +3134,33 @@ function doLogin(){
         }
         var shopTypeNow = getShopType(shopName);
         if(otherSellerShift && shopTypeNow!=='online'){
-          err.style.display='block';
-          err.textContent='⛔ Смена для «'+shopName+'» уже открыта продавцом '+(otherSellerShift.sellerName||'—')+'. Одновременно вести смену в одном магазине может только один человек.';
-          try{
-            saveAdminAlert({type:'shift_conflict', shopName:shopName,
-              blockedSellerName:seller.name, activeSellerName:otherSellerShift.sellerName,
-              date:new Date().toISOString().split('T')[0]});
-          }catch(e){}
-          return;
+          // Проверяем дату конфликтующей смены — если она открыта вчера или раньше,
+          // это зависшая незакрытая смена. Даём войти, но посылаем тревогу администратору.
+          var todayStr = new Date().toISOString().split('T')[0];
+          var otherDate = (otherSellerShift.date || (otherSellerShift.openedAt||'').split('T')[0] || '');
+          var isStaleShift = otherDate && otherDate < todayStr;
+          if(isStaleShift){
+            // Зависшая смена с прошлого дня — не трогаем данные в Firestore
+            // (реальное закрытие может ещё не дойти), просто пускаем продавца и шлём тревогу
+            try{
+              saveAdminAlert({type:'stale_shift_warning', shopName:shopName,
+                blockedSellerName:seller.name, activeSellerName:otherSellerShift.sellerName,
+                staleDate:otherDate, date:todayStr,
+                note:'Смена от '+otherDate+' висит открытой в Firestore — возможно не успела сохраниться при закрытии'});
+            }catch(e){}
+            showToast('⚠️ Завишшая смена '+otherSellerShift.sellerName+' за '+otherDate+' — админ уведомлён');
+            // Просто пропускаем блокировку — данные в Firestore не трогаем
+          } else {
+            // Смена открыта сегодня — реальный конфликт
+            err.style.display='block';
+            err.textContent='⛔ Смена для «'+shopName+'» уже открыта продавцом '+(otherSellerShift.sellerName||'—')+'. Одновременно вести смену в одном магазине может только один человек.';
+            try{
+              saveAdminAlert({type:'shift_conflict', shopName:shopName,
+                blockedSellerName:seller.name, activeSellerName:otherSellerShift.sellerName,
+                date:todayStr});
+            }catch(e){}
+            return;
+          }
         }
         pendingSession={shopName,sellerName:seller.name,sellerId};
         openMorningModal();
