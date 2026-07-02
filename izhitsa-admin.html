@@ -310,6 +310,151 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </div>
   </div>
 
+  <!-- ДОХОДЫ (Бухгалтер) -->
+  <div class="page" id="pg-income">
+    <div class="stitle">📈 Доходы</div>
+    <div class="pchips" id="incomeModeTabs">
+      <div class="pc active" onclick="setIncomeMode('add',this)">✏️ Внести</div>
+      <div class="pc" onclick="setIncomeMode('archive',this)">📋 Архив</div>
+    </div>
+
+    <div id="incomeFormBlock" class="card">
+      <div class="fg"><label class="fl">Сумма (₽)</label>
+        <input class="fi" type="number" id="incAmt" placeholder="0" inputmode="numeric"></div>
+      <div class="fg"><label class="fl">Источник / канал</label>
+        <select class="fs" id="incSource"></select></div>
+      <div class="fg"><label class="fl">Категория дохода</label>
+        <select class="fs" id="incCategory">
+          <option value="">— выбрать —</option>
+          <option value="Продажи магазина">Продажи магазина</option>
+          <option value="ОПТ">ОПТ</option>
+          <option value="ТГ канал">ТГ канал</option>
+          <option value="Instagram">Instagram</option>
+          <option value="Мастерская">Мастерская</option>
+          <option value="Прочее">Прочее</option>
+        </select></div>
+      <div class="fg"><label class="fl">Описание</label>
+        <input class="fi" id="incDesc" placeholder="Заметка (опционально)"></div>
+      <div class="fg"><label class="fl">Дата</label>
+        <input class="fi" type="date" id="incDate"></div>
+      <button class="btn" onclick="saveIncomeTx()">💾 Сохранить доход</button>
+    </div>
+
+    <div id="incomeArchiveBlock" style="display:none">
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <select id="incArchiveCat" class="fs" style="flex:1" onchange="renderIncomeArchive()">
+          <option value="">Все категории</option>
+          <option value="Продажи магазина">Продажи магазина</option>
+          <option value="ОПТ">ОПТ</option>
+          <option value="ТГ канал">ТГ канал</option>
+          <option value="Instagram">Instagram</option>
+          <option value="Мастерская">Мастерская</option>
+          <option value="Прочее">Прочее</option>
+        </select>
+        <input type="month" id="incArchiveMonth" class="fi" style="flex:1" onchange="renderIncomeArchive()">
+      </div>
+      <div id="incomeArchiveList"></div>
+    </div>
+  </div>
+
+  <!-- РАСХОДЫ (Бухгалтер) -->
+  <div class="page" id="pg-expenses">
+    <div class="stitle">📉 Расходы</div>
+    <div class="pchips" id="expModeTabs">
+      <div class="pc active" onclick="setExpMode('add',this)">✏️ Внести</div>
+      <div class="pc" onclick="setExpMode('archive',this)">📋 Архив</div>
+    </div>
+
+    <div id="expFormBlock" class="card">
+      <div class="fg"><label class="fl">Сумма (₽)</label>
+        <input class="fi" type="number" id="expAmt" placeholder="0" inputmode="numeric"></div>
+
+      <!-- Каскадный выбор: группа → подгруппа → статья -->
+      <div class="fg"><label class="fl">Группа расхода</label>
+        <select class="fs" id="expGroup" onchange="onExpGroupChange()">
+          <option value="">— выбрать группу —</option>
+        </select></div>
+      <div class="fg" id="expSubGroupFg" style="display:none"><label class="fl">Подгруппа</label>
+        <select class="fs" id="expSubGroup" onchange="onExpSubGroupChange()">
+          <option value="">— выбрать подгруппу —</option>
+        </select></div>
+      <div class="fg" id="expItemFg" style="display:none"><label class="fl">Статья расхода</label>
+        <select class="fs" id="expItem">
+          <option value="">— выбрать статью —</option>
+        </select></div>
+
+      <!-- Откуда оплата -->
+      <div class="fg"><label class="fl">Счёт / карта оплаты</label>
+        <select class="fs" id="expAccount"></select></div>
+
+      <div class="fg"><label class="fl">Описание</label>
+        <input class="fi" id="expDesc" placeholder="Заметка"></div>
+      <div class="fg"><label class="fl">Дата</label>
+        <input class="fi" type="date" id="expDate"></div>
+
+      <!-- Опция планового расхода -->
+      <div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <input type="checkbox" id="expIsRecurring" onchange="toggleExpRecurring()" style="width:16px;height:16px">
+          <label for="expIsRecurring" style="font-size:12px;color:var(--t1)">📅 Регулярный / плановый расход</label>
+        </div>
+        <div id="expRecurringBlock" style="display:none">
+          <div class="fg" style="margin-bottom:8px"><label class="fl">Периодичность</label>
+            <select class="fs" id="expRecurFreq">
+              <option value="monthly">Ежемесячно</option>
+              <option value="weekly">Еженедельно</option>
+              <option value="quarterly">Ежеквартально</option>
+              <option value="once">Разово (запланировано)</option>
+            </select></div>
+          <div class="fg"><label class="fl">Дата следующего платежа</label>
+            <input class="fi" type="date" id="expNextDate"></div>
+        </div>
+      </div>
+
+      <button class="btn" onclick="saveExpenseTx()">💾 Сохранить расход</button>
+    </div>
+
+    <div id="expArchiveBlock" style="display:none">
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <select id="expArchiveGroup" class="fs" style="flex:1;min-width:100px" onchange="renderExpArchive()">
+          <option value="">Все группы</option>
+        </select>
+        <input type="month" id="expArchiveMonth" class="fi" style="flex:1;min-width:100px" onchange="renderExpArchive()">
+      </div>
+      <div id="expArchiveList"></div>
+    </div>
+  </div>
+
+  <!-- ПЛАНИРОВАНИЕ -->
+  <div class="page" id="pg-plan">
+    <div class="stitle">📅 Планирование</div>
+    <div class="pchips">
+      <div class="pc active" onclick="setPlanTab('cashflow',this)">💳 Денежный поток</div>
+      <div class="pc" onclick="setPlanTab('planned',this)">📋 Плановые расходы</div>
+    </div>
+
+    <!-- Период планирования -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+      <select id="planMonth" class="fs" style="flex:1" onchange="renderPlanTab()"></select>
+      <button onclick="addPlanMonth(-1)" style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--t1);font-size:16px;cursor:pointer">‹</button>
+      <button onclick="addPlanMonth(1)" style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--t1);font-size:16px;cursor:pointer">›</button>
+    </div>
+
+    <div id="planCashflowBlock">
+      <!-- Сводка -->
+      <div id="planSummary"></div>
+      <!-- По счетам/ресурсам -->
+      <div id="planByAccount"></div>
+      <!-- Детали по дням -->
+      <div id="planDailyList"></div>
+    </div>
+
+    <div id="planPlannedBlock" style="display:none">
+      <div id="planRecurringList"></div>
+      <button class="btn" style="margin-top:12px" onclick="openAddPlannedModal()">＋ Добавить плановый расход</button>
+    </div>
+  </div>
+
   <!-- OPERATIONS -->
   <div class="page" id="pg-op">
     <div class="stitle">➕ Операция</div>
@@ -576,7 +721,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     <div class="stitle">⚙️ Настройки системы</div>
 
     <!-- SYSTEM -->
-    <div style="background:var(--s2);border-radius:8px;margin-bottom:16px;padding:12px;border-left:3px solid var(--exp)">
+    <div id="adminSystemBlock" style="background:var(--s2);border-radius:8px;margin-bottom:16px;padding:12px;border-left:3px solid var(--exp)">
       <div style="font-weight:700;font-size:13px;margin-bottom:12px;display:flex;align-items:center;gap:8px">
         <span>⚙️</span> Управление системой
       </div>
@@ -594,7 +739,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
     </div>
 
     <!-- GitHub Upload -->
-    <div class="card" style="margin-bottom:16px;background:#1a2e1e;border:1px solid #2e4e2e">
+    <div id="ghAdminUploadBlock" class="card" style="margin-bottom:16px;background:#1a2e1e;border:1px solid #2e4e2e">
       <div style="font-size:11px;font-weight:700;color:#c8f060;margin-bottom:8px">🚀 ОБНОВИТЬ ПРИЛОЖЕНИЕ НА GITHUB</div>
       <div style="font-size:11px;color:#8888aa;margin-bottom:8px">Загружает актуальный файл напрямую через API. Токен сохраняется локально на устройстве.</div>
       <input class="fi" id="ghAdminTokenInput" type="password" placeholder="GitHub токен (ghp_...)" autocomplete="off" style="margin-bottom:8px;font-family:monospace;font-size:12px" onfocus="if(!this.value){var t=localStorage.getItem('iz_gh_token');if(t)this.value=t;}">
@@ -604,7 +749,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
         <div style="font-size:12px;font-weight:700;color:#c8f060" id="ghAdminFileName">Выбрать файл izhitsa-admin.html</div>
         <input type="file" id="ghAdminFileInput" accept=".html" style="display:none" onchange="document.getElementById('ghAdminFileName').textContent=this.files[0]?this.files[0].name:'Выбрать файл'">
       </div>
-      <button type="button" onclick="uploadAdminToGitHub()" style="width:100%;padding:10px;border-radius:10px;border:none;background:#c8f060;color:#0f0f13;font-size:13px;font-weight:700;cursor:pointer">⬆️ Загрузить на GitHub Pages</button>
+      <button type="button" id="ghAdminUploadBtn" style="width:100%;padding:10px;border-radius:10px;border:none;background:#c8f060;color:#0f0f13;font-size:13px;font-weight:700;cursor:pointer">⬆️ Загрузить на GitHub Pages</button>
       <div id="ghAdminUploadStatus" style="margin-top:8px;font-size:11px;color:#8888aa"></div>
     </div>
 
@@ -679,17 +824,20 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
 <!-- TABS BAR -->
 <div class="tabs" id="tabsBar">
-  <button class="tab active" onclick="switchTab('dash',this)"><div class="ti">🏠</div>Главная</button>
-  <button class="tab" onclick="switchTab('alerts',this)"><div class="ti">🚨</div>Тревоги</button>
-  <button class="tab" onclick="switchTab('op',this)"><div class="ti">➕</div>Операция</button>
-  <button class="tab" onclick="switchTab('pl',this)"><div class="ti">📈</div>P&L</button>
-  <button class="tab" onclick="switchTab('debt',this)"><div class="ti">💰</div>Долги</button>
-  <button class="tab" onclick="switchTab('analytics',this)"><div class="ti">📊</div>Аналитика</button>
-  <button class="tab" onclick="switchTab('shops',this)"><div class="ti">🏪</div>Магазины</button>
-  <button class="tab" onclick="switchTab('prod',this)"><div class="ti">🏭</div>Мастерская</button>
-  <button class="tab" onclick="switchTab('staff',this);renderUnifiedStaff()"><div class="ti">👥</div>Сотрудники</button>
-  <button class="tab" onclick="switchTab('audit',this)"><div class="ti">🔍</div>Аудит</button>
-  <button class="tab" onclick="switchTab('settings',this)"><div class="ti">⚙️</div>Настройки</button>
+  <button class="tab active" data-roles="admin,owner,accountant" onclick="switchTab('dash',this)"><div class="ti">🏠</div>Главная</button>
+  <button class="tab" data-roles="admin,owner" onclick="switchTab('alerts',this)"><div class="ti">🚨</div>Тревоги</button>
+  <button class="tab" data-roles="accountant" onclick="switchTab('income',this)"><div class="ti">📈</div>Доходы</button>
+  <button class="tab" data-roles="accountant" onclick="switchTab('expenses',this)"><div class="ti">📉</div>Расходы</button>
+  <button class="tab" data-roles="admin,owner" onclick="switchTab('op',this)"><div class="ti">➕</div>Операция</button>
+  <button class="tab" data-roles="admin,owner,accountant" onclick="switchTab('pl',this)"><div class="ti">📊</div>P&L</button>
+  <button class="tab" data-roles="admin,owner,accountant" onclick="switchTab('plan',this)"><div class="ti">📅</div>Планирование</button>
+  <button class="tab" data-roles="admin,owner,accountant" onclick="switchTab('debt',this)"><div class="ti">💰</div>Долги</button>
+  <button class="tab" data-roles="admin,owner" onclick="switchTab('analytics',this)"><div class="ti">📈</div>Аналитика</button>
+  <button class="tab" data-roles="admin,owner,accountant" onclick="switchTab('shops',this)"><div class="ti">🏪</div>Магазины</button>
+  <button class="tab" data-roles="admin,owner,accountant" onclick="switchTab('prod',this)"><div class="ti">🏭</div>Мастерская</button>
+  <button class="tab" data-roles="admin" onclick="switchTab('staff',this);renderUnifiedStaff()"><div class="ti">👥</div>Сотрудники</button>
+  <button class="tab" data-roles="admin,owner,accountant" onclick="switchTab('audit',this)"><div class="ti">🔍</div>Аудит</button>
+  <button class="tab" data-roles="admin,owner,accountant" onclick="switchTab('settings',this)"><div class="ti">⚙️</div>Настройки</button>
 </div>
 
 <!-- Firebase -->
@@ -804,7 +952,14 @@ function pullAdminUsersFromFirebase() {
         localStorage.setItem('iz_admin_users', JSON.stringify(users));
         console.log('✅ Loaded', users.length, 'admin users from Firebase');
         // Refresh role selector
-        selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
+        // Кнопка загрузки на GitHub — подключаем через addEventListener для надёжности на iOS
+  var ghBtn = document.getElementById('ghAdminUploadBtn');
+  if(ghBtn) {
+    ghBtn.addEventListener('click', function(e){ e.preventDefault(); uploadAdminToGitHub(); });
+    ghBtn.addEventListener('touchend', function(e){ e.preventDefault(); uploadAdminToGitHub(); });
+  }
+
+  selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
       }
     }).catch(function(e) {
       console.warn('⚠️ Could not pull admin users from Firebase:', e);
@@ -1318,6 +1473,7 @@ function doLogin() {
     if(typeof populateSalesSourcesList==='function') populateSalesSourcesList();
     if(typeof populateSourcesForOp==='function') populateCategorySelects();
     populateShopCheckboxes();
+    applyRoleUI('admin');
     renderPL(); renderPLMargin(); renderShops(); renderPLBudget(); renderDebts();
     if(typeof renderDashboard==='function') renderDashboard();
     return;
@@ -1365,6 +1521,7 @@ function doLogin() {
   populateSalesSourcesList();
   populateCategorySelects();
   populateShopCheckboxes();
+  applyRoleUI(role);
   renderPL();
   renderShops();
   renderPLBudget();
@@ -2418,7 +2575,7 @@ function switchTab(tab, el) {
   if(pg) pg.classList.add('active');
   if(el) el.classList.add('active');
   if(tab === 'staff') { renderUnifiedStaff(); openAddStaffModal; }
-  if(tab === 'settings') { renderSettingsPage(); renderRefBooks(); }
+  if(tab === 'settings') { renderSettingsPage(); renderRefBooks(); if(session) applyRoleUI(session.role||'admin'); }
   if(tab === 'pl') { renderPL(); renderPLMargin(); }
   if(tab === 'debt') renderDebts();
   if(tab === 'analytics') renderAnalytics();
@@ -2427,6 +2584,9 @@ function switchTab(tab, el) {
   if(tab === 'shops') { initShopFilterBar(); renderShops(); }
   if(tab === 'prod') renderProduction();
   if(tab === 'op') { populateCategorySelects(); setTxType(currentTxType||'income'); }
+  if(tab === 'income') { populateIncomeSource(); setIncomeMode(_incomeMode); }
+  if(tab === 'expenses') { populateExpGroups(); setExpMode(_expMode); }
+  if(tab === 'plan') { initPlanMonthSelect(); renderPlanTab(); }
 }
 
 // Override old addSellerFromStaff / addWsEmployee / addAdminUser for compatibility
@@ -2467,7 +2627,7 @@ function renderRefBooks() {
   refBooks.forEach(function(book) {
     var items = getRefBook(book.key);
     var count = items.length;
-    html += '<div style="background:var(--s2);border-radius:8px;margin-bottom:8px;overflow:hidden">' +
+    html += '<div class="refbook-item" data-ref-id="' + book.id + '" style="background:var(--s2);border-radius:8px;margin-bottom:8px;overflow:hidden">' +
       '<div onclick="toggleRefBook(\'' + book.id + '\')" style="display:flex;align-items:center;justify-content:space-between;padding:12px;cursor:pointer;user-select:none">' +
         '<div style="display:flex;align-items:center;gap:10px">' +
           '<span style="font-size:20px">' + book.icon + '</span>' +
@@ -2638,10 +2798,38 @@ function initRefBooks() {
   
   if(!localStorage.getItem('iz_expense_items')) {
     saveRefBook('iz_expense_items', [
-      {id: uid(), name: 'Аренда'},
-      {id: uid(), name: 'Зарплаты'},
-      {id: uid(), name: 'Материалы'},
-      {id: uid(), name: 'Коммунальные'}
+      {id: uid(), name: 'Аренда и помещения', children: [
+        {id: uid(), name: 'Аренда торговой точки', children: []},
+        {id: uid(), name: 'Аренда мастерской', children: []},
+        {id: uid(), name: 'Коммунальные услуги', children: []}
+      ]},
+      {id: uid(), name: 'Зарплата и персонал', children: [
+        {id: uid(), name: 'ЗП продавцов', children: []},
+        {id: uid(), name: 'ЗП мастеров', children: []},
+        {id: uid(), name: 'Командировочные', children: []}
+      ]},
+      {id: uid(), name: 'Материалы и сырьё', children: [
+        {id: uid(), name: 'Древесина', children: []},
+        {id: uid(), name: 'Расходные материалы', children: []},
+        {id: uid(), name: 'Инструменты', children: []}
+      ]},
+      {id: uid(), name: 'Маркетинг и реклама', children: [
+        {id: uid(), name: 'Таргетированная реклама', children: []},
+        {id: uid(), name: 'SMM', children: []},
+        {id: uid(), name: 'Фото/видео', children: []}
+      ]},
+      {id: uid(), name: 'Логистика и доставка', children: [
+        {id: uid(), name: 'Доставка товаров', children: []},
+        {id: uid(), name: 'Транспортные расходы', children: []}
+      ]},
+      {id: uid(), name: 'Налоги и банк', children: [
+        {id: uid(), name: 'Налоги', children: []},
+        {id: uid(), name: 'Банковские комиссии', children: []},
+        {id: uid(), name: 'Эквайринг', children: []}
+      ]},
+      {id: uid(), name: 'Прочее', children: [
+        {id: uid(), name: 'Прочие расходы', children: []}
+      ]}
     ]);
   }
   
@@ -4268,6 +4456,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 function uploadAdminToGitHub(){
+  showToast('⏳ Начинаю загрузку...');
   var tokenEl = document.getElementById('ghAdminTokenInput');
   var statusEl = document.getElementById('ghAdminUploadStatus');
   var token = (tokenEl && tokenEl.value.trim()) || localStorage.getItem('iz_gh_token') || '';
@@ -4350,6 +4539,449 @@ function uploadAdminToGitHub(){
   }).catch(function(err){
     setStatus('<span style="color:#f06060">❌ '+err.message+'</span>', '❌ '+err.message);
   });
+}
+
+// ════ РОЛЕВАЯ СИСТЕМА ════
+// Вкладки и блоки настроек фильтруются по роли при логине
+
+// Справочники видимые для Бухгалтера (только финансовые)
+var ACCOUNTANT_REFBOOKS = ['sources','accounts','payments','salary','expenses'];
+// Блоки настроек скрытые для Бухгалтера и Владельца
+var SETTINGS_ADMIN_ONLY = ['ghAdminUploadBlock','adminSystemBlock'];
+
+function applyRoleUI(role) {
+  // Вкладки таббара
+  document.querySelectorAll('#tabsBar .tab').forEach(function(btn){
+    var roles = (btn.dataset.roles||'admin').split(',');
+    btn.style.display = roles.indexOf(role) >= 0 ? '' : 'none';
+  });
+
+  // Блоки в Настройках — GitHub и Экспорт только для admin
+  var ghBlock = document.getElementById('ghAdminUploadBlock');
+  var sysBlock = document.getElementById('adminSystemBlock');
+  if(ghBlock) ghBlock.style.display = role === 'admin' ? '' : 'none';
+  if(sysBlock) sysBlock.style.display = role === 'admin' ? '' : 'none';
+
+  // Справочники для бухгалтера — скрыть ненужные
+  if(role === 'accountant') {
+    document.querySelectorAll('.refbook-item').forEach(function(el){
+      var id = el.dataset.refId;
+      el.style.display = (id && ACCOUNTANT_REFBOOKS.indexOf(id) >= 0) ? '' : 'none';
+    });
+  }
+}
+
+// ════ ДОХОДЫ (вкладка Бухгалтера) ════
+var _incomeMode = 'add';
+
+function setIncomeMode(mode, btn) {
+  _incomeMode = mode;
+  document.querySelectorAll('#incomeModeTabs .pc').forEach(function(b){ b.classList.remove('active'); });
+  if(btn) btn.classList.add('active');
+  document.getElementById('incomeFormBlock').style.display = mode==='add' ? 'block' : 'none';
+  document.getElementById('incomeArchiveBlock').style.display = mode==='archive' ? 'block' : 'none';
+  if(mode==='archive') renderIncomeArchive();
+}
+
+function populateIncomeSource() {
+  var src = getSalesSources();
+  var sel = document.getElementById('incSource');
+  if(!sel) return;
+  sel.innerHTML = src.map(function(s){ var n=typeof s==='string'?s:(s.name||''); return '<option value="'+n+'">'+n+'</option>'; }).join('');
+}
+
+function saveIncomeTx() {
+  var amt = parseFloat(document.getElementById('incAmt').value||'0');
+  var source = (document.getElementById('incSource')||{}).value||'';
+  var cat = (document.getElementById('incCategory')||{}).value||'';
+  var desc = (document.getElementById('incDesc')||{}).value||'';
+  var date = (document.getElementById('incDate')||{}).value||'';
+  if(!amt||amt<=0){ showToast('❌ Введите сумму'); return; }
+  if(!date){ showToast('❌ Выберите дату'); return; }
+  var txs = getTransactions();
+  txs.push({id:uid(), type:'income', amount:amt, source:source, category:cat, desc:desc,
+    date:date+'T00:00:00', createdAt:now(), createdBy:session?session.name:''});
+  saveTransactions(txs);
+  document.getElementById('incAmt').value='';
+  document.getElementById('incDesc').value='';
+  showToast('✅ Доход '+amt.toLocaleString('ru-RU')+' ₽ сохранён');
+}
+
+function renderIncomeArchive() {
+  var el = document.getElementById('incomeArchiveList');
+  if(!el) return;
+  var txs = getTransactions().filter(function(tx){ return tx.type==='income'; });
+  var cat = (document.getElementById('incArchiveCat')||{}).value||'';
+  var mon = (document.getElementById('incArchiveMonth')||{}).value||'';
+  if(!mon){ var n=new Date(); mon=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); var mEl=document.getElementById('incArchiveMonth'); if(mEl&&!mEl.value) mEl.value=mon; }
+  txs = txs.filter(function(tx){
+    if(mon && (tx.date||'').substring(0,7)!==mon) return false;
+    if(cat && (tx.category||tx.source||'')!==cat) return false;
+    return true;
+  }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+  if(!txs.length){ el.innerHTML='<div style="padding:16px;text-align:center;color:var(--t2)">Нет записей</div>'; return; }
+  var total=txs.reduce(function(s,tx){return s+(tx.amount||0);},0);
+  el.innerHTML='<div style="display:flex;justify-content:space-between;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:8px"><span style="color:var(--t2);font-size:12px">Итого доходов</span><span style="font-weight:700;color:var(--inc)">'+Math.round(total).toLocaleString('ru-RU')+' ₽</span></div>'+
+    txs.map(function(tx){
+      return '<div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:6px;display:flex;justify-content:space-between">'+
+        '<div><div style="font-weight:600;color:var(--inc)">'+(tx.amount||0).toLocaleString('ru-RU')+' ₽</div>'+
+        '<div style="font-size:11px;color:var(--t2)">'+(tx.category||tx.source||'—')+(tx.desc?' · '+tx.desc:'')+'</div></div>'+
+        '<div style="text-align:right"><div style="font-size:11px;color:var(--t2)">'+(tx.date||'').substring(0,10)+'</div>'+
+        '<button onclick="deleteTx(\''+tx.id+'\')" style="margin-top:4px;background:none;border:1px solid #f0606060;border-radius:5px;color:var(--exp);font-size:10px;padding:2px 6px;cursor:pointer">✕</button></div>'+
+      '</div>';
+    }).join('');
+}
+
+// ════ РАСХОДЫ (вкладка Бухгалтера) ════
+var _expMode = 'add';
+
+function setExpMode(mode, btn) {
+  _expMode = mode;
+  document.querySelectorAll('#expModeTabs .pc').forEach(function(b){ b.classList.remove('active'); });
+  if(btn) btn.classList.add('active');
+  document.getElementById('expFormBlock').style.display = mode==='add' ? 'block' : 'none';
+  document.getElementById('expArchiveBlock').style.display = mode==='archive' ? 'block' : 'none';
+  if(mode==='archive') renderExpArchive();
+}
+
+function toggleExpRecurring() {
+  var cb = document.getElementById('expIsRecurring');
+  var bl = document.getElementById('expRecurringBlock');
+  if(bl) bl.style.display = cb&&cb.checked ? 'block' : 'none';
+}
+
+// Загрузка групп расходов в каскадные select'ы
+function populateExpGroups() {
+  var items = [];
+  try { items = JSON.parse(localStorage.getItem('iz_expense_items')||'[]'); } catch(e){}
+  var grpSel = document.getElementById('expGroup');
+  if(!grpSel) return;
+  grpSel.innerHTML = '<option value="">— выбрать группу —</option>' +
+    items.map(function(g){ return '<option value="'+g.id+'">'+g.name+'</option>'; }).join('');
+  // Также заполняем фильтр архива
+  var archGrp = document.getElementById('expArchiveGroup');
+  if(archGrp) {
+    archGrp.innerHTML = '<option value="">Все группы</option>' +
+      items.map(function(g){ return '<option value="'+g.name+'">'+g.name+'</option>'; }).join('');
+  }
+  // Счета для оплаты
+  populateExpAccounts();
+}
+
+function populateExpAccounts() {
+  var accs = [];
+  try { accs = JSON.parse(localStorage.getItem('iz_accounts')||'[]'); } catch(e){}
+  var sel = document.getElementById('expAccount');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">— выбрать счёт/карту —</option>' +
+    accs.map(function(a){ var n=typeof a==='string'?a:(a.name||''); return '<option value="'+n+'">'+n+'</option>'; }).join('');
+}
+
+function onExpGroupChange() {
+  var grpId = document.getElementById('expGroup').value;
+  var items = [];
+  try { items = JSON.parse(localStorage.getItem('iz_expense_items')||'[]'); } catch(e){}
+  var grp = items.find(function(g){ return g.id===grpId; });
+  var children = grp && grp.children ? grp.children : [];
+
+  var subFg = document.getElementById('expSubGroupFg');
+  var itemFg = document.getElementById('expItemFg');
+  var subSel = document.getElementById('expSubGroup');
+  var itemSel = document.getElementById('expItem');
+
+  if(children.length > 0) {
+    subSel.innerHTML = '<option value="">— подгруппа —</option>' +
+      children.map(function(c){ return '<option value="'+c.id+'">'+c.name+'</option>'; }).join('');
+    subFg.style.display = 'block';
+    itemFg.style.display = 'none';
+    itemSel.innerHTML = '<option value="">— статья —</option>';
+  } else {
+    subFg.style.display = 'none';
+    itemFg.style.display = 'none';
+  }
+}
+
+function onExpSubGroupChange() {
+  var grpId = document.getElementById('expGroup').value;
+  var subId = document.getElementById('expSubGroup').value;
+  var items = [];
+  try { items = JSON.parse(localStorage.getItem('iz_expense_items')||'[]'); } catch(e){}
+  var grp = items.find(function(g){ return g.id===grpId; });
+  var sub = grp && grp.children ? grp.children.find(function(c){ return c.id===subId; }) : null;
+  var children = sub && sub.children ? sub.children : [];
+
+  var itemFg = document.getElementById('expItemFg');
+  var itemSel = document.getElementById('expItem');
+  if(children.length > 0) {
+    itemSel.innerHTML = '<option value="">— статья —</option>' +
+      children.map(function(c){ return '<option value="'+c.name+'">'+c.name+'</option>'; }).join('');
+    itemFg.style.display = 'block';
+  } else {
+    itemFg.style.display = 'none';
+  }
+}
+
+function _getExpenseCategoryLabel() {
+  var items = [];
+  try { items = JSON.parse(localStorage.getItem('iz_expense_items')||'[]'); } catch(e){}
+  var grpId = (document.getElementById('expGroup')||{}).value||'';
+  var subId = (document.getElementById('expSubGroup')||{}).value||'';
+  var itemVal = (document.getElementById('expItem')||{}).value||'';
+  var grp = items.find(function(g){ return g.id===grpId; });
+  if(!grp) return '';
+  var sub = grp.children ? grp.children.find(function(c){ return c.id===subId; }) : null;
+  var parts = [grp.name];
+  if(sub) parts.push(sub.name);
+  if(itemVal) parts.push(itemVal);
+  return parts.join(' / ');
+}
+
+function saveExpenseTx() {
+  var amt = parseFloat((document.getElementById('expAmt')||{}).value||'0');
+  var cat = _getExpenseCategoryLabel();
+  var account = (document.getElementById('expAccount')||{}).value||'';
+  var desc = (document.getElementById('expDesc')||{}).value||'';
+  var date = (document.getElementById('expDate')||{}).value||'';
+  var isRecurring = document.getElementById('expIsRecurring') && document.getElementById('expIsRecurring').checked;
+  var freq = (document.getElementById('expRecurFreq')||{}).value||'monthly';
+  var nextDate = (document.getElementById('expNextDate')||{}).value||'';
+
+  if(!amt||amt<=0){ showToast('❌ Введите сумму'); return; }
+  if(!cat){ showToast('❌ Выберите группу расхода'); return; }
+  if(!date){ showToast('❌ Выберите дату'); return; }
+
+  var tx = {id:uid(), type:'expense', amount:amt, category:cat, account:account,
+    desc:desc, date:date+'T00:00:00', createdAt:now(), createdBy:session?session.name:''};
+  if(isRecurring) { tx.isRecurring=true; tx.recurFreq=freq; tx.nextDate=nextDate; }
+
+  var txs = getTransactions();
+  txs.push(tx);
+  saveTransactions(txs);
+
+  // Если плановый — сохраняем отдельно в iz_planned_expenses
+  if(isRecurring) {
+    var planned = [];
+    try { planned = JSON.parse(localStorage.getItem('iz_planned_expenses')||'[]'); } catch(e){}
+    planned.push(Object.assign({}, tx));
+    localStorage.setItem('iz_planned_expenses', JSON.stringify(planned));
+    try { db.collection('iz_transactions').doc(tx.id).set(tx); } catch(e){}
+  }
+
+  document.getElementById('expAmt').value='';
+  document.getElementById('expDesc').value='';
+  if(document.getElementById('expIsRecurring')) document.getElementById('expIsRecurring').checked=false;
+  toggleExpRecurring();
+  showToast('✅ Расход '+amt.toLocaleString('ru-RU')+' ₽ сохранён'+(isRecurring?' (плановый)':''));
+}
+
+function renderExpArchive() {
+  var el = document.getElementById('expArchiveList');
+  if(!el) return;
+  var txs = getTransactions().filter(function(tx){ return tx.type==='expense'; });
+  var grpFilter = (document.getElementById('expArchiveGroup')||{}).value||'';
+  var mon = (document.getElementById('expArchiveMonth')||{}).value||'';
+  if(!mon){ var n=new Date(); mon=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); var mEl=document.getElementById('expArchiveMonth'); if(mEl&&!mEl.value) mEl.value=mon; }
+  txs = txs.filter(function(tx){
+    if(mon && (tx.date||'').substring(0,7)!==mon) return false;
+    if(grpFilter && !(tx.category||'').startsWith(grpFilter)) return false;
+    return true;
+  }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+
+  if(!txs.length){ el.innerHTML='<div style="padding:16px;text-align:center;color:var(--t2)">Нет записей</div>'; return; }
+  var total=txs.reduce(function(s,tx){return s+(tx.amount||0);},0);
+
+  // Группировка по категории для итогов
+  var bycat={};
+  txs.forEach(function(tx){ var c=(tx.category||'—').split(' / ')[0]; bycat[c]=(bycat[c]||0)+(tx.amount||0); });
+
+  el.innerHTML='<div style="display:flex;justify-content:space-between;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:8px"><span style="color:var(--t2);font-size:12px">Итого расходов</span><span style="font-weight:700;color:var(--exp)">'+Math.round(total).toLocaleString('ru-RU')+' ₽</span></div>'+
+    Object.entries(bycat).map(function(e){
+      return '<div style="display:flex;justify-content:space-between;padding:6px 10px;font-size:11px;color:var(--t2)"><span>'+e[0]+'</span><span>'+Math.round(e[1]).toLocaleString('ru-RU')+' ₽</span></div>';
+    }).join('')+
+    '<div style="border-top:1px solid var(--border);margin:8px 0"></div>'+
+    txs.map(function(tx){
+      return '<div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:6px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div><div style="font-weight:600;color:var(--exp)">'+(tx.amount||0).toLocaleString('ru-RU')+' ₽</div>'+
+        '<div style="font-size:11px;color:var(--t2);margin-top:2px">'+(tx.category||'—')+'</div>'+
+        (tx.account?'<div style="font-size:10px;color:var(--t3)">💳 '+tx.account+'</div>':'')+
+        (tx.desc?'<div style="font-size:10px;color:var(--t2)">'+tx.desc+'</div>':'')+
+        (tx.isRecurring?'<div style="font-size:10px;color:var(--a2)">🔁 '+({monthly:'Ежемесячно',weekly:'Еженедельно',quarterly:'Ежеквартально',once:'Разово'}[tx.recurFreq]||tx.recurFreq)+'</div>':'')+
+        '</div>'+
+        '<div style="text-align:right;flex-shrink:0;margin-left:8px">'+
+        '<div style="font-size:11px;color:var(--t2)">'+(tx.date||'').substring(0,10)+'</div>'+
+        '<button onclick="deleteTx(\''+tx.id+'\')" style="margin-top:4px;background:none;border:1px solid #f0606060;border-radius:5px;color:var(--exp);font-size:10px;padding:2px 6px;cursor:pointer">✕</button></div>'+
+        '</div></div>';
+    }).join('');
+}
+
+// ════ ПЛАНИРОВАНИЕ ════
+var _planTab = 'cashflow';
+
+function setPlanTab(tab, btn) {
+  _planTab = tab;
+  document.querySelectorAll('#pg-plan .pchips .pc').forEach(function(b){ b.classList.remove('active'); });
+  if(btn) btn.classList.add('active');
+  document.getElementById('planCashflowBlock').style.display = tab==='cashflow' ? 'block' : 'none';
+  document.getElementById('planPlannedBlock').style.display = tab==='planned' ? 'block' : 'none';
+  renderPlanTab();
+}
+
+function initPlanMonthSelect() {
+  var sel = document.getElementById('planMonth');
+  if(!sel||sel.options.length>0) return;
+  var now2 = new Date();
+  for(var i=-2; i<=6; i++) {
+    var d = new Date(now2.getFullYear(), now2.getMonth()+i, 1);
+    var val = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    var opt = document.createElement('option');
+    opt.value = val;
+    opt.textContent = d.toLocaleDateString('ru-RU',{year:'numeric',month:'long'});
+    if(i===0) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+function addPlanMonth(delta) {
+  var sel = document.getElementById('planMonth');
+  if(!sel) return;
+  var idx = sel.selectedIndex + delta;
+  if(idx < 0) idx = 0;
+  if(idx >= sel.options.length) idx = sel.options.length-1;
+  sel.selectedIndex = idx;
+  renderPlanTab();
+}
+
+function renderPlanTab() {
+  if(_planTab==='cashflow') renderPlanCashflow();
+  else renderPlanPlanned();
+}
+
+function renderPlanCashflow() {
+  var mon = (document.getElementById('planMonth')||{}).value || '';
+  if(!mon) return;
+
+  var txs = getTransactions().filter(function(tx){ return (tx.date||'').substring(0,7)===mon; });
+  var shifts = [];
+  try { shifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]').filter(function(s){ return isValidShift(s) && s.date && s.date.substring(0,7)===mon; }); } catch(e){}
+  var planned = [];
+  try { planned = JSON.parse(localStorage.getItem('iz_planned_expenses')||'[]'); } catch(e){}
+
+  // Реальные доходы: из смен + ручные транзакции-доходы
+  var realIncome = shifts.reduce(function(s,sh){ return s+shiftRevenue(sh); },0) +
+    txs.filter(function(t){ return t.type==='income'; }).reduce(function(s,t){ return s+(t.amount||0); },0);
+  var realExpense = txs.filter(function(t){ return t.type==='expense'; }).reduce(function(s,t){ return s+(t.amount||0); },0);
+  var plannedExpense = planned.filter(function(p){
+    if(!p.recurFreq||p.recurFreq==='once') return (p.nextDate||'').substring(0,7)===mon;
+    return true; // регулярные — всегда попадают в любой месяц
+  }).reduce(function(s,p){ return s+(p.amount||0); },0);
+  var netReal = realIncome - realExpense;
+  var netForecast = realIncome - realExpense - plannedExpense;
+
+  function fmt(n){ return Math.round(n||0).toLocaleString('ru-RU'); }
+
+  // По счетам/ресурсам
+  var byAccount = {};
+  txs.forEach(function(tx){
+    if(tx.type!=='expense') return;
+    var acc = tx.account || 'Не указан';
+    byAccount[acc] = (byAccount[acc]||0) + (tx.amount||0);
+  });
+
+  var summaryEl = document.getElementById('planSummary');
+  var byAccEl = document.getElementById('planByAccount');
+  var dailyEl = document.getElementById('planDailyList');
+  if(!summaryEl) return;
+
+  summaryEl.innerHTML = '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+    '<div class="ctitle">💳 Денежный поток · '+mon+'</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">'+
+      _kpi('Доходы факт',fmt(realIncome)+' ₽','var(--inc)')+
+      _kpi('Расходы факт',fmt(realExpense)+' ₽','var(--exp)')+
+      _kpi('Плановые расходы',fmt(plannedExpense)+' ₽','var(--a2)')+
+      _kpi('Баланс факт',(netReal>=0?'+':'')+fmt(netReal)+' ₽',netReal>=0?'var(--inc)':'var(--exp)')+
+    '</div>'+
+    '<div style="background:var(--s2);border-radius:8px;padding:10px;display:flex;justify-content:space-between;align-items:center">'+
+      '<span style="font-size:12px;color:var(--t2)">Прогноз остатка (с плановыми)</span>'+
+      '<span style="font-weight:700;font-size:14px;color:'+(netForecast>=0?'var(--inc)':'var(--exp)')+'">'+
+        (netForecast>=0?'+':'')+fmt(netForecast)+' ₽</span>'+
+    '</div>'+
+  '</div>';
+
+  // По счетам
+  if(Object.keys(byAccount).length) {
+    byAccEl.innerHTML = '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+      '<div class="ctitle">🏦 Расходы по счетам</div>'+
+      Object.entries(byAccount).sort(function(a,b){return b[1]-a[1];}).map(function(e){
+        return '<div style="display:flex;justify-content:space-between;padding:8px;background:var(--s2);border-radius:6px;margin-bottom:6px">'+
+          '<span style="font-size:12px">💳 '+e[0]+'</span>'+
+          '<span style="font-weight:700;color:var(--exp);font-size:12px">'+fmt(e[1])+' ₽</span></div>';
+      }).join('')+
+    '</div>';
+  } else byAccEl.innerHTML='';
+
+  // По дням
+  var byDay = {};
+  shifts.forEach(function(sh){ byDay[sh.date]=(byDay[sh.date]||{inc:0,exp:0}); byDay[sh.date].inc+=shiftRevenue(sh); });
+  txs.forEach(function(tx){ var d=(tx.date||'').substring(0,10); byDay[d]=(byDay[d]||{inc:0,exp:0}); if(tx.type==='income') byDay[d].inc+=(tx.amount||0); else byDay[d].exp+=(tx.amount||0); });
+  // Плановые расходы
+  planned.forEach(function(p){
+    var d = p.nextDate||p.date||''; if(d.substring(0,7)!==mon) return;
+    d=d.substring(0,10); byDay[d]=(byDay[d]||{inc:0,exp:0,plan:0}); byDay[d].plan=(byDay[d].plan||0)+(p.amount||0);
+  });
+
+  var days = Object.keys(byDay).sort();
+  if(days.length) {
+    dailyEl.innerHTML = '<div class="card" style="background:var(--bg);border:1px solid var(--border)">'+
+      '<div class="ctitle">📆 По дням</div>'+
+      days.map(function(d){
+        var day=byDay[d], net=day.inc-day.exp;
+        return '<div style="padding:8px;border-bottom:1px solid var(--border)">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center">'+
+          '<span style="font-size:12px;color:var(--t2)">'+d+'</span>'+
+          '<span style="font-size:12px;font-weight:700;color:'+(net>=0?'var(--inc)':'var(--exp)')+'">'+
+            (net>=0?'+':'')+fmt(net)+' ₽</span></div>'+
+          '<div style="display:flex;gap:12px;font-size:10px;color:var(--t3);margin-top:2px">'+
+            (day.inc?'<span style="color:var(--inc)">+'+fmt(day.inc)+'</span>':'')+
+            (day.exp?'<span style="color:var(--exp)">-'+fmt(day.exp)+'</span>':'')+
+            (day.plan?'<span style="color:var(--a2)">📋-'+fmt(day.plan)+'</span>':'')+
+          '</div></div>';
+      }).join('')+'</div>';
+  } else dailyEl.innerHTML='';
+}
+
+function renderPlanPlanned() {
+  var el = document.getElementById('planRecurringList');
+  if(!el) return;
+  var planned = [];
+  try { planned = JSON.parse(localStorage.getItem('iz_planned_expenses')||'[]'); } catch(e){}
+  // Также из iz_transactions с isRecurring=true
+  var txs = getTransactions().filter(function(tx){ return tx.isRecurring; });
+  var all = planned.concat(txs.filter(function(t){ return !planned.find(function(p){return p.id===t.id;}); }));
+
+  if(!all.length){ el.innerHTML='<div style="padding:16px;text-align:center;color:var(--t2)">Нет плановых расходов</div>'; return; }
+  var freqLabels = {monthly:'📅 Ежемесячно',weekly:'📅 Еженедельно',quarterly:'📅 Ежеквартально',once:'🔂 Разово'};
+  el.innerHTML = all.sort(function(a,b){ return (a.nextDate||'').localeCompare(b.nextDate||''); }).map(function(p){
+    return '<div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:8px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+      '<div><div style="font-weight:600;font-size:13px;color:var(--exp)">'+(p.amount||0).toLocaleString('ru-RU')+' ₽</div>'+
+      '<div style="font-size:12px;color:var(--t1);margin-top:2px">'+(p.category||'—')+'</div>'+
+      (p.account?'<div style="font-size:10px;color:var(--t3)">💳 '+p.account+'</div>':'')+
+      '<div style="font-size:11px;color:var(--a2);margin-top:2px">'+(freqLabels[p.recurFreq]||'📅')+'</div>'+
+      (p.nextDate?'<div style="font-size:11px;color:var(--t2)">Следующий: '+p.nextDate+'</div>':'')+
+      '</div>'+
+      '<button onclick="deletePlanned(\''+p.id+'\')" style="background:none;border:1px solid #f0606060;border-radius:5px;color:var(--exp);font-size:10px;padding:2px 6px;cursor:pointer">✕</button>'+
+      '</div></div>';
+  }).join('');
+}
+
+function deletePlanned(id) {
+  if(!confirm('Удалить плановый расход?')) return;
+  var planned = [];
+  try { planned = JSON.parse(localStorage.getItem('iz_planned_expenses')||'[]'); } catch(e){}
+  planned = planned.filter(function(p){ return p.id!==id; });
+  localStorage.setItem('iz_planned_expenses', JSON.stringify(planned));
+  renderPlanPlanned();
 }
 
 selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
