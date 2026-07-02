@@ -347,6 +347,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
           <button type="button" onpointerdown="event.preventDefault();showInvChatGptPrompt()" style="width:100%;padding:8px;background:#1e2a14;border:1px solid #c8f060;border-radius:8px;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">📋 Инструкция для ChatGPT</button>
           <div id="manInvFileResult" style="margin-top:6px;font-size:11px"></div>
         </div>
+        <div id="manInvDraftStatus" style="display:none;font-size:12px;padding:6px 10px;background:#1a2a1e;border-radius:8px;margin-bottom:8px;align-items:center;gap:6px"></div>
         <div class="card" style="margin-bottom:10px">
           <div class="ctitle">Новая накладная</div>
           <div class="row2">
@@ -1383,6 +1384,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
   <div class="md"><div class="mh"></div><div class="mt">Списание</div>
     <div id="woDraftBanner" style="display:none;align-items:center;justify-content:space-between;gap:8px;background:#2e1a1a;border:1px solid #f06060;border-radius:10px;padding:10px 12px;margin-bottom:10px">
       <div style="font-size:12px;color:#f06060">📋 Восстановлен незавершённый черновик списания</div>
+    <div id="woDraftStatus" style="display:none;font-size:12px;padding:4px 8px;background:#1a2a1e;border-radius:8px;margin-top:4px"></div>
       <button type="button" onclick="discardWoDraft()" style="background:none;border:1px solid #f06060;border-radius:8px;padding:5px 10px;color:#f06060;font-size:11px;cursor:pointer;flex-shrink:0">Удалить</button>
     </div>
     <div class="fg"><label class="fl">Причина списания (для всех позиций ниже)</label><input class="fi" id="woReason" placeholder="Например: брак — трещина, или Покупка ТГ канал" oninput="saveWoDraft()"></div>
@@ -3723,6 +3725,7 @@ function migrateLegacyDrExpenses(){
   if(changed) saveJ();
 }
 function startApp(){
+  setTimeout(_updateDraftBadges, 500);
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
   if(!restoreMode) syncRestoreUIChrome();
@@ -3827,8 +3830,8 @@ function buildSellerTabs(){
   t.innerHTML=`
     <button class="tab active" onclick="showPg('home',this);renderStatusBar()"><div class="ti">🏠</div><span>Главная</span></button>
     <button class="tab" onclick="showPg('journal',this)"><div class="ti">📋</div><span>Журнал</span></button>
-    <button class="tab" onclick="showPg('invoices',this);switchRcvMainTab('intake');switchInvTab('incoming');_updateManInvJsonBlock()"><div class="ti">📥</div><span>Приход</span><div class="tbadge" id="invBadge"></div></button>
-    <button class="tab" onclick="showPg('writeoffs',this);renderWriteoffs()"><div class="ti">🗑</div><span>Списание</span></button>
+    <button class="tab" onclick="showPg('invoices',this);switchRcvMainTab('intake');switchInvTab('incoming');_updateManInvJsonBlock();_updateDraftBadges()"><div class="ti">📥</div><span>Приход</span><div class="tbadge" id="invBadge"></div></button>
+    <button class="tab" onclick="showPg('writeoffs',this);renderWriteoffs()"><div class="ti">🗑</div><span>Списание</span><div id="tabBadgeWo" class="tbadge" style="display:none">●</div></button>
     <button class="tab" onclick="showPg('staff-tab',this);renderStaff()"><div class="ti">🛒</div><span>Покупки</span></button>
     <button class="tab" onclick="showPg('close',this);renderClose()"><div class="ti">🔐</div><span>Закрыть</span></button>
     <button class="tab" onclick="showPg('personal',this);initPersonalTab()"><div class="ti">📈</div><span>Личное</span></button>
@@ -11771,6 +11774,28 @@ function renderActivatedList(){
 }
 var _manInvItems = [];
 var _manInvCounter = 1;
+function _showDraftSaved(elId){
+  var el=document.getElementById(elId);
+  if(!el) return;
+  el.style.display='inline-flex';
+  el.textContent='✅ Черновик сохранён — можно выйти';
+  el.style.color='#60f090';
+  clearTimeout(el._t);
+  el._t=setTimeout(function(){
+    el.textContent='💾 Черновик автосохраняется';
+    el.style.color='#8888aa';
+  }, 2000);
+}
+function _updateDraftBadges(){
+  // Бейдж на вкладке Приход
+  var hasinv=!!localStorage.getItem(_manInvDraftKey?_manInvDraftKey():'');
+  var rcvBadge=document.getElementById('tabBadgeRcv');
+  if(rcvBadge) rcvBadge.style.display=hasinv?'block':'none';
+  // Бейдж на вкладке Списание
+  var haswo=!!localStorage.getItem(_woDraftKey?_woDraftKey():'');
+  var woBadge=document.getElementById('tabBadgeWo');
+  if(woBadge) woBadge.style.display=haswo?'block':'none';
+}
 function _manInvDraftKey(){ return 'iz_man_inv_draft_'+(session&&session.shopName||''); }
 function saveManInvDraft(){
   if(!session) return;
@@ -11781,9 +11806,12 @@ function saveManInvDraft(){
   };
   if(!draft.num && !draft.from && !_manInvItems.length){
     localStorage.removeItem(_manInvDraftKey());
+    _updateDraftBadges();
     return;
   }
   localStorage.setItem(_manInvDraftKey(), JSON.stringify(draft));
+  _showDraftSaved('manInvDraftStatus');
+  _updateDraftBadges();
 }
 function loadManInvDraft(){
   if(!session) return false;
