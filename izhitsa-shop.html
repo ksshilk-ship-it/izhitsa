@@ -1818,8 +1818,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
   </div>
 </div>
 <div class="toast" id="toast"></div>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<!-- Firebase SDK загружается асинхронно через _loadFirebaseSDK() -->
 <script>
 var loginRole = 'seller';
 function pick(role) {
@@ -1854,45 +1853,78 @@ function pick(role) {
     renderLoginSellers();
   }
 }
+// ════ FIREBASE — асинхронная загрузка, не блокирует UI ════
 var db;
-var _offlineNoFirebase = (typeof firebase === 'undefined');
-if(_offlineNoFirebase){
-  // Firebase SDK не успел загрузиться (например первый запуск офлайн до кэширования SW).
-  // Создаём заглушку, чтобы остальной код приложения не падал, а UI рендерился на localStorage.
-  console.log('[App] Firebase SDK недоступен — работаю в офлайн-режиме без облака');
-  var _stubDoc = function(){
-    var ref = {};
-    ref.get = function(){ return Promise.reject(new Error('offline')); };
-    ref.set = function(){ return Promise.reject(new Error('offline')); };
-    ref.delete = function(){ return Promise.reject(new Error('offline')); };
-    ref.onSnapshot = function(onNext, onErr){ if(onErr) onErr({code:'offline'}); return function(){}; };
-    ref.collection = function(){ return _stubCollection(); };
-    return ref;
-  };
-  var _stubCollection = function(){
-    var col = {};
-    col.doc = function(){ return _stubDoc(); };
-    col.get = function(){ return Promise.reject(new Error('offline')); };
-    col.add = function(){ return Promise.reject(new Error('offline')); };
-    col.onSnapshot = function(onNext, onErr){ if(onErr) onErr({code:'offline'}); return function(){}; };
-    col.where = function(){ return col; };
-    col.orderBy = function(){ return col; };
-    col.limit = function(){ return col; };
-    return col;
-  };
-  db = { collection: function(){ return _stubCollection(); } };
-} else {
-  firebase.initializeApp({
-    apiKey:"AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
-    authDomain:"izhitsa-6327c.firebaseapp.com",
-    projectId:"izhitsa-6327c",
-    storageBucket:"izhitsa-6327c.firebasestorage.app",
-    messagingSenderId:"1025102190040",
-    appId:"1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
-  });
-  db = firebase.firestore();
-  db.enablePersistence({synchronizeTabs:true}).catch(e=>console.log('Persist:',e.code));
+var _offlineNoFirebase = true;
+var _firebaseReady = false;
+var _pendingWrites = [];
+function _makeStubDb(){
+  function sDoc(col,id){
+    return {
+      get:function(){return Promise.reject(new Error('offline'));},
+      set:function(data,opts){_pendingWrites.push({col:col,id:id,data:data,opts:opts});return Promise.resolve();},
+      delete:function(){return Promise.resolve();},
+      update:function(data){_pendingWrites.push({col:col,id:id,data:data,opts:{merge:true}});return Promise.resolve();},
+      onSnapshot:function(a,b){if(b)b({code:'offline'});return function(){};},
+      collection:function(c2){return sCol(col+'/'+id+'/'+c2);}
+    };
+  }
+  function sCol(col){
+    var q={
+      doc:function(id){return sDoc(col,id);},
+      get:function(){return Promise.reject(new Error('offline'));},
+      add:function(data){_pendingWrites.push({col:col,id:null,data:data});return Promise.resolve({id:'p'+Date.now()});},
+      onSnapshot:function(a,b){if(b)b({code:'offline'});return function(){};},
+      where:function(){return q;},orderBy:function(){return q;},limit:function(){return q;}
+    };
+    return q;
+  }
+  return {collection:function(col){return sCol(col);}};
 }
+db = _makeStubDb();
+function _initFirebase(){
+  function load(cb){
+    if(typeof firebase!=='undefined'){cb();return;}
+    var s1=document.createElement('script');
+    s1.src='https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js';
+    s1.onload=function(){
+      var s2=document.createElement('script');
+      s2.src='https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js';
+      s2.onload=cb;s2.onerror=cb;document.head.appendChild(s2);
+    };
+    s1.onerror=cb;document.head.appendChild(s1);
+  }
+  load(function(){
+    if(typeof firebase==='undefined'){console.log('[App] Firebase офлайн');return;}
+    try{
+      if(!firebase.apps.length){
+        firebase.initializeApp({
+          apiKey:"AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw",
+          authDomain:"izhitsa-6327c.firebaseapp.com",
+          projectId:"izhitsa-6327c",
+          storageBucket:"izhitsa-6327c.firebasestorage.app",
+          messagingSenderId:"1025102190040",
+          appId:"1:1025102190040:web:bb3b8e5e61f0b1fa038ead"
+        });
+      }
+      var rdb=firebase.firestore();
+      rdb.enablePersistence({synchronizeTabs:true}).catch(function(e){console.log('Persist:',e.code);});
+      db=rdb;_offlineNoFirebase=false;_firebaseReady=true;
+      if(_pendingWrites.length){
+        console.log('[App] Флашим',_pendingWrites.length,'отложенных записей');
+        _pendingWrites.forEach(function(w){
+          try{if(w.id)rdb.collection(w.col).doc(w.id).set(w.data,w.opts||{merge:true});
+          else rdb.collection(w.col).add(w.data);}catch(e){}
+        });_pendingWrites=[];
+      }
+      try{if(typeof startSyncListeners==='function')startSyncListeners();}catch(e){}
+      try{if(typeof syncLiveShift==='function')syncLiveShift();}catch(e){}
+      try{if(typeof _renderConnStatus==='function')_renderConnStatus();}catch(e){}
+      console.log('[App] Firebase готов');
+    }catch(e){console.log('[App] Ошибка Firebase:',e.message);}
+  });
+}
+_initFirebase();
 var _syncUnsubs = {};
 var SYNC_SETTINGS = {
   'iz_admin_shops':      {doc:'sales_sources', field:'data'},

@@ -1,7 +1,7 @@
 // Ижица Service Worker — офлайн-режим для shop-модуля
 // Кэширует HTML-приложение и Firebase SDK, чтобы приложение запускалось без интернета.
 
-const CACHE_NAME = 'izhitsa-shop-v1';
+const CACHE_NAME = 'izhitsa-shop-v2';
 const CACHE_URLS = [
   './izhitsa-shop.html',
   './manifest-shop.json',
