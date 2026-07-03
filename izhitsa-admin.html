@@ -2575,7 +2575,7 @@ function switchTab(tab, el) {
   if(pg) pg.classList.add('active');
   if(el) el.classList.add('active');
   if(tab === 'staff') { renderUnifiedStaff(); openAddStaffModal; }
-  if(tab === 'settings') { renderSettingsPage(); renderRefBooks(); if(session) applyRoleUI(session.role||'admin'); }
+  if(tab === 'settings') { renderSettingsPage(); renderRefBooks(); }
   if(tab === 'pl') { renderPL(); renderPLMargin(); }
   if(tab === 'debt') renderDebts();
   if(tab === 'analytics') renderAnalytics();
@@ -2654,6 +2654,9 @@ function renderRefBooks() {
   refBooks.forEach(function(book) {
     renderRefBookItems(book.id, book.key);
   });
+
+  // Применяем ролевую фильтрацию после каждого рендера
+  if(session) applyRoleUI(session.role || 'admin');
 }
 
 function toggleRefBook(id) {
@@ -4544,10 +4547,11 @@ function uploadAdminToGitHub(){
 // ════ РОЛЕВАЯ СИСТЕМА ════
 // Вкладки и блоки настроек фильтруются по роли при логине
 
-// Справочники видимые для Бухгалтера (только финансовые)
-var ACCOUNTANT_REFBOOKS = ['sources','accounts','payments','salary','expenses'];
-// Блоки настроек скрытые для Бухгалтера и Владельца
-var SETTINGS_ADMIN_ONLY = ['ghAdminUploadBlock','adminSystemBlock'];
+// Финансовые справочники — видны всем ролям
+var FINANCE_REFBOOKS = ['sources','accounts','payments','salary','expenses'];
+// Все справочники — только для admin
+var ALL_REFBOOKS = ['sources','accounts','payments','salary','goods','goods_derevo','goods_dr',
+  'suppliers','expenses','works','sizes','materials','species','dr_species','statuses','schedules'];
 
 function applyRoleUI(role) {
   // Вкладки таббара
@@ -4562,13 +4566,12 @@ function applyRoleUI(role) {
   if(ghBlock) ghBlock.style.display = role === 'admin' ? '' : 'none';
   if(sysBlock) sysBlock.style.display = role === 'admin' ? '' : 'none';
 
-  // Справочники для бухгалтера — скрыть ненужные
-  if(role === 'accountant') {
-    document.querySelectorAll('.refbook-item').forEach(function(el){
-      var id = el.dataset.refId;
-      el.style.display = (id && ACCOUNTANT_REFBOOKS.indexOf(id) >= 0) ? '' : 'none';
-    });
-  }
+  // Справочники — фильтруем по роли
+  var allowedIds = role === 'admin' ? ALL_REFBOOKS : FINANCE_REFBOOKS;
+  document.querySelectorAll('.refbook-item').forEach(function(el){
+    var id = el.dataset.refId;
+    el.style.display = (!id || allowedIds.indexOf(id) >= 0) ? '' : 'none';
+  });
 }
 
 // ════ ДОХОДЫ (вкладка Бухгалтера) ════
