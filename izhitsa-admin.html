@@ -749,7 +749,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
         <div style="font-size:12px;font-weight:700;color:#c8f060" id="ghAdminFileName">Выбрать файл izhitsa-admin.html</div>
         <input type="file" id="ghAdminFileInput" accept=".html" style="display:none" onchange="document.getElementById('ghAdminFileName').textContent=this.files[0]?this.files[0].name:'Выбрать файл'">
       </div>
-      <button type="button" id="ghAdminUploadBtn" style="width:100%;padding:10px;border-radius:10px;border:none;background:#c8f060;color:#0f0f13;font-size:13px;font-weight:700;cursor:pointer">⬆️ Загрузить на GitHub Pages</button>
+      <button type="button" id="ghAdminUploadBtn" onclick="uploadAdminToGitHub()" style="width:100%;padding:10px;border-radius:10px;border:none;background:#c8f060;color:#0f0f13;font-size:13px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:rgba(0,0,0,0)">⬆️ Загрузить на GitHub Pages</button>
       <div id="ghAdminUploadStatus" style="margin-top:8px;font-size:11px;color:#8888aa"></div>
     </div>
 
@@ -951,14 +951,6 @@ function pullAdminUsersFromFirebase() {
         var users = snap.data().admins;
         localStorage.setItem('iz_admin_users', JSON.stringify(users));
         console.log('✅ Loaded', users.length, 'admin users from Firebase');
-        // Refresh role selector
-        // Кнопка загрузки на GitHub — подключаем через addEventListener для надёжности на iOS
-  var ghBtn = document.getElementById('ghAdminUploadBtn');
-  if(ghBtn) {
-    ghBtn.addEventListener('click', function(e){ e.preventDefault(); uploadAdminToGitHub(); });
-    ghBtn.addEventListener('touchend', function(e){ e.preventDefault(); uploadAdminToGitHub(); });
-  }
-
   selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
       }
     }).catch(function(e) {
