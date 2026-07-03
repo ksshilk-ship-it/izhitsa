@@ -6548,14 +6548,34 @@ async function saveManualAccept(){
       positions
     });
     audit && audit('manual_acceptance_created',{masterName:master?.name, date, count:positions.length});
+    
+    // Добавить в локальный кэш
+    _maHistory.push({
+      id: batchId, masterId, masterName: master?.name||'',
+      deliveredDate: date,
+      createdBy: session.name, createdById: session.id,
+      createdAt: now(),
+      status: 'open',
+      positions
+    });
+    
     closeMo('manualAcceptMo');
     showToast(`✅ Приёмка от ${master?.name||''} сохранена · ${positions.length} позиций`);
-    renderManualAcceptHistory();
+    
+    // Перерисовать историю на странице приёмки
+    renderManualAcceptHistory('rcvManualHistory');
+    
+    // Если модальное окно истории существует - перерисовать и там
+    if(document.getElementById('manualAcceptHistory')){
+      renderManualAcceptHistory('manualAcceptHistory');
+    }
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 
-function renderManualAcceptHistory(){
-  const c = document.getElementById('manualAcceptHistory'); if(!c) return;
+function renderManualAcceptHistory(containerId){
+  // containerId - может быть 'manualAcceptHistory' (из модала) или 'rcvManualHistory' (со страницы приёмки)
+  const elemId = containerId || 'manualAcceptHistory';
+  const c = document.getElementById(elemId); if(!c) return;
   if(!_maHistory.length){
     c.innerHTML = '<div class="empty" style="padding:10px 0"><div class="ei">📋</div>Приёмок пока нет</div>';
     return;
