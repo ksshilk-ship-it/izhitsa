@@ -1926,8 +1926,8 @@ function _initFirebase(){
     }catch(e){console.log('[App] Ошибка Firebase:',e.message);}
   });
 }
-_initFirebase();
 var _syncUnsubs = {};
+// _initFirebase() вызывается после загрузки DOM (см. DOMContentLoaded)
 var SYNC_SETTINGS = {
   'iz_admin_shops':      {doc:'sales_sources', field:'data'},
   'iz_shop_admins':      {doc:'admins',   field:'admins'},
@@ -2014,6 +2014,11 @@ function syncListenCollection(lsKey, colName) {
       docs.sort(function(a,b){ return (b.date||b.closedAt||b.createdAt||'').localeCompare(a.date||a.closedAt||a.createdAt||''); });
     }
     localStorage.setItem(lsKey, JSON.stringify(docs));
+    // Обновляем UI архива если он открыт
+    if(lsKey==='iz_shifts'){
+      try{if(typeof renderShiftHistory==='function') renderShiftHistory();}catch(e){}
+      try{if(typeof renderTodayShift==='function') renderTodayShift();}catch(e){}
+    }
   }, function(e){ console.log('col sync err', colName, e.code||e); });
 }
 function startSyncListeners() {
@@ -5012,10 +5017,28 @@ function renderSaleItems(){
         ${it.hasDiff?`<div style="font-size:11px;color:#f06060;margin-top:2px">${it.diffNote}</div>`:''}
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0">
+        <button class="sir-del" onpointerdown="event.preventDefault();_siCopyItem(${i})" style="background:#1a2a1e;border:1px solid #60f090;border-radius:6px;color:#60f090;font-size:10px;padding:3px 6px">📋</button>
         <button class="sir-del" onclick="siEditItem(${i})" style="border:1px solid #c8f060;border-radius:6px;color:#c8f060;font-size:13px;padding:3px 6px">✏️</button>
         <button class="sir-del" onclick="saleItems.splice(${i},1);renderSaleItems();calcSaleTotal()">✕</button>
       </div>
     </div>`).join('');
+}
+function _siCopyItem(i){
+  var it = saleItems[i]; if(!it) return;
+  // Заполняем поля формы из копируемой позиции (кроме артикула)
+  currentLookupItem = null;
+  var lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
+  var numEl=document.getElementById('siNum'); if(numEl) numEl.value='';
+  if(lr) lr.style.display='none';
+  if(mb) mb.style.display='block';
+  var nameMEl=document.getElementById('siNameM'); if(nameMEl) nameMEl.value=it.name||'';
+  var priceMEl=document.getElementById('siPriceM'); if(priceMEl) priceMEl.value=it.price||'';
+  var spMEl=document.getElementById('siSpeciesM'); if(spMEl) spMEl.value=it.species||'';
+  var qMEl=document.getElementById('siQtyM'); if(qMEl) qMEl.value=1;
+  siCalcAmtM();
+  setSiItemType(it.goodsType==='dr'?'dr':'derevo');
+  setTimeout(function(){ var f=document.getElementById('siQtyM');if(f)f.focus(); },100);
+  showToast('📋 Поля скопированы — измените нужное и добавьте в чек');
 }
 function siEditItem(i){
   var it = saleItems[i]; if(!it) return;
@@ -5302,6 +5325,7 @@ function renderWoItems(){
         '<div style="font-size:11px;color:#8888aa;margin-top:2px">'+it.reason+'</div>'+
       '</div>'+
       '<div style="display:flex;gap:4px;flex-shrink:0">'+
+        '<button class="sir-del" onpointerdown="event.preventDefault();_woCopyItem('+i+')" style="background:#1a2a1e;border-color:#60f090;color:#60f090;font-size:10px">📋</button>'+
         '<button class="sir-del" onclick="removeWoItem('+i+')">✕</button>'+
       '</div>'+
     '</div>';
@@ -5309,6 +5333,24 @@ function renderWoItems(){
   var total = woItems.reduce(function(s,it){ return s+(it.amt||0); },0);
   if(totalEl){ totalEl.style.display='flex'; }
   if(totalAmtEl) totalAmtEl.textContent = fmt(total);
+}
+function _woCopyItem(i){
+  var src = woItems[i];
+  // Заполняем форму полями из копируемой позиции (кроме артикула)
+  var nameEl=document.getElementById('woName');
+  var specEl=document.getElementById('woSpecies');
+  var priceEl=document.getElementById('woPrice');
+  var qtyEl=document.getElementById('woQty');
+  var amtEl=document.getElementById('woAmt');
+  if(nameEl) nameEl.value=src.name||'';
+  if(specEl) specEl.value=src.species||'';
+  if(priceEl) priceEl.value=src.price||'';
+  if(qtyEl) qtyEl.value=src.qty&&src.qty!==1?src.qty:'';
+  if(amtEl) amtEl.value='';
+  setWoItemType(src.goodsType==='dr'?'dr':'derevo');
+  // Фокус на поле кол-во чтобы продавец сразу менял что нужно
+  setTimeout(function(){ var f=document.getElementById('woQty');if(f)f.focus(); },100);
+  showToast('📋 Поля скопированы — измените нужное и добавьте');
 }
 function resetWoForm(){
   woItems=[];
@@ -12112,6 +12154,8 @@ function renderManInvItems() {
           '<input class="fi" type="text" value="'+(item.price?item.price:'')+'" placeholder="0" '+
             'oninput="_manInvPrice('+i+',this.value)" style="margin:0;padding:8px" inputmode="numeric">'+
         '</div>'+
+        '<button type="button" onpointerdown="event.preventDefault();_manInvCopy('+i+')" '+
+          'style="background:#1a2a1e;border:1px solid #60f090;border-radius:8px;padding:8px 10px;color:#60f090;font-size:11px;font-weight:700;cursor:pointer;margin-top:14px">📋</button>'+
         '<button type="button" onclick="_manInvDel('+i+')" '+
           'style="background:none;border:1px solid #3e2e2e;border-radius:8px;padding:8px 10px;color:#f06060;font-size:13px;cursor:pointer;margin-top:14px">✕</button>'+
       '</div>'+
@@ -12208,6 +12252,15 @@ function _manInvAddSpecies(i){
 function _manInvQty(i, val) { _manInvItems[i].qty = parseFloat(val)||1; updateManInvTotal(); saveManInvDraft(); }
 function _manInvPrice(i, val) { _manInvItems[i].price = parseFloat(val)||0; updateManInvTotal(); saveManInvDraft(); }
 function _manInvDel(i) { _manInvItems.splice(i,1); renderManInvItems(); saveManInvDraft(); }
+function _manInvCopy(i) {
+  var src = _manInvItems[i];
+  var copy = {name:src.name||'', species:src.species||'', qty:src.qty||1, price:src.price||0, article:''};
+  _manInvItems.splice(i+1, 0, copy);
+  _manInvExpanded = i+1;
+  renderManInvItems();
+  saveManInvDraft();
+  showToast('📋 Позиция скопирована');
+}
 function updateManInvTotal() {
   var total = _manInvItems.reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); }, 0);
   var totalQty = _manInvItems.reduce(function(s,it){ return s+(it.qty||1); }, 0);
@@ -12670,6 +12723,7 @@ function init(){
   const saved=JSON.parse(localStorage.getItem(KEY.session)||'null');
   if(saved){ session=saved; journal=loadAndCleanJournal(); if(session.role==='shopadmin' && !session.sellerRestoreMode)startAdminApp(); else if(session.sellerRestoreMode){ startSellerRestoreApp(); } else { startApp(); syncLiveShift(); } }
 }
+_initFirebase(); // Firebase загружается асинхронно, не блокируя UI
 init();
 function fixWordCapitalization(text, fixes){
   if(!text || typeof text !== 'string') return text;
