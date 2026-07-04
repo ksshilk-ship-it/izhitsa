@@ -3867,9 +3867,26 @@ function startAdminShiftListener(){
   _adminShiftUnsub=db.collection('iz_shifts').where('date','==',today)
     .onSnapshot(function(snap){
       _adminActiveShifts=[];
-      snap.forEach(function(doc){_adminActiveShifts.push(doc.data());});
+      snap.forEach(function(doc){
+        var d=doc.data(); d.id=doc.id;
+        _adminActiveShifts.push(d);
+      });
       renderTodayShift();
-    },function(e){console.log('shift err',e&&e.code);renderTodayShift();});
+    },function(e){
+      console.log('shift listener err:',e&&e.code);
+      // Fallback: попробовать через get() если onSnapshot не работает
+      if(_firebaseReady){
+        db.collection('iz_shifts').where('date','==',today).get({source:'server'})
+          .then(function(snap){
+            _adminActiveShifts=[];
+            snap.forEach(function(doc){
+              var d=doc.data(); d.id=doc.id;
+              _adminActiveShifts.push(d);
+            });
+            renderTodayShift();
+          }).catch(function(){renderTodayShift();});
+      } else { renderTodayShift(); }
+    });
 }
 var _adminAuditLog=[], _adminAuditUnsub=null;
 function startAdminAuditListener(){
@@ -4393,6 +4410,22 @@ function startAdminApp(){
   startAdminAlertsListener();
   startAdminAuditListener();
   renderTodayShift();
+  // Если Firebase ещё не готов — повторно запустим слушателей как только он загрузится
+  if(!_firebaseReady){
+    var _adminRetryCount = 0;
+    var _adminRetryTimer = setInterval(function(){
+      _adminRetryCount++;
+      if(_firebaseReady || _adminRetryCount > 30){
+        clearInterval(_adminRetryTimer);
+        if(_firebaseReady){
+          startAdminShiftListener();
+          startAdminAlertsListener();
+          startAdminAuditListener();
+          renderTodayShift();
+        }
+      }
+    }, 500); // проверяем каждые 500мс до 15 секунд
+  }
   migrateOrphanItemNamesToGoods();
 }
 function migrateOrphanItemNamesToGoods(){
@@ -9245,23 +9278,15 @@ var STAFF_ROLE_LABELS = {
   'кладовщик':'📦 Кладовщик', 'управляющий':'👑 Управляющий'
 };
 var STAFF_ADMIN_ROLES = ['admin','owner','accountant'];
-var _showAllStaffDebug = false;
 function renderSellersAdmin(){
   renderAdminsAdminList();
   const c=document.getElementById('sellersAdminList'); if(!c)return;
   const staff=getStaff();
-  const sellers=_showAllStaffDebug ? staff : staff.filter(function(s){ return s.roles && s.roles.indexOf('seller')>=0 && !s.archived; });
-  var debugBtn = '<button onpointerdown="event.preventDefault();_showAllStaffDebug=!_showAllStaffDebug;renderSellersAdmin()" style="width:100%;padding:7px;background:#1a1a2e;border:1px solid #a060f0;border-radius:8px;color:#a060f0;font-size:11px;font-weight:700;cursor:pointer;margin-bottom:8px">'+(_showAllStaffDebug?'👁 Скрыть всех (показать только продавцов)':'🔍 Показать всех сотрудников (диагностика, всего в базе: '+staff.length+')')+'</button>';
-  if(!sellers.length){
-    var diag = staff.map(function(s){ return s.name+': roles='+JSON.stringify(s.roles)+' archived='+s.archived; }).join('\n');
-    c.innerHTML=debugBtn+'<div class="empty"><div class="ei">🏪</div>Нет продавцов'+
-      (staff.length?'<div style="font-size:10px;color:#555568;margin-top:10px;white-space:pre-wrap;text-align:left">'+diag+'</div>':'')+
-      '</div>';
-    return;
-  }
-  c.innerHTML=debugBtn+sellers.map(function(s){
+  const sellers=staff.filter(function(s){ return s.roles && s.roles.indexOf('seller')>=0 && s.archived!==true; });
+  if(!sellers.length){c.innerHTML='<div class="empty"><div class="ei">🏪</div>Нет продавцов</div>';return;}
+  c.innerHTML=sellers.map(function(s){
     const idx=staff.indexOf(s);
-    const roleStr=(s.roles||[]).map(function(r){return STAFF_ROLE_LABELS[r]||r;}).join(' · ')+(_showAllStaffDebug?' [archived:'+s.archived+']':'');
+    const roleStr=(s.roles||[]).map(function(r){return STAFF_ROLE_LABELS[r]||r;}).join(' · ');
     const shopStr=(s.shops||[]).length?(s.shops||[]).join(', '):'';
     return `
     <div style="background:${s.blocked?'#2e1a1a':'#1a1a22'};border:1px solid ${s.blocked?'#f06060':'#2e2e3e'};border-radius:12px;padding:10px;margin-bottom:8px">
