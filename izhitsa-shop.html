@@ -1921,6 +1921,15 @@ function _initFirebase(){
       }
       try{if(typeof startSyncListeners==='function')startSyncListeners();}catch(e){}
       try{if(typeof syncLiveShift==='function')syncLiveShift();}catch(e){}
+      // Перезапускаем admin-слушатели если пользователь — администратор
+      // (при первом запуске они могли запуститься на заглушке db)
+      try{
+        if(typeof session!=='undefined' && session && session.role==='shopadmin'){
+          if(typeof startAdminShiftListener==='function') startAdminShiftListener();
+          if(typeof startAdminAlertsListener==='function') startAdminAlertsListener();
+          if(typeof startAdminAuditListener==='function') startAdminAuditListener();
+        }
+      }catch(e){}
       try{if(typeof _renderConnStatus==='function')_renderConnStatus();}catch(e){}
       console.log('[App] Firebase готов');
     }catch(e){console.log('[App] Ошибка Firebase:',e.message);}
