@@ -2012,6 +2012,20 @@ function startApp(){
   document.getElementById('mainTabs').style.display='flex';
   document.getElementById('hdrName').textContent=session.name;
   document.getElementById('hdrRole').textContent={заготовщик:'🪚 Заготовщик',мастер:'🔨 Мастер',кладовщик:'📦 Кладовщик',управляющий:'👑 Управляющий',администратор:'🛡 Администратор'}[session.role]||session.role;
+  
+  // ИСПРАВЛЕНИЕ: Только администратор видит главное меню со всеми ролями
+  // Остальные видят сразу вкладки своей роли
+  if(session.role === 'администратор'){
+    _currentMenuLevel = 'main';  // Администратор видит главное меню
+    _currentPage = 'dash';
+  } else {
+    _currentMenuLevel = session.role;  // Остальные видят сразу свою роль
+    const roleObj = ROLES[session.role];
+    if(roleObj && roleObj.tabs && roleObj.tabs.length > 0){
+      _currentPage = roleObj.tabs[0];  // Первая вкладка роли
+    }
+  }
+  
   buildTabs();
   startListeners();
   renderExtraCatSelect('ewCat');
@@ -2137,6 +2151,12 @@ function buildTabs(){
 
 // Когда нажимаешь на пункт главного меню
 function showMainMenuItem(itemId){
+  // Только администратор может видеть и использовать главное меню
+  if(session && session.role !== 'администратор'){
+    showToast('⚠️ Доступ к меню только для администратора');
+    return;
+  }
+  
   if(itemId === 'dash'){
     // Главная - показываем главную страницу
     _currentMenuLevel = 'main';
@@ -2153,7 +2173,7 @@ function showMainMenuItem(itemId){
     _currentPage = 'admin';
     showPg('admin');
   } else {
-    // Это роль - показываем её меню
+    // Это роль - показываем её меню (только администратор)
     _currentMenuLevel = itemId;
     buildTabs();
     
@@ -2168,6 +2188,12 @@ function showMainMenuItem(itemId){
 
 // Кнопка "назад" в нижнем баре (влево от иконок)
 function goBackToMainMenu(){
+  // Только администратор может видеть главное меню
+  if(session && session.role !== 'администратор'){
+    showToast('⚠️ Только администратор может переходить в главное меню');
+    return;
+  }
+  
   if(_currentMenuLevel !== 'main'){
     _currentMenuLevel = 'main';
     _currentPage = 'dash';
