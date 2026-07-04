@@ -500,7 +500,7 @@ function applyUpdate() {
       </div>
       <div style="display:flex;gap:8px;margin-bottom:8px">
         <input class="fi" id="shipPageSearch" placeholder="🔍 По артикулу / наименованию..." style="flex:1" oninput="renderShipPageList()">
-        <button onclick="toggleShipPageSort()" id="shipPageSortBtn" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:12px;white-space:nowrap">↑ Цена</button>
+        <button onclick="toggleShipPageSort()" id="shipPageSortBtn" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:12px;white-space:nowrap">↕ Сортировка: 📊 Цена</button>
       </div>
       <div id="shipPageSelected" style="display:none;background:var(--s2);border-radius:10px;padding:10px;margin-bottom:8px;font-size:12px;color:var(--text)"></div>
       <div id="shipPageGroups"></div>
@@ -3033,6 +3033,7 @@ function setWhTab(tab){
 }
 
 // ════ ОТГРУЗКА — отдельная страница ════
+let _shipPageSortType = 'price';  // 'price', 'artnum', 'none'
 let _shipPageSortAsc = true;
 let _shipPageSelected = new Set();
 let _shipPageTab = 'new';
@@ -3067,8 +3068,12 @@ function setShipTab(tab){
 }
 
 function toggleShipPageSort(){
-  _shipPageSortAsc = !_shipPageSortAsc;
-  document.getElementById('shipPageSortBtn').textContent = (_shipPageSortAsc?'↑':'↓')+' Цена';
+  _shipPageSortType = _shipPageSortType === 'price' ? 'artnum' : _shipPageSortType === 'artnum' ? 'none' : 'price';
+  let btnText = '↕ Сортировка: ';
+  if(_shipPageSortType === 'price') btnText += '📊 Цена';
+  else if(_shipPageSortType === 'artnum') btnText += '№ Артикул';
+  else btnText += 'Без';
+  document.getElementById('shipPageSortBtn').textContent = btnText;
   renderShipPageList();
 }
 
@@ -3093,7 +3098,26 @@ function renderShipPageList(){
   c.innerHTML = sorted.map(g=>{
     const selCount = g.items.filter(i=>_shipPageSelected.has(i._id)).length;
     const id = 'spg_'+g.name.replace(/[^а-яёa-z0-9]/gi,'_');
-    g.items.sort((a,b)=>_shipPageSortAsc?(a.price||0)-(b.price||0):(b.price||0)-(a.price||0));
+    
+    // Сортировка товаров в группе
+    if(_shipPageSortType === 'price'){
+      g.items.sort((a,b)=>(a.price||0)-(b.price||0));
+    } else if(_shipPageSortType === 'artnum'){
+      g.items.sort((a,b)=>{
+        const aNum = parseInt((a.artikul||a.itemNum||'0').replace(/[^0-9]/g,''))||0;
+        const bNum = parseInt((b.artikul||b.itemNum||'0').replace(/[^0-9]/g,''))||0;
+        return aNum - bNum;
+      });
+    }
+    
+    // Поиск в группе (если есть текст поиска)
+    let groupItems = g.items;
+    if(q){
+      groupItems = g.items.filter(i=>
+        ((i.artikul||'')+(i.itemNum||'')+(i.wood||'')).toLowerCase().includes(q)
+      );
+    }
+    
     return `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:12px;overflow:hidden">
       <div onclick="toggleShipGroup('${id}')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 12px;background:var(--s2);cursor:pointer">
         <div>
@@ -3102,25 +3126,71 @@ function renderShipPageList(){
         </div>
         <span id="${id}_arrow" style="color:var(--t2)">▼</span>
       </div>
-      <div id="${id}" style="display:${q?'block':'none'};padding:0 12px">
-        ${g.items.map(item=>{
+      <div id="${id}" style="display:${q?'block':'none'};padding:12px;border-top:1px solid var(--border)">
+        <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+          <input type="text" placeholder="🔍 Поиск в ${g.name}..." class="group-search" 
+            data-group="${id}" onkeyup="filterGroupItems('${id}')"
+            style="flex:1;min-width:150px;padding:6px 10px;background:var(--s1);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">
+          <button onclick="sortGroupByPrice('${id}')" style="padding:6px 10px;background:var(--s1);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:11px;color:var(--t2)">💰 Цена</button>
+          <button onclick="sortGroupByArtNum('${id}')" style="padding:6px 10px;background:var(--s1);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:11px;color:var(--t2)">№ АРТ</button>
+        </div>
+        ${groupItems.length ? groupItems.map(item=>{
           const sel = _shipPageSelected.has(item._id);
           const num = item.artikul||(item.itemNum&&!item.itemNum.startsWith('НАЧ-')?item.itemNum:'');
-          return `<div onclick="toggleShipPageItem('${item._id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;background:${sel?'rgba(80,255,150,0.07)':''}">
-            <div style="width:22px;height:22px;border-radius:6px;border:2px solid ${sel?'var(--inc)':'var(--border)'};background:${sel?'var(--inc)':'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;color:#000;font-weight:700">${sel?'✓':''}</div>
+          return `<div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:6px;border-radius:8px;background:${sel?'rgba(200,240,96,0.1)':'var(--s2)'};border:1px solid ${sel?'var(--accent)':'var(--border)'};cursor:pointer" onclick="toggleShipPageItem('${item._id}')">
+            <div style="width:22px;height:22px;border-radius:6px;border:2px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'var(--accent)':'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;color:#000;font-weight:700">${sel?'✓':''}</div>
             <div style="flex:1">
-              <div style="font-size:13px;font-weight:600">${num?'№'+num+' ':''}${item.wood||'—'}${item.size?' · '+item.size:''}</div>
+              <div style="font-size:13px;font-weight:600">${num?'<b>№'+num+'</b> ':''} ${item.wood||'—'}${item.size?' · '+item.size:''}</div>
             </div>
-            <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</div>
+            </div>
+            <button onclick="event.stopPropagation();toggleShipPageItem('${item._id}')" style="padding:6px 10px;background:var(--a2);border:none;border-radius:6px;color:#000;cursor:pointer;font-weight:700;font-size:12px">+</button>
           </div>`;
-        }).join('')}
-        <div style="padding:8px 0">
-          <button onpointerdown="event.preventDefault();selectAllShipGroup('${g.name}')" style="width:100%;padding:7px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--t2);cursor:pointer;font-size:12px">☑ Выбрать все ${g.name}</button>
+        }).join('') : '<div style="color:var(--t2);font-size:12px;padding:10px">По поиску ничего не найдено</div>'}
+        <div style="padding:8px 0;margin-top:10px;border-top:1px solid var(--border)">
+          <button onpointerdown="event.preventDefault();selectAllShipGroup('${g.name}')" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--t2);cursor:pointer;font-size:12px;font-weight:600">☑ Выбрать все ${g.name}</button>
         </div>
       </div>
     </div>`;
   }).join('');
   updateShipPageSelected();
+}
+
+function sortGroupByPrice(groupId){
+  const items_to_sort = document.querySelectorAll(`#${groupId} > div[onclick*="toggleShipPageItem"]`);
+  const items_array = Array.from(items_to_sort).sort((a,b)=>{
+    const aPrice = parseInt(a.querySelector('[style*="color:var(--accent)"]')?.textContent.replace(/[^0-9]/g,'')||0);
+    const bPrice = parseInt(b.querySelector('[style*="color:var(--accent)"]')?.textContent.replace(/[^0-9]/g,'')||0);
+    return aPrice - bPrice;
+  });
+  const container = document.getElementById(groupId);
+  if(container){
+    items_array.forEach(item => container.appendChild(item));
+  }
+}
+
+function sortGroupByArtNum(groupId){
+  const items_to_sort = document.querySelectorAll(`#${groupId} > div[onclick*="toggleShipPageItem"]`);
+  const items_array = Array.from(items_to_sort).sort((a,b)=>{
+    const aNum = parseInt(a.textContent.match(/№(\d+)/)?.[1]||0);
+    const bNum = parseInt(b.textContent.match(/№(\d+)/)?.[1]||0);
+    return aNum - bNum;
+  });
+  const container = document.getElementById(groupId);
+  if(container){
+    items_array.forEach(item => container.appendChild(item));
+  }
+}
+
+function filterGroupItems(groupId){
+  const searchEl = document.querySelector(`input[data-group="${groupId}"]`);
+  const searchText = (searchEl?.value||'').toLowerCase();
+  const items = document.querySelectorAll(`#${groupId} > div[onclick*="toggleShipPageItem"]`);
+  items.forEach(item => {
+    const itemText = item.textContent.toLowerCase();
+    item.style.display = itemText.includes(searchText) ? 'flex' : 'none';
+  });
 }
 
 function toggleShipGroup(id){
