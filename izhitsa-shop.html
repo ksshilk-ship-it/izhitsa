@@ -2297,7 +2297,9 @@ function getStaffBySingleRole(role) {
 function syncDerivedFromStaff(staff) {
   if(!staff || !staff.length) return;
   var sellers = staff.filter(function(s){
-    return s.roles && s.roles.indexOf('seller') >= 0 && !s.blocked;
+    if(s.blocked || s.archived===true) return false;
+    // Продавец явно или нет ролей вообще
+    return (s.roles && s.roles.indexOf('seller')>=0) || (!s.roles || !s.roles.length);
   }).map(function(s){
     return {id:s.id, name:s.name, pass:s.pass, shops:s.shops||[], blocked:false, rate:s.wsRate||0};
   });
@@ -9282,7 +9284,15 @@ function renderSellersAdmin(){
   renderAdminsAdminList();
   const c=document.getElementById('sellersAdminList'); if(!c)return;
   const staff=getStaff();
-  const sellers=staff.filter(function(s){ return s.roles && s.roles.indexOf('seller')>=0 && s.archived!==true; });
+  // Показываем продавцов + тех у кого нет roles вообще (могли потерять при сохранении)
+  const sellers=staff.filter(function(s){
+    if(s.archived===true) return false;
+    // Имеет роль seller явно
+    if(s.roles && s.roles.indexOf('seller')>=0) return true;
+    // Нет ролей вообще или пустой массив — показываем с пометкой
+    if(!s.roles || !s.roles.length) return true;
+    return false;
+  });
   if(!sellers.length){c.innerHTML='<div class="empty"><div class="ei">🏪</div>Нет продавцов</div>';return;}
   c.innerHTML=sellers.map(function(s){
     const idx=staff.indexOf(s);
@@ -9394,6 +9404,17 @@ function renderStaffArchiveShop(){
       </div>
     </div>`;
   }).join('');
+}
+function repairStaffRoles(){
+  var staff=getStaff();
+  var fixed=0;
+  staff.forEach(function(s){
+    if(!s.roles || !s.roles.length){
+      s.roles=['seller']; fixed++;
+    }
+  });
+  if(fixed){saveStaffShop(staff);renderSellersAdmin();showToast('✅ Исправлено '+fixed+' записей без ролей');}
+  else showToast('Все записи уже имеют роли');
 }
 function unarchiveStaffShop(idx){
   var staff=getStaff();
