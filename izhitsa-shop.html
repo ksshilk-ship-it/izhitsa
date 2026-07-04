@@ -9284,6 +9284,19 @@ function renderSellersAdmin(){
   renderAdminsAdminList();
   const c=document.getElementById('sellersAdminList'); if(!c)return;
   const staff=getStaff();
+  // Показываем кнопку починки если есть сотрудники без роли seller
+  var noRoleStaff=staff.filter(function(s){ return s.archived!==true && (!s.roles||!s.roles.length||s.roles.indexOf('seller')<0) && s.roles && s.roles.indexOf('shopadmin')<0; });
+  var repairEl=document.getElementById('staffRepairBtn');
+  if(!repairEl && noRoleStaff.length){
+    var rb=document.createElement('div');
+    rb.id='staffRepairBtn';
+    rb.style='background:#2a1e14;border:1px solid #f0a060;border-radius:10px;padding:10px;margin-bottom:10px';
+    rb.innerHTML='⚠️ Найдено '+noRoleStaff.length+' сотрудника без роли продавца: <b>'+noRoleStaff.map(function(s){return s.name;}).join(', ')+'</b>'+
+      '<br><button onpointerdown="event.preventDefault();repairStaffRoles()" style="margin-top:8px;padding:6px 16px;background:#f0a060;border:none;border-radius:8px;font-weight:700;color:#0f0f13;cursor:pointer">🔧 Добавить роль Продавец</button>';
+    c.parentNode.insertBefore(rb, c);
+  } else if(repairEl && !noRoleStaff.length){
+    repairEl.remove();
+  }
   // Показываем продавцов + тех у кого нет roles вообще (могли потерять при сохранении)
   const sellers=staff.filter(function(s){
     if(s.archived===true) return false;
