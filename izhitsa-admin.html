@@ -411,6 +411,12 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
         </div>
       </div>
 
+      <!-- Привязка к мастерской -->
+      <div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:10px;display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="expIsWorkshop" style="width:16px;height:16px">
+        <label for="expIsWorkshop" style="font-size:12px;color:var(--t1)">🏭 Привязать к мастерской (содержание производства)</label>
+      </div>
+
       <button class="btn" onclick="saveExpenseTx()">💾 Сохранить расход</button>
     </div>
 
@@ -3544,6 +3550,20 @@ function renderProduction() {
     var totalZpPaid = masterEntries.reduce(function(s,e){return s+e[1].zpPaid;},0);
     var zpDebt = totalZpAccrued - totalZpPaid;
 
+    // ── Расходы на содержание мастерской (тег isWorkshop) ──
+    var allTxs = getTransactions();
+    var workshopTxs = allTxs.filter(function(tx){
+      return tx.type==='expense' && tx.isWorkshop && inRange(dayOf(tx.date));
+    });
+    var workshopExpenseTotal = workshopTxs.reduce(function(s,tx){ return s+(tx.amount||0); },0);
+    var totalWorkshopCost = totalZpAccrued + workshopExpenseTotal;
+    // Группировка расходов мастерской по статье (первый уровень категории)
+    var byWorkshopCat = {};
+    workshopTxs.forEach(function(tx){
+      var cat = (tx.category||'—').split(' / ')[0];
+      byWorkshopCat[cat] = (byWorkshopCat[cat]||0) + (tx.amount||0);
+    });
+
     var statusLabels = {
       new:'🆕 Новые', in_work:'🔨 В работе', done:'✅ Готово',
       shipped:'🚚 Отгружено', received:'📦 Принято магазином',
@@ -3565,6 +3585,22 @@ function renderProduction() {
       _row('💰 ЗП начислено', '<b>'+fmt(totalZpAccrued)+' ₽</b>')+
       _row('✅ ЗП выплачено', '<b>'+fmt(totalZpPaid)+' ₽</b>')+
       _row('⚠️ Долг по ЗП', '<b style="color:'+(zpDebt>0?'var(--exp)':'var(--inc)')+'">'+fmt(zpDebt)+' ₽</b>')+
+    '</div>';
+
+    // ── Полная стоимость содержания мастерской ──
+    summaryHtml += '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+      '<div class="ctitle">🏭 Содержание мастерской</div>'+
+      _row('💰 ЗП мастеров', fmt(totalZpAccrued)+' ₽')+
+      _row('📉 Прочие расходы (аренда, материалы и т.д.)', fmt(workshopExpenseTotal)+' ₽')+
+      '<div style="display:flex;justify-content:space-between;align-items:center;background:var(--s2);border-radius:8px;padding:10px;margin-top:6px;border:1px solid var(--a4)">'+
+        '<span style="font-size:12px;font-weight:700;color:var(--t1)">Итого расходов на мастерскую</span>'+
+        '<span style="font-size:14px;font-weight:700;color:var(--exp)">'+fmt(totalWorkshopCost)+' ₽</span>'+
+      '</div>'+
+      (Object.keys(byWorkshopCat).length ? '<div style="margin-top:10px;font-size:11px;color:var(--t2)">По статьям:</div>'+
+        Object.entries(byWorkshopCat).sort(function(a,b){return b[1]-a[1];}).map(function(e){
+          return '<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:11px;color:var(--t2);border-bottom:1px solid var(--border)">'+
+            '<span>'+e[0]+'</span><span>'+fmt(e[1])+' ₽</span></div>';
+        }).join('') : '<div style="font-size:11px;color:var(--t2);margin-top:8px">Нет расходов, привязанных к мастерской за период. Отметьте расход как «🏭 Мастерская» на вкладке Расходы.</div>')+
     '</div>';
 
     if(overdueBlanks.length > 0) {
@@ -4744,6 +4780,7 @@ function saveExpenseTx() {
   var isRecurring = document.getElementById('expIsRecurring') && document.getElementById('expIsRecurring').checked;
   var freq = (document.getElementById('expRecurFreq')||{}).value||'monthly';
   var nextDate = (document.getElementById('expNextDate')||{}).value||'';
+  var isWorkshop = document.getElementById('expIsWorkshop') && document.getElementById('expIsWorkshop').checked;
 
   if(!amt||amt<=0){ showToast('❌ Введите сумму'); return; }
   if(!cat){ showToast('❌ Выберите группу расхода'); return; }
@@ -4752,6 +4789,7 @@ function saveExpenseTx() {
   var tx = {id:uid(), type:'expense', amount:amt, category:cat, account:account,
     desc:desc, date:date+'T00:00:00', createdAt:now(), createdBy:session?session.name:''};
   if(isRecurring) { tx.isRecurring=true; tx.recurFreq=freq; tx.nextDate=nextDate; }
+  if(isWorkshop) { tx.isWorkshop=true; }
 
   var txs = getTransactions();
   txs.push(tx);
@@ -4769,8 +4807,9 @@ function saveExpenseTx() {
   document.getElementById('expAmt').value='';
   document.getElementById('expDesc').value='';
   if(document.getElementById('expIsRecurring')) document.getElementById('expIsRecurring').checked=false;
+  if(document.getElementById('expIsWorkshop')) document.getElementById('expIsWorkshop').checked=false;
   toggleExpRecurring();
-  showToast('✅ Расход '+amt.toLocaleString('ru-RU')+' ₽ сохранён'+(isRecurring?' (плановый)':''));
+  showToast('✅ Расход '+amt.toLocaleString('ru-RU')+' ₽ сохранён'+(isRecurring?' (плановый)':'')+(isWorkshop?' 🏭':''));
 }
 
 function renderExpArchive() {
@@ -4806,6 +4845,7 @@ function renderExpArchive() {
         (tx.account?'<div style="font-size:10px;color:var(--t3)">💳 '+tx.account+'</div>':'')+
         (tx.desc?'<div style="font-size:10px;color:var(--t2)">'+tx.desc+'</div>':'')+
         (tx.isRecurring?'<div style="font-size:10px;color:var(--a2)">🔁 '+({monthly:'Ежемесячно',weekly:'Еженедельно',quarterly:'Ежеквартально',once:'Разово'}[tx.recurFreq]||tx.recurFreq)+'</div>':'')+
+        (tx.isWorkshop?'<div style="font-size:10px;color:#c8a060">🏭 Мастерская</div>':'')+
         '</div>'+
         '<div style="text-align:right;flex-shrink:0;margin-left:8px">'+
         '<div style="font-size:11px;color:var(--t2)">'+(tx.date||'').substring(0,10)+'</div>'+
