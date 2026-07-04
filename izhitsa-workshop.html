@@ -666,66 +666,25 @@ function applyUpdate() {
 
   <!-- ADMIN (управляющий) -->
   <div class="page" id="pg-admin">
-    <div class="stitle">Управление</div>
+    <div class="stitle">⚙️ Администратор</div>
 
-    <!-- КАТАЛОГ ТОВАРОВ — только администратор -->
-    <div id="adminCatalogSection" style="display:none">
-      <div class="card" style="border-color:var(--a2)">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <div class="ctitle" style="margin:0">📋 Каталог товаров</div>
-          <button onclick="openAddProductMo()" style="background:var(--a2);border:none;border-radius:8px;padding:6px 12px;color:#000;font-size:12px;font-weight:700;cursor:pointer">＋ Добавить</button>
-        </div>
-        <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">
-          <div class="fchip active" id="catAll" onclick="setCatFilter('all',this)">Все</div>
-          <div class="fchip" id="catActive" onclick="setCatFilter('active',this)">Активные</div>
-          <div class="fchip" id="catArchive" onclick="setCatFilter('archive',this)">Архив</div>
-        </div>
-        <div id="productCatalogList"></div>
-      </div>
-
-      <!-- Справочники -->
-      <div class="card">
-        <div class="ctitle">📚 Справочники</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <button onclick="openAddItemNameMo()" class="btn sec" style="font-size:11px;padding:8px">📋 Наимен.</button>
-          <button onclick="openAddWoodMo()" class="btn sec" style="font-size:11px;padding:8px">🌳 Породы</button>
-          <button onclick="openAddSizeMo()" class="btn sec" style="font-size:11px;padding:8px">📐 Размеры</button>
-          <button onclick="openOtCategoriesMo()" class="btn sec" style="font-size:11px;padding:8px">🛠 Виды работ</button>
-        </div>
-      </div>
-
-      <!-- Служебные операции (только администратор) -->
-      <div class="card" id="adminServiceOps" style="border-color:var(--a4)">
-        <div class="ctitle">🔧 Служебные операции</div>
-        <button class="btn" style="background:var(--a4);color:#000;margin-bottom:8px" onclick="fixNachArtikuls()">
-          🔢 Исправить артикулы «НАЧ-...» на нормальные
-        </button>
-        <div style="font-size:11px;color:var(--t2)">Находит все товары на складе с автоматически сгенерированными длинными артикулами и заменяет их на порядковые числа</div>
-      </div>
-
-      <!-- GitHub Upload -->
-      <div class="card" style="margin-bottom:8px;background:#1a2e1e;border:1px solid #2e4e2e">
-        <div style="font-size:11px;font-weight:700;color:#c8f060;margin-bottom:8px">🚀 ОБНОВИТЬ ПРИЛОЖЕНИЕ НА GITHUB</div>
-        <div style="font-size:11px;color:#8888aa;margin-bottom:8px">Загружает актуальный файл напрямую через API. Токен сохраняется локально на устройстве.</div>
-        <input class="fi" id="wsGhTokenInput" type="password" placeholder="GitHub токен (ghp_...)" autocomplete="off" style="margin-bottom:8px;font-family:monospace;font-size:12px" onfocus="if(!this.value){var t=localStorage.getItem('iz_gh_token');if(t)this.value=t;}">
-        <div style="font-size:10px;color:#8888aa;margin-bottom:4px">Выберите новый файл от Клода:</div>
-        <div onclick="document.getElementById('wsGhFileInput').click()" style="border:2px dashed #c8f060;border-radius:10px;padding:12px;text-align:center;cursor:pointer;margin-bottom:8px">
-          <div style="font-size:20px;margin-bottom:3px">📄</div>
-          <div style="font-size:12px;font-weight:700;color:#c8f060" id="wsGhFileName">Выбрать файл izhitsa-workshop.html</div>
-          <input type="file" id="wsGhFileInput" accept=".html" style="display:none" onchange="document.getElementById('wsGhFileName').textContent=this.files[0]?this.files[0].name:'Выбрать файл'">
-        </div>
-        <button type="button" onpointerdown="event.preventDefault();wsUploadToGitHub()" style="width:100%;padding:10px;border-radius:10px;border:none;background:#c8f060;color:#0f0f13;font-size:13px;font-weight:700;cursor:pointer">⬆️ Загрузить на GitHub Pages</button>
-        <div id="wsGhUploadStatus" style="margin-top:8px;font-size:11px;color:#8888aa"></div>
+    <!-- СПРАВОЧНИКИ -->
+    <div class="card">
+      <div class="ctitle">📚 Справочники</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <button onclick="showShopsReference()" class="btn" style="background:var(--a2);color:#000;font-size:12px;padding:10px;font-weight:700">🏪 Магазины</button>
+        <button onclick="showItemNamesReference()" class="btn sec" style="font-size:12px;padding:10px">📋 Наименования</button>
+        <button onclick="showWoodsReference()" class="btn sec" style="font-size:12px;padding:10px">🌳 Породы дерева</button>
+        <button onclick="showSizesReference()" class="btn sec" style="font-size:12px;padding:10px">📐 Размеры</button>
       </div>
     </div>
 
-    <div id="adminExtraPanel"></div>
+    <!-- СПРАВОЧНИКИ СОДЕРЖИМОЕ -->
+    <div id="adminReferencesPanel"></div>
+
+    <!-- ЗП ПО МАСТЕРАМ -->
     <div class="card">
-      <div class="ctitle">Все изделия</div>
-      <div id="adminAllItems"></div>
-    </div>
-    <div class="card">
-      <div class="ctitle">ЗП по мастерам (месяц)</div>
+      <div class="ctitle">💰 ЗП по мастерам (месяц)</div>
       <div id="adminZP"></div>
     </div>
   </div>
@@ -2013,6 +1972,12 @@ function startApp(){
   document.getElementById('hdrName').textContent=session.name;
   document.getElementById('hdrRole').textContent={заготовщик:'🪚 Заготовщик',мастер:'🔨 Мастер',кладовщик:'📦 Кладовщик',управляющий:'👑 Управляющий',администратор:'🛡 Администратор'}[session.role]||session.role;
   
+  // Инициализировать справочники если их нет
+  if(!localStorage.getItem('iz_admin_shops')){
+    const defaultShops = ['Instagram', 'Facebook', 'ТикТок', 'Авито', 'Яндекс.Маркет'];
+    localStorage.setItem('iz_admin_shops', JSON.stringify(defaultShops));
+  }
+  
   // ИСПРАВЛЕНИЕ: Только администратор видит главное меню со всеми ролями
   // Остальные видят сразу вкладки своей роли
   if(session.role === 'администратор'){
@@ -3059,12 +3024,99 @@ function setShipTab(tab){
     t2.style.background='var(--s2)'; t2.style.color='var(--t2)'; t2.style.fontWeight='400'; t2.style.border='1px solid var(--border)';
     b1.style.display='block'; b2.style.display='none';
     renderShipPageList();
+    renderShipmentPage();
   } else {
     t2.style.background='var(--accent)'; t2.style.color='#000'; t2.style.fontWeight='700'; t2.style.border='none';
     t1.style.background='var(--s2)'; t1.style.color='var(--t2)'; t1.style.fontWeight='400'; t1.style.border='1px solid var(--border)';
     b2.style.display='block'; b1.style.display='none';
     renderShipArchive();
   }
+}
+
+// ════════ УПРАВЛЕНИЕ СПРАВОЧНИКАМИ (Администратор) ════════
+
+function showShopsReference(){
+  const panel = document.getElementById('adminReferencesPanel');
+  const shops = JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
+  
+  panel.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="ctitle" style="margin:0">🏪 Магазины</div>
+        <button onclick="addShopUI()" style="background:var(--a2);border:none;border-radius:8px;padding:6px 12px;color:#000;font-size:12px;font-weight:700;cursor:pointer">＋ Добавить</button>
+      </div>
+      <div id="shopsListRef">${shops.length ? shops.map((shop, idx) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:8px">
+          <div style="font-size:13px;font-weight:600">🏪 ${shop}</div>
+          <button onclick="deleteShop(${idx})" style="background:var(--exp);border:none;border-radius:6px;padding:4px 8px;color:#fff;cursor:pointer;font-size:12px">🗑 Удалить</button>
+        </div>
+      `).join('') : '<div style="color:var(--t2);font-size:12px;padding:10px">Магазинов нет</div>'}</div>
+    </div>
+  `;
+}
+
+function addShopUI(){
+  const shopName = prompt('Название магазина:');
+  if(!shopName) return;
+  const shops = JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
+  if(!shops.includes(shopName)){
+    shops.push(shopName);
+    localStorage.setItem('iz_admin_shops', JSON.stringify(shops));
+    showShopsReference();
+    renderShipmentPage();
+    showToast('✅ Магазин добавлен');
+  } else {
+    showToast('⚠️ Этот магазин уже существует');
+  }
+}
+
+function deleteShop(idx){
+  if(!confirm('Удалить магазин?')) return;
+  const shops = JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
+  shops.splice(idx, 1);
+  localStorage.setItem('iz_admin_shops', JSON.stringify(shops));
+  showShopsReference();
+  renderShipmentPage();
+  showToast('✅ Магазин удалён');
+}
+
+function showItemNamesReference(){
+  const panel = document.getElementById('adminReferencesPanel');
+  const names = Object.values(items).map(i => i.name||i.itemName||'').filter(Boolean).filter((v,i,a) => a.indexOf(v) === i).sort();
+  panel.innerHTML = `
+    <div class="card">
+      <div class="ctitle">📋 Наименования товаров (${names.length})</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        ${names.map(name => `<div style="padding:8px;background:var(--s2);border-radius:6px;font-size:12px">${name}</div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function showWoodsReference(){
+  const panel = document.getElementById('adminReferencesPanel');
+  const woods = Object.values(items).map(i => i.wood||'').filter(Boolean).filter((v,i,a) => a.indexOf(v) === i).sort();
+  panel.innerHTML = `
+    <div class="card">
+      <div class="ctitle">🌳 Породы дерева (${woods.length})</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        ${woods.map(wood => `<div style="padding:8px;background:var(--s2);border-radius:6px;font-size:12px">${wood}</div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function showSizesReference(){
+  const panel = document.getElementById('adminReferencesPanel');
+  const sizes = Object.values(items).map(i => i.size||'').filter(Boolean).filter((v,i,a) => a.indexOf(v) === i).sort();
+  panel.innerHTML = `
+    <div class="card">
+      <div class="ctitle">📐 Размеры (${sizes.length})</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        ${sizes.map(size => `<div style="padding:8px;background:var(--s2);border-radius:6px;font-size:12px">${size}</div>`).join('')}
+      </div>
+    </div>
+  `;
 }
 
 function toggleShipPageSort(){
