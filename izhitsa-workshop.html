@@ -3333,6 +3333,9 @@ async function deleteShipment(shipmentId, destName){
   if(!confirm(msg)) return;
   
   try{
+    // Показать загрузку
+    showToast('⏳ Удаляю отгрузку...');
+    
     // Найти отгрузку
     const shipment = shipments.find(s=>s._id===shipmentId || s.id===shipmentId);
     if(!shipment) throw new Error('Отгрузка не найдена');
@@ -3359,56 +3362,79 @@ async function deleteShipment(shipmentId, destName){
     
     await batch.commit();
     
-    // Обновить локальные данные
-    const shIdx = shipments.findIndex(s=>s._id===shipmentId || s.id===shipmentId);
-    if(shIdx >= 0) {
-      shipments[shIdx].deletedAt = now();
-      shipments[shIdx].deletedBy = session.name;
-    }
-    
-    shipment.items.forEach(si => {
-      const item = items.find(i=>i._id===si._id);
-      if(item) {
-        item.status = 'received';
-        item.shippedAt = null;
-        item.shippedTo = null;
-        item.shipmentNum = null;
+    // Обновить локальные данные БЕЗОПАСНО
+    try{
+      const shIdx = shipments.findIndex(s=>s._id===shipmentId || s.id===shipmentId);
+      if(shIdx >= 0) {
+        shipments[shIdx].deletedAt = now();
+        shipments[shIdx].deletedBy = session.name;
       }
-    });
+    }catch(e){ console.error('Error updating local shipment:', e); }
     
-    // Обновить интерфейс
-    renderShipArchive();
-    renderWarehouse();
-    showToast(`✅ Отгрузка удалена, ${shipment.items.length} товаров вернулось на склад`);
+    try{
+      shipment.items.forEach(si => {
+        const item = items.find(i=>i._id===si._id);
+        if(item) {
+          item.status = 'received';
+          item.shippedAt = null;
+          item.shippedTo = null;
+          item.shipmentNum = null;
+        }
+      });
+    }catch(e){ console.error('Error updating items:', e); }
+    
+    // Показать успех ПЕРЕД перерисовкой
+    showToast(`✅ Отгрузка удалена, товары вернулись на склад`);
+    
+    // Обновить интерфейс БЕЗОПАСНО
+    setTimeout(() => {
+      try{
+        renderShipArchive();
+      }catch(e){ console.error('Error in renderShipArchive:', e); }
+      try{
+        renderWarehouse();
+      }catch(e){ console.error('Error in renderWarehouse:', e); }
+    }, 500);
     
   }catch(e){
     console.error('Delete shipment error:', e);
-    showToast('Ошибка: '+e.message);
+    showToast('❌ Ошибка: '+e.message);
   }
 }
 
 function renderShipArchive(){
-  const c=document.getElementById('shipArchiveList'); if(!c) return;
-  const list=shipments.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
-  if(!list.length){ c.innerHTML='<div style="font-size:13px;color:var(--t2);padding:16px 0;text-align:center">Отгрузок пока нет</div>'; return; }
-  c.innerHTML=list.map(s=>{
-    const canDelete = session && (session.role==='администратор' || (session.role==='кладовщик' && isShipmentToday(s.createdAt)));
-    const deleteBtn = canDelete ? `<button onclick="deleteShipment('${s._id||s.id}','${(s.destName||'').replace(/'/g,"\\'")}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--exp);cursor:pointer;font-size:12px">🗑</button>` : '';
-    return `
-    <div class="card" style="margin-bottom:8px">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div style="flex:1">
-          <div style="font-size:14px;font-weight:700">${s.num||'—'}</div>
-          <div style="font-size:12px;color:var(--t2)">${s.destName||'—'} · ${fmtDT(s.createdAt)}</div>
-          <div style="font-size:12px;color:var(--t2)">${(s.items||[]).length} шт. · ${fmt((s.items||[]).reduce((sum,i)=>sum+(i.price||0),0))}</div>
+  try{
+    const c=document.getElementById('shipArchiveList'); 
+    if(!c) return;
+    
+    const list=shipments.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+    if(!list.length){ 
+      c.innerHTML='<div style="font-size:13px;color:var(--t2);padding:16px 0;text-align:center">Отгрузок пока нет</div>'; 
+      return; 
+    }
+    
+    c.innerHTML=list.map(s=>{
+      const canDelete = session && (session.role==='администратор' || (session.role==='кладовщик' && isShipmentToday(s.createdAt)));
+      const deleteBtn = canDelete ? `<button onclick="deleteShipment('${s._id||s.id}','${(s.destName||'').replace(/'/g,"\\'")}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--exp);cursor:pointer;font-size:12px">🗑</button>` : '';
+      return `
+      <div class="card" style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:700">${s.num||'—'}</div>
+            <div style="font-size:12px;color:var(--t2)">${s.destName||'—'} · ${fmtDT(s.createdAt)}</div>
+            <div style="font-size:12px;color:var(--t2)">${(s.items||[]).length} шт. · ${fmt((s.items||[]).reduce((sum,i)=>sum+(i.price||0),0))}</div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span style="font-size:11px;color:var(--a4)">✅</span>
+            ${deleteBtn}
+          </div>
         </div>
-        <div style="display:flex;gap:6px;align-items:center">
-          <span style="font-size:11px;color:var(--a4)">✅</span>
-          ${deleteBtn}
-        </div>
-      </div>
-    </div>`;
-  }).join('');
+      </div>`;
+    }).join('');
+  }catch(e){
+    console.error('Error rendering shipment archive:', e);
+    document.getElementById('shipArchiveList').innerHTML = '<div style="color:var(--exp);padding:10px">⚠️ Ошибка загрузки отгрузок</div>';
+  }
 }
 
 function isShipmentToday(createdAt){
