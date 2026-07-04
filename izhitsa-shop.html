@@ -1921,6 +1921,14 @@ function _initFirebase(){
           else rdb.collection(w.col).add(w.data);}catch(e){}
         });_pendingWrites=[];
       }
+      // КРИТИЧНО: слушатели могли "зарегистрироваться" на заглушке db ещё до того,
+      // как загрузился настоящий Firebase. Заглушка возвращает fake-unsubscribe (truthy),
+      // из-за чего startSyncListeners() второй раз ничего не переподключает.
+      // Поэтому явно сбрасываем реестр перед повторной регистрацией на реальном db.
+      Object.keys(_syncUnsubs).forEach(function(k){
+        try{ if(typeof _syncUnsubs[k]==='function') _syncUnsubs[k](); }catch(e){}
+        delete _syncUnsubs[k];
+      });
       try{if(typeof startSyncListeners==='function')startSyncListeners();}catch(e){}
       try{if(typeof syncLiveShift==='function')syncLiveShift();}catch(e){}
       // Перезапускаем admin-слушатели если пользователь — администратор
@@ -1981,8 +1989,11 @@ function syncListen(lsKey) {
       }
       if(lsKey === 'iz_admin_shops' || lsKey === 'iz_sellers') { try { pick(loginRole); } catch(e){} }
       if(lsKey === 'iz_admin_shops'){
+        try{ if(typeof renderLoginShopSelect==='function') renderLoginShopSelect(); }catch(e){}
         try{ renderShopsManage(); }catch(e){}
         try{ renderShopSettings(); }catch(e){}
+        try{ if(typeof renderTodayShift==='function' && document.getElementById('todayShiftContent')) renderTodayShift(); }catch(e){}
+        try{ if(typeof renderStatusBar==='function' && document.getElementById('mainStatusBar')) renderStatusBar(); }catch(e){}
       }
       if(lsKey === 'iz_accounts'){
         try{ renderAccountsList(); }catch(e){}
@@ -12829,6 +12840,11 @@ function addNewSupplier() {
   if(el) el.value=name.trim();
   showToast('✅ Поставщик «'+name+'» добавлен в базу');
 }
+function renderLoginShopSelect(){
+  const shopNames=getShopNames();
+  const shopSel=document.getElementById('loginShop');
+  if(shopSel) shopSel.innerHTML=shopNames.map(s=>`<option>${s}</option>`).join('');
+}
 function init(){
   startSyncListeners();
   try{ startStockSync(); }catch(e){}
@@ -12836,9 +12852,7 @@ function init(){
     try{pick(loginRole);}catch(e){}
     try{ if(document.getElementById('sellersAdminList')) renderSellersAdmin(); }catch(e){}
   });
-  const shopNames=getShopNames();
-  const shopSel=document.getElementById('loginShop');
-  if(shopSel) shopSel.innerHTML=shopNames.map(s=>`<option>${s}</option>`).join('');
+  renderLoginShopSelect();
   var admins=JSON.parse(localStorage.getItem('iz_shop_admins')||'[]');
   if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; saveShopAdmins(admins); }
   pick('seller');
