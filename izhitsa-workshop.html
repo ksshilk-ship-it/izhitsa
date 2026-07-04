@@ -2088,65 +2088,100 @@ const MAIN_MENU_TABS = [
 ];
 
 function buildTabs(){
-  let tabs = [];
+  // РАЗНАЯ ЛОГИКА ДЛЯ АДМИНИСТРАТОРА И ОСТАЛЬНЫХ!
   
-  if(_currentMenuLevel === 'main'){
-    // Верхний уровень - показываем только главное меню
-    tabs = MAIN_MENU_TABS.map(m => m.id);
-  } else {
-    // Нижний уровень - показываем табы для роли
-    const roleObj = Object.entries(ROLES).find(([key,val]) => key === _currentMenuLevel);
-    if(roleObj){
-      tabs = (roleObj[1].tabs || ['dash']);
-    }
-  }
-  
-  _visibleTabs = tabs;
-  
-  // Кнопка "Назад" видна только если мы не в главном меню
-  const backButton = _currentMenuLevel !== 'main' 
-    ? `<button class="tab back-btn" onclick="goBackToMainMenu()" title="Назад в главное меню">
-        <div class="ti">←</div>
-        <span>Назад</span>
-      </button><div class="tab-divider"></div>`
-    : '';
-  
-  const tabsHtml = tabs.map((tabId, idx) => {
-    let icon, label;
+  if(session.role === 'администратор'){
+    // ════════ АДМИНИСТРАТОР: главное меню + меню ролей ════════
+    let tabs = [];
     
-    // Если это корзина роли (вида 'trash-заготовщик')
-    if(tabId.startsWith('trash-')){
-      icon = '🗑';
-      const roleName = tabId.split('-')[1];
-      label = 'Корзина';
+    if(_currentMenuLevel === 'main'){
+      // Главное меню (только для администратора)
+      tabs = MAIN_MENU_TABS.map(m => m.id);
     } else {
-      // Ищем в главном меню
-      const mainItem = MAIN_MENU_TABS.find(m => m.id === tabId);
-      if(mainItem){
-        icon = mainItem.icon;
-        label = mainItem.label;
-      } else {
-        // Ищем в TAB_CFG
-        icon = TAB_CFG[tabId]?.icon || '?';
-        label = TAB_CFG[tabId]?.label || 'N/A';
+      // Меню выбранной роли (администратор переключается между ролями)
+      const roleObj = Object.entries(ROLES).find(([key,val]) => key === _currentMenuLevel);
+      if(roleObj){
+        tabs = (roleObj[1].tabs || ['dash']);
       }
     }
     
-    const isActive = tabId === _currentPage ? 'active' : '';
-    const onClick = _currentMenuLevel === 'main' 
-      ? `showMainMenuItem('${tabId}')`
-      : `showPg('${tabId}',this)`;
+    _visibleTabs = tabs;
     
-    // Добавляем разделитель после каждого элемента кроме последнего
-    const separator = idx < tabs.length - 1 ? '<div class="tab-divider"></div>' : '';
+    // Кнопка "Назад" ТОЛЬКО когда администратор в меню какой-то роли
+    const backButton = (_currentMenuLevel !== 'main' && _currentMenuLevel !== session.role) 
+      ? `<button class="tab back-btn" onclick="goBackToMainMenu()" title="Назад в главное меню">
+          <div class="ti">←</div>
+          <span>Назад</span>
+        </button><div class="tab-divider"></div>`
+      : '';
     
-    return `<button class="tab ${isActive}" onclick="${onClick}" title="${label}">
-      <div class="ti">${icon}</div>
-      <span>${label}</span>
-    </button>${separator}`;
-  }).join('');
-  
-  document.getElementById('mainTabs').innerHTML = backButton + tabsHtml;
+    const tabsHtml = tabs.map((tabId, idx) => {
+      let icon, label;
+      
+      if(tabId.startsWith('trash-')){
+        icon = '🗑';
+        label = 'Корзина';
+      } else {
+        const mainItem = MAIN_MENU_TABS.find(m => m.id === tabId);
+        if(mainItem){
+          icon = mainItem.icon;
+          label = mainItem.label;
+        } else {
+          icon = TAB_CFG[tabId]?.icon || '?';
+          label = TAB_CFG[tabId]?.label || 'N/A';
+        }
+      }
+      
+      const isActive = tabId === _currentPage ? 'active' : '';
+      const onClick = _currentMenuLevel === 'main' 
+        ? `showMainMenuItem('${tabId}')`
+        : `showPg('${tabId}',this)`;
+      
+      const separator = idx < tabs.length - 1 ? '<div class="tab-divider"></div>' : '';
+      
+      return `<button class="tab ${isActive}" onclick="${onClick}" title="${label}">
+        <div class="ti">${icon}</div>
+        <span>${label}</span>
+      </button>${separator}`;
+    }).join('');
+    
+    document.getElementById('mainTabs').innerHTML = backButton + tabsHtml;
+    
+  } else {
+    // ════════ ОСТАЛЬНЫЕ РОЛИ: только свои вкладки, БЕЗ главного меню ════════
+    // НЕТ кнопки "← Назад"
+    // НЕТ логики главного меню
+    // НЕТ переключения между ролями
+    
+    const roleObj = ROLES[session.role];
+    if(!roleObj) return;
+    
+    const tabs = roleObj.tabs || ['dash'];
+    _visibleTabs = tabs;
+    
+    // БЕЗ кнопки "Назад" - прямо табы
+    const tabsHtml = tabs.map((tabId, idx) => {
+      let icon, label;
+      
+      if(tabId.startsWith('trash-')){
+        icon = '🗑';
+        label = 'Корзина';
+      } else {
+        icon = TAB_CFG[tabId]?.icon || '?';
+        label = TAB_CFG[tabId]?.label || 'N/A';
+      }
+      
+      const isActive = tabId === _currentPage ? 'active' : '';
+      const separator = idx < tabs.length - 1 ? '<div class="tab-divider"></div>' : '';
+      
+      return `<button class="tab ${isActive}" onclick="showPg('${tabId}',this)" title="${label}">
+        <div class="ti">${icon}</div>
+        <span>${label}</span>
+      </button>${separator}`;
+    }).join('');
+    
+    document.getElementById('mainTabs').innerHTML = tabsHtml;
+  }
 }
 
 // Когда нажимаешь на пункт главного меню
