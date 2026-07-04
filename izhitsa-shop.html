@@ -1626,7 +1626,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
       <label class="fl">Статус сотрудника</label>
       <div id="staffStatusChips2" style="display:flex;flex-wrap:wrap;gap:8px"></div>
     </div>
-    <button class="btn" onclick="saveUnifiedStaffShop()" style="margin-bottom:8px">💾 Сохранить</button>
+    <button class="btn" onpointerdown="event.preventDefault();saveUnifiedStaffShop()" style="margin-bottom:8px">💾 Сохранить</button>
     <button class="btn sec" onclick="closeMo('staffMo2')">Отмена</button>
   </div>
 </div>
@@ -9285,7 +9285,7 @@ function renderSellersAdmin(){
   const c=document.getElementById('sellersAdminList'); if(!c)return;
   const staff=getStaff();
   // Показываем кнопку починки если есть сотрудники без роли seller
-  var noRoleStaff=staff.filter(function(s){ return s.archived!==true && (!s.roles||!s.roles.length||s.roles.indexOf('seller')<0) && s.roles && s.roles.indexOf('shopadmin')<0; });
+  var noRoleStaff=staff.filter(function(s){ return s.archived!==true && (!s.roles||!s.roles.length); });
   var repairEl=document.getElementById('staffRepairBtn');
   if(!repairEl && noRoleStaff.length){
     var rb=document.createElement('div');
@@ -9424,10 +9424,16 @@ function repairStaffRoles(){
   staff.forEach(function(s){
     if(!s.roles || !s.roles.length){
       s.roles=['seller']; fixed++;
+      console.log('[repair] Added seller to:', s.name);
     }
   });
-  if(fixed){saveStaffShop(staff);renderSellersAdmin();showToast('✅ Исправлено '+fixed+' записей без ролей');}
-  else showToast('Все записи уже имеют роли');
+  if(fixed){
+    saveStaffShop(staff);
+    renderSellersAdmin();
+    showToast('✅ Исправлено '+fixed+' записей — добавлена роль Продавец');
+  } else {
+    showToast('Нет записей без ролей — сотрудник не найден');
+  }
 }
 function unarchiveStaffShop(idx){
   var staff=getStaff();
@@ -9503,6 +9509,10 @@ function saveUnifiedStaffShop(){
   if(!name||!pass){showToast('Введите имя и пароль');return;}
   var roles=[];
   document.querySelectorAll('#staffRolesBlock2 input[type=checkbox]:checked').forEach(function(cb){ roles.push(cb.value); });
+  // Если выбраны магазины но роль продавца не отмечена — добавляем автоматически
+  var shops2=[];
+  document.querySelectorAll('#staffShopsList2 input[type=checkbox]:checked').forEach(function(cb){ shops2.push(cb.value); });
+  if(shops2.length && roles.indexOf('seller')<0){ roles.push('seller'); }
   if(!roles.length){showToast('Выберите хотя бы одну роль');return;}
   var shops=[];
   document.querySelectorAll('#staffShopsList2 input[type=checkbox]:checked').forEach(function(cb){ shops.push(cb.value); });
