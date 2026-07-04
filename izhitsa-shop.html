@@ -2510,7 +2510,21 @@ function openMo(id){
   document.body.appendChild(el);
   el.classList.add('open');
 }
-function closeMo(id){ document.getElementById(id).classList.remove('open'); }
+function closeMo(id){
+  var el=document.getElementById(id);
+  if(el) el.classList.remove('open');
+  // Фикс для iOS Safari: закрытие fixed-окна поверх прокручиваемого блока
+  // иногда "замораживает" скролл фона (-webkit-overflow-scrolling:touch).
+  // Форсируем reflow активной страницы и открытых модалок, чтобы разблокировать скролл.
+  requestAnimationFrame(function(){
+    document.querySelectorAll('.page.active, .mo.open .md').forEach(function(sEl){
+      var prevDisplay = sEl.style.display;
+      sEl.style.display = 'none';
+      void sEl.offsetHeight; // force reflow
+      sEl.style.display = prevDisplay;
+    });
+  });
+}
 function showPg(name,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
