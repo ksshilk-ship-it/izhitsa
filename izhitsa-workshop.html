@@ -61,6 +61,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 .ti{font-size:28px;line-height:1}
 .tbadge{position:absolute;top:5px;right:calc(50% - 16px);background:var(--exp);color:#fff;font-size:9px;font-weight:700;border-radius:8px;padding:1px 5px;min-width:16px;text-align:center;display:none}
 .tab-divider{width:1px;height:40px;background:var(--border);opacity:.5}
+.tab.back-btn{color:var(--a6);background:rgba(96,240,200,.1);border-radius:8px;margin:4px 6px;padding:4px 8px}
 
 /* PAGES */
 .page{display:none;padding:12px 16px;padding-bottom:calc(var(--tabh) + env(safe-area-inset-bottom) + 40px)}
@@ -2088,18 +2089,33 @@ function buildTabs(){
   
   _visibleTabs = tabs;
   
-  const tabsHtml = tabs.map(tabId => {
+  // Кнопка "Назад" видна только если мы не в главном меню
+  const backButton = _currentMenuLevel !== 'main' 
+    ? `<button class="tab back-btn" onclick="goBackToMainMenu()" title="Назад в главное меню">
+        <div class="ti">←</div>
+        <span>Назад</span>
+      </button><div class="tab-divider"></div>`
+    : '';
+  
+  const tabsHtml = tabs.map((tabId, idx) => {
     let icon, label;
     
-    // Ищем в главном меню
-    const mainItem = MAIN_MENU_TABS.find(m => m.id === tabId);
-    if(mainItem){
-      icon = mainItem.icon;
-      label = mainItem.label;
+    // Если это корзина роли (вида 'trash-заготовщик')
+    if(tabId.startsWith('trash-')){
+      icon = '🗑';
+      const roleName = tabId.split('-')[1];
+      label = 'Корзина';
     } else {
-      // Ищем в TAB_CFG
-      icon = TAB_CFG[tabId]?.icon || '?';
-      label = TAB_CFG[tabId]?.label || 'N/A';
+      // Ищем в главном меню
+      const mainItem = MAIN_MENU_TABS.find(m => m.id === tabId);
+      if(mainItem){
+        icon = mainItem.icon;
+        label = mainItem.label;
+      } else {
+        // Ищем в TAB_CFG
+        icon = TAB_CFG[tabId]?.icon || '?';
+        label = TAB_CFG[tabId]?.label || 'N/A';
+      }
     }
     
     const isActive = tabId === _currentPage ? 'active' : '';
@@ -2107,13 +2123,16 @@ function buildTabs(){
       ? `showMainMenuItem('${tabId}')`
       : `showPg('${tabId}',this)`;
     
+    // Добавляем разделитель после каждого элемента кроме последнего
+    const separator = idx < tabs.length - 1 ? '<div class="tab-divider"></div>' : '';
+    
     return `<button class="tab ${isActive}" onclick="${onClick}" title="${label}">
       <div class="ti">${icon}</div>
       <span>${label}</span>
-    </button>`;
+    </button>${separator}`;
   }).join('');
   
-  document.getElementById('mainTabs').innerHTML = tabsHtml;
+  document.getElementById('mainTabs').innerHTML = backButton + tabsHtml;
 }
 
 // Когда нажимаешь на пункт главного меню
@@ -2151,7 +2170,9 @@ function showMainMenuItem(itemId){
 function goBackToMainMenu(){
   if(_currentMenuLevel !== 'main'){
     _currentMenuLevel = 'main';
+    _currentPage = 'dash';
     buildTabs();
+    showPg('dash');
   }
 }
 
