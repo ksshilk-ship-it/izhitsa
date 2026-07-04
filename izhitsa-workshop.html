@@ -7479,6 +7479,55 @@ function initOfflineMode(){
 }
 
 // Когда вернулся интернет — синхронизировать
+// Универсальное сохранение: онлайн → Firebase, оффлайн → очередь
+async function dbSet(col, docId, payload){
+  if(navigator.onLine){
+    // Есть интернет - сохраняем прямо в Firebase
+    await db.collection(col).doc(docId).set(payload, {merge:true});
+  } else {
+    // Нет интернета - сохраняем в очередь
+    const outbox = JSON.parse(localStorage.getItem('ws_outbox') || '[]');
+    outbox.push({
+      id: uid(),
+      col: col,
+      docId: docId,
+      payload: payload,
+      ts: now()
+    });
+    localStorage.setItem('ws_outbox', JSON.stringify(outbox));
+    console.log('[OUTBOX] Добавлено в очередь:', col, docId);
+  }
+}
+
+// Отправить накопленную очередь оффлайн-данных при восстановлении интернета
+async function outboxFlush(){
+  const outbox = JSON.parse(localStorage.getItem('ws_outbox') || '[]');
+  if(!outbox.length) {
+    console.log('[OUTBOX] Очередь пуста');
+    return;
+  }
+  
+  console.log('[OUTBOX] Отправка', outbox.length, 'элементов...');
+  
+  try{
+    for(const item of outbox){
+      try{
+        await db.collection(item.col).doc(item.docId).set(item.payload, {merge:true});
+        console.log('[OUTBOX] ✅ Отправлено:', item.col, item.docId);
+      }catch(e){
+        console.error('[OUTBOX] Ошибка:', item.col, item.docId, e.message);
+        throw e;
+      }
+    }
+    // Очистить очередь только если всё прошло успешно
+    localStorage.setItem('ws_outbox', JSON.stringify([]));
+    console.log('[OUTBOX] ✅ Очередь очищена');
+  }catch(e){
+    console.error('[OUTBOX] Ошибка при отправке очереди:', e.message);
+    // Не выбрасываем ошибку - очередь остаётся для повторной попытки
+  }
+}
+
 async function syncOnlineData(){
   if(_syncInProgress || !_isOnline) return;
   _syncInProgress = true;
