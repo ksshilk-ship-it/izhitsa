@@ -1930,6 +1930,8 @@ function _initFirebase(){
         delete _syncUnsubs[k];
       });
       try{if(typeof startSyncListeners==='function')startSyncListeners();}catch(e){}
+      try{if(typeof startStaffLiveSync==='function' && typeof _staffSyncUpdateCb==='function') startStaffLiveSync(_staffSyncUpdateCb);}catch(e){}
+      try{if(typeof startStockSync==='function') startStockSync();}catch(e){}
       try{if(typeof syncLiveShift==='function')syncLiveShift();}catch(e){}
       // Перезапускаем admin-слушатели если пользователь — администратор
       // (при первом запуске они могли запуститься на заглушке db)
@@ -12845,13 +12847,14 @@ function renderLoginShopSelect(){
   const shopSel=document.getElementById('loginShop');
   if(shopSel) shopSel.innerHTML=shopNames.map(s=>`<option>${s}</option>`).join('');
 }
+function _staffSyncUpdateCb(){
+  try{pick(loginRole);}catch(e){}
+  try{ if(document.getElementById('sellersAdminList')) renderSellersAdmin(); }catch(e){}
+}
 function init(){
   startSyncListeners();
   try{ startStockSync(); }catch(e){}
-  startStaffLiveSync(function(){
-    try{pick(loginRole);}catch(e){}
-    try{ if(document.getElementById('sellersAdminList')) renderSellersAdmin(); }catch(e){}
-  });
+  startStaffLiveSync(_staffSyncUpdateCb);
   renderLoginShopSelect();
   var admins=JSON.parse(localStorage.getItem('iz_shop_admins')||'[]');
   if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; saveShopAdmins(admins); }
