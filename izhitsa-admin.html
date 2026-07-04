@@ -1493,8 +1493,10 @@ function doLogin() {
     return;
   }
   
-  // Get first role from roles array
-  var role = user.roles && user.roles.length > 0 ? user.roles[0] : 'admin';
+  // Роль — та, что выбрана на экране входа (карточка Администратор/Владелец/Бухгалтер),
+  // а не первая из user.roles[]. Один и тот же человек может иметь несколько ролей
+  // и должен войти именно под той, что выбрал, а не всегда под первой в списке.
+  var role = selectedRole || (user.roles && user.roles.length > 0 ? user.roles[0] : 'admin');
   
   session = {id: user.id, name: user.name, role: role};
   sessionStorage.setItem('iz_admin_session', JSON.stringify(session));
