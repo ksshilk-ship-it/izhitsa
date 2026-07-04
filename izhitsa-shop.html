@@ -2298,7 +2298,6 @@ function syncDerivedFromStaff(staff) {
   if(!staff || !staff.length) return;
   var sellers = staff.filter(function(s){
     if(s.blocked || s.archived===true) return false;
-    // Продавец явно или нет ролей вообще
     return (s.roles && s.roles.indexOf('seller')>=0) || (!s.roles || !s.roles.length);
   }).map(function(s){
     return {id:s.id, name:s.name, pass:s.pass, shops:s.shops||[], blocked:false, rate:s.wsRate||0};
@@ -4392,6 +4391,22 @@ function toggleSBlock(bid){
   if(hdr) hdr.style.marginBottom = open?'0':'8px';
   if(card) card.style.paddingBottom = open?'0':'14px';
 }
+function _autoRepairStaffRoles(){
+  // Автоматически исправляем записи с пустыми roles при каждом запуске
+  var staff = getStaff();
+  var fixed = 0;
+  staff.forEach(function(s){
+    if(!s.roles || !s.roles.length){
+      s.roles = ['seller'];
+      fixed++;
+      console.log('[autoRepair] fixed:', s.name);
+    }
+  });
+  if(fixed){
+    saveStaffShop(staff);
+    console.log('[autoRepair] fixed', fixed, 'staff records');
+  }
+}
 function startAdminApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
@@ -4408,6 +4423,7 @@ function startAdminApp(){
   var todayPg = document.getElementById('pg-today');
   if(todayPg) todayPg.classList.add('active');
   renderShiftHistory(); renderSellersAdmin();
+  _autoRepairStaffRoles(); // Исправляем записи без ролей при каждом входе
   startAdminShiftListener();
   startAdminAlertsListener();
   startAdminAuditListener();
@@ -9298,11 +9314,10 @@ function renderSellersAdmin(){
     repairEl.remove();
   }
   // Показываем продавцов + тех у кого нет roles вообще (могли потерять при сохранении)
+  // Показываем всех продавцов: у кого есть роль seller, или нет ролей вообще
   const sellers=staff.filter(function(s){
     if(s.archived===true) return false;
-    // Имеет роль seller явно
     if(s.roles && s.roles.indexOf('seller')>=0) return true;
-    // Нет ролей вообще или пустой массив — показываем с пометкой
     if(!s.roles || !s.roles.length) return true;
     return false;
   });
