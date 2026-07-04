@@ -170,8 +170,10 @@ window.addEventListener('online', function(){
     try{
       // Актуальный список сотрудников (для проверки при входе)
       db.collection('iz_settings').doc('staff').get({source:'server'}).then(function(snap){
-        if(snap.exists && snap.data().data){
-          localStorage.setItem('iz_staff', JSON.stringify(snap.data().data));
+        if(snap.exists && snap.data().staff){
+          localStorage.setItem('iz_staff', JSON.stringify(snap.data().staff));
+          if(typeof syncDerivedFromStaff==='function') syncDerivedFromStaff(snap.data().staff);
+          if(typeof renderSellersAdmin==='function' && document.getElementById('sellersAdminList')) renderSellersAdmin();
         }
       }).catch(function(){});
 
@@ -9321,8 +9323,35 @@ function renderSellersAdmin(){
     if(!s.roles || !s.roles.length) return true;
     return false;
   });
-  if(!sellers.length){c.innerHTML='<div class="empty"><div class="ei">🏪</div>Нет продавцов</div>';return;}
-  c.innerHTML=sellers.map(function(s){
+  // Диагностика: сотрудники, которые есть в базе, но не попадают ни в продавцов,
+  // ни в админов, ни в архив — из-за нестандартной/битой роли. Иначе их не видно совсем.
+  var adminRolesSet=STAFF_ADMIN_ROLES;
+  var ghosts=staff.filter(function(s){
+    if(s.archived===true) return false;
+    if(sellers.indexOf(s)>=0) return false;
+    if(s.roles && s.roles.some(function(r){return adminRolesSet.indexOf(r)>=0;})) return false;
+    return true;
+  });
+  var ghostHtml='';
+  if(ghosts.length){
+    ghostHtml='<div style="background:#2a1e14;border:1px solid #f0a060;border-radius:10px;padding:10px;margin-bottom:10px">'+
+      '⚠️ Найдено '+ghosts.length+' скрытых записей (не отображаются ни в одном списке из-за нестандартной роли):'+
+      ghosts.map(function(s){
+        var idx=staff.indexOf(s);
+        var roleStr=(s.roles||[]).join(', ')||'(нет ролей)';
+        return '<div style="margin-top:8px;padding:8px;background:#1a1a22;border-radius:8px">'+
+          '<div style="font-size:13px;font-weight:700">'+s.name+'</div>'+
+          '<div style="font-size:11px;color:#8888aa">роли: '+roleStr+'</div>'+
+          '<div style="display:flex;gap:6px;margin-top:6px">'+
+            '<button onclick="editStaffShop('+idx+')" style="flex:1;background:none;border:1px solid #2e2e3e;border-radius:8px;padding:6px;font-size:12px;color:#60c8f0;cursor:pointer">✏️ Открыть и исправить роль</button>'+
+            '<button onclick="openBlockSeller(\'delete\','+idx+',\''+s.name+'\')" style="flex:1;background:none;border:1px solid #2e2e3e;border-radius:8px;padding:6px;font-size:12px;color:#f06060;cursor:pointer">🗑 Удалить</button>'+
+          '</div>'+
+        '</div>';
+      }).join('')+
+    '</div>';
+  }
+  if(!sellers.length && !ghosts.length){c.innerHTML='<div class="empty"><div class="ei">🏪</div>Нет продавцов</div>';return;}
+  c.innerHTML=ghostHtml+sellers.map(function(s){
     const idx=staff.indexOf(s);
     const roleStr=(s.roles||[]).map(function(r){return STAFF_ROLE_LABELS[r]||r;}).join(' · ');
     const shopStr=(s.shops||[]).length?(s.shops||[]).join(', '):'';
@@ -9538,11 +9567,11 @@ function saveUnifiedStaffShop(){
   if(_editStaffIdx>=0 && staff[_editStaffIdx]){
     var existing=staff[_editStaffIdx];
     prev=existing;
-    var collision=staff.findIndex(function(s,i){return i!==_editStaffIdx && s.name===name;});
-    if(collision>=0){showToast('Сотрудник с таким именем уже есть');return;}
+    var collision=staff.findIndex(function(s,i){return i!==_editStaffIdx && (s.name||'').trim().toLowerCase()===name.toLowerCase();});
+    if(collision>=0){showToast('Сотрудник с таким именем уже есть (см. блок ⚠️ в списке, если его не видно)');return;}
     entryBase=existing;
   } else {
-    if(staff.some(function(s){return s.name===name;})){showToast('Сотрудник с таким именем уже есть');return;}
+    if(staff.some(function(s){return (s.name||'').trim().toLowerCase()===name.toLowerCase();})){showToast('Сотрудник с таким именем уже есть (см. блок ⚠️ в списке, если его не видно)');return;}
     entryBase={blocked:false,blockedByStatus:false,createdAt:new Date().toISOString()};
   }
   var blocked=entryBase.blocked||false;
