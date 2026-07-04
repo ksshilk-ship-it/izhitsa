@@ -55,11 +55,12 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 .exit-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--t2);cursor:pointer;font-size:11px;padding:5px 9px;font-family:'Golos Text',sans-serif}
 
 /* TABS */
-.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:calc(var(--tabh) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--s1);border-top:1px solid var(--border);display:none;z-index:100}
-.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--t2);font-size:9px;font-family:'Golos Text',sans-serif;font-weight:500;border:none;background:none;position:relative}
+.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:calc(var(--tabh) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--s1);border-top:1px solid var(--border);display:none;z-index:100;overflow-y:auto}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;color:var(--t2);font-size:9px;font-family:'Golos Text',sans-serif;font-weight:500;border:none;background:none;position:relative;padding:8px 2px;min-width:50px}
 .tab.active{color:var(--a5)}
-.ti{font-size:18px;line-height:1}
+.ti{font-size:28px;line-height:1}
 .tbadge{position:absolute;top:5px;right:calc(50% - 16px);background:var(--exp);color:#fff;font-size:9px;font-weight:700;border-radius:8px;padding:1px 5px;min-width:16px;text-align:center;display:none}
+.tab-divider{width:1px;height:40px;background:var(--border);opacity:.5}
 
 /* PAGES */
 .page{display:none;padding:12px 16px;padding-bottom:calc(var(--tabh) + env(safe-area-inset-bottom) + 40px)}
@@ -1393,11 +1394,11 @@ const audit = (action, details) => {
 };
 
 const ROLES = {
-  заготовщик:    {tabs:['dash','blanks','extrawork'], label:'🪚 Заготовщик'},
-  мастер:        {tabs:['dash','masterblanks','mywork','othertasks','delivery','zp'], label:'🔨 Мастер'},
-  кладовщик:     {tabs:['warehouse','shipment','receiving','inventory','otmanual','trash'], label:'📦 Кладовщик'},
-  управляющий:   {tabs:['dash','warehouse','zp','zpay','stats','inventory','admin'], label:'👑 Управляющий'},
-  администратор: {tabs:['dash','warehouse','shipment','receiving','zp','zpay','stats','inventory','trash','admin','import'], label:'🛡 Администратор'},
+  заготовщик:    {tabs:['blanks','extrawork'], label:'🪚 Заготовщик'},
+  мастер:        {tabs:['masterblanks','mywork','othertasks','delivery','zp'], label:'🔨 Мастер'},
+  кладовщик:     {tabs:['warehouse','shipment','receiving','inventory','otmanual','trash','import'], label:'📦 Кладовщик'},
+  управляющий:   {tabs:['warehouse','zp','zpay','stats','inventory','admin'], label:'👑 Управляющий'},
+  администратор: {tabs:['warehouse','shipment','receiving','zp','zpay','stats','inventory','trash','admin'], label:'🛡 Администратор'},
   владелец:      {tabs:['owner','ownerstaff','ownerwarehouse','stats'], label:'💼 Владелец'},
 };
 
@@ -2056,13 +2057,126 @@ function migrateLegacyEmployeesToStaff(){
   renderAdmin();
 }
 
+// ════════ HIERARCHICAL NAVIGATION ════════
+let _currentMenuLevel = 'main'; // 'main' или название роли
+let _visibleTabs = ['dash']; // текущие видимые табы
+
+// Главное меню (верхний уровень)
+const MAIN_MENU_TABS = [
+  {id:'dash', icon:'🏠', label:'Главная'},
+  {id:'заготовщик', icon:'🪚', label:'Заготовщик'},
+  {id:'мастер', icon:'🔨', label:'Мастер'},
+  {id:'кладовщик', icon:'📦', label:'Кладовщик'},
+  {id:'управляющий', icon:'👑', label:'Управляющий'},
+  {id:'stats', icon:'📊', label:'Статистика'},
+  {id:'admin', icon:'⚙️', label:'Настройки'},
+];
+
 function buildTabs(){
-  const tabs=(ROLES[session.role]&&ROLES[session.role].tabs)||['dash'];
-  document.getElementById('mainTabs').innerHTML=tabs.map(k=>`
-    <button class="tab ${k==='dash'?'active':''}" onclick="showPg('${k}',this)">
-      <div class="ti">${TAB_CFG[k].icon}</div>
-      <span>${TAB_CFG[k].label}</span>
-    </button>`).join('');
+  let tabs = [];
+  
+  if(_currentMenuLevel === 'main'){
+    // Верхний уровень - показываем только главное меню
+    tabs = MAIN_MENU_TABS.map(m => m.id);
+  } else {
+    // Нижний уровень - показываем табы для роли
+    const roleObj = Object.entries(ROLES).find(([key,val]) => key === _currentMenuLevel);
+    if(roleObj){
+      tabs = (roleObj[1].tabs || ['dash']);
+    }
+  }
+  
+  _visibleTabs = tabs;
+  
+  const tabsHtml = tabs.map(tabId => {
+    let icon, label;
+    
+    // Ищем в главном меню
+    const mainItem = MAIN_MENU_TABS.find(m => m.id === tabId);
+    if(mainItem){
+      icon = mainItem.icon;
+      label = mainItem.label;
+    } else {
+      // Ищем в TAB_CFG
+      icon = TAB_CFG[tabId]?.icon || '?';
+      label = TAB_CFG[tabId]?.label || 'N/A';
+    }
+    
+    const isActive = tabId === _currentPage ? 'active' : '';
+    const onClick = _currentMenuLevel === 'main' 
+      ? `showMainMenuItem('${tabId}')`
+      : `showPg('${tabId}',this)`;
+    
+    return `<button class="tab ${isActive}" onclick="${onClick}" title="${label}">
+      <div class="ti">${icon}</div>
+      <span>${label}</span>
+    </button>`;
+  }).join('');
+  
+  document.getElementById('mainTabs').innerHTML = tabsHtml;
+}
+
+// Когда нажимаешь на пункт главного меню
+function showMainMenuItem(itemId){
+  if(itemId === 'dash'){
+    // Главная - показываем главную страницу
+    _currentMenuLevel = 'main';
+    _currentPage = 'dash';
+    showPg('dash');
+  } else if(itemId === 'stats'){
+    // Статистика - сразу к странице
+    _currentMenuLevel = 'main';
+    _currentPage = 'stats';
+    showPg('stats');
+  } else if(itemId === 'admin'){
+    // Настройки - сразу к странице
+    _currentMenuLevel = 'main';
+    _currentPage = 'admin';
+    showPg('admin');
+  } else {
+    // Это роль - показываем её меню
+    _currentMenuLevel = itemId;
+    buildTabs();
+    
+    // Переходим на первую страницу роли
+    const roleObj = ROLES[itemId];
+    if(roleObj && roleObj.tabs && roleObj.tabs.length > 0){
+      _currentPage = roleObj.tabs[0];
+      showPg(roleObj.tabs[0]);
+    }
+  }
+}
+
+// Кнопка "назад" в нижнем баре (влево от иконок)
+function goBackToMainMenu(){
+  if(_currentMenuLevel !== 'main'){
+    _currentMenuLevel = 'main';
+    buildTabs();
+  }
+}
+
+// Оригинальная функция showPg должна вызывать buildTabs если изменилась страница
+let _currentPage = 'dash';
+function showPg(pageId, btn){
+  if(!TAB_CFG[pageId]) return;
+  
+  _currentPage = pageId;
+  
+  // Убираем active со всех страниц
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  
+  // Добавляем active к нужной странице и кнопке
+  const page = document.getElementById('pg-'+pageId);
+  if(page) page.classList.add('active');
+  if(btn) btn.classList.add('active');
+  
+  // Вызываем render функцию если она есть
+  const renderFn = window['render'+pageId.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join('')] || 
+                   window['render'+pageId];
+  if(renderFn && typeof renderFn === 'function'){
+    renderFn();
+  }
 }
 
 // ════════ FIREBASE LISTENERS ════════
