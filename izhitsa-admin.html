@@ -900,6 +900,7 @@ var ADMIN_SYNC_SETTINGS = {
   'iz_sales_sources':    {doc:'sales_sources',       field:'data'},
   'iz_plan_data':        {doc:'plan',                field:'data'},
   'iz_debits':           {doc:'debits',              field:'data'},
+  'iz_credits':          {doc:'credits',             field:'data'},
   'iz_ws_employees':     {doc:'ws_employees',        field:'data'},
   // Справочники товаров — те же что в izhitsa-shop.html
   'iz_species':          {doc:'species',             field:'list'},
@@ -1251,6 +1252,19 @@ function getDebits() {
 
 function saveDebits(data) {
   adminSyncSave('iz_debits', data);
+}
+
+// Кредиторская задолженность (мы должны) — аналогично getDebits/saveDebits,
+// но эти функции вызывались в addCredit/deleteCredit/renderDebts без
+// объявления, из-за чего вкладка «Долги» падала при попытке показать
+// раздел «Кредит» с ReferenceError.
+function getCredits() {
+  try { return JSON.parse(localStorage.getItem('iz_credits') || '[]'); }
+  catch(e) { return []; }
+}
+
+function saveCredits(data) {
+  adminSyncSave('iz_credits', data);
 }
 
 function getAuditLog() {
@@ -2361,6 +2375,23 @@ function populateSourcesForOp() {
     var name = typeof s === 'string' ? s : (s.name || '');
     return '<option value="'+name+'">'+name+'</option>';
   }).join('');
+}
+
+// Очищает форму «Движение денег» после сохранения операции (доход/расход/перевод),
+// а также по кнопке «Очистить». Функция вызывалась 4 раза по коду, но нигде
+// не была объявлена — из-за этого saveOperation падал с ReferenceError
+// сразу после успешного сохранения транзакции.
+function clearOperationForm() {
+  var fields = ['opAmt','opDesc','opDate'];
+  fields.forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  var selects = ['opSource','opCategory','opIncomeCategory','opTrFrom','opTrTo'];
+  selects.forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.selectedIndex = 0;
+  });
 }
 
 function saveOperation() {
@@ -4667,114 +4698,6 @@ function getFilteredTransactionsShops() {
 
 
 
-document.addEventListener('DOMContentLoaded', function() {
-  initRefBooks();
-  initStaff();
-  renderRefBooks();
-  startSyncListeners();
-  // Create default admin FIRST before sync listeners overwrite
-  var users = getAdminUsers();
-  var hasDefault = users.some(function(u){ return u.id === 'admin_default'; });
-  if(!hasDefault) {
-    users.unshift({id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'});
-    localStorage.setItem('iz_admin_users', JSON.stringify(users));
-  }
-  startAdminSyncListeners();
-  startStaffSyncListener();
-  // Auto-select first role card
-  var firstCard = document.querySelector('.role-card');
-  if(firstCard) firstCard.click();
-  // Init shops if not exist
-  if(!localStorage.getItem('iz_shops')) {
-    saveShops(['ОПИТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
-  }
-  
-  // Init plan data if not exist
-  if(!localStorage.getItem('iz_plan_data')) {
-    savePlanData({
-      planIncome: 130000,
-      planExpense: 68000
-    });
-  }
-  
-  // Init transactions with test data if not exist
-  if(!localStorage.getItem('iz_transactions')) {
-    const today = new Date();
-    const testTransactions = [
-      {id: uid(), type: 'income', amount: 50000, source: 'Роза Хутор', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'income', amount: 35000, source: 'Горки', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'income', amount: 20000, source: 'ТГ канал', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'income', amount: 15000, source: 'Instagram', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'expense', amount: 30000, source: '', category: 'Закупки', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'expense', amount: 12000, source: '', category: 'Материалы', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'expense', amount: 15000, source: '', category: 'Аренда', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'expense', amount: 8000, source: '', category: 'Зарплаты', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'expense', amount: 3000, source: '', category: 'Коммунальные', date: today.toISOString(), createdAt: now(), createdBy: 'System'}
-    ];
-    saveTransactions(testTransactions);
-  }
-  
-  // Init sales sources if not exist
-  if(!localStorage.getItem('iz_sales_sources')) {
-    saveSalesSources([
-      {id: uid(), name: 'Роза Хутор', type: 'shop', createdAt: now()},
-      {id: uid(), name: 'Горки', type: 'shop', createdAt: now()},
-      {id: uid(), name: 'ТГ канал', type: 'online', createdAt: now()},
-      {id: uid(), name: 'Instagram', type: 'online', createdAt: now()},
-      {id: uid(), name: 'Мастерская', type: 'workshop', createdAt: now()},
-      {id: uid(), name: 'Опт', type: 'offline', createdAt: now()}
-    ]);
-  }
-  
-  // Init users if not exist
-  // Init admin users - CRITICAL
-  if(!localStorage.getItem('iz_admin_users')) {
-    const adminUsers = [
-      {id: '1', name: 'Ксения', role: 'admin', pass: '1'},
-      {id: '2', name: 'Елена', role: 'admin', pass: '1'},
-      {id: '3', name: 'Владимир', role: 'owner', pass: '1'},
-      {id: '4', name: 'Анна', role: 'accountant', pass: '1'}
-    ];
-    localStorage.setItem('iz_admin_users', JSON.stringify(adminUsers));
-    console.log('✅ Admin users initialized');
-  }
-  
-  // Initialize first role on page load
-  setTimeout(function() {
-    const firstCard = document.querySelector('.role-card');
-    if(firstCard && !document.querySelector('.role-card.selected')) {
-      firstCard.click();
-    }
-  }, 100);
-  
-  // Check if logged in
-  const saved = sessionStorage.getItem('iz_admin_session');
-  if(saved) {
-    try {
-      session = JSON.parse(saved);
-      document.getElementById('loginScreen').style.display = 'none';
-      document.getElementById('appScreen').style.display = 'block';
-      document.getElementById('tabsBar').style.display = 'flex';
-      document.getElementById('hdrName').textContent = session.name;
-      document.getElementById('hdrRole').textContent = roleLabel(session.role);
-      populateSellers();
-      populateWsEmployees();
-      populateAdminUsers();
-      populateSalesSourcesList();
-      populateCategorySelects();
-      populateShopCheckboxes();
-      renderDashboard();
-      setTxType('income');
-      clearOperationForm();
-      renderPL();
-      renderPLBudget();
-      renderShops();
-      renderDebts();
-    } catch(e) {}
-  }
-  
-
-
 function uploadAdminToGitHub(){
   showToast('⏳ Начинаю загрузку...');
   var tokenEl = document.getElementById('ghAdminTokenInput');
@@ -5166,7 +5089,7 @@ function setPlanTab(tab, btn) {
 
 function initPlanMonthSelect() {
   var sel = document.getElementById('planMonth');
-  if(!sel||sel.options.length>0) return;
+  if(!sel || (sel.options && sel.options.length>0)) return;
   var now2 = new Date();
   for(var i=-2; i<=6; i++) {
     var d = new Date(now2.getFullYear(), now2.getMonth()+i, 1);
@@ -5336,6 +5259,115 @@ function openAddPlannedModal() {
   }
   showToast('Заполните форму расхода — отметка «Регулярный» уже стоит');
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+  initRefBooks();
+  initStaff();
+  renderRefBooks();
+  startSyncListeners();
+  // Create default admin FIRST before sync listeners overwrite
+  var users = getAdminUsers();
+  var hasDefault = users.some(function(u){ return u.id === 'admin_default'; });
+  if(!hasDefault) {
+    users.unshift({id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'});
+    localStorage.setItem('iz_admin_users', JSON.stringify(users));
+  }
+  startAdminSyncListeners();
+  startStaffSyncListener();
+  // Auto-select first role card
+  var firstCard = document.querySelector('.role-card');
+  if(firstCard) firstCard.click();
+  // Init shops if not exist
+  if(!localStorage.getItem('iz_shops')) {
+    saveShops(['ОПИТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
+  }
+  
+  // Init plan data if not exist
+  if(!localStorage.getItem('iz_plan_data')) {
+    savePlanData({
+      planIncome: 130000,
+      planExpense: 68000
+    });
+  }
+  
+  // Init transactions with test data if not exist
+  if(!localStorage.getItem('iz_transactions')) {
+    const today = new Date();
+    const testTransactions = [
+      {id: uid(), type: 'income', amount: 50000, source: 'Роза Хутор', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'income', amount: 35000, source: 'Горки', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'income', amount: 20000, source: 'ТГ канал', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'income', amount: 15000, source: 'Instagram', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 30000, source: '', category: 'Закупки', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 12000, source: '', category: 'Материалы', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 15000, source: '', category: 'Аренда', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 8000, source: '', category: 'Зарплаты', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
+      {id: uid(), type: 'expense', amount: 3000, source: '', category: 'Коммунальные', date: today.toISOString(), createdAt: now(), createdBy: 'System'}
+    ];
+    saveTransactions(testTransactions);
+  }
+  
+  // Init sales sources if not exist
+  if(!localStorage.getItem('iz_sales_sources')) {
+    saveSalesSources([
+      {id: uid(), name: 'Роза Хутор', type: 'shop', createdAt: now()},
+      {id: uid(), name: 'Горки', type: 'shop', createdAt: now()},
+      {id: uid(), name: 'ТГ канал', type: 'online', createdAt: now()},
+      {id: uid(), name: 'Instagram', type: 'online', createdAt: now()},
+      {id: uid(), name: 'Мастерская', type: 'workshop', createdAt: now()},
+      {id: uid(), name: 'Опт', type: 'offline', createdAt: now()}
+    ]);
+  }
+  
+  // Init users if not exist
+  // Init admin users - CRITICAL
+  if(!localStorage.getItem('iz_admin_users')) {
+    const adminUsers = [
+      {id: '1', name: 'Ксения', role: 'admin', pass: '1'},
+      {id: '2', name: 'Елена', role: 'admin', pass: '1'},
+      {id: '3', name: 'Владимир', role: 'owner', pass: '1'},
+      {id: '4', name: 'Анна', role: 'accountant', pass: '1'}
+    ];
+    localStorage.setItem('iz_admin_users', JSON.stringify(adminUsers));
+    console.log('✅ Admin users initialized');
+  }
+  
+  // Initialize first role on page load
+  setTimeout(function() {
+    const firstCard = document.querySelector('.role-card');
+    if(firstCard && !document.querySelector('.role-card.selected')) {
+      firstCard.click();
+    }
+  }, 100);
+  
+  // Check if logged in
+  const saved = sessionStorage.getItem('iz_admin_session');
+  if(saved) {
+    try {
+      session = JSON.parse(saved);
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('appScreen').style.display = 'block';
+      document.getElementById('tabsBar').style.display = 'flex';
+      document.getElementById('hdrName').textContent = session.name;
+      document.getElementById('hdrRole').textContent = roleLabel(session.role);
+      populateSellers();
+      populateWsEmployees();
+      populateAdminUsers();
+      populateSalesSourcesList();
+      populateCategorySelects();
+      populateShopCheckboxes();
+      renderDashboard();
+      setTxType('income');
+      clearOperationForm();
+      renderPL();
+      renderPLBudget();
+      renderShops();
+      renderDebts();
+    } catch(e) {}
+  }
+  
+
+
 
 selectAdminRole('admin', document.querySelectorAll('.role-card')[0]);
 });
