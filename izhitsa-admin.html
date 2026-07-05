@@ -759,6 +759,14 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
       </div>
     </div>
 
+    <!-- Управление системой для Бухгалтера — только экспорт финансовых данных -->
+    <div id="accountantSystemBlock" style="background:var(--s2);border-radius:8px;margin-bottom:16px;padding:12px;border-left:3px solid var(--exp);display:none">
+      <div style="font-weight:700;font-size:13px;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+        <span>⚙️</span> Управление данными
+      </div>
+      <button class="btn" onclick="exportFinanceData()" style="width:100%;background:var(--a2);color:#fff;font-size:14px;padding:16px;border-radius:12px;font-family:'Unbounded',sans-serif;font-weight:700">📥 Экспорт бухгалтерии (доходы / расходы / переводы)</button>
+    </div>
+
     <!-- ДИАГНОСТИКА СМЕН -->
     <div id="diagShiftsBlock" style="background:var(--s2);border-radius:8px;margin-bottom:16px;padding:12px;border-left:3px solid #60a0f0">
       <div style="font-weight:700;font-size:13px;margin-bottom:10px">🔍 Диагностика данных смен</div>
@@ -1437,6 +1445,13 @@ function saveWsEmployees(data) {
 }
 
 function uid() { return Math.random().toString(36).substr(2,9); }
+
+// Русская подпись роли для отображения в шапке (session.role хранится
+// на английском для внутренней логики — admin/owner/accountant).
+function roleLabel(role) {
+  var labels = {admin:'Администратор', owner:'Владелец', accountant:'Бухгалтер'};
+  return labels[role] || role;
+}
 function now() { return new Date().toISOString(); }
 
 // Простое тост-уведомление внизу экрана. Используется по всему приложению
@@ -1512,7 +1527,7 @@ function doLogin() {
     document.getElementById('appScreen').style.display = 'block';
     document.getElementById('tabsBar').style.display = 'flex';
     document.getElementById('hdrName').textContent = 'Администратор';
-    document.getElementById('hdrRole').textContent = 'admin';
+    document.getElementById('hdrRole').textContent = roleLabel('admin');
     populateSellers(); populateWsEmployees(); populateAdminUsers();
     if(typeof populateSalesSourcesList==='function') populateSalesSourcesList();
     if(typeof populateSourcesForOp==='function') populateCategorySelects();
@@ -1559,7 +1574,7 @@ function doLogin() {
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('tabsBar').style.display = 'flex';
   document.getElementById('hdrName').textContent = user.name;
-  document.getElementById('hdrRole').textContent = role;
+  document.getElementById('hdrRole').textContent = roleLabel(role);
   
   populateSellers();
   populateWsEmployees();
@@ -2770,6 +2785,26 @@ function exportAllData() {
   a.download = 'izhitsa_export_' + new Date().toISOString().split('T')[0] + '.json';
   a.click();
 }
+
+// Экспорт только для роли Бухгалтер — доходы, расходы, переводы между
+// счетами и плановые расходы. Никаких данных по сменам, сотрудникам,
+// товарам или производству — Бухгалтер работает только с финансами.
+function exportFinanceData() {
+  var allTxs = getTransactions();
+  var data = {
+    доходы: allTxs.filter(function(t){ return t.type==='income'; }),
+    расходы: allTxs.filter(function(t){ return t.type==='expense'; }),
+    переводы: allTxs.filter(function(t){ return t.type==='transfer'; }),
+    плановые_расходы: (function(){ try { return JSON.parse(localStorage.getItem('iz_planned_expenses')||'[]'); } catch(e){ return []; } })()
+  };
+  var blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'izhitsa_finance_export_' + new Date().toISOString().split('T')[0] + '.json';
+  a.click();
+  showToast('📥 Экспорт бухгалтерии сохранён');
+}
+
 function clearLocalCache() {
   if(!confirm('Очистить локальный кеш? Данные из Firestore подгрузятся снова при появлении интернета.')) return;
   var keep = ['iz_staff','iz_shops','iz_accounts','iz_items'];
@@ -4721,7 +4756,7 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('appScreen').style.display = 'block';
       document.getElementById('tabsBar').style.display = 'flex';
       document.getElementById('hdrName').textContent = session.name;
-      document.getElementById('hdrRole').textContent = session.role;
+      document.getElementById('hdrRole').textContent = roleLabel(session.role);
       populateSellers();
       populateWsEmployees();
       populateAdminUsers();
@@ -4837,17 +4872,28 @@ var ALL_REFBOOKS = ['sources','accounts','payments','salary','goods','goods_dere
 
 function applyRoleUI(role) {
   // Вкладки таббара
+  var activeHiddenTab = null;
   document.querySelectorAll('#tabsBar .tab').forEach(function(btn){
     var roles = (btn.dataset.roles||'admin').split(',');
-    btn.style.display = roles.indexOf(role) >= 0 ? '' : 'none';
+    var allowed = roles.indexOf(role) >= 0;
+    btn.style.display = allowed ? '' : 'none';
+    if(!allowed && btn.classList.contains('active')) activeHiddenTab = btn;
   });
+  // Если сейчас активна вкладка, недоступная для этой роли — уводим на Главную
+  if(activeHiddenTab) {
+    var dashBtn = document.querySelector('#tabsBar [onclick*="switchTab(\'dash\'"]');
+    switchTab('dash', dashBtn);
+  }
 
-  // Блоки в Настройках — GitHub, Экспорт и Диагностика смен только для admin
+  // Блоки в Настройках — GitHub, полное «Управление системой» и Диагностика смен только для admin.
+  // Бухгалтеру показываем urезанный блок с экспортом только финансовых данных.
   var ghBlock = document.getElementById('ghAdminUploadBlock');
   var sysBlock = document.getElementById('adminSystemBlock');
+  var accSysBlock = document.getElementById('accountantSystemBlock');
   var diagBlock = document.getElementById('diagShiftsBlock');
   if(ghBlock) ghBlock.style.display = role === 'admin' ? '' : 'none';
   if(sysBlock) sysBlock.style.display = role === 'admin' ? '' : 'none';
+  if(accSysBlock) accSysBlock.style.display = role === 'accountant' ? '' : 'none';
   if(diagBlock) diagBlock.style.display = role === 'admin' ? '' : 'none';
 
   // Справочники — фильтруем по роли
