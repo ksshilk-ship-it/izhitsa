@@ -2408,9 +2408,18 @@ function migrateLegacyManualInvoices(){
     var iid = String(inv._id!=null?inv._id:inv.id);
     if(!existingIds[iid]){
       manualList.unshift(inv);
-      try{ db.collection('iz_manual_invoices').doc(iid).set(inv); }catch(e){}
+      try{
+        db.collection('iz_manual_invoices').doc(iid).set(inv).then(function(){
+          // Удаляем старую копию только после подтверждённого успешного переноса
+          try{ db.collection('iz_invoices').doc(iid).delete(); }catch(e){}
+        }).catch(function(err){
+          console.log('[migrateLegacyManualInvoices] перенос не удался, старую копию не трогаем:', iid, err);
+        });
+      }catch(e){}
+    } else {
+      // Уже перенесена ранее — можно спокойно убрать дубликат из старой коллекции
+      try{ db.collection('iz_invoices').doc(iid).delete(); }catch(e){}
     }
-    try{ db.collection('iz_invoices').doc(iid).delete(); }catch(e){}
   });
   localStorage.setItem('iz_manual_invoices', JSON.stringify(manualList));
   var remaining = all.filter(function(i){ return !i.manual; });
