@@ -8235,7 +8235,14 @@ function svPersist(skipGoodsRecalc){
   var idx=shifts.findIndex(function(s){return (s.id||s._id)===_currentShiftView.id;}); if(idx<0) return;
   shifts[idx]=_currentShiftView;
   localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
-  try{db.collection('iz_shifts').doc(_currentShiftView.id).set(_currentShiftView);}catch(e){}
+  try{
+    db.collection('iz_shifts').doc(_currentShiftView.id).set(_currentShiftView).catch(function(err){
+      showToast('⚠️ Сохранено только локально! Ошибка облака: '+(err&&err.message||err));
+      console.log('[svPersist] ошибка сохранения в Firestore:', err);
+    });
+  }catch(e){
+    showToast('⚠️ Сохранено только локально! Ошибка: '+(e&&e.message||e));
+  }
   renderShiftHistory();
 }
 function openEditShift(id){ openShiftView(id); }
