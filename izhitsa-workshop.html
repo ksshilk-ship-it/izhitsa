@@ -3063,88 +3063,221 @@ function setShipTab(tab){
 
 // ════════ УПРАВЛЕНИЕ СПРАВОЧНИКАМИ (Администратор) ════════
 
+// Временное хранилище для редактирования справочников
+let _refEditState = {
+  shops: [],
+  names: [],
+  woods: [],
+  sizes: []
+};
+
 function showShopsReference(){
   const panel = document.getElementById('adminReferencesPanel');
-  const shops = JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
+  _refEditState.shops = JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
   
   panel.innerHTML = `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <div class="ctitle" style="margin:0">🏪 Магазины</div>
-        <button onclick="addShopUI()" style="background:var(--a2);border:none;border-radius:8px;padding:6px 12px;color:#000;font-size:12px;font-weight:700;cursor:pointer">＋ Добавить</button>
       </div>
-      <div id="shopsListRef">${shops.length ? shops.map((shop, idx) => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:8px">
-          <div style="font-size:13px;font-weight:600">🏪 ${shop}</div>
-          <button onclick="deleteShop(${idx})" style="background:var(--exp);border:none;border-radius:6px;padding:4px 8px;color:#fff;cursor:pointer;font-size:12px">🗑 Удалить</button>
-        </div>
-      `).join('') : '<div style="color:var(--t2);font-size:12px;padding:10px">Магазинов нет</div>'}</div>
+      
+      <div style="margin-bottom:12px">
+        <input type="text" id="shopNewInput" placeholder="Название магазина..." class="fi" style="margin-bottom:8px;width:100%">
+        <button onclick="addShopToEdit()" class="btn" style="width:100%;background:var(--a2);color:#000;font-weight:700">+ Добавить магазин</button>
+      </div>
+      
+      <div id="shopsEditList" style="max-height:300px;overflow-y:auto;margin-bottom:12px">
+        ${_refEditState.shops.map((shop, idx) => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:6px">
+            <div style="font-size:13px;font-weight:600">🏪 ${shop}</div>
+            <button onclick="deleteShopFromEdit(${idx})" style="background:var(--exp);border:none;border-radius:6px;padding:4px 8px;color:#fff;cursor:pointer;font-size:12px">🗑 Удалить</button>
+          </div>
+        `).join('')}
+      </div>
+      
+      <button onclick="saveReferences('shops')" style="width:100%;padding:10px;border-radius:8px;background:var(--a2);color:#000;font-weight:700;border:none;cursor:pointer">💾 Сохранить</button>
     </div>
   `;
 }
 
-function addShopUI(){
-  const shopName = prompt('Название магазина:');
-  if(!shopName) return;
-  const shops = JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
-  if(!shops.includes(shopName)){
-    shops.push(shopName);
-    localStorage.setItem('iz_admin_shops', JSON.stringify(shops));
-    showShopsReference();
-    renderShipmentPage();
-    showToast('✅ Магазин добавлен');
-  } else {
-    showToast('⚠️ Этот магазин уже существует');
-  }
+function addShopToEdit(){
+  const input = document.getElementById('shopNewInput');
+  const name = input?.value?.trim();
+  if(!name){ showToast('⚠️ Введи название магазина'); return; }
+  if(_refEditState.shops.includes(name)){ showToast('⚠️ Такой магазин уже есть'); return; }
+  _refEditState.shops.push(name);
+  input.value = '';
+  showShopsReference();
 }
 
-function deleteShop(idx){
-  if(!confirm('Удалить магазин?')) return;
-  const shops = JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
-  shops.splice(idx, 1);
-  localStorage.setItem('iz_admin_shops', JSON.stringify(shops));
+function deleteShopFromEdit(idx){
+  _refEditState.shops.splice(idx, 1);
   showShopsReference();
-  renderShipmentPage();
-  showToast('✅ Магазин удалён');
 }
 
 function showItemNamesReference(){
   const panel = document.getElementById('adminReferencesPanel');
-  const names = Object.values(items).map(i => i.name||i.itemName||'').filter(Boolean).filter((v,i,a) => a.indexOf(v) === i).sort();
+  const names = Object.values(items)
+    .map(i => i.name||i.itemName||'')
+    .filter(Boolean)
+    .filter((v,i,a) => a.indexOf(v) === i)
+    .sort();
+  
+  _refEditState.names = [...names];
+  
   panel.innerHTML = `
     <div class="card">
-      <div class="ctitle">📋 Наименования товаров (${names.length})</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        ${names.map(name => `<div style="padding:8px;background:var(--s2);border-radius:6px;font-size:12px">${name}</div>`).join('')}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="ctitle" style="margin:0">📋 Наименования товаров</div>
       </div>
+      
+      <div style="margin-bottom:12px">
+        <input type="text" id="nameNewInput" placeholder="Новое наименование..." class="fi" style="margin-bottom:8px;width:100%">
+        <button onclick="addNameToEdit()" class="btn" style="width:100%;background:var(--a2);color:#000;font-weight:700">+ Добавить</button>
+      </div>
+      
+      <div id="namesEditList" style="max-height:300px;overflow-y:auto;margin-bottom:12px">
+        ${_refEditState.names.map((name, idx) => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:6px">
+            <div style="font-size:13px;font-weight:600">${name}</div>
+            <button onclick="deleteNameFromEdit(${idx})" style="background:var(--exp);border:none;border-radius:6px;padding:4px 8px;color:#fff;cursor:pointer;font-size:12px">🗑 Удалить</button>
+          </div>
+        `).join('')}
+      </div>
+      
+      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">ℹ️ Справочник формируется из существующих товаров на складе</div>
+      <button onclick="saveReferences('names')" style="width:100%;padding:10px;border-radius:8px;background:var(--a2);color:#000;font-weight:700;border:none;cursor:pointer;opacity:0.5" disabled>💾 Сохранить (доступно позже)</button>
     </div>
   `;
+}
+
+function addNameToEdit(){
+  const input = document.getElementById('nameNewInput');
+  const name = input?.value?.trim();
+  if(!name){ showToast('⚠️ Введи наименование'); return; }
+  if(_refEditState.names.includes(name)){ showToast('⚠️ Такое наименование уже есть'); return; }
+  _refEditState.names.push(name);
+  input.value = '';
+  showItemNamesReference();
+}
+
+function deleteNameFromEdit(idx){
+  _refEditState.names.splice(idx, 1);
+  showItemNamesReference();
 }
 
 function showWoodsReference(){
   const panel = document.getElementById('adminReferencesPanel');
-  const woods = Object.values(items).map(i => i.wood||'').filter(Boolean).filter((v,i,a) => a.indexOf(v) === i).sort();
+  const woods = Object.values(items)
+    .map(i => i.wood||'')
+    .filter(Boolean)
+    .filter((v,i,a) => a.indexOf(v) === i)
+    .sort();
+  
+  _refEditState.woods = [...woods];
+  
   panel.innerHTML = `
     <div class="card">
-      <div class="ctitle">🌳 Породы дерева (${woods.length})</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        ${woods.map(wood => `<div style="padding:8px;background:var(--s2);border-radius:6px;font-size:12px">${wood}</div>`).join('')}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="ctitle" style="margin:0">🌳 Породы дерева</div>
       </div>
+      
+      <div style="margin-bottom:12px">
+        <input type="text" id="woodNewInput" placeholder="Новая порода..." class="fi" style="margin-bottom:8px;width:100%">
+        <button onclick="addWoodToEdit()" class="btn" style="width:100%;background:var(--a2);color:#000;font-weight:700">+ Добавить</button>
+      </div>
+      
+      <div id="woodsEditList" style="max-height:300px;overflow-y:auto;margin-bottom:12px">
+        ${_refEditState.woods.map((wood, idx) => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:6px">
+            <div style="font-size:13px;font-weight:600">🌳 ${wood}</div>
+            <button onclick="deleteWoodFromEdit(${idx})" style="background:var(--exp);border:none;border-radius:6px;padding:4px 8px;color:#fff;cursor:pointer;font-size:12px">🗑 Удалить</button>
+          </div>
+        `).join('')}
+      </div>
+      
+      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">ℹ️ Справочник формируется из существующих товаров на складе</div>
+      <button onclick="saveReferences('woods')" style="width:100%;padding:10px;border-radius:8px;background:var(--a2);color:#000;font-weight:700;border:none;cursor:pointer;opacity:0.5" disabled>💾 Сохранить (доступно позже)</button>
     </div>
   `;
 }
 
+function addWoodToEdit(){
+  const input = document.getElementById('woodNewInput');
+  const wood = input?.value?.trim();
+  if(!wood){ showToast('⚠️ Введи название породы'); return; }
+  if(_refEditState.woods.includes(wood)){ showToast('⚠️ Такая порода уже есть'); return; }
+  _refEditState.woods.push(wood);
+  input.value = '';
+  showWoodsReference();
+}
+
+function deleteWoodFromEdit(idx){
+  _refEditState.woods.splice(idx, 1);
+  showWoodsReference();
+}
+
 function showSizesReference(){
   const panel = document.getElementById('adminReferencesPanel');
-  const sizes = Object.values(items).map(i => i.size||'').filter(Boolean).filter((v,i,a) => a.indexOf(v) === i).sort();
+  const sizes = Object.values(items)
+    .map(i => i.size||'')
+    .filter(Boolean)
+    .filter((v,i,a) => a.indexOf(v) === i)
+    .sort();
+  
+  _refEditState.sizes = [...sizes];
+  
   panel.innerHTML = `
     <div class="card">
-      <div class="ctitle">📐 Размеры (${sizes.length})</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        ${sizes.map(size => `<div style="padding:8px;background:var(--s2);border-radius:6px;font-size:12px">${size}</div>`).join('')}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="ctitle" style="margin:0">📐 Размеры</div>
       </div>
+      
+      <div style="margin-bottom:12px">
+        <input type="text" id="sizeNewInput" placeholder="Новый размер..." class="fi" style="margin-bottom:8px;width:100%">
+        <button onclick="addSizeToEdit()" class="btn" style="width:100%;background:var(--a2);color:#000;font-weight:700">+ Добавить</button>
+      </div>
+      
+      <div id="sizesEditList" style="max-height:300px;overflow-y:auto;margin-bottom:12px">
+        ${_refEditState.sizes.map((size, idx) => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:6px">
+            <div style="font-size:13px;font-weight:600">📐 ${size}</div>
+            <button onclick="deleteSizeFromEdit(${idx})" style="background:var(--exp);border:none;border-radius:6px;padding:4px 8px;color:#fff;cursor:pointer;font-size:12px">🗑 Удалить</button>
+          </div>
+        `).join('')}
+      </div>
+      
+      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">ℹ️ Справочник формируется из существующих товаров на складе</div>
+      <button onclick="saveReferences('sizes')" style="width:100%;padding:10px;border-radius:8px;background:var(--a2);color:#000;font-weight:700;border:none;cursor:pointer;opacity:0.5" disabled>💾 Сохранить (доступно позже)</button>
     </div>
   `;
+}
+
+function addSizeToEdit(){
+  const input = document.getElementById('sizeNewInput');
+  const size = input?.value?.trim();
+  if(!size){ showToast('⚠️ Введи размер'); return; }
+  if(_refEditState.sizes.includes(size)){ showToast('⚠️ Такой размер уже есть'); return; }
+  _refEditState.sizes.push(size);
+  input.value = '';
+  showSizesReference();
+}
+
+function deleteSizeFromEdit(idx){
+  _refEditState.sizes.splice(idx, 1);
+  showSizesReference();
+}
+
+function saveReferences(refType){
+  try{
+    if(refType === 'shops'){
+      localStorage.setItem('iz_admin_shops', JSON.stringify(_refEditState.shops));
+      showToast('✅ Магазины сохранены');
+      showShopsReference();
+    }
+  }catch(e){
+    showToast('❌ Ошибка: '+e.message);
+  }
 }
 
 function toggleShipPageSort(){
