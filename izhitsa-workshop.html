@@ -20,9 +20,10 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 .spinner{width:50px;height:50px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .loading-text{margin-top:20px;font-size:13px;color:var(--t2);text-align:center}
-.online-indicator{position:fixed;top:12px;right:12px;z-index:10000;padding:6px 12px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:0.5px;transition:all 0.3s}
+.online-indicator{position:fixed;bottom:calc(var(--tabh) + 12px);left:12px;z-index:100;padding:6px 12px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:0.5px;transition:all 0.3s;display:none}
 .online-indicator.online{background:#1a3a1a;color:#60f080;border:1px solid #60f080}
 .online-indicator.offline{background:#3a1a1a;color:#f08060;border:1px solid #f08060}
+.online-indicator.show{display:block}
 
 /* LOGIN */
 #loginScreen{display:flex;flex-direction:column;justify-content:center;min-height:100dvh;padding:48px 24px calc(env(safe-area-inset-bottom) + 32px);box-sizing:border-box}
@@ -209,7 +210,7 @@ function applyUpdate() {
 </div>
 
 <!-- ONLINE STATUS INDICATOR -->
-<div class="online-indicator online" id="onlineIndicator" style="position:fixed;top:12px;right:12px;z-index:10001;padding:6px 12px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:0.5px">● Онлайн</div>
+<div class="online-indicator online" id="onlineIndicator">● Онлайн</div>
 
 <!-- Update notification banner -->
 <div id="updateBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a1e2e;border-bottom:2px solid #c8f060;padding:12px 16px;text-align:center">
@@ -1332,10 +1333,10 @@ function updateOnlineStatus(){
   var indicator = document.getElementById('onlineIndicator');
   if(!indicator) return;
   if(navigator.onLine){
-    indicator.className = 'online-indicator online';
+    indicator.className = 'online-indicator online show';
     indicator.textContent = '● Онлайн';
   } else {
-    indicator.className = 'online-indicator offline';
+    indicator.className = 'online-indicator offline show';
     indicator.textContent = '● Офлайн';
   }
 }
@@ -2020,6 +2021,9 @@ function doLogout(){
 function startApp(){
   // Скрыть экран загрузки когда приложение запускается
   hideLoadingScreen();
+  
+  // Показать индикатор онлайна
+  updateOnlineStatus();
   
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
@@ -3348,6 +3352,10 @@ function renderShipPageList(){
   });
   const sorted = Object.values(groups).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
 
+  // Разделяем активные и архивные товары
+  const allItems = items.filter(i=>i.status==='received');
+  const archivedItems = allItems.filter(i=>i.isShopArchived);
+
   c.innerHTML = sorted.map(g=>{
     const selCount = g.items.filter(i=>_shipPageSelected.has(i._id)).length;
     const id = 'spg_'+g.name.replace(/[^а-яёa-z0-9]/gi,'_');
@@ -3379,7 +3387,7 @@ function renderShipPageList(){
         </div>
         <span id="${id}_arrow" style="color:var(--t2)">▼</span>
       </div>
-      <div id="${id}" style="display:${q?'block':'none'};padding:12px;border-top:1px solid var(--border)">
+      <div id="${id}" style="display:none;padding:12px;border-top:1px solid var(--border)">
         <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
           <input type="text" placeholder="🔍 Поиск в ${g.name}..." class="group-search" 
             data-group="${id}" onkeyup="filterGroupItems('${id}')"
@@ -3406,7 +3414,23 @@ function renderShipPageList(){
         </div>
       </div>
     </div>`;
-  }).join('');
+  }).join('') + (archivedItems.length ? `
+  <div style="margin-top:16px;padding:12px;background:rgba(240,160,96,0.1);border:1px solid rgba(240,160,96,0.3);border-radius:12px">
+    <div style="font-size:12px;color:var(--a4);text-transform:uppercase;font-weight:700;letter-spacing:1px;margin-bottom:10px">📦 АРХИВ (НЕ ПОД ОТГРУЗКУ)</div>
+    ${archivedItems.map(item=>{
+      const num = item.artikul||(item.itemNum&&!item.itemNum.startsWith('НАЧ-')?item.itemNum:'');
+      const groupName = (item.name||item.itemName||'—').trim();
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:6px;border-radius:8px;background:var(--s2);border:1px solid var(--border);opacity:0.7">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600">${groupName}</div>
+          <div style="font-size:11px;color:var(--t2)">${num?'№'+num+' · ':''} ${item.wood||'—'}${item.size?' · '+item.size:''}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:13px;font-weight:700;color:var(--a4)">${fmt(item.price||0)}</div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>` : '');
   updateShipPageSelected();
 }
 
