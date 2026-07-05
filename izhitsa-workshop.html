@@ -3016,28 +3016,29 @@ function renderShipmentPage(){
 }
 
 function setShipTab(tab){
-  // ЗАЩИТА: если страницы отгрузки нет в DOM, не пытаемся её перерисовывать
-  const shipmentPage = document.getElementById('pg-shipment');
-  if(!shipmentPage) return;
-  
   _shipPageTab = tab;
   const t1=document.getElementById('shipTab1'), t2=document.getElementById('shipTab2');
   const b1=document.getElementById('shipNewBlock'), b2=document.getElementById('shipArchiveBlock');
   
-  // ЗАЩИТА: если элементы не найдены, выходим
-  if(!t1 || !t2 || !b1 || !b2) return;
-  
   try{
+    // Обновлять UI элементы только если они существуют
+    if(t1 && t2 && b1 && b2){
+      if(tab==='new'){
+        t1.style.background='var(--accent)'; t1.style.color='#000'; t1.style.fontWeight='700'; t1.style.border='none';
+        t2.style.background='var(--s2)'; t2.style.color='var(--t2)'; t2.style.fontWeight='400'; t2.style.border='1px solid var(--border)';
+        b1.style.display='block'; b2.style.display='none';
+      } else {
+        t2.style.background='var(--accent)'; t2.style.color='#000'; t2.style.fontWeight='700'; t2.style.border='none';
+        t1.style.background='var(--s2)'; t1.style.color='var(--t2)'; t1.style.fontWeight='400'; t1.style.border='1px solid var(--border)';
+        b2.style.display='block'; b1.style.display='none';
+      }
+    }
+    
+    // Всегда вызывать render функции - они сами проверяют есть ли нужные элементы
     if(tab==='new'){
-      t1.style.background='var(--accent)'; t1.style.color='#000'; t1.style.fontWeight='700'; t1.style.border='none';
-      t2.style.background='var(--s2)'; t2.style.color='var(--t2)'; t2.style.fontWeight='400'; t2.style.border='1px solid var(--border)';
-      b1.style.display='block'; b2.style.display='none';
       renderShipPageList();
       renderShipmentPage();
     } else {
-      t2.style.background='var(--accent)'; t2.style.color='#000'; t2.style.fontWeight='700'; t2.style.border='none';
-      t1.style.background='var(--s2)'; t1.style.color='var(--t2)'; t1.style.fontWeight='400'; t1.style.border='1px solid var(--border)';
-      b2.style.display='block'; b1.style.display='none';
       renderShipArchive();
     }
   }catch(e){
@@ -3416,10 +3417,6 @@ async function deleteShipment(shipmentId, destName){
 
 function renderShipArchive(){
   try{
-    // ЗАЩИТА: если страницы отгрузки нет в DOM, не пытаемся её перерисовывать
-    const shipmentPage = document.getElementById('pg-shipment');
-    if(!shipmentPage) return;
-    
     const c=document.getElementById('shipArchiveList'); 
     if(!c) return;
     
@@ -3474,31 +3471,31 @@ function renderReceivingPage(){
 }
 
 function setRcvTab(tab){
-  // ЗАЩИТА: если страницы приёмки нет в DOM, не пытаемся её перерисовывать
-  const receivingPage = document.getElementById('pg-receiving');
-  if(!receivingPage) return;
-  
   _rcvTab=tab;
   const t1=document.getElementById('rcvTab1'),t2=document.getElementById('rcvTab2');
   const b1=document.getElementById('rcvAutoBlock'),b2=document.getElementById('rcvManualBlock');
   
-  // ЗАЩИТА: если элементы не найдены, выходим
-  if(!t1 || !t2 || !b1 || !b2) return;
-  
   try{
+    // Обновлять UI элементы только если они существуют
+    if(t1 && t2 && b1 && b2){
+      if(tab==='auto'){
+        t1.style.background='var(--accent)';t1.style.color='#000';t1.style.fontWeight='700';t1.style.border='none';
+        t2.style.background='var(--s2)';t2.style.color='var(--t2)';t2.style.fontWeight='400';t2.style.border='1px solid var(--border)';
+        b1.style.display='block';b2.style.display='none';
+      } else {
+        t2.style.background='var(--accent)';t2.style.color='#000';t2.style.fontWeight='700';t2.style.border='none';
+        t1.style.background='var(--s2)';t1.style.color='var(--t2)';t1.style.fontWeight='400';t1.style.border='1px solid var(--border)';
+        b2.style.display='block';b1.style.display='none';
+      }
+    }
+    
+    // Всегда вызывать render функции
     if(tab==='auto'){
-      t1.style.background='var(--accent)';t1.style.color='#000';t1.style.fontWeight='700';t1.style.border='none';
-      t2.style.background='var(--s2)';t2.style.color='var(--t2)';t2.style.fontWeight='400';t2.style.border='1px solid var(--border)';
-      b1.style.display='block';b2.style.display='none';
       renderRcvPendingList();
     } else {
-      t2.style.background='var(--accent)';t2.style.color='#000';t2.style.fontWeight='700';t2.style.border='none';
-      t1.style.background='var(--s2)';t1.style.color='var(--t2)';t1.style.fontWeight='400';t1.style.border='1px solid var(--border)';
-      b2.style.display='block';b1.style.display='none';
       // История ручных приёмок
-      const hist=document.getElementById('rcvManualHistory'); if(!hist) return;
-      // Переиспользуем существующий рендер
-      if(typeof renderManualAcceptHistory==='function') renderManualAcceptHistory('rcvManualHistory');
+      const hist=document.getElementById('rcvManualHistory');
+      if(hist && typeof renderManualAcceptHistory==='function') renderManualAcceptHistory('rcvManualHistory');
     }
   }catch(e){
     console.error('Error in setRcvTab:', e);
@@ -3531,10 +3528,6 @@ async function acceptItemFromRcv(itemId){
 }
 
 function renderWarehouse(){
-  // ЗАЩИТА: если этой страницы нет в DOM, не пытаемся её перерисовывать
-  const warehousePage = document.getElementById('pg-warehouse');
-  if(!warehousePage) return;  // Страница не видна, выходим
-  
   try{
     const realItems = items.filter(i=>!i.isArchiveDraft);
     const pending = realItems.filter(i=>i.status==='delivered');
@@ -3572,27 +3565,28 @@ let _whShipSelected = new Set();
 let _whStockTab     = 'stock';
 
 function setWhStockTab(tab){
-  // ЗАЩИТА: если страницы склада нет в DOM, не пытаемся её перерисовывать
-  const warehousePage = document.getElementById('pg-warehouse');
-  if(!warehousePage) return;
-  
   _whStockTab = tab;
   const t1=document.getElementById('whStockTab1'), t2=document.getElementById('whStockTab2');
   const b1=document.getElementById('whStockBlock'), b2=document.getElementById('whShipBlock');
   
-  // ЗАЩИТА: если элементы не найдены, выходим
-  if(!t1 || !t2 || !b1 || !b2) return;
-  
   try{
+    // Обновлять UI элементы только если они существуют
+    if(t1 && t2 && b1 && b2){
+      if(tab==='stock'){
+        t1.style.background='var(--accent)'; t1.style.color='#000'; t1.style.border='none';
+        t2.style.background='var(--s2)'; t2.style.color='var(--t2)'; t2.style.border='1px solid var(--border)';
+        b1.style.display='block'; b2.style.display='none';
+      } else {
+        t2.style.background='var(--accent)'; t2.style.color='#000'; t2.style.border='none';
+        t1.style.background='var(--s2)'; t1.style.color='var(--t2)'; t1.style.border='1px solid var(--border)';
+        b2.style.display='block'; b1.style.display='none';
+      }
+    }
+    
+    // Всегда вызывать render функции
     if(tab==='stock'){
-      t1.style.background='var(--accent)'; t1.style.color='#000'; t1.style.border='none';
-      t2.style.background='var(--s2)'; t2.style.color='var(--t2)'; t2.style.border='1px solid var(--border)';
-      b1.style.display='block'; b2.style.display='none';
       renderStockGroups();
     } else {
-      t2.style.background='var(--accent)'; t2.style.color='#000'; t2.style.border='none';
-      t1.style.background='var(--s2)'; t1.style.color='var(--t2)'; t1.style.border='1px solid var(--border)';
-      b2.style.display='block'; b1.style.display='none';
       _whShipSelected.clear();
       renderShipList();
       // Заполнить магазины
