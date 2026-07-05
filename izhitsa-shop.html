@@ -13992,6 +13992,16 @@ function stockGetByNum(shopName,num){
   var ss=stock[shopName]||{};
   return ss[String(num)]||null;
 }
+function _noArticleStockKey(name,price,species,goodsType){
+  var nm=(name||'').trim().toLowerCase().replace(/\s+/g,'_').slice(0,30);
+  if(!nm) return null;
+  var pr=Math.round(parseFloat(price)||0);
+  if(goodsType==='dr'){
+    return 'DR_'+nm+'_'+pr;
+  }
+  var sp=(species||'').trim().toLowerCase().replace(/\s+/g,'_').slice(0,20);
+  return 'WD_'+nm+'_'+pr+(sp?'_'+sp:'');
+}
 function stockUpdateQty(shopName,num,name,price,species,goodsType,size,qtyDelta,date){
   if(!shopName||!num) return;
   var stock=getStock();
@@ -14018,6 +14028,7 @@ function stockApplySale(shopName,items){
   if(!shopName) return;
   items.forEach(function(it){
     var artNum=it.article||it.num||it.artNum;
+    if(!artNum) artNum=_noArticleStockKey(it.name,it.price,it.species,it.goodsType);
     if(!artNum) return;
     stockUpdateQty(shopName,artNum,it.name,it.price,it.species,it.goodsType,it.size,-(it.qty||1),null);
   });
@@ -14025,10 +14036,11 @@ function stockApplySale(shopName,items){
 function stockApplyReceive(shopName,items,date,invGoodsType){
   if(!shopName) return;
   items.forEach(function(it){
-    var artNum=it.article||it.num||it.artNum;
-    if(!artNum) return;
     var gt=it.goodsType||(it.category==='dr'?'dr':(invGoodsType||'derevo'));
+    var artNum=it.article||it.num||it.artNum;
     var pr=it.price||it.factPrice||0;
+    if(!artNum) artNum=_noArticleStockKey(it.name,pr,it.species,gt);
+    if(!artNum) return;
     stockUpdateQty(shopName,artNum,it.name,pr,it.species,gt,it.size||'',(it.qty||1),date);
   });
 }
@@ -14046,14 +14058,12 @@ function rebuildStock(showMsg){
     var invGoodsType = inv.goodsType || (inv.category==='dr'?'dr':'derevo');
     itemsList.forEach(function(it){
       var artNum=it.article||it.num||it.artNum;
-      if(!artNum){
-        if(invGoodsType==='dr' && it.name) artNum='DR_'+(it.name||'').replace(/\s+/g,'_').slice(0,20);
-        else return;
-      }
+      var gt=it.goodsType||(it.category==='dr'?'dr':invGoodsType);
+      var pr=it.factPrice||it.price||0;
+      if(!artNum) artNum=_noArticleStockKey(it.name,pr,it.species,gt);
+      if(!artNum) return;
       var key=String(artNum);
       var qty=it.qty||1;
-      var pr=it.factPrice||it.price||0;
-      var gt=it.goodsType||(it.category==='dr'?'dr':invGoodsType);
       if(!stock[sn][key]) stock[sn][key]={num:key,name:it.name||'',price:pr,species:it.species||'',goodsType:gt,size:it.size||'',qty:0,lastReceived:''};
       stock[sn][key].qty+=qty;
       if(date>(stock[sn][key].lastReceived||'')) stock[sn][key].lastReceived=date;
@@ -14073,11 +14083,12 @@ function rebuildStock(showMsg){
     var wsInvGoodsType = inv.goodsType||(inv.category==='dr'?'dr':'derevo');
     itemsList.forEach(function(it){
       var artNum=it.article||it.num||it.artNum;
+      var gt=it.goodsType||wsInvGoodsType||'derevo';
+      var pr=it.factPrice||it.price||0;
+      if(!artNum) artNum=_noArticleStockKey(it.name,pr,it.species,gt);
       if(!artNum) return;
       var key=String(artNum);
       var qty=it.qty||1;
-      var pr=it.factPrice||it.price||0;
-      var gt=it.goodsType||wsInvGoodsType||'derevo';
       if(!stock[sn][key]) stock[sn][key]={num:key,name:it.name||'',price:pr,species:it.species||'',goodsType:gt,size:it.size||'',qty:0,lastReceived:''};
       stock[sn][key].qty+=qty;
       if(date>(stock[sn][key].lastReceived||'')) stock[sn][key].lastReceived=date;
@@ -14097,6 +14108,7 @@ function rebuildStock(showMsg){
         var saleDate=e.ts?e.ts.split('T')[0]:(sh.date||sh.closedAt?sh.closedAt.split('T')[0]:'');
         (e.items||[]).forEach(function(it){
           var artNum=it.article||it.num||it.artNum||it.art;
+          if(!artNum) artNum=_noArticleStockKey(it.name,it.price,it.species,it.goodsType);
           if(!artNum) return;
           var key=String(artNum);
           if(!stock[sn][key]) return;
@@ -14113,6 +14125,9 @@ function rebuildStock(showMsg){
         if(e.invId && countedInvIds[String(e.invId)]) return;
         var rcvArt = e.article||(e.items&&e.items[0]&&(e.items[0].article||e.items[0].num));
         var rcvGt = e.goodsType||'derevo';
+        if(!rcvArt && e.items && e.items[0]){
+          rcvArt = _noArticleStockKey(e.items[0].name||e.name, e.items[0].price||e.amount, e.items[0].species, rcvGt);
+        }
         if(rcvArt){
           var key=String(rcvArt);
           if(!stock[sn][key]) stock[sn][key]={num:key,name:e.name||'',price:e.amount||0,species:'',goodsType:rcvGt,size:'',qty:0,lastReceived:''};
@@ -14129,11 +14144,11 @@ function rebuildStock(showMsg){
             var liDate = linkedInv.acceptedAt?linkedInv.acceptedAt.split('T')[0]:(linkedInv.date||'');
             (linkedInv.items||[]).forEach(function(it){
               var an=it.article||it.num||it.artNum;
-              if(!an && it.name) an='DR_'+(it.name||'').replace(/\s+/g,'_').slice(0,20);
-              if(!an) return;
-              var k=String(an);
               var pr=it.factPrice||it.price||0;
               var gt=it.goodsType||liGt;
+              if(!an) an=_noArticleStockKey(it.name,pr,it.species,gt);
+              if(!an) return;
+              var k=String(an);
               if(!stock[sn][k]) stock[sn][k]={num:k,name:it.name||'',price:pr,species:it.species||'',goodsType:gt,size:'',qty:0,lastReceived:''};
               stock[sn][k].qty+=(it.qty||1);
               if(liDate>(stock[sn][k].lastReceived||'')) stock[sn][k].lastReceived=liDate;
@@ -14144,6 +14159,7 @@ function rebuildStock(showMsg){
       } else if(e.type==='writeoff'){
         (e.items||[]).forEach(function(it){
           var artNum=it.article||it.num||it.artNum;
+          if(!artNum) artNum=_noArticleStockKey(it.name,it.price,it.species,it.goodsType);
           if(!artNum) return;
           var key=String(artNum);
           if(!stock[sn][key]) return;
@@ -14166,15 +14182,19 @@ function rebuildStock(showMsg){
     journal.forEach(function(e){
       if(e.type==='sale'){
         (e.items||[]).forEach(function(it){
-          if(!it.num) return;
-          var key=String(it.num);
+          var artNum=it.num||it.article||it.artNum;
+          if(!artNum) artNum=_noArticleStockKey(it.name,it.price,it.species,it.goodsType);
+          if(!artNum) return;
+          var key=String(artNum);
           if(!stock[sn][key]) return;
           stock[sn][key].qty=Math.max(0,(stock[sn][key].qty||0)-(it.qty||1));
         });
       } else if(e.type==='writeoff'){
         (e.items||[]).forEach(function(it){
-          if(!it.num) return;
-          var key=String(it.num);
+          var artNum=it.num||it.article||it.artNum;
+          if(!artNum) artNum=_noArticleStockKey(it.name,it.price,it.species,it.goodsType);
+          if(!artNum) return;
+          var key=String(artNum);
           if(!stock[sn][key]) return;
           stock[sn][key].qty=Math.max(0,(stock[sn][key].qty||0)-(it.qty||1));
         });
