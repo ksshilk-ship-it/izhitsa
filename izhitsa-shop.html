@@ -63,7 +63,7 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 .sir-del{background:none;border:none;color:#8888aa;cursor:pointer;font-size:16px;padding:2px 4px;flex-shrink:0}
 .mo{display:none;pointer-events:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:200;align-items:flex-end;justify-content:center}
 .mo.open{display:flex;pointer-events:auto}
-.md{background:#1a1a22;border-radius:22px 22px 0 0;width:100%;max-width:480px;max-height:93dvh;overflow-y:auto;padding:18px;padding-bottom:calc(18px + env(safe-area-inset-bottom, 0px))}
+.md{background:#1a1a22;border-radius:22px 22px 0 0;width:100%;max-width:480px;max-height:93dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:18px;padding-bottom:calc(18px + env(safe-area-inset-bottom, 0px))}
 .mh{width:34px;height:4px;background:#2e2e3e;border-radius:2px;margin:0 auto 14px}
 .mt{font-family:'Unbounded',sans-serif;font-size:16px;font-weight:700;margin-bottom:14px}
 .sep{height:1px;background:#2e2e3e;margin:12px 0}
@@ -1550,7 +1550,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 <div class="mo" id="invMo">
   <div class="md"><div class="mh"></div><div class="mt" id="invMoTitle">Приёмка накладной</div>
     <div style="font-size:11px;color:#8888aa;margin-bottom:12px" id="invMoSub"></div>
-    <div id="invMoItems" style="max-height:46dvh;overflow-y:auto"></div>
+    <div id="invMoItems" style="max-height:46dvh;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
     <div id="invMoTotal" style="display:flex;justify-content:space-between;align-items:center;background:#1e2a14;border:1px solid #c8f060;border-radius:10px;padding:10px 14px;margin:10px 0;font-weight:700">
       <span style="color:#8888aa;font-size:13px">Отмечено: <span id="invMoTotalQty">0</span> из <span id="invMoTotalQtyAll">0</span> шт.</span>
       <span id="invMoTotalAmt" style="color:#c8f060;font-size:16px">0₽</span>
@@ -1950,6 +1950,11 @@ function _initFirebase(){
       try{if(typeof startSyncListeners==='function')startSyncListeners();}catch(e){}
       try{if(typeof startStaffLiveSync==='function' && typeof _staffSyncUpdateCb==='function') startStaffLiveSync(_staffSyncUpdateCb);}catch(e){}
       try{if(typeof startStockSync==='function') startStockSync();}catch(e){}
+      try{
+        if(typeof session!=='undefined' && session && session.role!=='shopadmin' && !session.isPreview && typeof startInvoiceLiveSync==='function'){
+          startInvoiceLiveSync();
+        }
+      }catch(e){}
       try{if(typeof syncLiveShift==='function')syncLiveShift();}catch(e){}
       // Перезапускаем admin-слушатели если пользователь — администратор
       // (при первом запуске они могли запуститься на заглушке db)
@@ -2319,7 +2324,7 @@ function saveStaffShop(data) {
   localStorage.setItem('iz_staff', JSON.stringify(data));
   var obj = {staff: data, updatedAt: new Date().toISOString()};
   db.collection('iz_settings').doc('staff').set(obj, {merge:true})
-    .catch(function(e){ console.log('saveStaffShop err', e); });
+    .catch(function(e){ console.log('saveStaffShop err', e); showToast('⚠️ Сотрудник сохранён только локально! Ошибка облака: '+(e&&e.message||e)); });
   syncDerivedFromStaff(data);
 }
 function getStaffBySingleRole(role) {
@@ -2355,6 +2360,17 @@ function syncDerivedFromStaff(staff) {
     admins.unshift({id:'admin_default', name:'Администратор', role:'admin', pass:'admin123'});
   localStorage.setItem('iz_admin_users', JSON.stringify(admins));
   localStorage.setItem('iz_shop_admins', JSON.stringify(admins));
+}
+function startInvoiceLiveSync(){
+  db.collection('iz_invoices').onSnapshot(snap=>{
+    localStorage.setItem('iz_invoices',JSON.stringify(snap.docs.map(x=>({_id:x.id,...x.data()}))));
+    updateInvBadge(); renderPendingAlert();
+    migrateLegacyManualInvoices();
+  },()=>{});
+  db.collection('iz_manual_invoices').onSnapshot(snap=>{
+    localStorage.setItem('iz_manual_invoices',JSON.stringify(snap.docs.map(x=>({_id:x.id,...x.data()}))));
+    if(document.getElementById('rcvArchiveDates')) renderReceiveArchive();
+  },()=>{});
 }
 function startStaffLiveSync(onUpdate) {
   if(typeof db === 'undefined') return;
@@ -2513,6 +2529,17 @@ function fmt(n){ return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+'₽'
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function gv(id){ return (document.getElementById(id)||{}).value||''; }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
+function _fsWrite(promise){
+  try{
+    if(promise && typeof promise.catch==='function'){
+      promise.catch(function(err){
+        console.log('[Firestore] ошибка сохранения:', err);
+        showToast('⚠️ Не сохранилось в облако: '+(err&&err.message||err));
+      });
+    }
+  }catch(e){}
+  return promise;
+}
 function openMo(id){
   var el = document.getElementById(id);
   if(!el) return;
@@ -3149,6 +3176,21 @@ function renderLoginSellers(){
     ?sellers.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')
     :'<option value="">— нет продавцов —</option>';
 }
+function refreshRecentClosedShiftsFromCloud(shopName){
+  try{
+    db.collection('iz_shifts').where('shopName','==',shopName).where('status','==','closed')
+      .orderBy('openedAt','desc').limit(5).get({source:'server'}).then(function(snap){
+        if(snap.empty) return;
+        var local = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+        var byId = {}; local.forEach(function(s){ byId[String(s.id||s._id)]=s; });
+        snap.forEach(function(doc){
+          var d = doc.data(); var id = String(d.id||doc.id);
+          byId[id] = Object.assign({}, d, {id:id});
+        });
+        localStorage.setItem(KEY.shifts, JSON.stringify(Object.values(byId)));
+      }).catch(function(){});
+  }catch(e){}
+}
 function doLogin(){
   const sellerId=gv('loginSeller'), pass=gv('loginPass');
   const err=document.getElementById('loginErr');
@@ -3166,6 +3208,7 @@ function doLogin(){
   if(!seller){ err.style.display='block'; err.textContent='Продавец не найден'; return; }
   if(seller.blocked){ err.style.display='block'; err.textContent='Аккаунт заблокирован'; return; }
   if(seller.pass!==pass){ err.style.display='block'; err.textContent='Неверный пароль'; return; }
+  try{ refreshRecentClosedShiftsFromCloud(shopName); }catch(e){}
   var existing = JSON.parse(localStorage.getItem(KEY.session)||'null');
   var sameSeller = existing && (existing.sellerId===sellerId || existing.sellerName===seller.name);
   if(existing && (existing.isRestoreShift || existing.source==='psj' || existing.backfilled)){
@@ -3521,7 +3564,6 @@ function getPrevShiftByOpenOrder(shopName, beforeOpenedAt){
   var beforeDate = beforeOpenedAt ? beforeOpenedAt.split('T')[0] : '';
   var candidates = all.filter(function(s){
     if(s.isRestoreShift || s.backfilled || s.source==='psj') return false;
-    if(!s.shopName===shopName) return false;
     if(s.shopName!==shopName) return false;
     if(!s.openedAt) return false;
     var sDate = s.openedAt.split('T')[0];
@@ -3688,12 +3730,15 @@ function _reconcileReceiveEntries(archivedInvIds){
       : (inv.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
     var count = (inv.items||[]).length;
     var ts = inv.acceptedAt || inv.date || new Date().toISOString();
+    var invGt = inv.goodsType || (inv.category==='dr'?'dr':'derevo');
+    var isDr = invGt==='dr';
     journal.push({
       id:_stableReceiveId(iid), type:'receive', ts:ts, icon:'📥',
       label:'Приёмка '+(inv.num||''),
       sub:count+' изд.'+(inv.from?' · от '+inv.from:''),
       amount:total, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
-      goodsEffect:total, invId:iid
+      goodsType:invGt,
+      goodsEffect:isDr?0:total, goodsDrEffect:isDr?total:0, invId:iid
     });
   });
   journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
@@ -3816,15 +3861,7 @@ function startApp(){
   var firstTab = document.querySelector('#mainTabs .tab');
   if(firstTab) firstTab.classList.add('active');
   setTimeout(function(){ renderClose(); }, 100);
-  db.collection('iz_invoices').onSnapshot(snap=>{
-    localStorage.setItem('iz_invoices',JSON.stringify(snap.docs.map(x=>({_id:x.id,...x.data()}))));
-    updateInvBadge(); renderPendingAlert();
-    migrateLegacyManualInvoices();
-  },()=>{});
-  db.collection('iz_manual_invoices').onSnapshot(snap=>{
-    localStorage.setItem('iz_manual_invoices',JSON.stringify(snap.docs.map(x=>({_id:x.id,...x.data()}))));
-    if(document.getElementById('rcvArchiveDates')) renderReceiveArchive();
-  },()=>{});
+  startInvoiceLiveSync();
   document.getElementById('rcvDate').value=new Date().toISOString().split('T')[0];
   if(!session.isPreview) startLiveShiftListener();
   renderAll();
@@ -3901,7 +3938,7 @@ function buildSellerTabs(){
   t.innerHTML=`
     <button class="tab active" onclick="showPg('home',this);renderStatusBar()"><div class="ti">🏠</div><span>Главная</span></button>
     <button class="tab" onclick="showPg('journal',this)"><div class="ti">📋</div><span>Журнал</span></button>
-    <button class="tab" onclick="showPg('invoices',this);switchRcvMainTab('intake');switchInvTab('incoming');_updateManInvJsonBlock();_updateDraftBadges()"><div class="ti">📥</div><span>Приход</span><div class="tbadge" id="invBadge"></div></button>
+    <button class="tab" onclick="showPg('invoices',this);switchRcvMainTab('intake');switchInvTab('incoming');_updateManInvJsonBlock();_updateDraftBadges()"><div class="ti">📥</div><span>Приход</span><div class="tbadge" id="invBadge2"></div></button>
     <button class="tab" onclick="showPg('writeoffs',this);renderWriteoffs()"><div class="ti">🗑</div><span>Списание</span><div id="tabBadgeWo" class="tbadge" style="display:none">●</div></button>
     <button class="tab" onclick="showPg('staff-tab',this);renderStaff()"><div class="ti">🛒</div><span>Покупки</span></button>
     <button class="tab" onclick="showPg('close',this);renderClose()"><div class="ti">🔐</div><span>Закрыть</span></button>
@@ -4996,14 +5033,6 @@ function siAddToGoods(inputId){
     showToast('Уже есть в базе товаров');
   }
 }
-function siAddToSpecies(inputId){
-  var el=document.getElementById(inputId); var val=(el&&el.value||'').trim();
-  if(!val){ showToast('Введите породу'); return; }
-  var before = getSpecies().length;
-  saveSpecies(val);
-  if(getSpecies().length>before) showToast('✅ Добавлено в породы дерева: '+val);
-  else showToast('Уже есть в породах дерева');
-}
 var _siNoArticleMode = false;
 function openManualNoArticle(){
   var numEl=document.getElementById('siNum'); if(numEl) numEl.value='';
@@ -5764,6 +5793,7 @@ function createInvoiceFromJournal(){
 function updateInvBadge(){
   const p=getInvoices().filter(i=>i.destName===(session&&session.shopName)&&i.status==='pending');
   const b=document.getElementById('invBadge'); if(b){b.style.display=p.length?'block':'none';b.textContent=p.length;}
+  const b2=document.getElementById('invBadge2'); if(b2){b2.style.display=p.length?'block':'none';b2.textContent=p.length;}
   const tb=document.getElementById('pendingInvBadge');
   if(tb) tb.innerHTML = p.length ? ' <span style="background:#f0a060;color:#1a1206;border-radius:6px;padding:1px 6px;font-size:10px;font-weight:700">'+p.length+'</span>' : '';
 }
@@ -5993,7 +6023,10 @@ function saveShopInvoice(id){
     if(je){
       je.label = 'Приёмка '+data.num;
       je.amount = newTotal;
-      je.goodsEffect = newTotal;
+      var jeGt = data.goodsType || (data.category==='dr'?'dr':'derevo');
+      je.goodsType = jeGt;
+      je.goodsEffect = jeGt==='dr' ? 0 : newTotal;
+      je.goodsDrEffect = jeGt==='dr' ? newTotal : 0;
       saveJ();
     }
   }
@@ -6623,7 +6656,7 @@ function _closeShiftReal(){
   });
   filteredShifts.unshift(report);
   localStorage.setItem(KEY.shifts,JSON.stringify(filteredShifts));
-  try{ db.collection('iz_shifts').doc(report.id).set(report); }catch(e){}
+  try{ _fsWrite(db.collection('iz_shifts').doc(report.id).set(report)); }catch(e){ showToast('⚠️ Не сохранилось в облако: '+(e&&e.message||e)); }
   if(restoreMode){
     try{
       db.collection('iz_shifts')
@@ -6782,6 +6815,14 @@ function simpleEditForm(id, color, opts){
     '<input class="fi" id="svEdit_'+id+'_sub" value="'+(p.sub||'')+'" style="margin:0;padding:8px"></div>';
   html += '<div style="margin-bottom:6px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Сумма, ₽</div>'+
     '<input class="fi" id="svEdit_'+id+'_amt" type="text" inputmode="numeric" value="'+(p.amt||0)+'" style="margin:0;padding:8px"></div>';
+  if(opts.kind==='jrcv' || opts.kind==='jwo'){
+    var curGt = p.goodsType==='dr' ? 'dr' : 'derevo';
+    html += '<div style="margin-bottom:6px"><div style="font-size:10px;color:#8888aa;margin-bottom:3px">Категория товара</div>'+
+      '<select class="fi" id="svEdit_'+id+'_gt" style="margin:0;padding:8px">'+
+        '<option value="derevo"'+(curGt==='derevo'?' selected':'')+'>🌳 Дерево</option>'+
+        '<option value="dr"'+(curGt==='dr'?' selected':'')+'>🛍 ДР Товар</option>'+
+      '</select></div>';
+  }
   html += '<div style="font-size:10px;color:#8888aa;margin-bottom:3px">Причина правки</div>'+
     '<input class="fi" id="svEdit_'+id+'_reason" placeholder="Обязательно укажите причину..." style="margin:0;padding:8px;margin-bottom:8px">';
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'+
@@ -7526,7 +7567,7 @@ function _renderShiftView(){
     var amt = r.goodsEffect!=null ? r.goodsEffect : (r.amount||0);
     rcvBody += rcvItem(r.sub||r.label||'Приход', r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#555568', amt, '#60f090', 'svDeleteJEntry(\'receive\','+i+')', 'svToggleEdit(\'jrcv\','+i+')', invFn);
     if(_svEditTarget && _svEditTarget.kind==='jrcv' && _svEditTarget.idx===i){
-      rcvBody += simpleEditForm('jrcv'+i, '#60f090', {kind:'jrcv', idx:i, saveFn:'svSaveJEntrySimple(\'receive\','+i+')', prefill:{sub:r.sub||r.label||'', amt:amt}});
+      rcvBody += simpleEditForm('jrcv'+i, '#60f090', {kind:'jrcv', idx:i, saveFn:'svSaveJEntrySimple(\'receive\','+i+')', prefill:{sub:r.sub||r.label||'', amt:amt, goodsType:r.goodsType}});
     }
     woodRcvCount++;
   });
@@ -7546,6 +7587,9 @@ function _renderShiftView(){
     var invFn = r.invId ? 'svOpenInvoiceFromReceive(\''+r.invId+'\')' : null;
     var amt = r.goodsDrEffect!=null ? r.goodsDrEffect : (r.goodsEffect||r.amount||0);
     rcvBody += rcvItem(r.sub||r.label||'Приход ДР', r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#a060f0', amt, '#a060f0', 'svDeleteJEntry(\'receive\','+i+')', 'svToggleEdit(\'jrcv\','+i+')', invFn);
+    if(_svEditTarget && _svEditTarget.kind==='jrcv' && _svEditTarget.idx===i){
+      rcvBody += simpleEditForm('jrcv'+i, '#a060f0', {kind:'jrcv', idx:i, saveFn:'svSaveJEntrySimple(\'receive\','+i+')', prefill:{sub:r.sub||r.label||'', amt:amt, goodsType:r.goodsType}});
+    }
     drRcvCount++;
   });
   drRcv.forEach(function(r, i){
@@ -7587,7 +7631,7 @@ function _renderShiftView(){
     } else {
       woBody += woItem(w.sub||w.label||'Списание', w.reason||'', '#555568', w.amount||0, 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwo\','+i+')');
       if(_svEditTarget && _svEditTarget.kind==='jwo' && _svEditTarget.idx===i){
-        woBody += simpleEditForm('jwo'+i, '#f06060', {kind:'jwo', idx:i, saveFn:'svSaveJEntrySimple(\'writeoff\','+i+')', prefill:{sub:w.sub||w.label||'', amt:w.amount||0}});
+        woBody += simpleEditForm('jwo'+i, '#f06060', {kind:'jwo', idx:i, saveFn:'svSaveJEntrySimple(\'writeoff\','+i+')', prefill:{sub:w.sub||w.label||'', amt:w.amount||0, goodsType:w.goodsType}});
       }
     }
     woodWoCount++;
@@ -7920,15 +7964,27 @@ function svSaveJEntrySimple(type, idx){
   var jnl = _currentShiftView.journal||[];
   var ofType = jnl.filter(function(e){ return e.type===type; });
   var target = ofType[idx]; if(!target){ showToast('Запись не найдена'); return; }
-  var sub = ((document.getElementById('svEdit_'+(type==='receive'?'jrcv':'jwo')+idx+'_sub')||{}).value||'').trim();
-  var amt = parseFloat((document.getElementById('svEdit_'+(type==='receive'?'jrcv':'jwo')+idx+'_amt')||{}).value);
-  var reason = ((document.getElementById('svEdit_'+(type==='receive'?'jrcv':'jwo')+idx+'_reason')||{}).value||'').trim();
+  var elPrefix = 'svEdit_'+(type==='receive'?'jrcv':'jwo')+idx;
+  var sub = ((document.getElementById(elPrefix+'_sub')||{}).value||'').trim();
+  var amt = parseFloat((document.getElementById(elPrefix+'_amt')||{}).value);
+  var reason = ((document.getElementById(elPrefix+'_reason')||{}).value||'').trim();
+  var gtEl = document.getElementById(elPrefix+'_gt');
   if(isNaN(amt)){ showToast('Введите сумму'); return; }
   if(!reason){ showToast('Укажите причину правки'); return; }
   var before = Object.assign({}, target);
   if(sub) target.sub = sub;
   target.amount = amt;
-  target.goodsEffect = type==='receive' ? amt : -Math.abs(amt);
+  if(type==='receive'){
+    var gt = gtEl ? gtEl.value : (target.goodsType||'derevo');
+    target.goodsType = gt;
+    target.goodsEffect = gt==='dr' ? 0 : amt;
+    target.goodsDrEffect = gt==='dr' ? amt : 0;
+  } else {
+    var gtWo = gtEl ? gtEl.value : (target.goodsType||'derevo');
+    target.goodsType = gtWo;
+    target.goodsEffect = gtWo==='dr' ? 0 : -Math.abs(amt);
+    target.goodsDrEffect = gtWo==='dr' ? -Math.abs(amt) : 0;
+  }
   target.editedBy=(session&&(session.name||session.sellerName))||'admin';
   target.editedAt=new Date().toISOString();
   target.editReason=reason;
@@ -12495,7 +12551,7 @@ function saveManualInvoice() {
   var existing = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   existing.unshift(inv);
   localStorage.setItem('iz_manual_invoices', JSON.stringify(existing));
-  try { db.collection('iz_manual_invoices').doc(inv.id).set(inv); } catch(e){}
+  try { _fsWrite(db.collection('iz_manual_invoices').doc(inv.id).set(inv)); } catch(e){ showToast('⚠️ Не сохранилось в облако: '+(e&&e.message||e)); }
   var _gt4save = _manInvGoodsType || 'derevo';
   _manInvItems.forEach(function(item){
     autoSaveToItemBase(item.name, item.article, item.price, _gt4save);
