@@ -468,13 +468,13 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
   <!-- OPERATIONS -->
   <div class="page" id="pg-op">
-    <div class="stitle">➕ Операция</div>
+    <div class="stitle">⇄ Движение денег</div>
 
     <!-- Переключатель типа -->
     <div class="txtype">
-      <button class="txt-btn i" id="txb-inc" onclick="setTxType('income')">＋ Доход</button>
+      <button class="txt-btn t" id="txb-tr" onclick="setTxType('transfer')">⇄ Перевод</button>
+      <button class="txt-btn" id="txb-inc" onclick="setTxType('income')">＋ Доход</button>
       <button class="txt-btn" id="txb-exp" onclick="setTxType('expense')">− Расход</button>
-      <button class="txt-btn" id="txb-tr" onclick="setTxType('transfer')">⇄ Перевод</button>
     </div>
 
     <!-- Режим: Внести / Архив (для Доход и Расход) -->
@@ -517,6 +517,19 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
           <select class="fs" id="opCategory">
             <option value="">— выбрать статью —</option>
           </select>
+        </div>
+      </div>
+
+      <!-- Перевод: откуда → куда -->
+      <div id="opTransferFg" style="display:none">
+        <div class="fg">
+          <label class="fl">Откуда (списание)</label>
+          <select class="fs" id="opTrFrom"></select>
+        </div>
+        <div style="text-align:center;font-size:20px;color:var(--t2);margin:-4px 0 8px">⬇️</div>
+        <div class="fg">
+          <label class="fl">Куда (зачисление)</label>
+          <select class="fs" id="opTrTo"></select>
         </div>
       </div>
 
@@ -839,7 +852,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <button class="tab" data-roles="admin,owner" onclick="switchTab('alerts',this)"><div class="ti">🚨</div>Тревоги</button>
   <button class="tab" data-roles="accountant" onclick="switchTab('income',this)"><div class="ti">📈</div>Доходы</button>
   <button class="tab" data-roles="accountant" onclick="switchTab('expenses',this)"><div class="ti">📉</div>Расходы</button>
-  <button class="tab" data-roles="admin,owner" onclick="switchTab('op',this)"><div class="ti">➕</div>Операция</button>
+  <button class="tab" data-roles="admin,owner" onclick="switchTab('op',this)"><div class="ti">⇄</div>Движение денег</button>
   <button class="tab" data-roles="admin,owner,accountant" onclick="switchTab('pl',this)"><div class="ti">📊</div>P&L</button>
   <button class="tab" data-roles="admin,owner,accountant" onclick="switchTab('plan',this)"><div class="ti">📅</div>Планирование</button>
   <button class="tab" data-roles="admin,owner,accountant" onclick="switchTab('debt',this)"><div class="ti">💰</div>Долги</button>
@@ -1969,33 +1982,48 @@ var _currentOpMode = 'add'; // 'add' | 'archive'
 function setTxType(type) {
   currentTxType = type;
   document.querySelectorAll('.txtype .txt-btn').forEach(function(b){ b.classList.remove('i','e','t'); });
-  document.getElementById('txb-inc').classList.remove('i');
-  document.getElementById('txb-exp').classList.remove('e');
-  document.getElementById('txb-tr').classList.remove('t');
 
   var modeBar = document.getElementById('opModeBar');
+  var trFg = document.getElementById('opTransferFg');
 
   if(type === 'income') {
     document.getElementById('txb-inc').classList.add('i');
     document.getElementById('opSourceFg').style.display = 'block';
     document.getElementById('opCategoryFg').style.display = 'none';
+    if(trFg) trFg.style.display = 'none';
     if(modeBar) modeBar.style.display = 'flex';
   } else if(type === 'expense') {
     document.getElementById('txb-exp').classList.add('e');
     document.getElementById('opSourceFg').style.display = 'none';
     document.getElementById('opCategoryFg').style.display = 'block';
+    if(trFg) trFg.style.display = 'none';
     if(modeBar) modeBar.style.display = 'flex';
   } else {
     document.getElementById('txb-tr').classList.add('t');
     document.getElementById('opSourceFg').style.display = 'none';
     document.getElementById('opCategoryFg').style.display = 'none';
-    // Для перевода нет архива — всегда показываем форму
-    if(modeBar) modeBar.style.display = 'none';
-    setOpMode('add');
-    return;
+    if(trFg) trFg.style.display = 'block';
+    populateTransferAccounts();
+    if(modeBar) modeBar.style.display = 'flex';
   }
   populateCategorySelects();
   setOpMode(_currentOpMode);
+}
+
+// Заполняет select'ы «Откуда»/«Куда» для перевода из справочника счетов
+function populateTransferAccounts() {
+  var accs = getAccounts();
+  var fromSel = document.getElementById('opTrFrom');
+  var toSel = document.getElementById('opTrTo');
+  if(!fromSel || !toSel) return;
+  var optsHtml = accs.map(function(a){
+    var name = typeof a === 'string' ? a : (a.name || '');
+    return '<option value="'+name+'">'+name+'</option>';
+  }).join('');
+  fromSel.innerHTML = optsHtml;
+  toSel.innerHTML = optsHtml;
+  // По умолчанию выбираем разные счета, если их больше одного
+  if(accs.length > 1) toSel.selectedIndex = 1;
 }
 
 function setOpMode(mode) {
@@ -2078,7 +2106,6 @@ function renderOpArchive() {
   if(!el) return;
   try {
     var txs = getTransactions();
-    var catFilter = (document.getElementById('opArchiveCat')||{}).value || '';
     var monthFilter = (document.getElementById('opArchiveMonth')||{}).value || '';
 
     // Установим текущий месяц по умолчанию
@@ -2088,6 +2115,13 @@ function renderOpArchive() {
       var mEl = document.getElementById('opArchiveMonth');
       if(mEl && !mEl.value) mEl.value = monthFilter;
     }
+
+    if(currentTxType === 'transfer') {
+      renderTransferArchive(txs, monthFilter, el);
+      return;
+    }
+
+    var catFilter = (document.getElementById('opArchiveCat')||{}).value || '';
 
     var filtered = txs.filter(function(tx){
       if(tx.type !== currentTxType) return false;
@@ -2137,6 +2171,80 @@ function renderOpArchive() {
   }
 }
 
+// Архив переводов между счетами + расчёт текущего баланса по каждому счёту.
+// Баланс считается за всё время (не только за выбранный месяц), т.к. это
+// реальный текущий остаток денег на счету, а не показатель за период.
+function renderTransferArchive(allTxs, monthFilter, el) {
+  var transfers = allTxs.filter(function(tx){ return tx.type === 'transfer'; });
+  var filtered = transfers.filter(function(tx){
+    return !monthFilter || (tx.date||'').substring(0,7) === monthFilter;
+  }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+
+  // ── Баланс по счетам (за всё время) ──
+  var accs = getAccounts();
+  var balances = {};
+  accs.forEach(function(a){ var name = typeof a==='string'?a:(a.name||''); if(name) balances[name]=0; });
+
+  allTxs.forEach(function(tx){
+    if(tx.type === 'income' && tx.source) {
+      if(balances[tx.source] === undefined) balances[tx.source] = 0;
+      balances[tx.source] += (tx.amount||0);
+    } else if(tx.type === 'expense' && tx.account) {
+      if(balances[tx.account] === undefined) balances[tx.account] = 0;
+      balances[tx.account] -= (tx.amount||0);
+    } else if(tx.type === 'transfer') {
+      if(tx.fromAccount) { if(balances[tx.fromAccount]===undefined) balances[tx.fromAccount]=0; balances[tx.fromAccount] -= (tx.amount||0); }
+      if(tx.toAccount) { if(balances[tx.toAccount]===undefined) balances[tx.toAccount]=0; balances[tx.toAccount] += (tx.amount||0); }
+    }
+  });
+
+  function fmt(n){ return Math.round(n||0).toLocaleString('ru-RU'); }
+
+  var html = '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+    '<div class="ctitle">💳 Остатки по счетам</div>'+
+    Object.entries(balances).map(function(e){
+      var color = e[1] >= 0 ? 'var(--inc)' : 'var(--exp)';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:6px;margin-bottom:6px">'+
+        '<span style="font-size:12px">💳 '+e[0]+'</span>'+
+        '<span style="font-weight:700;font-size:13px;color:'+color+'">'+fmt(e[1])+' ₽</span>'+
+      '</div>';
+    }).join('')+
+  '</div>';
+
+  if(!filtered.length) {
+    html += '<div style="padding:16px;text-align:center;color:var(--t2);font-size:13px">Нет переводов за этот месяц</div>';
+    el.innerHTML = html;
+    return;
+  }
+
+  var totalTransferred = filtered.reduce(function(s,tx){ return s+(tx.amount||0); }, 0);
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:10px">'+
+    '<span style="font-size:12px;color:var(--t2)">Переведено за месяц</span>'+
+    '<span style="font-weight:700;font-size:15px;color:var(--a2)">'+fmt(totalTransferred)+' ₽</span>'+
+  '</div>';
+
+  html += filtered.map(function(tx){
+    var dateStr = (tx.date||'').substring(0,10);
+    return '<div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:8px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div style="flex:1">'+
+          '<div style="font-weight:600;font-size:13px;color:var(--a2)">'+fmt(tx.amount)+' ₽</div>'+
+          '<div style="font-size:12px;color:var(--t1);margin-top:2px">'+(tx.fromAccount||'—')+' → '+(tx.toAccount||'—')+'</div>'+
+          (tx.desc?'<div style="font-size:11px;color:var(--t2);margin-top:2px">'+tx.desc+'</div>':'')+
+        '</div>'+
+        '<div style="text-align:right;flex-shrink:0;margin-left:8px">'+
+          '<div style="font-size:11px;color:var(--t2)">'+dateStr+'</div>'+
+          '<div style="font-size:10px;color:var(--t3);margin-top:2px">'+(tx.createdBy||'')+'</div>'+
+          '<button onpointerdown="event.preventDefault();deleteTx(\''+tx.id+'\')" style="margin-top:4px;background:none;border:1px solid #f0606060;border-radius:5px;color:var(--exp);font-size:10px;padding:2px 6px;cursor:pointer">✕</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  el.innerHTML = html;
+}
+
+
 function deleteTx(txId) {
   if(!confirm('Удалить эту запись?')) return;
   var txs = getTransactions().filter(function(tx){ return tx.id !== txId; });
@@ -2162,6 +2270,35 @@ function saveOperation() {
   var category = currentTxType === 'expense' ? expCat : incCat;
   var desc = document.getElementById('opDesc').value || '';
   var date = document.getElementById('opDate').value || '';
+
+  if(currentTxType === 'transfer') {
+    var fromAcc = (document.getElementById('opTrFrom')||{}).value || '';
+    var toAcc = (document.getElementById('opTrTo')||{}).value || '';
+    if(!amt || amt <= 0) { showToast('❌ Введите сумму больше 0'); return; }
+    if(!date) { showToast('❌ Выберите дату'); return; }
+    if(!fromAcc || !toAcc) { showToast('❌ Выберите оба счёта'); return; }
+    if(fromAcc === toAcc) { showToast('❌ Счета «Откуда» и «Куда» не должны совпадать'); return; }
+
+    var txs2 = getTransactions();
+    txs2.push({
+      id: uid(),
+      type: 'transfer',
+      amount: amt,
+      fromAccount: fromAcc,
+      toAccount: toAcc,
+      desc: desc,
+      date: date + 'T00:00:00',
+      createdAt: now(),
+      createdBy: session ? (session.name||'') : ''
+    });
+    saveTransactions(txs2);
+    try { logAddOperation('transfer', amt, fromAcc+' → '+toAcc, ''); } catch(e){}
+    clearOperationForm();
+    renderDashboard();
+    showToast('✅ Перевод '+amt.toLocaleString('ru-RU')+' ₽: '+fromAcc+' → '+toAcc);
+    if(_currentOpMode === 'archive') renderOpArchive();
+    return;
+  }
 
   if(!amt || amt <= 0) { alert('Введите сумму больше 0'); return; }
   if(!date) { alert('Выберите дату'); return; }
