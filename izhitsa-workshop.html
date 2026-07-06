@@ -1333,17 +1333,17 @@ function updateOnlineStatus(){
   var indicator = document.getElementById('onlineIndicator');
   if(!indicator) return;
   if(navigator.onLine){
-    indicator.className = 'online-indicator online show';
+    indicator.className = 'online-indicator online';  // без show!
     indicator.textContent = '● Онлайн';
   } else {
-    indicator.className = 'online-indicator offline show';
+    indicator.className = 'online-indicator offline';  // без show!
     indicator.textContent = '● Офлайн';
   }
 }
 
 window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
-updateOnlineStatus();
+// updateOnlineStatus() - вызывать только в startApp(), не на экране входа!
 
 // Таймаут на загрузку Firebase
 setTimeout(() => {
@@ -2022,8 +2022,10 @@ function startApp(){
   // Скрыть экран загрузки когда приложение запускается
   hideLoadingScreen();
   
-  // Показать индикатор онлайна
+  // Показать индикатор онлайна (добавить класс show)
   updateOnlineStatus();
+  var indicator = document.getElementById('onlineIndicator');
+  if(indicator) indicator.classList.add('show');
   
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
