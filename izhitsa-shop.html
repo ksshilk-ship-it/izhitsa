@@ -3682,6 +3682,15 @@ function _reconcileReceiveEntries(archivedInvIds){
     var iid = String(inv._id!=null?inv._id:inv.id);
     return !archivedInvIds[iid];
   });
+  // Защита: если накладная старше 3 дней относительно открытия смены и всё ещё не "архивирована" —
+  // скорее всего, она уже была учтена ранее, но потеряла связь с той сменой. Не подмешиваем её
+  // повторно в новые смены бесконечно, чтобы старые записи не "воскресали" каждый день.
+  var shiftOpenDate = session.openedAt ? new Date(session.openedAt) : new Date();
+  manualInvoices = manualInvoices.filter(function(inv){
+    var invDate = new Date(inv.acceptedAt || inv.date || 0);
+    var daysDiff = (shiftOpenDate - invDate) / 86400000;
+    return daysDiff <= 3;
+  });
   var validInvIds = {};
   manualInvoices.forEach(function(inv){
     var iid = String(inv._id!=null?inv._id:inv.id);
