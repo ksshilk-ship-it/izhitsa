@@ -1405,70 +1405,6 @@ const TAB_CFG = {
   ownerwarehouse: {icon:'📦', label:'Склад',   page:'pg-ownerwarehouse'},
 };
 
-// ════════ SHARED REFERENCES - единая база справочников ════════
-// Глобальное хранилище справочников, синхронизируемое между модулями
-window._sharedRefs = {
-  shops: [],
-  staff: [],
-  itemNames: [],
-  woods: [],
-  sizes: []
-};
-
-// Инициализировать синхронизацию справочников из Firebase
-function initSharedReferencesSync(){
-  if(typeof db === 'undefined' || !db){
-    console.warn('[SharedRefs] Firebase не инициализирована, используем кэш');
-    loadSharedReferencesFromLocalStorage();
-    return;
-  }
-  console.log('[SharedRefs] Подписываемся на справочники из Firebase');
-  
-  // Подписываемся на документ shops
-  db.collection('iz_shared_references').doc('shops').onSnapshot(
-    snap => {
-      if(snap.exists){
-        window._sharedRefs.shops = snap.data().items || [];
-        localStorage.setItem('cache_shops', JSON.stringify(window._sharedRefs.shops));
-        console.log('[SharedRefs] Обновлено: shops');
-      }
-    },
-    err => {
-      console.error('[SharedRefs] Ошибка shops:', err.code);
-      loadSharedRefFromLocalStorage('shops');
-    }
-  );
-}
-
-function loadSharedReferencesFromLocalStorage(){
-  ['shops', 'staff', 'itemNames', 'woods', 'sizes'].forEach(type => {
-    loadSharedRefFromLocalStorage(type);
-  });
-}
-
-function loadSharedRefFromLocalStorage(refType){
-  try {
-    const cached = localStorage.getItem('cache_' + refType);
-    if(cached) window._sharedRefs[refType] = JSON.parse(cached);
-  } catch(e){ console.warn('[SharedRefs] Ошибка чтения кэша:', e.message); }
-}
-
-function saveSharedReference(refType, items){
-  window._sharedRefs[refType] = items;
-  try {
-    localStorage.setItem('cache_' + refType, JSON.stringify(items));
-  } catch(e){ console.warn('[SharedRefs] Ошибка записи кэша:', e.message); }
-  
-  if(typeof db === 'undefined' || !db) return;
-  
-  db.collection('iz_shared_references').doc(refType).set({
-    type: refType,
-    items: items,
-    updatedAt: new Date().toISOString(),
-    updatedBy: (session && session.id) || 'unknown'
-  }, {merge: true}).catch(err => console.error('[SharedRefs] Ошибка сохранения:', err));
-}
-
 // ════════ UTILS ════════
 function fmt(n){return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+'₽';}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
@@ -1476,40 +1412,6 @@ function now(){return new Date().toISOString();}
 function fmtDT(iso){if(!iso)return'';const d=new Date(iso);return d.toLocaleDateString('ru-RU',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}
 function elapsed(start,end){if(!start)return'';const ms=(end?new Date(end):new Date())-new Date(start);const h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);return h>0?h+'ч '+m+'м':m+'м';}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
-
-// ════════ МУЛЬТИРОЛЕВАЯ СИСТЕМА ════════
-// Функции для работы с несколькими ролями у одного пользователя
-function getUserRoles(){
-  if(session){
-    // Если есть roles (массив) - вернуть его
-    if(Array.isArray(session.roles)) return session.roles;
-    // Если есть role (строка) - вернуть массив с одной ролью
-    if(session.role) return [session.role];
-  }
-  return [];
-}
-
-function getCurrentRole(){
-  if(session){
-    // Если есть currentRole - вернуть её
-    if(session.currentRole) return session.currentRole;
-    // Если есть role (старая система) - вернуть её
-    if(session.role) return session.role;
-    // Если есть roles (массив) - вернуть первую
-    if(Array.isArray(session.roles) && session.roles.length > 0) return session.roles[0];
-  }
-  return null;
-}
-
-function setCurrentRole(role){
-  if(session) session.currentRole = role;
-  localStorage.setItem('session_current_role', role);
-}
-
-function hasRole(role){
-  const roles = getUserRoles();
-  return roles.includes(role);
-}
 
 // ════════ УНИВЕРСАЛЬНОЕ АВТОДОПОЛНЕНИЕ (наименования/породы/размеры) ════════
 // Рендерит инпут с выпадающим списком совпадений по подстроке, без select.
@@ -2082,9 +1984,6 @@ function doLogout(){
 }
 
 function startApp(){
-  // Инициализировать синхронизацию справочников из Firebase (НОВОЕ!)
-  try { initSharedReferencesSync(); } catch(e){ console.error('initSharedReferencesSync error:', e); }
-  
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
   document.getElementById('mainTabs').style.display='flex';
