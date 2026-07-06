@@ -1948,6 +1948,7 @@ function _initFirebase(){
         delete _syncUnsubs[k];
       });
       try{if(typeof startSyncListeners==='function')startSyncListeners();}catch(e){}
+      try{if(typeof initSharedReferencesSync==='function')initSharedReferencesSync();}catch(e){} // НОВОЕ!
       try{if(typeof startStaffLiveSync==='function' && typeof _staffSyncUpdateCb==='function') startStaffLiveSync(_staffSyncUpdateCb);}catch(e){}
       try{if(typeof startStockSync==='function') startStockSync();}catch(e){}
       try{
@@ -2094,6 +2095,87 @@ let session = null, pendingSession = null;
 let journal = [];
 var restoreMode = false;
 var restoreMeta = null;
+
+// ════════ МУЛЬТИРОЛЕВАЯ СИСТЕМА ════════
+function getUserRoles(){
+  if(session){
+    if(Array.isArray(session.roles)) return session.roles;
+    if(session.role) return [session.role];
+  }
+  return [];
+}
+
+function getCurrentRole(){
+  if(session){
+    if(session.currentRole) return session.currentRole;
+    if(session.role) return session.role;
+    if(Array.isArray(session.roles) && session.roles.length > 0) return session.roles[0];
+  }
+  return null;
+}
+
+function setCurrentRole(role){
+  if(session) session.currentRole = role;
+  localStorage.setItem('session_current_role', role);
+}
+
+function hasRole(role){
+  return getUserRoles().includes(role);
+}
+
+// ════════ SHARED REFERENCES ════════
+window._sharedRefs = {
+  shops: [],
+  staff: [],
+  itemNames: [],
+  woods: [],
+  sizes: []
+};
+
+function initSharedReferencesSync(){
+  if(typeof db === 'undefined' || !db){
+    loadSharedReferencesFromLocalStorage();
+    return;
+  }
+  db.collection('iz_shared_references').doc('shops').onSnapshot(
+    snap => {
+      if(snap.exists){
+        window._sharedRefs.shops = snap.data().items || [];
+        localStorage.setItem('cache_shops', JSON.stringify(window._sharedRefs.shops));
+      }
+    },
+    err => loadSharedRefFromLocalStorage('shops')
+  );
+}
+
+function loadSharedReferencesFromLocalStorage(){
+  ['shops', 'staff', 'itemNames', 'woods', 'sizes'].forEach(type => {
+    loadSharedRefFromLocalStorage(type);
+  });
+}
+
+function loadSharedRefFromLocalStorage(refType){
+  try {
+    const cached = localStorage.getItem('cache_' + refType);
+    if(cached) window._sharedRefs[refType] = JSON.parse(cached);
+  } catch(e){}
+}
+
+function saveSharedReference(refType, items){
+  window._sharedRefs[refType] = items;
+  try {
+    localStorage.setItem('cache_' + refType, JSON.stringify(items));
+  } catch(e){}
+  if(typeof db !== 'undefined' && db){
+    db.collection('iz_shared_references').doc(refType).set({
+      type: refType,
+      items: items,
+      updatedAt: new Date().toISOString(),
+      updatedBy: (session && session.id) || 'unknown'
+    }, {merge: true}).catch(err => console.error('[SharedRefs]:', err));
+  }
+}
+
 function _workingDateStr(){
   if(session && session.isBackfill && session.backfillDate) return session.backfillDate;
   var n=new Date();
