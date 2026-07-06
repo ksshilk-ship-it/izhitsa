@@ -2850,13 +2850,10 @@ function calcShiftZpStandalone(shopName, report){
   var totalNet = netWood+netDr;
   var totalGross = grossWood+grossDr;
   var zpFact, travelFact;
-  if(expenses.length){
-    zpFact = expenses.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
-    travelFact = expenses.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+e.amount;},0);
-  } else {
-    zpFact = (report && report.zp)||0;
-    travelFact = (report && report.travel)||0;
-  }
+  var zpEntries = expenses.filter(function(e){return e.expType==='zp';});
+  var travelEntries = expenses.filter(function(e){return e.expType==='travel';});
+  zpFact = zpEntries.length ? zpEntries.reduce(function(a,e){return a+e.amount;},0) : ((report && report.zp)||0);
+  travelFact = travelEntries.length ? travelEntries.reduce(function(a,e){return a+e.amount;},0) : 0;
   var zpSettings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
   var s = zpSettings[shopName] || null;
   var base = s ? numDef(s.base, 1500) : 1500;
