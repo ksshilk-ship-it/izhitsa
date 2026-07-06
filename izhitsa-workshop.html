@@ -3874,14 +3874,14 @@ function renderStockGroups(){
         ${sorted1.map(g=>{
           const isOpen = false;  // Свернуть по умолчанию (вместо автоматического открытия)
           return `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:8px">
-            <div onclick="toggleStockGroup('${g.name.replace(/'/g,"\\'")}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);cursor:pointer">
+            <div onclick="toggleStockGroup('${safeId}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);cursor:pointer">
               <div>
                 <div style="font-size:13px;font-weight:700">${g.name}</div>
                 <div style="font-size:10px;color:var(--t2)">${g.total} шт. · ${fmt(g.sum)}</div>
               </div>
               <span id="wsgarrow_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="font-size:16px;color:var(--t2);transition:transform .2s">${isOpen?'▲':'▼'}</span>
             </div>
-            <div id="wsg_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="display:${isOpen?'block':'none'};padding:0 12px">
+            <div id=\"wsg_${safeId}\" style=\"display:none;padding:0 12px">
               ${g.items.map(item=>{
                 const num = item.artikul || (item.itemNum && !item.itemNum.startsWith('НАЧ-') ? item.itemNum : '');
                 const isAdmin = session && (session.role==='администратор'||session.role==='управляющий');
@@ -3931,20 +3931,20 @@ function renderStockGroups(){
           <div style="font-size:14px;font-weight:700;color:var(--t2)">🗄 Архивные товары (прочие)</div>
           <div style="font-size:11px;color:var(--t2)">${totalQty2} шт. · ${fmt(totalSum2)}</div>
         </div>
-        <span id="stockCatArrow_archived" style="font-size:18px;color:var(--t2);transition:transform .2s">▲</span>
+        <span id="stockCatArrow_archived" style="font-size:18px;color:var(--t2);transition:transform .2s">▼</span>
       </div>
-      <div id="stockCat_archived" style="display:block;padding:0 12px">
+      <div id="stockCat_archived" style="display:none;padding:0 12px">
         ${sorted2.map(g=>{
           const isOpen = false;  // Свернуть по умолчанию (вместо автоматического открытия)
           return `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:8px">
-            <div onclick="toggleStockGroup('${g.name.replace(/'/g,"\\'")}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);cursor:pointer">
+            <div onclick="toggleStockGroup('${safeId}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);cursor:pointer">
               <div>
                 <div style="font-size:13px;font-weight:700">${g.name}</div>
                 <div style="font-size:10px;color:var(--t2)">${g.total} шт. · ${fmt(g.sum)}</div>
               </div>
               <span id="wsgarrow_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="font-size:16px;color:var(--t2);transition:transform .2s">${isOpen?'▲':'▼'}</span>
             </div>
-            <div id="wsg_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="display:${isOpen?'block':'none'};padding:0 12px">
+            <div id=\"wsg_${safeId}\" style=\"display:none;padding:0 12px">
               ${g.items.map(item=>{
                 const num = item.artikul || (item.itemNum && !item.itemNum.startsWith('НАЧ-') ? item.itemNum : '');
                 const isAdmin = session && (session.role==='администратор'||session.role==='управляющий');
