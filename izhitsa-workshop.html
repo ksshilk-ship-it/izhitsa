@@ -15,16 +15,6 @@
 html{background:var(--bg)}
 body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;min-height:100dvh;overscroll-behavior:none;max-width:480px;margin:0 auto;padding-top:env(safe-area-inset-top)}
 
-/* LOADING SCREEN */
-#loadingScreen{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,var(--s1) 0%,var(--bg) 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999}
-.spinner{width:50px;height:50px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.loading-text{margin-top:20px;font-size:13px;color:var(--t2);text-align:center}
-.online-indicator{position:fixed;bottom:calc(var(--tabh) + 12px);left:12px;z-index:100;padding:6px 12px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:0.5px;transition:all 0.3s;display:none}
-.online-indicator.online{background:#1a3a1a;color:#60f080;border:1px solid #60f080}
-.online-indicator.offline{background:#3a1a1a;color:#f08060;border:1px solid #f08060}
-.online-indicator.show{display:block}
-
 /* LOGIN */
 #loginScreen{display:flex;flex-direction:column;justify-content:center;min-height:100dvh;padding:48px 24px calc(env(safe-area-inset-bottom) + 32px);box-sizing:border-box}
 .app-logo{font-family:'Unbounded',sans-serif;font-size:24px;font-weight:700;color:var(--a5);margin-bottom:4px}
@@ -65,16 +55,11 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 .exit-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--t2);cursor:pointer;font-size:11px;padding:5px 9px;font-family:'Golos Text',sans-serif}
 
 /* TABS */
-.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:calc(var(--tabh) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--s1);border-top:1px solid var(--border);display:none;z-index:100;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin;white-space:nowrap;flex-wrap:nowrap}
-.tabs::-webkit-scrollbar{height:3px}
-.tabs::-webkit-scrollbar-track{background:transparent}
-.tabs::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-.tab{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;color:var(--t2);font-size:9px;font-family:'Golos Text',sans-serif;font-weight:500;border:none;background:none;position:relative;padding:8px 12px;min-width:60px;transition:color 0.2s}
+.tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:calc(var(--tabh) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--s1);border-top:1px solid var(--border);display:none;z-index:100}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--t2);font-size:9px;font-family:'Golos Text',sans-serif;font-weight:500;border:none;background:none;position:relative}
 .tab.active{color:var(--a5)}
-.ti{font-size:28px;line-height:1}
+.ti{font-size:18px;line-height:1}
 .tbadge{position:absolute;top:5px;right:calc(50% - 16px);background:var(--exp);color:#fff;font-size:9px;font-weight:700;border-radius:8px;padding:1px 5px;min-width:16px;text-align:center;display:none}
-.tab-divider{width:1px;height:40px;background:var(--border);opacity:.5}
-.tab.back-btn{color:var(--a6);background:rgba(96,240,200,.1);border-radius:8px;margin:4px 6px;padding:4px 8px}
 
 /* PAGES */
 .page{display:none;padding:12px 16px;padding-bottom:calc(var(--tabh) + env(safe-area-inset-bottom) + 40px)}
@@ -200,18 +185,6 @@ function applyUpdate() {
 
 </head>
 <body>
-<!-- LOADING SCREEN -->
-<div id="loadingScreen" style="position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,var(--s1) 0%,var(--bg) 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999">
-  <div class="spinner"></div>
-  <div class="loading-text">
-    <div style="margin-bottom:8px">Загружаю приложение...</div>
-    <div id="loadingStatus" style="font-size:11px;color:#666">Инициализация</div>
-  </div>
-</div>
-
-<!-- ONLINE STATUS INDICATOR -->
-<div class="online-indicator online" id="onlineIndicator">● Онлайн</div>
-
 <!-- Update notification banner -->
 <div id="updateBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a1e2e;border-bottom:2px solid #c8f060;padding:12px 16px;text-align:center">
   <div style="font-size:13px;color:#f0f0f8;margin-bottom:8px">🔄 Доступно обновление приложения</div>
@@ -403,9 +376,9 @@ function applyUpdate() {
         <button onclick="toggleStockSort()" id="whSortBtn" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:12px;white-space:nowrap">↑ Цена</button>
       </div>
       <div id="whStockGroups"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
-        <button class="btn" style="background:var(--a2)" onclick="openManualStockMo()">➕ Добавить товар</button>
-        <button class="btn sec" onclick="openDuplicateScanMo()">🔍 Задвоения</button>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn" style="background:var(--a2);flex:1" onclick="openManualStockMo()">➕ Добавить товар</button>
+        <button class="btn sec" style="flex:0 0 auto" onclick="openDuplicateScanMo()">🔍 Задвоения</button>
       </div>
     </div>
 
@@ -525,7 +498,7 @@ function applyUpdate() {
       </div>
       <div style="display:flex;gap:8px;margin-bottom:8px">
         <input class="fi" id="shipPageSearch" placeholder="🔍 По артикулу / наименованию..." style="flex:1" oninput="renderShipPageList()">
-        <button onclick="toggleShipPageSort()" id="shipPageSortBtn" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:12px;white-space:nowrap">↕ Сортировка: 📊 Цена</button>
+        <button onclick="toggleShipPageSort()" id="shipPageSortBtn" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:12px;white-space:nowrap">↑ Цена</button>
       </div>
       <div id="shipPageSelected" style="display:none;background:var(--s2);border-radius:10px;padding:10px;margin-bottom:8px;font-size:12px;color:var(--text)"></div>
       <div id="shipPageGroups"></div>
@@ -668,64 +641,69 @@ function applyUpdate() {
     </div>
   </div>
 
-  <!-- КОРЗИНА - для всех удалённых данных -->
-  <div class="page" id="pg-trash">
-    <div class="stitle">🗑 Корзина</div>
-    <div style="font-size:12px;color:var(--t2);margin-bottom:12px">
-      Здесь находятся удалённые элементы. Вы можете восстановить их или окончательно удалить.
-    </div>
-    
-    <!-- Фильтры по типу удалённых элементов -->
-    <div style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:8px">
-      <button onclick="showTrashType('all')" id="trashFilterAll" class="btn" style="background:var(--accent);color:#000;font-size:11px;padding:6px 12px;white-space:nowrap">Все</button>
-      <button onclick="showTrashType('fi')" id="trashFilterFi" class="btn" style="background:var(--s1);font-size:11px;padding:6px 12px;white-space:nowrap">🆕 Инвентаризация</button>
-      <button onclick="showTrashType('ma')" id="trashFilterMa" class="btn" style="background:var(--s1);font-size:11px;padding:6px 12px;white-space:nowrap">📥 Приёмка</button>
-      <button onclick="showTrashType('other')" id="trashFilterOther" class="btn" style="background:var(--s1);font-size:11px;padding:6px 12px;white-space:nowrap">Другое</button>
-    </div>
-
-    <!-- Список удалённых элементов -->
-    <div id="trashList" style="max-height:calc(100vh - 300px);overflow-y:auto">
-      <div style="font-size:13px;color:var(--t2);text-align:center;padding:20px 0">Загрузка...</div>
-    </div>
-  </div>
-
   <!-- ADMIN (управляющий) -->
   <div class="page" id="pg-admin">
-    <div class="stitle">⚙️ Администратор</div>
+    <div class="stitle">Управление</div>
 
-    <!-- СПРАВОЧНИКИ -->
-    <div class="card">
-      <div class="ctitle">📚 Справочники</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-        <button onclick="showShopsReference()" class="btn" style="background:var(--a2);color:#000;font-size:12px;padding:10px;font-weight:700">🏪 Магазины</button>
-        <button onclick="showItemNamesReference()" class="btn sec" style="font-size:12px;padding:10px">📋 Наименования</button>
-        <button onclick="showWoodsReference()" class="btn sec" style="font-size:12px;padding:10px">🌳 Породы дерева</button>
-        <button onclick="showSizesReference()" class="btn sec" style="font-size:12px;padding:10px">📐 Размеры</button>
+    <!-- КАТАЛОГ ТОВАРОВ — только администратор -->
+    <div id="adminCatalogSection" style="display:none">
+      <div class="card" style="border-color:var(--a2)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div class="ctitle" style="margin:0">📋 Каталог товаров</div>
+          <button onclick="openAddProductMo()" style="background:var(--a2);border:none;border-radius:8px;padding:6px 12px;color:#000;font-size:12px;font-weight:700;cursor:pointer">＋ Добавить</button>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto">
+          <div class="fchip active" id="catAll" onclick="setCatFilter('all',this)">Все</div>
+          <div class="fchip" id="catActive" onclick="setCatFilter('active',this)">Активные</div>
+          <div class="fchip" id="catArchive" onclick="setCatFilter('archive',this)">Архив</div>
+        </div>
+        <div id="productCatalogList"></div>
+      </div>
+
+      <!-- Справочники -->
+      <div class="card">
+        <div class="ctitle">📚 Справочники</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button onclick="openAddItemNameMo()" class="btn sec" style="font-size:11px;padding:8px">📋 Наимен.</button>
+          <button onclick="openAddWoodMo()" class="btn sec" style="font-size:11px;padding:8px">🌳 Породы</button>
+          <button onclick="openAddSizeMo()" class="btn sec" style="font-size:11px;padding:8px">📐 Размеры</button>
+          <button onclick="openOtCategoriesMo()" class="btn sec" style="font-size:11px;padding:8px">🛠 Виды работ</button>
+        </div>
+      </div>
+
+      <!-- Служебные операции (только администратор) -->
+      <div class="card" id="adminServiceOps" style="border-color:var(--a4)">
+        <div class="ctitle">🔧 Служебные операции</div>
+        <button class="btn" style="background:var(--a4);color:#000;margin-bottom:8px" onclick="fixNachArtikuls()">
+          🔢 Исправить артикулы «НАЧ-...» на нормальные
+        </button>
+        <div style="font-size:11px;color:var(--t2)">Находит все товары на складе с автоматически сгенерированными длинными артикулами и заменяет их на порядковые числа</div>
+      </div>
+
+      <!-- GitHub Upload -->
+      <div class="card" style="margin-bottom:8px;background:#1a2e1e;border:1px solid #2e4e2e">
+        <div style="font-size:11px;font-weight:700;color:#c8f060;margin-bottom:8px">🚀 ОБНОВИТЬ ПРИЛОЖЕНИЕ НА GITHUB</div>
+        <div style="font-size:11px;color:#8888aa;margin-bottom:8px">Загружает актуальный файл напрямую через API. Токен сохраняется локально на устройстве.</div>
+        <input class="fi" id="wsGhTokenInput" type="password" placeholder="GitHub токен (ghp_...)" autocomplete="off" style="margin-bottom:8px;font-family:monospace;font-size:12px" onfocus="if(!this.value){var t=localStorage.getItem('iz_gh_token');if(t)this.value=t;}">
+        <div style="font-size:10px;color:#8888aa;margin-bottom:4px">Выберите новый файл от Клода:</div>
+        <div onclick="document.getElementById('wsGhFileInput').click()" style="border:2px dashed #c8f060;border-radius:10px;padding:12px;text-align:center;cursor:pointer;margin-bottom:8px">
+          <div style="font-size:20px;margin-bottom:3px">📄</div>
+          <div style="font-size:12px;font-weight:700;color:#c8f060" id="wsGhFileName">Выбрать файл izhitsa-workshop.html</div>
+          <input type="file" id="wsGhFileInput" accept=".html" style="display:none" onchange="document.getElementById('wsGhFileName').textContent=this.files[0]?this.files[0].name:'Выбрать файл'">
+        </div>
+        <button type="button" onpointerdown="event.preventDefault();wsUploadToGitHub()" style="width:100%;padding:10px;border-radius:10px;border:none;background:#c8f060;color:#0f0f13;font-size:13px;font-weight:700;cursor:pointer">⬆️ Загрузить на GitHub Pages</button>
+        <div id="wsGhUploadStatus" style="margin-top:8px;font-size:11px;color:#8888aa"></div>
       </div>
     </div>
 
-    <!-- СПРАВОЧНИКИ СОДЕРЖИМОЕ -->
-    <div id="adminReferencesPanel"></div>
-
-    <!-- ЗП ПО МАСТЕРАМ -->
+    <div id="adminExtraPanel"></div>
     <div class="card">
-      <div class="ctitle">💰 ЗП по мастерам (месяц)</div>
+      <div class="ctitle">Все изделия</div>
+      <div id="adminAllItems"></div>
+    </div>
+    <div class="card">
+      <div class="ctitle">ЗП по мастерам (месяц)</div>
       <div id="adminZP"></div>
-    </div>
-
-    <!-- GitHub Upload -->
-    <div class="card" style="margin-bottom:8px;background:#1a2e1e;border:1px solid #2e4e2e">
-      <div style="font-size:13px;font-weight:700;color:#c8f060;margin-bottom:8px">🚀 ОБНОВИТЬ ПРИЛОЖЕНИЕ НА GITHUB</div>
-      <div style="font-size:12px;color:#8888aa;margin-bottom:8px">Загружает актуальный файл напрямую через API. Токен сохраняется локально на устройстве.</div>
-      <input class="fi" id="wsGhTokenInput" type="password" placeholder="GitHub токен (ghp_...)" autocomplete="off" style="margin-bottom:8px;font-family:monospace;font-size:12px" onfocus="if(!this.value){var t=localStorage.getItem('iz_gh_token');if(t)this.value=t;}">
-      <div style="font-size:11px;color:#8888aa;margin-bottom:4px">Выберите новый файл от Клода:</div>
-      <div onclick="document.getElementById('wsGhFileInput').click()" style="border:2px dashed #c8f060;border-radius:10px;padding:12px;text-align:center;cursor:pointer;margin-bottom:8px">
-        <div style="font-size:20px;margin-bottom:3px">📄</div>
-        <div style="font-size:12px;font-weight:700;color:#c8f060" id="wsGhFileName">Выбрать файл izhitsa-workshop.html</div>
-        <input type="file" id="wsGhFileInput" accept=".html" style="display:none" onchange="document.getElementById('wsGhFileName').textContent=this.files[0]?this.files[0].name:'Выбрать файл'">
-      </div>
-      <button type="button" onpointerdown="event.preventDefault();wsUploadToGitHub()" style="width:100%;padding:10px;border-radius:10px;border:none;background:#c8f060;color:#0f0f13;font-size:13px;font-weight:700;cursor:pointer">⬆️ Загрузить на GitHub Pages</button>
-      <div id="wsGhUploadStatus" style="margin-top:8px;font-size:11px;color:#8888aa"></div>
     </div>
   </div>
 
@@ -1275,187 +1253,6 @@ function applyUpdate() {
 <!-- FIREBASE -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-
-<!-- ═══════════════════════════════════════════════════════════════════════════ -->
-<!-- SHARED REFERENCES LIBRARY - Единая синхронизация справочников              -->
-<!-- ═══════════════════════════════════════════════════════════════════════════ -->
-<script>
-/**
- * SHARED REFERENCES LIBRARY - Мультиролевая система
- * Единая синхронизация справочников для всех модулей Ижица
- */
-
-window._sharedRefs = {
-  shops: [],
-  staff: [],
-  itemNames: [],
-  woods: [],
-  sizes: []
-};
-
-const CACHE_PREFIX = 'cache_ref_';
-
-function initSharedReferencesSync(){
-  if(typeof _offlineNoFirebase !== 'undefined' && _offlineNoFirebase){
-    console.log('[SharedRefs] Firebase offline, loading from cache');
-    loadSharedReferencesFromLocalStorage();
-    return;
-  }
-  if(typeof db === 'undefined'){
-    console.warn('[SharedRefs] Firebase not initialized');
-    loadSharedReferencesFromLocalStorage();
-    return;
-  }
-  console.log('[SharedRefs] Subscribing to shared references');
-  ['shops', 'staff', 'itemNames', 'woods', 'sizes'].forEach(subscribeToReference);
-}
-
-function subscribeToReference(refType){
-  db.collection('iz_shared_references').doc(refType).onSnapshot(
-    snap => {
-      if(snap.exists){
-        window._sharedRefs[refType] = snap.data().items || [];
-        saveSharedRefToLocalStorage(refType, window._sharedRefs[refType]);
-        console.log('[SharedRefs] Updated:', refType);
-        if(typeof onReferencesUpdated === 'function') onReferencesUpdated(refType);
-      }
-    },
-    err => {
-      console.error('[SharedRefs] Error:', refType, err.code);
-      loadSharedRefFromLocalStorage(refType);
-    }
-  );
-}
-
-function loadSharedReferencesFromLocalStorage(){
-  ['shops', 'staff', 'itemNames', 'woods', 'sizes'].forEach(type => {
-    loadSharedRefFromLocalStorage(type);
-  });
-}
-
-function loadSharedRefFromLocalStorage(refType){
-  try {
-    const cached = localStorage.getItem(CACHE_PREFIX + refType);
-    if(cached) window._sharedRefs[refType] = JSON.parse(cached);
-  } catch(e){ console.warn('[SharedRefs] Cache read error:', e.message); }
-}
-
-function saveSharedRefToLocalStorage(refType, items){
-  try {
-    localStorage.setItem(CACHE_PREFIX + refType, JSON.stringify(items));
-  } catch(e){ console.warn('[SharedRefs] Cache write error:', e.message); }
-}
-
-function saveSharedReference(refType, items){
-  window._sharedRefs[refType] = items;
-  saveSharedRefToLocalStorage(refType, items);
-  if(typeof _offlineNoFirebase === 'undefined' || !_offlineNoFirebase){
-    if(typeof db !== 'undefined'){
-      db.collection('iz_shared_references').doc(refType).set({
-        type: refType,
-        items: items,
-        updatedAt: new Date().toISOString(),
-        updatedBy: (session && session.id) || 'unknown'
-      }, {merge: true}).catch(err => console.error('[SharedRefs] Save error:', err));
-    }
-  }
-}
-
-function getSharedReference(refType){ return window._sharedRefs[refType] || []; }
-
-// Мультиролевая система
-function getUserRoles(){ 
-  if(session && Array.isArray(session.roles)) return session.roles;
-  if(session && session.role) return [session.role];
-  return [];
-}
-
-function getCurrentRole(){
-  if(session){
-    if(session.currentRole) return session.currentRole;
-    if(session.role) return session.role;
-    if(Array.isArray(session.roles) && session.roles.length > 0) return session.roles[0];
-  }
-  return null;
-}
-
-function setCurrentRole(role){
-  if(session) session.currentRole = role;
-  localStorage.setItem('session_current_role', role);
-}
-
-function hasRole(role){
-  return getUserRoles().includes(role);
-}
-
-function showRoleSwitcher(){
-  const roles = getUserRoles();
-  if(roles.length <= 1) return;
-  
-  const currentRole = getCurrentRole();
-  const switcher = document.createElement('div');
-  switcher.id = 'roleSwitcher';
-  switcher.style.cssText = `
-    position: fixed;
-    top: 50px;
-    right: 10px;
-    background: var(--s2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px;
-    z-index: 9999;
-    display: flex;
-    gap: 4px;
-    flex-direction: column;
-  `;
-  
-  const roleEmojis = {
-    'администратор': '⚙️',
-    'продавец': '🏪',
-    'кладовщик': '📦',
-    'мастер': '🔨',
-    'управляющий': '👑',
-    'заготовщик': '🪚'
-  };
-  
-  switcher.innerHTML = `
-    <div style="font-size: 9px; color: var(--t2); padding: 0 4px">Роль:</div>
-    ${roles.map(role => `
-      <button onclick="switchToRole('${role}')" style="
-        padding: 6px 10px;
-        border-radius: 6px;
-        border: 1px solid ${currentRole === role ? 'var(--accent)' : 'var(--border)'};
-        background: ${currentRole === role ? 'var(--accent)' : 'var(--s1)'};
-        color: ${currentRole === role ? '#000' : 'var(--t1)'};
-        cursor: pointer;
-        font-size: 12px;
-        font-weight: 700;
-        white-space: nowrap;
-      ">
-        ${roleEmojis[role] || '●'} ${role}
-      </button>
-    `).join('')}
-  `;
-  
-  const existing = document.getElementById('roleSwitcher');
-  if(existing) existing.remove();
-  document.body.appendChild(switcher);
-}
-
-function switchToRole(newRole){
-  setCurrentRole(newRole);
-  // Перезагрузить приложение с новой ролью
-  location.reload();
-}
-
-window.onReferencesUpdated = function(refType){
-  // Переопределить в каждом модуле
-};
-
-console.log('[SharedRefs] Library loaded');
-</script>
-<!-- ═══════════════════════════════════════════════════════════════════════════ -->
-
 <script>
 var db;
 var _offlineNoFirebase = (typeof firebase === 'undefined');
@@ -1494,47 +1291,6 @@ if(_offlineNoFirebase){
   db = firebase.firestore();
   db.enablePersistence({synchronizeTabs:true}).catch(e=>console.log('Persist:',e.code));
 }
-
-// Скрыть экран загрузки когда Firebase готов
-function hideLoadingScreen(){
-  setTimeout(() => {
-    var loading = document.getElementById('loadingScreen');
-    if(loading){
-      loading.style.opacity = '0';
-      loading.style.transition = 'opacity 0.3s ease';
-      setTimeout(() => {
-        loading.style.display = 'none';
-      }, 300);
-    }
-  }, 100);
-}
-
-// Обновлять статус онлайна
-function updateOnlineStatus(){
-  var indicator = document.getElementById('onlineIndicator');
-  if(!indicator) return;
-  if(navigator.onLine){
-    indicator.className = 'online-indicator online';  // без show!
-    indicator.textContent = '● Онлайн';
-  } else {
-    indicator.className = 'online-indicator offline';  // без show!
-    indicator.textContent = '● Офлайн';
-  }
-}
-
-window.addEventListener('online', updateOnlineStatus);
-window.addEventListener('offline', updateOnlineStatus);
-// updateOnlineStatus() - вызывать только в startApp(), не на экране входа!
-
-// Таймаут на загрузку Firebase
-setTimeout(() => {
-  if(!_offlineNoFirebase && typeof firebase === 'undefined'){
-    _offlineNoFirebase = true;
-    console.log('[App] Firebase не загрузился за 3 сек, переходим на offline');
-  }
-  hideLoadingScreen();
-}, 3000);
-
 
 // ════ WORKSHOP SYNC LAYER ════
 var _wsSyncUnsubs = {};
@@ -1588,6 +1344,13 @@ function startWsSyncListeners() {
 
 
 
+window.addEventListener('online', ()=>{
+  setSync('online');
+  if(typeof _offlineNoFirebase!=='undefined' && _offlineNoFirebase){
+    setTimeout(function(){ window.location.reload(); }, 800);
+  }
+});
+window.addEventListener('offline', ()=>setSync('offline'));
 function setSync(s){
   const dot=document.getElementById('sdot'),txt=document.getElementById('stxt');
   if(!dot||!txt)return;
@@ -1609,18 +1372,12 @@ let currentBlankId = null;
 let currentItemId = null;
 let extraWorkCats = JSON.parse(localStorage.getItem('ws_extra_cats')||'["Шлифовка","Покраска","Пропитка","Сборка","Доставка","Прочее"]');
 
-// Функция для логирования аудита (пока заглушка)
-const audit = (action, details) => {
-  console.log('[AUDIT]', action, details);
-  // TODO: отправлять в Firebase если нужно
-};
-
 const ROLES = {
-  заготовщик:    {tabs:['blanks','extrawork'], label:'🪚 Заготовщик'},
-  мастер:        {tabs:['masterblanks','mywork','othertasks','delivery','zp'], label:'🔨 Мастер'},
-  кладовщик:     {tabs:['warehouse','shipment','receiving','inventory','otmanual','trash','import'], label:'📦 Кладовщик'},
-  управляющий:   {tabs:['warehouse','zp','zpay','stats','inventory','admin'], label:'👑 Управляющий'},
-  администратор: {tabs:['warehouse','shipment','receiving','zp','zpay','stats','inventory','trash','admin'], label:'🛡 Администратор'},
+  заготовщик:    {tabs:['dash','blanks','extrawork'], label:'🪚 Заготовщик'},
+  мастер:        {tabs:['dash','masterblanks','mywork','othertasks','delivery','zp'], label:'🔨 Мастер'},
+  кладовщик:     {tabs:['warehouse','shipment','receiving','inventory','otmanual'], label:'📦 Кладовщик'},
+  управляющий:   {tabs:['dash','warehouse','zp','zpay','stats','inventory','admin'], label:'👑 Управляющий'},
+  администратор: {tabs:['dash','warehouse','zp','zpay','stats','inventory','admin','import'], label:'🛡 Администратор'},
   владелец:      {tabs:['owner','ownerstaff','ownerwarehouse','stats'], label:'💼 Владелец'},
 };
 
@@ -1637,7 +1394,6 @@ const TAB_CFG = {
   shipment:  {icon:'🚚', label:'Отгрузка', page:'pg-shipment'},
   receiving: {icon:'📥', label:'Приёмка',  page:'pg-receiving'},
   inventory: {icon:'🔍', label:'Инвент.',  page:'pg-inventory'},
-  trash:     {icon:'🗑', label:'Корзина',  page:'pg-trash'},
   catalog:   {icon:'📋', label:'Каталог', page:'pg-catalog'},
   zp:        {icon:'💰', label:'ЗП', page:'pg-zp'},
   zpay:      {icon:'💳', label:'Выплаты', page:'pg-zpay'},
@@ -1831,6 +1587,33 @@ async function deleteFiPosition(groupId, rid){
 }
 function openMo(id){document.getElementById(id).classList.add('open');}
 function closeMo(id){document.getElementById(id).classList.remove('open');}
+function showPg(name,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('pg-'+name).classList.add('active');
+  if(el&&el.classList) el.classList.add('active');
+  if(name==='mywork')       renderMyWork();
+  if(name==='masterblanks') renderMasterBlanks();
+  if(name==='othertasks')   renderOtherTasks();
+  if(name==='otmanual')     renderOtManualPage();
+  if(name==='blanks')       renderBlanks();
+  if(name==='warehouse') renderWarehouse();
+  if(name==='shipment')  renderShipmentPage();
+  if(name==='receiving') renderReceivingPage();
+  if(name==='inventory') renderInventoryPage();
+  if(name==='delivery')  renderDeliveryPage();
+  if(name==='catalog')   renderCatalogPage();
+  if(name==='zp')        renderZP();
+  if(name==='zpay')      renderZPay();
+  if(name==='stats')     renderStats();
+  if(name==='owner')     renderOwnerDash();
+  if(name==='ownerstaff') renderOwnerStaff();
+  if(name==='ownerwarehouse') renderOwnerWarehouse();
+  if(name==='admin')     renderAdmin();
+  if(name==='import')    renderImportPage();
+  if(name==='extrawork') { renderExtraWorkList(); }
+  if(name==='dash')      renderDash();
+}
 
 // ════════ EMPLOYEES ════════
 function getStaff() {
@@ -1952,6 +1735,7 @@ function selectRole(role,el){
 // ════ AUDIT LOG ════
 function getAuditLog(){ try { return JSON.parse(localStorage.getItem('iz_audit_log_ws')||'[]'); } catch(e) { return []; } }
 function saveAuditLog(data){ localStorage.setItem('iz_audit_log_ws',JSON.stringify(data)); }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function logAction(action, details) {
   if(!session) return;
   var log = getAuditLog();
@@ -2200,54 +1984,11 @@ function doLogout(){
 }
 
 function startApp(){
-  // Скрыть экран загрузки когда приложение запускается
-  hideLoadingScreen();
-  
-  // ✨ Инициализировать синхронизацию справочников (НОВОЕ!)
-  initSharedReferencesSync();
-  
-  // Показать индикатор онлайна (добавить класс show)
-  updateOnlineStatus();
-  var indicator = document.getElementById('onlineIndicator');
-  if(indicator) indicator.classList.add('show');
-  
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
   document.getElementById('mainTabs').style.display='flex';
   document.getElementById('hdrName').textContent=session.name;
-  
-  // Обновить отображение роли (с поддержкой мультиролевой системы)
-  const currentRole = getCurrentRole();
-  document.getElementById('hdrRole').textContent={
-    заготовщик:'🪚 Заготовщик',
-    мастер:'🔨 Мастер',
-    кладовщик:'📦 Кладовщик',
-    управляющий:'👑 Управляющий',
-    администратор:'🛡 Администратор'
-  }[currentRole] || currentRole;
-  
-  // Показать switcher ролей если их несколько (НОВОЕ!)
-  showRoleSwitcher();
-  
-  // Инициализировать справочники если их нет
-  if(window._sharedRefs.shops.length === 0){
-    const defaultShops = ['ОПТ', 'Ривьера Парк Сочи'];
-    saveSharedReference('shops', defaultShops);
-  }
-  
-  // ИСПРАВЛЕНИЕ: Только администратор видит главное меню со всеми ролями
-  // Остальные видят сразу вкладки своей роли
-  if(hasRole('администратор')){
-    _currentMenuLevel = 'main';  // Администратор видит главное меню
-    _currentPage = 'dash';
-  } else {
-    _currentMenuLevel = session.role;  // Остальные видят сразу свою роль
-    const roleObj = ROLES[session.role];
-    if(roleObj && roleObj.tabs && roleObj.tabs.length > 0){
-      _currentPage = roleObj.tabs[0];  // Первая вкладка роли
-    }
-  }
-  
+  document.getElementById('hdrRole').textContent={заготовщик:'🪚 Заготовщик',мастер:'🔨 Мастер',кладовщик:'📦 Кладовщик',управляющий:'👑 Управляющий',администратор:'🛡 Администратор'}[session.role]||session.role;
   buildTabs();
   startListeners();
   renderExtraCatSelect('ewCat');
@@ -2294,193 +2035,13 @@ function migrateLegacyEmployeesToStaff(){
   renderAdmin();
 }
 
-// ════════ HIERARCHICAL NAVIGATION ════════
-let _currentMenuLevel = 'main'; // 'main' или название роли
-let _visibleTabs = ['dash']; // текущие видимые табы
-
-// Главное меню (верхний уровень)
-const MAIN_MENU_TABS = [
-  {id:'dash', icon:'🏠', label:'Главная'},
-  {id:'заготовщик', icon:'🪚', label:'Заготовщик'},
-  {id:'мастер', icon:'🔨', label:'Мастер'},
-  {id:'кладовщик', icon:'📦', label:'Кладовщик'},
-  {id:'управляющий', icon:'👑', label:'Управляющий'},
-  {id:'stats', icon:'📊', label:'Статистика'},
-  {id:'admin', icon:'⚙️', label:'Настройки'},
-];
-
 function buildTabs(){
-  // РАЗНАЯ ЛОГИКА ДЛЯ АДМИНИСТРАТОРА И ОСТАЛЬНЫХ!
-  
-  if(session.role === 'администратор'){
-    // ════════ АДМИНИСТРАТОР: главное меню + меню ролей ════════
-    let tabs = [];
-    
-    if(_currentMenuLevel === 'main'){
-      // Главное меню (только для администратора)
-      tabs = MAIN_MENU_TABS.map(m => m.id);
-    } else {
-      // Меню выбранной роли (администратор переключается между ролями)
-      const roleObj = Object.entries(ROLES).find(([key,val]) => key === _currentMenuLevel);
-      if(roleObj){
-        tabs = (roleObj[1].tabs || ['dash']);
-      }
-    }
-    
-    _visibleTabs = tabs;
-    
-    // Кнопка "Назад" ТОЛЬКО когда администратор в меню какой-то роли
-    const backButton = (_currentMenuLevel !== 'main' && _currentMenuLevel !== session.role) 
-      ? `<button class="tab back-btn" onclick="goBackToMainMenu()" title="Назад в главное меню">
-          <div class="ti">←</div>
-          <span>Назад</span>
-        </button><div class="tab-divider"></div>`
-      : '';
-    
-    const tabsHtml = tabs.map((tabId, idx) => {
-      let icon, label;
-      
-      if(tabId.startsWith('trash-')){
-        icon = '🗑';
-        label = 'Корзина';
-      } else {
-        const mainItem = MAIN_MENU_TABS.find(m => m.id === tabId);
-        if(mainItem){
-          icon = mainItem.icon;
-          label = mainItem.label;
-        } else {
-          icon = TAB_CFG[tabId]?.icon || '?';
-          label = TAB_CFG[tabId]?.label || 'N/A';
-        }
-      }
-      
-      const isActive = tabId === _currentPage ? 'active' : '';
-      const onClick = _currentMenuLevel === 'main' 
-        ? `showMainMenuItem('${tabId}')`
-        : `showPg('${tabId}',this)`;
-      
-      const separator = idx < tabs.length - 1 ? '<div class="tab-divider"></div>' : '';
-      
-      return `<button class="tab ${isActive}" onclick="${onClick}" title="${label}">
-        <div class="ti">${icon}</div>
-        <span>${label}</span>
-      </button>${separator}`;
-    }).join('');
-    
-    document.getElementById('mainTabs').innerHTML = backButton + tabsHtml;
-    
-  } else {
-    // ════════ ОСТАЛЬНЫЕ РОЛИ: только свои вкладки, БЕЗ главного меню ════════
-    // НЕТ кнопки "← Назад"
-    // НЕТ логики главного меню
-    // НЕТ переключения между ролями
-    
-    const roleObj = ROLES[session.role];
-    if(!roleObj) return;
-    
-    const tabs = roleObj.tabs || ['dash'];
-    _visibleTabs = tabs;
-    
-    // БЕЗ кнопки "Назад" - прямо табы
-    const tabsHtml = tabs.map((tabId, idx) => {
-      let icon, label;
-      
-      if(tabId.startsWith('trash-')){
-        icon = '🗑';
-        label = 'Корзина';
-      } else {
-        icon = TAB_CFG[tabId]?.icon || '?';
-        label = TAB_CFG[tabId]?.label || 'N/A';
-      }
-      
-      const isActive = tabId === _currentPage ? 'active' : '';
-      const separator = idx < tabs.length - 1 ? '<div class="tab-divider"></div>' : '';
-      
-      return `<button class="tab ${isActive}" onclick="showPg('${tabId}',this)" title="${label}">
-        <div class="ti">${icon}</div>
-        <span>${label}</span>
-      </button>${separator}`;
-    }).join('');
-    
-    document.getElementById('mainTabs').innerHTML = tabsHtml;
-  }
-}
-
-// Когда нажимаешь на пункт главного меню
-function showMainMenuItem(itemId){
-  // Только администратор может видеть и использовать главное меню
-  if(session && session.role !== 'администратор'){
-    showToast('⚠️ Доступ к меню только для администратора');
-    return;
-  }
-  
-  if(itemId === 'dash'){
-    // Главная - показываем главную страницу
-    _currentMenuLevel = 'main';
-    _currentPage = 'dash';
-    showPg('dash');
-  } else if(itemId === 'stats'){
-    // Статистика - сразу к странице
-    _currentMenuLevel = 'main';
-    _currentPage = 'stats';
-    showPg('stats');
-  } else if(itemId === 'admin'){
-    // Настройки - сразу к странице
-    _currentMenuLevel = 'main';
-    _currentPage = 'admin';
-    showPg('admin');
-  } else {
-    // Это роль - показываем её меню (только администратор)
-    _currentMenuLevel = itemId;
-    buildTabs();
-    
-    // Переходим на первую страницу роли
-    const roleObj = ROLES[itemId];
-    if(roleObj && roleObj.tabs && roleObj.tabs.length > 0){
-      _currentPage = roleObj.tabs[0];
-      showPg(roleObj.tabs[0]);
-    }
-  }
-}
-
-// Кнопка "назад" в нижнем баре (влево от иконок)
-function goBackToMainMenu(){
-  // Только администратор может видеть главное меню
-  if(session && session.role !== 'администратор'){
-    showToast('⚠️ Только администратор может переходить в главное меню');
-    return;
-  }
-  
-  if(_currentMenuLevel !== 'main'){
-    _currentMenuLevel = 'main';
-    _currentPage = 'dash';
-    buildTabs();
-    showPg('dash');
-  }
-}
-
-// Оригинальная функция showPg должна вызывать buildTabs если изменилась страница
-let _currentPage = 'dash';
-function showPg(pageId, btn){
-  if(!TAB_CFG[pageId]) return;
-  
-  _currentPage = pageId;
-  
-  // Убираем active со всех страниц
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  
-  // Добавляем active к нужной странице и кнопке
-  const page = document.getElementById('pg-'+pageId);
-  if(page) page.classList.add('active');
-  if(btn) btn.classList.add('active');
-  
-  // Вызываем render функцию если она есть
-  const renderFn = window['render'+pageId.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join('')] || 
-                   window['render'+pageId];
-  if(renderFn && typeof renderFn === 'function'){
-    renderFn();
-  }
+  const tabs=(ROLES[session.role]&&ROLES[session.role].tabs)||['dash'];
+  document.getElementById('mainTabs').innerHTML=tabs.map(k=>`
+    <button class="tab ${k==='dash'?'active':''}" onclick="showPg('${k}',this)">
+      <div class="ti">${TAB_CFG[k].icon}</div>
+      <span>${TAB_CFG[k].label}</span>
+    </button>`).join('');
 }
 
 // ════════ FIREBASE LISTENERS ════════
@@ -2517,9 +2078,12 @@ function startListeners(){
       renderZP();
     }).catch(()=>{});
   }
-  // ⚠️ Shops синхронизируются через shared references library (initSharedReferences)
-  // Этот старый listener удалён и заменён на unified approach
-  
+  // Shops from admin
+  db.collection('iz_admin_shops').onSnapshot(snap=>{
+    const shops=snap.docs.map(d=>d.data().name).filter(Boolean);
+    const sel=document.getElementById('shipDest');
+    if(sel) sel.innerHTML=shops.length?shops.map(s=>`<option>${s}</option>`).join(''):'<option>Дерево</option>';
+  },()=>{});
   // Единый каталог товаров
   subscribeProducts();
   // Показать каталог только администратору
@@ -3250,7 +2814,6 @@ function setWhTab(tab){
 }
 
 // ════ ОТГРУЗКА — отдельная страница ════
-let _shipPageSortType = 'price';  // 'price', 'artnum', 'none'
 let _shipPageSortAsc = true;
 let _shipPageSelected = new Set();
 let _shipPageTab = 'new';
@@ -3261,7 +2824,7 @@ function renderShipmentPage(){
   // Заполнить магазины
   const sel = document.getElementById('shipPageDest');
   if(sel){
-    const shops = getShops();
+    const shops = JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
     sel.innerHTML = shops.map(s=>`<option value="${s}">${s}</option>`).join('');
   }
   renderShipPageList();
@@ -3271,283 +2834,22 @@ function setShipTab(tab){
   _shipPageTab = tab;
   const t1=document.getElementById('shipTab1'), t2=document.getElementById('shipTab2');
   const b1=document.getElementById('shipNewBlock'), b2=document.getElementById('shipArchiveBlock');
-  
-  try{
-    // Обновлять UI элементы только если они существуют
-    if(t1 && t2 && b1 && b2){
-      if(tab==='new'){
-        t1.style.background='var(--accent)'; t1.style.color='#000'; t1.style.fontWeight='700'; t1.style.border='none';
-        t2.style.background='var(--s2)'; t2.style.color='var(--t2)'; t2.style.fontWeight='400'; t2.style.border='1px solid var(--border)';
-        b1.style.display='block'; b2.style.display='none';
-      } else {
-        t2.style.background='var(--accent)'; t2.style.color='#000'; t2.style.fontWeight='700'; t2.style.border='none';
-        t1.style.background='var(--s2)'; t1.style.color='var(--t2)'; t1.style.fontWeight='400'; t1.style.border='1px solid var(--border)';
-        b2.style.display='block'; b1.style.display='none';
-      }
-    }
-    
-    // Всегда вызывать render функции - они сами проверяют есть ли нужные элементы
-    if(tab==='new'){
-      renderShipPageList();
-      renderShipmentPage();
-    } else {
-      renderShipArchive();
-    }
-  }catch(e){
-    console.error('Error in setShipTab:', e);
-  }
-}
-
-// ════════ УПРАВЛЕНИЕ СПРАВОЧНИКАМИ (Администратор) ════════
-
-// Временное хранилище для редактирования справочников
-let _refEditState = {
-  shops: [],
-  names: [],
-  woods: [],
-  sizes: []
-};
-
-function showShopsReference(){
-  const panel = document.getElementById('adminReferencesPanel');
-  _refEditState.shops = window._sharedRefs.shops || [];
-  
-  panel.innerHTML = `
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div class="ctitle" style="margin:0">🏪 Магазины</div>
-      </div>
-      
-      <div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:12px;font-size:11px;color:var(--t2)">
-        💡 Добавь новый магазин или удали ненужные. После сохранения данные синхронизируются везде!
-      </div>
-      
-      <div style="margin-bottom:12px">
-        <input type="text" id="shopNewInput" placeholder="Название магазина..." class="fi" style="margin-bottom:8px;width:100%">
-        <button onclick="addShopToEdit()" class="btn" style="width:100%;background:var(--a2);color:#000;font-weight:700">➕ Добавить магазин</button>
-      </div>
-      
-      <div id="shopsEditList" style="max-height:300px;overflow-y:auto;margin-bottom:12px">
-        ${_refEditState.shops.length === 0 ? 
-          '<div style="text-align:center;color:var(--t2);padding:20px">Магазинов нет. Добавь первый!</div>' :
-          _refEditState.shops.map((shop, idx) => {
-            const name = typeof shop === 'string' ? shop : (shop.name || 'Без имени');
-            const type = typeof shop === 'string' ? '—' : (shop.type || 'shop');
-            const typeLabel = {
-              'shop': '🏪 Магазин',
-              'offline': '💼 Опт',
-              'online': '🌐 Онлайн',
-              'workshop': '🏭 Мастерская'
-            }[type] || type;
-            return `
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:6px;border:1px solid var(--border)">
-                <div style="flex:1">
-                  <div style="font-size:13px;font-weight:600">🏪 ${name}</div>
-                  <div style="font-size:10px;color:var(--t2)">${typeLabel}</div>
-                </div>
-                <button onclick="deleteShopFromEdit(${idx})" style="background:var(--exp);border:none;border-radius:6px;padding:6px 10px;color:#fff;cursor:pointer;font-size:12px;font-weight:600">🗑 Удалить</button>
-              </div>
-            `;
-          }).join('')
-        }
-      </div>
-      
-      <button onclick="saveReferences('shops')" style="width:100%;padding:12px;border-radius:8px;background:var(--a2);color:#000;font-weight:700;border:none;cursor:pointer;font-size:14px">💾 Сохранить все магазины</button>
-    </div>
-  `;
-}
-
-function addShopToEdit(){
-  const input = document.getElementById('shopNewInput');
-  const name = input?.value?.trim();
-  if(!name){ showToast('⚠️ Введи название магазина'); return; }
-  if(_refEditState.shops.includes(name)){ showToast('⚠️ Магазин "'+name+'" уже существует'); return; }
-  _refEditState.shops.push(name);
-  input.value = '';
-  showToast('✅ Магазин добавлен. Нажми "Сохранить" чтобы применить');
-  showShopsReference();
-}
-
-function deleteShopFromEdit(idx){
-  const shop = _refEditState.shops[idx];
-  _refEditState.shops.splice(idx, 1);
-  showToast('✅ Магазин "'+shop+'" удалён. Нажми "Сохранить" чтобы применить');
-  showShopsReference();
-}
-
-function showItemNamesReference(){
-  const panel = document.getElementById('adminReferencesPanel');
-  const names = Object.values(items)
-    .map(i => i.name||i.itemName||'')
-    .filter(Boolean)
-    .filter((v,i,a) => a.indexOf(v) === i)
-    .sort();
-  
-  _refEditState.names = [...names];
-  
-  panel.innerHTML = `
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div class="ctitle" style="margin:0">📋 Наименования товаров</div>
-      </div>
-      
-      <div style="margin-bottom:12px">
-        <input type="text" id="nameNewInput" placeholder="Новое наименование..." class="fi" style="margin-bottom:8px;width:100%">
-        <button onclick="addNameToEdit()" class="btn" style="width:100%;background:var(--a2);color:#000;font-weight:700">+ Добавить</button>
-      </div>
-      
-      <div id="namesEditList" style="max-height:300px;overflow-y:auto;margin-bottom:12px">
-        ${_refEditState.names.map((name, idx) => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:6px">
-            <div style="font-size:13px;font-weight:600">${name}</div>
-            <button onclick="deleteNameFromEdit(${idx})" style="background:var(--exp);border:none;border-radius:6px;padding:4px 8px;color:#fff;cursor:pointer;font-size:12px">🗑 Удалить</button>
-          </div>
-        `).join('')}
-      </div>
-      
-      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">ℹ️ Справочник формируется из существующих товаров на складе</div>
-      <button onclick="saveReferences('names')" style="width:100%;padding:10px;border-radius:8px;background:var(--a2);color:#000;font-weight:700;border:none;cursor:pointer;opacity:0.5" disabled>💾 Сохранить (доступно позже)</button>
-    </div>
-  `;
-}
-
-function addNameToEdit(){
-  const input = document.getElementById('nameNewInput');
-  const name = input?.value?.trim();
-  if(!name){ showToast('⚠️ Введи наименование'); return; }
-  if(_refEditState.names.includes(name)){ showToast('⚠️ Такое наименование уже есть'); return; }
-  _refEditState.names.push(name);
-  input.value = '';
-  showItemNamesReference();
-}
-
-function deleteNameFromEdit(idx){
-  _refEditState.names.splice(idx, 1);
-  showItemNamesReference();
-}
-
-function showWoodsReference(){
-  const panel = document.getElementById('adminReferencesPanel');
-  const woods = Object.values(items)
-    .map(i => i.wood||'')
-    .filter(Boolean)
-    .filter((v,i,a) => a.indexOf(v) === i)
-    .sort();
-  
-  _refEditState.woods = [...woods];
-  
-  panel.innerHTML = `
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div class="ctitle" style="margin:0">🌳 Породы дерева</div>
-      </div>
-      
-      <div style="margin-bottom:12px">
-        <input type="text" id="woodNewInput" placeholder="Новая порода..." class="fi" style="margin-bottom:8px;width:100%">
-        <button onclick="addWoodToEdit()" class="btn" style="width:100%;background:var(--a2);color:#000;font-weight:700">+ Добавить</button>
-      </div>
-      
-      <div id="woodsEditList" style="max-height:300px;overflow-y:auto;margin-bottom:12px">
-        ${_refEditState.woods.map((wood, idx) => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:6px">
-            <div style="font-size:13px;font-weight:600">🌳 ${wood}</div>
-            <button onclick="deleteWoodFromEdit(${idx})" style="background:var(--exp);border:none;border-radius:6px;padding:4px 8px;color:#fff;cursor:pointer;font-size:12px">🗑 Удалить</button>
-          </div>
-        `).join('')}
-      </div>
-      
-      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">ℹ️ Справочник формируется из существующих товаров на складе</div>
-      <button onclick="saveReferences('woods')" style="width:100%;padding:10px;border-radius:8px;background:var(--a2);color:#000;font-weight:700;border:none;cursor:pointer;opacity:0.5" disabled>💾 Сохранить (доступно позже)</button>
-    </div>
-  `;
-}
-
-function addWoodToEdit(){
-  const input = document.getElementById('woodNewInput');
-  const wood = input?.value?.trim();
-  if(!wood){ showToast('⚠️ Введи название породы'); return; }
-  if(_refEditState.woods.includes(wood)){ showToast('⚠️ Такая порода уже есть'); return; }
-  _refEditState.woods.push(wood);
-  input.value = '';
-  showWoodsReference();
-}
-
-function deleteWoodFromEdit(idx){
-  _refEditState.woods.splice(idx, 1);
-  showWoodsReference();
-}
-
-function showSizesReference(){
-  const panel = document.getElementById('adminReferencesPanel');
-  const sizes = Object.values(items)
-    .map(i => i.size||'')
-    .filter(Boolean)
-    .filter((v,i,a) => a.indexOf(v) === i)
-    .sort();
-  
-  _refEditState.sizes = [...sizes];
-  
-  panel.innerHTML = `
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div class="ctitle" style="margin:0">📐 Размеры</div>
-      </div>
-      
-      <div style="margin-bottom:12px">
-        <input type="text" id="sizeNewInput" placeholder="Новый размер..." class="fi" style="margin-bottom:8px;width:100%">
-        <button onclick="addSizeToEdit()" class="btn" style="width:100%;background:var(--a2);color:#000;font-weight:700">+ Добавить</button>
-      </div>
-      
-      <div id="sizesEditList" style="max-height:300px;overflow-y:auto;margin-bottom:12px">
-        ${_refEditState.sizes.map((size, idx) => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:6px">
-            <div style="font-size:13px;font-weight:600">📐 ${size}</div>
-            <button onclick="deleteSizeFromEdit(${idx})" style="background:var(--exp);border:none;border-radius:6px;padding:4px 8px;color:#fff;cursor:pointer;font-size:12px">🗑 Удалить</button>
-          </div>
-        `).join('')}
-      </div>
-      
-      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">ℹ️ Справочник формируется из существующих товаров на складе</div>
-      <button onclick="saveReferences('sizes')" style="width:100%;padding:10px;border-radius:8px;background:var(--a2);color:#000;font-weight:700;border:none;cursor:pointer;opacity:0.5" disabled>💾 Сохранить (доступно позже)</button>
-    </div>
-  `;
-}
-
-function addSizeToEdit(){
-  const input = document.getElementById('sizeNewInput');
-  const size = input?.value?.trim();
-  if(!size){ showToast('⚠️ Введи размер'); return; }
-  if(_refEditState.sizes.includes(size)){ showToast('⚠️ Такой размер уже есть'); return; }
-  _refEditState.sizes.push(size);
-  input.value = '';
-  showSizesReference();
-}
-
-function deleteSizeFromEdit(idx){
-  _refEditState.sizes.splice(idx, 1);
-  showSizesReference();
-}
-
-function saveReferences(refType){
-  try{
-    if(refType === 'shops'){
-      // Используем unified shared references library
-      saveSharedReference('shops', _refEditState.shops);
-      showToast('✅ Магазины сохранены');
-      showShopsReference();
-    }
-  }catch(e){
-    showToast('❌ Ошибка: '+e.message);
+  if(tab==='new'){
+    t1.style.background='var(--accent)'; t1.style.color='#000'; t1.style.fontWeight='700'; t1.style.border='none';
+    t2.style.background='var(--s2)'; t2.style.color='var(--t2)'; t2.style.fontWeight='400'; t2.style.border='1px solid var(--border)';
+    b1.style.display='block'; b2.style.display='none';
+    renderShipPageList();
+  } else {
+    t2.style.background='var(--accent)'; t2.style.color='#000'; t2.style.fontWeight='700'; t2.style.border='none';
+    t1.style.background='var(--s2)'; t1.style.color='var(--t2)'; t1.style.fontWeight='400'; t1.style.border='1px solid var(--border)';
+    b2.style.display='block'; b1.style.display='none';
+    renderShipArchive();
   }
 }
 
 function toggleShipPageSort(){
-  _shipPageSortType = _shipPageSortType === 'price' ? 'artnum' : _shipPageSortType === 'artnum' ? 'none' : 'price';
-  let btnText = '↕ Сортировка: ';
-  if(_shipPageSortType === 'price') btnText += '📊 Цена';
-  else if(_shipPageSortType === 'artnum') btnText += '№ Артикул';
-  else btnText += 'Без';
-  document.getElementById('shipPageSortBtn').textContent = btnText;
+  _shipPageSortAsc = !_shipPageSortAsc;
+  document.getElementById('shipPageSortBtn').textContent = (_shipPageSortAsc?'↑':'↓')+' Цена';
   renderShipPageList();
 }
 
@@ -3569,33 +2871,10 @@ function renderShipPageList(){
   });
   const sorted = Object.values(groups).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
 
-  // Разделяем активные и архивные товары
-  const allItems = items.filter(i=>i.status==='received');
-  const archivedItems = allItems.filter(i=>i.isShopArchived);
-
   c.innerHTML = sorted.map(g=>{
     const selCount = g.items.filter(i=>_shipPageSelected.has(i._id)).length;
     const id = 'spg_'+g.name.replace(/[^а-яёa-z0-9]/gi,'_');
-    
-    // Сортировка товаров в группе
-    if(_shipPageSortType === 'price'){
-      g.items.sort((a,b)=>(a.price||0)-(b.price||0));
-    } else if(_shipPageSortType === 'artnum'){
-      g.items.sort((a,b)=>{
-        const aNum = parseInt((a.artikul||a.itemNum||'0').replace(/[^0-9]/g,''))||0;
-        const bNum = parseInt((b.artikul||b.itemNum||'0').replace(/[^0-9]/g,''))||0;
-        return aNum - bNum;
-      });
-    }
-    
-    // Поиск в группе (если есть текст поиска)
-    let groupItems = g.items;
-    if(q){
-      groupItems = g.items.filter(i=>
-        ((i.artikul||'')+(i.itemNum||'')+(i.wood||'')).toLowerCase().includes(q)
-      );
-    }
-    
+    g.items.sort((a,b)=>_shipPageSortAsc?(a.price||0)-(b.price||0):(b.price||0)-(a.price||0));
     return `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:12px;overflow:hidden">
       <div onclick="toggleShipGroup('${id}')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 12px;background:var(--s2);cursor:pointer">
         <div>
@@ -3604,87 +2883,25 @@ function renderShipPageList(){
         </div>
         <span id="${id}_arrow" style="color:var(--t2)">▼</span>
       </div>
-      <div id="${id}" style="display:none;padding:12px;border-top:1px solid var(--border)">
-        <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
-          <input type="text" placeholder="🔍 Поиск в ${g.name}..." class="group-search" 
-            data-group="${id}" onkeyup="filterGroupItems('${id}')"
-            style="flex:1;min-width:150px;padding:6px 10px;background:var(--s1);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">
-          <button onclick="sortGroupByPrice('${id}')" style="padding:6px 10px;background:var(--s1);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:11px;color:var(--t2)">💰 Цена</button>
-          <button onclick="sortGroupByArtNum('${id}')" style="padding:6px 10px;background:var(--s1);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:11px;color:var(--t2)">№ АРТ</button>
-        </div>
-        ${groupItems.length ? groupItems.map(item=>{
+      <div id="${id}" style="display:${q?'block':'none'};padding:0 12px">
+        ${g.items.map(item=>{
           const sel = _shipPageSelected.has(item._id);
           const num = item.artikul||(item.itemNum&&!item.itemNum.startsWith('НАЧ-')?item.itemNum:'');
-          return `<div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:6px;border-radius:8px;background:${sel?'rgba(200,240,96,0.1)':'var(--s2)'};border:1px solid ${sel?'var(--accent)':'var(--border)'};cursor:pointer" onclick="toggleShipPageItem('${item._id}')">
-            <div style="width:22px;height:22px;border-radius:6px;border:2px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'var(--accent)':'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;color:#000;font-weight:700">${sel?'✓':''}</div>
+          return `<div onclick="toggleShipPageItem('${item._id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;background:${sel?'rgba(80,255,150,0.07)':''}">
+            <div style="width:22px;height:22px;border-radius:6px;border:2px solid ${sel?'var(--inc)':'var(--border)'};background:${sel?'var(--inc)':'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;color:#000;font-weight:700">${sel?'✓':''}</div>
             <div style="flex:1">
-              <div style="font-size:13px;font-weight:600">${num?'<b>№'+num+'</b> ':''} ${item.wood||'—'}${item.size?' · '+item.size:''}</div>
+              <div style="font-size:13px;font-weight:600">${num?'№'+num+' ':''}${item.wood||'—'}${item.size?' · '+item.size:''}</div>
             </div>
-            <div style="text-align:right;flex-shrink:0">
-              <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</div>
-            </div>
-            <button onclick="event.stopPropagation();toggleShipPageItem('${item._id}')" style="padding:6px 10px;background:var(--a2);border:none;border-radius:6px;color:#000;cursor:pointer;font-weight:700;font-size:12px">+</button>
+            <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</div>
           </div>`;
-        }).join('') : '<div style="color:var(--t2);font-size:12px;padding:10px">По поиску ничего не найдено</div>'}
-        <div style="padding:8px 0;margin-top:10px;border-top:1px solid var(--border)">
-          <button onpointerdown="event.preventDefault();selectAllShipGroup('${g.name}')" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--t2);cursor:pointer;font-size:12px;font-weight:600">☑ Выбрать все ${g.name}</button>
+        }).join('')}
+        <div style="padding:8px 0">
+          <button onpointerdown="event.preventDefault();selectAllShipGroup('${g.name}')" style="width:100%;padding:7px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--t2);cursor:pointer;font-size:12px">☑ Выбрать все ${g.name}</button>
         </div>
       </div>
     </div>`;
-  }).join('') + (archivedItems.length ? `
-  <div style="margin-top:16px;padding:12px;background:rgba(240,160,96,0.1);border:1px solid rgba(240,160,96,0.3);border-radius:12px">
-    <div style="font-size:12px;color:var(--a4);text-transform:uppercase;font-weight:700;letter-spacing:1px;margin-bottom:10px">📦 АРХИВ (НЕ ПОД ОТГРУЗКУ)</div>
-    ${archivedItems.map(item=>{
-      const num = item.artikul||(item.itemNum&&!item.itemNum.startsWith('НАЧ-')?item.itemNum:'');
-      const groupName = (item.name||item.itemName||'—').trim();
-      return `<div style="display:flex;align-items:center;gap:10px;padding:10px;margin-bottom:6px;border-radius:8px;background:var(--s2);border:1px solid var(--border);opacity:0.7">
-        <div style="flex:1">
-          <div style="font-size:13px;font-weight:600">${groupName}</div>
-          <div style="font-size:11px;color:var(--t2)">${num?'№'+num+' · ':''} ${item.wood||'—'}${item.size?' · '+item.size:''}</div>
-        </div>
-        <div style="text-align:right;flex-shrink:0">
-          <div style="font-size:13px;font-weight:700;color:var(--a4)">${fmt(item.price||0)}</div>
-        </div>
-      </div>`;
-    }).join('')}
-  </div>` : '');
+  }).join('');
   updateShipPageSelected();
-}
-
-function sortGroupByPrice(groupId){
-  const items_to_sort = document.querySelectorAll(`#${groupId} > div[onclick*="toggleShipPageItem"]`);
-  const items_array = Array.from(items_to_sort).sort((a,b)=>{
-    const aPrice = parseInt(a.querySelector('[style*="color:var(--accent)"]')?.textContent.replace(/[^0-9]/g,'')||0);
-    const bPrice = parseInt(b.querySelector('[style*="color:var(--accent)"]')?.textContent.replace(/[^0-9]/g,'')||0);
-    return aPrice - bPrice;
-  });
-  const container = document.getElementById(groupId);
-  if(container){
-    items_array.forEach(item => container.appendChild(item));
-  }
-}
-
-function sortGroupByArtNum(groupId){
-  const items_to_sort = document.querySelectorAll(`#${groupId} > div[onclick*="toggleShipPageItem"]`);
-  const items_array = Array.from(items_to_sort).sort((a,b)=>{
-    const aNum = parseInt(a.textContent.match(/№(\d+)/)?.[1]||0);
-    const bNum = parseInt(b.textContent.match(/№(\d+)/)?.[1]||0);
-    return aNum - bNum;
-  });
-  const container = document.getElementById(groupId);
-  if(container){
-    items_array.forEach(item => container.appendChild(item));
-  }
-}
-
-function filterGroupItems(groupId){
-  const searchEl = document.querySelector(`input[data-group="${groupId}"]`);
-  const searchText = (searchEl?.value||'').toLowerCase();
-  const items = document.querySelectorAll(`#${groupId} > div[onclick*="toggleShipPageItem"]`);
-  items.forEach(item => {
-    const itemText = item.textContent.toLowerCase();
-    item.style.display = itemText.includes(searchText) ? 'flex' : 'none';
-  });
 }
 
 function toggleShipGroup(id){
@@ -3743,147 +2960,21 @@ async function createShipmentFromPage(){
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 
-// Удалить отгрузку (вернуть товары на склад)
-async function deleteShipment(shipmentId, destName){
-  // Проверка прав доступа
-  if(!session) { showToast('⚠️ Не авторизированы'); return; }
-  
-  const isAdmin = session.role === 'администратор';
-  const isWarehouse = session.role === 'кладовщик';
-  
-  if(!isAdmin && !isWarehouse) {
-    showToast('⚠️ Нет прав на удаление отгрузок');
-    return;
-  }
-  
-  // Для кладовщика - только отгрузки сегодня
-  if(isWarehouse) {
-    const shipment = shipments.find(s=>s._id===shipmentId || s.id===shipmentId);
-    if(!shipment) { showToast('⚠️ Отгрузка не найдена'); return; }
-    
-    if(!isShipmentToday(shipment.createdAt)) {
-      showToast('⚠️ Кладовщик может удалять отгрузки только в день создания!');
-      return;
-    }
-  }
-  
-  // Подтверждение
-  const msg = isAdmin ? 
-    '⚠️ УДАЛИТЬ ОТГРУЗКУ?\n\nТовары вернутся на склад.\nАдминистратор может это делать всегда.' :
-    '⚠️ УДАЛИТЬ ОТГРУЗКУ?\n\nТовары вернутся на склад.\nКладовщик может удалять только в день создания.';
-  
-  if(!confirm(msg)) return;
-  
-  try{
-    // Показать загрузку
-    showToast('⏳ Удаляю отгрузку...');
-    
-    // Найти отгрузку
-    const shipment = shipments.find(s=>s._id===shipmentId || s.id===shipmentId);
-    if(!shipment) throw new Error('Отгрузка не найдена');
-    
-    // Вернуть товары на склад
-    const batch = db.batch();
-    (shipment.items||[]).forEach(si => {
-      const itemRef = db.collection('ws_items').doc(si._id);
-      batch.update(itemRef, {
-        status: 'received',
-        shippedAt: null,
-        shippedTo: null,
-        shipmentNum: null
-      });
-    });
-    
-    // Мягкое удаление отгрузки
-    const shipRef = db.collection('ws_shipments').doc(shipmentId);
-    batch.update(shipRef, {
-      deletedAt: now(),
-      deletedBy: session.name,
-      deletedReason: 'ошибочная отгрузка'
-    });
-    
-    await batch.commit();
-    
-    // Обновить локальные данные БЕЗОПАСНО
-    try{
-      const shIdx = shipments.findIndex(s=>s._id===shipmentId || s.id===shipmentId);
-      if(shIdx >= 0) {
-        shipments[shIdx].deletedAt = now();
-        shipments[shIdx].deletedBy = session.name;
-      }
-    }catch(e){ console.error('Error updating local shipment:', e); }
-    
-    try{
-      shipment.items.forEach(si => {
-        const item = items.find(i=>i._id===si._id);
-        if(item) {
-          item.status = 'received';
-          item.shippedAt = null;
-          item.shippedTo = null;
-          item.shipmentNum = null;
-        }
-      });
-    }catch(e){ console.error('Error updating items:', e); }
-    
-    // Показать успех ПЕРЕД перерисовкой
-    showToast(`✅ Отгрузка удалена, товары вернулись на склад`);
-    
-    // Обновить интерфейс БЕЗОПАСНО
-    setTimeout(() => {
-      try{
-        renderShipArchive();
-      }catch(e){ console.error('Error in renderShipArchive:', e); }
-      try{
-        renderWarehouse();
-      }catch(e){ console.error('Error in renderWarehouse:', e); }
-    }, 500);
-    
-  }catch(e){
-    console.error('Delete shipment error:', e);
-    showToast('❌ Ошибка: '+e.message);
-  }
-}
-
 function renderShipArchive(){
-  try{
-    const c=document.getElementById('shipArchiveList'); 
-    if(!c) return;
-    
-    const list=shipments.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
-    if(!list.length){ 
-      c.innerHTML='<div style="font-size:13px;color:var(--t2);padding:16px 0;text-align:center">Отгрузок пока нет</div>'; 
-      return; 
-    }
-    
-    c.innerHTML=list.map(s=>{
-      const canDelete = session && (session.role==='администратор' || (session.role==='кладовщик' && isShipmentToday(s.createdAt)));
-      const deleteBtn = canDelete ? `<button onclick="deleteShipment('${s._id||s.id}','${(s.destName||'').replace(/'/g,"\\'")}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--exp);cursor:pointer;font-size:12px">🗑</button>` : '';
-      return `
-      <div class="card" style="margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div style="flex:1">
-            <div style="font-size:14px;font-weight:700">${s.num||'—'}</div>
-            <div style="font-size:12px;color:var(--t2)">${s.destName||'—'} · ${fmtDT(s.createdAt)}</div>
-            <div style="font-size:12px;color:var(--t2)">${(s.items||[]).length} шт. · ${fmt((s.items||[]).reduce((sum,i)=>sum+(i.price||0),0))}</div>
-          </div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <span style="font-size:11px;color:var(--a4)">✅</span>
-            ${deleteBtn}
-          </div>
+  const c=document.getElementById('shipArchiveList'); if(!c) return;
+  const list=shipments.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+  if(!list.length){ c.innerHTML='<div style="font-size:13px;color:var(--t2);padding:16px 0;text-align:center">Отгрузок пока нет</div>'; return; }
+  c.innerHTML=list.map(s=>`
+    <div class="card" style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:14px;font-weight:700">${s.num||'—'}</div>
+          <div style="font-size:12px;color:var(--t2)">${s.destName||'—'} · ${fmtDT(s.createdAt)}</div>
+          <div style="font-size:12px;color:var(--t2)">${(s.items||[]).length} шт. · ${fmt((s.items||[]).reduce((sum,i)=>sum+(i.price||0),0))}</div>
         </div>
-      </div>`;
-    }).join('');
-  }catch(e){
-    console.error('Error rendering shipment archive:', e);
-    document.getElementById('shipArchiveList').innerHTML = '<div style="color:var(--exp);padding:10px">⚠️ Ошибка загрузки отгрузок</div>';
-  }
-}
-
-function isShipmentToday(createdAt){
-  if(!createdAt) return false;
-  const shipDate = new Date(createdAt).toDateString();
-  const today = new Date().toDateString();
-  return shipDate === today;
+        <span style="font-size:11px;color:var(--a4)">✅</span>
+      </div>
+    </div>`).join('');
 }
 
 // ════ ПРИЁМКА — отдельная страница ════
@@ -3903,31 +2994,19 @@ function setRcvTab(tab){
   _rcvTab=tab;
   const t1=document.getElementById('rcvTab1'),t2=document.getElementById('rcvTab2');
   const b1=document.getElementById('rcvAutoBlock'),b2=document.getElementById('rcvManualBlock');
-  
-  try{
-    // Обновлять UI элементы только если они существуют
-    if(t1 && t2 && b1 && b2){
-      if(tab==='auto'){
-        t1.style.background='var(--accent)';t1.style.color='#000';t1.style.fontWeight='700';t1.style.border='none';
-        t2.style.background='var(--s2)';t2.style.color='var(--t2)';t2.style.fontWeight='400';t2.style.border='1px solid var(--border)';
-        b1.style.display='block';b2.style.display='none';
-      } else {
-        t2.style.background='var(--accent)';t2.style.color='#000';t2.style.fontWeight='700';t2.style.border='none';
-        t1.style.background='var(--s2)';t1.style.color='var(--t2)';t1.style.fontWeight='400';t1.style.border='1px solid var(--border)';
-        b2.style.display='block';b1.style.display='none';
-      }
-    }
-    
-    // Всегда вызывать render функции
-    if(tab==='auto'){
-      renderRcvPendingList();
-    } else {
-      // История ручных приёмок
-      const hist=document.getElementById('rcvManualHistory');
-      if(hist && typeof renderManualAcceptHistory==='function') renderManualAcceptHistory('rcvManualHistory');
-    }
-  }catch(e){
-    console.error('Error in setRcvTab:', e);
+  if(tab==='auto'){
+    t1.style.background='var(--accent)';t1.style.color='#000';t1.style.fontWeight='700';t1.style.border='none';
+    t2.style.background='var(--s2)';t2.style.color='var(--t2)';t2.style.fontWeight='400';t2.style.border='1px solid var(--border)';
+    b1.style.display='block';b2.style.display='none';
+    renderRcvPendingList();
+  } else {
+    t2.style.background='var(--accent)';t2.style.color='#000';t2.style.fontWeight='700';t2.style.border='none';
+    t1.style.background='var(--s2)';t1.style.color='var(--t2)';t1.style.fontWeight='400';t1.style.border='1px solid var(--border)';
+    b2.style.display='block';b1.style.display='none';
+    // История ручных приёмок
+    const hist=document.getElementById('rcvManualHistory'); if(!hist) return;
+    // Переиспользуем существующий рендер
+    if(typeof renderManualAcceptHistory==='function') renderManualAcceptHistory('rcvManualHistory');
   }
 }
 
@@ -3957,34 +3036,30 @@ async function acceptItemFromRcv(itemId){
 }
 
 function renderWarehouse(){
-  try{
-    const realItems = items.filter(i=>!i.isArchiveDraft);
-    const pending = realItems.filter(i=>i.status==='delivered');
-    const stock   = realItems.filter(i=>i.status==='received');
-    const shipped = realItems.filter(i=>i.status==='shipped');
+  const realItems = items.filter(i=>!i.isArchiveDraft);
+  const pending = realItems.filter(i=>i.status==='delivered');
+  const stock   = realItems.filter(i=>i.status==='received');
+  const shipped = realItems.filter(i=>i.status==='shipped');
 
-    const elPend=document.getElementById('whPending'), elStock=document.getElementById('whStock'), elShip=document.getElementById('whShipped');
-    if(elPend) elPend.textContent=pending.length;
-    if(elStock) elStock.textContent=stock.length;
-    if(elShip) elShip.textContent=shipped.length;
+  const elPend=document.getElementById('whPending'), elStock=document.getElementById('whStock'), elShip=document.getElementById('whShipped');
+  if(elPend) elPend.textContent=pending.length;
+  if(elStock) elStock.textContent=stock.length;
+  if(elShip) elShip.textContent=shipped.length;
 
-    const wn=document.getElementById('whNotifications');
-    if(wn) wn.innerHTML=pending.length?`<div class="notif warn" style="margin-bottom:12px"><div class="notif-ico">🔔</div><div class="notif-body"><div class="notif-title">${pending.length} изделий ждут приёмки</div><div class="notif-sub">Перейдите во вкладку «Приёмка»</div></div></div>`:'';
+  const wn=document.getElementById('whNotifications');
+  if(wn) wn.innerHTML=pending.length?`<div class="notif warn" style="margin-bottom:12px"><div class="notif-ico">🔔</div><div class="notif-body"><div class="notif-title">${pending.length} изделий ждут приёмки</div><div class="notif-sub">Перейдите во вкладку «Приёмка»</div></div></div>`:'';
 
-    renderStockGroups();
+  renderStockGroups();
 
-    // Обновить счётчики страницы приёмки если она уже в DOM
-    const rp=document.getElementById('rcvPending'), rt=document.getElementById('rcvToday');
-    if(rp) rp.textContent=pending.length;
-    const today=new Date().toDateString();
-    const todayCount=realItems.filter(i=>i.status==='received'&&i.receivedAt&&new Date(i.receivedAt).toDateString()===today).length;
-    if(rt) rt.textContent=todayCount;
-    renderRcvPendingList();
+  // Обновить счётчики страницы приёмки если она уже в DOM
+  const rp=document.getElementById('rcvPending'), rt=document.getElementById('rcvToday');
+  if(rp) rp.textContent=pending.length;
+  const today=new Date().toDateString();
+  const todayCount=realItems.filter(i=>i.status==='received'&&i.receivedAt&&new Date(i.receivedAt).toDateString()===today).length;
+  if(rt) rt.textContent=todayCount;
+  renderRcvPendingList();
 
-    if(_whTab==='archive') renderArchiveWarehouse();
-  }catch(e){
-    console.error('Error in renderWarehouse:', e);
-  }
+  if(_whTab==='archive') renderArchiveWarehouse();
 }
 
 // ════ СКЛАД: ОСТАТКИ ПО ГРУППАМ + ОТГРУЗКА ════
@@ -3997,36 +3072,23 @@ function setWhStockTab(tab){
   _whStockTab = tab;
   const t1=document.getElementById('whStockTab1'), t2=document.getElementById('whStockTab2');
   const b1=document.getElementById('whStockBlock'), b2=document.getElementById('whShipBlock');
-  
-  try{
-    // Обновлять UI элементы только если они существуют
-    if(t1 && t2 && b1 && b2){
-      if(tab==='stock'){
-        t1.style.background='var(--accent)'; t1.style.color='#000'; t1.style.border='none';
-        t2.style.background='var(--s2)'; t2.style.color='var(--t2)'; t2.style.border='1px solid var(--border)';
-        b1.style.display='block'; b2.style.display='none';
-      } else {
-        t2.style.background='var(--accent)'; t2.style.color='#000'; t2.style.border='none';
-        t1.style.background='var(--s2)'; t1.style.color='var(--t2)'; t1.style.border='1px solid var(--border)';
-        b2.style.display='block'; b1.style.display='none';
-      }
+  if(tab==='stock'){
+    t1.style.background='var(--accent)'; t1.style.color='#000'; t1.style.border='none';
+    t2.style.background='var(--s2)'; t2.style.color='var(--t2)'; t2.style.border='1px solid var(--border)';
+    b1.style.display='block'; b2.style.display='none';
+    renderStockGroups();
+  } else {
+    t2.style.background='var(--accent)'; t2.style.color='#000'; t2.style.border='none';
+    t1.style.background='var(--s2)'; t1.style.color='var(--t2)'; t1.style.border='1px solid var(--border)';
+    b2.style.display='block'; b1.style.display='none';
+    _whShipSelected.clear();
+    renderShipList();
+    // Заполнить магазины
+    const sel=document.getElementById('whShipDest');
+    if(sel && sel.options.length===0){
+      const shops=JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
+      sel.innerHTML=shops.map(s=>`<option value="${s}">${s}</option>`).join('');
     }
-    
-    // Всегда вызывать render функции
-    if(tab==='stock'){
-      renderStockGroups();
-    } else {
-      _whShipSelected.clear();
-      renderShipList();
-      // Заполнить магазины
-      const sel=document.getElementById('whShipDest');
-      if(sel && sel.options.length===0){
-        const shops=getShops();
-        sel.innerHTML=shops.map(s=>`<option value="${s}">${s}</option>`).join('');
-      }
-    }
-  }catch(e){
-    console.error('Error in setWhStockTab:', e);
   }
 }
 
@@ -4045,7 +3107,7 @@ function toggleShipSort(){
 function renderStockGroups(){
   const c = document.getElementById('whStockGroups'); if(!c) return;
   const q = (document.getElementById('whStockSearch')?.value||'').toLowerCase().trim();
-  let stock = items.filter(i=>i.status==='received' && !i.deletedAt);
+  let stock = items.filter(i=>i.status==='received');
   if(q) stock = stock.filter(i=>((i.name||i.itemName||'')+(i.artikul||'')+(i.wood||'')+(i.size||'')).toLowerCase().includes(q));
 
   if(!stock.length){
@@ -4053,169 +3115,64 @@ function renderStockGroups(){
     return;
   }
 
-  // Разделяем на две категории
-  const active = stock.filter(i=>!i.isShopArchived);
-  const archived = stock.filter(i=>i.isShopArchived);
+  // Группируем по наименованию (нормализуем: trim + нижний регистр как ключ)
+  const groups = {};
+  stock.forEach(item=>{
+    const rawName = (item.name||item.itemName||'—').trim();
+    const key = rawName.toLowerCase();
+    if(!groups[key]) groups[key]={name: rawName, items:[], total:0, sum:0};
+    groups[key].items.push(item);
+    groups[key].total++;
+    groups[key].sum += item.price||0;
+  });
 
-  let html = '';
+  // Сортировка внутри группы по цене
+  Object.values(groups).forEach(g=>{
+    g.items.sort((a,b)=> _whStockSortAsc ? (a.price||0)-(b.price||0) : (b.price||0)-(a.price||0));
+  });
 
-  // ═══ ГРУППА 1: ТОВАРЫ ПОД ОТГРУЗКУ ═══
-  if(active.length){
-    const groups1 = {};
-    active.forEach(item=>{
-      const rawName = (item.name||item.itemName||'—').trim();
-      const key = rawName.toLowerCase();
-      if(!groups1[key]) groups1[key]={name: rawName, items:[], total:0, sum:0};
-      groups1[key].items.push(item);
-      groups1[key].total++;
-      groups1[key].sum += item.price||0;
-    });
-    
-    Object.values(groups1).forEach(g=>{
-      g.items.sort((a,b)=> _whStockSortAsc ? (a.price||0)-(b.price||0) : (b.price||0)-(a.price||0));
-    });
-    
-    const sorted1 = Object.values(groups1).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
-    const totalQty1 = sorted1.reduce((s,g)=>s+g.total,0);
-    const totalSum1 = sorted1.reduce((s,g)=>s+g.sum,0);
+  // Группы по алфавиту
+  const sorted = Object.values(groups).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
 
-    html += `<div style="margin-bottom:14px;border:2px solid var(--accent);border-radius:12px;overflow:hidden">
-      <div onclick="toggleStockCategory('active')" style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--accent);color:#000;font-weight:700;cursor:pointer">
+  c.innerHTML = sorted.map(g=>{
+    const isOpen = q || document.getElementById('wsg_'+CSS.escape(g.name))?.classList.contains('open');
+    return `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <div onclick="toggleStockGroup('${g.name.replace(/'/g,"\\'")}')" style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--s2);cursor:pointer">
         <div>
-          <div style="font-size:14px">📦 Товары под отгрузку</div>
-          <div style="font-size:11px;opacity:0.8">${totalQty1} шт. · ${fmt(totalSum1)}</div>
+          <div style="font-size:14px;font-weight:700">${g.name}</div>
+          <div style="font-size:11px;color:var(--t2)">${g.total} шт. · ${fmt(g.sum)}</div>
         </div>
-        <span id="stockCatArrow_active" style="font-size:18px;transition:transform .2s">▲</span>
+        <span id="wsgarrow_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="font-size:18px;color:var(--t2);transition:transform .2s">${isOpen?'▲':'▼'}</span>
       </div>
-      <div id="stockCat_active" style="padding:0 12px">
-        ${sorted1.map(g=>{
-          const isOpen = false;  // Свернуть по умолчанию (вместо автоматического открытия)
-          return `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:8px">
-            <div onclick="toggleStockGroup('${safeId}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);cursor:pointer">
-              <div>
-                <div style="font-size:13px;font-weight:700">${g.name}</div>
-                <div style="font-size:10px;color:var(--t2)">${g.total} шт. · ${fmt(g.sum)}</div>
-              </div>
-              <span id="wsgarrow_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="font-size:16px;color:var(--t2);transition:transform .2s">${isOpen?'▲':'▼'}</span>
+      <div id="wsg_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="display:${isOpen?'block':'none'};padding:0 12px">
+        ${g.items.map(item=>{
+          const num = item.artikul || (item.itemNum && !item.itemNum.startsWith('НАЧ-') ? item.itemNum : '');
+          const isAdmin = session && (session.role==='администратор'||session.role==='управляющий');
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
+            <div style="flex:1">
+              <div style="font-size:12px;font-weight:600">${num?'№'+num+' ':''}${item.wood||'—'}${item.size?' · '+item.size:''}</div>
+              <div style="font-size:11px;color:var(--t2)">Принято: ${fmtDT(item.receivedAt)}</div>
             </div>
-            <div id=\"wsg_${safeId}\" style=\"display:none;padding:0 12px">
-              ${g.items.map(item=>{
-                const num = item.artikul || (item.itemNum && !item.itemNum.startsWith('НАЧ-') ? item.itemNum : '');
-                const isAdmin = session && (session.role==='администратор'||session.role==='управляющий');
-                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
-                  <div style="flex:1">
-                    <div style="font-size:12px;font-weight:600">${num?'№'+num+' ':''}${item.wood||'—'}${item.size?' · '+item.size:''}</div>
-                    <div style="font-size:11px;color:var(--t2)">Принято: ${fmtDT(item.receivedAt)}</div>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</div>
-                    ${isAdmin?`
-                    <button onclick="openStockItemEdit('${item._id}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--a2);cursor:pointer;font-size:12px">✏️</button>
-                    <button onclick="deleteStockItem('${item._id}','${(item.name||item.itemName||'').replace(/'/g,"\\'")}');" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--exp);cursor:pointer;font-size:12px">🗑</button>`:''}
-                  </div>
-                </div>`;
-              }).join('')}
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</div>
+              ${isAdmin?`
+              <button onclick="openStockItemEdit('${item._id}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--a2);cursor:pointer;font-size:12px">✏️</button>
+              <button onclick="deleteStockItem('${item._id}','${(item.name||item.itemName||'').replace(/'/g,"\\'")}');" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--exp);cursor:pointer;font-size:12px">🗑</button>`:''}
             </div>
           </div>`;
         }).join('')}
       </div>
     </div>`;
-  }
-
-  // ═══ ГРУППА 2: АРХИВНЫЕ ТОВАРЫ ═══
-  if(archived.length){
-    const groups2 = {};
-    archived.forEach(item=>{
-      const rawName = (item.name||item.itemName||'—').trim();
-      const key = rawName.toLowerCase();
-      if(!groups2[key]) groups2[key]={name: rawName, items:[], total:0, sum:0};
-      groups2[key].items.push(item);
-      groups2[key].total++;
-      groups2[key].sum += item.price||0;
-    });
-    
-    Object.values(groups2).forEach(g=>{
-      g.items.sort((a,b)=> _whStockSortAsc ? (a.price||0)-(b.price||0) : (b.price||0)-(a.price||0));
-    });
-    
-    const sorted2 = Object.values(groups2).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
-    const totalQty2 = sorted2.reduce((s,g)=>s+g.total,0);
-    const totalSum2 = sorted2.reduce((s,g)=>s+g.sum,0);
-
-    html += `<div style="margin-bottom:14px;border:2px solid var(--border);border-radius:12px;overflow:hidden">
-      <div onclick="toggleStockCategory('archived')" style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--s1);cursor:pointer;border-bottom:1px solid var(--border)">
-        <div>
-          <div style="font-size:14px;font-weight:700;color:var(--t2)">🗄 Архивные товары (прочие)</div>
-          <div style="font-size:11px;color:var(--t2)">${totalQty2} шт. · ${fmt(totalSum2)}</div>
-        </div>
-        <span id="stockCatArrow_archived" style="font-size:18px;color:var(--t2);transition:transform .2s">▼</span>
-      </div>
-      <div id="stockCat_archived" style="display:none;padding:0 12px">
-        ${sorted2.map(g=>{
-          const isOpen = false;  // Свернуть по умолчанию (вместо автоматического открытия)
-          return `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:8px">
-            <div onclick="toggleStockGroup('${safeId}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);cursor:pointer">
-              <div>
-                <div style="font-size:13px;font-weight:700">${g.name}</div>
-                <div style="font-size:10px;color:var(--t2)">${g.total} шт. · ${fmt(g.sum)}</div>
-              </div>
-              <span id="wsgarrow_${g.name.replace(/[^а-яёa-z0-9]/gi,'_')}" style="font-size:16px;color:var(--t2);transition:transform .2s">${isOpen?'▲':'▼'}</span>
-            </div>
-            <div id=\"wsg_${safeId}\" style=\"display:none;padding:0 12px">
-              ${g.items.map(item=>{
-                const num = item.artikul || (item.itemNum && !item.itemNum.startsWith('НАЧ-') ? item.itemNum : '');
-                const isAdmin = session && (session.role==='администратор'||session.role==='управляющий');
-                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
-                  <div style="flex:1">
-                    <div style="font-size:12px;font-weight:600">${num?'№'+num+' ':''}${item.wood||'—'}${item.size?' · '+item.size:''}</div>
-                    <div style="font-size:11px;color:var(--t2)">Принято: ${fmtDT(item.receivedAt)}</div>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</div>
-                    ${isAdmin?`
-                    <button onclick="openStockItemEdit('${item._id}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--a2);cursor:pointer;font-size:12px">✏️</button>
-                    <button onclick="deleteStockItem('${item._id}','${(item.name||item.itemName||'').replace(/'/g,"\\'")}');" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 7px;color:var(--exp);cursor:pointer;font-size:12px">🗑</button>`:''}
-                  </div>
-                </div>`;
-              }).join('')}
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`;
-  }
-
-  c.innerHTML = html;
+  }).join('');
 }
 
-// Callback когда обновился справочник шопов
-window.onReferencesUpdated = function(refType){
-  if(refType === 'shops'){
-    renderStockGroups(); // Обновить список товаров и селект магазинов
-  }
-  if(refType === 'staff'){
-    renderStockGroups(); // Может потребоваться обновить UI
-  }
-  if(refType === 'itemNames'){
-    renderStockGroups(); // Может потребоваться обновить UI
-  }
-};
-
-function toggleStockCategory(category){
-  const el = document.getElementById('stockCat_'+category);
-  const arrow = document.getElementById('stockCatArrow_'+category);
+function toggleStockGroup(name){
+  const id = 'wsg_'+name.replace(/[^а-яёa-z0-9]/gi,'_');
+  const arrowId = 'wsgarrow_'+name.replace(/[^а-яёa-z0-9]/gi,'_');
+  const el = document.getElementById(id);
+  const arrow = document.getElementById(arrowId);
   if(!el) return;
-  const open = el.style.display === 'block';
-  el.style.display = open ? 'none' : 'block';
-  if(arrow) arrow.textContent = open ? '▼' : '▲';
-}
-
-function toggleStockGroup(groupName){
-  const safeId = groupName.replace(/[^а-яёa-z0-9]/gi,'_');
-  const el = document.getElementById('wsg_'+safeId);
-  const arrow = document.getElementById('wsgarrow_'+safeId);
-  if(!el) return;
-  const open = el.style.display === 'block';
+  const open = el.style.display==='block';
   el.style.display = open ? 'none' : 'block';
   if(arrow) arrow.textContent = open ? '▼' : '▲';
 }
@@ -6682,10 +5639,10 @@ async function saveStockItemEdit(){
 }
 
 async function deleteStockItem(itemId, name){
-  if(!confirm(`Переместить товар в корзину?\n\n«${name}»\n\nВы сможете восстановить его из корзины в любой момент.`)) return;
+  if(!confirm(`Удалить товар «${name}» со склада?\n\nЭто действие нельзя отменить.`)) return;
   try{
-    await softDeleteItem('ws_items', itemId, 'товар');
-    renderStockGroups();
+    await db.collection('ws_items').doc(itemId).delete();
+    showToast(`🗑 Товар «${name}» удалён`);
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 // Та же база ws_other_tasks, но запись ведётся по дням вручную,
@@ -7175,32 +6132,9 @@ function getMaxSystemArtikul(){
 function addMaItemRow(){
   const names = getItemNames();
   const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
-  _maItems.push({
-    rid:uid(), artikul:'', artikulMode:'auto', artikulManual:false, 
-    name:'', wood:'', zp:0, price:0, qty:'',
-    _copyName:true, _copyWood:true, _copyPrice:true, _copyZp:true
-  });
+  _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', artikulManual:false, name:'', wood:'', zp:0, price:0, qty:''});
   recalcMaAutoArtikuls();
   renderMaItemsList();
-}
-
-function duplicateMaItemRow(rid){
-  const idx = _maItems.findIndex(x=>x.rid===rid); 
-  if(idx<0) return;
-  const src = _maItems[idx];
-  const copy = {
-    rid:uid(), artikul:'', artikulMode:'auto', artikulManual:false,
-    name: src._copyName ? src.name : '',
-    wood: src._copyWood ? src.wood : '',
-    zp: src._copyZp ? (src.zp||0) : 0,
-    price: src._copyPrice ? (src.price||0) : 0,
-    qty: '',
-    _copyName:true, _copyWood:true, _copyPrice:true, _copyZp:true
-  };
-  _maItems.splice(idx+1, 0, copy);
-  recalcMaAutoArtikuls();
-  renderMaItemsList();
-  showToast('📋 Позиция скопирована');
 }
 
 function renderMaItemsList(){
@@ -7229,7 +6163,7 @@ function renderMaItemsList(){
           placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
           style="${it.artikulMode==='none'?'opacity:0.6':''}">
         ${it.artikulMode==='auto'?`<div style="font-size:11px;color:var(--t2);margin-top:5px">Последний номер в системе: ${getMaxSystemArtikul()}. По умолчанию — следующий по порядку, можно ввести свой</div>`:''}
-        <div id="maArtikulHint_${it.rid}" style="font-size:11px;color:var(--accent);margin-top:5px">${(parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto' ? `Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}` : ''}</div>
+        ${(parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto' ? `<div style="font-size:11px;color:var(--accent);margin-top:5px">Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}</div>` : ''}
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Количество одинаковых изделий</label>
         <input class="fi" type="number" inputmode="numeric" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" placeholder="1">
@@ -7277,37 +6211,15 @@ function setMaArtikulMode(rid, mode){
   renderMaItemsList();
 }
 
-// Точечно обновляет только подпись текущей позиции (если она свёрнута) и
-// подсказку диапазона артикулов внутри открытой карточки — БЕЗ пересборки
-// всего списка через innerHTML. Это нужно, чтобы при наборе номера с
-// клавиатуры поле ввода не теряло фокус и клавиатура не закрывалась
-// после каждой введённой цифры.
-function refreshMaDynamicBits(){
-  _maItems.forEach(it=>{
-    if(it.rid===_maExpandedRid){
-      const hintEl = document.getElementById('maArtikulHint_'+it.rid);
-      if(hintEl){
-        hintEl.textContent = (parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto'
-          ? `Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}`
-          : '';
-      }
-    } else {
-      const sumEl = document.getElementById('maSummary_'+it.rid);
-      if(sumEl) sumEl.innerHTML = maItemSummaryLine(it);
-    }
-  });
-}
-
 // Ручной ввод номера в окошке "Авто" — пользователь меняет, от какого номера
 // начинается автонумерация. Все последующие позиции в режиме "авто" продолжат
-// цепочку от введённого значения. Полную перерисовку списка НЕ делаем —
-// иначе на мобильных это закрывает клавиатуру после каждой цифры.
+// цепочку от введённого значения.
 function updateMaAutoArtikul(rid, val){
   const it = _maItems.find(x=>x.rid===rid); if(!it) return;
   it.artikul = val;
   it.artikulManual = true;
   recalcMaAutoArtikuls();
-  refreshMaDynamicBits();
+  renderMaItemsList();
 }
 
 function updateMaItem(rid, field, val){
@@ -7315,7 +6227,7 @@ function updateMaItem(rid, field, val){
   if(field==='qty'){
     it.qty = Math.max(1, parseInt(val,10)||1);
     recalcMaAutoArtikuls();
-    refreshMaDynamicBits(); // без полной перерисовки — не теряем фокус поля
+    renderMaItemsList();
     return;
   }
   it[field] = (field==='zp'||field==='price') ? (parseFloat(val)||0) : val;
@@ -7386,34 +6298,14 @@ async function saveManualAccept(){
       positions
     });
     audit && audit('manual_acceptance_created',{masterName:master?.name, date, count:positions.length});
-    
-    // Добавить в локальный кэш
-    _maHistory.push({
-      id: batchId, masterId, masterName: master?.name||'',
-      deliveredDate: date,
-      createdBy: session.name, createdById: session.id,
-      createdAt: now(),
-      status: 'open',
-      positions
-    });
-    
     closeMo('manualAcceptMo');
     showToast(`✅ Приёмка от ${master?.name||''} сохранена · ${positions.length} позиций`);
-    
-    // Перерисовать историю на странице приёмки
-    renderManualAcceptHistory('rcvManualHistory');
-    
-    // Если модальное окно истории существует - перерисовать и там
-    if(document.getElementById('manualAcceptHistory')){
-      renderManualAcceptHistory('manualAcceptHistory');
-    }
+    renderManualAcceptHistory();
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 
-function renderManualAcceptHistory(containerId){
-  // containerId - может быть 'manualAcceptHistory' (из модала) или 'rcvManualHistory' (со страницы приёмки)
-  const elemId = containerId || 'manualAcceptHistory';
-  const c = document.getElementById(elemId); if(!c) return;
+function renderManualAcceptHistory(){
+  const c = document.getElementById('manualAcceptHistory'); if(!c) return;
   if(!_maHistory.length){
     c.innerHTML = '<div class="empty" style="padding:10px 0"><div class="ei">📋</div>Приёмок пока нет</div>';
     return;
@@ -7866,17 +6758,15 @@ function openFiGroupDetail(groupId){
       <button onclick="closeMo('fiGroupDetailMo');activateFirstInvGroup('${g.id}')" class="btn green" style="margin-bottom:8px">✅ Активировать (поставить на склад)</button>
       <button onclick="closeMo('fiGroupDetailMo');openFiGroupForEdit('${g.id}')" class="btn" style="background:var(--a2);color:#000;margin-bottom:8px">➕ Дополнить группу</button>
       <button onclick="closeMo('fiGroupDetailMo');archiveFirstInvGroup('${g.id}')" class="btn sec" style="margin-bottom:8px">🗄 Перенести в архив</button>
-      <button onclick="deleteFiGroup('${g.id}')" class="btn" style="background:var(--exp)">🗑 Переместить в корзину</button>`;
+      <button onclick="deleteFiGroup('${g.id}')" class="btn" style="background:var(--exp)">🗑 Удалить группу</button>`;
   } else if(g.status==='active'){
     actions = `
       <button onclick="closeMo('fiGroupDetailMo');openFiGroupForEdit('${g.id}')" class="btn" style="background:var(--a2);color:#000;margin-bottom:8px">➕ Дополнить группу</button>
       <button onclick="closeMo('fiGroupDetailMo');archiveFirstInvGroup('${g.id}')" class="btn sec">🗄 Перенести в архив</button>`;
   } else {
-    // Архивированная группа — можно восстановить или переместить в корзину
     actions = `
       <button onclick="closeMo('fiGroupDetailMo');openFiGroupForEdit('${g.id}')" class="btn" style="background:var(--a2);color:#000;margin-bottom:8px">➕ Дополнить группу</button>
-      <button onclick="unarchiveFirstInvGroup('${g.id}')" class="btn green" style="margin-bottom:8px">↩️ Восстановить из архива</button>
-      <button onclick="deleteFiGroup('${g.id}')" class="btn" style="background:var(--exp)">🗑 Переместить в корзину</button>`;
+      <button onclick="deleteFiGroup('${g.id}')" class="btn" style="background:var(--exp)">🗑 Удалить группу из архива</button>`;
   }
   document.getElementById('fiGroupDetailActions').innerHTML = actions;
 
@@ -7899,10 +6789,11 @@ function filterFiGroupPositions(){
 
 async function deleteFiGroup(groupId){
   const g = _fiGroups.find(x=>x.id===groupId); if(!g) return;
-  if(!confirm(`Переместить группу в корзину?\n\n«${g.groupName}»\n\nВы сможете восстановить её из корзины в любой момент.`)) return;
+  if(!confirm(`Удалить группу «${g.groupName}»?\n\nЕсли группа была активирована — товары останутся на складе.`)) return;
   try{
-    await softDeleteItem('ws_first_inventory', groupId, 'инвентаризация');
+    await db.collection('ws_first_inventory').doc(groupId).delete();
     closeMo('fiGroupDetailMo');
+    showToast(`🗑 Группа «${g.groupName}» удалена`);
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 
@@ -8010,34 +6901,6 @@ async function archiveFirstInvGroup(groupId){
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 
-// 🔴 КРИТИЧНО: Эта функция ВОССТАНАВЛИВАЕТ группу из архива, а НЕ удаляет её!
-// Ранее кнопка "Удалить группу из архива" вызывала deleteFiGroup(), который полностью
-// стирал группу из системы вместе со всеми данными. Теперь это исправлено.
-// Функция просто меняет статус с 'archived' обратно на 'active' или 'draft'.
-async function unarchiveFirstInvGroup(groupId){
-  const g = _fiGroups.find(x=>x.id===groupId); if(!g) return;
-  if(!confirm(`Восстановить группу «${g.groupName}» из архива?\n\nВсе товары останутся на складе и станут видны в отгрузках.`)) return;
-  try{
-    // Если группа была активирована (товары на складе) — возвращаем статус 'active'
-    // Иначе возвращаем в 'draft'
-    const newStatus = g.activatedAt ? 'active' : 'draft';
-    await db.collection('ws_first_inventory').doc(groupId).update({
-      status: newStatus, 
-      unarchivedAt: now(), 
-      unarchivedBy: session.name
-    });
-    // Если товары были помечены архивными — снимаем эту отметку
-    if(newStatus==='active'){
-      const snap = await db.collection('ws_items').where('fromFirstInventory','==',groupId).get();
-      const batch = db.batch();
-      snap.docs.forEach(d=>batch.update(d.ref,{isShopArchived:false}));
-      await batch.commit();
-    }
-    closeMo('fiGroupDetailMo');
-    showToast(`✅ Группа «${g.groupName}» восстановлена из архива`);
-  }catch(e){ showToast('Ошибка: '+e.message); }
-}
-
 // Исправляет артикулы вида НАЧ-... на нормальные порядковые числа
 async function fixNachArtikuls(){
   const badItems = items.filter(i=>i.itemNum && i.itemNum.startsWith('НАЧ-'));
@@ -8121,354 +6984,19 @@ function wsUploadToGitHub(){
   });
 }
 
-
-// ════════ КОРЗИНА (мягкое удаление) ════════
-let _trashCache = {}; // локальный кэш удалённых элементов
-let _trashCurrentFilter = 'all'; // текущий фильтр в корзине
-
-// Отметить элемент как удалённый (мягкое удаление) вместо полного `.delete()`
-async function softDeleteItem(collection, docId, itemType='other') {
-  try {
-    await db.collection(collection).doc(docId).update({
-      deletedAt: now(),
-      deletedBy: session.name,
-      deletedReason: itemType
-    });
-    showToast(`🗑 ${itemType} перемещён в корзину`);
-  } catch(e) {
-    showToast('Ошибка: ' + e.message);
-  }
-}
-
-// Восстановить из корзины
-async function restoreFromTrash(collection, docId) {
-  if(!confirm('Восстановить из корзины?')) return;
-  try {
-    await db.collection(collection).doc(docId).update({
-      deletedAt: null,
-      deletedBy: null
-    });
-    showTrashList(); // перезагрузить список
-    showToast('✅ Восстановлено из корзины');
-  } catch(e) {
-    showToast('Ошибка: ' + e.message);
-  }
-}
-
-// Окончательно удалить из корзины (ПЕРМАНЕНТНОЕ УДАЛЕНИЕ)
-async function permanentlyDeleteFromTrash(collection, docId, name) {
-  if(!confirm(`⚠️ ОКОНЧАТЕЛЬНО УДАЛИТЬ?\n\n«${name}»\n\nЭто действие необратимо!`)) return;
-  if(!confirm('Вы уверены?')) return;
-  try {
-    await db.collection(collection).doc(docId).delete();
-    showTrashList();
-    showToast('🗑 Удалено окончательно');
-  } catch(e) {
-    showToast('Ошибка: ' + e.message);
-  }
-}
-
-// Переключить фильтр в корзине
-async function showTrashType(type) {
-  _trashCurrentFilter = type;
-  // Обновить кнопки фильтра
-  ['all','fi','ma','other'].forEach(t => {
-    const btn = document.getElementById('trashFilter' + (t==='all'?'All':t.toUpperCase()));
-    if(btn) btn.style.background = (t === type) ? 'var(--accent)' : 'var(--s1)';
-  });
-  showTrashList();
-}
-
-// Загрузить и показать список корзины
-async function showTrashList() {
-  const container = document.getElementById('trashList');
-  if(!container) return;
-  container.innerHTML = '<div style="text-align:center;padding:20px">Загрузка корзины...</div>';
-  
-  try {
-    // Загружаем удалённые группы первой инвентаризации
-    const deletedFiSnap = await db.collection('ws_first_inventory').where('deletedAt','!=',null).get();
-    const deletedFi = deletedFiSnap.docs.map(d => ({id:d.id, type:'fi', ...d.data()}));
-    
-    // Загружаем удалённые приёмки от мастеров
-    const deletedMaSnap = await db.collection('ws_master_acceptances').where('deletedAt','!=',null).get();
-    const deletedMa = deletedMaSnap.docs.map(d => ({id:d.id, type:'ma', ...d.data()}));
-    
-    // Загружаем удалённые товары со склада
-    const deletedItemsSnap = await db.collection('ws_items').where('deletedAt','!=',null).get();
-    const deletedItems = deletedItemsSnap.docs.map(d => ({id:d.id, type:'item', ...d.data()}));
-    
-    // Объединяем всё
-    let allDeleted = [...deletedFi, ...deletedMa, ...deletedItems];
-    
-    // Фильтруем по типу
-    if(_trashCurrentFilter !== 'all') {
-      if(_trashCurrentFilter === 'fi') allDeleted = allDeleted.filter(i => i.type === 'fi');
-      else if(_trashCurrentFilter === 'ma') allDeleted = allDeleted.filter(i => i.type === 'ma');
-      else if(_trashCurrentFilter === 'other') allDeleted = allDeleted.filter(i => !['fi','ma','item'].includes(i.type));
-    }
-    
-    // Сортируем по времени удаления (новые сверху)
-    allDeleted.sort((a,b) => (b.deletedAt||'').localeCompare(a.deletedAt||''));
-    
-    if(!allDeleted.length) {
-      container.innerHTML = '<div style="text-align:center;color:var(--t2);padding:20px 0">Корзина пуста</div>';
-      return;
-    }
-    
-    container.innerHTML = allDeleted.map(item => {
-      let label = '';
-      let collection = '';
-      if(item.type === 'fi') {
-        label = '🆕 Инвентаризация: ' + (item.groupName || 'без названия');
-        collection = 'ws_first_inventory';
-      } else if(item.type === 'ma') {
-        label = '📥 Приёмка от ' + (item.masterName || 'мастера');
-        collection = 'ws_master_acceptances';
-      } else if(item.type === 'item') {
-        label = '📦 Товар: ' + ((item.name||item.itemName||'') + (item.artikul ? ' №' + item.artikul : ''));
-        collection = 'ws_items';
-      } else {
-        label = 'Другое: ' + (item.name || item.id);
-        collection = '';
-      }
-      
-      const delTime = item.deletedAt ? new Date(item.deletedAt).toLocaleString('ru-RU') : 'неизвестно';
-      const delBy = item.deletedBy || 'неизвестно';
-      
-      return `
-      <div style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
-          <div>
-            <div style="font-size:14px;font-weight:600;color:var(--text)">${label}</div>
-            <div style="font-size:12px;color:var(--t2);margin-top:4px">
-              Удалено: ${delTime} • ${delBy}
-            </div>
-          </div>
-        </div>
-        <div style="display:flex;gap:8px">
-          <button onclick="restoreFromTrash('${collection}','${item.id}')" 
-                  class="btn green" style="flex:1;font-size:12px">↩️ Восстановить</button>
-          <button onclick="permanentlyDeleteFromTrash('${collection}','${item.id}','${(label||'').replace(/"/g,'&quot;')}')" 
-                  class="btn" style="flex:1;font-size:12px;background:var(--exp)">🗑 Удалить навсегда</button>
-        </div>
-      </div>`;
-    }).join('');
-    
-  } catch(e) {
-    container.innerHTML = `<div style="color:var(--exp);padding:20px;text-align:center">Ошибка загрузки: ${e.message}</div>`;
-  }
-}
-
-// Инициализировать корзину при переходе на вкладку
-let _pageChangeListener = null;
-function initTrashTab() {
-  if(!_pageChangeListener) {
-    _pageChangeListener = () => {
-      if(document.querySelector('.page.active')?.id === 'pg-trash') {
-        showTrashList();
-      }
-    };
-    window.addEventListener('popstate', _pageChangeListener);
-  }
-}
-
-// ════════ OFFLINE MODE & SYNC ════════
-let _isOnline = navigator.onLine;
-let _syncInProgress = false;
-let _offlineCacheReady = false;
-
-// Загрузить приложение из кэша (localStorage)
-function initOfflineMode(){
-  console.log('[OFFLINE] Loading from localStorage...');
-  
-  // Загружаем сохранённые данные
-  const cached = {
-    items: JSON.parse(localStorage.getItem('ws_items') || '[]'),
-    products: JSON.parse(localStorage.getItem('ws_item_names') || '[]'),
-    woods: JSON.parse(localStorage.getItem('ws_woods') || '[]'),
-    sizes: JSON.parse(localStorage.getItem('ws_sizes') || '[]'),
-    staff: JSON.parse(localStorage.getItem('ws_staff') || '[]'),
-    maHistory: JSON.parse(localStorage.getItem('ws_master_acceptances_list') || '[]'),
-    fiGroups: JSON.parse(localStorage.getItem('ws_first_inventory_list') || '[]'),
-  };
-  
-  items = cached.items;
-  products = cached.products;
-  _allWoods = cached.woods;
-  _allSizes = cached.sizes;
-  _staff = cached.staff;
-  _maHistory = cached.maHistory;
-  _fiGroups = cached.fiGroups;
-  
-  // Показываем UI с кэшированными данными
-  if(session) {
-    showPage(ROLES[session.role]?.page || 'pg-dash');
-    renderEmployeeList();
-    renderDash();
-    renderMyWork();
-    renderWarehouse();
-    renderZP();
-    renderAdmin();
-  }
-  
-  _offlineCacheReady = true;
-  console.log('[OFFLINE] Ready! Items:', items.length, 'Staff:', _staff.length);
-}
-
-// Когда вернулся интернет — синхронизировать
-// Универсальное сохранение: онлайн → Firebase, оффлайн → очередь
-async function dbSet(col, docId, payload){
-  if(navigator.onLine){
-    // Есть интернет - сохраняем прямо в Firebase
-    await db.collection(col).doc(docId).set(payload, {merge:true});
-  } else {
-    // Нет интернета - сохраняем в очередь
-    const outbox = JSON.parse(localStorage.getItem('ws_outbox') || '[]');
-    outbox.push({
-      id: uid(),
-      col: col,
-      docId: docId,
-      payload: payload,
-      ts: now()
-    });
-    localStorage.setItem('ws_outbox', JSON.stringify(outbox));
-    console.log('[OUTBOX] Добавлено в очередь:', col, docId);
-  }
-}
-
-// Отправить накопленную очередь оффлайн-данных при восстановлении интернета
-async function outboxFlush(){
-  const outbox = JSON.parse(localStorage.getItem('ws_outbox') || '[]');
-  if(!outbox.length) {
-    console.log('[OUTBOX] Очередь пуста');
-    return;
-  }
-  
-  console.log('[OUTBOX] Отправка', outbox.length, 'элементов...');
-  
-  try{
-    for(const item of outbox){
-      try{
-        await db.collection(item.col).doc(item.docId).set(item.payload, {merge:true});
-        console.log('[OUTBOX] ✅ Отправлено:', item.col, item.docId);
-      }catch(e){
-        console.error('[OUTBOX] Ошибка:', item.col, item.docId, e.message);
-        throw e;
-      }
-    }
-    // Очистить очередь только если всё прошло успешно
-    localStorage.setItem('ws_outbox', JSON.stringify([]));
-    console.log('[OUTBOX] ✅ Очередь очищена');
-  }catch(e){
-    console.error('[OUTBOX] Ошибка при отправке очереди:', e.message);
-    // Не выбрасываем ошибку - очередь остаётся для повторной попытки
-  }
-}
-
-async function syncOnlineData(){
-  if(_syncInProgress || !_isOnline) return;
-  _syncInProgress = true;
-  
-  console.log('[SYNC] Starting sync with Firebase...');
-  
-  try{
-    // 1. Загружаем свежие данные с Firebase
-    const itemsSnap = await db.collection('ws_items').get();
-    items = itemsSnap.docs.map(d => ({_id: d.id, ...d.data()}));
-    localStorage.setItem('ws_items', JSON.stringify(items));
-    
-    const staffSnap = await db.collection('ws_staff').get();
-    _staff = staffSnap.docs.map(d => ({_id: d.id, ...d.data()}));
-    localStorage.setItem('ws_staff', JSON.stringify(_staff));
-    
-    const maSnap = await db.collection('ws_master_acceptances').get();
-    _maHistory = maSnap.docs.map(d => ({_id: d.id, ...d.data()}));
-    localStorage.setItem('ws_master_acceptances_list', JSON.stringify(_maHistory));
-    
-    const fiSnap = await db.collection('ws_first_inventory').get();
-    _fiGroups = fiSnap.docs.map(d => ({id: d.id, ...d.data()}));
-    localStorage.setItem('ws_first_inventory_list', JSON.stringify(_fiGroups));
-    
-    // 2. Отправляем очередь оффлайн-данных
-    await outboxFlush();
-    
-    // 3. Проверяем открытые смены
-    await checkOpenShifts();
-    
-    // 4. Обновляем UI
-    if(session){
-      renderDash();
-      renderMyWork();
-      renderWarehouse();
-      renderZP();
-      renderRcvPendingList();
-    }
-    
-    console.log('[SYNC] ✅ Sync complete!');
-    showToast('✅ Данные синхронизированы');
-    
-  }catch(e){
-    console.error('[SYNC] Error:', e.message);
-    showToast('⚠️ Ошибка синхронизации: ' + e.message);
-  }finally{
-    _syncInProgress = false;
-  }
-}
-
-// Проверить наличие открытых смен
-async function checkOpenShifts(){
-  try{
-    const shiftsSnap = await db.collection('ws_shifts').where('status','==','open').get();
-    const openShifts = shiftsSnap.docs.map(d => ({id: d.id, ...d.data()}));
-    
-    if(openShifts.length > 0){
-      console.log('[SHIFTS] Open shifts found:', openShifts.length);
-      showToast(`⚠️ Открытые смены: ${openShifts.length}`);
-    }
-  }catch(e){
-    console.log('[SHIFTS] Error checking shifts:', e.message);
-  }
-}
-
-// Обработчик изменения статуса интернета
-window.addEventListener('online', () => {
-  _isOnline = true;
-  console.log('[ONLINE] ✅ Internet connected!');
-  setSync('online');
-  setTimeout(() => syncOnlineData(), 500);
-});
-
-window.addEventListener('offline', () => {
-  _isOnline = false;
-  console.log('[OFFLINE] ❌ Internet disconnected');
-  setSync('offline');
-});
-
 document.addEventListener('DOMContentLoaded', ()=>{
-  console.log('[INIT] App starting...');
-  
-  // Показать интерфейс сразу (без ожидания Firebase)
-  if(session) {
-    initOfflineMode();
-    showPage(ROLES[session.role]?.page || 'pg-dash');
-  }
-  
-  // Если есть интернет — подключиться и синхронизировать
-  _isOnline = navigator.onLine;
-  setSync(_isOnline ? 'online' : 'offline');
-  
-  if(_isOnline){
-    // Небольшая задержка, чтобы Firebase успел инициализироваться
-    setTimeout(() => {
-      startWsSyncListeners();
-      startWsStaffSync();
-      syncOnlineData();
-    }, 1000);
-  }
-  
-  initTrashTab();
-  console.log('[INIT] ✅ App ready! Online:', _isOnline);
+  startWsSyncListeners();
+  startWsStaffSync();
+  renderEmployeeList();
+  if(session) startApp();
+  setSync(navigator.onLine?'online':'offline');
+  // Загружаем историю инвентаризаций в фоне
+  setTimeout(loadInvHistories, 2000);
+  // Init date defaults
+  const todayStr = new Date().toISOString().split('T')[0];
+  const blankD = document.getElementById('blankDate'); if(blankD) blankD.value = todayStr;
+  const ewD = document.getElementById('ewDate'); if(ewD) ewD.value = todayStr;
+  setStatsDateInputs('month');
 });
 </script>
 
@@ -8656,10 +7184,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     <div class="fg"><label class="fl">Мастер</label><select class="fs" id="maMaster"></select></div>
     <div class="fg"><label class="fl">Дата сдачи</label><input class="fi" type="date" id="maDate"></div>
 
-    <button class="btn" style="background:var(--a2);margin-bottom:10px" onclick="addMaItemRow()">➕ Добавить изделие</button>
-
     <div id="maItemsList" style="margin:14px 0"></div>
 
+    <button class="btn" style="background:var(--a2);margin-bottom:10px" onclick="addMaItemRow()">➕ Добавить изделие</button>
     <button class="btn green" onclick="saveManualAccept()">💾 Сохранить приёмку</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('manualAcceptMo')">Отмена</button>
   </div>

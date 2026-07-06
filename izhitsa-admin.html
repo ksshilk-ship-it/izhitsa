@@ -963,173 +963,6 @@ firebase.initializeApp({
 const db = firebase.firestore();
 db.enablePersistence({synchronizeTabs:true}).catch(function(e){ console.log('Persist:',e.code); });
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SHARED REFERENCES LIBRARY - Мультиролевая система
-// ═══════════════════════════════════════════════════════════════════════════
-
-window._sharedRefs = {
-  shops: [],
-  staff: [],
-  itemNames: [],
-  woods: [],
-  sizes: []
-};
-
-const CACHE_PREFIX_REF = 'cache_ref_';
-
-function initSharedReferencesSync(){
-  if(typeof db === 'undefined'){
-    console.warn('[SharedRefs] Firebase not initialized');
-    loadSharedReferencesFromLocalStorage();
-    return;
-  }
-  console.log('[SharedRefs] Subscribing to shared references');
-  ['shops', 'staff', 'itemNames', 'woods', 'sizes'].forEach(subscribeToReference);
-}
-
-function subscribeToReference(refType){
-  db.collection('iz_shared_references').doc(refType).onSnapshot(
-    snap => {
-      if(snap.exists){
-        window._sharedRefs[refType] = snap.data().items || [];
-        saveSharedRefToLocalStorage(refType, window._sharedRefs[refType]);
-        console.log('[SharedRefs] Updated:', refType);
-        if(typeof onReferencesUpdated === 'function') onReferencesUpdated(refType);
-      }
-    },
-    err => {
-      console.error('[SharedRefs] Error:', refType, err.code);
-      loadSharedRefFromLocalStorage(refType);
-    }
-  );
-}
-
-function loadSharedReferencesFromLocalStorage(){
-  ['shops', 'staff', 'itemNames', 'woods', 'sizes'].forEach(type => {
-    loadSharedRefFromLocalStorage(type);
-  });
-}
-
-function loadSharedRefFromLocalStorage(refType){
-  try {
-    const cached = localStorage.getItem(CACHE_PREFIX_REF + refType);
-    if(cached) window._sharedRefs[refType] = JSON.parse(cached);
-  } catch(e){ console.warn('[SharedRefs] Cache read error:', e.message); }
-}
-
-function saveSharedRefToLocalStorage(refType, items){
-  try {
-    localStorage.setItem(CACHE_PREFIX_REF + refType, JSON.stringify(items));
-  } catch(e){ console.warn('[SharedRefs] Cache write error:', e.message); }
-}
-
-function saveSharedReference(refType, items){
-  window._sharedRefs[refType] = items;
-  saveSharedRefToLocalStorage(refType, items);
-  if(typeof db !== 'undefined'){
-    db.collection('iz_shared_references').doc(refType).set({
-      type: refType,
-      items: items,
-      updatedAt: new Date().toISOString(),
-      updatedBy: (session && session.id) || 'unknown'
-    }, {merge: true}).catch(err => console.error('[SharedRefs] Save error:', err));
-  }
-}
-
-function getSharedReference(refType){ return window._sharedRefs[refType] || []; }
-
-// Мультиролевая система
-function getUserRoles(){ 
-  if(session && Array.isArray(session.roles)) return session.roles;
-  if(session && session.role) return [session.role];
-  return [];
-}
-
-function getCurrentRole(){
-  if(session){
-    if(session.currentRole) return session.currentRole;
-    if(session.role) return session.role;
-    if(Array.isArray(session.roles) && session.roles.length > 0) return session.roles[0];
-  }
-  return null;
-}
-
-function setCurrentRole(role){
-  if(session) session.currentRole = role;
-  localStorage.setItem('session_current_role', role);
-}
-
-function hasRole(role){
-  return getUserRoles().includes(role);
-}
-
-function showRoleSwitcher(){
-  const roles = getUserRoles();
-  if(roles.length <= 1) return;
-  
-  const currentRole = getCurrentRole();
-  const switcher = document.createElement('div');
-  switcher.id = 'roleSwitcher';
-  switcher.style.cssText = `
-    position: fixed;
-    top: 50px;
-    right: 10px;
-    background: var(--s2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px;
-    z-index: 9999;
-    display: flex;
-    gap: 4px;
-    flex-direction: column;
-  `;
-  
-  const roleEmojis = {
-    'admin': '⚙️',
-    'accountant': '💰',
-    'seller': '🏪',
-    'кладовщик': '📦',
-    'мастер': '🔨',
-    'управляющий': '👑',
-    'заготовщик': '🪚'
-  };
-  
-  switcher.innerHTML = `
-    <div style="font-size: 9px; color: var(--t2); padding: 0 4px">Роль:</div>
-    ${roles.map(role => `
-      <button onclick="switchToRole('${role}')" style="
-        padding: 6px 10px;
-        border-radius: 6px;
-        border: 1px solid ${currentRole === role ? 'var(--accent)' : 'var(--border)'};
-        background: ${currentRole === role ? 'var(--accent)' : 'var(--s1)'};
-        color: ${currentRole === role ? '#000' : 'var(--t1)'};
-        cursor: pointer;
-        font-size: 12px;
-        font-weight: 700;
-        white-space: nowrap;
-      ">
-        ${roleEmojis[role] || '●'} ${role}
-      </button>
-    `).join('')}
-  `;
-  
-  const existing = document.getElementById('roleSwitcher');
-  if(existing) existing.remove();
-  document.body.appendChild(switcher);
-}
-
-function switchToRole(newRole){
-  setCurrentRole(newRole);
-  location.reload();
-}
-
-window.onReferencesUpdated = function(refType){
-  // Переопределить в каждом модуле
-};
-
-console.log('[SharedRefs] Library loaded');
-// ═══════════════════════════════════════════════════════════════════════════
-
 var _adminSyncUnsubs = {};
 var ADMIN_SYNC_SETTINGS = {
   'iz_admin_users':      {doc:'admins',              field:'admins'},
@@ -1169,15 +1002,7 @@ function adminSyncListen(lsKey) {
 }
 function adminSyncSave(lsKey, data) {
   localStorage.setItem(lsKey, JSON.stringify(data));
-  
-  // Использовать shared-references для справочников
-  if(lsKey === 'iz_shops'){
-    localStorage.setItem('iz_admin_shops', JSON.stringify(data));
-    saveSharedReference('shops', data); // НОВОЕ! Сохранить в единую БД
-  } else if(lsKey === 'iz_staff'){
-    saveSharedReference('staff', data); // НОВОЕ! Сохранить в единую БД
-  }
-  
+  if(lsKey === 'iz_shops') localStorage.setItem('iz_admin_shops', JSON.stringify(data));
   var m = ADMIN_SYNC_SETTINGS[lsKey]; if(!m) return;
   var obj = {}; obj[m.field] = data; obj.updatedAt = new Date().toISOString();
   db.collection('iz_settings').doc(m.doc).set(obj, {merge:true}).catch(function(e){ console.log('adminSyncSave err', lsKey, e.code||e); });
@@ -6022,8 +5847,6 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   startAdminSyncListeners();
   startStaffSyncListener();
-  initSharedReferencesSync(); // НОВОЕ! Инициализировать синхронизацию справочников
-  showRoleSwitcher(); // НОВОЕ! Показать переключатель ролей если их несколько
   // Auto-select first role card
   var firstCard = document.querySelector('.role-card');
   if(firstCard) firstCard.click();
