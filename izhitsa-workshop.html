@@ -1275,6 +1275,187 @@ function applyUpdate() {
 <!-- FIREBASE -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- SHARED REFERENCES LIBRARY - Единая синхронизация справочников              -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<script>
+/**
+ * SHARED REFERENCES LIBRARY - Мультиролевая система
+ * Единая синхронизация справочников для всех модулей Ижица
+ */
+
+window._sharedRefs = {
+  shops: [],
+  staff: [],
+  itemNames: [],
+  woods: [],
+  sizes: []
+};
+
+const CACHE_PREFIX = 'cache_ref_';
+
+function initSharedReferencesSync(){
+  if(typeof _offlineNoFirebase !== 'undefined' && _offlineNoFirebase){
+    console.log('[SharedRefs] Firebase offline, loading from cache');
+    loadSharedReferencesFromLocalStorage();
+    return;
+  }
+  if(typeof db === 'undefined'){
+    console.warn('[SharedRefs] Firebase not initialized');
+    loadSharedReferencesFromLocalStorage();
+    return;
+  }
+  console.log('[SharedRefs] Subscribing to shared references');
+  ['shops', 'staff', 'itemNames', 'woods', 'sizes'].forEach(subscribeToReference);
+}
+
+function subscribeToReference(refType){
+  db.collection('iz_shared_references').doc(refType).onSnapshot(
+    snap => {
+      if(snap.exists){
+        window._sharedRefs[refType] = snap.data().items || [];
+        saveSharedRefToLocalStorage(refType, window._sharedRefs[refType]);
+        console.log('[SharedRefs] Updated:', refType);
+        if(typeof onReferencesUpdated === 'function') onReferencesUpdated(refType);
+      }
+    },
+    err => {
+      console.error('[SharedRefs] Error:', refType, err.code);
+      loadSharedRefFromLocalStorage(refType);
+    }
+  );
+}
+
+function loadSharedReferencesFromLocalStorage(){
+  ['shops', 'staff', 'itemNames', 'woods', 'sizes'].forEach(type => {
+    loadSharedRefFromLocalStorage(type);
+  });
+}
+
+function loadSharedRefFromLocalStorage(refType){
+  try {
+    const cached = localStorage.getItem(CACHE_PREFIX + refType);
+    if(cached) window._sharedRefs[refType] = JSON.parse(cached);
+  } catch(e){ console.warn('[SharedRefs] Cache read error:', e.message); }
+}
+
+function saveSharedRefToLocalStorage(refType, items){
+  try {
+    localStorage.setItem(CACHE_PREFIX + refType, JSON.stringify(items));
+  } catch(e){ console.warn('[SharedRefs] Cache write error:', e.message); }
+}
+
+function saveSharedReference(refType, items){
+  window._sharedRefs[refType] = items;
+  saveSharedRefToLocalStorage(refType, items);
+  if(typeof _offlineNoFirebase === 'undefined' || !_offlineNoFirebase){
+    if(typeof db !== 'undefined'){
+      db.collection('iz_shared_references').doc(refType).set({
+        type: refType,
+        items: items,
+        updatedAt: new Date().toISOString(),
+        updatedBy: (session && session.id) || 'unknown'
+      }, {merge: true}).catch(err => console.error('[SharedRefs] Save error:', err));
+    }
+  }
+}
+
+function getSharedReference(refType){ return window._sharedRefs[refType] || []; }
+
+// Мультиролевая система
+function getUserRoles(){ 
+  if(session && Array.isArray(session.roles)) return session.roles;
+  if(session && session.role) return [session.role];
+  return [];
+}
+
+function getCurrentRole(){
+  if(session){
+    if(session.currentRole) return session.currentRole;
+    if(session.role) return session.role;
+    if(Array.isArray(session.roles) && session.roles.length > 0) return session.roles[0];
+  }
+  return null;
+}
+
+function setCurrentRole(role){
+  if(session) session.currentRole = role;
+  localStorage.setItem('session_current_role', role);
+}
+
+function hasRole(role){
+  return getUserRoles().includes(role);
+}
+
+function showRoleSwitcher(){
+  const roles = getUserRoles();
+  if(roles.length <= 1) return;
+  
+  const currentRole = getCurrentRole();
+  const switcher = document.createElement('div');
+  switcher.id = 'roleSwitcher';
+  switcher.style.cssText = `
+    position: fixed;
+    top: 50px;
+    right: 10px;
+    background: var(--s2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    z-index: 9999;
+    display: flex;
+    gap: 4px;
+    flex-direction: column;
+  `;
+  
+  const roleEmojis = {
+    'администратор': '⚙️',
+    'продавец': '🏪',
+    'кладовщик': '📦',
+    'мастер': '🔨',
+    'управляющий': '👑',
+    'заготовщик': '🪚'
+  };
+  
+  switcher.innerHTML = `
+    <div style="font-size: 9px; color: var(--t2); padding: 0 4px">Роль:</div>
+    ${roles.map(role => `
+      <button onclick="switchToRole('${role}')" style="
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: 1px solid ${currentRole === role ? 'var(--accent)' : 'var(--border)'};
+        background: ${currentRole === role ? 'var(--accent)' : 'var(--s1)'};
+        color: ${currentRole === role ? '#000' : 'var(--t1)'};
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      ">
+        ${roleEmojis[role] || '●'} ${role}
+      </button>
+    `).join('')}
+  `;
+  
+  const existing = document.getElementById('roleSwitcher');
+  if(existing) existing.remove();
+  document.body.appendChild(switcher);
+}
+
+function switchToRole(newRole){
+  setCurrentRole(newRole);
+  // Перезагрузить приложение с новой ролью
+  location.reload();
+}
+
+window.onReferencesUpdated = function(refType){
+  // Переопределить в каждом модуле
+};
+
+console.log('[SharedRefs] Library loaded');
+</script>
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+
 <script>
 var db;
 var _offlineNoFirebase = (typeof firebase === 'undefined');
@@ -2022,6 +2203,9 @@ function startApp(){
   // Скрыть экран загрузки когда приложение запускается
   hideLoadingScreen();
   
+  // ✨ Инициализировать синхронизацию справочников (НОВОЕ!)
+  initSharedReferencesSync();
+  
   // Показать индикатор онлайна (добавить класс show)
   updateOnlineStatus();
   var indicator = document.getElementById('onlineIndicator');
@@ -2031,17 +2215,29 @@ function startApp(){
   document.getElementById('appScreen').style.display='block';
   document.getElementById('mainTabs').style.display='flex';
   document.getElementById('hdrName').textContent=session.name;
-  document.getElementById('hdrRole').textContent={заготовщик:'🪚 Заготовщик',мастер:'🔨 Мастер',кладовщик:'📦 Кладовщик',управляющий:'👑 Управляющий',администратор:'🛡 Администратор'}[session.role]||session.role;
+  
+  // Обновить отображение роли (с поддержкой мультиролевой системы)
+  const currentRole = getCurrentRole();
+  document.getElementById('hdrRole').textContent={
+    заготовщик:'🪚 Заготовщик',
+    мастер:'🔨 Мастер',
+    кладовщик:'📦 Кладовщик',
+    управляющий:'👑 Управляющий',
+    администратор:'🛡 Администратор'
+  }[currentRole] || currentRole;
+  
+  // Показать switcher ролей если их несколько (НОВОЕ!)
+  showRoleSwitcher();
   
   // Инициализировать справочники если их нет
-  if(!localStorage.getItem('iz_admin_shops')){
-    const defaultShops = ['Instagram', 'Facebook', 'ТикТок', 'Авито', 'Яндекс.Маркет'];
-    localStorage.setItem('iz_admin_shops', JSON.stringify(defaultShops));
+  if(window._sharedRefs.shops.length === 0){
+    const defaultShops = ['ОПТ', 'Ривьера Парк Сочи'];
+    saveSharedReference('shops', defaultShops);
   }
   
   // ИСПРАВЛЕНИЕ: Только администратор видит главное меню со всеми ролями
   // Остальные видят сразу вкладки своей роли
-  if(session.role === 'администратор'){
+  if(hasRole('администратор')){
     _currentMenuLevel = 'main';  // Администратор видит главное меню
     _currentPage = 'dash';
   } else {
@@ -2321,14 +2517,9 @@ function startListeners(){
       renderZP();
     }).catch(()=>{});
   }
-  // Shops from admin
-  db.collection('iz_admin_shops').onSnapshot(snap=>{
-    let shops=snap.docs.map(d=>d.data().name).filter(Boolean);
-    // Исправляем неправильные названия точек продаж
-    shops = shops.map(s => s.replace('ОПИТ', 'ОПТ'));
-    const sel=document.getElementById('shipDest');
-    if(sel) sel.innerHTML=shops.length?shops.map(s=>`<option>${s}</option>`).join(''):'<option>Дерево</option>';
-  },()=>{});
+  // ⚠️ Shops синхронизируются через shared references library (initSharedReferences)
+  // Этот старый listener удалён и заменён на unified approach
+  
   // Единый каталог товаров
   subscribeProducts();
   // Показать каталог только администратору
@@ -3070,7 +3261,7 @@ function renderShipmentPage(){
   // Заполнить магазины
   const sel = document.getElementById('shipPageDest');
   if(sel){
-    const shops = JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
+    const shops = getShops();
     sel.innerHTML = shops.map(s=>`<option value="${s}">${s}</option>`).join('');
   }
   renderShipPageList();
@@ -3119,7 +3310,7 @@ let _refEditState = {
 
 function showShopsReference(){
   const panel = document.getElementById('adminReferencesPanel');
-  _refEditState.shops = JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
+  _refEditState.shops = window._sharedRefs.shops || [];
   
   panel.innerHTML = `
     <div class="card">
@@ -3127,21 +3318,41 @@ function showShopsReference(){
         <div class="ctitle" style="margin:0">🏪 Магазины</div>
       </div>
       
+      <div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:12px;font-size:11px;color:var(--t2)">
+        💡 Добавь новый магазин или удали ненужные. После сохранения данные синхронизируются везде!
+      </div>
+      
       <div style="margin-bottom:12px">
         <input type="text" id="shopNewInput" placeholder="Название магазина..." class="fi" style="margin-bottom:8px;width:100%">
-        <button onclick="addShopToEdit()" class="btn" style="width:100%;background:var(--a2);color:#000;font-weight:700">+ Добавить магазин</button>
+        <button onclick="addShopToEdit()" class="btn" style="width:100%;background:var(--a2);color:#000;font-weight:700">➕ Добавить магазин</button>
       </div>
       
       <div id="shopsEditList" style="max-height:300px;overflow-y:auto;margin-bottom:12px">
-        ${_refEditState.shops.map((shop, idx) => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:6px">
-            <div style="font-size:13px;font-weight:600">🏪 ${shop}</div>
-            <button onclick="deleteShopFromEdit(${idx})" style="background:var(--exp);border:none;border-radius:6px;padding:4px 8px;color:#fff;cursor:pointer;font-size:12px">🗑 Удалить</button>
-          </div>
-        `).join('')}
+        ${_refEditState.shops.length === 0 ? 
+          '<div style="text-align:center;color:var(--t2);padding:20px">Магазинов нет. Добавь первый!</div>' :
+          _refEditState.shops.map((shop, idx) => {
+            const name = typeof shop === 'string' ? shop : (shop.name || 'Без имени');
+            const type = typeof shop === 'string' ? '—' : (shop.type || 'shop');
+            const typeLabel = {
+              'shop': '🏪 Магазин',
+              'offline': '💼 Опт',
+              'online': '🌐 Онлайн',
+              'workshop': '🏭 Мастерская'
+            }[type] || type;
+            return `
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--s2);border-radius:8px;margin-bottom:6px;border:1px solid var(--border)">
+                <div style="flex:1">
+                  <div style="font-size:13px;font-weight:600">🏪 ${name}</div>
+                  <div style="font-size:10px;color:var(--t2)">${typeLabel}</div>
+                </div>
+                <button onclick="deleteShopFromEdit(${idx})" style="background:var(--exp);border:none;border-radius:6px;padding:6px 10px;color:#fff;cursor:pointer;font-size:12px;font-weight:600">🗑 Удалить</button>
+              </div>
+            `;
+          }).join('')
+        }
       </div>
       
-      <button onclick="saveReferences('shops')" style="width:100%;padding:10px;border-radius:8px;background:var(--a2);color:#000;font-weight:700;border:none;cursor:pointer">💾 Сохранить</button>
+      <button onclick="saveReferences('shops')" style="width:100%;padding:12px;border-radius:8px;background:var(--a2);color:#000;font-weight:700;border:none;cursor:pointer;font-size:14px">💾 Сохранить все магазины</button>
     </div>
   `;
 }
@@ -3150,14 +3361,17 @@ function addShopToEdit(){
   const input = document.getElementById('shopNewInput');
   const name = input?.value?.trim();
   if(!name){ showToast('⚠️ Введи название магазина'); return; }
-  if(_refEditState.shops.includes(name)){ showToast('⚠️ Такой магазин уже есть'); return; }
+  if(_refEditState.shops.includes(name)){ showToast('⚠️ Магазин "'+name+'" уже существует'); return; }
   _refEditState.shops.push(name);
   input.value = '';
+  showToast('✅ Магазин добавлен. Нажми "Сохранить" чтобы применить');
   showShopsReference();
 }
 
 function deleteShopFromEdit(idx){
+  const shop = _refEditState.shops[idx];
   _refEditState.shops.splice(idx, 1);
+  showToast('✅ Магазин "'+shop+'" удалён. Нажми "Сохранить" чтобы применить');
   showShopsReference();
 }
 
@@ -3317,7 +3531,8 @@ function deleteSizeFromEdit(idx){
 function saveReferences(refType){
   try{
     if(refType === 'shops'){
-      localStorage.setItem('iz_admin_shops', JSON.stringify(_refEditState.shops));
+      // Используем unified shared references library
+      saveSharedReference('shops', _refEditState.shops);
       showToast('✅ Магазины сохранены');
       showShopsReference();
     }
@@ -3806,7 +4021,7 @@ function setWhStockTab(tab){
       // Заполнить магазины
       const sel=document.getElementById('whShipDest');
       if(sel && sel.options.length===0){
-        const shops=JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
+        const shops=getShops();
         sel.innerHTML=shops.map(s=>`<option value="${s}">${s}</option>`).join('');
       }
     }
@@ -3972,6 +4187,19 @@ function renderStockGroups(){
 
   c.innerHTML = html;
 }
+
+// Callback когда обновился справочник шопов
+window.onReferencesUpdated = function(refType){
+  if(refType === 'shops'){
+    renderStockGroups(); // Обновить список товаров и селект магазинов
+  }
+  if(refType === 'staff'){
+    renderStockGroups(); // Может потребоваться обновить UI
+  }
+  if(refType === 'itemNames'){
+    renderStockGroups(); // Может потребоваться обновить UI
+  }
+};
 
 function toggleStockCategory(category){
   const el = document.getElementById('stockCat_'+category);

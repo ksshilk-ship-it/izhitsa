@@ -1824,6 +1824,180 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 <div class="toast" id="toast"></div>
 <!-- Firebase SDK загружается асинхронно через _loadFirebaseSDK() -->
 <script>
+// ═══════════════════════════════════════════════════════════════════════════
+// SHARED REFERENCES LIBRARY - Мультиролевая система
+// ═══════════════════════════════════════════════════════════════════════════
+
+window._sharedRefs = {
+  shops: [],
+  staff: [],
+  itemNames: [],
+  woods: [],
+  sizes: []
+};
+
+const CACHE_PREFIX = 'cache_ref_';
+
+function initSharedReferencesSync(){
+  if(typeof _offlineNoFirebase !== 'undefined' && _offlineNoFirebase){
+    console.log('[SharedRefs] Firebase offline, loading from cache');
+    loadSharedReferencesFromLocalStorage();
+    return;
+  }
+  if(typeof db === 'undefined'){
+    console.warn('[SharedRefs] Firebase not initialized');
+    loadSharedReferencesFromLocalStorage();
+    return;
+  }
+  console.log('[SharedRefs] Subscribing to shared references');
+  ['shops', 'staff', 'itemNames', 'woods', 'sizes'].forEach(subscribeToReference);
+}
+
+function subscribeToReference(refType){
+  db.collection('iz_shared_references').doc(refType).onSnapshot(
+    snap => {
+      if(snap.exists){
+        window._sharedRefs[refType] = snap.data().items || [];
+        saveSharedRefToLocalStorage(refType, window._sharedRefs[refType]);
+        console.log('[SharedRefs] Updated:', refType);
+        if(typeof onReferencesUpdated === 'function') onReferencesUpdated(refType);
+      }
+    },
+    err => {
+      console.error('[SharedRefs] Error:', refType, err.code);
+      loadSharedRefFromLocalStorage(refType);
+    }
+  );
+}
+
+function loadSharedReferencesFromLocalStorage(){
+  ['shops', 'staff', 'itemNames', 'woods', 'sizes'].forEach(type => {
+    loadSharedRefFromLocalStorage(type);
+  });
+}
+
+function loadSharedRefFromLocalStorage(refType){
+  try {
+    const cached = localStorage.getItem(CACHE_PREFIX + refType);
+    if(cached) window._sharedRefs[refType] = JSON.parse(cached);
+  } catch(e){ console.warn('[SharedRefs] Cache read error:', e.message); }
+}
+
+function saveSharedRefToLocalStorage(refType, items){
+  try {
+    localStorage.setItem(CACHE_PREFIX + refType, JSON.stringify(items));
+  } catch(e){ console.warn('[SharedRefs] Cache write error:', e.message); }
+}
+
+function saveSharedReference(refType, items){
+  window._sharedRefs[refType] = items;
+  saveSharedRefToLocalStorage(refType, items);
+  if(typeof _offlineNoFirebase === 'undefined' || !_offlineNoFirebase){
+    if(typeof db !== 'undefined'){
+      db.collection('iz_shared_references').doc(refType).set({
+        type: refType,
+        items: items,
+        updatedAt: new Date().toISOString(),
+        updatedBy: (session && session.id) || 'unknown'
+      }, {merge: true}).catch(err => console.error('[SharedRefs] Save error:', err));
+    }
+  }
+}
+
+function getSharedReference(refType){ return window._sharedRefs[refType] || []; }
+
+// Мультиролевая система
+function getUserRoles(){ 
+  if(session && Array.isArray(session.roles)) return session.roles;
+  if(session && session.role) return [session.role];
+  return [];
+}
+
+function getCurrentRole(){
+  if(session){
+    if(session.currentRole) return session.currentRole;
+    if(session.role) return session.role;
+    if(Array.isArray(session.roles) && session.roles.length > 0) return session.roles[0];
+  }
+  return null;
+}
+
+function setCurrentRole(role){
+  if(session) session.currentRole = role;
+  localStorage.setItem('session_current_role', role);
+}
+
+function hasRole(role){
+  return getUserRoles().includes(role);
+}
+
+function showRoleSwitcher(){
+  const roles = getUserRoles();
+  if(roles.length <= 1) return;
+  
+  const currentRole = getCurrentRole();
+  const switcher = document.createElement('div');
+  switcher.id = 'roleSwitcher';
+  switcher.style.cssText = `
+    position: fixed;
+    top: 50px;
+    right: 10px;
+    background: var(--s2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    z-index: 9999;
+    display: flex;
+    gap: 4px;
+    flex-direction: column;
+  `;
+  
+  const roleEmojis = {
+    'администратор': '⚙️',
+    'продавец': '🏪',
+    'shopadmin': '🏪',
+    'кладовщик': '📦',
+    'мастер': '🔨',
+    'управляющий': '👑',
+    'заготовщик': '🪚'
+  };
+  
+  switcher.innerHTML = `
+    <div style="font-size: 9px; color: var(--t2); padding: 0 4px">Роль:</div>
+    ${roles.map(role => `
+      <button onclick="switchToRole('${role}')" style="
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: 1px solid ${currentRole === role ? 'var(--accent)' : 'var(--border)'};
+        background: ${currentRole === role ? 'var(--accent)' : 'var(--s1)'};
+        color: ${currentRole === role ? '#000' : 'var(--t1)'};
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      ">
+        ${roleEmojis[role] || '●'} ${role}
+      </button>
+    `).join('')}
+  `;
+  
+  const existing = document.getElementById('roleSwitcher');
+  if(existing) existing.remove();
+  document.body.appendChild(switcher);
+}
+
+function switchToRole(newRole){
+  setCurrentRole(newRole);
+  location.reload();
+}
+
+window.onReferencesUpdated = function(refType){
+  // Переопределить в каждом модуле
+};
+
+console.log('[SharedRefs] Library loaded');
+// ═══════════════════════════════════════════════════════════════════════════
+
 var loginRole = 'seller';
 function pick(role) {
   loginRole = role;
@@ -1948,6 +2122,7 @@ function _initFirebase(){
         delete _syncUnsubs[k];
       });
       try{if(typeof startSyncListeners==='function')startSyncListeners();}catch(e){}
+      try{if(typeof initSharedReferencesSync==='function')initSharedReferencesSync();}catch(e){} // НОВОЕ!
       try{if(typeof startStaffLiveSync==='function' && typeof _staffSyncUpdateCb==='function') startStaffLiveSync(_staffSyncUpdateCb);}catch(e){}
       try{if(typeof startStockSync==='function') startStockSync();}catch(e){}
       try{
@@ -2090,6 +2265,20 @@ function startSyncListeners() {
   syncListenCollection('iz_psj', 'iz_psj');
   syncListenCollection('iz_shop_notifications', 'iz_shop_notifications');
 }
+
+// Callbacks когда обновляются справочники (shared-references)
+window.onReferencesUpdated = function(refType){
+  if(refType === 'shops'){
+    // Обновить селекты, списки магазинов и т.д.
+    if(typeof renderShops === 'function') renderShops();
+    if(typeof updateSelectOptions === 'function') updateSelectOptions();
+  }
+  if(refType === 'staff'){
+    // Обновить список сотрудников
+    if(typeof renderStaff === 'function') renderStaff();
+  }
+};
+
 let session = null, pendingSession = null;
 let journal = [];
 var restoreMode = false;
@@ -2318,13 +2507,10 @@ function renderTrash(){
   });
 }
 function getStaff() {
-  return JSON.parse(localStorage.getItem('iz_staff')||'[]');
+  return window._sharedRefs.staff || [];
 }
 function saveStaffShop(data) {
-  localStorage.setItem('iz_staff', JSON.stringify(data));
-  var obj = {staff: data, updatedAt: new Date().toISOString()};
-  db.collection('iz_settings').doc('staff').set(obj, {merge:true})
-    .catch(function(e){ console.log('saveStaffShop err', e); showToast('⚠️ Сотрудник сохранён только локально! Ошибка облака: '+(e&&e.message||e)); });
+  saveSharedReference('staff', data);
   syncDerivedFromStaff(data);
 }
 function getStaffBySingleRole(role) {
@@ -2454,9 +2640,9 @@ function sortByTypeThenName(arr, typeOrder){
     return na.localeCompare(nb, 'ru');
   });
 }
-function getShops(){ return sortByTypeThenName(JSON.parse(localStorage.getItem('iz_admin_shops')||'[]'), SHOP_TYPE_ORDER); }
-function saveShops(d){ syncSave('iz_admin_shops', sortByTypeThenName(d, SHOP_TYPE_ORDER)); }
-function saveSellers(d){ syncSave('iz_sellers', d); }
+function getShops(){ return sortByTypeThenName(window._sharedRefs.shops || [], SHOP_TYPE_ORDER); }
+function saveShops(d){ saveSharedReference('shops', sortByTypeThenName(d, SHOP_TYPE_ORDER)); }
+function saveSellers(d){ saveSharedReference('staff', d); }
 function getShopNames(){ var s=getShops(); return s.length?s.map(x=>x.name||x):['Дерево','ДР Товар']; }
 function getShopType(name){
   var shops=getShops();
