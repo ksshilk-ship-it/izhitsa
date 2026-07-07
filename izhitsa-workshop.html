@@ -1405,133 +1405,6 @@ const TAB_CFG = {
   ownerwarehouse: {icon:'📦', label:'Склад',   page:'pg-ownerwarehouse'},
 };
 
-// ════════ ЕДИНАЯ БАЗА СПРАВОЧНИКОВ ════════
-// Автоматически создаёт Firebase документы если их нет
-// При первой загрузке перетекут существующие справочники
-
-window._sharedRefs = {
-  itemNames: [],
-  woods: [],
-  sizes: [],
-  shops: [],
-  staff: []
-};
-
-// Инициализировать единую базу справочников
-async function initUnifiedReferences(){
-  if(typeof db === 'undefined' || !db){
-    console.log('[References] Firebase не доступна, используем localStorage');
-    loadReferencesFromLocalStorage();
-    return;
-  }
-  
-  console.log('[References] Инициализирую единую базу справочников...');
-  
-  try {
-    // Проверяем существующие документы
-    const docRef = db.collection('iz_shared_references').doc('itemNames');
-    const doc = await docRef.get();
-    
-    if(!doc.exists){
-      // Документы не существуют - создаём и перетекаем старые данные!
-      console.log('[References] Создаю Firebase документы с существующими данными...');
-      
-      // Берём существующие данные из localStorage
-      const itemNames = JSON.parse(localStorage.getItem('ws_item_names')||'["Столешница","Подоконник","Столешница барная","Полка","Дверь","Фасад","Панель","Тумба","Тумба прикроватная","Комод"]');
-      const woods = JSON.parse(localStorage.getItem('ws_woods')||'["Дуб","Ясень","Орех","Клён","Береза","Сосна","Лиственница","Тик","Венге","Махагон"]');
-      const sizes = JSON.parse(localStorage.getItem('ws_sizes')||'[]');
-      
-      // Создаём Firebase документы
-      await db.collection('iz_shared_references').doc('itemNames').set({
-        type: 'itemNames',
-        items: itemNames,
-        createdAt: new Date().toISOString()
-      });
-      
-      await db.collection('iz_shared_references').doc('woods').set({
-        type: 'woods',
-        items: woods,
-        createdAt: new Date().toISOString()
-      });
-      
-      await db.collection('iz_shared_references').doc('sizes').set({
-        type: 'sizes',
-        items: sizes,
-        createdAt: new Date().toISOString()
-      });
-      
-      console.log('[References] Firebase документы созданы!');
-      
-      // Загружаем созданные данные
-      window._sharedRefs.itemNames = itemNames;
-      window._sharedRefs.woods = woods;
-      window._sharedRefs.sizes = sizes;
-    } else {
-      // Документы уже существуют - загружаем
-      console.log('[References] Документы найдены, загружаю...');
-      
-      const itemNamesDoc = await db.collection('iz_shared_references').doc('itemNames').get();
-      const woodsDoc = await db.collection('iz_shared_references').doc('woods').get();
-      const sizesDoc = await db.collection('iz_shared_references').doc('sizes').get();
-      
-      window._sharedRefs.itemNames = itemNamesDoc.exists ? (itemNamesDoc.data().items || []) : [];
-      window._sharedRefs.woods = woodsDoc.exists ? (woodsDoc.data().items || []) : [];
-      window._sharedRefs.sizes = sizesDoc.exists ? (sizesDoc.data().items || []) : [];
-      
-      console.log('[References] Загружено из Firebase');
-    }
-    
-    // Подписываемся на изменения
-    subscribeToReferences();
-    
-  } catch(e){
-    console.error('[References] Ошибка инициализации:', e.message);
-    loadReferencesFromLocalStorage();
-  }
-}
-
-// Подписываемся на изменения справочников в Firebase
-function subscribeToReferences(){
-  ['itemNames', 'woods', 'sizes'].forEach(refType => {
-    try {
-      db.collection('iz_shared_references').doc(refType).onSnapshot(snap => {
-        if(snap.exists){
-          window._sharedRefs[refType] = snap.data().items || [];
-          localStorage.setItem('cache_' + refType, JSON.stringify(window._sharedRefs[refType]));
-        }
-      });
-    } catch(e){}
-  });
-}
-
-// Загрузить справочники из localStorage (для offline)
-function loadReferencesFromLocalStorage(){
-  const itemNames = JSON.parse(localStorage.getItem('ws_item_names')||'["Столешница","Подоконник","Столешница барная","Полка","Дверь","Фасад","Панель","Тумба","Тумба прикроватная","Комод"]');
-  const woods = JSON.parse(localStorage.getItem('ws_woods')||'["Дуб","Ясень","Орех","Клён","Береза","Сосна","Лиственница","Тик","Венге","Махагон"]');
-  const sizes = JSON.parse(localStorage.getItem('ws_sizes')||'[]');
-  
-  window._sharedRefs.itemNames = itemNames;
-  window._sharedRefs.woods = woods;
-  window._sharedRefs.sizes = sizes;
-}
-
-// Сохранить справочник в Firebase и localStorage
-function saveReferenceToUnified(refType, items){
-  window._sharedRefs[refType] = items;
-  
-  // Сохранить в localStorage для offline
-  localStorage.setItem('cache_' + refType, JSON.stringify(items));
-  
-  // Сохранить в Firebase
-  if(typeof db !== 'undefined' && db){
-    db.collection('iz_shared_references').doc(refType).set({
-      type: refType,
-      items: items,
-      updatedAt: new Date().toISOString()
-    }, {merge: true}).catch(e => console.error('[References] Ошибка сохранения:', e));
-  }
-}
-
 // ════════ UTILS ════════
 function fmt(n){return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+'₽';}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
@@ -2111,9 +1984,6 @@ function doLogout(){
 }
 
 function startApp(){
-  // Инициализировать единую базу справочников (НОВОЕ!)
-  try { initUnifiedReferences(); } catch(e){ console.error('[References] Init error:', e); }
-  
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
   document.getElementById('mainTabs').style.display='flex';
@@ -2345,18 +2215,10 @@ function renderDash(){
 
 // ════════ СПРАВОЧНИК НАИМЕНОВАНИЙ ИЗДЕЛИЙ ════════
 function getItemNames(){
-  // Сначала пытаемся из единой БД, потом fallback на localStorage
-  if(window._sharedRefs && window._sharedRefs.itemNames && window._sharedRefs.itemNames.length > 0){
-    return window._sharedRefs.itemNames.slice().sort((a,b)=>a.localeCompare(b,'ru'));
-  }
-  // Fallback на старый способ
   const arr = JSON.parse(localStorage.getItem('ws_item_names')||'["Столешница","Подоконник","Столешница барная","Полка","Дверь","Фасад","Панель","Тумба","Тумба прикроватная","Комод"]');
   return arr.slice().sort((a,b)=>a.localeCompare(b,'ru'));
 }
-function saveItemNames(arr){ 
-  saveReferenceToUnified('itemNames', arr);
-  wsSyncSave('ws_item_names', arr); // Сохраняем и в старом месте для совместимости
-}
+function saveItemNames(arr){ wsSyncSave('ws_item_names', arr); }
 
 function renderItemNameSelect(){
   const names = getItemNames();
@@ -2430,16 +2292,10 @@ function deleteItemName(i){
 
 // ════════ СПРАВОЧНИК ПОРОД ДЕРЕВА ════════
 function getWoods(){
-  if(window._sharedRefs && window._sharedRefs.woods && window._sharedRefs.woods.length > 0){
-    return window._sharedRefs.woods.slice().sort((a,b)=>a.localeCompare(b,'ru'));
-  }
   const arr = JSON.parse(localStorage.getItem('ws_woods')||'["Дуб","Ясень","Орех","Клён","Береза","Сосна","Лиственница","Тик","Венге","Махагон"]');
   return arr.slice().sort((a,b)=>a.localeCompare(b,'ru'));
 }
-function saveWoods(arr){ 
-  saveReferenceToUnified('woods', arr);
-  wsSyncSave('ws_woods', arr);
-}
+function saveWoods(arr){ wsSyncSave('ws_woods', arr); }
 
 function renderWoodSelect(){
   const woods = getWoods();
@@ -2542,15 +2398,9 @@ function getSizeFromFields(prefix){
 
 // ════════ СПРАВОЧНИК РАЗМЕРОВ ════════
 function getSizes(){
-  if(window._sharedRefs && window._sharedRefs.sizes && window._sharedRefs.sizes.length > 0){
-    return window._sharedRefs.sizes;
-  }
   return JSON.parse(localStorage.getItem('ws_sizes')||'["600×400","800×400","1000×600","1200×600","1400×700","1600×800","1800×900","2000×1000","2400×1200"]');
 }
-function saveSizes(arr){ 
-  saveReferenceToUnified('sizes', arr);
-  wsSyncSave('ws_sizes', arr);
-}
+function saveSizes(arr){ wsSyncSave('ws_sizes', arr); }
 
 function renderSizeSelect(){
   const sizes = getSizes();
