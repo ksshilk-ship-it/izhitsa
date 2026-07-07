@@ -6112,6 +6112,14 @@ function openManualAcceptMo(){
   _maItems = [];
   addMaItemRow(); // одна строка по умолчанию
   renderMaItemsList();
+  
+  // НОВОЕ! Показать архив приёмок в модальном окне
+  _archiveViewLevel = 'periods';
+  _archiveSelectedPeriod = null;
+  _archiveSelectedMaster = null;
+  _archiveSelectedDate = null;
+  renderManualAcceptHistory();
+  
   openMo('manualAcceptMo');
 }
 
@@ -6212,15 +6220,6 @@ function getNextArtikulNumber(){
 }
 
 // Реальный последний (максимальный) порядковый номер артикула во всей системе
-function getMaxSystemArtikul(){
-  let max = 0;
-  products.forEach(p=>{
-    const n = parseInt(String(p.artikul||'').replace(/\D/g,''),10);
-    if(!isNaN(n) && n>max) max = n;
-  });
-  return max;
-}
-
 function addMaItemRow(){
   const names = getItemNames();
   const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
@@ -6259,7 +6258,7 @@ function renderMaItemsList(){
         ${(parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto' ? `<div style="font-size:11px;color:var(--accent);margin-top:5px">Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}</div>` : ''}
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Количество одинаковых изделий</label>
-        <input class="fi" type="text" inputmode="numeric" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" placeholder="1"
+        <input class="fi" type="text" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" placeholder="1"
           autocomplete="off">
         <div style="font-size:11px;color:var(--t2);margin-top:4px">Если сдано несколько одинаковых изделий по одной цене — укажите количество, остальные поля заполните один раз</div>
       </div>
@@ -6287,11 +6286,11 @@ function renderMaItemsList(){
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div class="fg"><label class="fl">ЗП мастеру (₽)</label>
-          <input class="fi" type="text" inputmode="numeric" value="${it.zp||''}" oninput="updateMaItem('${it.rid}','zp',this.value)" placeholder="0"
+          <input class="fi" type="text" value="${it.zp||''}" oninput="updateMaItem('${it.rid}','zp',this.value)" placeholder="0"
             autocomplete="off">
         </div>
         <div class="fg"><label class="fl">Розничная цена (₽)</label>
-          <input class="fi" type="text" inputmode="numeric" value="${it.price||''}" oninput="updateMaItem('${it.rid}','price',this.value)" placeholder="0"
+          <input class="fi" type="text" value="${it.price||''}" oninput="updateMaItem('${it.rid}','price',this.value)" placeholder="0"
             autocomplete="off">
         </div>
       </div>
