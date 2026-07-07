@@ -3120,6 +3120,87 @@ async function acceptItemFromRcv(itemId){
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 
+// НОВОЕ! Фильтр приходов по источнику
+function filterIncomingBySource(source){
+  _incomingSourceFilter = source;
+  
+  // Обновить кнопки
+  const btnMasters = document.getElementById('incSourceMasters');
+  const btnShops = document.getElementById('incSourceShops');
+  
+  if(source === 'masters'){
+    btnMasters.style.borderColor = 'var(--accent)';
+    btnMasters.style.background = 'var(--s1)';
+    btnMasters.style.color = 'var(--t1)';
+    btnShops.style.borderColor = 'var(--border)';
+    btnShops.style.background = 'var(--s2)';
+    btnShops.style.color = 'var(--t2)';
+  } else {
+    btnShops.style.borderColor = 'var(--accent)';
+    btnShops.style.background = 'var(--s1)';
+    btnShops.style.color = 'var(--t1)';
+    btnMasters.style.borderColor = 'var(--border)';
+    btnMasters.style.background = 'var(--s2)';
+    btnMasters.style.color = 'var(--t2)';
+  }
+  
+  renderIncomingList();
+}
+
+// НОВОЕ! Отображение приходов
+function renderIncomingList(){
+  const list = document.getElementById('whIncomingList');
+  if(!list) return;
+  
+  if(_incomingSourceFilter === 'masters'){
+    // Показать все приёмки от мастеров
+    if(!_maHistory || !_maHistory.length){
+      list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)">📭 Нет приёмок от мастеров</div>';
+      return;
+    }
+    
+    // Сгруппировать по мастерам
+    const byMaster = {};
+    _maHistory.forEach(acc => {
+      if(!byMaster[acc.masterId]) byMaster[acc.masterId] = [];
+      byMaster[acc.masterId].push(acc);
+    });
+    
+    list.innerHTML = Object.entries(byMaster).map(([masterId, acceptances]) => {
+      const master = getEmployees().find(e=>e.id===masterId);
+      const totalItems = acceptances.reduce((sum, a) => sum + a.positions.length, 0);
+      const totalZP = acceptances.reduce((sum, a) => sum + a.positions.reduce((s, p) => s + (parseInt(p.zp,10)||0), 0), 0);
+      
+      return `
+        <div style="background:var(--s1);border-radius:10px;padding:12px;margin-bottom:8px;border-left:4px solid var(--accent)">
+          <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
+            <div>
+              <div style="font-weight:700;color:var(--t1)">${master?.name || masterId}</div>
+              <div style="font-size:11px;color:var(--t2)">${acceptances.length} приёмок · ${totalItems} товаров</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:13px;color:var(--accent);font-weight:700">₽${fmt(totalZP)}</div>
+              <div style="font-size:11px;color:var(--t2)">ЗП начислено</div>
+            </div>
+          </div>
+          
+          <div style="font-size:11px;color:var(--t2)">
+            ${acceptances.map(a => {
+              const aItems = a.positions.length;
+              const aZP = a.positions.reduce((s, p) => s + (parseInt(p.zp,10)||0), 0);
+              const status = a.status === 'done' ? '✅' : '⏳';
+              return `${status} ${a.deliveredDate} · ${aItems} шт · ₽${fmt(aZP)}`;
+            }).join('<br>')}
+          </div>
+        </div>
+      `;
+    }).join('');
+  } else {
+    // Магазины - пока нет данных
+    list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)">📭 Приходы от магазинов скоро добавим</div>';
+  }
+}
+
 function renderWarehouse(){
   const realItems = items.filter(i=>!i.isArchiveDraft);
   const pending = realItems.filter(i=>i.status==='delivered');
@@ -3144,7 +3225,10 @@ function renderWarehouse(){
   if(rt) rt.textContent=todayCount;
   renderRcvPendingList();
 
-  if(_whTab==='archive') renderArchiveWarehouse();
+  if(_whTab==='archive'){
+    renderArchiveWarehouse();
+    renderIncomingList(); // НОВОЕ! Показать приходы в архиве
+  }
 }
 
 // ════ СКЛАД: ОСТАТКИ ПО ГРУППАМ + ОТГРУЗКА ════
