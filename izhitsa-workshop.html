@@ -6254,7 +6254,7 @@ function renderMaItemsList(){
           <div onclick="setMaArtikulMode('${it.rid}','manual')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='manual'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='manual'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='manual'?'var(--accent)':'var(--border)'}">Вручную</div>
           <div onclick="setMaArtikulMode('${it.rid}','none')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='none'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='none'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='none'?'var(--accent)':'var(--border)'}">Без артикула</div>
         </div>
-        <input class="fi" type="text" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
+        <input class="fi" type="number" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
           oninput="${it.artikulMode==='auto'?`updateMaAutoArtikul('${it.rid}',this.value)`:`updateMaItem('${it.rid}','artikul',this.value)`}"
           placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
           style="${it.artikulMode==='none'?'opacity:0.6':''}"
@@ -6263,7 +6263,7 @@ function renderMaItemsList(){
         ${it.artikulMode==='auto'?`
           <div style="background:var(--s1);border-radius:10px;padding:10px;margin-top:8px;border:1px solid var(--accent)">
             <div style="font-size:11px;color:var(--t2);margin-bottom:4px">📍 Начать отсчёт с номера:</div>
-            <input class="fi" type="text" value="${it.artikul || getMaxSystemArtikul()}" 
+            <input class="fi" type="number" value="${it.artikul || getMaxSystemArtikul()}" 
               id="maAutoStartNumber_${it.rid}"
               oninput="updateMaItem('${it.rid}','artikul',this.value);recalcMaAutoArtikuls()" 
               placeholder="Последний номер"
@@ -6274,7 +6274,7 @@ function renderMaItemsList(){
         ${(parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto' ? `<div style="font-size:11px;color:var(--accent);margin-top:5px;background:rgba(192,255,96,0.1);padding:8px;border-radius:8px">✓ Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}</div>` : ''}
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Количество одинаковых изделий</label>
-        <input class="fi" type="text" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" placeholder="1"
+        <input class="fi" type="number" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" placeholder="1"
           autocomplete="off">
         <div style="font-size:11px;color:var(--t2);margin-top:4px">Если сдано несколько одинаковых изделий по одной цене — укажите количество, остальные поля заполните один раз</div>
       </div>
@@ -6302,11 +6302,11 @@ function renderMaItemsList(){
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div class="fg"><label class="fl">ЗП мастеру (₽)</label>
-          <input class="fi" type="text" value="${it.zp||''}" oninput="updateMaItem('${it.rid}','zp',this.value)" placeholder="0"
+          <input class="fi" type="number" value="${it.zp||''}" oninput="updateMaItem('${it.rid}','zp',this.value)" placeholder="0"
             autocomplete="off">
         </div>
         <div class="fg"><label class="fl">Розничная цена (₽)</label>
-          <input class="fi" type="text" value="${it.price||''}" oninput="updateMaItem('${it.rid}','price',this.value)" placeholder="0"
+          <input class="fi" type="number" value="${it.price||''}" oninput="updateMaItem('${it.rid}','price',this.value)" placeholder="0"
             autocomplete="off">
         </div>
       </div>
@@ -6443,7 +6443,8 @@ async function saveManualAccept(){
       status: 'open', // open → done (после "Провести")
       positions
     });
-    audit && audit('manual_acceptance_created',{masterName:master?.name, date, count:positions.length});
+    // Логирование в аудит
+    logAction('manual_acceptance_created', {masterName:master?.name, date, count:positions.length});
     closeMo('manualAcceptMo');
     showToast(`✅ Приёмка от ${master?.name||''} сохранена · ${positions.length} позиций`);
     renderManualAcceptHistory();
@@ -6780,7 +6781,8 @@ async function provedMaAccept(){
       status: 'done', provedAt: postDate, provedBy: session.name
     });
 
-    audit && audit('manual_acceptance_processed',{masterName:acc.masterName, accepted:accepted.length, defects:defects.length});
+    // Логирование в аудит
+    logAction('manual_acceptance_processed', {masterName:acc.masterName, accepted:accepted.length, defects:defects.length});
     closeMo('maDetailMo');
     showToast(`✅ Проведено: +${accepted.length} на склад, ${defects.length} в брак мастеру`);
   }catch(e){ showToast('Ошибка: '+e.message); }
@@ -6888,7 +6890,7 @@ function renderFiItemsList(){
           <div onclick="setFiArtikulMode('${it.rid}','manual')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='manual'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='manual'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='manual'?'var(--accent)':'var(--border)'}">Вручную</div>
           <div onclick="setFiArtikulMode('${it.rid}','none')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='none'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='none'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='none'?'var(--accent)':'var(--border)'}">Без артикула</div>
         </div>
-        <input class="fi" type="text" inputmode="numeric" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
+        <input class="fi" type="number" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
           oninput="${it.artikulMode==='auto'?`updateFiAutoArtikul('${it.rid}',this.value)`:`updateFiItem('${it.rid}','artikul',this.value)`}"
           placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
           style="${it.artikulMode==='none'?'opacity:0.6':''}">
