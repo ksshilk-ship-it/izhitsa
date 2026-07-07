@@ -6250,15 +6250,17 @@ function renderMaItemsList(){
           <div onclick="setMaArtikulMode('${it.rid}','manual')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='manual'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='manual'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='manual'?'var(--accent)':'var(--border)'}">Вручную</div>
           <div onclick="setMaArtikulMode('${it.rid}','none')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='none'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='none'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='none'?'var(--accent)':'var(--border)'}">Без артикула</div>
         </div>
-        <input class="fi" type="text" inputmode="numeric" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
+        <input class="fi" type="text" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
           oninput="${it.artikulMode==='auto'?`updateMaAutoArtikul('${it.rid}',this.value)`:`updateMaItem('${it.rid}','artikul',this.value)`}"
           placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
-          style="${it.artikulMode==='none'?'opacity:0.6':''}">
+          style="${it.artikulMode==='none'?'opacity:0.6':''}"
+          autocomplete="off">
         ${it.artikulMode==='auto'?`<div style="font-size:11px;color:var(--t2);margin-top:5px">Последний номер в системе: ${getMaxSystemArtikul()}. По умолчанию — следующий по порядку, можно ввести свой</div>`:''}
         ${(parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto' ? `<div style="font-size:11px;color:var(--accent);margin-top:5px">Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}</div>` : ''}
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Количество одинаковых изделий</label>
-        <input class="fi" type="number" inputmode="numeric" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" placeholder="1">
+        <input class="fi" type="text" inputmode="numeric" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" placeholder="1"
+          autocomplete="off">
         <div style="font-size:11px;color:var(--t2);margin-top:4px">Если сдано несколько одинаковых изделий по одной цене — укажите количество, остальные поля заполните один раз</div>
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label>
@@ -6285,13 +6287,27 @@ function renderMaItemsList(){
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div class="fg"><label class="fl">ЗП мастеру (₽)</label>
-          <input class="fi" type="number" inputmode="numeric" value="${it.zp||''}" oninput="updateMaItem('${it.rid}','zp',this.value)" placeholder="0">
+          <input class="fi" type="text" inputmode="numeric" value="${it.zp||''}" oninput="updateMaItem('${it.rid}','zp',this.value)" placeholder="0"
+            autocomplete="off">
         </div>
         <div class="fg"><label class="fl">Розничная цена (₽)</label>
-          <input class="fi" type="number" inputmode="numeric" value="${it.price||''}" oninput="updateMaItem('${it.rid}','price',this.value)" placeholder="0">
+          <input class="fi" type="text" inputmode="numeric" value="${it.price||''}" oninput="updateMaItem('${it.rid}','price',this.value)" placeholder="0"
+            autocomplete="off">
         </div>
       </div>
     </div>`).join('');
+}
+
+function getMaxSystemArtikul(){
+  // Последний артикул из всех товаров в системе
+  let max = 0;
+  if(items && items.length) {
+    items.forEach(i => {
+      const num = parseInt(String(i.artikul||'').replace(/\D/g,''),10);
+      if(!isNaN(num) && num > max) max = num;
+    });
+  }
+  return max || '—';
 }
 
 function setMaArtikulMode(rid, mode){
@@ -6396,13 +6412,123 @@ async function saveManualAccept(){
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 
+// НОВОЕ! Переменные для навигации архива приёмок
+let _archiveViewLevel = 'periods'; // periods → masters → dates → items
+let _archiveSelectedPeriod = null;
+let _archiveSelectedMaster = null;
+let _archiveSelectedDate = null;
+
 function renderManualAcceptHistory(){
   const c = document.getElementById('manualAcceptHistory'); if(!c) return;
+  
+  if(_archiveViewLevel === 'periods') renderArchivePeriods(c);
+  else if(_archiveViewLevel === 'masters') renderArchiveMasters(c);
+  else if(_archiveViewLevel === 'dates') renderArchiveDates(c);
+  else if(_archiveViewLevel === 'items') renderArchiveItems(c);
+}
+
+// ═══ УРОВЕНЬ 1: ПЕРИОДЫ (месяц/квартал/год) ═══
+function renderArchivePeriods(c){
   if(!_maHistory.length){
     c.innerHTML = '<div class="empty" style="padding:10px 0"><div class="ei">📋</div>Приёмок пока нет</div>';
     return;
   }
-  c.innerHTML = _maHistory.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(acc=>{
+  
+  // Группировать по месяцам
+  const byMonth = {};
+  _maHistory.forEach(acc => {
+    const date = new Date(acc.deliveredDate);
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
+    if(!byMonth[monthKey]) byMonth[monthKey] = [];
+    byMonth[monthKey].push(acc);
+  });
+  
+  c.innerHTML = Object.entries(byMonth).sort((a,b)=>b[0].localeCompare(a[0])).map(([monthKey, accs])=>{
+    const [year, month] = monthKey.split('-');
+    const monthName = new Date(year, parseInt(month)-1).toLocaleDateString('ru-RU', {month:'long', year:'numeric'});
+    const totalCount = accs.reduce((sum, a) => sum + a.positions.length, 0);
+    return `<div class="li" onclick="selectArchivePeriod('${monthKey}')">
+      <div class="li-ico" style="background:#1a1e2a">📅</div>
+      <div class="li-info">
+        <div class="li-name">${monthName}</div>
+        <div class="li-sub">${accs.length} приёмок · ${totalCount} товаров</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectArchivePeriod(monthKey){
+  _archiveSelectedPeriod = monthKey;
+  _archiveViewLevel = 'masters';
+  renderManualAcceptHistory();
+}
+
+// ═══ УРОВЕНЬ 2: МАСТЕРА В ПЕРИОДЕ ═══
+function renderArchiveMasters(c){
+  if(!_archiveSelectedPeriod){
+    _archiveViewLevel = 'periods';
+    renderManualAcceptHistory();
+    return;
+  }
+  
+  const [year, month] = _archiveSelectedPeriod.split('-');
+  const accsInPeriod = _maHistory.filter(acc => {
+    const date = new Date(acc.deliveredDate);
+    return date.getFullYear() === parseInt(year) && date.getMonth()+1 === parseInt(month);
+  });
+  
+  // Группировать по мастерам
+  const byMaster = {};
+  accsInPeriod.forEach(acc => {
+    if(!byMaster[acc.masterId]) byMaster[acc.masterId] = {name: acc.masterName, accs: []};
+    byMaster[acc.masterId].accs.push(acc);
+  });
+  
+  c.innerHTML = `<div class="li" onclick="archiveGoBack()" style="cursor:pointer;opacity:0.7">
+    <div class="li-ico">←</div>
+    <div class="li-info"><div class="li-name">Вернуться к периодам</div></div>
+  </div>` + 
+  Object.entries(byMaster).map(([masterId, {name, accs}])=>{
+    const totalCount = accs.reduce((sum, a) => sum + a.positions.length, 0);
+    return `<div class="li" onclick="selectArchiveMaster('${masterId}')">
+      <div class="li-ico" style="background:#1a1e2a">👤</div>
+      <div class="li-info">
+        <div class="li-name">${name}</div>
+        <div class="li-sub">${accs.length} приёмок · ${totalCount} товаров</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectArchiveMaster(masterId){
+  _archiveSelectedMaster = masterId;
+  _archiveViewLevel = 'dates';
+  renderManualAcceptHistory();
+}
+
+// ═══ УРОВЕНЬ 3: ДАТЫ ПРИЁМОК МАСТЕРА ═══
+function renderArchiveDates(c){
+  if(!_archiveSelectedPeriod || !_archiveSelectedMaster){
+    _archiveViewLevel = 'masters';
+    renderManualAcceptHistory();
+    return;
+  }
+  
+  const [year, month] = _archiveSelectedPeriod.split('-');
+  const accsForMaster = _maHistory.filter(acc => {
+    const date = new Date(acc.deliveredDate);
+    return acc.masterId === _archiveSelectedMaster &&
+           date.getFullYear() === parseInt(year) && 
+           date.getMonth()+1 === parseInt(month);
+  });
+  
+  const masterName = accsForMaster[0]?.masterName || '';
+  
+  c.innerHTML = `<div class="li" onclick="archiveGoBack()" style="cursor:pointer;opacity:0.7">
+    <div class="li-ico">←</div>
+    <div class="li-info"><div class="li-name">Вернуться к мастерам</div></div>
+  </div>` +
+  accsForMaster.sort((a,b)=>b.deliveredDate.localeCompare(a.deliveredDate)).map(acc=>{
     const total = acc.positions.length;
     const accepted = acc.positions.filter(p=>p.status==='accepted').length;
     const defect = acc.positions.filter(p=>p.status==='defect').length;
@@ -6410,15 +6536,72 @@ function renderManualAcceptHistory(){
     const statusLabel = acc.status==='done'
       ? `<span style="color:var(--inc)">✅ Проведена</span>`
       : `<span style="color:var(--a4)">⏳ Открыта · ${pending} не размечено</span>`;
-    return `<div class="li" onclick="openMaDetail('${acc.id}')">
+    return `<div class="li" onclick="selectArchiveDate('${acc.id}')">
       <div class="li-ico" style="background:#1a1e2a">📦</div>
       <div class="li-info">
-        <div class="li-name">${acc.masterName} · ${total} шт.</div>
-        <div class="li-sub">Сдал: ${acc.deliveredDate} · Принял: ${acc.createdBy}</div>
+        <div class="li-name">${acc.deliveredDate} · ${total} шт</div>
+        <div class="li-sub">Принял: ${acc.createdBy}</div>
         <div class="li-sub">${statusLabel}</div>
       </div>
     </div>`;
   }).join('');
+}
+
+function selectArchiveDate(accId){
+  _archiveSelectedDate = accId;
+  _archiveViewLevel = 'items';
+  renderManualAcceptHistory();
+}
+
+// ═══ УРОВЕНЬ 4: ТОВАРЫ ПРИЁМКИ ═══
+function renderArchiveItems(c){
+  if(!_archiveSelectedDate){
+    _archiveViewLevel = 'dates';
+    renderManualAcceptHistory();
+    return;
+  }
+  
+  const acc = _maHistory.find(a=>a.id === _archiveSelectedDate);
+  if(!acc){
+    _archiveViewLevel = 'dates';
+    renderManualAcceptHistory();
+    return;
+  }
+  
+  c.innerHTML = `<div class="li" onclick="archiveGoBack()" style="cursor:pointer;opacity:0.7">
+    <div class="li-ico">←</div>
+    <div class="li-info"><div class="li-name">Вернуться к датам</div></div>
+  </div>
+  <div style="padding:12px;background:var(--s2);border-radius:10px;margin-bottom:12px;border:1px solid var(--border)">
+    <div class="at-row"><span class="at-lbl">Мастер</span><span class="at-val">${acc.masterName}</span></div>
+    <div class="at-row"><span class="at-lbl">Дата сдачи</span><span class="at-val">${acc.deliveredDate}</span></div>
+    <div class="at-row"><span class="at-lbl">Принял</span><span class="at-val">${acc.createdBy}</span></div>
+    <div class="at-row"><span class="at-lbl">Статус</span><span class="at-val">${acc.status==='done'?'✅ Проведена':'⏳ Открыта'}</span></div>
+  </div>` +
+  acc.positions.map((p,i)=>`
+    <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid var(--border)">
+      <div class="at-row"><span class="at-lbl">Артикул</span><span class="at-val">${p.artikul||'—'}</span></div>
+      <div class="at-row"><span class="at-lbl">Наименование</span><span class="at-val">${p.name||'—'}</span></div>
+      <div class="at-row"><span class="at-lbl">Порода</span><span class="at-val">${p.wood||'—'}</span></div>
+      <div class="at-row"><span class="at-lbl">Цена</span><span class="at-val">${fmt(p.price||0)}</span></div>
+      <div class="at-row"><span class="at-lbl">ЗП</span><span class="at-val" style="color:var(--a5)">${fmt(p.zp||0)}</span></div>
+      <div class="at-row"><span class="at-lbl">Статус</span><span class="at-val">${p.status==='accepted'?'✅ Принято':p.status==='defect'?'❌ Брак':'⏳ Не размечено'}</span></div>
+    </div>
+  `).join('');
+}
+
+function archiveGoBack(){
+  if(_archiveViewLevel === 'masters'){
+    _archiveViewLevel = 'periods';
+    _archiveSelectedPeriod = null;
+  } else if(_archiveViewLevel === 'dates'){
+    _archiveViewLevel = 'masters';
+    _archiveSelectedMaster = null;
+  } else if(_archiveViewLevel === 'items'){
+    _archiveViewLevel = 'dates';
+    _archiveSelectedDate = null;
+  }
+  renderManualAcceptHistory();
 }
 
 function openMaDetail(accId){
