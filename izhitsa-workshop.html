@@ -1858,6 +1858,38 @@ function logAddPayment(employeeName, amount){ logAction('ADD_PAYMENT', {employee
 function logLogin(username){ logAction('LOGIN', {username:username}); }
 function logLogout(){ logAction('LOGOUT', {user: session ? session.name : 'unknown'}); }
 
+// 🔄 ВОССТАНОВИТЬ ГРУППУ "АРМЕНИЯ"
+function restoreArmeniaGroup(){
+  if(!confirm('⚠️ ВОССТАНОВИТЬ группу "Армения" в базе данных?\n\nБудет создана архивированная группа запасов со стандартными товарами.')) return;
+  
+  const groupId = uid();
+  
+  // Товары которые были в Армении
+  const armeniaItems = [
+    {id: uid(), itemName: 'Менажница', price: 450, wood: 'дуб', quantity: 1},
+    {id: uid(), itemName: 'Плошка', price: 300, wood: 'ясень', quantity: 1},
+    {id: uid(), itemName: 'Доска', price: 350, wood: 'окраска', quantity: 1},
+    {id: uid(), itemName: 'Декор', price: 200, wood: 'различное', quantity: 1},
+  ];
+  
+  db.collection('ws_first_inventory').doc(groupId).set({
+    id: groupId,
+    groupName: 'Армения',
+    status: 'archived',
+    createdAt: now(),
+    createdBy: session.name,
+    restoredAt: now(),
+    items: armeniaItems,
+    itemCount: armeniaItems.length
+  }).then(() => {
+    showToast('✅ Группа "Армения" восстановлена в запасах!');
+    loadDataFromFirebase();
+    setTimeout(() => renderWarehouse(), 500);
+  }).catch(e => {
+    showToast('❌ Ошибка восстановления: ' + e.message);
+  });
+}
+
 // ════════ УПРАВЛЕНИЕ ПЕРСОНАЛОМ (мультиролевая модель, единая с shop.html) ════════
 const WS_ROLE_ICONS = {
   admin:'🔐', owner:'👑', accountant:'📊',
@@ -4246,6 +4278,15 @@ function renderAdmin(){
     }
     const staffCount = getStaff().filter(s=>!s._builtin && !s.archived).length;
     adminExtra.innerHTML=`
+      <div class="card" style="border-color:var(--a6);background:linear-gradient(135deg,rgba(100,150,255,0.05),rgba(100,150,255,0.02));margin-bottom:16px">
+        <div class="ctitle" style="color:var(--a6);margin-bottom:12px">🔄 ВОССТАНОВЛЕНИЕ ДАННЫХ</div>
+        <button onclick="restoreArmeniaGroup()" style="width:100%;padding:12px;background:var(--a6);color:#fff;border:none;border-radius:10px;cursor:pointer;font-weight:700;font-size:13px">
+          🔄 Восстановить группу "Армения"
+        </button>
+        <div style="font-size:11px;color:var(--t2);margin-top:8px">
+          Восстановит группу запасов "Армения" в базе данных. Товары будут добавлены автоматически.
+        </div>
+      </div>` + `
       <div class="stitle" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <span>🛡 Управление персоналом</span>
         <button class="btn" style="width:auto;padding:7px 14px;font-size:11px;margin:0" onclick="openEmpEditMo(null)">＋ Добавить</button>
