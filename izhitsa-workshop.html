@@ -6419,7 +6419,9 @@ let _archiveSelectedMaster = null;
 let _archiveSelectedDate = null;
 
 function renderManualAcceptHistory(){
-  const c = document.getElementById('manualAcceptHistory'); if(!c) return;
+  // Функция работает в двух местах: на странице приёмки (rcvManualHistory) и в модальном окне (manualAcceptHistory)
+  const c = document.getElementById('manualAcceptHistory') || document.getElementById('rcvManualHistory');
+  if(!c) return;
   
   if(_archiveViewLevel === 'periods') renderArchivePeriods(c);
   else if(_archiveViewLevel === 'masters') renderArchiveMasters(c);
@@ -7464,6 +7466,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
     <button class="btn" style="background:var(--a2);margin-bottom:10px" onclick="addMaItemRow()">➕ Добавить изделие</button>
     <button class="btn green" onclick="saveManualAccept()">💾 Сохранить приёмку</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('manualAcceptMo')">Отмена</button>
+    
+    <!-- АРХИВ ПРИЁМОК (многоуровневая навигация) -->
+    <div style="margin-top:20px;padding-top:20px;border-top:2px solid var(--border)">
+      <div class="stitle" style="margin-bottom:12px">📋 Архив приёмок</div>
+      <div id="manualAcceptHistory" style="padding:0"></div>
+    </div>
   </div>
 </div>
 
