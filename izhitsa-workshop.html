@@ -1250,6 +1250,24 @@ function applyUpdate() {
 
 <div class="toast" id="toast"></div>
 
+<!-- КОРЗИНА (для администратора просмотра роли) -->
+<div class="page" id="pg-trash">
+  <div class="stitle">🗑️ Корзина</div>
+  <div style="color:var(--t2);font-size:12px;padding:20px 0;text-align:center">
+    Удалённые элементы роли: <strong id="trashRoleLabel">-</strong>
+  </div>
+  <div id="trashContent" style="padding:0"></div>
+</div>
+
+<!-- АУДИТ (для администратора просмотра роли) -->
+<div class="page" id="pg-audit">
+  <div class="stitle">📋 Аудит</div>
+  <div style="color:var(--t2);font-size:12px;padding:20px 0;text-align:center">
+    История действий роли: <strong id="auditRoleLabel">-</strong>
+  </div>
+  <div id="auditContent" style="padding:0"></div>
+</div>
+
 <!-- FIREBASE -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -1360,6 +1378,7 @@ function setSync(s){
 
 // ════════ STATE ════════
 let session = JSON.parse(sessionStorage.getItem('ws_session')||'null');
+let _adminViewingRole = null; // НОВОЕ! Роль которую администратор просматривает
 let employees = [];
 let blanks = [];
 let items = [];
@@ -1403,6 +1422,8 @@ const TAB_CFG = {
   owner:        {icon:'💼', label:'Обзор',     page:'pg-owner'},
   ownerstaff:   {icon:'👥', label:'Персонал',  page:'pg-ownerstaff'},
   ownerwarehouse: {icon:'📦', label:'Склад',   page:'pg-ownerwarehouse'},
+  trash:     {icon:'🗑️', label:'Корзина',  page:'pg-trash'},
+  audit:     {icon:'📋', label:'Аудит',    page:'pg-audit'},
 };
 
 // ════════ UTILS ════════
@@ -1613,6 +1634,29 @@ function showPg(name,el){
   if(name==='import')    renderImportPage();
   if(name==='extrawork') { renderExtraWorkList(); }
   if(name==='dash')      renderDash();
+  if(name==='trash')     renderTrash(); // НОВОЕ!
+  if(name==='audit')     renderAudit(); // НОВОЕ!
+}
+
+// НОВОЕ! Функции для отображения корзины и аудита администратором
+function renderTrash(){
+  const roleLabel = _adminViewingRole ? ROLES[_adminViewingRole].label : 'Не выбрана';
+  document.getElementById('trashRoleLabel').textContent = roleLabel;
+  document.getElementById('trashContent').innerHTML = `
+    <div style="padding:20px;text-align:center;color:var(--t2)">
+      📌 Корзина для роли: ${roleLabel}<br>
+      <span style="font-size:11px">Удалённые элементы будут отображаться здесь</span>
+    </div>`;
+}
+
+function renderAudit(){
+  const roleLabel = _adminViewingRole ? ROLES[_adminViewingRole].label : 'Не выбрана';
+  document.getElementById('auditRoleLabel').textContent = roleLabel;
+  document.getElementById('auditContent').innerHTML = `
+    <div style="padding:20px;text-align:center;color:var(--t2)">
+      📌 Аудит для роли: ${roleLabel}<br>
+      <span style="font-size:11px">История действий будет отображаться здесь</span>
+    </div>`;
 }
 
 // ════════ EMPLOYEES ════════
@@ -2036,12 +2080,30 @@ function migrateLegacyEmployeesToStaff(){
 }
 
 function buildTabs(){
-  const tabs=(ROLES[session.role]&&ROLES[session.role].tabs)||['dash'];
+  // НОВОЕ! Если администратор выбрал роль для просмотра - показать её вкладки + trash + audit
+  let tabs;
+  if(session.role === 'администратор' && _adminViewingRole){
+    // Администратор просматривает роль - показать вкладки этой роли + корзина + аудит
+    tabs = (ROLES[_adminViewingRole] && ROLES[_adminViewingRole].tabs) || ['dash'];
+    tabs = [...tabs, 'trash', 'audit']; // Добавить корзину и аудит
+  } else {
+    // Обычный режим - показать вкладки текущей роли
+    tabs = (ROLES[session.role] && ROLES[session.role].tabs) || ['dash'];
+  }
+  
   document.getElementById('mainTabs').innerHTML=tabs.map(k=>`
     <button class="tab ${k==='dash'?'active':''}" onclick="showPg('${k}',this)">
       <div class="ti">${TAB_CFG[k].icon}</div>
       <span>${TAB_CFG[k].label}</span>
     </button>`).join('');
+}
+
+// НОВОЕ! Функция для администратора выбрать роль для просмотра
+function adminSelectRoleToView(role){
+  if(session.role !== 'администратор') return;
+  _adminViewingRole = (_adminViewingRole === role) ? null : role; // Toggle
+  buildTabs();
+  showPg('dash', document.querySelector('.tab')); // Показать главную выбранной роли
 }
 
 // ════════ FIREBASE LISTENERS ════════
@@ -3590,6 +3652,36 @@ function renderAdmin(){
   const ai=document.getElementById('adminAllItems');
   if(!ai)return;
   const isAdmin = session.role==='администратор' || session.role==='управляющий';
+
+  // НОВОЕ! Администратор может выбирать роль для просмотра
+  if(isAdmin && session.role==='администратор'){
+    let roleSelector = document.getElementById('adminRoleSelector');
+    if(!roleSelector){
+      roleSelector = document.createElement('div');
+      roleSelector.id = 'adminRoleSelector';
+      ai.parentElement.insertBefore(roleSelector, ai.parentElement.firstChild);
+    }
+    
+    const roles = ['заготовщик', 'мастер', 'кладовщик', 'управляющий'];
+    roleSelector.innerHTML = `
+      <div class="stitle" style="margin-bottom:10px">👁️ Просмотр ролей</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:16px">
+        ${roles.map(r => `
+          <button onclick="adminSelectRoleToView('${r}')" 
+            style="padding:12px;border-radius:10px;border:2px solid ${_adminViewingRole===r?'var(--a2)':'var(--border)'};
+                   background:${_adminViewingRole===r?'var(--s2)':'var(--s1)'};
+                   color:var(--t1);cursor:pointer;font-size:13px;font-weight:700;
+                   transition:all .2s">
+            ${ROLES[r].label}
+          </button>
+        `).join('')}
+      </div>
+      ${_adminViewingRole ? `<div class="card" style="border-color:var(--a2);margin-bottom:16px;padding:10px;font-size:12px">
+        <strong>Выбрана роль:</strong> ${ROLES[_adminViewingRole].label}<br>
+        <span style="color:var(--t2)">Все данные этой роли доступны для просмотра в других вкладках</span>
+      </div>` : ''}
+    `;
+  }
 
   // Admin: show full employee panel
   let adminExtra = document.getElementById('adminExtraPanel');
