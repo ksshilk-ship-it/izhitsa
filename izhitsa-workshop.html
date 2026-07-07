@@ -389,6 +389,26 @@ function applyUpdate() {
     <!-- ВКЛАДКА 2: Архив -->
     <div id="whArchive" style="display:none">
 
+      <!-- ПРИХОДЫ (новое!) -->
+      <div class="card" style="margin-bottom:16px;border-color:var(--accent);background:linear-gradient(135deg,rgba(192,255,96,0.05),rgba(192,255,96,0.02))">
+        <div class="ctitle" style="color:var(--accent)">📥 Приходы товаров</div>
+        <div style="font-size:12px;color:var(--t2);margin-bottom:12px">Все поступления товаров на склад мастерской</div>
+        
+        <!-- Кнопки источников приходов -->
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px">
+          <button onclick="filterIncomingBySource('masters')" id="incSourceMasters" 
+            style="padding:8px;border-radius:8px;border:2px solid var(--accent);background:var(--s1);color:var(--t1);cursor:pointer;font-size:12px;font-weight:700">
+            👤 От мастеров
+          </button>
+          <button onclick="filterIncomingBySource('shops')" id="incSourceShops" 
+            style="padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--t2);cursor:pointer;font-size:12px">
+            🏪 От магазинов
+          </button>
+        </div>
+        
+        <div id="whIncomingList" style="max-height:500px;overflow-y:auto"></div>
+      </div>
+
       <!-- Метка актуальности -->
       <div id="whArchiveDate" style="display:none;background:linear-gradient(135deg,#2a1a4a,#1a1428);border:1px solid #6c3fc5;border-radius:12px;padding:12px;margin-bottom:12px;text-align:center">
         <div style="font-size:10px;color:#c8a0ff;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Архивные данные актуальны на утро</div>
@@ -2858,6 +2878,7 @@ function setItemStatus(id,status){
 
 // ════════ WAREHOUSE (Кладовщик) ════════
 let _whTab = 'real';
+let _incomingSourceFilter = 'masters'; // Filter for incoming: masters, shops, etc
 
 function setWhTab(tab){
   _whTab = tab;
@@ -6114,14 +6135,6 @@ function openManualAcceptMo(){
   _maItems = [];
   addMaItemRow(); // одна строка по умолчанию
   renderMaItemsList();
-  
-  // НОВОЕ! Показать архив приёмок в модальном окне
-  _archiveViewLevel = 'periods';
-  _archiveSelectedPeriod = null;
-  _archiveSelectedMaster = null;
-  _archiveSelectedDate = null;
-  renderManualAcceptHistory();
-  
   openMo('manualAcceptMo');
 }
 
@@ -6254,7 +6267,7 @@ function renderMaItemsList(){
           <div onclick="setMaArtikulMode('${it.rid}','manual')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='manual'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='manual'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='manual'?'var(--accent)':'var(--border)'}">Вручную</div>
           <div onclick="setMaArtikulMode('${it.rid}','none')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='none'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='none'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='none'?'var(--accent)':'var(--border)'}">Без артикула</div>
         </div>
-        <input class="fi" type="text" pattern="[0-9]*" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
+        <input class="fi" type="text" inputmode="decimal" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
           oninput="${it.artikulMode==='auto'?`updateMaAutoArtikul('${it.rid}',this.value)`:`updateMaItem('${it.rid}','artikul',this.value)`}"
           placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
           style="${it.artikulMode==='none'?'opacity:0.6':''}"
@@ -6263,7 +6276,7 @@ function renderMaItemsList(){
         ${it.artikulMode==='auto'?`
           <div style="background:var(--s1);border-radius:10px;padding:10px;margin-top:8px;border:1px solid var(--accent)">
             <div style="font-size:11px;color:var(--t2);margin-bottom:4px">📍 Начать отсчёт с номера:</div>
-            <input class="fi" type="text" pattern="[0-9]*" value="${it.artikul || getMaxSystemArtikul()}" 
+            <input class="fi" type="text" inputmode="decimal" value="${it.artikul || getMaxSystemArtikul()}" 
               id="maAutoStartNumber_${it.rid}"
               oninput="updateMaItem('${it.rid}','artikul',this.value);recalcMaAutoArtikuls()" 
               placeholder="Последний номер"
@@ -6478,8 +6491,8 @@ function showReceivingArchiveView(){
 }
 
 function renderManualAcceptHistory(){
-  // Функция работает в трёх местах: на странице приёмки (rcvArchiveContainer), в модальном окне (manualAcceptHistory) и на странице (rcvManualHistory)
-  const c = document.getElementById('rcvArchiveContainer') || document.getElementById('manualAcceptHistory') || document.getElementById('rcvManualHistory');
+  // Функция работает ТОЛЬКО на главной странице приёмки (rcvArchiveContainer)
+  const c = document.getElementById('rcvArchiveContainer');
   if(!c) return;
   
   if(_archiveViewLevel === 'periods') renderArchivePeriods(c);
@@ -6890,7 +6903,7 @@ function renderFiItemsList(){
           <div onclick="setFiArtikulMode('${it.rid}','manual')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='manual'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='manual'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='manual'?'var(--accent)':'var(--border)'}">Вручную</div>
           <div onclick="setFiArtikulMode('${it.rid}','none')" style="flex:1;text-align:center;padding:6px;border-radius:7px;font-size:11px;cursor:pointer;background:${it.artikulMode==='none'?'var(--accent)':'var(--s1)'};color:${it.artikulMode==='none'?'#000':'var(--t2)'};border:1px solid ${it.artikulMode==='none'?'var(--accent)':'var(--border)'}">Без артикула</div>
         </div>
-        <input class="fi" type="text" pattern="[0-9]*" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
+        <input class="fi" type="text" inputmode="decimal" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
           oninput="${it.artikulMode==='auto'?`updateFiAutoArtikul('${it.rid}',this.value)`:`updateFiItem('${it.rid}','artikul',this.value)`}"
           placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
           style="${it.artikulMode==='none'?'opacity:0.6':''}">
@@ -7526,12 +7539,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     <button class="btn" style="background:var(--a2);margin-bottom:10px" onclick="addMaItemRow()">➕ Добавить изделие</button>
     <button class="btn green" onclick="saveManualAccept()">💾 Сохранить приёмку</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('manualAcceptMo')">Отмена</button>
-    
-    <!-- АРХИВ ПРИЁМОК (многоуровневая навигация) -->
-    <div style="margin-top:20px;padding-top:20px;border-top:2px solid var(--border)">
-      <div class="stitle" style="margin-bottom:12px">📋 Архив приёмок</div>
-      <div id="manualAcceptHistory" style="padding:0"></div>
-    </div>
   </div>
 </div>
 
