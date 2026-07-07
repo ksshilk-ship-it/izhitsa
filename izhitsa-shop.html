@@ -4474,7 +4474,23 @@ function renderShiftDetail(shift){
       }).join('')+
     '</div>';
   }
+  html += '<button onclick="openLiveShiftView(\''+(shift.id||shift._id||'')+'\')" style="width:100%;padding:12px;margin-top:12px;background:#1e2a3e;border:2px solid #60c8f0;border-radius:12px;font-weight:700;font-size:13px;color:#60c8f0;cursor:pointer">📖 Открыть полный журнал смены (редактирование)</button>';
   return html;
+}
+function openLiveShiftView(id){
+  if(!id){ showToast('Смена не найдена'); return; }
+  showToast('⏳ Загружаю смену...');
+  db.collection('iz_shifts').doc(id).get({source:'server'}).then(function(doc){
+    if(!doc.exists){ showToast('Смена не найдена в облаке'); return; }
+    var d = doc.data(); d.id = doc.id;
+    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var idx = shifts.findIndex(function(s){ return (s.id||s._id)===id; });
+    if(idx>=0) shifts[idx]=d; else shifts.push(d);
+    localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+    openShiftView(id);
+  }).catch(function(err){
+    showToast('⚠️ Не удалось загрузить смену: '+(err&&err.message||err));
+  });
 }
 function toggleTodayDetail(key){
   var d=document.getElementById('todayDetail_'+key);
