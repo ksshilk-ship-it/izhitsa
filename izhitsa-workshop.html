@@ -744,14 +744,31 @@ function applyUpdate() {
   <div class="page" id="pg-settings">
     <div class="stitle">⚙️ Настройки</div>
     <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="card" style="cursor:pointer" onclick="showPg('staff', null)">
+        <div class="ctitle" style="margin:0">👤 Персонал</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:4px">Сотрудники: добавление, роли, редактирование</div>
+      </div>
       <div class="card" style="cursor:pointer" onclick="showPg('admin', null)">
-        <div class="ctitle" style="margin:0">🛡 Управление и персонал</div>
-        <div style="font-size:11px;color:var(--t2);margin-top:4px">Сотрудники, восстановление данных, базовые настройки</div>
+        <div class="ctitle" style="margin:0">🛡 Управление</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:4px">Каталог, справочники, восстановление данных, базовые настройки</div>
       </div>
       <div class="card" style="cursor:pointer" onclick="showPg('import', null)">
         <div class="ctitle" style="margin:0">📥 Загрузка / импорт</div>
-        <div style="font-size:11px;color:var(--t2);margin-top:4px">Импорт данных из файлов</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:4px">Обновление на GitHub, импорт данных из файлов</div>
       </div>
+    </div>
+  </div>
+
+  <!-- ПЕРСОНАЛ (вынесено из Управления) -->
+  <div class="page" id="pg-staff">
+    <div id="hubBack_staff" style="display:none;margin-bottom:8px"><span onclick="showPg('settings',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Настройки</span></div>
+    <div class="stitle" style="display:flex;justify-content:space-between;align-items:center">
+      <span>👤 Персонал</span>
+      <button class="btn" style="width:auto;padding:7px 14px;font-size:11px;margin:0" onclick="openEmpEditMo(null)">＋ Добавить</button>
+    </div>
+    <div class="card" style="border-color:#6c3fc5">
+      <div class="ctitle" style="margin-bottom:4px" id="staffCountTitle">Сотрудники</div>
+      <div id="employeeListStaff"></div>
     </div>
   </div>
 
@@ -793,21 +810,6 @@ function applyUpdate() {
           🔢 Исправить артикулы «НАЧ-...» на нормальные
         </button>
         <div style="font-size:11px;color:var(--t2)">Находит все товары на складе с автоматически сгенерированными длинными артикулами и заменяет их на порядковые числа</div>
-      </div>
-
-      <!-- GitHub Upload -->
-      <div class="card" style="margin-bottom:8px;background:#1a2e1e;border:1px solid #2e4e2e">
-        <div style="font-size:11px;font-weight:700;color:#c8f060;margin-bottom:8px">🚀 ОБНОВИТЬ ПРИЛОЖЕНИЕ НА GITHUB</div>
-        <div style="font-size:11px;color:#8888aa;margin-bottom:8px">Загружает актуальный файл напрямую через API. Токен сохраняется локально на устройстве.</div>
-        <input class="fi" id="wsGhTokenInput" type="password" placeholder="GitHub токен (ghp_...)" autocomplete="off" style="margin-bottom:8px;font-family:monospace;font-size:12px" onfocus="if(!this.value){var t=localStorage.getItem('iz_gh_token');if(t)this.value=t;}">
-        <div style="font-size:10px;color:#8888aa;margin-bottom:4px">Выберите новый файл от Клода:</div>
-        <div onclick="document.getElementById('wsGhFileInput').click()" style="border:2px dashed #c8f060;border-radius:10px;padding:12px;text-align:center;cursor:pointer;margin-bottom:8px">
-          <div style="font-size:20px;margin-bottom:3px">📄</div>
-          <div style="font-size:12px;font-weight:700;color:#c8f060" id="wsGhFileName">Выбрать файл izhitsa-workshop.html</div>
-          <input type="file" id="wsGhFileInput" accept=".html" style="display:none" onchange="document.getElementById('wsGhFileName').textContent=this.files[0]?this.files[0].name:'Выбрать файл'">
-        </div>
-        <button type="button" onpointerdown="event.preventDefault();wsUploadToGitHub()" style="width:100%;padding:10px;border-radius:10px;border:none;background:#c8f060;color:#0f0f13;font-size:13px;font-weight:700;cursor:pointer">⬆️ Загрузить на GitHub Pages</button>
-        <div id="wsGhUploadStatus" style="margin-top:8px;font-size:11px;color:#8888aa"></div>
       </div>
     </div>
 
@@ -899,6 +901,21 @@ function applyUpdate() {
   <div class="page" id="pg-import">
     <div id="hubBack_import" style="display:none;margin-bottom:8px"><span onclick="showPg('settings',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Настройки</span></div>
     <div class="stitle">📥 Загрузка данных</div>
+
+    <!-- GitHub Upload -->
+    <div class="card" style="margin-bottom:16px;background:#1a2e1e;border:1px solid #2e4e2e">
+      <div style="font-size:11px;font-weight:700;color:#c8f060;margin-bottom:8px">🚀 ОБНОВИТЬ ПРИЛОЖЕНИЕ НА GITHUB</div>
+      <div style="font-size:11px;color:#8888aa;margin-bottom:8px">Загружает актуальный файл напрямую через API. Токен сохраняется локально на устройстве.</div>
+      <input class="fi" id="wsGhTokenInput" type="password" placeholder="GitHub токен (ghp_...)" autocomplete="off" style="margin-bottom:8px;font-family:monospace;font-size:12px" onfocus="if(!this.value){var t=localStorage.getItem('iz_gh_token');if(t)this.value=t;}">
+      <div style="font-size:10px;color:#8888aa;margin-bottom:4px">Выберите новый файл от Клода:</div>
+      <div onclick="document.getElementById('wsGhFileInput').click()" style="border:2px dashed #c8f060;border-radius:10px;padding:12px;text-align:center;cursor:pointer;margin-bottom:8px">
+        <div style="font-size:20px;margin-bottom:3px">📄</div>
+        <div style="font-size:12px;font-weight:700;color:#c8f060" id="wsGhFileName">Выбрать файл izhitsa-workshop.html</div>
+        <input type="file" id="wsGhFileInput" accept=".html" style="display:none" onchange="document.getElementById('wsGhFileName').textContent=this.files[0]?this.files[0].name:'Выбрать файл'">
+      </div>
+      <button type="button" onpointerdown="event.preventDefault();wsUploadToGitHub()" style="width:100%;padding:10px;border-radius:10px;border:none;background:#c8f060;color:#0f0f13;font-size:13px;font-weight:700;cursor:pointer">⬆️ Загрузить на GitHub Pages</button>
+      <div id="wsGhUploadStatus" style="margin-top:8px;font-size:11px;color:#8888aa"></div>
+    </div>
 
     <!-- Выбор режима -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
@@ -1546,6 +1563,7 @@ const TAB_CFG = {
   finance:   {icon:'💰', label:'Финансы',  page:'pg-finance'},
   analytics: {icon:'📊', label:'Аналитика',page:'pg-analytics'},
   settings:  {icon:'⚙️', label:'Настройки',page:'pg-settings'},
+  staff:     {icon:'👤', label:'Персонал', page:'pg-staff'},
 };
 
 // ════════ UTILS ════════
@@ -1758,6 +1776,7 @@ function showPg(name,el){
   if(name==='ownerwarehouse') renderOwnerWarehouse();
   if(name==='admin')     renderAdmin();
   if(name==='roles')     renderRolesPage();
+  if(name==='staff')     renderStaffPage();
   if(name==='import')    renderImportPage();
   if(name==='extrawork') { renderExtraWorkList(); }
   if(name==='dash')      renderDash();
@@ -1976,8 +1995,8 @@ const WS_ROLE_LABELS = {
   мастер:'Мастер', заготовщик:'Заготовщик', кладовщик:'Кладовщик', управляющий:'Управляющий мастерской'
 };
 
-function renderEmployeeList(){
-  const c=document.getElementById('employeeList'); if(!c) return;
+function renderEmployeeList(targetId){
+  const c=document.getElementById(targetId||'employeeList'); if(!c) return;
   const staff = getStaff().filter(s=>!s._builtin);
   if(!staff.length){ c.innerHTML='<div style="font-size:12px;color:var(--t2)">Сотрудников нет</div>'; return; }
 
@@ -2091,7 +2110,7 @@ async function saveEmpEdit(){
   try{ await db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}); }catch(e){}
 
   closeMo('empEditMo');
-  renderEmployeeList();
+  renderEmployeeList(); renderStaffPage();
   renderAdmin();
   showToast('✅ Сохранено');
 }
@@ -2103,7 +2122,7 @@ async function toggleEmpBlock(staffId){
   staff[idx].updatedAt = now();
   localStorage.setItem('iz_staff', JSON.stringify(staff));
   try{ await db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}); }catch(e){}
-  renderEmployeeList();
+  renderEmployeeList(); renderStaffPage();
   showToast(staff[idx].blocked ? '🔒 Заблокирован' : '🔓 Разблокирован');
 }
 
@@ -2116,7 +2135,7 @@ async function archiveEmp(staffId){
   staff[idx].updatedAt = now();
   localStorage.setItem('iz_staff', JSON.stringify(staff));
   try{ await db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}); }catch(e){}
-  renderEmployeeList();
+  renderEmployeeList(); renderStaffPage();
   showToast('📥 Перенесён в архив');
 }
 
@@ -2127,7 +2146,7 @@ async function delEmployeeById(staffId){
   staff.splice(idx,1);
   localStorage.setItem('iz_staff', JSON.stringify(staff));
   try{ await db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}); }catch(e){}
-  renderEmployeeList();
+  renderEmployeeList(); renderStaffPage();
   renderAdmin();
   showToast('🗑 Сотрудник удалён');
 }
@@ -2238,7 +2257,7 @@ function migrateLegacyEmployeesToStaff(){
   // Старую базу не удаляем автоматически — getEmployees() уже игнорирует
   // дубли по id, так что наличие легаси-копии больше не вредит.
   showToast(`✅ ${migrated} сотрудник(ов) перенесены в общую базу. Проверьте их роли в разделе «Сотрудники».`);
-  renderEmployeeList();
+  renderEmployeeList(); renderStaffPage();
   renderAdmin();
 }
 
@@ -4460,12 +4479,20 @@ function formatMonthKey(key){
 }
 
 // ════════ ADMIN ════════
+// НОВОЕ! Отдельная страница управления персоналом (вынесена из Управления)
+function renderStaffPage(){
+  const staffCount = getStaff().filter(s=>!s._builtin && !s.archived).length;
+  const title = document.getElementById('staffCountTitle');
+  if(title) title.textContent = `Сотрудники (${staffCount})`;
+  renderEmployeeList('employeeListStaff');
+}
+
 function renderAdmin(){
   const ai=document.getElementById('adminAllItems');
   if(!ai)return;
   const isAdmin = session.role==='администратор' || session.role==='управляющий';
 
-  // Admin: show full employee panel
+  // Admin: восстановление данных / служебные операции (персонал вынесен в отдельную страницу pg-staff)
   let adminExtra = document.getElementById('adminExtraPanel');
   if(isAdmin){
     if(!adminExtra){
@@ -4473,7 +4500,6 @@ function renderAdmin(){
       adminExtra.id = 'adminExtraPanel';
       ai.parentElement.insertBefore(adminExtra, ai.parentElement.firstChild);
     }
-    const staffCount = getStaff().filter(s=>!s._builtin && !s.archived).length;
     adminExtra.innerHTML=`
       <div class="card" style="border-color:var(--a6);background:linear-gradient(135deg,rgba(100,150,255,0.05),rgba(100,150,255,0.02));margin-bottom:16px">
         <div class="ctitle" style="color:var(--a6);margin-bottom:12px">🔄 ВОССТАНОВЛЕНИЕ ДАННЫХ</div>
@@ -4489,16 +4515,7 @@ function renderAdmin(){
         <div style="font-size:11px;color:var(--t2);margin-top:8px">
           Уберёт эти группы из общего баланса "Готовы к отгрузке" и переместит во вкладку "Запасы". Данные позиций не меняются.
         </div>
-      </div>` + `
-      <div class="stitle" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <span>🛡 Управление персоналом</span>
-        <button class="btn" style="width:auto;padding:7px 14px;font-size:11px;margin:0" onclick="openEmpEditMo(null)">＋ Добавить</button>
-      </div>
-      <div class="card" style="border-color:#6c3fc5">
-        <div class="ctitle" style="margin-bottom:4px">Сотрудники (${staffCount})</div>
-        <div id="employeeList"></div>
       </div>`;
-    renderEmployeeList();
   } else if(adminExtra){
     adminExtra.innerHTML='';
   }
