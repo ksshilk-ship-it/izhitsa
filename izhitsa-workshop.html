@@ -371,26 +371,42 @@ function applyUpdate() {
     <!-- ВКЛАДКА 1: БАЛАНС СКЛАДА -->
     <div id="whBalance" style="display:block">
       <div class="srow" style="margin-bottom:12px">
-        <div class="sc"><div class="sc-v" id="whBalanceTotal" style="color:var(--accent)">0</div><div class="sc-l">Всего на складе</div></div>
-        <div class="sc"><div class="sc-v" id="whBalanceReady" style="color:var(--a5)">0</div><div class="sc-l">Готовые</div></div>
-        <div class="sc"><div class="sc-v" id="whBalanceReserves" style="color:var(--a4)">0</div><div class="sc-l">Запасы</div></div>
+        <div class="sc" onclick="setBalanceView('all')" id="whFilterAll" style="cursor:pointer"><div class="sc-v" id="whBalanceTotal" style="color:var(--accent)">0</div><div class="sc-l">Всего на складе</div></div>
+        <div class="sc" onclick="setBalanceView('ready')" id="whFilterReady" style="cursor:pointer"><div class="sc-v" id="whBalanceReady" style="color:var(--a5)">0</div><div class="sc-l">Готовые</div></div>
+        <div class="sc" onclick="setBalanceView('reserves')" id="whFilterReserves" style="cursor:pointer"><div class="sc-v" id="whBalanceReserves" style="color:var(--a4)">0</div><div class="sc-l">Запасы</div></div>
       </div>
 
-      <!-- ГОТОВЫЕ К ОТГРУЗКЕ -->
-      <div class="card">
-        <div class="ctitle">📦 Готовы к отгрузке</div>
-        <div style="display:flex;gap:8px;margin-bottom:8px">
-          <input class="fi" id="whBalanceSearch" placeholder="🔍 Поиск..." style="flex:1" oninput="renderBalance()">
-          <button onclick="toggleBalanceSort()" id="whBalanceSortBtn" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:12px">↑ Цена</button>
+      <!-- ГОТОВЫЕ К ОТГРУЗКЕ (сворачиваемый блок) -->
+      <div class="card" id="whReadyBlock" style="display:none;padding:0;overflow:hidden">
+        <div onclick="toggleWhBlock('ready')" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;cursor:pointer">
+          <div>
+            <div class="ctitle" style="margin:0">📦 Готовы к отгрузке</div>
+            <div id="whReadySummary" style="font-size:12px;color:var(--t2);margin-top:2px"></div>
+          </div>
+          <span id="whReadyArrow" style="font-size:16px;color:var(--t2)">▼</span>
         </div>
-        <div id="whBalanceReadyList"></div>
+        <div id="whReadyBody" style="display:none;padding:0 16px 16px">
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <input class="fi" id="whBalanceSearch" placeholder="🔍 Поиск..." style="flex:1" oninput="renderBalance()">
+            <button onclick="toggleBalanceSort()" id="whBalanceSortBtn" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:12px">↑ Цена</button>
+          </div>
+          <div id="whBalanceReadyList"></div>
+        </div>
       </div>
 
-      <!-- ЗАПАСЫ -->
-      <div class="card" style="margin-top:12px">
-        <div class="ctitle">🟡 Запасы</div>
-        <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Товары физически на складе, но недоступны для отгрузки в магазины. Можно перевести в «Готовые» целиком группой.</div>
-        <div id="whBalanceReservesList"></div>
+      <!-- ЗАПАСЫ (сворачиваемый блок) -->
+      <div class="card" id="whReservesBlock" style="display:none;margin-top:12px;padding:0;overflow:hidden">
+        <div onclick="toggleWhBlock('reserves')" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;cursor:pointer">
+          <div>
+            <div class="ctitle" style="margin:0">🟡 Запасы</div>
+            <div id="whReservesSummary" style="font-size:12px;color:var(--t2);margin-top:2px"></div>
+          </div>
+          <span id="whReservesArrow" style="font-size:16px;color:var(--t2)">▼</span>
+        </div>
+        <div id="whReservesBody" style="display:none;padding:0 16px 16px">
+          <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Товары физически на складе, но недоступны для отгрузки в магазины. Можно перевести в «Готовые» целиком группой.</div>
+          <div id="whBalanceReservesList"></div>
+        </div>
       </div>
 
       <div style="display:flex;gap:8px;margin-top:12px">
@@ -3883,6 +3899,24 @@ function toggleBalanceGroup(gid){
   if(arrow) arrow.textContent = open ? '▼' : '▲';
 }
 
+let _whBalanceView = 'all'; // all | ready | reserves
+let _whReadyExpanded = false;
+let _whReservesExpanded = false;
+
+function setBalanceView(view){
+  _whBalanceView = view;
+  // Раскрывать блок сразу, если выбран именно он (не "Всего")
+  if(view === 'ready') _whReadyExpanded = true;
+  if(view === 'reserves') _whReservesExpanded = true;
+  if(view === 'all'){ _whReadyExpanded = false; _whReservesExpanded = false; }
+  renderBalance();
+}
+function toggleWhBlock(which){
+  if(which === 'ready') _whReadyExpanded = !_whReadyExpanded;
+  else _whReservesExpanded = !_whReservesExpanded;
+  renderBalance();
+}
+
 function renderBalance(){
   // Показывать ВСЕ товары которые есть, независимо от статуса
   const readyItems = items.filter(i => !i.isArchiveDraft && !i.isShopArchived && i.status !== 'shipped');
@@ -3900,12 +3934,49 @@ function renderBalance(){
   
   // Обновить счётчики
   const archivReserves = (_fiGroups || []).filter(g => g.status === 'archived');
-  let reserveItems = 0;
-  archivReserves.forEach(g => reserveItems += (g.items || []).length);
+  let reserveItems = 0, reserveSum = 0;
+  archivReserves.forEach(g => {
+    (g.positions||[]).forEach(p=>{
+      const qty = parseInt(p.qty,10)||1;
+      reserveItems += qty;
+      reserveSum += (parseInt(p.price,10)||0) * qty;
+    });
+  });
+  const readySum = readyItems.reduce((s,i)=>s+(parseInt(i.price,10)||0),0);
   
   document.getElementById('whBalanceTotal').textContent = readyItems.length + reserveItems;
   document.getElementById('whBalanceReady').textContent = readyItems.length;
   document.getElementById('whBalanceReserves').textContent = reserveItems;
+
+  // Подсветить активный фильтр
+  ['whFilterAll','whFilterReady','whFilterReserves'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.style.background = 'var(--s1)';
+  });
+  const activeId = _whBalanceView==='all' ? 'whFilterAll' : (_whBalanceView==='ready' ? 'whFilterReady' : 'whFilterReserves');
+  const activeEl = document.getElementById(activeId);
+  if(activeEl) activeEl.style.background = 'var(--s2)';
+
+  // Показать нужные блоки в зависимости от фильтра
+  const readyBlock = document.getElementById('whReadyBlock');
+  const reservesBlock = document.getElementById('whReservesBlock');
+  if(readyBlock) readyBlock.style.display = (_whBalanceView==='all' || _whBalanceView==='ready') ? 'block' : 'none';
+  if(reservesBlock) reservesBlock.style.display = (_whBalanceView==='all' || _whBalanceView==='reserves') ? 'block' : 'none';
+
+  // Заголовки блоков (кол-во и сумма) + раскрыто/свёрнуто
+  const readySummaryEl = document.getElementById('whReadySummary');
+  if(readySummaryEl) readySummaryEl.textContent = `${readyItems.length} шт · ${fmt(readySum)}`;
+  const readyBody = document.getElementById('whReadyBody');
+  const readyArrow = document.getElementById('whReadyArrow');
+  if(readyBody) readyBody.style.display = _whReadyExpanded ? 'block' : 'none';
+  if(readyArrow) readyArrow.textContent = _whReadyExpanded ? '▲' : '▼';
+
+  const reservesSummaryEl = document.getElementById('whReservesSummary');
+  if(reservesSummaryEl) reservesSummaryEl.textContent = `${reserveItems} шт · ${fmt(reserveSum)}`;
+  const reservesBody = document.getElementById('whReservesBody');
+  const reservesArrow = document.getElementById('whReservesArrow');
+  if(reservesBody) reservesBody.style.display = _whReservesExpanded ? 'block' : 'none';
+  if(reservesArrow) reservesArrow.textContent = _whReservesExpanded ? '▲' : '▼';
   
   // Отобразить готовые товары ГРУППАМИ по наименованию (сворачиваемые, без бесконечного полотна)
   const readyList = document.getElementById('whBalanceReadyList');
