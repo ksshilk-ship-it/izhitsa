@@ -2545,6 +2545,17 @@ function openMo(id){
   if(!el) return;
   document.body.appendChild(el);
   el.classList.add('open');
+  // Тот же фикс iOS Safari: при открытии окна поверх другого (вложенные модалки)
+  // скролл нового окна иногда "не активируется" сразу. Форсируем reflow, как при закрытии.
+  requestAnimationFrame(function(){
+    var md = el.querySelector('.md');
+    if(md){
+      var prevDisplay = md.style.display;
+      md.style.display = 'none';
+      void md.offsetHeight; // force reflow
+      md.style.display = prevDisplay;
+    }
+  });
 }
 function closeMo(id){
   var el=document.getElementById(id);
@@ -9338,7 +9349,7 @@ function renderShopSettings(){
           '<input class="fi" type="text" id="zp_base_'+sid+'" value="'+base+'" inputmode="numeric"></div>'+
         '<div class="fg"><label class="fl">Порог выручки для % (₽)</label>'+
           '<input class="fi" type="text" id="zp_thresh_'+sid+'" value="'+threshold+'" inputmode="numeric">'+
-          '<div style="font-size:11px;color:#8888aa;margin-top:4px">Ниже порога → только базовая</div></div>'+
+          '<div style="font-size:11px;color:#8888aa;margin-top:4px">Ниже порога → только базовая. Оставь поле пустым или 0, если порога нет — процент будет начисляться всегда</div></div>'+
         '<div class="fg"><label class="fl">Процент от выручки (%)</label>'+
           '<input class="fi" type="text" id="zp_pct_'+sid+'" value="'+pct+'" inputmode="numeric" step="0.5"></div>'+
         '<div class="fg"><label class="fl">Проезд за смену (₽)</label>'+
@@ -9374,9 +9385,10 @@ function toggleHighPct(sid, checked){
 function saveOneShopZp(shop, sid){
   var settings=getShopZpSettings();
   var hasHigh=(document.getElementById('zp_has_high_'+sid)||{}).checked;
+  var threshRaw = (document.getElementById('zp_thresh_'+sid)||{}).value;
   settings[shop]={
     base: numDef(parseFloat((document.getElementById('zp_base_'+sid)||{}).value), 1500),
-    threshold: numDef(parseFloat((document.getElementById('zp_thresh_'+sid)||{}).value), 5000),
+    threshold: (threshRaw==null || threshRaw==='') ? 0 : (parseFloat(threshRaw)||0),
     pct: numDef(parseFloat((document.getElementById('zp_pct_'+sid)||{}).value), 8),
     travel: numDef(parseFloat((document.getElementById('zp_travel_'+sid)||{}).value), 0),
     highThreshold: hasHigh?numDef(parseFloat((document.getElementById('zp_highthresh_'+sid)||{}).value), 20000):null,
@@ -9395,9 +9407,10 @@ function saveShopSettings(){
     var hasHigh=(document.getElementById('zp_has_high_'+sid)||{}).checked;
     var baseEl=document.getElementById('zp_base_'+sid);
     if(!baseEl) return; // accordion not opened, skip
+    var threshRaw2 = (document.getElementById('zp_thresh_'+sid)||{}).value;
     settings[shop]={
       base: numDef(parseFloat(baseEl.value), 1500),
-      threshold: numDef(parseFloat((document.getElementById('zp_thresh_'+sid)||{}).value), 5000),
+      threshold: (threshRaw2==null || threshRaw2==='') ? 0 : (parseFloat(threshRaw2)||0),
       pct: numDef(parseFloat((document.getElementById('zp_pct_'+sid)||{}).value), 8),
       travel: numDef(parseFloat((document.getElementById('zp_travel_'+sid)||{}).value), 0),
       highThreshold: hasHigh?numDef(parseFloat((document.getElementById('zp_highthresh_'+sid)||{}).value), 20000):null,
@@ -14686,6 +14699,78 @@ function startStockSync(){
     }catch(e){}
   });
 }
+
+/* ===== Управление свайпами ===== */
+(function(){
+  // --- Свайп вниз для закрытия открытого окна ---
+  var mTouch = {active:false, startY:0, startX:0, md:null, mo:null};
+  document.addEventListener('touchstart', function(e){
+    var md = e.target.closest('.mo.open .md');
+    if(!md){ mTouch.active=false; return; }
+    if(md.scrollTop > 4) { mTouch.active=false; return; } // не мешаем обычному скроллу, если не у самого верха
+    mTouch.active = true;
+    mTouch.startY = e.touches[0].clientY;
+    mTouch.startX = e.touches[0].clientX;
+    mTouch.md = md;
+    mTouch.mo = md.closest('.mo');
+  }, {passive:true});
+  document.addEventListener('touchmove', function(e){
+    if(!mTouch.active || !mTouch.md) return;
+    var dy = e.touches[0].clientY - mTouch.startY;
+    var dx = e.touches[0].clientX - mTouch.startX;
+    if(dy>0 && dy>Math.abs(dx)){
+      mTouch.md.style.transition='none';
+      mTouch.md.style.transform='translateY('+dy+'px)';
+      mTouch.md.style.opacity=Math.max(0.4, 1-dy/500);
+    }
+  }, {passive:true});
+  document.addEventListener('touchend', function(e){
+    if(!mTouch.active || !mTouch.md) return;
+    var md = mTouch.md, moEl = mTouch.mo;
+    var dy = (e.changedTouches[0].clientY - mTouch.startY);
+    md.style.transition='transform 0.2s ease, opacity 0.2s ease';
+    if(dy > 110){
+      md.style.transform='translateY(100%)'; md.style.opacity='0';
+      var moId = moEl && moEl.id;
+      setTimeout(function(){
+        md.style.transition=''; md.style.transform=''; md.style.opacity='';
+        if(moId) closeMo(moId);
+      }, 180);
+    } else {
+      md.style.transform='translateY(0)'; md.style.opacity='1';
+      setTimeout(function(){ md.style.transition=''; }, 200);
+    }
+    mTouch.active=false; mTouch.md=null; mTouch.mo=null;
+  }, {passive:true});
+
+  // --- Свайп влево/вправо для переключения вкладок нижнего меню ---
+  var tTouch = {tracking:false, startX:0, startY:0};
+  document.addEventListener('touchstart', function(e){
+    if(document.querySelector('.mo.open')){ tTouch.tracking=false; return; }
+    if(e.target.closest('#mainTabs')){ tTouch.tracking=false; return; }
+    var hScroll = e.target.closest('[style*="overflow-x"]');
+    if(hScroll && hScroll.scrollWidth > hScroll.clientWidth + 2){ tTouch.tracking=false; return; }
+    tTouch.tracking = true;
+    tTouch.startX = e.touches[0].clientX;
+    tTouch.startY = e.touches[0].clientY;
+  }, {passive:true});
+  document.addEventListener('touchend', function(e){
+    if(!tTouch.tracking) return;
+    tTouch.tracking = false;
+    var dx = e.changedTouches[0].clientX - tTouch.startX;
+    var dy = e.changedTouches[0].clientY - tTouch.startY;
+    if(Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy)*1.4) return;
+    var bar = document.getElementById('mainTabs');
+    if(!bar || bar.style.display==='none') return;
+    var tabs = Array.prototype.slice.call(bar.querySelectorAll('.tab'));
+    if(!tabs.length) return;
+    var activeIdx = tabs.findIndex(function(t){return t.classList.contains('active');});
+    if(activeIdx<0) return;
+    var nextIdx = dx<0 ? activeIdx+1 : activeIdx-1;
+    if(nextIdx<0 || nextIdx>=tabs.length) return;
+    tabs[nextIdx].click();
+  }, {passive:true});
+})();
 </script>
 </body>
 </html>
