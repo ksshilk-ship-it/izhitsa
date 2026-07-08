@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ижица — Финансы</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --kraft:#EDE4D3;
+    --kraft-dark:#DCCFB4;
+    --paper:#F7F2E7;
+    --ink:#2B241A;
+    --ink-soft:#6B6152;
+    --brick:#AE4A2E;
+    --brick-dark:#8E3B24;
+    --green:#4C6B4F;
+    --slate:#4E6C7A;
+    --line:#C9BB9E;
+    --white:#FFFDF8;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--kraft);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  header{
+    padding:22px 20px 14px;
+    border-bottom:2px solid var(--ink);
+    background:var(--paper);
+  }
+  header h1{
+    font-family:'PT Serif',serif;
+    font-size:1.5rem;
+    margin:0 0 2px;
+    letter-spacing:0.3px;
+  }
+  header .sub{
+    font-size:0.78rem;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+    letter-spacing:1.5px;
+  }
+  nav{
+    display:flex;
+    overflow-x:auto;
+    background:var(--kraft-dark);
+    border-bottom:1px solid var(--line);
+  }
+  nav button{
+    flex:0 0 auto;
+    padding:12px 16px;
+    background:none;
+    border:none;
+    font-family:'Inter',sans-serif;
+    font-size:0.86rem;
+    font-weight:600;
+    color:var(--ink-soft);
+    cursor:pointer;
+    border-bottom:3px solid transparent;
+    white-space:nowrap;
+  }
+  nav button.active{
+    color:var(--brick-dark);
+    border-bottom-color:var(--brick);
+  }
+  main{
+    padding:16px;
+    max-width:720px;
+    margin:0 auto;
+    padding-bottom:60px;
+  }
+  .card{
+    background:var(--white);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px;
+    margin-bottom:14px;
+  }
+  .card h2{
+    font-family:'PT Serif',serif;
+    font-size:1.05rem;
+    margin:0 0 12px;
+    padding-bottom:8px;
+    border-bottom:1px solid var(--line);
+  }
+  .row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+    margin-bottom:8px;
+  }
+  .label{color:var(--ink-soft); font-size:0.85rem;}
+  .num{
+    font-family:'IBM Plex Mono',monospace;
+    font-weight:600;
+    font-size:1rem;
+  }
+  .num.big{font-size:1.6rem;}
+  .num.pos{color:var(--green);}
+  .num.neg{color:var(--brick);}
+  .stat-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-bottom:6px;
+  }
+  .stat{
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:10px 12px;
+  }
+  .stat .label{font-size:0.72rem; text-transform:uppercase; letter-spacing:0.5px;}
+  .stat .num{display:block; margin-top:4px;}
+  input, select, textarea{
+    width:100%;
+    padding:9px 10px;
+    border:1px solid var(--line);
+    border-radius:6px;
+    background:var(--paper);
+    font-family:'Inter',sans-serif;
+    font-size:0.9rem;
+    color:var(--ink);
+  }
+  textarea{font-family:'IBM Plex Mono',monospace; font-size:0.8rem; min-height:80px;}
+  label.field{display:block; font-size:0.78rem; color:var(--ink-soft); margin-bottom:4px; margin-top:10px;}
+  button.btn{
+    padding:10px 16px;
+    border:none;
+    border-radius:6px;
+    background:var(--brick);
+    color:var(--white);
+    font-weight:600;
+    font-size:0.88rem;
+    cursor:pointer;
+    margin-top:12px;
+  }
+  button.btn.secondary{
+    background:none;
+    border:1px solid var(--line);
+    color:var(--ink-soft);
+  }
+  button.btn.small{padding:6px 10px; font-size:0.78rem; margin-top:0;}
+  button.btn.danger{background:var(--brick-dark);}
+  table{width:100%; border-collapse:collapse; font-size:0.83rem;}
+  th{
+    text-align:left;
+    font-size:0.7rem;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    border-bottom:1px solid var(--line);
+    padding:6px 4px;
+  }
+  td{padding:7px 4px; border-bottom:1px solid var(--kraft-dark); font-family:'IBM Plex Mono',monospace;}
+  td.txt{font-family:'Inter',sans-serif;}
+  .tag{
+    display:inline-block;
+    font-size:0.68rem;
+    padding:2px 7px;
+    border-radius:20px;
+    background:var(--kraft-dark);
+    color:var(--ink-soft);
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+  }
+  .tag.paid{background:#DDE8DD; color:var(--green);}
+  .tag.planned{background:#F3E3D6; color:var(--brick-dark);}
+  .empty{color:var(--ink-soft); font-size:0.85rem; text-align:center; padding:16px 0;}
+  .bar-row{display:flex; align-items:center; gap:8px; margin-bottom:5px;}
+  .bar-label{width:64px; font-size:0.72rem; color:var(--ink-soft); flex:0 0 auto;}
+  .bar-track{flex:1; background:var(--kraft-dark); border-radius:4px; height:14px; overflow:hidden;}
+  .bar-fill{height:100%; background:var(--brick); border-radius:4px;}
+  .bar-val{width:70px; text-align:right; font-family:'IBM Plex Mono',monospace; font-size:0.75rem; flex:0 0 auto;}
+  details summary{cursor:pointer; font-size:0.82rem; color:var(--brick-dark); font-weight:600; padding:4px 0;}
+  .del-x{background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:0.9rem; padding:0 4px;}
+  .del-x:hover{color:var(--brick);}
+  .two-col{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .note{font-size:0.76rem; color:var(--ink-soft); margin-top:6px; line-height:1.4;}
+  .chart-wrap{
+    display:flex; gap:16px; overflow-x:auto;
+    position:relative; padding-top:2px;
+  }
+  .chart-baseline{
+    position:absolute; left:0; right:0; top:70px;
+    height:1px; background:var(--ink); opacity:0.35; z-index:0;
+  }
+  .chart-col{display:flex; flex-direction:column; align-items:center; flex:0 0 auto;}
+  .chart-bars{
+    position:relative; height:140px;
+    display:flex; gap:5px; align-items:flex-start; z-index:1;
+  }
+  .bar-slot{position:relative; width:14px; height:100%;}
+  .bar{position:absolute; left:0; right:0; border-radius:2px 2px 0 0;}
+  .bar.neg{border-radius:0 0 2px 2px;}
+  .bar.fin.pos{background:var(--green);}
+  .bar.fin.neg{background:var(--brick);}
+  .bar.cash.pos{background:var(--slate); opacity:0.85;}
+  .bar.cash.neg{background:var(--slate); opacity:0.5;}
+  .chart-label{font-size:0.68rem; color:var(--ink-soft); margin-top:6px;}
+  select.inline{width:auto; padding:4px 6px; font-size:0.78rem;}
+  input.inline-date{width:120px; padding:4px 6px; font-size:0.78rem; display:inline-block;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Ижица — Финансы</h1>
+  <div class="sub">Касса · Маржа · Расходы</div>
+</header>
+
+<nav id="nav"></nav>
+<main id="main"></main>
+
+<script>
+const CATEGORIES = ['Аренда','ЗП','Закуп товара','Налоги','Мой склад','Прочее'];
+const TABS = [
+  {id:'overview', label:'Обзор'},
+  {id:'analytics', label:'Аналитика'},
+  {id:'sales', label:'Продажи'},
+  {id:'expenses', label:'Расходы'},
+  {id:'commission', label:'ЗП продавца'},
+  {id:'settings', label:'Остатки'},
+];
+const MONTHS_RU = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+
+let state = {
+  balances:{cash:0, bank:0, updatedAt:null},
+  sales:[],
+  expenses:[],
+  commissionTiers:[]
+};
+let currentTab = 'overview';
+let loaded = false;
+
+async function loadState(){
+  try{
+    const res = await window.storage.get('izhitsa-finance-data', false);
+    if(res && res.value){
+      const parsed = JSON.parse(res.value);
+      state = Object.assign(state, parsed);
+    }
+  }catch(e){ /* no data yet */ }
+  loaded = true;
+  render();
+}
+
+async function saveState(){
+  try{
+    await window.storage.set('izhitsa-finance-data', JSON.stringify(state), false);
+  }catch(e){
+    console.error('Ошибка сохранения', e);
+  }
+}
+
+function uid(){ return Math.random().toString(36).slice(2,10); }
+function fmt(n){
+  n = Number(n)||0;
+  return n.toLocaleString('ru-RU', {maximumFractionDigits:0}) + ' ₽';
+}
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function daysAgoISO(n){
+  const d = new Date();
+  d.setDate(d.getDate()-n);
+  return d.toISOString().slice(0,10);
+}
+
+function renderNav(){
+  const nav = document.getElementById('nav');
+  nav.innerHTML = '';
+  TABS.forEach(t=>{
+    const b = document.createElement('button');
+    b.textContent = t.label;
+    if(t.id===currentTab) b.className='active';
+    b.onclick = ()=>{ currentTab=t.id; render(); };
+    nav.appendChild(b);
+  });
+}
+
+function render(){
+  renderNav();
+  const main = document.getElementById('main');
+  if(!loaded){ main.innerHTML = '<div class="empty">Загрузка…</div>'; return; }
+  if(currentTab==='overview') return renderOverview(main);
+  if(currentTab==='analytics') return renderAnalytics(main);
+  if(currentTab==='sales') return renderSales(main);
+  if(currentTab==='expenses') return renderExpenses(main);
+  if(currentTab==='commission') return renderCommission(main);
+  if(currentTab==='settings') return renderSettings(main);
+}
+
+// ---------- OVERVIEW ----------
+function renderOverview(main){
+  const totalLiquid = (Number(state.balances.cash)||0) + (Number(state.balances.bank)||0);
+
+  const last30 = state.sales.filter(s=>s.date>=daysAgoISO(30));
+  const sumGross30 = last30.reduce((a,s)=>a+Number(s.gross||0),0);
+  const sumNet30 = last30.reduce((a,s)=>a+Number(s.net||0),0);
+  const avgDailyNet = last30.length ? sumNet30/30 : 0;
+  const marginPct = sumGross30 ? (sumNet30/sumGross30*100) : 0;
+
+  const upcoming = state.expenses
+    .filter(e=>e.status==='planned' && e.dueDate)
+    .sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
+  const next30Cut = daysAgoISO(-30);
+  const upcoming30 = upcoming.filter(e=>e.dueDate<=next30Cut);
+  const sumUpcoming30 = upcoming30.reduce((a,e)=>a+Number(e.amount||0),0);
+
+  const projected30 = totalLiquid + avgDailyNet*30 - sumUpcoming30;
+
+  main.innerHTML = `
+    <div class="card">
+      <h2>Остатки</h2>
+      <div class="stat-grid">
+        <div class="stat"><span class="label">Наличные</span><span class="num">${fmt(state.balances.cash)}</span></div>
+        <div class="stat"><span class="label">Расчётный счёт</span><span class="num">${fmt(state.balances.bank)}</span></div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <span class="label">Итого свободных денег</span>
+        <span class="num big">${fmt(totalLiquid)}</span>
+      </div>
+      <div class="row">
+        <span class="label">Долг поставщикам (отсрочка, ещё не оплачено)</span>
+        <span class="num neg">${fmt(state.expenses.filter(e=>e.category==='Закуп товара' && e.status==='planned').reduce((a,e)=>a+Number(e.amount||0),0))}</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Последние 30 дней</h2>
+      <div class="stat-grid">
+        <div class="stat"><span class="label">Продажи (общая сумма)</span><span class="num">${fmt(sumGross30)}</span></div>
+        <div class="stat"><span class="label">Чистыми (маржа)</span><span class="num pos">${fmt(sumNet30)}</span></div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <span class="label">Средняя маржинальность</span>
+        <span class="num">${marginPct.toFixed(1)}%</span>
+      </div>
+      <div class="row">
+        <span class="label">Средняя чистая прибыль в день</span>
+        <span class="num">${fmt(avgDailyNet)}</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Прогноз на 30 дней вперёд</h2>
+      <div class="row">
+        <span class="label">Запланировано выплат (ближайшие 30 дней)</span>
+        <span class="num neg">−${fmt(sumUpcoming30)}</span>
+      </div>
+      <div class="row">
+        <span class="label">Ожидаемая прибыль от продаж</span>
+        <span class="num pos">+${fmt(avgDailyNet*30)}</span>
+      </div>
+      <div class="row" style="margin-top:6px; border-top:1px solid var(--line); padding-top:10px;">
+        <span class="label">Прогнозный остаток через 30 дней</span>
+        <span class="num big ${projected30>=0?'pos':'neg'}">${fmt(projected30)}</span>
+      </div>
+      <div class="note">Прогноз строится на среднедневной чистой прибыли за последние 30 дней и на уже запланированных расходах с датами оплат.</div>
+    </div>
+
+    <div class="card">
+      <h2>Ближайшие платежи</h2>
+      ${upcoming.length===0 ? '<div class="empty">Нет запланированных платежей</div>' :
+        `<table><thead><tr><th>Дата</th><th>Категория</th><th>Сумма</th></tr></thead><tbody>
+          ${upcoming.slice(0,8).map(e=>`
+            <tr>
+              <td>${e.dueDate}</td>
+              <td class="txt">${e.category}</td>
+              <td>${fmt(e.amount)}</td>
+            </tr>`).join('')}
+        </tbody></table>`}
+    </div>
+  `;
+}
+
+// ---------- ANALYTICS ----------
+function monthKey(dateStr){ return dateStr ? dateStr.slice(0,7) : null; }
+function monthLabel(key){
+  const [y,m] = key.split('-');
+  return MONTHS_RU[Number(m)-1] + ' ' + y.slice(2);
+}
+
+function buildMonthlyData(){
+  const months = new Set();
+  state.sales.forEach(s=>{ if(s.date) months.add(monthKey(s.date)); });
+  state.expenses.forEach(e=>{
+    if(e.dueDate) months.add(monthKey(e.dueDate));
+    if(e.paidDate) months.add(monthKey(e.paidDate));
+  });
+  const sorted = [...months].filter(Boolean).sort();
+
+  return sorted.map(key=>{
+    const salesGross = state.sales.filter(s=>monthKey(s.date)===key).reduce((a,s)=>a+Number(s.gross||0),0);
+    const salesNet = state.sales.filter(s=>monthKey(s.date)===key).reduce((a,s)=>a+Number(s.net||0),0);
+
+    // Операционные расходы (P&L, начисление) — без "Закуп товара",
+    // т.к. себестоимость проданного товара уже вычтена внутри "чистыми"
+    const opex = state.expenses
+      .filter(e=>e.category!=='Закуп товара' && monthKey(e.dueDate)===key)
+      .reduce((a,e)=>a+Number(e.amount||0),0);
+
+    const finResult = salesNet - opex;
+
+    // Движение денег (кассовый метод) — реальные поступления/оплаты,
+    // включая оплату поставщикам по факту (с учётом отсрочки)
+    const cashIn = salesGross;
+    const cashOut = state.expenses
+      .filter(e=>e.status==='paid' && monthKey(e.paidDate)===key)
+      .reduce((a,e)=>a+Number(e.amount||0),0);
+    const cashResult = cashIn - cashOut;
+
+    return {key, label:monthLabel(key), salesGross, salesNet, opex, finResult, cashIn, cashOut, cashResult};
+  });
+}
+
+function renderAnalytics(main){
+  const data = buildMonthlyData();
+  const debtToSuppliers = state.expenses
+    .filter(e=>e.category==='Закуп товара' && e.status==='planned')
+    .reduce((a,e)=>a+Number(e.amount||0),0);
+
+  if(data.length===0){
+    main.innerHTML = `<div class="card"><div class="empty">Пока недостаточно данных. Занеси продажи и расходы — здесь появится помесячный анализ.</div></div>`;
+    return;
+  }
+
+  const maxAbs = Math.max(1, ...data.flatMap(d=>[Math.abs(d.finResult), Math.abs(d.cashResult)]));
+  const barMaxPx = 70;
+
+  main.innerHTML = `
+    <div class="card">
+      <h2>Долг поставщикам (отсрочка)</h2>
+      <div class="row">
+        <span class="label">Получено товара, ещё не оплачено</span>
+        <span class="num big neg">${fmt(debtToSuppliers)}</span>
+      </div>
+      <div class="note">Это сумма из категории «Закуп товара» со статусом «Запланировано» — то, что вы уже приняли на склад, но пока не заплатили поставщику.</div>
+    </div>
+
+    <div class="card">
+      <h2>Финрезультат по месяцам</h2>
+      <div class="note" style="margin-bottom:12px;">
+        <span style="color:var(--brick-dark); font-weight:600;">■ Финрезультат</span> — прибыль/убыток от факта продаж за месяц (маржа минус аренда/ЗП/налоги/сервис, закуп сюда не входит — он уже в себестоимости проданного).<br>
+        <span style="color:var(--slate); font-weight:600;">■ Движение денег</span> — что реально пришло и ушло с расчётного счёта/кассы в этом месяце, включая оплату поставщикам по факту.
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-baseline"></div>
+        ${data.map(d=>{
+          const finH = Math.round(Math.abs(d.finResult)/maxAbs*barMaxPx);
+          const cashH = Math.round(Math.abs(d.cashResult)/maxAbs*barMaxPx);
+          const finStyle = d.finResult>=0 ? `bottom:${barMaxPx}px; height:${finH}px;` : `top:${barMaxPx}px; height:${finH}px;`;
+          const cashStyle = d.cashResult>=0 ? `bottom:${barMaxPx}px; height:${cashH}px;` : `top:${barMaxPx}px; height:${cashH}px;`;
+          return `
+          <div class="chart-col">
+            <div class="chart-bars">
+              <div class="bar-slot"><div class="bar fin ${d.finResult>=0?'pos':'neg'}" style="${finStyle}"></div></div>
+              <div class="bar-slot"><div class="bar cash ${d.cashResult>=0?'pos':'neg'}" style="${cashStyle}"></div></div>
+            </div>
+            <div class="chart-label">${d.label}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Закрытие месяцев</h2>
+      <table><thead><tr><th>Месяц</th><th>Маржа</th><th>Опер.расходы</th><th>Финрезультат</th><th>Кассовый итог</th></tr></thead><tbody>
+        ${data.slice().reverse().map(d=>`
+          <tr>
+            <td class="txt">${d.label}</td>
+            <td>${fmt(d.salesNet)}</td>
+            <td>−${fmt(d.opex)}</td>
+            <td class="${d.finResult>=0?'pos':'neg'}">${d.finResult>=0?'+':''}${fmt(d.finResult)}</td>
+            <td class="${d.cashResult>=0?'pos':'neg'}">${d.cashResult>=0?'+':''}${fmt(d.cashResult)}</td>
+          </tr>`).join('')}
+      </tbody></table>
+      <div class="note">Финрезультат — реальная прибыльность месяца по факту продаж. Кассовый итог — что произошло с деньгами (может быть в минус из-за оплаты отложенных поставок, даже если месяц прибыльный).</div>
+    </div>
+  `;
+}
+
+// ---------- SALES ----------
+function renderSales(main){
+  const sorted = [...state.sales].sort((a,b)=>b.date.localeCompare(a.date));
+  main.innerHTML = `
+    <div class="card">
+      <h2>Добавить продажи за день</h2>
+      <label class="field">Дата</label>
+      <input type="date" id="s-date" value="${todayISO()}">
+      <label class="field">Сумма продаж (выручка)</label>
+      <input type="number" id="s-gross" placeholder="0">
+      <label class="field">Чистыми (за вычетом себестоимости)</label>
+      <input type="number" id="s-net" placeholder="0">
+      <button class="btn" id="s-add">Добавить</button>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>Импорт нескольких дней сразу</summary>
+        <div class="note">Одна строка — один день, через точку с запятой:<br>2026-06-01;54000;21000</div>
+        <textarea id="s-import" placeholder="2026-06-01;54000;21000
+2026-06-02;61000;24500"></textarea>
+        <button class="btn secondary" id="s-import-btn">Импортировать</button>
+      </details>
+    </div>
+
+    <div class="card">
+      <h2>История (${sorted.length})</h2>
+      ${sorted.length===0 ? '<div class="empty">Пока нет записей</div>' :
+        `<table><thead><tr><th>Дата</th><th>Продажи</th><th>Чистыми</th><th>%</th><th></th></tr></thead><tbody>
+          ${sorted.map(s=>{
+            const pct = s.gross ? (s.net/s.gross*100).toFixed(0) : '0';
+            return `<tr>
+              <td>${s.date}</td>
+              <td>${fmt(s.gross)}</td>
+              <td>${fmt(s.net)}</td>
+              <td>${pct}%</td>
+              <td><button class="del-x" data-del="${s.id}">✕</button></td>
+            </tr>`;
+          }).join('')}
+        </tbody></table>`}
+    </div>
+  `;
+
+  document.getElementById('s-add').onclick = ()=>{
+    const date = document.getElementById('s-date').value;
+    const gross = document.getElementById('s-gross').value;
+    const net = document.getElementById('s-net').value;
+    if(!date || !gross){ return; }
+    state.sales.push({id:uid(), date, gross:Number(gross), net:Number(net||0)});
+    saveState(); render();
+  };
+
+  document.getElementById('s-import-btn').onclick = ()=>{
+    const raw = document.getElementById('s-import').value.trim();
+    if(!raw) return;
+    const lines = raw.split('\n').map(l=>l.trim()).filter(Boolean);
+    let added = 0;
+    lines.forEach(line=>{
+      const parts = line.split(';').map(p=>p.trim());
+      if(parts.length>=2 && parts[0]){
+        state.sales.push({id:uid(), date:parts[0], gross:Number(parts[1])||0, net:Number(parts[2])||0});
+        added++;
+      }
+    });
+    saveState(); render();
+  };
+
+  sorted.forEach(s=>{});
+  main.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.onclick = ()=>{
+      state.sales = state.sales.filter(s=>s.id!==btn.dataset.del);
+      saveState(); render();
+    };
+  });
+}
+
+// ---------- EXPENSES ----------
+function renderExpenses(main){
+  const sorted = [...state.expenses].sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
+  const byCat = {};
+  CATEGORIES.forEach(c=>byCat[c]=0);
+  state.expenses.forEach(e=>{ byCat[e.category] = (byCat[e.category]||0) + Number(e.amount||0); });
+  const maxCat = Math.max(1, ...Object.values(byCat));
+
+  main.innerHTML = `
+    <div class="card">
+      <h2>Новый расход / платёж</h2>
+      <label class="field">Категория</label>
+      <select id="e-cat">${CATEGORIES.map(c=>`<option>${c}</option>`).join('')}</select>
+      <label class="field">Описание</label>
+      <input type="text" id="e-desc" placeholder="напр. Поставщик — фурнитура">
+      <div class="two-col">
+        <div>
+          <label class="field">Сумма</label>
+          <input type="number" id="e-amount" placeholder="0">
+        </div>
+        <div>
+          <label class="field">Дата</label>
+          <input type="date" id="e-date" value="${todayISO()}">
+        </div>
+      </div>
+      <label class="field">Статус</label>
+      <select id="e-status">
+        <option value="planned">Запланировано (получено, не оплачено)</option>
+        <option value="paid">Оплачено</option>
+      </select>
+      <label class="field">Дата фактической оплаты (если уже оплачено)</label>
+      <input type="date" id="e-paiddate">
+      <button class="btn" id="e-add">Добавить</button>
+      <div class="note">Для товара с отсрочкой: в «Дата» укажи дату поступления товара, статус — «Запланировано». Когда реально заплатишь поставщику — отметь оплаченным и укажи дату оплаты прямо в списке ниже.</div>
+    </div>
+
+    <div class="card">
+      <h2>Расходы по категориям (всего)</h2>
+      ${CATEGORIES.map(c=>`
+        <div class="bar-row">
+          <div class="bar-label">${c}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${(byCat[c]/maxCat*100)||0}%"></div></div>
+          <div class="bar-val">${fmt(byCat[c])}</div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="card">
+      <h2>Все записи (${sorted.length})</h2>
+      ${sorted.length===0 ? '<div class="empty">Пока нет записей</div>' :
+        `<table><thead><tr><th>Дата</th><th>Категория</th><th>Сумма</th><th>Статус</th><th>Оплачено</th><th></th></tr></thead><tbody>
+          ${sorted.map(e=>`
+            <tr>
+              <td>${e.dueDate||'—'}</td>
+              <td class="txt">${e.category}${e.description?`<br><span style="color:var(--ink-soft);font-size:0.75rem;">${e.description}</span>`:''}</td>
+              <td>${fmt(e.amount)}</td>
+              <td class="txt">
+                <select class="inline" data-status="${e.id}">
+                  <option value="planned" ${e.status==='planned'?'selected':''}>План</option>
+                  <option value="paid" ${e.status==='paid'?'selected':''}>Оплачено</option>
+                </select>
+              </td>
+              <td class="txt">
+                ${e.status==='paid' ? `<input type="date" class="inline-date" data-paiddate="${e.id}" value="${e.paidDate||''}">` : '—'}
+              </td>
+              <td><button class="del-x" data-del="${e.id}">✕</button></td>
+            </tr>`).join('')}
+        </tbody></table>`}
+    </div>
+  `;
+
+  document.getElementById('e-add').onclick = ()=>{
+    const category = document.getElementById('e-cat').value;
+    const description = document.getElementById('e-desc').value;
+    const amount = document.getElementById('e-amount').value;
+    const dueDate = document.getElementById('e-date').value;
+    const status = document.getElementById('e-status').value;
+    let paidDate = document.getElementById('e-paiddate').value;
+    if(!amount) return;
+    if(status==='paid' && !paidDate) paidDate = dueDate;
+    state.expenses.push({id:uid(), category, description, amount:Number(amount), dueDate, status, paidDate: status==='paid'?paidDate:null});
+    saveState(); render();
+  };
+
+  main.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.onclick = ()=>{
+      state.expenses = state.expenses.filter(e=>e.id!==btn.dataset.del);
+      saveState(); render();
+    };
+  });
+
+  main.querySelectorAll('[data-status]').forEach(sel=>{
+    sel.onchange = ()=>{
+      const exp = state.expenses.find(e=>e.id===sel.dataset.status);
+      if(!exp) return;
+      exp.status = sel.value;
+      if(sel.value==='paid' && !exp.paidDate) exp.paidDate = todayISO();
+      if(sel.value==='planned') exp.paidDate = null;
+      saveState(); render();
+    };
+  });
+
+  main.querySelectorAll('[data-paiddate]').forEach(inp=>{
+    inp.onchange = ()=>{
+      const exp = state.expenses.find(e=>e.id===inp.dataset.paiddate);
+      if(!exp) return;
+      exp.paidDate = inp.value;
+      saveState(); render();
+    };
+  });
+}
+
+// ---------- COMMISSION ----------
+function renderCommission(main){
+  const tiers = [...state.commissionTiers].sort((a,b)=>a.min-b.min);
+  main.innerHTML = `
+    <div class="card">
+      <h2>Ставки продавца по выручке</h2>
+      ${tiers.length===0 ? '<div class="empty">Добавьте диапазоны выручки и % ставки</div>' :
+        `<table><thead><tr><th>От</th><th>До</th><th>Ставка</th><th></th></tr></thead><tbody>
+          ${tiers.map(t=>`
+            <tr>
+              <td>${fmt(t.min)}</td>
+              <td>${t.max ? fmt(t.max) : '∞'}</td>
+              <td>${t.rate}%</td>
+              <td><button class="del-x" data-del="${t.id}">✕</button></td>
+            </tr>`).join('')}
+        </tbody></table>`}
+      <label class="field">От (₽)</label>
+      <input type="number" id="c-min" placeholder="0">
+      <label class="field">До (₽, пусто = без ограничения)</label>
+      <input type="number" id="c-max" placeholder="">
+      <label class="field">Ставка (%)</label>
+      <input type="number" id="c-rate" placeholder="0">
+      <button class="btn" id="c-add">Добавить диапазон</button>
+    </div>
+
+    <div class="card">
+      <h2>Рассчитать зарплату</h2>
+      <label class="field">Выручка продавца за период</label>
+      <input type="number" id="c-calc-input" placeholder="0">
+      <button class="btn secondary" id="c-calc-btn">Рассчитать</button>
+      <div id="c-calc-result" style="margin-top:14px;"></div>
+    </div>
+  `;
+
+  document.getElementById('c-add').onclick = ()=>{
+    const min = Number(document.getElementById('c-min').value||0);
+    const maxRaw = document.getElementById('c-max').value;
+    const max = maxRaw ? Number(maxRaw) : null;
+    const rate = Number(document.getElementById('c-rate').value||0);
+    state.commissionTiers.push({id:uid(), min, max, rate});
+    saveState(); render();
+  };
+
+  main.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.onclick = ()=>{
+      state.commissionTiers = state.commissionTiers.filter(t=>t.id!==btn.dataset.del);
+      saveState(); render();
+    };
+  });
+
+  document.getElementById('c-calc-btn').onclick = ()=>{
+    const revenue = Number(document.getElementById('c-calc-input').value||0);
+    const tier = [...state.commissionTiers].sort((a,b)=>a.min-b.min)
+      .find(t=> revenue>=t.min && (t.max===null || revenue<t.max));
+    const box = document.getElementById('c-calc-result');
+    if(!tier){
+      box.innerHTML = '<div class="empty">Нет подходящей ставки для этой суммы</div>';
+      return;
+    }
+    const pay = revenue * tier.rate / 100;
+    box.innerHTML = `
+      <div class="row"><span class="label">Ставка</span><span class="num">${tier.rate}%</span></div>
+      <div class="row" style="border-top:1px solid var(--line); padding-top:10px;">
+        <span class="label">К выплате</span><span class="num big pos">${fmt(pay)}</span>
+      </div>
+    `;
+  };
+}
+
+// ---------- SETTINGS / BALANCES ----------
+function renderSettings(main){
+  main.innerHTML = `
+    <div class="card">
+      <h2>Текущие остатки</h2>
+      <label class="field">Наличные в кассе</label>
+      <input type="number" id="b-cash" value="${state.balances.cash||0}">
+      <label class="field">Расчётный счёт</label>
+      <input type="number" id="b-bank" value="${state.balances.bank||0}">
+      <button class="btn" id="b-save">Сохранить остатки</button>
+      <div class="note">${state.balances.updatedAt ? 'Обновлено: '+state.balances.updatedAt : ''}</div>
+    </div>
+    <div class="card">
+      <h2>Данные приложения</h2>
+      <div class="note">Все данные хранятся локально в этом приложении и доступны только вам.</div>
+      <button class="btn danger" id="b-reset">Очистить все данные</button>
+    </div>
+  `;
+  document.getElementById('b-save').onclick = ()=>{
+    state.balances.cash = Number(document.getElementById('b-cash').value||0);
+    state.balances.bank = Number(document.getElementById('b-bank').value||0);
+    state.balances.updatedAt = new Date().toLocaleString('ru-RU');
+    saveState(); render();
+  };
+  document.getElementById('b-reset').onclick = ()=>{
+    if(!confirm('Удалить все данные без возможности восстановления?')) return;
+    state = {balances:{cash:0,bank:0,updatedAt:null}, sales:[], expenses:[], commissionTiers:[]};
+    saveState(); render();
+  };
+}
+
+loadState();
+</script>
+</body>
+</html>
