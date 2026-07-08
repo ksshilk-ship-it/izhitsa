@@ -1932,29 +1932,33 @@ function logLogout(){ logAction('LOGOUT', {user: session ? session.name : 'unkno
 
 // 🔄 ВОССТАНОВИТЬ ГРУППУ "АРМЕНИЯ"
 function restoreArmeniaGroup(){
-  if(!confirm('⚠️ ВОССТАНОВИТЬ группу "Армения" в базе данных?\n\nБудет создана архивированная группа запасов со стандартными товарами.')) return;
-  
-  const groupId = uid();
-  
-  // Товары которые были в Армении
-  const armeniaItems = [
-    {id: uid(), itemName: 'Менажница', price: 450, wood: 'дуб', quantity: 1},
-    {id: uid(), itemName: 'Плошка', price: 300, wood: 'ясень', quantity: 1},
-    {id: uid(), itemName: 'Доска', price: 350, wood: 'окраска', quantity: 1},
-    {id: uid(), itemName: 'Декор', price: 200, wood: 'различное', quantity: 1},
-  ];
-  
-  db.collection('ws_first_inventory').doc(groupId).set({
-    id: groupId,
-    groupName: 'Армения',
-    status: 'archived',
-    createdAt: now(),
-    createdBy: session.name,
-    restoredAt: now(),
-    items: armeniaItems,
-    itemCount: armeniaItems.length
+  if(!confirm('⚠️ ВОССТАНОВИТЬ группу "Армения"?\n\nВсе битые копии "Армения" будут удалены и создана одна корректная группа запасов.')) return;
+
+  // Сначала удаляем все существующие (в т.ч. битые) документы с этим именем
+  db.collection('ws_first_inventory').where('groupName','==','Армения').get().then(snap=>{
+    const batch = db.batch();
+    snap.docs.forEach(d=>batch.delete(d.ref));
+    return batch.commit();
+  }).then(()=>{
+    const groupId = uid();
+    // Товары — в правильном формате positions[], как использует остальной код
+    const positions = [
+      {name: 'Менажница', wood: 'дуб', price: 450, qty: 1, artikul: ''},
+      {name: 'Плошка', wood: 'ясень', price: 300, qty: 1, artikul: ''},
+      {name: 'Доска', wood: 'окраска', price: 350, qty: 1, artikul: ''},
+      {name: 'Декор', wood: 'различное', price: 200, qty: 1, artikul: ''},
+    ];
+    return db.collection('ws_first_inventory').doc(groupId).set({
+      id: groupId,
+      groupName: 'Армения',
+      status: 'archived',
+      createdAt: now(),
+      createdBy: session.name,
+      restoredAt: now(),
+      positions: positions
+    });
   }).then(() => {
-    showToast('✅ Группа "Армения" восстановлена в запасах!');
+    showToast('✅ Группа "Армения" восстановлена в запасах (1 корректная копия)');
     loadDataFromFirebase();
     setTimeout(() => renderWarehouse(), 500);
   }).catch(e => {
@@ -3228,7 +3232,7 @@ function toggleShipPageSort(){
 function renderShipPageList(){
   const c = document.getElementById('shipPageGroups'); if(!c) return;
   const q = (document.getElementById('shipPageSearch')?.value||'').toLowerCase().trim();
-  let stock = items.filter(i=>i.status==='received');
+  let stock = items.filter(i=>i.status==='received' && !i.isShopArchived);
   if(q) stock = stock.filter(i=>((i.name||i.itemName||'')+(i.artikul||'')+(i.wood||'')).toLowerCase().includes(q));
 
   if(!stock.length){ c.innerHTML='<div style="font-size:13px;color:var(--t2);padding:16px 0;text-align:center">Склад пуст</div>'; updateShipPageSelected(); return; }
@@ -3547,17 +3551,27 @@ function renderReservesList(){
 }
 
 // НОВОЕ! Функция для перевода группы из запасов на склад
-function activateReserveGroup(groupId){
+async function activateReserveGroup(groupId){
   if(!confirm('Перевести эту группу на склад для отгрузки?')) return;
-  
-  db.collection('ws_first_inventory').doc(groupId).update({
-    status: 'active',
-    activatedAt: now(),
-    activatedBy: session.name
-  }).then(() => {
+  const g = _fiGroups.find(x=>x.id===groupId);
+  if(!g){ showToast('❌ Группа не найдена'); return; }
+  try{
+    // Проверяем, есть ли уже реальные товары этой группы на складе (были активированы раньше, потом заархивированы)
+    const existingSnap = await db.collection('ws_items').where('fromFirstInventory','==',groupId).get();
+    if(existingSnap.size > 0){
+      // Товары уже существуют — просто снимаем пометку "не показывать в балансе"
+      const batch = db.batch();
+      existingSnap.docs.forEach(d=>batch.update(d.ref,{isShopArchived:false}));
+      batch.update(db.collection('ws_first_inventory').doc(groupId),{status:'active', activatedAt: now(), activatedBy: session.name});
+      await batch.commit();
+    } else {
+      // Товаров ещё нет — создаём их из positions (как первичная активация)
+      await activateFirstInvGroup(groupId);
+    }
     showToast('✅ Группа переведена на склад');
-    renderWarehouse();
-  }).catch(e => showToast('❌ Ошибка: ' + e.message));
+    loadDataFromFirebase();
+    setTimeout(()=>renderWarehouse(), 400);
+  }catch(e){ showToast('❌ Ошибка: ' + e.message); }
 }
 
 // НОВОЕ! Отображение АРХИВА (отгруженные товары)
@@ -3623,7 +3637,7 @@ function toggleBalanceGroup(gid){
 
 function renderBalance(){
   // Показывать ВСЕ товары которые есть, независимо от статуса
-  const readyItems = items.filter(i => !i.isArchiveDraft);
+  const readyItems = items.filter(i => !i.isArchiveDraft && !i.isShopArchived && i.status !== 'shipped');
   const searchQ = (document.getElementById('whBalanceSearch')?.value || '').toLowerCase();
   const filtered = readyItems.filter(i => 
     !searchQ || (i.name || '').toLowerCase().includes(searchQ) || (i.itemName || '').toLowerCase().includes(searchQ)
@@ -3690,25 +3704,30 @@ function renderBalance(){
     if(!archivReserves.length){
       reservesList.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)">📭 Нет групп в запасах</div>';
     } else {
+      const isAdminR = session && (session.role==='администратор'||session.role==='управляющий');
       reservesList.innerHTML = archivReserves.map(group => {
-        const itemCount = (group.items || []).length;
-        const totalPrice = (group.items || []).reduce((sum, item) => sum + (parseInt(item.price, 10) || 0), 0);
+        const positions = group.positions || [];
+        const itemCount = positions.reduce((s,p)=>s+(parseInt(p.qty,10)||1),0);
+        const totalPrice = positions.reduce((sum, p) => sum + (parseInt(p.price, 10) || 0) * (parseInt(p.qty,10)||1), 0);
         
         return `
           <div style="background:var(--s1);border-radius:8px;padding:10px;margin-bottom:8px;border-left:3px solid var(--a4)">
-            <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:6px">
+            <div onclick="openFiGroupDetail('${group.id}')" style="display:flex;justify-content:space-between;align-items:start;margin-bottom:6px;cursor:pointer">
               <div>
                 <div style="font-weight:700;color:var(--t1)">${group.groupName}</div>
-                <div style="font-size:11px;color:var(--t2)">${itemCount} товаров</div>
+                <div style="font-size:11px;color:var(--t2)">${positions.length} поз. · ${itemCount} шт</div>
               </div>
               <div style="text-align:right">
                 <div style="font-size:12px;color:var(--a4);font-weight:700">₽${fmt(totalPrice)}</div>
               </div>
             </div>
-            <button onclick="activateReserveGroup('${group.id}')" 
-              style="width:100%;padding:6px;background:var(--accent);color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px">
-              ✅ На склад
-            </button>
+            <div style="display:flex;gap:6px">
+              <button onclick="activateReserveGroup('${group.id}')" 
+                style="flex:1;padding:6px;background:var(--accent);color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px">
+                ✅ На склад
+              </button>
+              ${isAdminR?`<button onclick="deleteFiGroup('${group.id}')" style="padding:6px 10px;background:none;border:1px solid var(--exp);color:var(--exp);border-radius:6px;cursor:pointer;font-size:11px">🗑</button>`:''}
+            </div>
           </div>
         `;
       }).join('');
@@ -3725,6 +3744,7 @@ function renderMovement(){
 function renderMovementIncoming(){
   const list = document.getElementById('whMoveIncomingList');
   if(!list) return;
+  const isAdmin = session && (session.role==='администратор'||session.role==='управляющий');
   
   if(_whMovementSource === 'masters'){
     if(!_maHistory || !_maHistory.length){
@@ -3740,12 +3760,13 @@ function renderMovementIncoming(){
     
     list.innerHTML = Object.entries(byMaster).map(([masterId, acceptances]) => {
       const master = getEmployees().find(e=>e.id===masterId);
-      const totalItems = acceptances.reduce((sum, a) => sum + a.positions.length, 0);
-      const totalZP = acceptances.reduce((sum, a) => sum + a.positions.reduce((s, p) => s + (parseInt(p.zp,10)||0), 0), 0);
+      const totalItems = acceptances.reduce((sum, a) => sum + (a.positions||[]).length, 0);
+      const totalZP = acceptances.reduce((sum, a) => sum + (a.positions||[]).reduce((s, p) => s + (parseInt(p.zp,10)||0), 0), 0);
+      const gid = 'mvinc_' + masterId;
       
       return `
-        <div style="background:var(--s1);border-radius:8px;padding:10px;margin-bottom:8px;border-left:3px solid var(--accent)">
-          <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:6px">
+        <div style="background:var(--s1);border-radius:10px;margin-bottom:8px;overflow:hidden;border-left:3px solid var(--accent)">
+          <div onclick="toggleBalanceGroup('${gid}')" style="display:flex;justify-content:space-between;align-items:start;padding:10px;cursor:pointer">
             <div>
               <div style="font-weight:700;color:var(--t1)">${master?.name || masterId}</div>
               <div style="font-size:11px;color:var(--t2)">${acceptances.length} приёмок · ${totalItems} товаров</div>
@@ -3755,6 +3776,19 @@ function renderMovementIncoming(){
               <div style="font-size:10px;color:var(--t2)">ЗП</div>
             </div>
           </div>
+          <div id="${gid}" style="display:none;padding:0 10px 10px">
+            ${acceptances.map(a=>{
+              const aItems = (a.positions||[]).length;
+              const aZP = (a.positions||[]).reduce((s,p)=>s+(parseInt(p.zp,10)||0),0);
+              const status = a.status==='done' ? '✅' : '⏳';
+              return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:8px;margin-bottom:6px">
+                <div onclick="openMaDetail('${a.id}')" style="flex:1;cursor:pointer">
+                  <div style="font-size:12px;color:var(--t1)">${status} ${a.deliveredDate} · ${aItems} шт · ₽${fmt(aZP)}</div>
+                </div>
+                ${isAdmin?`<button onclick="event.stopPropagation();deleteMaAcceptance('${a.id}')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 7px;color:var(--exp);cursor:pointer;font-size:12px">🗑</button>`:''}
+              </div>`;
+            }).join('')}
+          </div>
         </div>
       `;
     }).join('');
@@ -3763,9 +3797,22 @@ function renderMovementIncoming(){
   }
 }
 
+// НОВОЕ! Удалить целиком запись приёмки (для админа/управляющего)
+async function deleteMaAcceptance(accId){
+  const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
+  if(!confirm(`Удалить приёмку от ${acc.masterName} за ${acc.deliveredDate}?\n\nЭто действие нельзя отменить.`)) return;
+  try{
+    await db.collection('ws_master_acceptances').doc(accId).delete();
+    showToast('🗑 Приёмка удалена');
+    loadDataFromFirebase();
+    setTimeout(()=>renderMovement(), 300);
+  }catch(e){ showToast('❌ Ошибка: '+e.message); }
+}
+
 function renderMovementOutgoing(){
   const list = document.getElementById('whMoveOutgoingList');
   if(!list) return;
+  const isAdmin = session && (session.role==='администратор'||session.role==='управляющий');
   
   const shippedItems = items.filter(i => i.status === 'shipped');
   const searchQ = (document.getElementById('whMoveOutSearch')?.value || '').toLowerCase();
@@ -3784,19 +3831,34 @@ function renderMovementOutgoing(){
     }
   });
   
-  list.innerHTML = Object.entries(byShop).map(([shop, items]) => {
-    const totalPrice = items.reduce((sum, i) => sum + (parseInt(i.price, 10) || 0), 0);
+  list.innerHTML = Object.entries(byShop).map(([shop, shopItems]) => {
+    const totalPrice = shopItems.reduce((sum, i) => sum + (parseInt(i.price, 10) || 0), 0);
+    const gid = 'mvout_' + shop.replace(/[^а-яёa-z0-9]/gi,'_');
     
     return `
-      <div style="background:var(--s1);border-radius:8px;padding:10px;margin-bottom:8px;border-left:3px solid var(--a2)">
-        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:6px">
+      <div style="background:var(--s1);border-radius:10px;margin-bottom:8px;overflow:hidden;border-left:3px solid var(--a2)">
+        <div onclick="toggleBalanceGroup('${gid}')" style="display:flex;justify-content:space-between;align-items:start;padding:10px;cursor:pointer">
           <div>
             <div style="font-weight:700;color:var(--t1)">🏪 ${shop}</div>
-            <div style="font-size:11px;color:var(--t2)">${items.length} товаров отгружено</div>
+            <div style="font-size:11px;color:var(--t2)">${shopItems.length} товаров отгружено</div>
           </div>
           <div style="text-align:right">
             <div style="font-size:12px;color:var(--a2);font-weight:700">₽${fmt(totalPrice)}</div>
           </div>
+        </div>
+        <div id="${gid}" style="display:none;padding:0 10px 10px">
+          ${shopItems.map(item=>`
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:8px;margin-bottom:6px">
+              <div style="flex:1">
+                <div style="font-size:12px;color:var(--t1)">${item.name||item.itemName||'—'} · 🏷 ${item.artikul||'—'}</div>
+                <div style="font-size:10px;color:var(--t2)">${fmtDT(item.shippedAt)} · ₽${fmt(item.price||0)}</div>
+              </div>
+              ${isAdmin?`
+                <button onclick="openStockItemEdit('${item._id}')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 7px;color:var(--a2);cursor:pointer;font-size:12px;margin-left:4px">✏️</button>
+                <button onclick="deleteStockItem('${item._id}','${(item.name||item.itemName||'').replace(/'/g,"\\'")}')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 7px;color:var(--exp);cursor:pointer;font-size:12px;margin-left:4px">🗑</button>
+              `:''}
+            </div>
+          `).join('')}
         </div>
       </div>
     `;
@@ -3874,20 +3936,6 @@ function renderWarehouse(){
   else if(_whMainTab === 'archive') renderArchiveGoods();
 }
 
-// Функция для переведения группы запасов на склад (активация)
-function activateReserveGroup(groupId){
-  if(!confirm('Перевести эту группу на склад для отгрузки?')) return;
-  
-  db.collection('ws_first_inventory').doc(groupId).update({
-    status: 'active',
-    activatedAt: now(),
-    activatedBy: session.name
-  }).then(() => {
-    showToast('✅ Группа переведена на склад');
-    renderWarehouse();
-  }).catch(e => showToast('❌ Ошибка: ' + e.message));
-}
-
 // ════ СКЛАД: ОСТАТКИ ПО ГРУППАМ + ОТГРУЗКА ════
 let _whStockSortAsc = true;
 let _whShipSortAsc  = true;
@@ -3933,7 +3981,7 @@ function toggleShipSort(){
 function renderStockGroups(){
   const c = document.getElementById('whStockGroups'); if(!c) return;
   const q = (document.getElementById('whStockSearch')?.value||'').toLowerCase().trim();
-  let stock = items.filter(i=>i.status==='received');
+  let stock = items.filter(i=>i.status==='received' && !i.isShopArchived);
   if(q) stock = stock.filter(i=>((i.name||i.itemName||'')+(i.artikul||'')+(i.wood||'')+(i.size||'')).toLowerCase().includes(q));
 
   if(!stock.length){
@@ -4006,7 +4054,7 @@ function toggleStockGroup(name){
 function renderShipList(){
   const c = document.getElementById('whShipList'); if(!c) return;
   const q = (document.getElementById('whShipSearch')?.value||'').toLowerCase().trim();
-  let stock = items.filter(i=>i.status==='received');
+  let stock = items.filter(i=>i.status==='received' && !i.isShopArchived);
   if(q) stock = stock.filter(i=>((i.name||i.itemName||'')+(i.artikul||'')+(i.wood||'')).toLowerCase().includes(q));
   stock.sort((a,b)=> _whShipSortAsc ? (a.price||0)-(b.price||0) : (b.price||0)-(a.price||0));
 
@@ -6067,14 +6115,14 @@ function renderInvFiGroups(){
   if(!admin){
     // ══ КЛАДОВЩИК: простой список без дат и аналитики ══
     c.innerHTML = sorted.map(g=>{
-      const gQty  = g.positions.reduce((s,p)=>s+(parseInt(p.qty)||1),0);
+      const gQty  = (g.positions||[]).reduce((s,p)=>s+(parseInt(p.qty)||1),0);
       const gReal = items.filter(i=>i.fromFirstInventory===g.id && i.status==='received').length;
       const gMiss = g.status==='active' && gReal<gQty;
       const icon  = {draft:'⏳',active:'✅',archived:'🗄'}[g.status]||'';
       return `<div onclick="openFiGroupDetail('${g.id}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid ${gMiss?'var(--exp)':'var(--border)'};border-radius:10px;margin-bottom:6px;cursor:pointer;background:${gMiss?'rgba(255,80,80,0.05)':'var(--s2)'}">
         <div>
           <div style="font-size:13px;font-weight:600">${icon} ${g.groupName}</div>
-          <div style="font-size:11px;color:var(--t2)">${g.positions.length} поз. · ${gQty} шт.</div>
+          <div style="font-size:11px;color:var(--t2)">${(g.positions||[]).length} поз. · ${gQty} шт.</div>
           ${gMiss?`<div style="font-size:11px;color:var(--exp)">⚠️ Не все активированы (${gReal}/${gQty})</div>`:''}
         </div>
         <span style="font-size:18px;color:var(--t2)">›</span>
@@ -6093,11 +6141,11 @@ function renderInvFiGroups(){
   });
 
   c.innerHTML = Object.values(byDate).sort((a,b)=>b.ts-a.ts).map(({date,groups})=>{
-    const totalPositions = groups.reduce((s,g)=>s+g.positions.length,0);
-    const totalQty       = groups.reduce((s,g)=>s+g.positions.reduce((ss,p)=>ss+(parseInt(p.qty)||1),0),0);
+    const totalPositions = groups.reduce((s,g)=>s+(g.positions||[]).length,0);
+    const totalQty       = groups.reduce((s,g)=>s+(g.positions||[]).reduce((ss,p)=>ss+(parseInt(p.qty)||1),0),0);
     const activeCount    = groups.filter(g=>g.status==='active').length;
     const draftCount     = groups.filter(g=>g.status==='draft').length;
-    const totalSum       = groups.reduce((s,g)=>s+g.positions.reduce((ss,p)=>ss+(p.price||0)*(parseInt(p.qty)||1),0),0);
+    const totalSum       = groups.reduce((s,g)=>s+(g.positions||[]).reduce((ss,p)=>ss+(p.price||0)*(parseInt(p.qty)||1),0),0);
     const realOnStock    = groups.reduce((s,g)=>s+items.filter(i=>i.fromFirstInventory===g.id&&i.status==='received').length,0);
     const mismatch       = activeCount>0 && realOnStock<totalQty;
 
@@ -6116,8 +6164,8 @@ function renderInvFiGroups(){
         </div>
       </div>
       ${groups.map(g=>{
-        const gQty  = g.positions.reduce((s,p)=>s+(parseInt(p.qty)||1),0);
-        const gSum  = g.positions.reduce((s,p)=>s+(p.price||0)*(parseInt(p.qty)||1),0);
+        const gQty  = (g.positions||[]).reduce((s,p)=>s+(parseInt(p.qty)||1),0);
+        const gSum  = (g.positions||[]).reduce((s,p)=>s+(p.price||0)*(parseInt(p.qty)||1),0);
         const gReal = items.filter(i=>i.fromFirstInventory===g.id&&i.status==='received').length;
         const gMiss = g.status==='active' && gReal<gQty;
         const icon  = {draft:'⏳',active:'✅',archived:'🗄'}[g.status]||'';
@@ -7421,6 +7469,8 @@ function openMaDetail(accId){
 
   document.getElementById('maProvedBtn').style.display = acc.status==='done' ? 'none' : 'block';
   document.getElementById('maProvedBtn').setAttribute('data-acc-id', acc.id);
+  const delBtn = document.getElementById('maDeleteBtn');
+  if(delBtn) delBtn.style.display = (session && (session.role==='администратор'||session.role==='управляющий')) ? 'block' : 'none';
   openMo('maDetailMo');
 }
 
@@ -7556,7 +7606,7 @@ function openFiGroupForEdit(groupId){
   if(saveBtn) saveBtn.textContent = '💾 Добавить товары в группу';
   // Показываем уже существующие позиции для справки
   const existingInfo = document.getElementById('fiExistingInfo');
-  if(existingInfo) existingInfo.innerHTML = g.positions.length ? `<div style="font-size:11px;color:var(--t2);margin-bottom:8px;padding:8px;background:var(--s2);border-radius:8px">Уже в группе: ${g.positions.length} поз. · ${g.positions.reduce((s,p)=>s+(p.qty||0),0)} шт. — добавьте новые товары ниже</div>` : '';
+  if(existingInfo) existingInfo.innerHTML = (g.positions||[]).length ? `<div style="font-size:11px;color:var(--t2);margin-bottom:8px;padding:8px;background:var(--s2);border-radius:8px">Уже в группе: ${(g.positions||[]).length} поз. · ${(g.positions||[]).reduce((s,p)=>s+(p.qty||0),0)} шт. — добавьте новые товары ниже</div>` : '';
   _fiItems = [];
   addFiItemRow();
   renderFiItemsList();
@@ -7714,7 +7764,7 @@ async function saveFirstInvGroup(){
       await db.collection('ws_first_inventory').doc(_fiCurrentGroupId).update({
         positions: merged, updatedAt: now(), updatedBy: session.name
       });
-      audit && audit('first_inventory_group_updated',{groupName:g.groupName, added:newPositions.length});
+      logAction('first_inventory_group_updated',{groupName:g.groupName, added:newPositions.length});
       closeMo('firstInvMo');
       showToast(`✅ Добавлено ${newPositions.length} товар(ов) в группу «${g.groupName}»`);
     } else {
@@ -7726,7 +7776,7 @@ async function saveFirstInvGroup(){
         createdBy: session.name, createdById: session.id,
         createdAt: now()
       });
-      audit && audit('first_inventory_group_created',{groupName, count:newPositions.length});
+      logAction('first_inventory_group_created',{groupName, count:newPositions.length});
       closeMo('firstInvMo');
       showToast(`✅ Группа «${groupName}» сохранена · ${newPositions.length} товаров`);
     }
@@ -7742,8 +7792,8 @@ function renderFirstInventoryGroups(){
   section.style.display='block';
 
   c.innerHTML = _fiGroups.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(g=>{
-    const totalQty = g.positions.reduce((s,p)=>s+(p.qty||0),0);
-    const totalSum = g.positions.reduce((s,p)=>s+(p.price||0)*(p.qty||0),0);
+    const totalQty = (g.positions||[]).reduce((s,p)=>s+(p.qty||0),0);
+    const totalSum = (g.positions||[]).reduce((s,p)=>s+(p.price||0)*(p.qty||0),0);
     const statusBadge = {
       draft:    '<span style="color:var(--a4)">⏳ Черновик</span>',
       active:   '<span style="color:var(--inc)">✅ На балансе склада</span>',
@@ -7752,7 +7802,7 @@ function renderFirstInventoryGroups(){
     return `<div class="li" onclick="openFiGroupDetail('${g.id}')" style="cursor:pointer">
       <div class="li-info">
         <div class="li-name">${g.groupName}</div>
-        <div class="li-sub">${g.positions.length} позиций · ${totalQty} шт. · ${fmt(totalSum)}</div>
+        <div class="li-sub">${(g.positions||[]).length} позиций · ${totalQty} шт. · ${fmt(totalSum)}</div>
         <div class="li-sub">${statusBadge}</div>
       </div>
       <span style="font-size:18px;color:var(--t2)">›</span>
@@ -7770,8 +7820,8 @@ function openFiGroupDetail(groupId){
     active:   '<span style="color:var(--inc)">✅ На балансе склада</span>',
     archived: '<span style="color:var(--t2)">🗄 В архиве</span>'
   };
-  const totalQty = g.positions.reduce((s,p)=>s+(parseInt(p.qty)||1),0);
-  const totalSum = g.positions.reduce((s,p)=>s+(p.price||0)*(parseInt(p.qty)||1),0);
+  const totalQty = (g.positions||[]).reduce((s,p)=>s+(parseInt(p.qty)||1),0);
+  const totalSum = (g.positions||[]).reduce((s,p)=>s+(p.price||0)*(parseInt(p.qty)||1),0);
   // Сколько ws_items реально создано из этой группы
   const realCount = items.filter(i=>i.fromFirstInventory===groupId && i.status==='received').length;
   const mismatch = g.status==='active' && realCount !== totalQty;
@@ -7779,7 +7829,7 @@ function openFiGroupDetail(groupId){
   document.getElementById('fiGroupDetailStatus').innerHTML = `
     <div style="background:var(--s2);border-radius:10px;padding:12px">
       <div class="at-row"><span class="at-lbl">Статус</span><span class="at-val">${statusMap[g.status]||g.status}</span></div>
-      <div class="at-row"><span class="at-lbl">Позиций в записи</span><span class="at-val">${g.positions.length}</span></div>
+      <div class="at-row"><span class="at-lbl">Позиций в записи</span><span class="at-val">${(g.positions||[]).length}</span></div>
       <div class="at-row"><span class="at-lbl">Ожидалось товаров</span><span class="at-val">${totalQty}</span></div>
       ${g.status==='active'?`<div class="at-row"><span class="at-lbl">Создано на складе</span><span class="at-val" style="color:${mismatch?'var(--exp)':'var(--inc)'}">${realCount}${mismatch?' ⚠️ не совпадает':' ✅'}</span></div>`:''}
       <div class="at-row"><span class="at-lbl">Сумма</span><span class="at-val" style="color:var(--accent)">${fmt(totalSum)}</span></div>
@@ -7796,7 +7846,7 @@ function openFiGroupDetail(groupId){
 
   document.getElementById('fiGroupDetailPositions').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div class="ctitle" style="margin:0">Позиции (${g.positions.length})</div>
+      <div class="ctitle" style="margin:0">Позиции (${(g.positions||[]).length})</div>
     </div>
     <div style="position:relative;margin-bottom:10px">
       <input class="fi" id="fiGroupSearchInput" placeholder="🔍 Поиск по наименованию, артикулу..."
@@ -7806,7 +7856,7 @@ function openFiGroupDetail(groupId){
         style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px;padding:0">✕</button>
     </div>
     <div id="fiGroupPositionsList">
-    ${g.positions.map((p,i)=>`
+    ${(g.positions||[]).map((p,i)=>`
       <div class="fi-pos-row" data-search="${((p.name||'')+(p.artikul||'')+(p.wood||'')+(p.size||'')).toLowerCase()}" style="padding:10px 0;border-bottom:1px solid var(--border)">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
           <div style="flex:1">
@@ -7893,7 +7943,7 @@ async function activateFirstInvGroup(groupId){
     });
     await batch.commit();
     await db.collection('ws_first_inventory').doc(groupId).update({status:'active', activatedAt: now(), activatedBy: session.name});
-    audit && audit('first_inventory_group_activated',{groupName:g.groupName, count:g.positions.length});
+    logAction('first_inventory_group_activated',{groupName:g.groupName, count:(g.positions||[]).length});
     closeMo('fiGroupDetailMo');
     showToast(`✅ Группа «${g.groupName}» поставлена на баланс склада`);
   }catch(e){ showToast('Ошибка: '+e.message); }
@@ -7908,7 +7958,7 @@ async function reactivateFiGroup(groupId){
   const existingCount = existing.length;
 
   // Ожидаемое полное количество
-  const totalQty = g.positions.reduce((s,p)=>s+(parseInt(p.qty)||1),0);
+  const totalQty = (g.positions||[]).reduce((s,p)=>s+(parseInt(p.qty)||1),0);
   const missing = totalQty - existingCount;
 
   if(missing<=0){ showToast('Всё уже на складе — расхождений нет'); return; }
@@ -8269,6 +8319,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     <div id="maDetailItems" style="margin-bottom:14px"></div>
     <button class="btn green" onclick="provedMaAccept()" id="maProvedBtn">✅ Провести</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('maDetailMo')">Закрыть</button>
+    <button class="btn" id="maDeleteBtn" style="margin-top:8px;background:none;border:1px solid var(--exp);color:var(--exp);display:none" onclick="deleteMaAcceptance(document.getElementById('maProvedBtn').getAttribute('data-acc-id'));closeMo('maDetailMo')">🗑 Удалить приёмку целиком</button>
   </div>
 </div>
 
