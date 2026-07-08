@@ -2949,6 +2949,34 @@ let _incomingSourceFilter = 'masters';
 let _whBalanceSortAsc = true;
 
 // Переключение ГЛАВНЫХ вкладок (Баланс / Движение / Архив)
+// 🔄 ЗАГРУЗИТЬ ВСЕ ДАННЫЕ ИЗ FIREBASE ДЛЯ СКЛАДА
+async function loadDataFromFirebase(){
+  try {
+    await Promise.all([
+      // Загрузить товары
+      db.collection('ws_items').orderBy('createdAt','desc').get()
+        .then(snap => {
+          items = snap.docs.map(d=>({id:d.id,...d.data()}));
+          console.log('✅ Товаров:', items.length);
+        }),
+      // Загрузить группы инвентаризации
+      db.collection('ws_first_inventory').orderBy('createdAt','desc').get()
+        .then(snap => {
+          _fiGroups = snap.docs.map(d=>({id:d.id,...d.data()}));
+          console.log('✅ Групп инвентаризации:', _fiGroups.length);
+        }),
+      // Загрузить приёмки от мастеров
+      db.collection('ws_master_acceptances').orderBy('createdAt','desc').get()
+        .then(snap => {
+          _maHistory = snap.docs.map(d=>d.data());
+          console.log('✅ Приёмок:', _maHistory.length);
+        })
+    ]);
+  } catch (e) {
+    console.error('❌ Ошибка загрузки:', e);
+  }
+}
+
 function setWhMainTab(tab){
   _whMainTab = tab;
   
@@ -3481,7 +3509,8 @@ function renderShippedWarehouse(){
 
 // НОВОЕ! Отображение БАЛАНСА СКЛАДА (готовые + запасы)
 function renderBalance(){
-  const readyItems = items.filter(i => !i.isArchiveDraft && i.status === 'received');
+  // Показывать ВСЕ товары которые есть, независимо от статуса
+  const readyItems = items.filter(i => !i.isArchiveDraft);
   const searchQ = (document.getElementById('whBalanceSearch')?.value || '').toLowerCase();
   const filtered = readyItems.filter(i => 
     !searchQ || (i.name || '').toLowerCase().includes(searchQ) || (i.itemName || '').toLowerCase().includes(searchQ)
