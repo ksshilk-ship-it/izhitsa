@@ -233,16 +233,18 @@ let state = {
   balances:{cash:0, bank:0, updatedAt:null},
   sales:[],
   expenses:[],
-  commissionTiers:[]
+  commissionTiers:[],
+  sellers:[],
+  suppliers:[]
 };
 let currentTab = 'overview';
 let loaded = false;
 
 async function loadState(){
   try{
-    const res = await window.storage.get('izhitsa-finance-data', false);
-    if(res && res.value){
-      const parsed = JSON.parse(res.value);
+    const raw = localStorage.getItem('izhitsa-finance-data');
+    if(raw){
+      const parsed = JSON.parse(raw);
       state = Object.assign(state, parsed);
     }
   }catch(e){ /* no data yet */ }
@@ -252,7 +254,7 @@ async function loadState(){
 
 async function saveState(){
   try{
-    await window.storage.set('izhitsa-finance-data', JSON.stringify(state), false);
+    localStorage.setItem('izhitsa-finance-data', JSON.stringify(state));
   }catch(e){
     console.error('Ошибка сохранения', e);
   }
@@ -573,6 +575,12 @@ function renderExpenses(main){
       <h2>Новый расход / платёж</h2>
       <label class="field">Категория</label>
       <select id="e-cat">${CATEGORIES.map(c=>`<option>${c}</option>`).join('')}</select>
+      ${state.suppliers.length>0 ? `
+      <label class="field">Поставщик</label>
+      <select id="e-supplier">
+        <option value="">— выбрать из списка —</option>
+        ${state.suppliers.map(s=>`<option value="${s.name}">${s.name} (${s.type})</option>`).join('')}
+      </select>` : ''}
       <label class="field">Описание</label>
       <input type="text" id="e-desc" placeholder="напр. Поставщик — фурнитура">
       <div class="two-col">
@@ -630,6 +638,13 @@ function renderExpenses(main){
         </tbody></table>`}
     </div>
   `;
+
+  const supplierSel = document.getElementById('e-supplier');
+  if(supplierSel){
+    supplierSel.onchange = ()=>{
+      if(supplierSel.value) document.getElementById('e-desc').value = supplierSel.value;
+    };
+  }
 
   document.getElementById('e-add').onclick = ()=>{
     const category = document.getElementById('e-cat').value;
@@ -699,6 +714,12 @@ function renderCommission(main){
 
     <div class="card">
       <h2>Рассчитать зарплату</h2>
+      ${state.sellers.length>0 ? `
+      <label class="field">Продавец</label>
+      <select id="c-seller">
+        <option value="">— не выбран —</option>
+        ${state.sellers.map(s=>`<option value="${s.name}">${s.name}</option>`).join('')}
+      </select>` : ''}
       <label class="field">Выручка продавца за период</label>
       <input type="number" id="c-calc-input" placeholder="0">
       <button class="btn secondary" id="c-calc-btn">Рассчитать</button>
@@ -732,7 +753,10 @@ function renderCommission(main){
       return;
     }
     const pay = revenue * tier.rate / 100;
+    const sellerSel = document.getElementById('c-seller');
+    const sellerName = sellerSel ? sellerSel.value : '';
     box.innerHTML = `
+      ${sellerName ? `<div class="row"><span class="label">Продавец</span><span class="num">${sellerName}</span></div>` : ''}
       <div class="row"><span class="label">Ставка</span><span class="num">${tier.rate}%</span></div>
       <div class="row" style="border-top:1px solid var(--line); padding-top:10px;">
         <span class="label">К выплате</span><span class="num big pos">${fmt(pay)}</span>
@@ -743,6 +767,9 @@ function renderCommission(main){
 
 // ---------- SETTINGS / BALANCES ----------
 function renderSettings(main){
+  const sellersSorted = [...state.sellers].sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+  const suppliersSorted = [...state.suppliers].sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+
   main.innerHTML = `
     <div class="card">
       <h2>Текущие остатки</h2>
@@ -753,6 +780,47 @@ function renderSettings(main){
       <button class="btn" id="b-save">Сохранить остатки</button>
       <div class="note">${state.balances.updatedAt ? 'Обновлено: '+state.balances.updatedAt : ''}</div>
     </div>
+
+    <div class="card">
+      <h2>Продавцы</h2>
+      ${sellersSorted.length===0 ? '<div class="empty">Список пуст</div>' :
+        `<table><thead><tr><th>Имя</th><th>Заметка</th><th></th></tr></thead><tbody>
+          ${sellersSorted.map(s=>`
+            <tr>
+              <td class="txt">${s.name}</td>
+              <td class="txt">${s.note||'—'}</td>
+              <td><button class="del-x" data-del-seller="${s.id}">✕</button></td>
+            </tr>`).join('')}
+        </tbody></table>`}
+      <label class="field">Имя продавца</label>
+      <input type="text" id="seller-name" placeholder="напр. Анна">
+      <label class="field">Заметка (необязательно)</label>
+      <input type="text" id="seller-note" placeholder="напр. точка на Ленина">
+      <button class="btn secondary" id="seller-add">Добавить продавца</button>
+    </div>
+
+    <div class="card">
+      <h2>Поставщики товаров и услуг</h2>
+      ${suppliersSorted.length===0 ? '<div class="empty">Список пуст</div>' :
+        `<table><thead><tr><th>Название</th><th>Тип</th><th></th></tr></thead><tbody>
+          ${suppliersSorted.map(s=>`
+            <tr>
+              <td class="txt">${s.name}</td>
+              <td class="txt">${s.type}</td>
+              <td><button class="del-x" data-del-supplier="${s.id}">✕</button></td>
+            </tr>`).join('')}
+        </tbody></table>`}
+      <label class="field">Название поставщика</label>
+      <input type="text" id="supplier-name" placeholder="напр. ЛесТорг">
+      <label class="field">Тип</label>
+      <select id="supplier-type">
+        <option>Товары</option>
+        <option>Услуги</option>
+      </select>
+      <button class="btn secondary" id="supplier-add">Добавить поставщика</button>
+      <div class="note">Список появится в выпадающем меню при добавлении расхода на вкладке «Расходы».</div>
+    </div>
+
     <div class="card">
       <h2>Данные приложения</h2>
       <div class="note">Все данные хранятся локально в этом приложении и доступны только вам.</div>
@@ -765,9 +833,38 @@ function renderSettings(main){
     state.balances.updatedAt = new Date().toLocaleString('ru-RU');
     saveState(); render();
   };
+
+  document.getElementById('seller-add').onclick = ()=>{
+    const name = document.getElementById('seller-name').value.trim();
+    const note = document.getElementById('seller-note').value.trim();
+    if(!name) return;
+    state.sellers.push({id:uid(), name, note});
+    saveState(); render();
+  };
+  main.querySelectorAll('[data-del-seller]').forEach(btn=>{
+    btn.onclick = ()=>{
+      state.sellers = state.sellers.filter(s=>s.id!==btn.dataset.delSeller);
+      saveState(); render();
+    };
+  });
+
+  document.getElementById('supplier-add').onclick = ()=>{
+    const name = document.getElementById('supplier-name').value.trim();
+    const type = document.getElementById('supplier-type').value;
+    if(!name) return;
+    state.suppliers.push({id:uid(), name, type});
+    saveState(); render();
+  };
+  main.querySelectorAll('[data-del-supplier]').forEach(btn=>{
+    btn.onclick = ()=>{
+      state.suppliers = state.suppliers.filter(s=>s.id!==btn.dataset.delSupplier);
+      saveState(); render();
+    };
+  });
+
   document.getElementById('b-reset').onclick = ()=>{
     if(!confirm('Удалить все данные без возможности восстановления?')) return;
-    state = {balances:{cash:0,bank:0,updatedAt:null}, sales:[], expenses:[], commissionTiers:[]};
+    state = {balances:{cash:0,bank:0,updatedAt:null}, sales:[], expenses:[], commissionTiers:[], sellers:[], suppliers:[]};
     saveState(); render();
   };
 }
