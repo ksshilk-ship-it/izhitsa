@@ -218,7 +218,7 @@
 <main id="main"></main>
 
 <script>
-const CATEGORIES = ['Аренда','ЗП','Закуп товара','Налоги','Мой склад','Прочее'];
+const CATEGORIES = ['Аренда','ЗП','Проезд','Закуп товара','Налоги','Мой склад','Прочее'];
 const TABS = [
   {id:'overview', label:'Обзор'},
   {id:'analytics', label:'Аналитика'},
@@ -494,6 +494,12 @@ function renderSales(main){
       <h2>Добавить продажи за день</h2>
       <label class="field">Дата</label>
       <input type="date" id="s-date" value="${todayISO()}">
+      ${state.sellers.length>0 ? `
+      <label class="field">Чья смена</label>
+      <select id="s-seller">
+        <option value="">— не указан —</option>
+        ${state.sellers.map(sl=>`<option value="${sl.name}">${sl.name}</option>`).join('')}
+      </select>` : ''}
       <label class="field">Сумма продаж (выручка)</label>
       <input type="number" id="s-gross" placeholder="0">
       <label class="field">Чистыми (за вычетом себестоимости)</label>
@@ -504,9 +510,9 @@ function renderSales(main){
     <div class="card">
       <details>
         <summary>Импорт нескольких дней сразу</summary>
-        <div class="note">Одна строка — один день, через точку с запятой:<br>2026-06-01;54000;21000</div>
-        <textarea id="s-import" placeholder="2026-06-01;54000;21000
-2026-06-02;61000;24500"></textarea>
+        <div class="note">Одна строка — один день, через точку с запятой:<br>2026-06-01;54000;21000;Анна</div>
+        <textarea id="s-import" placeholder="2026-06-01;54000;21000;Анна
+2026-06-02;61000;24500;Мария"></textarea>
         <button class="btn secondary" id="s-import-btn">Импортировать</button>
       </details>
     </div>
@@ -514,11 +520,12 @@ function renderSales(main){
     <div class="card">
       <h2>История (${sorted.length})</h2>
       ${sorted.length===0 ? '<div class="empty">Пока нет записей</div>' :
-        `<table><thead><tr><th>Дата</th><th>Продажи</th><th>Чистыми</th><th>%</th><th></th></tr></thead><tbody>
+        `<table><thead><tr><th>Дата</th><th>Продавец</th><th>Продажи</th><th>Чистыми</th><th>%</th><th></th></tr></thead><tbody>
           ${sorted.map(s=>{
             const pct = s.gross ? (s.net/s.gross*100).toFixed(0) : '0';
             return `<tr>
               <td>${s.date}</td>
+              <td class="txt">${s.seller||'—'}</td>
               <td>${fmt(s.gross)}</td>
               <td>${fmt(s.net)}</td>
               <td>${pct}%</td>
@@ -533,8 +540,10 @@ function renderSales(main){
     const date = document.getElementById('s-date').value;
     const gross = document.getElementById('s-gross').value;
     const net = document.getElementById('s-net').value;
+    const sellerSel = document.getElementById('s-seller');
+    const seller = sellerSel ? sellerSel.value : '';
     if(!date || !gross){ return; }
-    state.sales.push({id:uid(), date, gross:Number(gross), net:Number(net||0)});
+    state.sales.push({id:uid(), date, gross:Number(gross), net:Number(net||0), seller});
     saveState(); render();
   };
 
@@ -546,14 +555,13 @@ function renderSales(main){
     lines.forEach(line=>{
       const parts = line.split(';').map(p=>p.trim());
       if(parts.length>=2 && parts[0]){
-        state.sales.push({id:uid(), date:parts[0], gross:Number(parts[1])||0, net:Number(parts[2])||0});
+        state.sales.push({id:uid(), date:parts[0], gross:Number(parts[1])||0, net:Number(parts[2])||0, seller:parts[3]||''});
         added++;
       }
     });
     saveState(); render();
   };
 
-  sorted.forEach(s=>{});
   main.querySelectorAll('[data-del]').forEach(btn=>{
     btn.onclick = ()=>{
       state.sales = state.sales.filter(s=>s.id!==btn.dataset.del);
@@ -580,6 +588,12 @@ function renderExpenses(main){
       <select id="e-supplier">
         <option value="">— выбрать из списка —</option>
         ${state.suppliers.map(s=>`<option value="${s.name}">${s.name} (${s.type})</option>`).join('')}
+      </select>` : ''}
+      ${state.sellers.length>0 ? `
+      <label class="field">Продавец (для ЗП / проезда)</label>
+      <select id="e-seller">
+        <option value="">— выбрать из списка —</option>
+        ${state.sellers.map(s=>`<option value="${s.name}">${s.name}</option>`).join('')}
       </select>` : ''}
       <label class="field">Описание</label>
       <input type="text" id="e-desc" placeholder="напр. Поставщик — фурнитура">
@@ -643,6 +657,12 @@ function renderExpenses(main){
   if(supplierSel){
     supplierSel.onchange = ()=>{
       if(supplierSel.value) document.getElementById('e-desc').value = supplierSel.value;
+    };
+  }
+  const sellerSel = document.getElementById('e-seller');
+  if(sellerSel){
+    sellerSel.onchange = ()=>{
+      if(sellerSel.value) document.getElementById('e-desc').value = sellerSel.value;
     };
   }
 
