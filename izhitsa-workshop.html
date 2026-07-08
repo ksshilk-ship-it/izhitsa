@@ -388,7 +388,8 @@ function applyUpdate() {
 
       <!-- ЗАПАСЫ -->
       <div class="card" style="margin-top:12px">
-        <div class="ctitle">🟡 Запасы (архивированные группы)</div>
+        <div class="ctitle">🟡 Запасы</div>
+        <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Товары физически на складе, но недоступны для отгрузки в магазины. Можно перевести в «Готовые» целиком группой.</div>
         <div id="whBalanceReservesList"></div>
       </div>
 
@@ -451,22 +452,15 @@ function applyUpdate() {
     <!-- ВКЛАДКА 3: АРХИВ ТОВАРОВ -->
     <div id="whArchive" style="display:none">
       <div class="srow" style="margin-bottom:12px">
-        <div class="sc"><div class="sc-v" id="whArchiveTotal" style="color:var(--a2)">0</div><div class="sc-l">В архиве всего</div></div>
-        <div class="sc"><div class="sc-v" id="whArchiveInactive" style="color:var(--a4)">0</div><div class="sc-l">Неактивные</div></div>
+        <div class="sc"><div class="sc-v" id="whArchiveTotal" style="color:var(--a2)">0</div><div class="sc-l">Отгружено всего</div></div>
       </div>
+      <div style="font-size:11px;color:var(--t2);margin-bottom:12px">📜 Архив — то, чего <b>больше нет</b> на складе: отгружено, продано или списано. Товары, которые сейчас физически есть на складе (даже если не под отгрузку) — смотрите на вкладке «Баланс → Запасы».</div>
 
-      <!-- АРХИВ ГОТОВЫХ -->
+      <!-- ИСТОРИЯ ОТГРУЖЕННОГО -->
       <div class="card">
-        <div class="ctitle">📦 Готовые товары (архив)</div>
-        <div style="font-size:12px;color:var(--t2);margin-bottom:8px">Полная история готовых товаров: сейчас на складе и отгружено</div>
+        <div class="ctitle">📦 История отгруженных товаров</div>
+        <div style="font-size:12px;color:var(--t2);margin-bottom:8px">По каждому наименованию: сколько всего было произведено и сколько уже ушло со склада</div>
         <div id="whArchiveReadyList"></div>
-      </div>
-
-      <!-- АРХИВ ЗАПАСОВ -->
-      <div class="card" style="margin-top:12px">
-        <div class="ctitle">🟡 Запасы (архив)</div>
-        <div style="font-size:12px;color:var(--t2);margin-bottom:8px">История всех групп запасов</div>
-        <div id="whArchiveReservesList"></div>
       </div>
     </div>
 
@@ -3886,63 +3880,33 @@ function renderMovementOutgoing(){
 
 // НОВОЕ! Отображение АРХИВА ТОВАРОВ
 function renderArchiveGoods(){
-  const archivedItems = items.filter(i => i.isArchive && i.status !== 'shipped');
+  // АРХИВ = то, чего больше НЕТ на складе (отгружено/продано/списано). Запасы сюда не относятся — они на вкладке "Баланс".
   const shippedItems = items.filter(i => i.status === 'shipped');
-  const inactiveGroups = (_fiGroups || []).filter(g => g.status !== 'active');
   
-  document.getElementById('whArchiveTotal').textContent = archivedItems.length + shippedItems.length;
-  document.getElementById('whArchiveInactive').textContent = inactiveGroups.length;
+  document.getElementById('whArchiveTotal').textContent = shippedItems.length;
   
-  // Архив готовых товаров
   const readyArchive = document.getElementById('whArchiveReadyList');
   if(readyArchive){
-    if(!archivedItems.length && !shippedItems.length){
-      readyArchive.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)">📭 Архив готовых товаров пуст</div>';
+    if(!shippedItems.length){
+      readyArchive.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)">📭 Пока ничего не отгружено</div>';
     } else {
       const byName = {};
-      [...archivedItems, ...shippedItems].forEach(item => {
+      shippedItems.forEach(item => {
         const name = item.name || item.itemName || 'Неизвестный товар';
-        if(!byName[name]) byName[name] = {total: 0, onStock: 0, shipped: 0};
-        byName[name].total++;
-        if(item.status === 'shipped') byName[name].shipped++;
-        else byName[name].onStock++;
+        if(!byName[name]) byName[name] = {count: 0, sum: 0};
+        byName[name].count++;
+        byName[name].sum += parseInt(item.price,10) || 0;
       });
       
-      readyArchive.innerHTML = Object.entries(byName).map(([name, stats]) => `
-        <div style="background:var(--s1);border-radius:8px;padding:10px;margin-bottom:8px;border-left:3px solid var(--a5)">
+      readyArchive.innerHTML = Object.entries(byName).sort((a,b)=>a[0].localeCompare(b[0],'ru')).map(([name, stats]) => `
+        <div style="background:var(--s1);border-radius:8px;padding:10px;margin-bottom:8px;border-left:3px solid var(--a2)">
           <div style="font-weight:700;color:var(--t1);margin-bottom:4px">${name}</div>
           <div style="font-size:11px;color:var(--t2)">
-            📊 Всего было: <span style="color:var(--t1);font-weight:700">${stats.total} шт</span>
-            · Сейчас на складе: <span style="color:var(--accent);font-weight:700">${stats.onStock} шт</span>
-            · Отгружено: <span style="color:var(--a2);font-weight:700">${stats.shipped} шт</span>
+            🚚 Отгружено: <span style="color:var(--a2);font-weight:700">${stats.count} шт</span>
+            · Сумма: <span style="color:var(--a2);font-weight:700">₽${fmt(stats.sum)}</span>
           </div>
         </div>
       `).join('');
-    }
-  }
-  
-  // Архив запасов
-  const reservesArchive = document.getElementById('whArchiveReservesList');
-  if(reservesArchive){
-    if(!inactiveGroups.length){
-      reservesArchive.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)">📭 Архив запасов пуст</div>';
-    } else {
-      reservesArchive.innerHTML = inactiveGroups.map(group => {
-        const itemCount = (group.items || []).length;
-        const status = group.status === 'archived' ? 'В архиве' : 'Удалена';
-        
-        return `
-          <div style="background:var(--s1);border-radius:8px;padding:10px;margin-bottom:8px;border-left:3px solid var(--a4)">
-            <div style="display:flex;justify-content:space-between;align-items:start">
-              <div>
-                <div style="font-weight:700;color:var(--t1)">${group.groupName}</div>
-                <div style="font-size:11px;color:var(--t2)">${itemCount} товаров · ${status}</div>
-              </div>
-              ${group.status === 'archived' ? `<button onclick="activateReserveGroup('${group.id}')" style="padding:4px 8px;background:var(--accent);color:#000;border:none;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700">✅ Восстановить</button>` : ''}
-            </div>
-          </div>
-        `;
-      }).join('');
     }
   }
 }
@@ -4137,71 +4101,10 @@ function createShipmentFromTab(){
     setWhStockTab('stock');
   }).catch(e=>showToast('Ошибка: '+e.message));
 }
+// УСТАРЕЛО: старая система "архивного склада" (isArchiveDraft) заменена моделью Баланс/Запасы/Архив.
+// Функция оставлена как no-op, чтобы не ломать старые вызовы.
 function renderArchiveWarehouse(){
-  const isAdmin = session.role==='администратор';
-  const shipBtn   = document.getElementById('whArchShipBtn');
-  if(draftCard) draftCard.style.display = isAdmin ? 'block' : 'none';
-  if(shipBtn)   shipBtn.style.display   = isAdmin ? 'block' : 'none';
-
-  // Черновики (только для подсчёта у админа)
-  const drafts = isAdmin ? items.filter(i=>i.isArchiveDraft && i.status==='received') : [];
-
-  // Активированный архив — виден всем
-  const archStock   = items.filter(i=>i.isArchive && !i.isArchiveDraft && i.status==='received');
-  const archShipped = items.filter(i=>i.isArchive && !i.isArchiveDraft && i.status==='shipped');
-
-  document.getElementById('whArchStock').textContent   = archStock.length + (isAdmin ? drafts.length : 0);
-  document.getElementById('whArchDraft').textContent   = isAdmin ? drafts.length : '—';
-  document.getElementById('whArchShipped').textContent = archShipped.length;
-
-  // Метка актуальности — берём из последнего активированного периода
-  const hist = JSON.parse(localStorage.getItem('ws_activated_periods')||'[]');
-  const dateEl = document.getElementById('whArchiveDate');
-  const dateVal = document.getElementById('whArchiveDateVal');
-  const periodInfo = document.getElementById('whArchivePeriodInfo');
-  if(hist.length){
-    const last = hist[0];
-    // Дата "на утро" = следующий день после последней даты периода
-    const nextDay = new Date(last.to);
-    nextDay.setDate(nextDay.getDate()+1);
-    const nextDayStr = nextDay.toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
-    dateEl.style.display='block';
-    dateVal.textContent = nextDayStr;
-    periodInfo.textContent = `Последний активированный период: ${last.from} — ${last.to}`;
-  } else if(drafts.length){
-    dateEl.style.display='block';
-    dateVal.textContent = 'Черновики не активированы';
-    periodInfo.textContent = 'Активируйте период в разделе Загрузка → Архив';
-  } else {
-    dateEl.style.display='none';
-  }
-
-  // Список архивного склада
-  const allArchStock = isAdmin
-    ? [...archStock, ...drafts].sort((a,b)=>(b.receivedAt||'').localeCompare(a.receivedAt||''))
-    : archStock.sort((a,b)=>(b.receivedAt||'').localeCompare(a.receivedAt||''));
-
-  const sl = document.getElementById('whArchStockList');
-  sl.innerHTML = allArchStock.length ? allArchStock.map(item=>`
-    <div class="li">
-      <div class="li-ico" style="background:${item.isArchiveDraft?'#2a1a4a':'#1e2a14'}">${item.isArchiveDraft?'✏️':'📦'}</div>
-      <div class="li-info">
-        <div class="li-name">№${item.itemNum||'—'} ${item.name||item.itemName}${item.artikul?' · '+item.artikul:''}</div>
-        <div class="li-sub">👤 ${item.masterName} · ${fmt(item.price||0)}</div>
-        <div class="li-sub">${fmtDT(item.receivedAt)}${item.isArchiveDraft?' · <span style="color:#c8a0ff">черновик</span>':''}</div>
-      </div>
-      <span class="badge" style="background:${item.isArchiveDraft?'#6c3fc5':'var(--s2)'};color:${item.isArchiveDraft?'#fff':'var(--t2)'}">${fmt(item.price||0)}</span>
-    </div>`).join('') : '<div style="font-size:12px;color:var(--t2);padding:6px 0">Архивный склад пуст</div>';
-
-  // Черновики отдельным списком — только для администратора
-  if(isAdmin){
-    const dl = document.getElementById('whArchDraftList');
-    dl.innerHTML = drafts.length
-      ? `<div style="font-size:11px;color:#c8a0ff;margin-bottom:8px">Эти записи ещё не активированы — не видны в статистике</div>`
-        + drafts.slice(0,5).map(i=>`<div class="at-row"><span class="at-lbl">${i.name||i.itemName}<br><span style="font-size:10px">${fmtDT(i.receivedAt)} · ${i.masterName}</span></span><span class="at-val" style="color:#c8a0ff">${fmt(i.price||0)}</span></div>`).join('')
-        + (drafts.length>5?`<div style="font-size:11px;color:var(--t2);padding:6px 0;text-align:center">...и ещё ${drafts.length-5}</div>`:'')
-      : '<div style="font-size:12px;color:var(--t2);padding:6px 0">Черновиков нет</div>';
-  }
+  return;
 }
 
 function openArchiveShipmentMo(){
@@ -6141,7 +6044,7 @@ function renderInvFiGroups(){
       const gQty  = (g.positions||[]).reduce((s,p)=>s+(parseInt(p.qty)||1),0);
       const gReal = items.filter(i=>i.fromFirstInventory===g.id && i.status==='received').length;
       const gMiss = g.status==='active' && gReal<gQty;
-      const icon  = {draft:'⏳',active:'✅',archived:'🗄'}[g.status]||'';
+      const icon  = {draft:'⏳',active:'✅',archived:'🟡'}[g.status]||'';
       return `<div onclick="openFiGroupDetail('${g.id}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid ${gMiss?'var(--exp)':'var(--border)'};border-radius:10px;margin-bottom:6px;cursor:pointer;background:${gMiss?'rgba(255,80,80,0.05)':'var(--s2)'}">
         <div>
           <div style="font-size:13px;font-weight:600">${icon} ${g.groupName}</div>
@@ -6191,7 +6094,7 @@ function renderInvFiGroups(){
         const gSum  = (g.positions||[]).reduce((s,p)=>s+(p.price||0)*(parseInt(p.qty)||1),0);
         const gReal = items.filter(i=>i.fromFirstInventory===g.id&&i.status==='received').length;
         const gMiss = g.status==='active' && gReal<gQty;
-        const icon  = {draft:'⏳',active:'✅',archived:'🗄'}[g.status]||'';
+        const icon  = {draft:'⏳',active:'✅',archived:'🟡'}[g.status]||'';
         const tCreate = new Date(g.createdAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
         const tActive = g.activatedAt ? new Date(g.activatedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : null;
         return `<div onclick="openFiGroupDetail('${g.id}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;background:${gMiss?'rgba(255,80,80,0.05)':''}">
@@ -7820,7 +7723,7 @@ function renderFirstInventoryGroups(){
     const statusBadge = {
       draft:    '<span style="color:var(--a4)">⏳ Черновик</span>',
       active:   '<span style="color:var(--inc)">✅ На балансе склада</span>',
-      archived: '<span style="color:var(--t2)">🗄 В архиве</span>'
+      archived: '<span style="color:var(--a4)">🟡 В запасах</span>'
     }[g.status] || g.status;
     return `<div class="li" onclick="openFiGroupDetail('${g.id}')" style="cursor:pointer">
       <div class="li-info">
@@ -7841,7 +7744,7 @@ function openFiGroupDetail(groupId){
   const statusMap = {
     draft:    '<span style="color:var(--a4)">⏳ Черновик</span>',
     active:   '<span style="color:var(--inc)">✅ На балансе склада</span>',
-    archived: '<span style="color:var(--t2)">🗄 В архиве</span>'
+    archived: '<span style="color:var(--a4)">🟡 В запасах</span>'
   };
   const totalQty = (g.positions||[]).reduce((s,p)=>s+(parseInt(p.qty)||1),0);
   const totalSum = (g.positions||[]).reduce((s,p)=>s+(p.price||0)*(parseInt(p.qty)||1),0);
@@ -7858,7 +7761,7 @@ function openFiGroupDetail(groupId){
       <div class="at-row"><span class="at-lbl">Сумма</span><span class="at-val" style="color:var(--accent)">${fmt(totalSum)}</span></div>
       <div class="at-row"><span class="at-lbl">Создана</span><span class="at-val">${fmtDT(g.createdAt)}${g.createdBy?' · '+g.createdBy:''}</span></div>
       ${g.activatedAt?`<div class="at-row"><span class="at-lbl">Активирована</span><span class="at-val">${fmtDT(g.activatedAt)}${g.activatedBy?' · '+g.activatedBy:''}</span></div>`:''}
-      ${g.archivedAt?`<div class="at-row"><span class="at-lbl">В архиве с</span><span class="at-val">${fmtDT(g.archivedAt)}${g.archivedBy?' · '+g.archivedBy:''}</span></div>`:''}
+      ${g.archivedAt?`<div class="at-row"><span class="at-lbl">В запасах с</span><span class="at-val">${fmtDT(g.archivedAt)}${g.archivedBy?' · '+g.archivedBy:''}</span></div>`:''}
     </div>
     ${mismatch?`<div style="background:rgba(255,80,80,0.1);border:1px solid var(--exp);border-radius:8px;padding:10px;margin-top:8px;font-size:12px;color:var(--exp)">
       ⚠️ Расхождение: в записи ${totalQty} шт., на складе ${realCount} шт. (разница: ${totalQty-realCount}).
@@ -7901,12 +7804,12 @@ function openFiGroupDetail(groupId){
     actions = `
       <button onclick="closeMo('fiGroupDetailMo');activateFirstInvGroup('${g.id}')" class="btn green" style="margin-bottom:8px">✅ Активировать (поставить на склад)</button>
       <button onclick="closeMo('fiGroupDetailMo');openFiGroupForEdit('${g.id}')" class="btn" style="background:var(--a2);color:#000;margin-bottom:8px">➕ Дополнить группу</button>
-      <button onclick="closeMo('fiGroupDetailMo');archiveFirstInvGroup('${g.id}')" class="btn sec" style="margin-bottom:8px">🗄 Перенести в архив</button>
+      <button onclick="closeMo('fiGroupDetailMo');archiveFirstInvGroup('${g.id}')" class="btn sec" style="margin-bottom:8px">🟡 Перенести в Запасы</button>
       <button onclick="deleteFiGroup('${g.id}')" class="btn" style="background:var(--exp)">🗑 Удалить группу</button>`;
   } else if(g.status==='active'){
     actions = `
       <button onclick="closeMo('fiGroupDetailMo');openFiGroupForEdit('${g.id}')" class="btn" style="background:var(--a2);color:#000;margin-bottom:8px">➕ Дополнить группу</button>
-      <button onclick="closeMo('fiGroupDetailMo');archiveFirstInvGroup('${g.id}')" class="btn sec">🗄 Перенести в архив</button>`;
+      <button onclick="closeMo('fiGroupDetailMo');archiveFirstInvGroup('${g.id}')" class="btn sec">🟡 Перенести в Запасы</button>`;
   } else {
     actions = `
       <button onclick="closeMo('fiGroupDetailMo');openFiGroupForEdit('${g.id}')" class="btn" style="background:var(--a2);color:#000;margin-bottom:8px">➕ Дополнить группу</button>
@@ -8056,7 +7959,7 @@ async function archiveFirstInvGroup(groupId){
       snap.docs.forEach(d=>batch.update(d.ref,{isShopArchived:true}));
       await batch.commit();
     }
-    showToast(`🗄 Группа «${g.groupName}» перенесена в архив`);
+    showToast(`🟡 Группа «${g.groupName}» перенесена в Запасы`);
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 
