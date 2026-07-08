@@ -1379,7 +1379,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
     </div>
     <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="saleComment" placeholder="Необязательно"></div>
     <button class="btn" onclick="saveSale()">✅ Зафиксировать продажу</button>
-    <button class="btn sec" style="margin-top:8px" onclick="closeMo('saleMo')">Отмена</button>
+    <button class="btn sec" style="margin-top:8px" onclick="_svArchiveAddMode=false;_svArchiveEditId=null;closeMo('saleMo')">Отмена</button>
   </div>
 </div>
 <div class="mo" id="woMo">
@@ -2161,6 +2161,15 @@ function editJournalSale(id){
     var md = modal.querySelector('.md');
     if(md) md.appendChild(delBtn);
   }
+}
+var _svArchiveAddMode = false;
+function svAddSaleToArchive(){
+  if(!_currentShiftView) return;
+  openMo('saleMo');
+  resetSaleForm();
+  _svArchiveEditId = null;
+  _svArchiveAddMode = true;
+  var mt = document.querySelector('#saleMo .mt'); if(mt) mt.textContent = '➕ Добавить пропущенную продажу';
 }
 function svEditSale(idx){
   if(!_currentShiftView) return;
@@ -5190,6 +5199,7 @@ function resetSaleForm(){
   if(rsChip) rsChip.style.display = (_shopType === 'shop') ? 'none' : '';
   _editSaleEntryId = null;
   _svArchiveEditId = null;
+  _svArchiveAddMode = false;
   _siNoArticleMode = false;
   var mt = document.querySelector('#saleMo .mt'); if(mt) mt.textContent = 'Оформить продажу';
   var delBtn = document.querySelector('#saleMo .sale-edit-del-btn'); if(delBtn) delBtn.remove();
@@ -5380,6 +5390,22 @@ function saveSale(){
     hasDiff,comment:gv('saleComment'),amount:paid,amtCls:'inc',amtSign:'+',
     cashEffect:cashPartWood,cardEffect:cardPartWood,staffEffect:0,goodsEffect:-totalWood,
     cashDrEffect:cashPartDr,cardDrEffect:cardPartDr,goodsDrEffect:-totalDr};
+  if(_svArchiveAddMode && _currentShiftView){
+    var jnlArch2 = _currentShiftView.journal||[];
+    var newArchEntry = Object.assign({id:uid(), type:'sale'}, newEntryData, {
+      addedByAdmin:(session&&(session.name||session.sellerName))||'admin',
+      addedAt:new Date().toISOString()
+    });
+    jnlArch2.push(newArchEntry);
+    jnlArch2.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
+    _currentShiftView.journal = jnlArch2;
+    try{ logAction('JOURNAL_ENTRY_ADD_MISSED', {entryType:'sale', shopName:_currentShiftView.shopName, snapshot:newArchEntry}); }catch(e){}
+    svPersist();
+    _svArchiveAddMode = false;
+    resetSaleForm(); closeMo('saleMo'); _renderShiftView();
+    showToast('✅ Пропущенная продажа добавлена');
+    return;
+  }
   if(_svArchiveEditId && _currentShiftView){
     var jnlArch = _currentShiftView.journal||[];
     var idxArch = jnlArch.findIndex(function(e){ return e.id===_svArchiveEditId; });
@@ -7504,6 +7530,7 @@ function _renderShiftView(){
     salesBody += '<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:700;border-top:1px solid #2e2e3e;margin-top:4px"><span>Итого</span><span style="color:#c8f060">'+f(totalRev+drTot)+'</span></div>';
     salesBody += '<div style="font-size:11px;color:#555568;margin-top:4px">Детализация продаж недоступна — смена без журнала</div>';
   }
+  salesBody += '<button onclick="svAddSaleToArchive()" style="width:100%;padding:10px;margin-top:10px;background:#1a2a14;border:2px solid #c8f060;border-radius:10px;font-weight:700;font-size:12px;color:#c8f060;cursor:pointer">➕ Добавить пропущенную продажу</button>';
   var soldItemsWood = {}, soldItemsDr = {};
   sales.forEach(function(e){
     (e.items||[]).forEach(function(it){
