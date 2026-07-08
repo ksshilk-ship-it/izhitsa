@@ -1950,6 +1950,7 @@ function _initFirebase(){
       try{if(typeof startSyncListeners==='function')startSyncListeners();}catch(e){}
       try{if(typeof startStaffLiveSync==='function' && typeof _staffSyncUpdateCb==='function') startStaffLiveSync(_staffSyncUpdateCb);}catch(e){}
       try{if(typeof startStockSync==='function') startStockSync();}catch(e){}
+      try{if(typeof _retryPendingShiftSyncs==='function') _retryPendingShiftSyncs();}catch(e){}
       try{
         if(typeof session!=='undefined' && session && session.role!=='shopadmin' && !session.isPreview && typeof startInvoiceLiveSync==='function'){
           startInvoiceLiveSync();
@@ -2540,6 +2541,43 @@ function _fsWrite(promise){
   }catch(e){}
   return promise;
 }
+function _clearShiftPendingFlag(shiftId){
+  try{
+    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var idx = shifts.findIndex(function(s){ return (s.id||s._id)===shiftId; });
+    if(idx>=0 && shifts[idx]._pendingSync){
+      delete shifts[idx]._pendingSync;
+      localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+    }
+  }catch(e){}
+}
+function _pushShiftWithRetry(shiftId, data){
+  if(!shiftId || !data) return;
+  try{
+    db.collection('iz_shifts').doc(shiftId).set(data).then(function(){
+      _clearShiftPendingFlag(shiftId);
+    }).catch(function(err){
+      console.log('[_pushShiftWithRetry] не удалось, останется в очереди на повтор:', shiftId, err);
+    });
+  }catch(e){}
+}
+function _retryPendingShiftSyncs(){
+  try{
+    if(typeof firebase==='undefined' || !navigator.onLine) return;
+    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var pending = shifts.filter(function(s){ return s._pendingSync; });
+    if(!pending.length) return;
+    console.log('[_retryPendingShiftSyncs] повторная отправка смен:', pending.length);
+    pending.forEach(function(s){
+      var clean = Object.assign({}, s); delete clean._pendingSync;
+      _pushShiftWithRetry(s.id||s._id, clean);
+    });
+  }catch(e){}
+}
+// Фоновая проверка неотправленных смен: сразу при загрузке, затем каждые 45 секунд,
+// плюс сразу при восстановлении интернет-соединения.
+setInterval(_retryPendingShiftSyncs, 45000);
+window.addEventListener('online', function(){ setTimeout(_retryPendingShiftSyncs, 1500); });
 function openMo(id){
   var el = document.getElementById(id);
   if(!el) return;
@@ -6681,6 +6719,7 @@ function _closeShiftReal(){
     saveAdminAlert({type:'cash_diff',shopName:session.shopName,sellerName:session.sellerName,
       date:report.date,cashDiff,cashDiffReason:reason,morningDiff,prevCashEve:(prev&&prev.cashEvening),cashMorning:session.cashMorning});
   }
+  report._pendingSync = true;
   const shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   var filteredShifts = shifts.filter(function(s){
     if(!restoreMode) return true;
@@ -6689,7 +6728,7 @@ function _closeShiftReal(){
   });
   filteredShifts.unshift(report);
   localStorage.setItem(KEY.shifts,JSON.stringify(filteredShifts));
-  try{ _fsWrite(db.collection('iz_shifts').doc(report.id).set(report)); }catch(e){ showToast('⚠️ Не сохранилось в облако: '+(e&&e.message||e)); }
+  _pushShiftWithRetry(report.id, report);
   if(restoreMode){
     try{
       db.collection('iz_shifts')
