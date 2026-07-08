@@ -3547,7 +3547,8 @@ function confirmMorning(){
     shiftId:uid(),
     openedAt: restoreMode ? pendingSession._restoreOpenedAt : new Date().toISOString(),
     cashMorning:cashM, cashDrMorning:cashDr, cashStaffMorning:cashStaff,
-    goodsMorning:goodsM, goodsDrMorning:goodsDrM, shopType:'shop'
+    goodsMorning:goodsM, goodsDrMorning:goodsDrM, shopType:'shop',
+    goodsMornSource:_goodsMornMode, goodsDrMornSource:_goodsDrMode
   });
   if(restoreMode) session.isRestoreShift = true;
   var prev=getPrevShiftByOpenOrder(pendingSession.shopName, session.openedAt);
@@ -6704,6 +6705,7 @@ function _closeShiftReal(){
   const report={id:finalReportId,status:'closed',source:'shop',shopName:session.shopName,sellerName:session.sellerName,
     date:openedDateStr,openedAt:session.openedAt,closedAt:new Date().toISOString(),
     cashMorning:session.cashMorning,goodsMorning:session.goodsMorning,cashEvening:cashEve,goodsEvening:t.goods,
+    goodsMornSource:session.goodsMornSource||'auto',goodsDrMornSource:session.goodsDrMornSource||'auto',
     cashDrMorning:(session.cashDrMorning||0),drCashEvening:drCashEve,goodsDrMorning:(session.goodsDrMorning||0),drGoodsEvening:t.goodsDr,drCashDiff:drCashDiff,
     cashStaffMorning:(session.cashStaffMorning||0),cashStaffEvening:staffCashEve,
     inkass,cashDiff,cashDiffReason:reason,hasCashDiff:Math.abs(cashDiff)>=1,
@@ -7136,7 +7138,8 @@ function evaluateShiftIssues(sh){
     if(prevG.goodsEvening!=null && prevG.goodsEvening>0 && sh.goodsMorning!=null){
       var diffW = Math.round((sh.goodsMorning||0) - prevG.goodsEvening);
       if(Math.abs(diffW)>=1){
-        issues.push({code:'morn_goods_wood_diff', label:'🌳 Остаток товара утро (Дерево) не совпадает с вечером пред. смены: ввели '+Math.round(sh.goodsMorning).toLocaleString('ru-RU')+'₽, было '+Math.round(prevG.goodsEvening).toLocaleString('ru-RU')+'₽ ('+(diffW>0?'+':'')+Math.round(diffW).toLocaleString('ru-RU')+'₽)'});
+        var srcNoteW = sh.goodsMornSource==='manual' ? ' [введено вручную продавцом]' : (sh.goodsMornSource==='auto' ? ' [взято системой автоматически]' : '');
+        issues.push({code:'morn_goods_wood_diff', label:'🌳 Остаток товара утро (Дерево) не совпадает с вечером пред. смены: ввели '+Math.round(sh.goodsMorning).toLocaleString('ru-RU')+'₽, было '+Math.round(prevG.goodsEvening).toLocaleString('ru-RU')+'₽ ('+(diffW>0?'+':'')+Math.round(diffW).toLocaleString('ru-RU')+'₽)'+srcNoteW});
       }
     }
     var prevDrEve = prevG.drGoodsEvening!=null ? prevG.drGoodsEvening : prevG.goodsDrEvening;
@@ -7144,7 +7147,8 @@ function evaluateShiftIssues(sh){
     if(prevDrEve!=null && prevDrEve>0 && curDrMorn!=null){
       var diffDr = Math.round((curDrMorn||0) - prevDrEve);
       if(Math.abs(diffDr)>=1){
-        issues.push({code:'morn_goods_dr_diff', label:'🛍 Остаток товара утро (ДР Товар) не совпадает с вечером пред. смены: ввели '+Math.round(curDrMorn).toLocaleString('ru-RU')+'₽, было '+Math.round(prevDrEve).toLocaleString('ru-RU')+'₽ ('+(diffDr>0?'+':'')+Math.round(diffDr).toLocaleString('ru-RU')+'₽)'});
+        var srcNoteDr = sh.goodsDrMornSource==='manual' ? ' [введено вручную продавцом]' : (sh.goodsDrMornSource==='auto' ? ' [взято системой автоматически]' : '');
+        issues.push({code:'morn_goods_dr_diff', label:'🛍 Остаток товара утро (ДР Товар) не совпадает с вечером пред. смены: ввели '+Math.round(curDrMorn).toLocaleString('ru-RU')+'₽, было '+Math.round(prevDrEve).toLocaleString('ru-RU')+'₽ ('+(diffDr>0?'+':'')+Math.round(diffDr).toLocaleString('ru-RU')+'₽)'+srcNoteDr});
       }
     }
   })();
@@ -7371,6 +7375,11 @@ function _renderShiftView(){
     var v = val!=null ? f(val) : '—';
     return mismatch ? '<span style="color:#f0a060;text-decoration:underline wavy #f06060">'+v+'</span>' : '<b>'+v+'</b>';
   }
+  function _mornSourceLabel(src){
+    if(src==='manual') return '✍️ вручную';
+    if(src==='auto') return '🤖 авто (расчёт)';
+    return '— неизвестно (старая смена)';
+  }
   function tblRow(label, woodVal, drVal, opts){
     opts = opts||{};
     return '<div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:0 8px;padding:'+(opts.pad||'4px')+' 0;'+(opts.border?'border-top:1px solid #2e2e3e;margin-top:4px;padding-top:8px':'')+'">'+
@@ -7388,6 +7397,7 @@ function _renderShiftView(){
     tblRow('Кол-во', woodSaleQty+' шт.', drSaleQty+' шт.')+
     '<div style="font-size:10px;color:#f0a060;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:8px 0 2px">📦 ТОВАР</div>'+
     tblRow('Остаток утро', enteredVal(sh.goodsMorning||0, morningGoodsMismatch), enteredVal(sh.goodsDrMorning!=null?sh.goodsDrMorning:(sh.drGoodsMorning||0), morningDrGoodsMismatch))+
+    tblRow('  · как введено', _mornSourceLabel(sh.goodsMornSource), _mornSourceLabel(sh.goodsDrMornSource), {color:'#8888aa'})+
     tblRow('Остаток вечер', f(sh.goodsEvening||0), f(sh.drGoodsEvening||0))+
     tblRow('Приход', f(woodRcvTotal), f(drRcvTotal))+
     tblRow('Списание', f(woodWoTotal), f(drWoTotal))+
@@ -12687,12 +12697,24 @@ function editManualInvoice(id){
   if(!inv) return;
   var card = document.getElementById('maninv_'+id); if(!card) return;
   window._manInvEdit[id] = JSON.parse(JSON.stringify(inv));
+  var curType3 = inv.goodsType || (inv.category==='dr'?'dr':'derevo');
+  var bD3 = curType3==='derevo'
+    ? 'flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer'
+    : 'flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer';
+  var bDr3 = curType3==='dr'
+    ? 'flex:1;padding:9px;border-radius:10px;border:2px solid #a060f0;background:#1e1a2e;color:#a060f0;font-size:12px;font-weight:700;cursor:pointer'
+    : 'flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer';
   card.innerHTML =
     '<div style="font-size:11px;font-weight:700;color:#c8f060;margin-bottom:8px">✏️ Исправление: '+(inv.num||'')+'</div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Номер</label><input class="fi" id="maninv_num_'+id+'" value="'+(inv.num||'')+'" style="margin:0;padding:7px"></div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата приёмки</label><input class="fi" type="date" id="maninv_date_'+id+'" value="'+(inv.date||'')+'" style="margin:0;padding:7px;-webkit-appearance:none;color-scheme:dark"></div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата накладной</label><input class="fi" type="date" id="maninv_docdate_'+id+'" value="'+(inv.docDate||inv.date||'')+'" style="margin:0;padding:7px;-webkit-appearance:none;color-scheme:dark"></div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">От кого</label><input class="fi" id="maninv_from_'+id+'" value="'+(inv.from||'')+'" style="margin:0;padding:7px"></div>'+
+    '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ТИП ТОВАРА</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:10px">'+
+      '<button type="button" id="maninvTypeDerevo_'+id+'" onpointerdown="event.preventDefault();setSellerInvType(\''+id+'\',\'derevo\')" style="'+bD3+'">🌳 Дерево</button>'+
+      '<button type="button" id="maninvTypeDr_'+id+'" onpointerdown="event.preventDefault();setSellerInvType(\''+id+'\',\'dr\')" style="'+bDr3+'">🛍 ДР Товар</button>'+
+    '</div>'+
     '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (арт. · наим. · порода · кол-во · цена)</div>'+
     '<div id="maninv_items_'+id+'"></div>'+
     '<button type="button" onclick="addManInvEditItem(\''+id+'\')" class="btn sec" style="font-size:12px;margin:6px 0 0">＋ Добавить позицию</button>'+
@@ -12702,6 +12724,17 @@ function editManualInvoice(id){
       '<button onclick="openRcvArchiveDate(\''+(inv.date||'—')+'\')" style="padding:8px 12px;border-radius:8px;border:1px solid #2e2e3e;background:none;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>'+
     '</div>';
   renderManInvEditItems(id);
+}
+function setSellerInvType(id, type){
+  if(!window._manInvEdit[id]) return;
+  window._manInvEdit[id].goodsType = type;
+  var bD=document.getElementById('maninvTypeDerevo_'+id), bDr=document.getElementById('maninvTypeDr_'+id);
+  if(bD) bD.style.cssText = type==='derevo'
+    ? 'flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer'
+    : 'flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer';
+  if(bDr) bDr.style.cssText = type==='dr'
+    ? 'flex:1;padding:9px;border-radius:10px;border:2px solid #a060f0;background:#1e1a2e;color:#a060f0;font-size:12px;font-weight:700;cursor:pointer'
+    : 'flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer';
 }
 var _manInvEditActive = {id:null, i:null};
 function _manInvNameOptions(){ return getItemsBase().map(function(it){ return it.name; }).filter(Boolean); }
@@ -12861,15 +12894,20 @@ function saveManualInvoiceEdit(id){
     return !(e.sub && e.sub.indexOf(oldNum)>=0);
   });
   (data.items||[]).forEach(function(item){
-    autoSaveToItemBase(item.name, item.article, item.price, 'derevo');
+    autoSaveToItemBase(item.name, item.article, item.price, (data.goodsType==='dr'?'dr':'derevo'));
   });
+  var _sellerGt = data.goodsType || 'derevo';
+  var _isDrSeller = _sellerGt==='dr';
   journal.push({
     id:uid(), type:'receive', ts:preservedTs, icon:'📥',
-    label:'Приёмка '+data.num,
+    label:'Приёмка '+data.num+(_isDrSeller?' (ДР)':''),
     sub:(data.items||[]).length+' изд.'+(data.from?' · от '+data.from:''),
     amount:data.totalAmt,
     amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
-    goodsEffect:data.totalAmt, invId:id, editedAt:new Date().toISOString()
+    goodsType:_sellerGt,
+    goodsEffect:_isDrSeller?0:data.totalAmt,
+    goodsDrEffect:_isDrSeller?data.totalAmt:0,
+    invId:id, editedAt:new Date().toISOString()
   });
   saveJ();
   delete window._manInvEdit[id];
