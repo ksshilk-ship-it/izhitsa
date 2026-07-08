@@ -2196,27 +2196,32 @@ function adminSelectRoleToView(role){
 // ════════ FIREBASE LISTENERS ════════
 function startListeners(){
   // Blanks
-  db.collection('ws_blanks').orderBy('createdAt','desc').onSnapshot(snap=>{
+  db.collection('ws_blanks').onSnapshot(snap=>{
     blanks=snap.docs.map(d=>({_id:d.id,...d.data()}));
+    blanks.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
     renderDash(); renderBlanks(); renderMyWork(); renderMasterBlanks(); updateBadges();
-  },console.error);
+  }, e=>{ console.error('ws_blanks:', e); showToast('❌ Ошибка загрузки заготовок'); });
   // Items
-  db.collection('ws_items').orderBy('createdAt','desc').onSnapshot(snap=>{
+  db.collection('ws_items').onSnapshot(snap=>{
     items=snap.docs.map(d=>({_id:d.id,...d.data()}));
+    items.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
     renderDash(); renderMyWork(); renderWarehouse(); renderZP(); renderAdmin(); updateBadges();
-  },console.error);
+  }, e=>{ console.error('ws_items:', e); showToast('❌ Ошибка загрузки товаров'); });
   // Shipments
-  db.collection('ws_shipments').orderBy('createdAt','desc').onSnapshot(snap=>{
+  db.collection('ws_shipments').onSnapshot(snap=>{
     shipments=snap.docs.map(d=>({_id:d.id,...d.data()}));
-  },console.error);
+    shipments.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  }, e=>{ console.error('ws_shipments:', e); });
   // Extra works
-  db.collection('ws_extra_works').orderBy('createdAt','desc').onSnapshot(snap=>{
+  db.collection('ws_extra_works').onSnapshot(snap=>{
     extraWorks=snap.docs.map(d=>({_id:d.id,...d.data()}));
+    extraWorks.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
     renderExtraWorkList(); renderZPay(); renderStats();
-  },console.error);
+  }, e=>{ console.error('ws_extra_works:', e); });
   // Прочие работы
-  db.collection('ws_other_tasks').orderBy('createdAt','desc').onSnapshot(snap=>{
+  db.collection('ws_other_tasks').onSnapshot(snap=>{
     otherTasks=snap.docs.map(d=>({_id:d.id,...d.data()}));
+    otherTasks.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
     renderDash(); renderOtherTasks(); renderOtManualPage();
   },()=>{});
   // Выплаты ЗП — для мастера
@@ -2238,16 +2243,18 @@ function startListeners(){
   // Показать каталог только администратору
   toggleAdminCatalog();
   // Ручные приёмки от мастеров (кладовщик)
-  db.collection('ws_master_acceptances').orderBy('createdAt','desc').onSnapshot(snap=>{
+  db.collection('ws_master_acceptances').onSnapshot(snap=>{
     _maHistory = snap.docs.map(d=>d.data());
+    _maHistory.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
     renderManualAcceptHistory();
-  },console.error);
+  }, e => { console.error('Ошибка загрузки приёмок:', e); showToast('❌ Ошибка приёмок: '+e.message); });
   // Первая инвентаризация (внесение остатков с нуля)
-  db.collection('ws_first_inventory').orderBy('createdAt','desc').onSnapshot(snap=>{
+  db.collection('ws_first_inventory').onSnapshot(snap=>{
     _fiGroups = snap.docs.map(d=>({id:d.id,...d.data()}));
+    _fiGroups.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
     renderFirstInventoryGroups();
     renderInvFiGroups();
-  },console.error);
+  }, e => { console.error('Ошибка загрузки инвентаризации:', e); showToast('❌ Ошибка инвентаризации: '+e.message); });
 }
 
 function updateBadges(){
@@ -2952,28 +2959,21 @@ let _whBalanceSortAsc = true;
 // 🔄 ЗАГРУЗИТЬ ВСЕ ДАННЫЕ ИЗ FIREBASE ДЛЯ СКЛАДА
 async function loadDataFromFirebase(){
   try {
-    await Promise.all([
-      // Загрузить товары
-      db.collection('ws_items').orderBy('createdAt','desc').get()
-        .then(snap => {
-          items = snap.docs.map(d=>({id:d.id,...d.data()}));
-          console.log('✅ Товаров:', items.length);
-        }),
-      // Загрузить группы инвентаризации
-      db.collection('ws_first_inventory').orderBy('createdAt','desc').get()
-        .then(snap => {
-          _fiGroups = snap.docs.map(d=>({id:d.id,...d.data()}));
-          console.log('✅ Групп инвентаризации:', _fiGroups.length);
-        }),
-      // Загрузить приёмки от мастеров
-      db.collection('ws_master_acceptances').orderBy('createdAt','desc').get()
-        .then(snap => {
-          _maHistory = snap.docs.map(d=>d.data());
-          console.log('✅ Приёмок:', _maHistory.length);
-        })
+    const [itemsSnap, fiSnap, maSnap] = await Promise.all([
+      db.collection('ws_items').get(),
+      db.collection('ws_first_inventory').get(),
+      db.collection('ws_master_acceptances').get()
     ]);
+    items = itemsSnap.docs.map(d=>({id:d.id,...d.data()}));
+    _fiGroups = fiSnap.docs.map(d=>({id:d.id,...d.data()}));
+    _maHistory = maSnap.docs.map(d=>d.data());
+    console.log('✅ Товаров:', items.length, '· Групп:', _fiGroups.length, '· Приёмок:', _maHistory.length);
+    // Обновить и страницу инвентаризации, если она открыта
+    if(typeof renderInvFiGroups === 'function') renderInvFiGroups();
+    if(typeof renderFirstInventoryGroups === 'function') renderFirstInventoryGroups();
   } catch (e) {
-    console.error('❌ Ошибка загрузки:', e);
+    console.error('❌ Ошибка загрузки данных склада:', e);
+    showToast('❌ Ошибка загрузки: ' + e.message);
   }
 }
 
@@ -3390,7 +3390,7 @@ function renderReservesList(){
   if(!c) return;
   
   // Найти все архивированные группы из инвентаризации
-  const archivedGroups = (fiGroups || []).filter(g => g.status === 'archived');
+  const archivedGroups = (_fiGroups || []).filter(g => g.status === 'archived');
   
   if(!archivedGroups.length){
     c.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)">📭 Нет товаров в запасах</div>';
@@ -3524,7 +3524,7 @@ function renderBalance(){
   }
   
   // Обновить счётчики
-  const archivReserves = (fiGroups || []).filter(g => g.status === 'archived');
+  const archivReserves = (_fiGroups || []).filter(g => g.status === 'archived');
   let reserveItems = 0;
   archivReserves.forEach(g => reserveItems += (g.items || []).length);
   
@@ -3676,7 +3676,7 @@ function renderMovementOutgoing(){
 function renderArchiveGoods(){
   const archivedItems = items.filter(i => i.isArchive && i.status !== 'shipped');
   const shippedItems = items.filter(i => i.status === 'shipped');
-  const inactiveGroups = (fiGroups || []).filter(g => g.status !== 'active');
+  const inactiveGroups = (_fiGroups || []).filter(g => g.status !== 'active');
   
   document.getElementById('whArchiveTotal').textContent = archivedItems.length + shippedItems.length;
   document.getElementById('whArchiveInactive').textContent = inactiveGroups.length;
@@ -3737,6 +3737,7 @@ function renderArchiveGoods(){
 
 function renderWarehouse(){
   // Вызвать правильную функцию отображения в зависимости от текущей вкладки
+  // Данные items и _fiGroups поддерживаются актуальными живыми Firebase-listener'ами (initFirebaseListeners)
   if(_whMainTab === 'balance') renderBalance();
   else if(_whMainTab === 'movement') renderMovement();
   else if(_whMainTab === 'archive') renderArchiveGoods();
