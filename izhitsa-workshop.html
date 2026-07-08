@@ -8554,6 +8554,68 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const ewD = document.getElementById('ewDate'); if(ewD) ewD.value = todayStr;
   setStatsDateInputs('month');
 });
+
+// ════════════════════════════════
+// 👆 ЖЕСТЫ: свайп вниз закрывает окно, свайп влево/вправо листает вкладки
+// ════════════════════════════════
+(function(){
+  // --- 1) СВАЙП ВНИЗ ЗАКРЫВАЕТ ОТКРЫТОЕ ОКНО (модалку), особенно когда оно поверх основного экрана ---
+  let md = null, mo = null, startY = 0, startX = 0, curY = 0, dragging = false;
+  document.addEventListener('touchstart', function(e){
+    const target = e.target.closest('.mo.open .md');
+    if(!target) return;
+    if(target.scrollTop > 4) return; // не мешаем внутреннему скроллу контента окна
+    md = target; mo = target.closest('.mo');
+    startY = e.touches[0].clientY; startX = e.touches[0].clientX; curY = startY;
+    dragging = true;
+    md.style.transition = 'none';
+  }, {passive:true});
+  document.addEventListener('touchmove', function(e){
+    if(!dragging || !md) return;
+    curY = e.touches[0].clientY;
+    const dy = curY - startY, dx = e.touches[0].clientX - startX;
+    if(dy > 0 && Math.abs(dy) > Math.abs(dx)) md.style.transform = 'translateY('+dy+'px)';
+  }, {passive:true});
+  document.addEventListener('touchend', function(){
+    if(!dragging || !md) return;
+    const dy = curY - startY;
+    md.style.transition = 'transform .2s ease';
+    if(dy > 90){
+      const closingMd = md, closingMo = mo;
+      closingMd.style.transform = 'translateY(120%)';
+      setTimeout(()=>{ if(closingMo) closingMo.classList.remove('open'); closingMd.style.transition=''; closingMd.style.transform=''; }, 200);
+    } else {
+      md.style.transform = '';
+    }
+    dragging = false; md = null; mo = null;
+  }, {passive:true});
+
+  // --- 2) СВАЙП ВЛЕВО/ВПРАВО ЛИСТАЕТ ВКЛАДКИ НИЖНЕГО МЕНЮ ---
+  let sx = 0, sy = 0, tracking = false;
+  document.addEventListener('touchstart', function(e){
+    if(e.target.closest('.mo.open')) return;
+    if(e.target.closest('input,textarea,select,button')) return;
+    const scrollableAncestor = e.target.closest('[style*="overflow-x"]');
+    if(scrollableAncestor) return;
+    if(!e.target.closest('.page.active')) return;
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+    tracking = true;
+  }, {passive:true});
+  document.addEventListener('touchend', function(e){
+    if(!tracking) return;
+    tracking = false;
+    const dx = e.changedTouches[0].clientX - sx;
+    const dy = e.changedTouches[0].clientY - sy;
+    if(Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy)*1.4) return;
+    const tabs = Array.from(document.querySelectorAll('#mainTabs .tab'));
+    if(!tabs.length) return;
+    const activeIdx = tabs.findIndex(t=>t.classList.contains('active'));
+    if(activeIdx === -1) return;
+    const nextIdx = dx < 0 ? activeIdx+1 : activeIdx-1; // свайп влево → следующая вкладка
+    if(nextIdx < 0 || nextIdx >= tabs.length) return;
+    tabs[nextIdx].click();
+  }, {passive:true});
+})();
 </script>
 
 <!-- ADD EXTRA WORK MODAL -->
