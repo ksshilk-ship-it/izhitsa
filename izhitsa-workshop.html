@@ -537,29 +537,52 @@ function applyUpdate() {
   <div class="page" id="pg-shipment">
     <div class="stitle">🚚 Отгрузка</div>
 
-    <!-- Подвкладки: Новая / Архив -->
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <div id="shipTab1" onclick="setShipTab('new')" style="flex:1;padding:9px;text-align:center;border-radius:10px;background:var(--accent);color:#000;font-weight:700;font-size:13px;cursor:pointer">🚚 Новая отгрузка</div>
-      <div id="shipTab2" onclick="setShipTab('archive')" style="flex:1;padding:9px;text-align:center;border-radius:10px;background:var(--s2);color:var(--t2);font-size:13px;cursor:pointer;border:1px solid var(--border)">🗄 Архив</div>
+    <!-- Подвкладки: Новая / В процессе / Архив -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px">
+      <div id="shipTab1" onclick="setShipTab('new')" style="padding:9px 4px;text-align:center;border-radius:10px;background:var(--accent);color:#000;font-weight:700;font-size:12px;cursor:pointer">🚚 Новая</div>
+      <div id="shipTab3" onclick="setShipTab('progress')" style="padding:9px 4px;text-align:center;border-radius:10px;background:var(--s2);color:var(--t2);font-size:12px;cursor:pointer;border:1px solid var(--border)">📦 В процессе</div>
+      <div id="shipTab2" onclick="setShipTab('archive')" style="padding:9px 4px;text-align:center;border-radius:10px;background:var(--s2);color:var(--t2);font-size:12px;cursor:pointer;border:1px solid var(--border)">🗄 Архив</div>
     </div>
 
     <!-- НОВАЯ ОТГРУЗКА -->
     <div id="shipNewBlock">
-      <div class="fg" style="margin-bottom:8px">
-        <label class="fl">Магазин назначения</label>
-        <select class="fs" id="shipPageDest" onchange="renderShipPageList()"></select>
-      </div>
       <div style="display:flex;gap:8px;margin-bottom:8px">
-        <input class="fi" id="shipPageSearch" placeholder="🔍 По артикулу / наименованию..." style="flex:1" oninput="renderShipPageList()">
-        <button onclick="toggleShipPageSort()" id="shipPageSortBtn" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:12px;white-space:nowrap">↑ Цена</button>
+        <div class="fg" style="flex:1;margin-bottom:0">
+          <label class="fl">Магазин назначения</label>
+          <select class="fs" id="shipPageDest" onchange="renderShipPageList()"></select>
+        </div>
+        <div class="fg" style="margin-bottom:0">
+          <label class="fl">Дата</label>
+          <input class="fi" type="date" id="shipPageDate">
+        </div>
       </div>
-      <div id="shipPageSelected" style="display:none;background:var(--s2);border-radius:10px;padding:10px;margin-bottom:8px;font-size:12px;color:var(--text)"></div>
+
+      <!-- Накладная (сворачиваемая) -->
+      <div id="shipInvoiceCard" style="display:none;background:var(--s1);border:2px solid var(--accent);border-radius:12px;margin-bottom:10px;overflow:hidden">
+        <div onclick="toggleShipInvoice()" style="display:flex;justify-content:space-between;align-items:center;padding:12px;cursor:pointer">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--accent)">📋 Накладная</div>
+            <div id="shipInvoiceSummary" style="font-size:11px;color:var(--t2)"></div>
+          </div>
+          <span id="shipInvoiceArrow" style="color:var(--t2);font-size:16px">▼</span>
+        </div>
+        <div id="shipInvoiceBody" style="display:none;padding:0 12px 12px"></div>
+      </div>
+
+      <input class="fi" id="shipPageSearch" placeholder="🔍 По артикулу / наименованию..." style="margin-bottom:8px" oninput="renderShipPageList()">
       <div id="shipPageGroups"></div>
-      <button class="btn green" style="margin-top:10px" onclick="createShipmentFromPage()">🚚 Отгрузить выбранные</button>
+      <button class="btn green" style="margin-top:10px" onclick="createShipmentFromPage()">💾 Сохранить накладную</button>
+    </div>
+
+    <!-- В ПРОЦЕССЕ ОТГРУЗКИ -->
+    <div id="shipProgressBlock" style="display:none">
+      <div style="font-size:11px;color:var(--t2);margin-bottom:10px">Накладные сформированы и товар списан со склада, но физически ещё не покинул мастерскую.</div>
+      <div id="shipProgressList"></div>
     </div>
 
     <!-- АРХИВ ОТГРУЗОК -->
     <div id="shipArchiveBlock" style="display:none">
+      <div style="font-size:11px;color:var(--t2);margin-bottom:10px">Всё, что фактически уехало из мастерской.</div>
       <div id="shipArchiveList"></div>
     </div>
   </div>
@@ -3315,9 +3338,17 @@ function toggleBalanceSort(){
 let _shipPageSortAsc = true;
 let _shipPageSelected = new Set();
 let _shipPageTab = 'new';
+let _shipOpenGroups = new Set();      // какие группы сейчас раскрыты
+let _shipGroupSearch = {};            // поиск по артикулу внутри конкретной группы
+let _shipGroupSort = {};              // {groupKey: {field:'price'|'artikul', asc:bool}}
+let _shipInvoiceOpen = false;
 
 function renderShipmentPage(){
   _shipPageSelected.clear();
+  _shipOpenGroups.clear();
+  _shipGroupSearch = {};
+  _shipGroupSort = {};
+  _shipInvoiceOpen = false;
   setShipTab('new');
   // Заполнить магазины
   const sel = document.getElementById('shipPageDest');
@@ -3325,64 +3356,79 @@ function renderShipmentPage(){
     const shops = JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
     sel.innerHTML = shops.map(s=>`<option value="${s}">${s}</option>`).join('');
   }
+  const dateEl = document.getElementById('shipPageDate');
+  if(dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0,10);
   renderShipPageList();
 }
 
 function setShipTab(tab){
   _shipPageTab = tab;
-  const t1=document.getElementById('shipTab1'), t2=document.getElementById('shipTab2');
-  const b1=document.getElementById('shipNewBlock'), b2=document.getElementById('shipArchiveBlock');
+  const t1=document.getElementById('shipTab1'), t2=document.getElementById('shipTab2'), t3=document.getElementById('shipTab3');
+  const b1=document.getElementById('shipNewBlock'), b2=document.getElementById('shipArchiveBlock'), b3=document.getElementById('shipProgressBlock');
+  [t1,t2,t3].forEach(t=>{ t.style.background='var(--s2)'; t.style.color='var(--t2)'; t.style.fontWeight='400'; t.style.border='1px solid var(--border)'; });
+  [b1,b2,b3].forEach(b=>b.style.display='none');
   if(tab==='new'){
     t1.style.background='var(--accent)'; t1.style.color='#000'; t1.style.fontWeight='700'; t1.style.border='none';
-    t2.style.background='var(--s2)'; t2.style.color='var(--t2)'; t2.style.fontWeight='400'; t2.style.border='1px solid var(--border)';
-    b1.style.display='block'; b2.style.display='none';
+    b1.style.display='block';
     renderShipPageList();
+  } else if(tab==='progress'){
+    t3.style.background='var(--accent)'; t3.style.color='#000'; t3.style.fontWeight='700'; t3.style.border='none';
+    b3.style.display='block';
+    renderShipProgress();
   } else {
     t2.style.background='var(--accent)'; t2.style.color='#000'; t2.style.fontWeight='700'; t2.style.border='none';
-    t1.style.background='var(--s2)'; t1.style.color='var(--t2)'; t1.style.fontWeight='400'; t1.style.border='1px solid var(--border)';
-    b2.style.display='block'; b1.style.display='none';
+    b2.style.display='block';
     renderShipArchive();
   }
 }
 
-function toggleShipPageSort(){
-  _shipPageSortAsc = !_shipPageSortAsc;
-  document.getElementById('shipPageSortBtn').textContent = (_shipPageSortAsc?'↑':'↓')+' Цена';
-  renderShipPageList();
-}
-
+// ═══ Список товаров по группам (наименованиям) для формирования накладной ═══
 function renderShipPageList(){
   const c = document.getElementById('shipPageGroups'); if(!c) return;
   const q = (document.getElementById('shipPageSearch')?.value||'').toLowerCase().trim();
   let stock = items.filter(i=>i.status==='received' && !i.isShopArchived);
   if(q) stock = stock.filter(i=>((i.name||i.itemName||'')+(i.artikul||'')+(i.wood||'')).toLowerCase().includes(q));
 
-  if(!stock.length){ c.innerHTML='<div style="font-size:13px;color:var(--t2);padding:16px 0;text-align:center">Склад пуст</div>'; updateShipPageSelected(); return; }
+  if(!stock.length){ c.innerHTML='<div style="font-size:13px;color:var(--t2);padding:16px 0;text-align:center">Ничего не найдено</div>'; renderShipInvoice(); return; }
 
   // Группируем по наименованию
   const groups = {};
   stock.forEach(item=>{
     const raw = (item.name||item.itemName||'—').trim();
     const key = raw.toLowerCase();
-    if(!groups[key]) groups[key]={name:raw, items:[]};
+    if(!groups[key]) groups[key]={name:raw, key, items:[]};
     groups[key].items.push(item);
   });
   const sorted = Object.values(groups).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
 
   c.innerHTML = sorted.map(g=>{
     const selCount = g.items.filter(i=>_shipPageSelected.has(i._id)).length;
-    const id = 'spg_'+g.name.replace(/[^а-яёa-z0-9]/gi,'_');
-    g.items.sort((a,b)=>_shipPageSortAsc?(a.price||0)-(b.price||0):(b.price||0)-(a.price||0));
+    const isOpen = _shipOpenGroups.has(g.key) || !!q;
+    const gSearch = _shipGroupSearch[g.key] || '';
+    const gSort = _shipGroupSort[g.key] || {field:'price', asc:true};
+
+    let groupItems = g.items;
+    if(gSearch) groupItems = groupItems.filter(i=>(i.artikul||'').toLowerCase().includes(gSearch.toLowerCase()));
+    groupItems = groupItems.slice().sort((a,b)=>{
+      if(gSort.field==='price') return gSort.asc ? (a.price||0)-(b.price||0) : (b.price||0)-(a.price||0);
+      return gSort.asc ? (a.artikul||'').localeCompare(b.artikul||'') : (b.artikul||'').localeCompare(a.artikul||'');
+    });
+
     return `<div style="margin-bottom:8px;border:1px solid var(--border);border-radius:12px;overflow:hidden">
-      <div onclick="toggleShipGroup('${id}')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 12px;background:var(--s2);cursor:pointer">
+      <div onclick="toggleShipGroup('${g.key.replace(/'/g,"\\'")}')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 12px;background:var(--s2);cursor:pointer">
         <div>
           <div style="font-size:14px;font-weight:700">${g.name}</div>
           <div style="font-size:11px;color:var(--t2)">${g.items.length} шт.${selCount?` · <span style="color:var(--inc)">выбрано ${selCount}</span>`:''}</div>
         </div>
-        <span id="${id}_arrow" style="color:var(--t2)">▼</span>
+        <span style="color:var(--t2)">${isOpen?'▲':'▼'}</span>
       </div>
-      <div id="${id}" style="display:${q?'block':'none'};padding:0 12px">
-        ${g.items.map(item=>{
+      <div style="display:${isOpen?'block':'none'};padding:10px 12px">
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <input class="fi" placeholder="🔍 Артикул..." value="${gSearch}" oninput="setShipGroupSearch('${g.key.replace(/'/g,"\\'")}', this.value)" style="flex:1;font-size:12px;padding:8px">
+          <button onclick="toggleShipGroupSort('${g.key.replace(/'/g,"\\'")}','price')" title="Сортировка по цене" style="background:${gSort.field==='price'?'var(--accent)':'var(--s2)'};color:${gSort.field==='price'?'#000':'var(--t2)'};border:1px solid var(--border);border-radius:8px;padding:0 10px;cursor:pointer;font-size:12px">₽${gSort.field==='price'?(gSort.asc?'↑':'↓'):''}</button>
+          <button onclick="toggleShipGroupSort('${g.key.replace(/'/g,"\\'")}','artikul')" title="Сортировка по артикулу" style="background:${gSort.field==='artikul'?'var(--accent)':'var(--s2)'};color:${gSort.field==='artikul'?'#000':'var(--t2)'};border:1px solid var(--border);border-radius:8px;padding:0 10px;cursor:pointer;font-size:12px">🔢${gSort.field==='artikul'?(gSort.asc?'↑':'↓'):''}</button>
+        </div>
+        ${groupItems.map(item=>{
           const sel = _shipPageSelected.has(item._id);
           const num = item.artikul||(item.itemNum&&!item.itemNum.startsWith('НАЧ-')?item.itemNum:'');
           return `<div onclick="toggleShipPageItem('${item._id}')" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;background:${sel?'rgba(80,255,150,0.07)':''}">
@@ -3392,75 +3438,155 @@ function renderShipPageList(){
             </div>
             <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</div>
           </div>`;
-        }).join('')}
-        <div style="padding:8px 0">
-          <button onpointerdown="event.preventDefault();selectAllShipGroup('${g.name}')" style="width:100%;padding:7px;border-radius:8px;border:1px solid var(--border);background:var(--s2);color:var(--t2);cursor:pointer;font-size:12px">☑ Выбрать все ${g.name}</button>
-        </div>
+        }).join('') || '<div style="font-size:12px;color:var(--t2);padding:8px 0">Ничего не найдено по артикулу</div>'}
       </div>
     </div>`;
   }).join('');
-  updateShipPageSelected();
+  renderShipInvoice();
 }
 
-function toggleShipGroup(id){
-  const el=document.getElementById(id), arrow=document.getElementById(id+'_arrow');
-  if(!el) return;
-  const open=el.style.display==='block';
-  el.style.display=open?'none':'block';
-  if(arrow) arrow.textContent=open?'▼':'▲';
+function toggleShipGroup(key){
+  if(_shipOpenGroups.has(key)) _shipOpenGroups.delete(key);
+  else _shipOpenGroups.add(key);
+  renderShipPageList();
+}
+function setShipGroupSearch(key, val){
+  _shipGroupSearch[key] = val;
+  renderShipPageList();
+}
+function toggleShipGroupSort(key, field){
+  const cur = _shipGroupSort[key] || {field:'price', asc:true};
+  if(cur.field===field) _shipGroupSort[key] = {field, asc:!cur.asc};
+  else _shipGroupSort[key] = {field, asc:true};
+  renderShipPageList();
 }
 
+// Клик по товару НЕ перерисовывает свёрнутость групп — только сам список + накладную
 function toggleShipPageItem(id){
   if(_shipPageSelected.has(id)) _shipPageSelected.delete(id);
   else _shipPageSelected.add(id);
   renderShipPageList();
 }
 
-function selectAllShipGroup(name){
-  const norm = name.trim().toLowerCase();
-  const groupItems = items.filter(i=>i.status==='received'&&(i.name||i.itemName||'').trim().toLowerCase()===norm);
-  const allSel = groupItems.every(i=>_shipPageSelected.has(i._id));
-  groupItems.forEach(i=>{ if(allSel) _shipPageSelected.delete(i._id); else _shipPageSelected.add(i._id); });
-  renderShipPageList();
+// ═══ Накладная (сворачиваемая, с группировкой по подгруппам) ═══
+function toggleShipInvoice(){
+  _shipInvoiceOpen = !_shipInvoiceOpen;
+  renderShipInvoice();
 }
+function renderShipInvoice(){
+  const card = document.getElementById('shipInvoiceCard');
+  const summary = document.getElementById('shipInvoiceSummary');
+  const body = document.getElementById('shipInvoiceBody');
+  const arrow = document.getElementById('shipInvoiceArrow');
+  if(!card) return;
 
-function updateShipPageSelected(){
-  const el=document.getElementById('shipPageSelected'); if(!el) return;
-  const cnt=_shipPageSelected.size;
-  if(!cnt){ el.style.display='none'; return; }
-  const sum=items.filter(i=>_shipPageSelected.has(i._id)).reduce((s,i)=>s+(i.price||0),0);
-  el.style.display='block';
-  el.innerHTML=`Выбрано: <b>${cnt} шт.</b> · Сумма: <b style="color:var(--accent)">${fmt(sum)}</b>`;
+  const selItems = items.filter(i=>_shipPageSelected.has(i._id));
+  if(!selItems.length){ card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  const totalQty = selItems.length;
+  const totalSum = selItems.reduce((s,i)=>s+(i.price||0),0);
+  summary.innerHTML = `${totalQty} шт. · <b style="color:var(--accent)">${fmt(totalSum)}</b>`;
+
+  body.style.display = _shipInvoiceOpen ? 'block' : 'none';
+  arrow.textContent = _shipInvoiceOpen ? '▲' : '▼';
+
+  if(_shipInvoiceOpen){
+    const byGroup = {};
+    selItems.forEach(item=>{
+      const n = (item.name||item.itemName||'—').trim();
+      if(!byGroup[n]) byGroup[n] = {items:[], sum:0};
+      byGroup[n].items.push(item);
+      byGroup[n].sum += (item.price||0);
+    });
+    body.innerHTML = Object.entries(byGroup).sort((a,b)=>a[0].localeCompare(b[0],'ru')).map(([name,g])=>`
+      <div style="margin-top:8px">
+        <div style="font-size:12px;font-weight:700;color:var(--t1);margin-bottom:4px">${name} <span style="color:var(--t2);font-weight:400">· ${g.items.length} шт · ${fmt(g.sum)}</span></div>
+        ${g.items.map(item=>`
+          <div onclick="toggleShipPageItem('${item._id}')" style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer">
+            <div style="font-size:12px;color:var(--t2)">🏷 ${item.artikul||'—'} · 🌳 ${item.wood||'—'}</div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:12px;font-weight:700;color:var(--accent)">${fmt(item.price||0)}</span>
+              <span style="color:var(--exp);font-size:14px">✕</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `).join('');
+  }
 }
 
 async function createShipmentFromPage(){
   if(!_shipPageSelected.size){ showToast('Выберите товары для отгрузки'); return; }
   const dest = document.getElementById('shipPageDest')?.value;
   if(!dest){ showToast('Выберите магазин'); return; }
+  const shipDate = document.getElementById('shipPageDate')?.value || new Date().toISOString().slice(0,10);
   const shipItems = items.filter(i=>_shipPageSelected.has(i._id));
   const allNums = shipments.map(s=>parseInt((s.num||'').replace(/[^0-9]/g,''))||0);
   const nextNum = allNums.length ? Math.max(...allNums)+1 : 1;
   const shipNum = 'НАК-'+String(nextNum).padStart(3,'0');
   const shipDoc = {
-    num:shipNum, destName:dest,
+    num:shipNum, destName:dest, shipDate,
     items:shipItems.map(i=>({_id:i._id,itemNum:i.itemNum,artikul:i.artikul||'',name:i.name||i.itemName,wood:i.wood||'',price:i.price||0})),
     createdById:session.id, createdByName:session.name,
-    status:'pending', createdAt:now()
+    status:'in_progress', createdAt:now()
   };
   try{
     await db.collection('ws_shipments').add(shipDoc);
     const batch=db.batch();
-    shipItems.forEach(i=>batch.update(db.collection('ws_items').doc(i._id),{status:'shipped',shippedAt:now(),shippedTo:dest,shipmentNum:shipNum}));
+    // Товар списывается со склада сразу (уходит из Баланса), но статус "shipping" — ещё НЕ архив,
+    // пока накладная физически не покинула мастерскую (см. markShipmentSent)
+    shipItems.forEach(i=>batch.update(db.collection('ws_items').doc(i._id),{status:'shipping',shippedTo:dest,shipmentNum:shipNum}));
     await batch.commit();
     _shipPageSelected.clear();
-    showToast(`✅ ${shipNum} → ${dest} · ${shipItems.length} шт.`);
-    setShipTab('archive');
+    _shipOpenGroups.clear();
+    showToast(`✅ ${shipNum} → ${dest} · ${shipItems.length} шт. Товар списан со склада`);
+    setShipTab('progress');
+  }catch(e){ showToast('Ошибка: '+e.message); }
+}
+
+// ═══ В ПРОЦЕССЕ ОТГРУЗКИ — сформированные накладные, но физически ещё на месте ═══
+function renderShipProgress(){
+  const c=document.getElementById('shipProgressList'); if(!c) return;
+  const list=shipments.filter(s=>s.status!=='sent').slice().sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  if(!list.length){ c.innerHTML='<div style="font-size:13px;color:var(--t2);padding:16px 0;text-align:center">Нет накладных в процессе</div>'; return; }
+  c.innerHTML=list.map(s=>{
+    const qty=(s.items||[]).length;
+    const sum=(s.items||[]).reduce((t,i)=>t+(i.price||0),0);
+    return `<div class="card" style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div>
+          <div style="font-size:14px;font-weight:700">${s.num||'—'}</div>
+          <div style="font-size:12px;color:var(--t2)">🏪 ${s.destName||'—'} · ${s.shipDate||fmtDT(s.createdAt)}</div>
+          <div style="font-size:11px;color:var(--t2)">${qty} шт · ${fmt(sum)}</div>
+        </div>
+      </div>
+      <button onclick="markShipmentSent('${s._id}')" style="width:100%;padding:10px;background:var(--accent);color:#000;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:13px">
+        🚚 Отправлено из мастерской
+      </button>
+    </div>`;
+  }).join('');
+}
+
+async function markShipmentSent(shipId){
+  if(!confirm('Подтвердить, что накладная физически покинула мастерскую?\n\nОна переместится в Архив.')) return;
+  try{
+    const ship = shipments.find(s=>s._id===shipId);
+    await db.collection('ws_shipments').doc(shipId).update({status:'sent', sentAt: now(), sentBy: session.name});
+    // Только теперь товары становятся по-настоящему "отгруженными" (Архив)
+    if(ship && ship.items && ship.items.length){
+      const batch = db.batch();
+      ship.items.forEach(i=>batch.update(db.collection('ws_items').doc(i._id),{status:'shipped', shippedAt: now()}));
+      await batch.commit();
+    }
+    showToast('🚚 Отмечено как отправлено');
+    renderShipProgress();
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 
 function renderShipArchive(){
   const c=document.getElementById('shipArchiveList'); if(!c) return;
-  const list=shipments.slice().sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+  const list=shipments.filter(s=>s.status==='sent').slice().sort((a,b)=>(b.sentAt||b.createdAt||'').localeCompare(a.sentAt||a.createdAt||''));
   if(!list.length){ c.innerHTML='<div style="font-size:13px;color:var(--t2);padding:16px 0;text-align:center">Отгрузок пока нет</div>'; return; }
   c.innerHTML=list.map(s=>`
     <div class="card" style="margin-bottom:8px">
@@ -3936,7 +4062,7 @@ function renderMovementOutgoing(){
   if(!list) return;
   const isAdmin = session && (session.role==='администратор'||session.role==='управляющий');
   
-  const shippedItems = items.filter(i => i.status === 'shipped');
+  const shippedItems = items.filter(i => i.status === 'shipped' || i.status === 'shipping');
   const searchQ = (document.getElementById('whMoveOutSearch')?.value || '').toLowerCase();
   
   if(!shippedItems.length){
@@ -3972,8 +4098,8 @@ function renderMovementOutgoing(){
           ${shopItems.map(item=>`
             <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--s2);border-radius:8px;margin-bottom:6px">
               <div style="flex:1">
-                <div style="font-size:12px;color:var(--t1)">${item.name||item.itemName||'—'} · 🏷 ${item.artikul||'—'}</div>
-                <div style="font-size:10px;color:var(--t2)">${fmtDT(item.shippedAt)} · ₽${fmt(item.price||0)}</div>
+                <div style="font-size:12px;color:var(--t1)">${item.name||item.itemName||'—'} · 🏷 ${item.artikul||'—'} ${item.status==='shipping'?'<span style="color:var(--a4)">· 📦 в процессе</span>':'<span style="color:var(--a2)">· ✅ отправлено</span>'}</div>
+                <div style="font-size:10px;color:var(--t2)">${item.status==='shipped'?fmtDT(item.shippedAt):'ожидает отправки'} · ₽${fmt(item.price||0)}</div>
               </div>
               ${isAdmin?`
                 <button onclick="openStockItemEdit('${item._id}')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 7px;color:var(--a2);cursor:pointer;font-size:12px;margin-left:4px">✏️</button>
@@ -7629,6 +7755,7 @@ function renderArchiveItems(c){
     <div class="at-row"><span class="at-lbl">Дата сдачи</span><span class="at-val">${acc.deliveredDate}</span></div>
     <div class="at-row"><span class="at-lbl">Принял</span><span class="at-val">${acc.createdBy}</span></div>
     <div class="at-row"><span class="at-lbl">Статус</span><span class="at-val">${acc.status==='done'?'✅ Проведена':'⏳ Открыта'}</span></div>
+    ${acc.status!=='done'?`<button onclick="openMaDetail('${acc.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);color:#000;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">✏️ Разметить и провести</button>`:''}
   </div>` +
   acc.positions.map((p,i)=>`
     <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid var(--border)">
