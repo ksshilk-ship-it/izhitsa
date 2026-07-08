@@ -7373,6 +7373,7 @@ function renderMaItemsList(){
         </div>
         <input class="fi" type="text" inputmode="decimal" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
           oninput="${it.artikulMode==='auto'?`updateMaAutoArtikul('${it.rid}',this.value)`:`updateMaItem('${it.rid}','artikul',this.value)`}"
+          onblur="${it.artikulMode==='auto'?`finalizeMaAutoArtikul()`:''}"
           placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
           style="${it.artikulMode==='none'?'opacity:0.6':''}"
           autocomplete="off">
@@ -7382,7 +7383,8 @@ function renderMaItemsList(){
             <div style="font-size:11px;color:var(--t2);margin-bottom:4px">📍 Начать отсчёт с номера:</div>
             <input class="fi" type="text" inputmode="decimal" value="${it.artikul || getMaxSystemArtikul()}" 
               id="maAutoStartNumber_${it.rid}"
-              oninput="updateMaItem('${it.rid}','artikul',this.value);recalcMaAutoArtikuls()" 
+              oninput="updateMaItem('${it.rid}','artikul',this.value)" 
+              onblur="finalizeMaAutoArtikul()"
               placeholder="Последний номер"
               autocomplete="off"
               style="font-weight:700;color:var(--accent)">
@@ -7391,7 +7393,7 @@ function renderMaItemsList(){
         ${(parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto' ? `<div style="font-size:11px;color:var(--accent);margin-top:5px;background:rgba(192,255,96,0.1);padding:8px;border-radius:8px">✓ Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}</div>` : ''}
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Количество одинаковых изделий</label>
-        <input class="fi" type="number" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" placeholder="1"
+        <input class="fi" type="number" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" onblur="finalizeMaQty()" placeholder="1"
           autocomplete="off">
         <div style="font-size:11px;color:var(--t2);margin-top:4px">Если сдано несколько одинаковых изделий по одной цене — укажите количество, остальные поля заполните один раз</div>
       </div>
@@ -7455,9 +7457,13 @@ function setMaArtikulMode(rid, mode){
 // начинается автонумерация. Все последующие позиции в режиме "авто" продолжат
 // цепочку от введённого значения.
 function updateMaAutoArtikul(rid, val){
+  // Только сохраняем значение в памяти — БЕЗ перерисовки, чтобы не терять фокус поля и не закрывать клавиатуру
   const it = _maItems.find(x=>x.rid===rid); if(!it) return;
   it.artikul = val;
   it.artikulManual = true;
+}
+function finalizeMaAutoArtikul(){
+  // Вызывается по потере фокуса поля — теперь можно спокойно пересчитать и перерисовать
   recalcMaAutoArtikuls();
   renderMaItemsList();
 }
@@ -7466,11 +7472,13 @@ function updateMaItem(rid, field, val){
   const it = _maItems.find(x=>x.rid===rid); if(!it) return;
   if(field==='qty'){
     it.qty = Math.max(1, parseInt(val,10)||1);
-    recalcMaAutoArtikuls();
-    renderMaItemsList();
-    return;
+    return; // перерисовка — по blur (см. finalizeMaQty), чтобы не терять фокус поля при вводе
   }
   it[field] = (field==='zp'||field==='price') ? (parseFloat(val)||0) : val;
+}
+function finalizeMaQty(){
+  recalcMaAutoArtikuls();
+  renderMaItemsList();
 }
 
 // Пересчитывает артикулы для всех позиций в режиме "авто" последовательно,
@@ -7981,9 +7989,12 @@ function setFiArtikulMode(rid, mode){
 }
 
 function updateFiAutoArtikul(rid, val){
+  // Только сохраняем значение — без перерисовки (иначе теряется фокус и клавиатура закрывается)
   const it = _fiItems.find(x=>x.rid===rid); if(!it) return;
   it.artikul = val;
   it.artikulManual = true;
+}
+function finalizeFiAutoArtikul(){
   renderFiItemsList();
 }
 
@@ -8012,6 +8023,7 @@ function renderFiItemsList(){
         </div>
         <input class="fi" type="text" inputmode="decimal" value="${it.artikulMode==='none'?'':it.artikul}" ${it.artikulMode==='none'?'disabled':''}
           oninput="${it.artikulMode==='auto'?`updateFiAutoArtikul('${it.rid}',this.value)`:`updateFiItem('${it.rid}','artikul',this.value)`}"
+          onblur="${it.artikulMode==='auto'?`finalizeFiAutoArtikul()`:''}"
           placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
           style="${it.artikulMode==='none'?'opacity:0.6':''}">
         ${it.artikulMode==='auto'?`<div style="font-size:11px;color:var(--t2);margin-top:5px">Последний номер в системе: ${getMaxSystemArtikul()}. По умолчанию — следующий по порядку, можно ввести свой</div>`:''}
