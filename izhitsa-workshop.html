@@ -358,7 +358,7 @@ function applyUpdate() {
 
   <!-- WAREHOUSE (кладовщик) -->
   <div class="page" id="pg-warehouse">
-    <div id="hubBack_warehouse" style="display:none;margin-bottom:8px"><span onclick="showPg('analytics',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Аналитика</span></div>
+    <div id="hubBack_warehouse" style="display:none;margin-bottom:8px"><span onclick="showPg('goods',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Товар</span></div>
     <div class="stitle">📦 Склад</div>
 
     <!-- ГЛАВНЫЕ ВКЛАДКИ: БАЛАНС / ДВИЖЕНИЕ / АРХИВ -->
@@ -651,7 +651,7 @@ function applyUpdate() {
 
   <!-- ИНВЕНТАРИЗАЦИЯ (кладовщик) -->
   <div class="page" id="pg-inventory">
-    <div id="hubBack_inventory" style="display:none;margin-bottom:8px"><span onclick="showPg('analytics',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Аналитика</span></div>
+    <div id="hubBack_inventory" style="display:none;margin-bottom:8px"><span onclick="showPg('goods',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Товар</span></div>
     <div class="stitle">🔍 Инвентаризация</div>
 
     <!-- Режим: история / активная сверка -->
@@ -715,23 +715,123 @@ function applyUpdate() {
     </div>
   </div>
 
-  <!-- 📊 АНАЛИТИКА (хаб) -->
-  <div class="page" id="pg-analytics">
-    <div class="stitle">📊 Аналитика</div>
+  <!-- 📦 ТОВАР (хаб) -->
+  <div class="page" id="pg-goods">
+    <div class="stitle">📦 Товар</div>
     <div style="display:flex;flex-direction:column;gap:10px">
       <div class="card" style="cursor:pointer" onclick="showPg('warehouse', null)">
         <div class="ctitle" style="margin:0">📦 Склад</div>
         <div style="font-size:11px;color:var(--t2);margin-top:4px">Баланс, движение товаров, архив</div>
-      </div>
-      <div class="card" style="cursor:pointer" onclick="showPg('stats', null)">
-        <div class="ctitle" style="margin:0">📊 Статистика</div>
-        <div style="font-size:11px;color:var(--t2);margin-top:4px">Продажи, обороты, показатели мастерской</div>
       </div>
       <div class="card" style="cursor:pointer" onclick="showPg('inventory', null)">
         <div class="ctitle" style="margin:0">🔍 Инвентаризация</div>
         <div style="font-size:11px;color:var(--t2);margin-top:4px">Группы остатков, сверки, расхождения</div>
       </div>
     </div>
+  </div>
+
+  <!-- 📊 АНАЛИЗ (хаб верхнего уровня) -->
+  <div class="page" id="pg-analytics">
+    <div class="stitle">📊 Анализ</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="card" style="cursor:pointer" onclick="showPg('prodanalysis', null)">
+        <div class="ctitle" style="margin:0">🏭 Производство</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:4px">Статистика и анализ по товарам и объёмам</div>
+      </div>
+      <div class="card" style="cursor:pointer" onclick="showPg('staffanalysis', null)">
+        <div class="ctitle" style="margin:0">👥 Сотрудники</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:4px">Статистика и анализ по мастерам</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🏭 ПРОИЗВОДСТВО (подхаб) -->
+  <div class="page" id="pg-prodanalysis">
+    <div id="hubBack_prodanalysis" style="margin-bottom:8px"><span onclick="showPg('analytics',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Анализ</span></div>
+    <div class="stitle">🏭 Производство</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="card" style="cursor:pointer" onclick="showPg('stats', null)">
+        <div class="ctitle" style="margin:0">📈 Статистика</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:4px">Сбор данных по производству с фильтрами</div>
+      </div>
+      <div class="card" style="cursor:pointer" onclick="showPg('proddeep', null)">
+        <div class="ctitle" style="margin:0">🔎 Анализ</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:4px">Топ товаров, динамика, сравнение периодов</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 👥 СОТРУДНИКИ АНАЛИЗ (подхаб) -->
+  <div class="page" id="pg-staffanalysis">
+    <div id="hubBack_staffanalysis" style="margin-bottom:8px"><span onclick="showPg('analytics',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Анализ</span></div>
+    <div class="stitle">👥 Сотрудники</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="card" style="cursor:pointer" onclick="showPg('staffstats', null)">
+        <div class="ctitle" style="margin:0">📈 Статистика</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:4px">Сбор данных по мастерам с фильтрами</div>
+      </div>
+      <div class="card" style="cursor:pointer" onclick="showPg('staffdeep', null)">
+        <div class="ctitle" style="margin:0">🔎 Анализ</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:4px">Рейтинг мастеров, сравнение периодов</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🏭 ПРОИЗВОДСТВО: АНАЛИЗ (глубокий) -->
+  <div class="page" id="pg-proddeep">
+    <div id="hubBack_proddeep" style="margin-bottom:8px"><span onclick="showPg('prodanalysis',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Производство</span></div>
+    <div class="stitle">🔎 Анализ производства</div>
+    <div id="pdFilter" style="display:flex;gap:7px;margin-bottom:10px;overflow-x:auto">
+      <div class="fchip active" onclick="setPdPeriod('month',this)">Месяц</div>
+      <div class="fchip" onclick="setPdPeriod('lastmonth',this)">Прош. мес.</div>
+      <div class="fchip" onclick="setPdPeriod('week',this)">Неделя</div>
+      <div class="fchip" onclick="setPdPeriod('quarter',this)">Квартал</div>
+      <div class="fchip" onclick="setPdPeriod('year',this)">Год</div>
+      <div class="fchip" onclick="setPdPeriod('all',this)">Всё</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input class="fi" type="date" id="pdFrom" onchange="renderProdDeep()">
+      <input class="fi" type="date" id="pdTo" onchange="renderProdDeep()">
+    </div>
+    <div id="pdContent"></div>
+  </div>
+
+  <!-- 👥 СОТРУДНИКИ: СТАТИСТИКА (сбор данных) -->
+  <div class="page" id="pg-staffstats">
+    <div id="hubBack_staffstats" style="margin-bottom:8px"><span onclick="showPg('staffanalysis',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Сотрудники</span></div>
+    <div class="stitle">📈 Статистика по сотрудникам</div>
+    <div id="ssFilter" style="display:flex;gap:7px;margin-bottom:10px;overflow-x:auto">
+      <div class="fchip active" onclick="setSsPeriod('month',this)">Месяц</div>
+      <div class="fchip" onclick="setSsPeriod('lastmonth',this)">Прош. мес.</div>
+      <div class="fchip" onclick="setSsPeriod('week',this)">Неделя</div>
+      <div class="fchip" onclick="setSsPeriod('quarter',this)">Квартал</div>
+      <div class="fchip" onclick="setSsPeriod('year',this)">Год</div>
+      <div class="fchip" onclick="setSsPeriod('all',this)">Всё</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input class="fi" type="date" id="ssFrom" onchange="renderStaffStats()">
+      <input class="fi" type="date" id="ssTo" onchange="renderStaffStats()">
+    </div>
+    <div id="ssContent"></div>
+  </div>
+
+  <!-- 👥 СОТРУДНИКИ: АНАЛИЗ (глубокий) -->
+  <div class="page" id="pg-staffdeep">
+    <div id="hubBack_staffdeep" style="margin-bottom:8px"><span onclick="showPg('staffanalysis',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Сотрудники</span></div>
+    <div class="stitle">🔎 Анализ по сотрудникам</div>
+    <div id="sdFilter" style="display:flex;gap:7px;margin-bottom:10px;overflow-x:auto">
+      <div class="fchip active" onclick="setSdPeriod('month',this)">Месяц</div>
+      <div class="fchip" onclick="setSdPeriod('lastmonth',this)">Прош. мес.</div>
+      <div class="fchip" onclick="setSdPeriod('week',this)">Неделя</div>
+      <div class="fchip" onclick="setSdPeriod('quarter',this)">Квартал</div>
+      <div class="fchip" onclick="setSdPeriod('year',this)">Год</div>
+      <div class="fchip" onclick="setSdPeriod('all',this)">Всё</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input class="fi" type="date" id="sdFrom" onchange="renderStaffDeep()">
+      <input class="fi" type="date" id="sdTo" onchange="renderStaffDeep()">
+    </div>
+    <div id="sdContent"></div>
   </div>
 
   <!-- ⚙️ НАСТРОЙКИ (хаб) -->
@@ -874,7 +974,7 @@ function applyUpdate() {
   </div>
 
   <div class="page" id="pg-stats">
-    <div id="hubBack_stats" style="display:none;margin-bottom:8px"><span onclick="showPg('analytics',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Аналитика</span></div>
+    <div id="hubBack_stats" style="display:none;margin-bottom:8px"><span onclick="showPg('prodanalysis',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Производство</span></div>
     <div class="stitle">Статистика производства</div>
     <div id="statsFilter" style="display:flex;gap:7px;margin-bottom:10px;overflow-x:auto">
       <div class="fchip active" onclick="setStatsPeriod('month',this)">Месяц</div>
@@ -1524,8 +1624,8 @@ const ROLES = {
   заготовщик:    {tabs:['dash','blanks','extrawork'], label:'🪚 Заготовщик'},
   мастер:        {tabs:['dash','masterblanks','mywork','othertasks','delivery','zp'], label:'🔨 Мастер'},
   кладовщик:     {tabs:['warehouse','shipment','receiving','inventory','otmanual'], label:'📦 Кладовщик'},
-  управляющий:   {tabs:['dash','finance','analytics','settings'], label:'👑 Управляющий'},
-  администратор: {tabs:['dash','roles','finance','analytics','settings'], label:'🛡 Администратор'},
+  управляющий:   {tabs:['dash','goods','finance','analytics','settings'], label:'👑 Управляющий'},
+  администратор: {tabs:['dash','roles','goods','finance','analytics','settings'], label:'🛡 Администратор'},
   владелец:      {tabs:['owner','ownerstaff','ownerwarehouse','stats'], label:'💼 Владелец'},
 };
 
@@ -1558,6 +1658,12 @@ const TAB_CFG = {
   analytics: {icon:'📊', label:'Аналитика',page:'pg-analytics'},
   settings:  {icon:'⚙️', label:'Настройки',page:'pg-settings'},
   staff:     {icon:'👤', label:'Персонал', page:'pg-staff'},
+  goods:         {icon:'📦', label:'Товар',       page:'pg-goods'},
+  prodanalysis:  {icon:'🏭', label:'Производство', page:'pg-prodanalysis'},
+  staffanalysis: {icon:'👥', label:'Сотрудники',   page:'pg-staffanalysis'},
+  proddeep:      {icon:'🔎', label:'Анализ',       page:'pg-proddeep'},
+  staffstats:    {icon:'📈', label:'Статистика',   page:'pg-staffstats'},
+  staffdeep:     {icon:'🔎', label:'Анализ',       page:'pg-staffdeep'},
 };
 
 // ════════ UTILS ════════
@@ -1765,6 +1871,9 @@ function showPg(name,el){
   if(name==='zp')        renderZP();
   if(name==='zpay')      renderZPay();
   if(name==='stats')     renderStats();
+  if(name==='proddeep')  renderProdDeep();
+  if(name==='staffstats')renderStaffStats();
+  if(name==='staffdeep') renderStaffDeep();
   if(name==='owner')     renderOwnerDash();
   if(name==='ownerstaff') renderOwnerStaff();
   if(name==='ownerwarehouse') renderOwnerWarehouse();
@@ -5148,7 +5257,182 @@ function renderStats(){
 }
 
 // ════════════════════════════════
-// ARCHIVE MANAGEMENT
+// ОБЩИЙ ХЕЛПЕР ФИЛЬТРА ПО ДАТАМ (для новых страниц Анализа)
+// ════════════════════════════════
+function computeDateRangeForPreset(preset){
+  const now = new Date();
+  let from, to = new Date().toISOString().split('T')[0];
+  if(preset==='week'){ const d=new Date(); d.setDate(d.getDate()-7); from=d.toISOString().split('T')[0]; }
+  else if(preset==='month'){ from=new Date(now.getFullYear(),now.getMonth(),1).toISOString().split('T')[0]; to=new Date(now.getFullYear(),now.getMonth()+1,0).toISOString().split('T')[0]; }
+  else if(preset==='lastmonth'){ from=new Date(now.getFullYear(),now.getMonth()-1,1).toISOString().split('T')[0]; to=new Date(now.getFullYear(),now.getMonth(),0).toISOString().split('T')[0]; }
+  else if(preset==='quarter'){ const q=Math.floor(now.getMonth()/3); from=new Date(now.getFullYear(),q*3,1).toISOString().split('T')[0]; to=new Date(now.getFullYear(),q*3+3,0).toISOString().split('T')[0]; }
+  else if(preset==='year'){ from=new Date(now.getFullYear(),0,1).toISOString().split('T')[0]; to=new Date(now.getFullYear(),11,31).toISOString().split('T')[0]; }
+  else { from='2020-01-01'; }
+  return {from, to};
+}
+function filterByDateRange(arr, dateField, from, to){
+  return arr.filter(i=>{
+    if(!i[dateField]) return false;
+    if(i.isArchiveDraft) return false;
+    const d = i[dateField].split('T')[0];
+    if(from && d < from) return false;
+    if(to   && d > to)   return false;
+    return true;
+  });
+}
+function shiftRangeBack(from, to){
+  // Сдвигает диапазон [from,to] на такую же длину назад — для сравнения с предыдущим периодом
+  const f = new Date(from), t = new Date(to);
+  const days = Math.max(1, Math.round((t-f)/86400000)+1);
+  const newTo = new Date(f); newTo.setDate(newTo.getDate()-1);
+  const newFrom = new Date(newTo); newFrom.setDate(newFrom.getDate()-days+1);
+  return {from: newFrom.toISOString().split('T')[0], to: newTo.toISOString().split('T')[0]};
+}
+function pctChange(cur, prev){
+  if(!prev) return cur>0 ? '+100%' : '—';
+  const p = Math.round(((cur-prev)/prev)*100);
+  return (p>=0?'+':'')+p+'%';
+}
+
+// ════════════════════════════════
+// 🔎 АНАЛИЗ ПРОИЗВОДСТВА (Производство → Анализ)
+// ════════════════════════════════
+let pdPeriod = 'month';
+function setPdPeriod(p, el){
+  pdPeriod = p;
+  document.querySelectorAll('#pdFilter .fchip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  const {from,to} = computeDateRangeForPreset(p);
+  document.getElementById('pdFrom').value = from;
+  document.getElementById('pdTo').value = to;
+  renderProdDeep();
+}
+function renderProdDeep(){
+  const c = document.getElementById('pdContent'); if(!c) return;
+  let from = document.getElementById('pdFrom').value, to = document.getElementById('pdTo').value;
+  if(!from && !to){ const r = computeDateRangeForPreset(pdPeriod); from=r.from; to=r.to; document.getElementById('pdFrom').value=from; document.getElementById('pdTo').value=to; }
+
+  const baseItems = items.filter(i=>i.status==='received'||i.status==='shipped');
+  const cur  = filterByDateRange(baseItems, 'receivedAt', from, to);
+  const prevRange = shiftRangeBack(from, to);
+  const prev = filterByDateRange(baseItems, 'receivedAt', prevRange.from, prevRange.to);
+
+  const curRevenue = cur.reduce((s,i)=>s+(i.price||0),0);
+  const prevRevenue = prev.reduce((s,i)=>s+(i.price||0),0);
+
+  // Топ товаров по выручке за период
+  const byName = {};
+  cur.forEach(i=>{
+    const n = i.name||i.itemName||'—';
+    if(!byName[n]) byName[n] = {qty:0, sum:0};
+    byName[n].qty++; byName[n].sum += (i.price||0);
+  });
+  const topByRevenue = Object.entries(byName).sort((a,b)=>b[1].sum-a[1].sum).slice(0,7);
+  const topByQty = Object.entries(byName).sort((a,b)=>b[1].qty-a[1].qty).slice(0,7);
+
+  c.innerHTML = `
+    <div class="srow" style="margin-bottom:12px">
+      <div class="sc"><div class="sc-v" style="color:var(--accent)">${fmt(curRevenue)}</div><div class="sc-l">Выручка за период</div></div>
+      <div class="sc"><div class="sc-v" style="color:${curRevenue>=prevRevenue?'var(--inc)':'var(--exp)'}">${pctChange(curRevenue,prevRevenue)}</div><div class="sc-l">к пред. периоду</div></div>
+      <div class="sc"><div class="sc-v" style="color:var(--a5)">${cur.length}</div><div class="sc-l">Изделий</div></div>
+    </div>
+    <div class="card">
+      <div class="ctitle">🏆 Топ товаров по выручке</div>
+      ${topByRevenue.length ? topByRevenue.map(([name,s])=>`
+        <div class="at-row"><span class="at-lbl">${name}<br><span style="font-size:10px">${s.qty} шт</span></span><span class="at-val" style="color:var(--accent)">${fmt(s.sum)}</span></div>
+      `).join('') : '<div class="empty" style="padding:12px 0">Нет данных за период</div>'}
+    </div>
+    <div class="card" style="margin-top:10px">
+      <div class="ctitle">📦 Топ товаров по количеству</div>
+      ${topByQty.length ? topByQty.map(([name,s])=>`
+        <div class="at-row"><span class="at-lbl">${name}</span><span class="at-val" style="color:var(--a5)">${s.qty} шт</span></div>
+      `).join('') : '<div class="empty" style="padding:12px 0">Нет данных за период</div>'}
+    </div>
+  `;
+}
+
+// ════════════════════════════════
+// 📈 СТАТИСТИКА ПО СОТРУДНИКАМ (Сотрудники → Статистика — сбор данных)
+// ════════════════════════════════
+let ssPeriod = 'month';
+function setSsPeriod(p, el){
+  ssPeriod = p;
+  document.querySelectorAll('#ssFilter .fchip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  const {from,to} = computeDateRangeForPreset(p);
+  document.getElementById('ssFrom').value = from;
+  document.getElementById('ssTo').value = to;
+  renderStaffStats();
+}
+function renderStaffStats(){
+  const c = document.getElementById('ssContent'); if(!c) return;
+  let from = document.getElementById('ssFrom').value, to = document.getElementById('ssTo').value;
+  if(!from && !to){ const r = computeDateRangeForPreset(ssPeriod); from=r.from; to=r.to; document.getElementById('ssFrom').value=from; document.getElementById('ssTo').value=to; }
+
+  const baseItems = items.filter(i=>i.status==='received'||i.status==='shipped');
+  const cur = filterByDateRange(baseItems, 'receivedAt', from, to);
+
+  const byMaster = {};
+  cur.forEach(i=>{
+    const n = i.masterName||'—';
+    if(!byMaster[n]) byMaster[n] = {qty:0, zp:0};
+    byMaster[n].qty++; byMaster[n].zp += (i.zp||0);
+  });
+  const rows = Object.entries(byMaster).sort((a,b)=>b[1].zp-a[1].zp);
+
+  c.innerHTML = `
+    <div class="card">
+      <div class="ctitle">👤 По мастерам за период</div>
+      ${rows.length ? rows.map(([name,s])=>`
+        <div class="at-row"><span class="at-lbl">${name}<br><span style="font-size:10px">${s.qty} изделий</span></span><span class="at-val" style="color:var(--a5)">${fmt(s.zp)}</span></div>
+      `).join('') : '<div class="empty" style="padding:12px 0">Нет данных за период</div>'}
+    </div>
+  `;
+}
+
+// ════════════════════════════════
+// 🔎 АНАЛИЗ ПО СОТРУДНИКАМ (Сотрудники → Анализ — рейтинг и сравнение)
+// ════════════════════════════════
+let sdPeriod = 'month';
+function setSdPeriod(p, el){
+  sdPeriod = p;
+  document.querySelectorAll('#sdFilter .fchip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  const {from,to} = computeDateRangeForPreset(p);
+  document.getElementById('sdFrom').value = from;
+  document.getElementById('sdTo').value = to;
+  renderStaffDeep();
+}
+function renderStaffDeep(){
+  const c = document.getElementById('sdContent'); if(!c) return;
+  let from = document.getElementById('sdFrom').value, to = document.getElementById('sdTo').value;
+  if(!from && !to){ const r = computeDateRangeForPreset(sdPeriod); from=r.from; to=r.to; document.getElementById('sdFrom').value=from; document.getElementById('sdTo').value=to; }
+
+  const baseItems = items.filter(i=>i.status==='received'||i.status==='shipped');
+  const cur = filterByDateRange(baseItems, 'receivedAt', from, to);
+
+  const byMaster = {};
+  cur.forEach(i=>{
+    const n = i.masterName||'—';
+    if(!byMaster[n]) byMaster[n] = {qty:0, zp:0};
+    byMaster[n].qty++; byMaster[n].zp += (i.zp||0);
+  });
+  const ranked = Object.entries(byMaster).map(([name,s])=>({
+    name, qty:s.qty, zp:s.zp, avg: s.qty ? Math.round(s.zp/s.qty) : 0
+  })).sort((a,b)=>b.zp-a.zp);
+
+  c.innerHTML = `
+    <div class="card">
+      <div class="ctitle">🏆 Рейтинг мастеров (по ЗП за период)</div>
+      ${ranked.length ? ranked.map((r,idx)=>`
+        <div class="at-row">
+          <span class="at-lbl">${idx===0?'🥇':idx===1?'🥈':idx===2?'🥉':(idx+1)+'.'} ${r.name}<br><span style="font-size:10px">${r.qty} изделий · в среднем ${fmt(r.avg)}/шт</span></span>
+          <span class="at-val" style="color:var(--accent)">${fmt(r.zp)}</span>
+        </div>
+      `).join('') : '<div class="empty" style="padding:12px 0">Нет данных за период</div>'}
+    </div>
+  `;
+}
 // ════════════════════════════════
 
 function renderImportPage(){
