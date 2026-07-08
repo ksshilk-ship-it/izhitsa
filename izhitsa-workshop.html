@@ -4483,6 +4483,12 @@ function renderAdmin(){
         <div style="font-size:11px;color:var(--t2);margin-top:8px">
           Восстановит группу запасов "Армения" в базе данных. Товары будут добавлены автоматически.
         </div>
+        <button onclick="moveGroupsToReserves(['Полка Володи','Образцы для ресторанов'])" style="width:100%;padding:12px;background:var(--a4);color:#000;border:none;border-radius:10px;cursor:pointer;font-weight:700;font-size:13px;margin-top:10px">
+          🟡 Перенести "Полка Володи" и "Образцы для ресторанов" в Запасы
+        </button>
+        <div style="font-size:11px;color:var(--t2);margin-top:8px">
+          Уберёт эти группы из общего баланса "Готовы к отгрузке" и переместит во вкладку "Запасы". Данные позиций не меняются.
+        </div>
       </div>` + `
       <div class="stitle" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <span>🛡 Управление персоналом</span>
@@ -7833,8 +7839,9 @@ function openFiGroupDetail(groupId){
       <div class="at-row"><span class="at-lbl">Ожидалось товаров</span><span class="at-val">${totalQty}</span></div>
       ${g.status==='active'?`<div class="at-row"><span class="at-lbl">Создано на складе</span><span class="at-val" style="color:${mismatch?'var(--exp)':'var(--inc)'}">${realCount}${mismatch?' ⚠️ не совпадает':' ✅'}</span></div>`:''}
       <div class="at-row"><span class="at-lbl">Сумма</span><span class="at-val" style="color:var(--accent)">${fmt(totalSum)}</span></div>
-      <div class="at-row"><span class="at-lbl">Создана</span><span class="at-val">${fmtDT(g.createdAt)}</span></div>
-      ${g.activatedAt?`<div class="at-row"><span class="at-lbl">Активирована</span><span class="at-val">${fmtDT(g.activatedAt)}</span></div>`:''}
+      <div class="at-row"><span class="at-lbl">Создана</span><span class="at-val">${fmtDT(g.createdAt)}${g.createdBy?' · '+g.createdBy:''}</span></div>
+      ${g.activatedAt?`<div class="at-row"><span class="at-lbl">Активирована</span><span class="at-val">${fmtDT(g.activatedAt)}${g.activatedBy?' · '+g.activatedBy:''}</span></div>`:''}
+      ${g.archivedAt?`<div class="at-row"><span class="at-lbl">В архиве с</span><span class="at-val">${fmtDT(g.archivedAt)}${g.archivedBy?' · '+g.archivedBy:''}</span></div>`:''}
     </div>
     ${mismatch?`<div style="background:rgba(255,80,80,0.1);border:1px solid var(--exp);border-radius:8px;padding:10px;margin-top:8px;font-size:12px;color:var(--exp)">
       ⚠️ Расхождение: в записи ${totalQty} шт., на складе ${realCount} шт. (разница: ${totalQty-realCount}).
@@ -8003,6 +8010,21 @@ async function reactivateFiGroup(groupId){
     closeMo('fiGroupDetailMo');
     showToast(`✅ Доактивировано: +${created} шт. на складе`);
   }catch(e){ showToast('Ошибка: '+e.message); }
+}
+
+// НОВОЕ! Перевести конкретные группы (по имени) из активных в Запасы — разовая ручная операция
+async function moveGroupsToReserves(groupNames){
+  const targets = _fiGroups.filter(g => groupNames.includes(g.groupName) && g.status === 'active');
+  if(!targets.length){
+    showToast('Активных групп с такими названиями не найдено (возможно, уже в запасах)');
+    return;
+  }
+  if(!confirm(`Перенести в Запасы группы: ${targets.map(g=>g.groupName).join(', ')}?\n\nИх товары исчезнут из общего баланса "Готовы к отгрузке" и появятся во вкладке "Запасы".`)) return;
+  for(const g of targets){
+    await archiveFirstInvGroup(g.id);
+  }
+  loadDataFromFirebase();
+  setTimeout(()=>renderWarehouse(), 400);
 }
 
 async function archiveFirstInvGroup(groupId){
