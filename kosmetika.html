@@ -22,7 +22,7 @@
     --white:#FFFDF8;
   }
   *{box-sizing:border-box;}
-  body{margin:0; background:var(--kraft); color:var(--ink); font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased;}
+  body{margin:0; background:var(--kraft); color:var(--ink); font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased; overflow-x:hidden;}
   header{padding:22px 20px 14px; border-bottom:2px solid var(--ink); background:var(--paper);}
   header h1{font-family:'PT Serif',serif; font-size:1.5rem; margin:0 0 2px; letter-spacing:0.3px;}
   header .sub{font-size:0.78rem; color:var(--ink-soft); text-transform:uppercase; letter-spacing:1.5px;}
@@ -101,6 +101,17 @@
   .cal-legend{font-size:0.7rem; color:var(--ink-soft); margin-top:10px; line-height:1.6;}
   .preset-row{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;}
   .preset-chip{padding:4px 10px; font-size:0.74rem; border:1px solid var(--line); border-radius:20px; background:var(--paper); cursor:pointer; color:var(--ink-soft);}
+  .table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -2px;}
+  .table-scroll table{white-space:nowrap;}
+  .seller-card{background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:10px;}
+  .seller-card .sc-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;}
+  .seller-card .sc-name{font-family:'PT Serif',serif; font-size:0.95rem;}
+  .seller-card .sc-shifts{font-size:0.72rem; color:var(--ink-soft);}
+  .sc-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;}
+  .sc-stat{background:var(--white); border:1px solid var(--line); border-radius:6px; padding:7px 9px;}
+  .sc-stat .label{font-size:0.68rem; color:var(--ink-soft); display:block;}
+  .sc-stat .num{font-size:0.85rem; display:block; margin-top:2px;}
+  .sc-total-row{display:flex; justify-content:space-between; align-items:center; padding-top:6px; border-top:1px dashed var(--line); margin-top:4px;}
 </style>
 </head>
 <body>
@@ -177,13 +188,23 @@ function getRateForDate(dateStr){
   for(const p of periods){ if(p.from<=dateStr) applicable=p; else break; }
   return applicable;
 }
-function shiftPayForDate(sale){
+// Разбивка ЗП за смену: оклад / % от продаж / факт (если задано вручную при импорте истории)
+function shiftPayBreakdown(sale){
   if(sale.salaryOverride!==undefined && sale.salaryOverride!==null && sale.salaryOverride!==''){
-    return Number(sale.salaryOverride);
+    const v = Number(sale.salaryOverride);
+    return {base:0, commission:0, override:v, total:v};
   }
   const rate = getRateForDate(sale.date);
-  return shiftPay(saleGross(sale), sale.discount, rate.tiers||[], Number(rate.base||0), Number(rate.threshold||0));
+  const base = Number(rate.base||0);
+  const threshold = Number(rate.threshold||0);
+  const net = saleGross(sale) - Number(sale.discount||0);
+  if(net<=threshold) return {base, commission:0, override:0, total:base};
+  const tier = (rate.tiers||[]).find(t=> net>=t.min && (t.max===null || net<t.max));
+  const tRate = tier ? tier.rate : 0;
+  const commission = (net-threshold)*tRate/100;
+  return {base, commission, override:0, total:base+commission};
 }
+function shiftPayForDate(sale){ return shiftPayBreakdown(sale).total; }
 function shiftTravelForDate(sale){
   return Number(getRateForDate(sale.date).travel||0);
 }
@@ -326,14 +347,24 @@ function render(){
   renderNav();
   const main = document.getElementById('main');
   if(!loaded){ main.innerHTML='<div class="empty">Загрузка…</div>'; return; }
-  if(currentTab==='overview') return renderOverview(main);
-  if(currentTab==='forecast') return renderForecast(main);
-  if(currentTab==='analytics') return renderAnalytics(main);
-  if(currentTab==='sales') return renderSales(main);
-  if(currentTab==='expenses') return renderExpenses(main);
-  if(currentTab==='commission') return renderCommission(main);
-  if(currentTab==='import') return renderImport(main);
-  if(currentTab==='settings') return renderSettings(main);
+  if(currentTab==='overview') renderOverview(main);
+  else if(currentTab==='forecast') renderForecast(main);
+  else if(currentTab==='analytics') renderAnalytics(main);
+  else if(currentTab==='sales') renderSales(main);
+  else if(currentTab==='expenses') renderExpenses(main);
+  else if(currentTab==='commission') renderCommission(main);
+  else if(currentTab==='import') renderImport(main);
+  else if(currentTab==='settings') renderSettings(main);
+  wrapTablesForScroll(main);
+}
+function wrapTablesForScroll(main){
+  main.querySelectorAll('table').forEach(t=>{
+    if(t.parentElement && t.parentElement.classList.contains('table-scroll')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'table-scroll';
+    t.parentNode.insertBefore(wrap, t);
+    wrap.appendChild(t);
+  });
 }
 
 // ---------- OVERVIEW ----------
@@ -992,13 +1023,18 @@ function buildSalaryMonthlyData(){
       const shifts = months[k][name];
       const shiftsCount = shifts.length;
       const revenue = shifts.reduce((a,s)=>a+saleGross(s),0);
-      const salesPay = shifts.reduce((a,s)=>a+shiftPayForDate(s),0);
+      let oklad=0, commission=0, override=0;
+      shifts.forEach(s=>{
+        const b = shiftPayBreakdown(s);
+        oklad += b.base; commission += b.commission; override += b.override;
+      });
       const travel = shifts.reduce((a,s)=>a+shiftTravelForDate(s),0);
-      const totalAccrued = salesPay + travel;
+      const totalNoTravel = oklad + commission + override;
+      const totalWithTravel = totalNoTravel + travel;
       const avgRevenue = shiftsCount ? revenue/shiftsCount : 0;
-      const avgEarn = shiftsCount ? totalAccrued/shiftsCount : 0;
-      const pct = revenue ? totalAccrued/revenue*100 : 0;
-      return {name, shiftsCount, revenue, totalAccrued, avgRevenue, avgEarn, pct};
+      const avgEarn = shiftsCount ? totalWithTravel/shiftsCount : 0;
+      const pct = revenue ? totalWithTravel/revenue*100 : 0;
+      return {name, shiftsCount, revenue, oklad, commission, override, travel, totalNoTravel, totalWithTravel, avgRevenue, avgEarn, pct};
     });
     return {key:k, label:monthLabel(k), rows};
   });
@@ -1063,18 +1099,23 @@ function renderCommission(main){
         monthlySalary.map((m,idx)=>`
           <details class="month-group" ${idx===0?'open':''}>
             <summary class="month-summary"><span>${m.label}</span></summary>
-            <table><thead><tr><th>Продавец</th><th>Смен</th><th>Выручка</th><th>Начислено</th><th>Выр./день</th><th>ЗП/день</th><th>% от выр.</th></tr></thead><tbody>
-              ${m.rows.map(r=>`
-                <tr>
-                  <td class="txt">${r.name}</td>
-                  <td>${r.shiftsCount}</td>
-                  <td>${fmt(r.revenue)}</td>
-                  <td>${fmt(r.totalAccrued)}</td>
-                  <td>${fmt(r.avgRevenue)}</td>
-                  <td>${fmt(r.avgEarn)}</td>
-                  <td>${r.pct.toFixed(1)}%</td>
-                </tr>`).join('')}
-            </tbody></table>
+            ${m.rows.map(r=>`
+              <div class="seller-card">
+                <div class="sc-head">
+                  <span class="sc-name">${r.name}</span>
+                  <span class="sc-shifts">${r.shiftsCount} смен · выручка ${fmt(r.revenue)}</span>
+                </div>
+                <div class="sc-grid">
+                  <div class="sc-stat"><span class="label">Оклад</span><span class="num">${fmt(r.oklad)}</span></div>
+                  <div class="sc-stat"><span class="label">% от продаж</span><span class="num">${fmt(r.commission)}</span></div>
+                  <div class="sc-stat"><span class="label">Проезд</span><span class="num">${fmt(r.travel)}</span></div>
+                  <div class="sc-stat"><span class="label">ЗП/день (с проездом)</span><span class="num">${fmt(r.avgEarn)}</span></div>
+                </div>
+                ${r.override>0 ? `<div class="note">Из них внесено вручную (факт из импорта истории): ${fmt(r.override)}</div>` : ''}
+                <div class="sc-total-row"><span class="label">Итого без проезда</span><span class="num">${fmt(r.totalNoTravel)}</span></div>
+                <div class="sc-total-row"><span class="label">Итого с проездом</span><span class="num big pos">${fmt(r.totalWithTravel)}</span></div>
+                <div class="row" style="margin-top:6px;"><span class="label">% ЗП от выручки</span><span class="num">${r.pct.toFixed(1)}%</span></div>
+              </div>`).join('')}
           </details>`).join('')}
     </div>
 
@@ -1150,25 +1191,32 @@ function renderCommission(main){
     const revenue = shifts.reduce((a,s)=>a+saleGross(s),0);
     const travel = shifts.reduce((a,s)=>a+shiftTravelForDate(s),0);
 
+    let oklad=0, commission=0, override=0;
     const dayRows = shifts.map(s=>{
       const gr = saleGross(s);
-      const pay = shiftPayForDate(s);
-      return {date:s.date, gr, discount:Number(s.discount||0), pay, isOverride: s.salaryOverride!==undefined && s.salaryOverride!==null && s.salaryOverride!==''};
+      const b = shiftPayBreakdown(s);
+      oklad += b.base; commission += b.commission; override += b.override;
+      return {date:s.date, gr, discount:Number(s.discount||0), pay:b.total, isOverride: b.override>0};
     });
-    const salesPay = dayRows.reduce((a,r)=>a+r.pay,0);
-    const totalAccrued = salesPay + travel;
+    const totalNoTravel = oklad + commission + override;
+    const totalWithTravel = totalNoTravel + travel;
 
     const factPaid = state.expenses.filter(e=>e.seller===salarySellerName && (e.category==='ЗП'||e.category==='Проезд') && e.status==='paid' && e.paidDate && e.paidDate>=salaryFrom && e.paidDate<=salaryTo)
       .reduce((a,e)=>a+Number(e.amount||0),0);
-    const diff = totalAccrued - factPaid;
+    const diff = totalWithTravel - factPaid;
 
     box.innerHTML = `
       <div class="row"><span class="label">Смен</span><span class="num">${shiftsCount}</span></div>
       <div class="row"><span class="label">Выручка</span><span class="num">${fmt(revenue)}</span></div>
-      <div class="row"><span class="label">Начислено по продажам (по дням)</span><span class="num">${fmt(salesPay)}</span></div>
-      <div class="row"><span class="label">Проезд</span><span class="num">${fmt(travel)}</span></div>
-      <div class="row" style="border-top:1px solid var(--line); padding-top:10px;"><span class="label">Итого начислено</span><span class="num big">${fmt(totalAccrued)}</span></div>
-      <div class="row"><span class="label">Факт выплачено</span><span class="num">${fmt(factPaid)}</span></div>
+      <div class="sc-grid" style="margin-top:10px;">
+        <div class="sc-stat"><span class="label">Оклад</span><span class="num">${fmt(oklad)}</span></div>
+        <div class="sc-stat"><span class="label">% от продаж</span><span class="num">${fmt(commission)}</span></div>
+        <div class="sc-stat"><span class="label">Проезд</span><span class="num">${fmt(travel)}</span></div>
+        <div class="sc-stat"><span class="label">Ручной факт (импорт)</span><span class="num">${fmt(override)}</span></div>
+      </div>
+      <div class="sc-total-row"><span class="label">Итого без проезда</span><span class="num">${fmt(totalNoTravel)}</span></div>
+      <div class="sc-total-row"><span class="label">Итого с проездом</span><span class="num big pos">${fmt(totalWithTravel)}</span></div>
+      <div class="row" style="margin-top:8px;"><span class="label">Факт выплачено (по расходам)</span><span class="num">${fmt(factPaid)}</span></div>
       <div class="row"><span class="label">Остаток к выплате</span><span class="num ${diff>=0?'neg':'pos'}">${fmt(diff)}</span></div>
       ${dayRows.length>0 ? `
       <details style="margin-top:10px;">
