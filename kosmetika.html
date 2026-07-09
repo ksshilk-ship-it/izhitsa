@@ -6,6 +6,7 @@
 <title>Косметика — Финансы</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
     --kraft:#EDE4D3;
@@ -142,6 +143,7 @@ let currentTab = 'overview';
 let loaded = false;
 let editSaleId = null;
 let editExpenseId = null;
+let copyDraft = null;
 let overviewPeriod = null;
 let forecastMonth = null;
 let salaryFrom = null, salaryTo = null, salarySellerName = '';
@@ -254,7 +256,7 @@ function renderNav(){
     const b = document.createElement('button');
     b.textContent = t.label;
     if(t.id===currentTab) b.className='active';
-    b.onclick = ()=>{ currentTab=t.id; editSaleId=null; editExpenseId=null; render(); };
+    b.onclick = ()=>{ currentTab=t.id; editSaleId=null; editExpenseId=null; copyDraft=null; render(); };
     nav.appendChild(b);
   });
 }
@@ -610,49 +612,52 @@ function renderSales(main){
 // ---------- EXPENSES ----------
 function renderExpenses(main){
   const editing = editExpenseId ? state.expenses.find(e=>e.id===editExpenseId) : null;
+  const prefill = editing || copyDraft;
+  const isCopy = !editing && !!copyDraft;
   const grouped = {};
   state.expenses.forEach(e=>{ const k=monthKey(e.dueDate)||'—'; (grouped[k]=grouped[k]||[]).push(e); });
   const monthKeys = Object.keys(grouped).sort().reverse();
 
   main.innerHTML = `
     <div class="card">
-      <h2>${editing ? 'Редактировать расход' : 'Новый расход / платёж'}</h2>
+      <h2>${editing ? 'Редактировать расход' : isCopy ? 'Копия расхода — проверьте дату' : 'Новый расход / платёж'}</h2>
       <label class="field">Категория</label>
-      <select id="e-cat">${state.expenseCategories.map(c=>`<option ${editing && editing.category===c ? 'selected':''}>${c}</option>`).join('')}</select>
+      <select id="e-cat">${state.expenseCategories.map(c=>`<option ${prefill && prefill.category===c ? 'selected':''}>${c}</option>`).join('')}</select>
       ${state.suppliers.length>0 ? `
       <label class="field">Поставщик (необязательно)</label>
       <select id="e-supplier">
         <option value="">— не выбран —</option>
-        ${state.suppliers.map(s=>`<option value="${s.name}" ${editing && editing.supplier===s.name ? 'selected':''}>${s.name} (${s.type})</option>`).join('')}
+        ${state.suppliers.map(s=>`<option value="${s.name}" ${prefill && prefill.supplier===s.name ? 'selected':''}>${s.name} (${s.type})</option>`).join('')}
       </select>` : ''}
       ${state.sellers.length>0 ? `
       <label class="field">Продавец (для ЗП / проезда)</label>
       <select id="e-seller">
         <option value="">— не выбран —</option>
-        ${state.sellers.map(s=>`<option value="${s.name}" ${editing && editing.seller===s.name ? 'selected':''}>${s.name}</option>`).join('')}
+        ${state.sellers.map(s=>`<option value="${s.name}" ${prefill && prefill.seller===s.name ? 'selected':''}>${s.name}</option>`).join('')}
       </select>` : ''}
       <label class="field">Описание</label>
-      <input type="text" id="e-desc" placeholder="напр. Аренда за июль" value="${editing ? (editing.description||'') : ''}">
+      <input type="text" id="e-desc" placeholder="напр. Аренда за июль" value="${prefill ? (prefill.description||'') : ''}">
       ${state.descriptionPresets.length>0 ? `<div class="preset-row">${state.descriptionPresets.map(p=>`<button type="button" class="preset-chip" data-preset="${p}">${p}</button>`).join('')}</div>` : ''}
       <button type="button" class="btn secondary small" id="e-save-preset">Сохранить описание как шаблон</button>
       <div class="two-col">
-        <div><label class="field">Сумма</label><input type="number" id="e-amount" placeholder="0" value="${editing ? editing.amount : ''}"></div>
-        <div><label class="field">Дата</label><input type="date" id="e-date" value="${editing ? editing.dueDate : todayISO()}"></div>
+        <div><label class="field">Сумма</label><input type="number" id="e-amount" placeholder="0" value="${prefill ? prefill.amount : ''}"></div>
+        <div><label class="field">Дата</label><input type="date" id="e-date" value="${editing ? editing.dueDate : todayISO()}" ${isCopy?'autofocus':''}></div>
       </div>
       <label class="field">Статус</label>
       <select id="e-status">
-        <option value="planned" ${editing && editing.status==='planned' ? 'selected':''}>Запланировано</option>
-        <option value="paid" ${editing && editing.status==='paid' ? 'selected':''}>Оплачено</option>
+        <option value="planned" ${prefill && prefill.status==='planned' ? 'selected':''}>Запланировано</option>
+        <option value="paid" ${prefill && prefill.status==='paid' ? 'selected':''}>Оплачено</option>
       </select>
       <label class="field">Оплачено со счёта</label>
       <select id="e-paidfrom">
         <option value="">— не выбран —</option>
-        ${state.accounts.map(a=>`<option value="${a.id}" ${editing && editing.paidFrom===a.id ? 'selected':''}>${a.name}</option>`).join('')}
+        ${state.accounts.map(a=>`<option value="${a.id}" ${prefill && prefill.paidFrom===a.id ? 'selected':''}>${a.name}</option>`).join('')}
       </select>
       <label class="field">Дата фактической оплаты</label>
-      <input type="date" id="e-paiddate" value="${editing && editing.paidDate ? editing.paidDate : ''}">
+      <input type="date" id="e-paiddate" value="${prefill && prefill.paidDate ? prefill.paidDate : ''}">
       <button class="btn" id="e-add">${editing ? 'Сохранить изменения' : 'Добавить'}</button>
-      ${editing ? '<button class="btn secondary" id="e-cancel">Отмена</button>' : ''}
+      ${prefill ? '<button class="btn secondary" id="e-cancel">Отмена</button>' : ''}
+      ${isCopy ? '<div class="note">Все поля скопированы из исходного расхода — при необходимости поменяйте только дату (и статус, если он ещё не оплачен).</div>' : ''}
     </div>
 
     ${monthKeys.length===0 ? '<div class="card"><div class="empty">Пока нет записей</div></div>' :
@@ -668,7 +673,8 @@ function renderExpenses(main){
             ${catKeys.map(cat=>{
               const catRows = byCat[cat].slice().sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
               const catTotal = catRows.reduce((a,e)=>a+Number(e.amount||0),0);
-              return `<div class="cat-group-title">${cat} — ${fmt(catTotal)}</div>
+              return `<details class="cat-group">
+              <summary class="cat-group-title">${cat} — ${fmt(catTotal)}</summary>
               <table><thead><tr><th>Дата</th><th>Описание</th><th>Сумма</th><th>Статус</th><th>Счёт</th><th>Оплата</th><th></th></tr></thead><tbody>
                 ${catRows.map(e=>`
                   <tr>
@@ -689,7 +695,8 @@ function renderExpenses(main){
                       <button class="del-x" data-del="${e.id}">✕</button>
                     </td>
                   </tr>`).join('')}
-              </tbody></table>`;
+              </tbody></table>
+              </details>`;
             }).join('')}
           </details>
         </div>`;
@@ -735,23 +742,23 @@ function renderExpenses(main){
       state.expenses.push(exp);
       applyExpenseDebit(exp);
     }
+    copyDraft = null;
     saveState(); render();
   };
 
   const cancelBtn = document.getElementById('e-cancel');
-  if(cancelBtn) cancelBtn.onclick = ()=>{ editExpenseId=null; render(); };
+  if(cancelBtn) cancelBtn.onclick = ()=>{ editExpenseId=null; copyDraft=null; render(); };
 
   main.querySelectorAll('[data-edit-exp]').forEach(btn=>{
-    btn.onclick = ()=>{ editExpenseId = btn.dataset.editExp; render(); window.scrollTo(0,0); };
+    btn.onclick = ()=>{ editExpenseId = btn.dataset.editExp; copyDraft=null; render(); window.scrollTo(0,0); };
   });
   main.querySelectorAll('[data-copy-exp]').forEach(btn=>{
     btn.onclick = ()=>{
       const src = state.expenses.find(e=>e.id===btn.dataset.copyExp);
       if(!src) return;
-      const copy = Object.assign({}, src, {id:uid(), status:'planned', paidFrom:null, paidDate:null});
-      state.expenses.push(copy);
-      editExpenseId = copy.id;
-      saveState(); render(); window.scrollTo(0,0);
+      copyDraft = {category:src.category, supplier:src.supplier, seller:src.seller, description:src.description, amount:src.amount, dueDate:src.dueDate, status:src.status, paidFrom:src.paidFrom, paidDate:src.paidDate};
+      editExpenseId = null;
+      render(); window.scrollTo(0,0);
     };
   });
   main.querySelectorAll('[data-del]').forEach(btn=>{
@@ -1019,42 +1026,70 @@ function renderCommission(main){
 }
 
 // ---------- IMPORT HISTORY ----------
+function downloadSalaryTemplate(){
+  const headers = ['Дата','Продавец','Нал','Безнал','Скидка','Чистыми','ЗП'];
+  const example = ['2021-03-01','Оля',12000,8000,500,9800,2600];
+  const example2 = ['2021-03-02','Эллирика',15400,6200,0,11900,''];
+  const ws = XLSX.utils.aoa_to_sheet([headers, example, example2]);
+  ws['!cols'] = [{wch:12},{wch:14},{wch:10},{wch:10},{wch:10},{wch:10},{wch:10}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Данные');
+  XLSX.writeFile(wb, 'kosmetika-shablon.xlsx');
+}
+
 function renderImport(main){
   main.innerHTML = `
     <div class="card">
       <h2>Импорт данных за прошлые годы</h2>
       <div class="note">
-        Одна строка — один день/смена. Поля через точку с запятой, в этом порядке:<br>
-        <b>Дата;Продавец;Нал;Безнал;Скидка;Чистыми;ЗП</b><br><br>
-        Дата — в формате ГГГГ-ММ-ДД.<br>
-        ЗП — необязательно. Если указана, она используется как факт и <u>не пересчитывается</u> по текущим ставкам (пригодится для прошлых лет со старыми правилами). Если оставить пустым — ЗП посчитается по периодам ставок (вкладка «ЗП продавца»), актуальным на дату смены.
+        Столбцы (первая строка — заголовки, как в шаблоне):<br>
+        <b>Дата · Продавец · Нал · Безнал · Скидка · Чистыми · ЗП</b><br><br>
+        Дата — в формате ГГГГ-ММ-ДД (или обычная дата из Excel, распознается автоматически).<br>
+        ЗП — необязательно. Если указана, используется как факт и <u>не пересчитывается</u> по текущим ставкам — пригодится для прошлых лет со старыми правилами. Если оставить пустой ячейку — ЗП посчитается по периодам ставок (вкладка «ЗП продавца»), актуальным на дату смены.
       </div>
-      <textarea id="imp-text" style="min-height:220px;" placeholder="2021-03-01;Оля;12000;8000;500;9800;2600
-2021-03-02;Эллирика;15400;6200;0;11900;3100
-2021-03-03;Оля;9000;4000;0;7200;"></textarea>
-      <button class="btn" id="imp-run">Импортировать</button>
-      <div id="imp-result" style="margin-top:12px;"></div>
+      <button class="btn secondary" id="imp-template">Скачать шаблон Excel</button>
+
+      <label class="field">Загрузить файл (.xlsx / .xls / .csv)</label>
+      <input type="file" id="imp-file" accept=".xlsx,.xls,.csv">
+      <div id="imp-file-result" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>Или вставить текстом вручную</summary>
+        <div class="note">Одна строка — один день, через точку с запятой: Дата;Продавец;Нал;Безнал;Скидка;Чистыми;ЗП</div>
+        <textarea id="imp-text" style="min-height:160px;" placeholder="2021-03-01;Оля;12000;8000;500;9800;2600
+2021-03-02;Эллирика;15400;6200;0;11900;3100"></textarea>
+        <button class="btn" id="imp-run">Импортировать текст</button>
+        <div id="imp-result" style="margin-top:12px;"></div>
+      </details>
     </div>
   `;
 
-  document.getElementById('imp-run').onclick = ()=>{
-    const raw = document.getElementById('imp-text').value.trim();
-    const box = document.getElementById('imp-result');
-    if(!raw){ box.innerHTML=''; return; }
+  document.getElementById('imp-template').onclick = downloadSalaryTemplate;
+
+  function importRows(rows){
     let added = 0, skipped = 0;
-    raw.split('\n').map(l=>l.trim()).filter(Boolean).forEach(line=>{
-      const parts = line.split(';').map(p=>p.trim());
-      if(!parts[0]){ skipped++; return; }
+    rows.forEach(row=>{
+      let dateVal = row[0];
+      let dateStr;
+      if(dateVal instanceof Date){
+        dateStr = dateVal.getFullYear()+'-'+pad2(dateVal.getMonth()+1)+'-'+pad2(dateVal.getDate());
+      } else {
+        dateStr = dateVal!==undefined && dateVal!==null ? String(dateVal).trim() : '';
+      }
+      if(!dateStr || dateStr.toLowerCase()==='дата'){ if(dateStr) skipped++; return; }
       const cashAcc = getAccountByRole('cash'); const bankAcc = getAccountByRole('noncash');
+      const salaryRaw = row[6];
       const sale = {
-        id:uid(),
-        date:parts[0],
-        seller:parts[1]||'',
-        cash:Number(parts[2])||0,
-        cashless:Number(parts[3])||0,
-        discount:Number(parts[4])||0,
-        net:Number(parts[5])||0,
-        salaryOverride: (parts[6]!==undefined && parts[6]!=='') ? Number(parts[6]) : null,
+        id: uid(),
+        date: dateStr,
+        seller: row[1]!==undefined && row[1]!==null ? String(row[1]).trim() : '',
+        cash: Number(row[2])||0,
+        cashless: Number(row[3])||0,
+        discount: Number(row[4])||0,
+        net: Number(row[5])||0,
+        salaryOverride: (salaryRaw!==undefined && salaryRaw!==null && salaryRaw!=='') ? Number(salaryRaw) : null,
         cashAccountId: cashAcc?cashAcc.id:null,
         bankAccountId: bankAcc?bankAcc.id:null
       };
@@ -1063,7 +1098,43 @@ function renderImport(main){
       added++;
     });
     saveState();
-    box.innerHTML = `<div class="note">Импортировано записей: ${added}${skipped?`, пропущено (без даты): ${skipped}`:''}. Данные появятся на вкладках «Продажи» и «ЗП продавца».</div>`;
+    return {added, skipped};
+  }
+
+  document.getElementById('imp-file').onchange = (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const box = document.getElementById('imp-file-result');
+    box.innerHTML = '<div class="note">Читаю файл…</div>';
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      try{
+        const data = new Uint8Array(ev.target.result);
+        const wb = XLSX.read(data, {type:'array', cellDates:true});
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
+        const dataRows = rows.slice(1).filter(r=>r.length>0 && r[0]!=='');
+        const {added, skipped} = importRows(dataRows);
+        render();
+        setTimeout(()=>{
+          const box2 = document.getElementById('imp-file-result');
+          if(box2) box2.innerHTML = `<div class="note">Импортировано записей: ${added}${skipped?`, пропущено: ${skipped}`:''}.</div>`;
+        },0);
+      }catch(err){
+        box.innerHTML = '<div class="note">Не удалось прочитать файл. Проверьте, что это .xlsx/.xls/.csv, сохранённый из Excel.</div>';
+        console.error(err);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  document.getElementById('imp-run').onclick = ()=>{
+    const raw = document.getElementById('imp-text').value.trim();
+    const box = document.getElementById('imp-result');
+    if(!raw){ box.innerHTML=''; return; }
+    const rows = raw.split('\n').map(l=>l.trim()).filter(Boolean).map(line=>line.split(';').map(p=>p.trim()));
+    const {added, skipped} = importRows(rows);
+    box.innerHTML = `<div class="note">Импортировано записей: ${added}${skipped?`, пропущено: ${skipped}`:''}. Данные появятся на вкладках «Продажи» и «ЗП продавца».</div>`;
     document.getElementById('imp-text').value = '';
   };
 }
