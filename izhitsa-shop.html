@@ -353,11 +353,11 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
         <div class="card" style="margin-bottom:10px">
           <div class="ctitle">Новая накладная</div>
           <div class="row2">
-            <div class="fg"><label class="fl">Номер накладной</label>
-              <input class="fi" id="manInvNum" placeholder="НАК-001" oninput="saveManInvDraft()">
+            <div class="fg"><label class="fl">Номер накладной (авто)</label>
+              <input class="fi" id="manInvNum" placeholder="НАК-001" readonly style="opacity:0.85">
             </div>
-            <div class="fg"><label class="fl">Дата накладной</label>
-              <input class="fi" type="date" id="manInvDate" style="-webkit-appearance:none;color-scheme:dark" oninput="saveManInvDraft()">
+            <div class="fg"><label class="fl">Дата накладной (приёмки)</label>
+              <input class="fi" type="date" id="manInvDate" style="-webkit-appearance:none;color-scheme:dark" oninput="var ne=document.getElementById('manInvNum');if(ne)ne.value=generateManInvNum(this.value);saveManInvDraft()">
             </div>
           </div>
           <div class="fg"><label class="fl">Откуда (поставщик)</label>
@@ -3285,12 +3285,14 @@ function doLogin(){
           doLogin();
           return;
         }
+        _shiftForceClosedRemotely = false;
         session = existing;
         journal = loadAndCleanJournal();
         startApp();
         syncLiveShift();
         showToast('📂 Восстановлена незакрытая смена');
       }).catch(function(){
+        _shiftForceClosedRemotely = false;
         session = existing;
         journal = loadAndCleanJournal();
         startApp();
@@ -3299,6 +3301,7 @@ function doLogin(){
       });
       return;
     }
+    _shiftForceClosedRemotely = false;
     session = existing;
     journal = loadAndCleanJournal();
     startApp();
@@ -3323,6 +3326,21 @@ function doLogin(){
           else if(!otherSellerShift) otherSellerShift=d;
         });
         if(sameSellerShift && !sameSellerShift.isRestoreShift && !sameSellerShift.backfilled){
+          var todayStr0 = new Date().toISOString().split('T')[0];
+          var shiftDate0 = sameSellerShift.date || (sameSellerShift.openedAt||'').split('T')[0] || '';
+          if(shiftDate0 && shiftDate0 < todayStr0){
+            // Смена из прошлого дня всё ещё числится "открытой" в облаке — это застрявшая
+            // запись (скорее всего, сбой при закрытии). Не открываем её заново молча —
+            // сами чиним статус на "закрыта" и продолжаем как обычный вход/открытие новой смены.
+            db.collection('iz_shifts').doc(sameSellerShift.id).set({status:'closed',_autoFixedStale:true},{merge:true}).then(function(){
+              doLogin();
+            }).catch(function(){ doLogin(); });
+            try{ logAction('STALE_OPEN_SHIFT_AUTOFIXED', {shiftId:sameSellerShift.id, shopName:shopName, date:shiftDate0}); }catch(e){}
+            showToast('⚠️ Найдена зависшая смена за '+shiftDate0+' — статус исправлен, открываем сегодняшнюю');
+            _shiftForceClosedRemotely = false;
+            return;
+          }
+          _shiftForceClosedRemotely = false;
           session = {shopName:sameSellerShift.shopName, sellerName:sameSellerShift.sellerName, sellerId:sellerId,
             shiftId:sameSellerShift.id, openedAt:sameSellerShift.openedAt,
             cashMorning:sameSellerShift.cashMorning, goodsMorning:sameSellerShift.goodsMorning,
@@ -3552,6 +3570,7 @@ function confirmMorning(){
   var goodsDrM=_goodsDrMode==='manual'
     ?parseFloat(document.getElementById('morningGoodsDr').value)
     :calcGoodsDrMorning(pendingSession.shopName);
+  _shiftForceClosedRemotely = false;
   session=Object.assign({},pendingSession,{
     shiftId:uid(),
     openedAt: restoreMode ? pendingSession._restoreOpenedAt : new Date().toISOString(),
@@ -6656,6 +6675,11 @@ function validateClose(){
   renderClose();
 }
 function closeShift(){
+  // Останавливаем "живую" фоновую синхронизацию сразу — иначе она может успеть
+  // отправить в облако снимок со status:'open' уже ПОСЛЕ того как смена закрыта,
+  // и закрытие "отменится" в облаке само по себе.
+  if(typeof _liveShiftSyncTimer!=='undefined' && _liveShiftSyncTimer){ clearTimeout(_liveShiftSyncTimer); _liveShiftSyncTimer=null; }
+  _shiftForceClosedRemotely = true;
   if(session && session.isPreview){
     if(confirm('Режим просмотра — данные не будут сохранены. Выйти?')){
       localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal);
@@ -12377,17 +12401,21 @@ function shopAbbrev(shopName){
     'горки': 'Горки',
     'опт': 'ОПТ',
     'тг канал': 'ТГ',
-    'тгканал': 'ТГ'
+    'тгканал': 'ТГ',
+    'парк ривьера сочи': 'Ривьера',
+    'instagram': 'Instagram',
+    'мастерская': 'Мастерская'
   };
   var key = shopName.toLowerCase().trim();
   if(map[key]) return map[key];
   return shopName.replace(/\s+/g,'').slice(0,10);
 }
-function generateManInvNum(){
-  var now = new Date();
-  var dd = String(now.getDate()).padStart(2,'0');
-  var mm = String(now.getMonth()+1).padStart(2,'0');
-  var yyyy = now.getFullYear();
+function generateManInvNum(forDate){
+  var d = forDate ? new Date(forDate+'T00:00:00') : new Date();
+  if(isNaN(d.getTime())) d = new Date();
+  var dd = String(d.getDate()).padStart(2,'0');
+  var mm = String(d.getMonth()+1).padStart(2,'0');
+  var yyyy = d.getFullYear();
   var shopName = (session && session.shopName) || '';
   var shopShort = shopAbbrev(shopName);
   var existing = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
@@ -12395,7 +12423,7 @@ function generateManInvNum(){
   var monthInvs = existing.filter(function(inv){
     if(!inv.num) return false;
     var invDate = inv.date||'';
-    return invDate.indexOf(monthKey)===0;
+    return invDate.indexOf(monthKey)===0 && inv.shopName===shopName;
   });
   var n = String(monthInvs.length + 1).padStart(3,'0');
   return n+'/'+dd+'.'+mm+'.'+yyyy+'/'+(shopShort||'Магазин');
@@ -12409,8 +12437,8 @@ function initManualInvoice() {
   var dateEl = document.getElementById('manInvDate');
   if(dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split('T')[0];
   var numEl = document.getElementById('manInvNum');
-  if(numEl && !numEl.value) {
-    numEl.value = generateManInvNum();
+  if(numEl) {
+    numEl.value = generateManInvNum(dateEl && dateEl.value);
   }
   renderManInvItems(); updateManInvTotal();
   var banner = document.getElementById('manInvDraftBanner');
@@ -12684,7 +12712,8 @@ function saveManualInvoice() {
   _manInvItems = [];
   var numEl = document.getElementById('manInvNum');
   if(numEl) {
-    numEl.value = generateManInvNum();
+    var dateElAfter = document.getElementById('manInvDate');
+    numEl.value = generateManInvNum(dateElAfter && dateElAfter.value);
   }
   var fromEl = document.getElementById('manInvFrom'); if(fromEl) fromEl.value='';
   clearManInvDraft();
@@ -14053,6 +14082,58 @@ function adminRcvToggle(key){
   _adminRcvOpen[key] = !_adminRcvOpen[key];
   renderAdminRcvWo();
 }
+function adminToggleMoveDate(btn, entryId, shiftId, shopName){
+  var existing = btn.parentElement.querySelector('.moveDateForm');
+  if(existing){ existing.remove(); return; }
+  var form = document.createElement('div');
+  form.className = 'moveDateForm';
+  form.style.cssText = 'margin-top:8px;padding:8px;background:#1a1410;border:1px solid #f0a060;border-radius:8px';
+  form.innerHTML =
+    '<div style="font-size:11px;color:#f0a060;margin-bottom:6px">На какую дату реально пришёл этот товар? Смена на эту дату у магазина «'+shopName+'» должна уже существовать.</div>'+
+    '<input class="fi" type="date" id="moveDateInput_'+entryId+'" style="margin:0 0 6px;padding:7px;-webkit-appearance:none;color-scheme:dark">'+
+    '<button type="button" onclick="adminMoveReceiptDate(\''+entryId+'\',\''+shiftId+'\')" style="width:100%;padding:8px;border-radius:8px;border:none;background:#f0a060;color:#1a1206;font-weight:700;font-size:12px;cursor:pointer">Перенести приход на эту дату</button>';
+  btn.parentElement.appendChild(form);
+}
+function adminMoveReceiptDate(entryId, sourceShiftId){
+  var dateInput = document.getElementById('moveDateInput_'+entryId);
+  var newDate = dateInput && dateInput.value;
+  if(!newDate){ showToast('Укажи новую дату'); return; }
+  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var srcIdx = shifts.findIndex(function(s){ return (s.id||s._id)===sourceShiftId; });
+  if(srcIdx<0){ showToast('Исходная смена не найдена локально — сначала нажми ☁️ Синх'); return; }
+  var srcShift = shifts[srcIdx];
+  var jnl = srcShift.journal||[];
+  var eIdx = jnl.findIndex(function(e){ return e.id===entryId; });
+  if(eIdx<0){ showToast('Запись прихода не найдена в смене'); return; }
+  if(srcShift.date===newDate){ showToast('Это и есть текущая дата прихода'); return; }
+  var entry = jnl[eIdx];
+  var tgtIdx = shifts.findIndex(function(s){ return s.shopName===srcShift.shopName && s.date===newDate; });
+  if(tgtIdx<0){
+    showToast('⚠️ У магазина «'+srcShift.shopName+'» нет смены за '+newDate+'. Сначала должна существовать смена на эту дату (открытая или закрытая), потом перенос.');
+    return;
+  }
+  if(!confirm('Перенести приход "'+(entry.label||entry.sub||'')+'" на '+newDate+' — из смены '+srcShift.date+' в смену '+newDate+'? Остатки товара в обеих сменах пересчитаются.')) return;
+  // убираем из исходной смены
+  jnl.splice(eIdx,1);
+  srcShift.journal = jnl;
+  // добавляем в целевую смену, сохраняя время суток, но меняя дату
+  var timePart = (entry.ts||'').split('T')[1] || '12:00:00.000Z';
+  var movedEntry = Object.assign({}, entry, {
+    ts: newDate+'T'+timePart,
+    movedFrom: srcShift.date,
+    movedAt: new Date().toISOString(),
+    movedBy: (session&&(session.name||session.sellerName))||'admin'
+  });
+  var tgtShift = shifts[tgtIdx];
+  tgtShift.journal = (tgtShift.journal||[]).concat([movedEntry])
+    .sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
+  localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+  try{ logAction('RECEIPT_DATE_MOVED', {entryId:entryId, from:srcShift.date, to:newDate, shopName:srcShift.shopName}); }catch(e){}
+  _pushShiftWithRetry(srcShift.id||srcShift._id, srcShift);
+  _pushShiftWithRetry(tgtShift.id||tgtShift._id, tgtShift);
+  showToast('✅ Приход перенесён на '+newDate);
+  try{ renderAdminRcvWo(); }catch(e){}
+}
 function renderAdminRcvWo(){
   var range = _adminRcvDateRange();
   var allShifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
@@ -14074,7 +14155,7 @@ function renderAdminRcvWo(){
         var found = allInvCache.find(function(i){ return (i.id||i._id)===e.invId; });
         if(found&&found.num) invNum = found.num;
       }
-      rows.push({shop:sn, date:shDate, ts:e.ts||shDate, label:invNum?'Приёмка '+invNum:(e.label||e.sub||''), sub:e.sub||'', amount:amt, goodsType:e.goodsType||'derevo', invId:e.invId||null, items:e.items||[], reason:e.reason||''});
+      rows.push({shop:sn, date:shDate, ts:e.ts||shDate, label:invNum?'Приёмка '+invNum:(e.label||e.sub||''), sub:e.sub||'', amount:amt, goodsType:e.goodsType||'derevo', invId:e.invId||null, entryId:e.id||null, shiftId:sh.id||sh._id||null, items:e.items||[], reason:e.reason||''});
     });
     if(type==='receive'){
       (sh.goodsReceives||[]).forEach(function(r){ rows.push({shop:sn,date:shDate,ts:shDate,label:'Приход Дерево',sub:r.name||'',amount:r.amt||r.amount||0,goodsType:'derevo',items:[]}); });
@@ -14122,7 +14203,8 @@ function renderAdminRcvWo(){
           '<div style="font-size:15px;font-weight:700;color:'+gtColor+'">'+Math.round(r.amount).toLocaleString('ru-RU')+'₽</div>'+
         '</div>'+
       '</div>'+
-      (r.invId?'<button type="button" onclick="svOpenInvoiceFromReceive(\''+r.invId+'\')" style="font-size:11px;padding:3px 9px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#60c8f0;cursor:pointer;margin-top:5px">📋 Открыть накладную</button>':'')+
+      (r.invId?'<button type="button" onclick="svOpenInvoiceFromReceive(\''+r.invId+'\')" style="font-size:11px;padding:3px 9px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#60c8f0;cursor:pointer;margin-top:5px;margin-right:6px">📋 Открыть накладную</button>':'')+
+      (r.entryId&&r.shiftId?'<button type="button" onclick="adminToggleMoveDate(this,\''+r.entryId+'\',\''+r.shiftId+'\',\''+r.shop.replace(/'/g,"\\'")+'\')" style="font-size:11px;padding:3px 9px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0a060;cursor:pointer;margin-top:5px">📅 Изменить дату прихода</button>':'')+
     '</div>';
   }
   function groupHeader(key, label, count, total, isOpen){
