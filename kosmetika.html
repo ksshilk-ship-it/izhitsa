@@ -190,13 +190,59 @@ function shiftTravelForDate(sale){
 
 function getAccount(id){ return state.accounts.find(a=>a.id===id); }
 function getAccountByRole(role){ return state.accounts.find(a=>a.role===role); }
-function adjustAccountBalance(id, delta){ const a=getAccount(id); if(a) a.balance=(Number(a.balance)||0)+delta; }
-function applySaleToAccounts(sale, sign){
-  if(sale.cashAccountId) adjustAccountBalance(sale.cashAccountId, sign*Number(sale.cash||0));
-  if(sale.bankAccountId) adjustAccountBalance(sale.bankAccountId, sign*Number(sale.cashless||0));
+// Старые функции больше не мутируют баланс напрямую — баланс теперь всегда считается
+// от ближайшей контрольной точки. Оставлены как no-op, чтобы не трогать все места вызова.
+function adjustAccountBalance(id, delta){}
+function applySaleToAccounts(sale, sign){}
+function applyExpenseDebit(exp){}
+function reverseExpenseDebit(exp){}
+
+function addDays(dateStr, n){
+  const d = new Date(dateStr+'T00:00:00');
+  d.setDate(d.getDate()+n);
+  return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
 }
-function applyExpenseDebit(exp){ if(exp.status==='paid' && exp.paidFrom) adjustAccountBalance(exp.paidFrom, -Number(exp.amount||0)); }
-function reverseExpenseDebit(exp){ if(exp.status==='paid' && exp.paidFrom) adjustAccountBalance(exp.paidFrom, Number(exp.amount||0)); }
+function accountFlow(account, from, to){
+  // приход/расход по счёту за период [from, to] включительно, без учёта контрольных точек
+  let flow = 0;
+  if(account.role==='cash'){
+    flow += state.sales.filter(s=>s.date>=from && s.date<=to).reduce((a,s)=>a+Number(s.cash||0),0);
+  } else if(account.role==='noncash'){
+    flow += state.sales.filter(s=>s.date>=from && s.date<=to).reduce((a,s)=>a+Number(s.cashless||0),0);
+  }
+  flow -= state.expenses.filter(e=>e.paidFrom===account.id && e.status==='paid' && e.paidDate && e.paidDate>=from && e.paidDate<=to)
+    .reduce((a,e)=>a+Number(e.amount||0),0);
+  return flow;
+}
+function sortedCheckpoints(account){
+  return [...(account.checkpoints||[])].sort((a,b)=>a.date.localeCompare(b.date));
+}
+// Баланс на конец указанной даты. Считается ТОЛЬКО от точек типа "anchor" (точки отсчёта).
+// Точки типа "audit" (контрольные, выведенные вручную) в расчёт не участвуют — они только для сверки.
+function getAccountBalance(accountId, asOfDate){
+  const acc = getAccount(accountId);
+  if(!acc) return 0;
+  const anchors = sortedCheckpoints(acc).filter(c=>c.type==='anchor');
+  if(anchors.length===0) return 0;
+  let base = anchors[0];
+  for(const a of anchors){ if(a.date<=asOfDate) base=a; else break; }
+  return Number(base.balance||0) + accountFlow(acc, base.date, asOfDate);
+}
+// Для каждой точки (и отсчёта, и контрольной) — что показал бы расчёт от предыдущей точки отсчёта
+// на утро этой даты, и есть ли расхождение с тем, что введено вручную.
+function getCheckpointReport(accountId){
+  const acc = getAccount(accountId);
+  if(!acc) return [];
+  const checkpoints = sortedCheckpoints(acc);
+  return checkpoints.map(cp=>{
+    const hasPriorAnchor = checkpoints.some(c=>c.type==='anchor' && c.date<cp.date);
+    if(!hasPriorAnchor) return {checkpoint:cp, predicted:null, discrepancy:null};
+    const predicted = getAccountBalance(accountId, addDays(cp.date,-1));
+    const discrepancy = predicted - Number(cp.balance||0);
+    return {checkpoint:cp, predicted, discrepancy};
+  });
+}
+
 
 // ---------- LOAD / SAVE ----------
 async function loadState(){
@@ -214,6 +260,11 @@ async function loadState(){
       {id:uid(), name:'Конверт дом', role:'other', balance:0},
     ];
   }
+  state.accounts.forEach(a=>{
+    if(!a.checkpoints){
+      a.checkpoints = [{id:uid(), date:todayISO(), balance:Number(a.balance||0), type:'anchor'}];
+    }
+  });
   if(!state.expenseCategories || state.expenseCategories.length===0){
     state.expenseCategories = ['Аренда','ЗП','Проезд','Закуп товара','Налоги','Мой склад','Прочее'];
   }
@@ -295,7 +346,7 @@ function renderOverview(main){
     .reduce((a,e)=>a+Number(e.amount||0),0);
   const finResult = net - opex;
 
-  const totalLiquid = state.accounts.reduce((a,acc)=>a+Number(acc.balance||0),0);
+  const totalLiquid = state.accounts.reduce((a,acc)=>a+getAccountBalance(acc.id, todayISO()),0);
   const debtToSuppliers = state.expenses.filter(e=>e.category==='Закуп товара' && e.status==='planned').reduce((a,e)=>a+Number(e.amount||0),0);
 
   const upcoming = state.expenses.filter(e=>e.status==='planned' && e.dueDate).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
@@ -319,7 +370,7 @@ function renderOverview(main){
 
     <div class="card">
       <h2>Счета</h2>
-      ${state.accounts.map(a=>`<div class="row"><span class="label">${a.name}</span><span class="num">${fmt(a.balance||0)}</span></div>`).join('')}
+      ${state.accounts.map(a=>`<div class="row"><span class="label">${a.name}</span><span class="num">${fmt(getAccountBalance(a.id, todayISO()))}</span></div>`).join('')}
       <div class="row" style="margin-top:6px; border-top:1px solid var(--line); padding-top:10px;">
         <span class="label">Итого свободных денег</span><span class="num big">${fmt(totalLiquid)}</span>
       </div>
@@ -1266,17 +1317,47 @@ function renderSettings(main){
 
   main.innerHTML = `
     <div class="card">
-      <h2>Категории хранения денег</h2>
-      ${state.accounts.length===0 ? '<div class="empty">Список пуст</div>' :
-        `<table><thead><tr><th>Название</th><th>Тип</th><th>Остаток</th><th></th></tr></thead><tbody>
-          ${state.accounts.map(a=>`
-            <tr>
-              <td class="txt">${a.name}</td>
-              <td class="txt">${a.role==='cash'?'Наличные':a.role==='noncash'?'Безнал (РС)':'Прочее'}</td>
-              <td><input type="number" class="inline-date" data-acc-balance="${a.id}" value="${a.balance||0}"></td>
-              <td><button class="del-x" data-del-account="${a.id}">✕</button></td>
-            </tr>`).join('')}
-        </tbody></table>`}
+      <h2>Счета и точки отсчёта / контроля</h2>
+      <div class="note">
+        <b>Точка отсчёта</b> — остаток на утро этой даты (до всех приходов/расходов), от которого приложение считает баланс вперёд по датам продаж и расходов.<br>
+        <b>Контрольная</b> — остаток, который вы вывели вручную (например, пересчитали кассу), используется только для сверки с тем, что показал расчёт, и никогда не меняет сам расчёт.<br>
+        Если позже добавляете более раннюю точку отсчёта — расчёт для всех дат после неё обновится автоматически, а расхождения по каждой ранее введённой точке будут видны в таблице.
+      </div>
+      ${state.accounts.map(a=>{
+        const report = getCheckpointReport(a.id);
+        const currentBalance = getAccountBalance(a.id, todayISO());
+        const roleLabel = a.role==='cash'?'Наличные':a.role==='noncash'?'Безнал (РС)':'Прочее';
+        return `
+        <details class="month-group">
+          <summary class="month-summary"><span>${a.name} <span style="font-size:0.7rem;color:var(--ink-soft);">(${roleLabel})</span></span><span class="stats">Сейчас: ${fmt(currentBalance)}</span></summary>
+          ${report.length===0 ? '<div class="empty">Точек пока нет — добавьте первую точку отсчёта ниже</div>' :
+            `<table><thead><tr><th>Дата</th><th>Тип</th><th>Введено</th><th>Расчёт</th><th>Расхожд.</th><th></th></tr></thead><tbody>
+              ${report.map(r=>`
+                <tr>
+                  <td>${r.checkpoint.date}</td>
+                  <td class="txt">${r.checkpoint.type==='anchor'?'Отсчёт':'Контроль'}</td>
+                  <td>${fmt(r.checkpoint.balance)}</td>
+                  <td>${r.predicted===null?'—':fmt(r.predicted)}</td>
+                  <td class="${r.discrepancy===null?'':Math.abs(r.discrepancy)<1?'pos':'neg'}">${r.discrepancy===null?'—':(r.discrepancy>=0?'+':'')+fmt(r.discrepancy)}</td>
+                  <td><button class="del-x" data-del-checkpoint="${r.checkpoint.id}">✕</button></td>
+                </tr>`).join('')}
+            </tbody></table>`}
+          <label class="field">Дата</label>
+          <input type="date" id="cp-date-${a.id}" value="${todayISO()}">
+          <label class="field">Тип точки</label>
+          <select id="cp-type-${a.id}">
+            <option value="anchor">Точка отсчёта (считать баланс от неё)</option>
+            <option value="audit">Контрольная (только сверить, не менять расчёт)</option>
+          </select>
+          <label class="field">Остаток на утро этой даты</label>
+          <input type="number" id="cp-balance-${a.id}" placeholder="0">
+          <button class="btn secondary small" data-cp-add="${a.id}">Добавить точку</button>
+        </details>`;
+      }).join('')}
+    </div>
+
+    <div class="card">
+      <h2>Новый счёт</h2>
       <label class="field">Название</label>
       <input type="text" id="acc-name" placeholder="напр. Сейф офис">
       <label class="field">Тип</label>
@@ -1285,8 +1366,8 @@ function renderSettings(main){
         <option value="noncash">Безналичные / РС (получает безнал с продаж)</option>
         <option value="other">Прочее</option>
       </select>
-      <button class="btn secondary" id="acc-add">Добавить</button>
-      <div class="note">Наличные и безналичные из «Продаж» автоматически зачисляются на счета с соответствующим типом. При оплате расхода деньги списываются со счёта, который вы выберете.</div>
+      <button class="btn secondary" id="acc-add">Добавить счёт</button>
+      <div class="note">Наличные и безналичные из «Продаж» автоматически учитываются на счетах с соответствующим типом начиная с их точки отсчёта. При оплате расхода деньги списываются со счёта, который вы выберете.</div>
     </div>
 
     <div class="card">
@@ -1324,24 +1405,83 @@ function renderSettings(main){
 
     <div class="card">
       <h2>Данные приложения</h2>
-      <div class="note">Все данные хранятся локально в этом приложении и доступны только вам.</div>
+      <div class="note">Все данные хранятся локально в этом приложении и доступны только с того устройства и браузера, где вы их вносите — между устройствами они не синхронизируются автоматически.</div>
+
+      <label class="field">Перенос на другое устройство</label>
+      <div class="note">Скачайте копию здесь, затем на другом устройстве откройте это же приложение → Настройки → «Загрузить копию» и выберите скачанный файл.</div>
+      <button class="btn secondary small" id="b-export">Скачать резервную копию</button>
+
+      <label class="field" style="margin-top:16px;">Загрузить копию (заменит текущие данные на этом устройстве)</label>
+      <input type="file" id="b-import" accept=".json">
+      <div id="b-import-result" style="margin-top:8px;"></div>
+
+      <div class="note" style="margin-top:16px;">Полная очистка удаляет все данные без возможности восстановления (если нет резервной копии).</div>
       <button class="btn danger" id="b-reset">Очистить все данные</button>
     </div>
   `;
 
-  main.querySelectorAll('[data-acc-balance]').forEach(inp=>{
-    inp.onchange = ()=>{ const acc=getAccount(inp.dataset.accBalance); if(acc) acc.balance=Number(inp.value||0); saveState(); render(); };
+  document.getElementById('b-export').onclick = ()=>{
+    const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = todayISO();
+    a.href = url;
+    a.download = `kosmetika-backup-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  document.getElementById('b-import').onchange = (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const box = document.getElementById('b-import-result');
+    if(!confirm('Загрузка копии заменит все текущие данные на этом устройстве. Продолжить?')){
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      try{
+        const parsed = JSON.parse(ev.target.result);
+        localStorage.setItem('izhitsa-finance-data', JSON.stringify(parsed));
+        box.innerHTML = '<div class="note">Готово, данные загружены. Обновляю…</div>';
+        setTimeout(()=>location.reload(), 500);
+      }catch(err){
+        box.innerHTML = '<div class="note">Не удалось прочитать файл — убедитесь, что это .json, скачанный из этого же приложения.</div>';
+        console.error(err);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  state.accounts.forEach(a=>{
+    const btn = main.querySelector(`[data-cp-add="${a.id}"]`);
+    if(btn){
+      btn.onclick = ()=>{
+        const date = document.getElementById('cp-date-'+a.id).value;
+        const type = document.getElementById('cp-type-'+a.id).value;
+        const balance = Number(document.getElementById('cp-balance-'+a.id).value||0);
+        if(!date) return;
+        a.checkpoints.push({id:uid(), date, type, balance});
+        saveState(); render();
+      };
+    }
+  });
+  main.querySelectorAll('[data-del-checkpoint]').forEach(btn=>{
+    btn.onclick = ()=>{
+      state.accounts.forEach(a=>{ a.checkpoints = (a.checkpoints||[]).filter(c=>c.id!==btn.dataset.delCheckpoint); });
+      saveState(); render();
+    };
   });
   document.getElementById('acc-add').onclick = ()=>{
     const name = document.getElementById('acc-name').value.trim();
     const role = document.getElementById('acc-role').value;
     if(!name) return;
-    state.accounts.push({id:uid(), name, role, balance:0});
+    state.accounts.push({id:uid(), name, role, balance:0, checkpoints:[]});
     saveState(); render();
   };
-  main.querySelectorAll('[data-del-account]').forEach(btn=>{
-    btn.onclick = ()=>{ state.accounts = state.accounts.filter(a=>a.id!==btn.dataset.delAccount); saveState(); render(); };
-  });
 
   document.getElementById('cat-add').onclick = ()=>{
     const name = document.getElementById('cat-name').value.trim();
