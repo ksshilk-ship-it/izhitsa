@@ -83,8 +83,8 @@
   select.inline{width:auto; padding:4px 6px; font-size:0.76rem;}
   input.inline-date{width:110px; padding:4px 6px; font-size:0.76rem; display:inline-block;}
   .month-group{padding:10px 12px;}
-  .month-summary{display:flex; justify-content:space-between; align-items:center; padding:4px 0 10px; cursor:pointer; font-family:'PT Serif',serif; font-size:1rem;}
-  .month-summary .stats{font-family:'IBM Plex Mono',monospace; font-size:0.75rem; color:var(--ink-soft); font-weight:normal;}
+  .month-summary{display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:4px 10px; padding:4px 0 10px; cursor:pointer; font-family:'PT Serif',serif; font-size:1rem;}
+  .month-summary .stats{font-family:'IBM Plex Mono',monospace; font-size:0.72rem; color:var(--ink-soft); font-weight:normal; text-align:right;}
   .cat-group-title{font-size:0.7rem; text-transform:uppercase; color:var(--ink-soft); letter-spacing:0.5px; margin:12px 0 4px; padding-top:8px; border-top:1px dashed var(--line);}
   .period-btns{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:4px;}
   .period-btns button{padding:6px 10px; font-size:0.74rem; border:1px solid var(--line); background:var(--paper); border-radius:20px; color:var(--ink-soft); cursor:pointer;}
@@ -172,7 +172,7 @@ function shiftPay(revenue, discount, tiers, base, threshold){
 }
 function getRateForDate(dateStr){
   const periods = [...state.salaryRates].sort((a,b)=>a.from.localeCompare(b.from));
-  if(periods.length===0) return {base:0, threshold:0, tiers:[]};
+  if(periods.length===0) return {base:0, threshold:0, travel:0, tiers:[]};
   let applicable = periods[0];
   for(const p of periods){ if(p.from<=dateStr) applicable=p; else break; }
   return applicable;
@@ -183,6 +183,9 @@ function shiftPayForDate(sale){
   }
   const rate = getRateForDate(sale.date);
   return shiftPay(saleGross(sale), sale.discount, rate.tiers||[], Number(rate.base||0), Number(rate.threshold||0));
+}
+function shiftTravelForDate(sale){
+  return Number(getRateForDate(sale.date).travel||0);
 }
 
 function getAccount(id){ return state.accounts.find(a=>a.id===id); }
@@ -220,13 +223,21 @@ async function loadState(){
   if(!state.commissionTiers) state.commissionTiers = [];
   if(!state.salaryBase) state.salaryBase = {amount:2000, threshold:5000};
   if(!state.salaryRates || state.salaryRates.length===0){
+    const defaultTiers = (state.commissionTiers && state.commissionTiers.length>0)
+      ? state.commissionTiers.map(t=>Object.assign({},t))
+      : [
+          {id:uid(), min:5001, max:35000, rate:10},
+          {id:uid(), min:35001, max:null, rate:12}
+        ];
     state.salaryRates = [{
       id:uid(), from:'1970-01-01',
-      base:Number(state.salaryBase.amount||0),
-      threshold:Number(state.salaryBase.threshold||0),
-      tiers: (state.commissionTiers||[]).map(t=>Object.assign({},t))
+      base:Number(state.salaryBase.amount||0) || 2000,
+      threshold:Number(state.salaryBase.threshold||0) || 5000,
+      travel:600,
+      tiers: defaultTiers
     }];
   }
+  state.salaryRates.forEach(p=>{ if(p.travel===undefined) p.travel=0; });
   state.sales = (state.sales||[]).map(s=>{
     if(s.cash===undefined && s.cashless===undefined){
       return Object.assign({}, s, {cash:Number(s.gross||0), cashless:0});
@@ -660,16 +671,72 @@ function renderExpenses(main){
       ${isCopy ? '<div class="note">Все поля скопированы из исходного расхода — при необходимости поменяйте только дату (и статус, если он ещё не оплачен).</div>' : ''}
     </div>
 
+    <div class="card">
+      <details>
+        <summary>Массово: одни и те же данные на несколько дат</summary>
+        <div class="note">Для повторяющегося расхода (проезд, оклад, аренда и т.п.) — заполняете один раз всё, кроме дат, и одной кнопкой создаёте отдельную запись на каждую выбранную дату. Удобно для «задним числом» — забранных денег за проезд/оклад за несколько дней сразу.</div>
+
+        <label class="field">Категория</label>
+        <select id="bulk-cat">${state.expenseCategories.map(c=>`<option>${c}</option>`).join('')}</select>
+        ${state.suppliers.length>0 ? `
+        <label class="field">Поставщик (необязательно)</label>
+        <select id="bulk-supplier">
+          <option value="">— не выбран —</option>
+          ${state.suppliers.map(s=>`<option value="${s.name}">${s.name} (${s.type})</option>`).join('')}
+        </select>` : ''}
+        ${state.sellers.length>0 ? `
+        <label class="field">Продавец (необязательно)</label>
+        <select id="bulk-seller">
+          <option value="">— не выбран —</option>
+          ${state.sellers.map(s=>`<option value="${s.name}">${s.name}</option>`).join('')}
+        </select>` : ''}
+        <label class="field">Комментарий / описание</label>
+        <input type="text" id="bulk-desc" placeholder="напр. Проезд">
+        ${state.descriptionPresets.length>0 ? `<div class="preset-row">${state.descriptionPresets.map(p=>`<button type="button" class="preset-chip" data-bulk-preset="${p}">${p}</button>`).join('')}</div>` : ''}
+
+        <label class="field">Сумма (одинаковая на каждую дату)</label>
+        <input type="number" id="bulk-amount" placeholder="0">
+
+        <label class="field">Статус</label>
+        <select id="bulk-status">
+          <option value="paid" selected>Оплачено (деньги уже забраны)</option>
+          <option value="planned">Запланировано</option>
+        </select>
+        <label class="field">Счёт списания</label>
+        <select id="bulk-paidfrom">
+          <option value="">— не выбран —</option>
+          ${state.accounts.map(a=>`<option value="${a.id}">${a.name}</option>`).join('')}
+        </select>
+
+        <label class="field">Быстро добавить диапазон дат</label>
+        <div class="two-col">
+          <div><input type="date" id="bulk-range-from"></div>
+          <div><input type="date" id="bulk-range-to"></div>
+        </div>
+        <button type="button" class="btn secondary small" id="bulk-range-add">Добавить каждый день диапазона в список ниже</button>
+
+        <label class="field">Даты (каждая с новой строки или через запятую)</label>
+        <textarea id="bulk-dates" style="min-height:100px;" placeholder="2026-07-01
+2026-07-02
+2026-07-03"></textarea>
+
+        <button class="btn" id="bulk-add">Добавить на все указанные даты</button>
+        <div id="bulk-result" style="margin-top:12px;"></div>
+      </details>
+    </div>
+
     ${monthKeys.length===0 ? '<div class="card"><div class="empty">Пока нет записей</div></div>' :
       monthKeys.map((k,idx)=>{
         const rows = grouped[k];
         const total = rows.reduce((a,e)=>a+Number(e.amount||0),0);
+        const planned = rows.filter(e=>e.status==='planned').reduce((a,e)=>a+Number(e.amount||0),0);
+        const paid = rows.filter(e=>e.status==='paid').reduce((a,e)=>a+Number(e.amount||0),0);
         const byCat = {};
         rows.forEach(e=>{ (byCat[e.category]=byCat[e.category]||[]).push(e); });
         const catKeys = Object.keys(byCat).sort();
         return `<div class="card">
           <details class="month-group" ${idx===0?'open':''}>
-            <summary class="month-summary"><span>${k==='—'?'Без даты':monthLabel(k)}</span><span class="stats">${fmt(total)}</span></summary>
+            <summary class="month-summary"><span>${k==='—'?'Без даты':monthLabel(k)}</span><span class="stats">Итого ${fmt(total)} · План ${fmt(planned)} · Факт ${fmt(paid)}</span></summary>
             ${catKeys.map(cat=>{
               const catRows = byCat[cat].slice().sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
               const catTotal = catRows.reduce((a,e)=>a+Number(e.amount||0),0);
@@ -710,6 +777,57 @@ function renderExpenses(main){
     const val = document.getElementById('e-desc').value.trim();
     if(!val) return;
     if(!state.descriptionPresets.includes(val)){ state.descriptionPresets.push(val); saveState(); }
+    render();
+  };
+
+  main.querySelectorAll('[data-bulk-preset]').forEach(btn=>{
+    btn.onclick = ()=>{ document.getElementById('bulk-desc').value = btn.dataset.bulkPreset; };
+  });
+
+  document.getElementById('bulk-range-add').onclick = ()=>{
+    const from = document.getElementById('bulk-range-from').value;
+    const to = document.getElementById('bulk-range-to').value;
+    if(!from || !to || from>to) return;
+    const existing = document.getElementById('bulk-dates').value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
+    const set = new Set(existing);
+    let d = new Date(from+'T00:00:00');
+    const end = new Date(to+'T00:00:00');
+    while(d<=end){
+      set.add(d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()));
+      d.setDate(d.getDate()+1);
+    }
+    document.getElementById('bulk-dates').value = [...set].sort().join('\n');
+  };
+
+  document.getElementById('bulk-add').onclick = ()=>{
+    const category = document.getElementById('bulk-cat').value;
+    const supplierEl = document.getElementById('bulk-supplier');
+    const supplier = supplierEl ? supplierEl.value : '';
+    const sellerEl = document.getElementById('bulk-seller');
+    const seller = sellerEl ? sellerEl.value : '';
+    const description = document.getElementById('bulk-desc').value;
+    const amount = Number(document.getElementById('bulk-amount').value||0);
+    const status = document.getElementById('bulk-status').value;
+    const paidFrom = document.getElementById('bulk-paidfrom').value || null;
+    const dates = document.getElementById('bulk-dates').value.split(/[\n,]/).map(s=>s.trim()).filter(Boolean);
+    const box = document.getElementById('bulk-result');
+    if(!amount || dates.length===0){ box.innerHTML = '<div class="note">Укажите сумму и хотя бы одну дату.</div>'; return; }
+    let added = 0;
+    dates.forEach(dateStr=>{
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+      const exp = {
+        id: uid(), category, supplier, seller, description, amount,
+        dueDate: dateStr, status,
+        paidFrom: status==='paid' ? paidFrom : null,
+        paidDate: status==='paid' ? dateStr : null
+      };
+      state.expenses.push(exp);
+      applyExpenseDebit(exp);
+      added++;
+    });
+    saveState();
+    box.innerHTML = `<div class="note">Добавлено записей: ${added}.</div>`;
+    document.getElementById('bulk-dates').value = '';
     render();
   };
 
@@ -824,8 +942,7 @@ function buildSalaryMonthlyData(){
       const shiftsCount = shifts.length;
       const revenue = shifts.reduce((a,s)=>a+saleGross(s),0);
       const salesPay = shifts.reduce((a,s)=>a+shiftPayForDate(s),0);
-      const seller = state.sellers.find(sl=>sl.name===name);
-      const travel = shiftsCount * (seller?Number(seller.travelPerShift||0):0);
+      const travel = shifts.reduce((a,s)=>a+shiftTravelForDate(s),0);
       const totalAccrued = salesPay + travel;
       const avgRevenue = shiftsCount ? revenue/shiftsCount : 0;
       const avgEarn = shiftsCount ? totalAccrued/shiftsCount : 0;
@@ -846,14 +963,15 @@ function renderCommission(main){
   main.innerHTML = `
     <div class="card">
       <h2>Периоды ставок ЗП</h2>
-      <div class="note">У разных периодов может быть своя база за выход, порог и проценты — пригодится для прошлых лет, где ставки отличались. Период действует с указанной даты до начала следующего.</div>
+      <div class="note">У разных периодов может быть своя база за выход, порог, проезд и проценты — пригодится для прошлых лет, где ставки отличались. Период действует с указанной даты до начала следующего.</div>
       ${periods.length===0 ? '<div class="empty">Периодов пока нет</div>' :
-        `<table><thead><tr><th>Действует с</th><th>База</th><th>Порог</th><th></th></tr></thead><tbody>
+        `<table><thead><tr><th>Действует с</th><th>База</th><th>Порог</th><th>Проезд</th><th></th></tr></thead><tbody>
           ${periods.map(p=>`
             <tr>
               <td>${p.from}</td>
               <td>${fmt(p.base)}</td>
               <td>${fmt(p.threshold)}</td>
+              <td>${fmt(p.travel||0)}</td>
               <td>
                 <button class="icon-btn" data-select-period="${p.id}">${p.id===editingRatePeriodId?'●':'○'}</button>
                 <button class="del-x" data-del-period="${p.id}">✕</button>
@@ -863,9 +981,11 @@ function renderCommission(main){
       <label class="field">Действует с даты</label>
       <input type="date" id="rp-from" value="${todayISO()}">
       <div class="two-col">
-        <div><label class="field">База за выход, ₽</label><input type="number" id="rp-base" placeholder="0"></div>
-        <div><label class="field">Порог, ₽</label><input type="number" id="rp-threshold" placeholder="0"></div>
+        <div><label class="field">База за выход, ₽</label><input type="number" id="rp-base" placeholder="0" value="2000"></div>
+        <div><label class="field">Порог, ₽</label><input type="number" id="rp-threshold" placeholder="0" value="5000"></div>
       </div>
+      <label class="field">Проезд за выход, ₽</label>
+      <input type="number" id="rp-travel" placeholder="0" value="600">
       <button class="btn secondary small" id="rp-add">Добавить период</button>
     </div>
 
@@ -932,8 +1052,9 @@ function renderCommission(main){
     const from = document.getElementById('rp-from').value;
     const base = Number(document.getElementById('rp-base').value||0);
     const threshold = Number(document.getElementById('rp-threshold').value||0);
+    const travel = Number(document.getElementById('rp-travel').value||0);
     if(!from) return;
-    const p = {id:uid(), from, base, threshold, tiers:[]};
+    const p = {id:uid(), from, base, threshold, travel, tiers:[]};
     state.salaryRates.push(p);
     editingRatePeriodId = p.id;
     saveState(); render();
@@ -976,8 +1097,7 @@ function renderCommission(main){
       .sort((a,b)=>a.date.localeCompare(b.date));
     const shiftsCount = shifts.length;
     const revenue = shifts.reduce((a,s)=>a+saleGross(s),0);
-    const travelPerShift = seller ? Number(seller.travelPerShift||0) : 0;
-    const travel = shiftsCount*travelPerShift;
+    const travel = shifts.reduce((a,s)=>a+shiftTravelForDate(s),0);
 
     const dayRows = shifts.map(s=>{
       const gr = saleGross(s);
@@ -1180,15 +1300,13 @@ function renderSettings(main){
     <div class="card">
       <h2>Продавцы</h2>
       ${sellersSorted.length===0 ? '<div class="empty">Список пуст</div>' :
-        `<table><thead><tr><th>Имя</th><th>Проезд/выход</th><th></th></tr></thead><tbody>
-          ${sellersSorted.map(s=>`<tr><td class="txt">${s.name}</td><td>${fmt(s.travelPerShift||0)}</td><td><button class="del-x" data-del-seller="${s.id}">✕</button></td></tr>`).join('')}
+        `<table><thead><tr><th>Имя</th><th></th></tr></thead><tbody>
+          ${sellersSorted.map(s=>`<tr><td class="txt">${s.name}</td><td><button class="del-x" data-del-seller="${s.id}">✕</button></td></tr>`).join('')}
         </tbody></table>`}
       <label class="field">Имя продавца</label>
       <input type="text" id="seller-name" placeholder="напр. Анна">
-      <label class="field">Проезд за выход</label>
-      <input type="number" id="seller-travel" placeholder="0">
       <button class="btn secondary" id="seller-add">Добавить продавца</button>
-      <div class="note">Оклад и % от выручки теперь считаются по единой формуле на вкладке «ЗП продавца» (база за выход + % сверх порога) — она одна для всех продавцов.</div>
+      <div class="note">Оклад, % от выручки и проезд теперь считаются по единой формуле на вкладке «ЗП продавца» (периоды ставок) — она одна для всех продавцов.</div>
     </div>
 
     <div class="card">
@@ -1237,9 +1355,8 @@ function renderSettings(main){
 
   document.getElementById('seller-add').onclick = ()=>{
     const name = document.getElementById('seller-name').value.trim();
-    const travelPerShift = Number(document.getElementById('seller-travel').value||0);
     if(!name) return;
-    state.sellers.push({id:uid(), name, travelPerShift});
+    state.sellers.push({id:uid(), name});
     saveState(); render();
   };
   main.querySelectorAll('[data-del-seller]').forEach(btn=>{
