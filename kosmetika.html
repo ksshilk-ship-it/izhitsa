@@ -120,6 +120,7 @@ const TABS = [
   {id:'sales', label:'Продажи'},
   {id:'expenses', label:'Расходы'},
   {id:'commission', label:'ЗП продавца'},
+  {id:'import', label:'Импорт истории'},
   {id:'settings', label:'Настройки'},
 ];
 const MONTHS_RU = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
@@ -131,6 +132,8 @@ let state = {
   expenseCategories:[],
   descriptionPresets:[],
   commissionTiers:[],
+  salaryBase:{amount:2000, threshold:5000},
+  salaryRates:[],
   sellers:[],
   suppliers:[],
   balances:{cash:0,bank:0,updatedAt:null}
@@ -142,6 +145,7 @@ let editExpenseId = null;
 let overviewPeriod = null;
 let forecastMonth = null;
 let salaryFrom = null, salaryTo = null, salarySellerName = '';
+let editingRatePeriodId = null;
 
 // ---------- HELPERS ----------
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -157,6 +161,27 @@ function monthEnd(ym){ const [y,m]=ym.split('-').map(Number); const last=new Dat
 function monthKey(dateStr){ return dateStr ? dateStr.slice(0,7) : null; }
 function monthLabel(key){ const [y,m]=key.split('-'); return MONTHS_RU[Number(m)-1]+' '+y; }
 function saleGross(s){ return Number(s.cash||0)+Number(s.cashless||0); }
+function shiftPay(revenue, discount, tiers, base, threshold){
+  const net = revenue - Number(discount||0);
+  if(net<=threshold) return base;
+  const tier = tiers.find(t=> net>=t.min && (t.max===null || net<t.max));
+  const rate = tier ? tier.rate : 0;
+  return base + (net-threshold)*rate/100;
+}
+function getRateForDate(dateStr){
+  const periods = [...state.salaryRates].sort((a,b)=>a.from.localeCompare(b.from));
+  if(periods.length===0) return {base:0, threshold:0, tiers:[]};
+  let applicable = periods[0];
+  for(const p of periods){ if(p.from<=dateStr) applicable=p; else break; }
+  return applicable;
+}
+function shiftPayForDate(sale){
+  if(sale.salaryOverride!==undefined && sale.salaryOverride!==null && sale.salaryOverride!==''){
+    return Number(sale.salaryOverride);
+  }
+  const rate = getRateForDate(sale.date);
+  return shiftPay(saleGross(sale), sale.discount, rate.tiers||[], Number(rate.base||0), Number(rate.threshold||0));
+}
 
 function getAccount(id){ return state.accounts.find(a=>a.id===id); }
 function getAccountByRole(role){ return state.accounts.find(a=>a.role===role); }
@@ -191,6 +216,15 @@ async function loadState(){
   if(!state.sellers) state.sellers = [];
   if(!state.suppliers) state.suppliers = [];
   if(!state.commissionTiers) state.commissionTiers = [];
+  if(!state.salaryBase) state.salaryBase = {amount:2000, threshold:5000};
+  if(!state.salaryRates || state.salaryRates.length===0){
+    state.salaryRates = [{
+      id:uid(), from:'1970-01-01',
+      base:Number(state.salaryBase.amount||0),
+      threshold:Number(state.salaryBase.threshold||0),
+      tiers: (state.commissionTiers||[]).map(t=>Object.assign({},t))
+    }];
+  }
   state.sales = (state.sales||[]).map(s=>{
     if(s.cash===undefined && s.cashless===undefined){
       return Object.assign({}, s, {cash:Number(s.gross||0), cashless:0});
@@ -234,6 +268,7 @@ function render(){
   if(currentTab==='sales') return renderSales(main);
   if(currentTab==='expenses') return renderExpenses(main);
   if(currentTab==='commission') return renderCommission(main);
+  if(currentTab==='import') return renderImport(main);
   if(currentTab==='settings') return renderSettings(main);
 }
 
@@ -467,6 +502,8 @@ function renderSales(main){
         <div><label class="field">Наличными</label><input type="number" id="s-cash" placeholder="0" value="${editing ? (editing.cash||0) : ''}"></div>
         <div><label class="field">Безналично</label><input type="number" id="s-cashless" placeholder="0" value="${editing ? (editing.cashless||0) : ''}"></div>
       </div>
+      <label class="field">Скидка за смену (₽, если была)</label>
+      <input type="number" id="s-discount" placeholder="0" value="${editing ? (editing.discount||0) : ''}">
       <label class="field">Чистыми (за вычетом себестоимости)</label>
       <input type="number" id="s-net" placeholder="0" value="${editing ? (editing.net||0) : ''}">
       <button class="btn" id="s-add">${editing ? 'Сохранить изменения' : 'Добавить'}</button>
@@ -476,8 +513,8 @@ function renderSales(main){
     <div class="card">
       <details>
         <summary>Импорт нескольких дней сразу</summary>
-        <div class="note">Одна строка — один день: дата;наличные;безнал;чистыми;продавец</div>
-        <textarea id="s-import" placeholder="2026-06-01;18000;12000;16000;Анна"></textarea>
+        <div class="note">Одна строка — один день: дата;наличные;безнал;чистыми;продавец;скидка</div>
+        <textarea id="s-import" placeholder="2026-06-01;18000;12000;16000;Анна;0"></textarea>
         <button class="btn secondary" id="s-import-btn">Импортировать</button>
       </details>
     </div>
@@ -491,7 +528,7 @@ function renderSales(main){
         return `<div class="card">
           <details class="month-group" ${idx===0?'open':''}>
             <summary class="month-summary"><span>${monthLabel(k)}</span><span class="stats">${fmt(g)} · ${fmt(n)} · ${pct}%</span></summary>
-            <table><thead><tr><th>Дата</th><th>Продавец</th><th>Нал</th><th>Безнал</th><th>Чист.</th><th>%</th><th></th></tr></thead><tbody>
+            <table><thead><tr><th>Дата</th><th>Продавец</th><th>Нал</th><th>Безнал</th><th>Скидка</th><th>Чист.</th><th>%</th><th></th></tr></thead><tbody>
               ${rows.map(s=>{
                 const gr = saleGross(s);
                 const p = gr ? (s.net/gr*100).toFixed(0) : '0';
@@ -500,6 +537,7 @@ function renderSales(main){
                   <td class="txt">${s.seller||'—'}</td>
                   <td>${fmt(s.cash)}</td>
                   <td>${fmt(s.cashless)}</td>
+                  <td>${fmt(s.discount||0)}</td>
                   <td>${fmt(s.net)}</td>
                   <td>${p}%</td>
                   <td><button class="icon-btn" data-edit-sale="${s.id}">✎</button><button class="del-x" data-del="${s.id}">✕</button></td>
@@ -515,6 +553,7 @@ function renderSales(main){
     const date = document.getElementById('s-date').value;
     const cash = Number(document.getElementById('s-cash').value||0);
     const cashless = Number(document.getElementById('s-cashless').value||0);
+    const discount = Number(document.getElementById('s-discount').value||0);
     const net = Number(document.getElementById('s-net').value||0);
     const sellerSel = document.getElementById('s-seller');
     const seller = sellerSel ? sellerSel.value : '';
@@ -522,14 +561,14 @@ function renderSales(main){
     if(editSaleId){
       const existing = state.sales.find(s=>s.id===editSaleId);
       applySaleToAccounts(existing,-1);
-      existing.date=date; existing.seller=seller; existing.cash=cash; existing.cashless=cashless; existing.net=net;
+      existing.date=date; existing.seller=seller; existing.cash=cash; existing.cashless=cashless; existing.discount=discount; existing.net=net;
       const cashAcc=getAccountByRole('cash'); const bankAcc=getAccountByRole('noncash');
       existing.cashAccountId = cashAcc?cashAcc.id:null; existing.bankAccountId = bankAcc?bankAcc.id:null;
       applySaleToAccounts(existing,1);
       editSaleId = null;
     } else {
       const cashAcc=getAccountByRole('cash'); const bankAcc=getAccountByRole('noncash');
-      const sale = {id:uid(), date, seller, cash, cashless, net, cashAccountId:cashAcc?cashAcc.id:null, bankAccountId:bankAcc?bankAcc.id:null};
+      const sale = {id:uid(), date, seller, cash, cashless, discount, net, cashAccountId:cashAcc?cashAcc.id:null, bankAccountId:bankAcc?bankAcc.id:null};
       state.sales.push(sale);
       applySaleToAccounts(sale,1);
     }
@@ -550,7 +589,7 @@ function renderSales(main){
       const parts = line.split(';').map(p=>p.trim());
       if(parts[0]){
         const cashAcc=getAccountByRole('cash'); const bankAcc=getAccountByRole('noncash');
-        const sale = {id:uid(), date:parts[0], cash:Number(parts[1])||0, cashless:Number(parts[2])||0, net:Number(parts[3])||0, seller:parts[4]||'', cashAccountId:cashAcc?cashAcc.id:null, bankAccountId:bankAcc?bankAcc.id:null};
+        const sale = {id:uid(), date:parts[0], cash:Number(parts[1])||0, cashless:Number(parts[2])||0, net:Number(parts[3])||0, seller:parts[4]||'', discount:Number(parts[5])||0, cashAccountId:cashAcc?cashAcc.id:null, bankAccountId:bankAcc?bankAcc.id:null};
         state.sales.push(sale);
         applySaleToAccounts(sale,1);
       }
@@ -760,16 +799,77 @@ function renderExpenses(main){
 }
 
 // ---------- COMMISSION / ЗП ----------
+function buildSalaryMonthlyData(){
+  const months = {};
+  state.sales.forEach(s=>{
+    if(!s.seller || !s.date) return;
+    const k = monthKey(s.date);
+    months[k] = months[k] || {};
+    months[k][s.seller] = months[k][s.seller] || [];
+    months[k][s.seller].push(s);
+  });
+
+  const monthKeys = Object.keys(months).sort().reverse();
+  return monthKeys.map(k=>{
+    const sellersInMonth = Object.keys(months[k]).sort((a,b)=>a.localeCompare(b,'ru'));
+    const rows = sellersInMonth.map(name=>{
+      const shifts = months[k][name];
+      const shiftsCount = shifts.length;
+      const revenue = shifts.reduce((a,s)=>a+saleGross(s),0);
+      const salesPay = shifts.reduce((a,s)=>a+shiftPayForDate(s),0);
+      const seller = state.sellers.find(sl=>sl.name===name);
+      const travel = shiftsCount * (seller?Number(seller.travelPerShift||0):0);
+      const totalAccrued = salesPay + travel;
+      const avgRevenue = shiftsCount ? revenue/shiftsCount : 0;
+      const avgEarn = shiftsCount ? totalAccrued/shiftsCount : 0;
+      const pct = revenue ? totalAccrued/revenue*100 : 0;
+      return {name, shiftsCount, revenue, totalAccrued, avgRevenue, avgEarn, pct};
+    });
+    return {key:k, label:monthLabel(k), rows};
+  });
+}
+
 function renderCommission(main){
-  const tiers = [...state.commissionTiers].sort((a,b)=>a.min-b.min);
+  const periods = [...state.salaryRates].sort((a,b)=>b.from.localeCompare(a.from));
+  if(!editingRatePeriodId && periods.length>0) editingRatePeriodId = periods[0].id;
+  const editingPeriod = state.salaryRates.find(p=>p.id===editingRatePeriodId) || periods[0];
+  const editingTiers = editingPeriod ? [...editingPeriod.tiers].sort((a,b)=>a.min-b.min) : [];
+  const monthlySalary = buildSalaryMonthlyData();
 
   main.innerHTML = `
     <div class="card">
-      <h2>Ставки % от выручки</h2>
-      ${tiers.length===0 ? '<div class="empty">Добавьте диапазоны выручки и % ставки</div>' :
-        `<table><thead><tr><th>От</th><th>До</th><th>Ставка</th><th></th></tr></thead><tbody>
-          ${tiers.map(t=>`<tr><td>${fmt(t.min)}</td><td>${t.max?fmt(t.max):'∞'}</td><td>${t.rate}%</td><td><button class="del-x" data-del="${t.id}">✕</button></td></tr>`).join('')}
+      <h2>Периоды ставок ЗП</h2>
+      <div class="note">У разных периодов может быть своя база за выход, порог и проценты — пригодится для прошлых лет, где ставки отличались. Период действует с указанной даты до начала следующего.</div>
+      ${periods.length===0 ? '<div class="empty">Периодов пока нет</div>' :
+        `<table><thead><tr><th>Действует с</th><th>База</th><th>Порог</th><th></th></tr></thead><tbody>
+          ${periods.map(p=>`
+            <tr>
+              <td>${p.from}</td>
+              <td>${fmt(p.base)}</td>
+              <td>${fmt(p.threshold)}</td>
+              <td>
+                <button class="icon-btn" data-select-period="${p.id}">${p.id===editingRatePeriodId?'●':'○'}</button>
+                <button class="del-x" data-del-period="${p.id}">✕</button>
+              </td>
+            </tr>`).join('')}
         </tbody></table>`}
+      <label class="field">Действует с даты</label>
+      <input type="date" id="rp-from" value="${todayISO()}">
+      <div class="two-col">
+        <div><label class="field">База за выход, ₽</label><input type="number" id="rp-base" placeholder="0"></div>
+        <div><label class="field">Порог, ₽</label><input type="number" id="rp-threshold" placeholder="0"></div>
+      </div>
+      <button class="btn secondary small" id="rp-add">Добавить период</button>
+    </div>
+
+    ${editingPeriod ? `
+    <div class="card">
+      <h2>Ставки % для периода «с ${editingPeriod.from}»</h2>
+      ${editingTiers.length===0 ? '<div class="empty">Добавьте диапазоны выручки и % ставки</div>' :
+        `<table><thead><tr><th>От</th><th>До</th><th>Ставка</th><th></th></tr></thead><tbody>
+          ${editingTiers.map(t=>`<tr><td>${fmt(t.min)}</td><td>${t.max?fmt(t.max):'∞'}</td><td>${t.rate}%</td><td><button class="del-x" data-del-tier="${t.id}">✕</button></td></tr>`).join('')}
+        </tbody></table>`}
+      <div class="note">Диапазон «От / До» — это выручка за смену (минус скидка), не превышение. Ставка применяется только к сумме сверх порога этого периода.</div>
       <label class="field">От (₽)</label>
       <input type="number" id="c-min" placeholder="0">
       <label class="field">До (₽, пусто = без ограничения)</label>
@@ -777,6 +877,27 @@ function renderCommission(main){
       <label class="field">Ставка (%)</label>
       <input type="number" id="c-rate" placeholder="0">
       <button class="btn" id="c-add">Добавить диапазон</button>
+    </div>` : ''}
+
+    <div class="card">
+      <h2>Зарплата по месяцам</h2>
+      ${monthlySalary.length===0 ? '<div class="empty">Пока нет продаж с указанным продавцом</div>' :
+        monthlySalary.map((m,idx)=>`
+          <details class="month-group" ${idx===0?'open':''}>
+            <summary class="month-summary"><span>${m.label}</span></summary>
+            <table><thead><tr><th>Продавец</th><th>Смен</th><th>Выручка</th><th>Начислено</th><th>Выр./день</th><th>ЗП/день</th><th>% от выр.</th></tr></thead><tbody>
+              ${m.rows.map(r=>`
+                <tr>
+                  <td class="txt">${r.name}</td>
+                  <td>${r.shiftsCount}</td>
+                  <td>${fmt(r.revenue)}</td>
+                  <td>${fmt(r.totalAccrued)}</td>
+                  <td>${fmt(r.avgRevenue)}</td>
+                  <td>${fmt(r.avgEarn)}</td>
+                  <td>${r.pct.toFixed(1)}%</td>
+                </tr>`).join('')}
+            </tbody></table>
+          </details>`).join('')}
     </div>
 
     <div class="card">
@@ -800,17 +921,43 @@ function renderCommission(main){
     </div>
   `;
 
-  document.getElementById('c-add').onclick = ()=>{
-    const min = Number(document.getElementById('c-min').value||0);
-    const maxRaw = document.getElementById('c-max').value;
-    const max = maxRaw ? Number(maxRaw) : null;
-    const rate = Number(document.getElementById('c-rate').value||0);
-    state.commissionTiers.push({id:uid(), min, max, rate});
+  document.getElementById('rp-add').onclick = ()=>{
+    const from = document.getElementById('rp-from').value;
+    const base = Number(document.getElementById('rp-base').value||0);
+    const threshold = Number(document.getElementById('rp-threshold').value||0);
+    if(!from) return;
+    const p = {id:uid(), from, base, threshold, tiers:[]};
+    state.salaryRates.push(p);
+    editingRatePeriodId = p.id;
     saveState(); render();
   };
-  main.querySelectorAll('[data-del]').forEach(btn=>{
-    btn.onclick = ()=>{ state.commissionTiers = state.commissionTiers.filter(t=>t.id!==btn.dataset.del); saveState(); render(); };
+  main.querySelectorAll('[data-select-period]').forEach(btn=>{
+    btn.onclick = ()=>{ editingRatePeriodId = btn.dataset.selectPeriod; render(); };
   });
+  main.querySelectorAll('[data-del-period]').forEach(btn=>{
+    btn.onclick = ()=>{
+      state.salaryRates = state.salaryRates.filter(p=>p.id!==btn.dataset.delPeriod);
+      if(editingRatePeriodId===btn.dataset.delPeriod) editingRatePeriodId = null;
+      saveState(); render();
+    };
+  });
+
+  if(editingPeriod){
+    document.getElementById('c-add').onclick = ()=>{
+      const min = Number(document.getElementById('c-min').value||0);
+      const maxRaw = document.getElementById('c-max').value;
+      const max = maxRaw ? Number(maxRaw) : null;
+      const rate = Number(document.getElementById('c-rate').value||0);
+      editingPeriod.tiers.push({id:uid(), min, max, rate});
+      saveState(); render();
+    };
+    main.querySelectorAll('[data-del-tier]').forEach(btn=>{
+      btn.onclick = ()=>{
+        editingPeriod.tiers = editingPeriod.tiers.filter(t=>t.id!==btn.dataset.delTier);
+        saveState(); render();
+      };
+    });
+  }
 
   if(state.sellers.length===0) return;
 
@@ -818,28 +965,40 @@ function renderCommission(main){
     const box = document.getElementById('sal-result');
     if(!salarySellerName || !salaryFrom || !salaryTo){ box.innerHTML=''; return; }
     const seller = state.sellers.find(s=>s.name===salarySellerName);
-    const shifts = state.sales.filter(s=>s.seller===salarySellerName && s.date>=salaryFrom && s.date<=salaryTo);
+    const shifts = state.sales.filter(s=>s.seller===salarySellerName && s.date>=salaryFrom && s.date<=salaryTo)
+      .sort((a,b)=>a.date.localeCompare(b.date));
     const shiftsCount = shifts.length;
     const revenue = shifts.reduce((a,s)=>a+saleGross(s),0);
-    const salaryPerShift = seller ? Number(seller.salaryPerShift||0) : 0;
     const travelPerShift = seller ? Number(seller.travelPerShift||0) : 0;
-    const oklad = shiftsCount*salaryPerShift;
     const travel = shiftsCount*travelPerShift;
-    const tier = tiers.find(t=>revenue>=t.min && (t.max===null||revenue<t.max));
-    const commission = tier ? revenue*tier.rate/100 : 0;
-    const totalAccrued = oklad+travel+commission;
+
+    const dayRows = shifts.map(s=>{
+      const gr = saleGross(s);
+      const pay = shiftPayForDate(s);
+      return {date:s.date, gr, discount:Number(s.discount||0), pay, isOverride: s.salaryOverride!==undefined && s.salaryOverride!==null && s.salaryOverride!==''};
+    });
+    const salesPay = dayRows.reduce((a,r)=>a+r.pay,0);
+    const totalAccrued = salesPay + travel;
+
     const factPaid = state.expenses.filter(e=>e.seller===salarySellerName && (e.category==='ЗП'||e.category==='Проезд') && e.status==='paid' && e.paidDate && e.paidDate>=salaryFrom && e.paidDate<=salaryTo)
       .reduce((a,e)=>a+Number(e.amount||0),0);
     const diff = totalAccrued - factPaid;
+
     box.innerHTML = `
       <div class="row"><span class="label">Смен</span><span class="num">${shiftsCount}</span></div>
       <div class="row"><span class="label">Выручка</span><span class="num">${fmt(revenue)}</span></div>
-      <div class="row"><span class="label">Оклад за выход</span><span class="num">${fmt(oklad)}</span></div>
-      <div class="row"><span class="label">% от продаж${tier?` (${tier.rate}%)`:''}</span><span class="num">${fmt(commission)}</span></div>
+      <div class="row"><span class="label">Начислено по продажам (по дням)</span><span class="num">${fmt(salesPay)}</span></div>
       <div class="row"><span class="label">Проезд</span><span class="num">${fmt(travel)}</span></div>
       <div class="row" style="border-top:1px solid var(--line); padding-top:10px;"><span class="label">Итого начислено</span><span class="num big">${fmt(totalAccrued)}</span></div>
       <div class="row"><span class="label">Факт выплачено</span><span class="num">${fmt(factPaid)}</span></div>
       <div class="row"><span class="label">Остаток к выплате</span><span class="num ${diff>=0?'neg':'pos'}">${fmt(diff)}</span></div>
+      ${dayRows.length>0 ? `
+      <details style="margin-top:10px;">
+        <summary>Разбивка по дням (${dayRows.length})</summary>
+        <table><thead><tr><th>Дата</th><th>Выручка</th><th>Скидка</th><th>ЗП за смену</th></tr></thead><tbody>
+          ${dayRows.map(r=>`<tr><td>${r.date.slice(8,10)}.${r.date.slice(5,7)}</td><td>${fmt(r.gr)}</td><td>${fmt(r.discount)}</td><td>${fmt(r.pay)}${r.isOverride?' <span class="tag">факт</span>':''}</td></tr>`).join('')}
+        </tbody></table>
+      </details>` : ''}
     `;
   }
 
@@ -857,6 +1016,56 @@ function renderCommission(main){
     computeAndShow();
   };
   if(salarySellerName) computeAndShow();
+}
+
+// ---------- IMPORT HISTORY ----------
+function renderImport(main){
+  main.innerHTML = `
+    <div class="card">
+      <h2>Импорт данных за прошлые годы</h2>
+      <div class="note">
+        Одна строка — один день/смена. Поля через точку с запятой, в этом порядке:<br>
+        <b>Дата;Продавец;Нал;Безнал;Скидка;Чистыми;ЗП</b><br><br>
+        Дата — в формате ГГГГ-ММ-ДД.<br>
+        ЗП — необязательно. Если указана, она используется как факт и <u>не пересчитывается</u> по текущим ставкам (пригодится для прошлых лет со старыми правилами). Если оставить пустым — ЗП посчитается по периодам ставок (вкладка «ЗП продавца»), актуальным на дату смены.
+      </div>
+      <textarea id="imp-text" style="min-height:220px;" placeholder="2021-03-01;Оля;12000;8000;500;9800;2600
+2021-03-02;Эллирика;15400;6200;0;11900;3100
+2021-03-03;Оля;9000;4000;0;7200;"></textarea>
+      <button class="btn" id="imp-run">Импортировать</button>
+      <div id="imp-result" style="margin-top:12px;"></div>
+    </div>
+  `;
+
+  document.getElementById('imp-run').onclick = ()=>{
+    const raw = document.getElementById('imp-text').value.trim();
+    const box = document.getElementById('imp-result');
+    if(!raw){ box.innerHTML=''; return; }
+    let added = 0, skipped = 0;
+    raw.split('\n').map(l=>l.trim()).filter(Boolean).forEach(line=>{
+      const parts = line.split(';').map(p=>p.trim());
+      if(!parts[0]){ skipped++; return; }
+      const cashAcc = getAccountByRole('cash'); const bankAcc = getAccountByRole('noncash');
+      const sale = {
+        id:uid(),
+        date:parts[0],
+        seller:parts[1]||'',
+        cash:Number(parts[2])||0,
+        cashless:Number(parts[3])||0,
+        discount:Number(parts[4])||0,
+        net:Number(parts[5])||0,
+        salaryOverride: (parts[6]!==undefined && parts[6]!=='') ? Number(parts[6]) : null,
+        cashAccountId: cashAcc?cashAcc.id:null,
+        bankAccountId: bankAcc?bankAcc.id:null
+      };
+      state.sales.push(sale);
+      applySaleToAccounts(sale,1);
+      added++;
+    });
+    saveState();
+    box.innerHTML = `<div class="note">Импортировано записей: ${added}${skipped?`, пропущено (без даты): ${skipped}`:''}. Данные появятся на вкладках «Продажи» и «ЗП продавца».</div>`;
+    document.getElementById('imp-text').value = '';
+  };
 }
 
 // ---------- SETTINGS ----------
@@ -900,16 +1109,15 @@ function renderSettings(main){
     <div class="card">
       <h2>Продавцы</h2>
       ${sellersSorted.length===0 ? '<div class="empty">Список пуст</div>' :
-        `<table><thead><tr><th>Имя</th><th>Оклад/выход</th><th>Проезд/выход</th><th></th></tr></thead><tbody>
-          ${sellersSorted.map(s=>`<tr><td class="txt">${s.name}</td><td>${fmt(s.salaryPerShift||0)}</td><td>${fmt(s.travelPerShift||0)}</td><td><button class="del-x" data-del-seller="${s.id}">✕</button></td></tr>`).join('')}
+        `<table><thead><tr><th>Имя</th><th>Проезд/выход</th><th></th></tr></thead><tbody>
+          ${sellersSorted.map(s=>`<tr><td class="txt">${s.name}</td><td>${fmt(s.travelPerShift||0)}</td><td><button class="del-x" data-del-seller="${s.id}">✕</button></td></tr>`).join('')}
         </tbody></table>`}
       <label class="field">Имя продавца</label>
       <input type="text" id="seller-name" placeholder="напр. Анна">
-      <div class="two-col">
-        <div><label class="field">Оклад за выход</label><input type="number" id="seller-salary" placeholder="0"></div>
-        <div><label class="field">Проезд за выход</label><input type="number" id="seller-travel" placeholder="0"></div>
-      </div>
+      <label class="field">Проезд за выход</label>
+      <input type="number" id="seller-travel" placeholder="0">
       <button class="btn secondary" id="seller-add">Добавить продавца</button>
+      <div class="note">Оклад и % от выручки теперь считаются по единой формуле на вкладке «ЗП продавца» (база за выход + % сверх порога) — она одна для всех продавцов.</div>
     </div>
 
     <div class="card">
@@ -958,10 +1166,9 @@ function renderSettings(main){
 
   document.getElementById('seller-add').onclick = ()=>{
     const name = document.getElementById('seller-name').value.trim();
-    const salaryPerShift = Number(document.getElementById('seller-salary').value||0);
     const travelPerShift = Number(document.getElementById('seller-travel').value||0);
     if(!name) return;
-    state.sellers.push({id:uid(), name, salaryPerShift, travelPerShift});
+    state.sellers.push({id:uid(), name, travelPerShift});
     saveState(); render();
   };
   main.querySelectorAll('[data-del-seller]').forEach(btn=>{
