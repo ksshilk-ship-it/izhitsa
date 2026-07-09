@@ -7475,14 +7475,21 @@ function _renderShiftView(){
     tblRow('Проезд факт', enteredVal(zpStandalone.travelFact, false), '—')+
     tblRow('Разница ЗП+проезд', diffChip(zpDiff), '', {border:true});
   var _allShiftIssues = evaluateShiftIssues(sh).issues;
+  var _shiftStillOpen = sh.status==='open' || !sh.closedAt;
+  var _hasRealMismatch = _allShiftIssues.some(function(i){ return !(i.code && i.code.indexOf('_missing')>=0); });
+  var _isWaitingOnly = _shiftStillOpen && !_hasRealMismatch;
+  if(_isWaitingOnly) anyDiff = false;
   var issuesListHtml = _allShiftIssues.length
-    ? '<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #4a2a2a">'+
-        _allShiftIssues.map(function(i){ return '<div style="font-size:11px;color:#f0a0a0;padding:3px 0">• '+i.label+'</div>'; }).join('')+
+    ? '<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid '+(_isWaitingOnly?'#3a3a4a':'#4a2a2a')+'">'+
+        _allShiftIssues.map(function(i){ return '<div style="font-size:11px;color:'+(_isWaitingOnly?'#8888aa':'#f0a0a0')+';padding:3px 0">• '+i.label+'</div>'; }).join('')+
       '</div>'
     : '';
-  var summaryHtml = '<div style="background:'+(anyDiff?'#2e1a1a':'#1a2e1a')+';border:2px solid '+(anyDiff?'#f06060':'#60f090')+';border-radius:14px;padding:14px;margin-bottom:12px">'+
+  var _bannerColor = _isWaitingOnly ? '#f0c060' : (anyDiff?'#f06060':'#60f090');
+  var _bannerBg = _isWaitingOnly ? '#2e2a1a' : (anyDiff?'#2e1a1a':'#1a2e1a');
+  var _bannerLabel = _isWaitingOnly ? '⏳ СМЕНА ЕЩЁ ОТКРЫТА' : (anyDiff?'⚠️ ЕСТЬ НЕСОВПАДЕНИЯ':'✅ ВСЁ СХОДИТСЯ');
+  var summaryHtml = '<div style="background:'+_bannerBg+';border:2px solid '+_bannerColor+';border-radius:14px;padding:14px;margin-bottom:12px">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:'+(anyDiff?'#f06060':'#60f090')+'">'+(anyDiff?'⚠️ ЕСТЬ НЕСОВПАДЕНИЯ':'✅ ВСЁ СХОДИТСЯ')+'</div>'+
+      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:'+_bannerColor+'">'+_bannerLabel+'</div>'+
       '<div style="font-size:10.5px;color:#8888aa">👤 '+(sh.sellerName||'—')+'</div>'+
     '</div>'+
     issuesListHtml+
