@@ -7619,6 +7619,7 @@ function openManualAcceptMo(){
   if(sel) sel.innerHTML = '<option value="">— Выберите мастера —</option>' + getEmployees().filter(e=>e.role==='мастер').map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
   document.getElementById('maDate').value = new Date().toISOString().slice(0,10);
   _maItems = [];
+  _maToggled = new Set();
   addMaItemRow(); // одна строка по умолчанию
   renderMaItemsList();
   openMo('manualAcceptMo');
@@ -7729,6 +7730,12 @@ function addMaItemRow(){
   renderMaItemsList();
 }
 
+let _maToggled = new Set(); // rid-ы, у которых пользователь вручную переключил свёрнуто/развёрнуто (инвертирует поведение по умолчанию)
+function toggleMaItemCollapse(rid){
+  if(_maToggled.has(rid)) _maToggled.delete(rid); else _maToggled.add(rid);
+  renderMaItemsList();
+}
+
 function renderMaItemsList(){
   const names = getItemNames();
   const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
@@ -7737,11 +7744,31 @@ function renderMaItemsList(){
     _acLists['maWood_'+it.rid] = woods;
   });
   const c = document.getElementById('maItemsList'); if(!c) return;
-  c.innerHTML = _maItems.map((it,i)=>`
+  c.innerHTML = _maItems.map((it,i)=>{
+    const isLast = i === _maItems.length-1;
+    let collapsed = !isLast; // по умолчанию: все, кроме последней (текущей), свёрнуты
+    if(_maToggled.has(it.rid)) collapsed = !collapsed; // ручное переключение
+
+    if(collapsed){
+      const statusIcon = it.status==='defect' ? '⚠️' : '✅';
+      return `<div onclick="toggleMaItemCollapse('${it.rid}')" style="background:var(--s2);border-radius:12px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          <span style="font-size:14px">${statusIcon}</span>
+          <div style="min-width:0">
+            <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${it.name||'Позиция '+(i+1)}${it.artikul?' · '+it.artikul:''}</div>
+            <div style="font-size:11px;color:var(--t2)">${it.wood||'—'} · ₽${fmt(it.price||0)}</div>
+          </div>
+        </div>
+        <span style="font-size:14px;color:var(--t2);flex-shrink:0">✏️</span>
+      </div>`;
+    }
+
+    return `
     <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:10px;border:1px solid var(--border)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <span style="font-size:11px;color:var(--t2);font-weight:700">Позиция ${i+1}</span>
         <div style="display:flex;gap:6px">
+          ${!isLast?`<button onclick="toggleMaItemCollapse('${it.rid}')" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px" title="Свернуть">︿</button>`:''}
           <button onclick="copyMaItemRow('${it.rid}')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:16px" title="Копировать (наименование и древесина)">📋</button>
           ${_maItems.length>1?`<button onclick="removeMaItemRow('${it.rid}')" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>`:''}
         </div>
@@ -7821,7 +7848,8 @@ function renderMaItemsList(){
           ⚠️ Брак / переделка
         </button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function setMaItemStatus(rid, status){
@@ -8164,16 +8192,33 @@ function renderArchiveItems(c){
     <div class="at-row"><span class="at-lbl">Статус</span><span class="at-val">${acc.status==='done'?'✅ Проведена':'⏳ Открыта'}</span></div>
     ${acc.status!=='done'?`<button onclick="openMaDetail('${acc.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);color:#000;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">✏️ Разметить и провести</button>`:''}
   </div>` +
-  acc.positions.map((p,i)=>`
-    <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid var(--border)">
-      <div class="at-row"><span class="at-lbl">Артикул</span><span class="at-val">${p.artikul||'—'}</span></div>
-      <div class="at-row"><span class="at-lbl">Наименование</span><span class="at-val">${p.name||'—'}</span></div>
-      <div class="at-row"><span class="at-lbl">Порода</span><span class="at-val">${p.wood||'—'}</span></div>
-      <div class="at-row"><span class="at-lbl">Цена</span><span class="at-val">${fmt(p.price||0)}</span></div>
-      <div class="at-row"><span class="at-lbl">ЗП</span><span class="at-val" style="color:var(--a5)">${fmt(p.zp||0)}</span></div>
-      <div class="at-row"><span class="at-lbl">Статус</span><span class="at-val">${p.status==='accepted'?'✅ Принято':p.status==='defect'?'❌ Брак':'⏳ Не размечено'}</span></div>
+  `<div style="font-size:11px;color:var(--t2);margin-bottom:6px">${acc.positions.length} позиций · нажми на строку, чтобы посмотреть подробнее</div>` +
+  acc.positions.map((p,i)=>{
+    const pid = 'archPos_'+(p.rid||i);
+    const statusIcon = p.status==='accepted'?'✅':p.status==='defect'?'❌':'⏳';
+    return `
+    <div style="background:var(--s2);border-radius:12px;margin-bottom:8px;border:1px solid var(--border);overflow:hidden">
+      <div onclick="const d=document.getElementById('${pid}');d.style.display=d.style.display==='block'?'none':'block';" style="padding:10px 12px;display:flex;justify-content:space-between;align-items:center;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          <span style="font-size:14px">${statusIcon}</span>
+          <div style="min-width:0">
+            <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name||'—'}${p.artikul?' · '+p.artikul:''}</div>
+            <div style="font-size:11px;color:var(--t2)">${p.wood||'—'} · ₽${fmt(p.price||0)}</div>
+          </div>
+        </div>
+        <span style="font-size:14px;color:var(--t2);flex-shrink:0">▾</span>
+      </div>
+      <div id="${pid}" class="archPosDetail" style="display:none;padding:0 12px 12px">
+        <div class="at-row"><span class="at-lbl">Артикул</span><span class="at-val">${p.artikul||'—'}</span></div>
+        <div class="at-row"><span class="at-lbl">Наименование</span><span class="at-val">${p.name||'—'}</span></div>
+        <div class="at-row"><span class="at-lbl">Порода</span><span class="at-val">${p.wood||'—'}</span></div>
+        <div class="at-row"><span class="at-lbl">Цена</span><span class="at-val">${fmt(p.price||0)}</span></div>
+        <div class="at-row"><span class="at-lbl">ЗП</span><span class="at-val" style="color:var(--a5)">${fmt(p.zp||0)}</span></div>
+        <div class="at-row"><span class="at-lbl">Статус</span><span class="at-val">${p.status==='accepted'?'✅ Принято':p.status==='defect'?'❌ Брак':'⏳ Не размечено'}</span></div>
+      </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function archiveGoBack(){
