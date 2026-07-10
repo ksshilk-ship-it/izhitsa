@@ -1763,6 +1763,14 @@ function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 function now(){return new Date().toISOString();}
 function fmtDT(iso){if(!iso)return'';const d=new Date(iso);return d.toLocaleDateString('ru-RU',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}
 function elapsed(start,end){if(!start)return'';const ms=(end?new Date(end):new Date())-new Date(start);const h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);return h>0?h+'ч '+m+'м':m+'м';}
+// ════════ ЗАЩИТА ОТ ПОВТОРНОГО СОХРАНЕНИЯ ════════
+// Не даёт запустить одно и то же действие сохранения второй раз, пока первое ещё выполняется
+// (например, двойной тап по кнопке "Сохранить" на медленном интернете)
+const _saveLocks = new Set();
+function isSaving(lockName){ return _saveLocks.has(lockName); }
+function beginSave(lockName){ _saveLocks.add(lockName); }
+function endSave(lockName){ _saveLocks.delete(lockName); }
+
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
 
 // Заметный баннер "Сохранено" — крупнее и заметнее обычного тоста, специально для явного сохранения справочников
@@ -1963,6 +1971,7 @@ function openFiPositionEdit(groupId, rid){
 }
 
 async function saveFiPositionEdit(){
+  if(isSaving('fiPosEdit')) return;
   const g = _fiGroups.find(x=>x.id===_fpeGroupId); if(!g) return;
   const p = g.positions.find(x=>x.rid===_fpeRid); if(!p) return;
   p.name    = document.getElementById('fpeNameInput').value.trim();
@@ -1971,12 +1980,14 @@ async function saveFiPositionEdit(){
   p.artikul = document.getElementById('fpeArtikul').value.trim();
   p.price   = parseFloat(document.getElementById('fpePrice').value)||0;
   p.qty     = parseFloat(document.getElementById('fpeQty').value)||1;
+  beginSave('fiPosEdit');
   try{
     await db.collection('ws_first_inventory').doc(_fpeGroupId).update({positions: g.positions, updatedAt: now()});
     closeMo('fiPositionEditMo');
     openFiGroupDetail(_fpeGroupId);
-    showToast('✅ Позиция обновлена');
+    showSavedBanner('✅ Позиция обновлена');
   }catch(e){ showToast('Ошибка: '+e.message); }
+  finally{ endSave('fiPosEdit'); }
 }
 
 async function deleteFiPosition(groupId, rid){
@@ -2318,6 +2329,7 @@ function openEmpEditMo(staffId){
 }
 
 async function saveEmpEdit(){
+  if(isSaving('empEdit')) return;
   const name = document.getElementById('eeName').value.trim();
   const pass = document.getElementById('eePass').value;
   const rate = parseFloat(document.getElementById('eeRate').value)||0;
@@ -2353,13 +2365,15 @@ async function saveEmpEdit(){
     });
   }
 
+  beginSave('empEdit');
   localStorage.setItem('iz_staff', JSON.stringify(staff));
   try{ await db.collection('iz_settings').doc('staff').set({staff, updatedAt: now()}, {merge:true}); }catch(e){}
 
   closeMo('empEditMo');
   renderEmployeeList(); renderStaffPage();
   renderAdmin();
-  showToast('✅ Сохранено');
+  showSavedBanner('✅ Сохранено');
+  endSave('empEdit');
 }
 
 async function toggleEmpBlock(staffId){
@@ -3698,6 +3712,7 @@ function renderShipInvoice(){
 }
 
 async function createShipmentFromPage(){
+  if(isSaving('shipCreate')) return;
   if(!_shipPageSelected.size){ showToast('Выберите товары для отгрузки'); return; }
   const dest = document.getElementById('shipPageDest')?.value;
   if(!dest){ showToast('Выберите магазин'); return; }
@@ -3712,6 +3727,7 @@ async function createShipmentFromPage(){
     createdById:session.id, createdByName:session.name,
     status:'in_progress', createdAt:now()
   };
+  beginSave('shipCreate');
   try{
     await db.collection('ws_shipments').add(shipDoc);
     const batch=db.batch();
@@ -3721,10 +3737,11 @@ async function createShipmentFromPage(){
     await batch.commit();
     _shipPageSelected.clear();
     _shipOpenGroups.clear();
-    showToast(`✅ ${shipNum} → ${dest} · ${shipItems.length} шт. Товар списан со склада`);
+    showSavedBanner(`✅ ${shipNum} → ${dest} · ${shipItems.length} шт.`);
     logAction('shipment_created', {shipNum, dest, itemCount: shipItems.length});
     setShipTab('progress');
   }catch(e){ showToast('Ошибка: '+e.message); }
+  finally{ endSave('shipCreate'); }
 }
 
 // ═══ В ПРОЦЕССЕ ОТГРУЗКИ — сформированные накладные, но физически ещё на месте ═══
@@ -3751,7 +3768,9 @@ function renderShipProgress(){
 }
 
 async function markShipmentSent(shipId){
+  if(isSaving('shipSent_'+shipId)) return;
   if(!confirm('Подтвердить, что накладная физически покинула мастерскую?\n\nОна переместится в Архив.')) return;
+  beginSave('shipSent_'+shipId);
   try{
     const ship = shipments.find(s=>s._id===shipId);
     await db.collection('ws_shipments').doc(shipId).update({status:'sent', sentAt: now(), sentBy: session.name});
@@ -3761,10 +3780,11 @@ async function markShipmentSent(shipId){
       ship.items.forEach(i=>batch.update(db.collection('ws_items').doc(i._id),{status:'shipped', shippedAt: now()}));
       await batch.commit();
     }
-    showToast('🚚 Отмечено как отправлено');
+    showSavedBanner('🚚 Отмечено как отправлено');
     logAction('shipment_sent', {shipNum: ship?.num, dest: ship?.destName, itemCount: (ship?.items||[]).length});
     renderShipProgress();
   }catch(e){ showToast('Ошибка: '+e.message); }
+  finally{ endSave('shipSent_'+shipId); }
 }
 
 function renderShipArchive(){
@@ -5270,6 +5290,7 @@ function openZPPay(masterId, masterName){
 }
 
 async function saveZPPayment(){
+  if(isSaving('zpPay')) return;
   const amount = parseFloat(document.getElementById('zpPayAmt').value)||0;
   if(!amount){ showToast('Введите сумму'); return; }
   const comment  = document.getElementById('zpPayComment').value.trim();
@@ -5283,25 +5304,27 @@ async function saveZPPayment(){
     createdAt: now(), by: session.name
   };
 
-  const payments = getZPPayments();
-  payments.push(payEntry);
-  saveZPPayments(payments);
-
+  beginSave('zpPay');
   try{
+    const payments = getZPPayments();
+    payments.push(payEntry);
+    saveZPPayments(payments);
+
     await db.collection('ws_zp_payments').add(payEntry);
-  }catch(e){ console.error('zp pay save', e); }
 
-  // Синхронизируем в localStorage мастера для его ЗП-страницы
-  const masterPayKey = 'ws_zp_payments_'+currentZPMasterId;
-  const masterPays   = JSON.parse(localStorage.getItem(masterPayKey)||'[]');
-  masterPays.unshift(payEntry);
-  localStorage.setItem(masterPayKey, JSON.stringify(masterPays.slice(0,100)));
+    // Синхронизируем в localStorage мастера для его ЗП-страницы
+    const masterPayKey = 'ws_zp_payments_'+currentZPMasterId;
+    const masterPays   = JSON.parse(localStorage.getItem(masterPayKey)||'[]');
+    masterPays.unshift(payEntry);
+    localStorage.setItem(masterPayKey, JSON.stringify(masterPays.slice(0,100)));
 
-  closeMo('zpPayMo');
-  renderZPay();
-  // Обновить детальную карточку если открыта
-  if(document.getElementById('zpEmployeeDetailMo').style.display==='flex') openZPEmployeeDetail(currentZPMasterId);
-  showToast(`✅ Выплата ${fmt(amount)} зафиксирована`);
+    closeMo('zpPayMo');
+    renderZPay();
+    // Обновить детальную карточку если открыта
+    if(document.getElementById('zpEmployeeDetailMo').style.display==='flex') openZPEmployeeDetail(currentZPMasterId);
+    showSavedBanner(`✅ Выплата ${fmt(amount)} зафиксирована`);
+  }catch(e){ showToast('Ошибка: '+e.message); }
+  finally{ endSave('zpPay'); }
 }
 
 // ════════════════════════════════
@@ -6787,11 +6810,14 @@ async function saveManualStock(){
       itemNum: 'МАН-'+uid().toUpperCase()
     });
   }
+  if(isSaving('manualStock')) return;
+  beginSave('manualStock');
   try {
     await batch.commit();
     closeMo('manualStockMo');
-    showToast(`✅ Добавлено ${qty} шт. «${name}» на склад`);
+    showSavedBanner(`✅ Добавлено ${qty} шт. «${name}» на склад`);
   } catch(e){ showToast('Ошибка: '+e.message); }
+  finally{ endSave('manualStock'); }
 }
 let _msDupChecked = false;
 
@@ -7227,6 +7253,7 @@ function openStockItemEdit(itemId){
 }
 
 async function saveStockItemEdit(){
+  if(isSaving('stockItemEdit')) return;
   if(!_sieItemId){ showToast('Ошибка: товар не найден'); return; }
   const name    = document.getElementById('sieNameInput').value.trim();
   const wood    = document.getElementById('sieWoodInput').value.trim();
@@ -7234,14 +7261,16 @@ async function saveStockItemEdit(){
   const artikul = document.getElementById('sieArtikul').value.trim();
   const price   = parseFloat(document.getElementById('siePrice').value)||0;
   if(!name){ showToast('Укажите наименование'); return; }
+  beginSave('stockItemEdit');
   try{
     await db.collection('ws_items').doc(_sieItemId).update({
       name, itemName: name, wood, size, artikul, price,
       editedAt: now(), editedBy: session.name
     });
     closeMo('stockItemEditMo');
-    showToast('✅ Товар обновлён');
+    showSavedBanner('✅ Товар обновлён');
   }catch(e){ showToast('Ошибка: '+e.message); }
+  finally{ endSave('stockItemEdit'); }
 }
 
 async function deleteStockItem(itemId, name){
@@ -7968,6 +7997,7 @@ function copyMaItemRow(rid){
 }
 
 async function saveManualAccept(){
+  if(isSaving('maAccept')) return; // защита от двойного тапа
   const masterId = document.getElementById('maMaster')?.value;
   const date     = document.getElementById('maDate')?.value;
   if(!masterId){ showToast('Выберите мастера'); return; }
@@ -7991,6 +8021,7 @@ async function saveManualAccept(){
     }
   });
 
+  beginSave('maAccept');
   try{
     await db.collection('ws_master_acceptances').doc(batchId).set({
       id: batchId, masterId, masterName: master?.name||'',
@@ -8003,9 +8034,10 @@ async function saveManualAccept(){
     // Логирование в аудит
     logAction('manual_acceptance_created', {masterName:master?.name, date, count:positions.length});
     closeMo('manualAcceptMo');
-    showToast(`✅ Приёмка от ${master?.name||''} сохранена · ${positions.length} позиций`);
+    showSavedBanner(`✅ Приёмка от ${master?.name||''} сохранена · ${positions.length} позиций`);
     renderManualAcceptHistory();
   }catch(e){ showToast('Ошибка: '+e.message); }
+  finally{ endSave('maAccept'); }
 }
 
 // НОВОЕ! Переменные для навигации архива приёмок
@@ -8398,6 +8430,8 @@ async function provedMaAccept(){
   }
   _maDupChecked = new Set();
 
+  if(isSaving('maProved')) return;
+  beginSave('maProved');
   try{
     // 1) Принятые — на баланс склада, датой приёмки кладовщиком
     if(accepted.length){
@@ -8445,8 +8479,9 @@ async function provedMaAccept(){
     // Логирование в аудит
     logAction('manual_acceptance_processed', {masterName:acc.masterName, accepted:accepted.length, defects:defects.length});
     closeMo('maDetailMo');
-    showToast(`✅ Проведено: +${accepted.length} на склад, ${defects.length} в брак мастеру`);
+    showSavedBanner(`✅ Проведено: +${accepted.length} на склад, ${defects.length} в брак мастеру`);
   }catch(e){ showToast('Ошибка: '+e.message); }
+  finally{ endSave('maProved'); }
 }
 
 // ════════════════════════════════
@@ -8638,17 +8673,19 @@ async function saveFirstInvGroup(){
     price: it.price||0, qty: it.qty||1
   }));
 
+  if(isSaving('fiGroupSave')) return;
+  beginSave('fiGroupSave');
   try{
     if(_fiCurrentGroupId){
       // Режим дополнения: добавляем товары к существующей группе
-      const g = _fiGroups.find(x=>x.id===_fiCurrentGroupId); if(!g) return;
+      const g = _fiGroups.find(x=>x.id===_fiCurrentGroupId); if(!g){ endSave('fiGroupSave'); return; }
       const merged = [...(g.positions||[]), ...newPositions];
       await db.collection('ws_first_inventory').doc(_fiCurrentGroupId).update({
         positions: merged, updatedAt: now(), updatedBy: session.name
       });
       logAction('first_inventory_group_updated',{groupName:g.groupName, added:newPositions.length});
       closeMo('firstInvMo');
-      showToast(`✅ Добавлено ${newPositions.length} товар(ов) в группу «${g.groupName}»`);
+      showSavedBanner(`✅ Добавлено ${newPositions.length} товар(ов) в группу «${g.groupName}»`);
     } else {
       // Новая группа
       const groupId = uid();
@@ -8660,9 +8697,10 @@ async function saveFirstInvGroup(){
       });
       logAction('first_inventory_group_created',{groupName, count:newPositions.length});
       closeMo('firstInvMo');
-      showToast(`✅ Группа «${groupName}» сохранена · ${newPositions.length} товаров`);
+      showSavedBanner(`✅ Группа «${groupName}» сохранена · ${newPositions.length} товаров`);
     }
   }catch(e){ showToast('Ошибка: '+e.message); }
+  finally{ endSave('fiGroupSave'); }
 }
 
 function renderFirstInventoryGroups(){
@@ -8867,7 +8905,9 @@ async function deleteFiGroup(groupId){
 }
 
 async function activateFirstInvGroup(groupId){
+  if(isSaving('fiActivate_'+groupId)) return;
   const g = _fiGroups.find(x=>x.id===groupId); if(!g) return;
+  beginSave('fiActivate_'+groupId);
   try{
     const batch = db.batch();
     g.positions.forEach(p=>{
@@ -8894,11 +8934,13 @@ async function activateFirstInvGroup(groupId){
     await db.collection('ws_first_inventory').doc(groupId).update({status:'active', activatedAt: now(), activatedBy: session.name});
     logAction('first_inventory_group_activated',{groupName:g.groupName, count:(g.positions||[]).length});
     closeMo('fiGroupDetailMo');
-    showToast(`✅ Группа «${g.groupName}» поставлена на баланс склада`);
+    showSavedBanner(`✅ Группа «${g.groupName}» поставлена на баланс склада`);
   }catch(e){ showToast('Ошибка: '+e.message); }
+  finally{ endSave('fiActivate_'+groupId); }
 }
 
 async function reactivateFiGroup(groupId){
+  if(isSaving('fiReactivate_'+groupId)) return;
   const g = _fiGroups.find(x=>x.id===groupId); if(!g) return;
 
   // Найдём все ws_items уже созданные из этой группы
@@ -8917,6 +8959,7 @@ async function reactivateFiGroup(groupId){
   if(!confirm(`Создать недостающие ${missing} шт. на складе из группы «${g.groupName}»?`)) return;
 
   try{
+    beginSave('fiReactivate_'+groupId);
     showToast(`Создаём ${missing} позиций...`);
     const batch = db.batch();
     let created = 0;
@@ -8950,16 +8993,18 @@ async function reactivateFiGroup(groupId){
 
     if(created===0){
       showToast(`Не создано ни одного — скорее всего, у части позиций одинаковые артикулы (смотрите список выше в карточке группы).`);
+      endSave('fiReactivate_'+groupId);
       return;
     }
 
     await batch.commit();
     closeMo('fiGroupDetailMo');
-    showToast(`✅ Доактивировано: +${created} шт. на складе` + (skippedDup?` (пропущено дублей: ${skippedDup})`:''));
+    showSavedBanner(`✅ Доактивировано: +${created} шт. на складе` + (skippedDup?` (пропущено дублей: ${skippedDup})`:''));
     logAction('inventory_group_reactivated', {groupName: g.groupName, created, skippedDup});
     loadDataFromFirebase();
     setTimeout(()=>renderWarehouse(), 400);
   }catch(e){ showToast('Ошибка: '+e.message); }
+  finally{ endSave('fiReactivate_'+groupId); }
 }
 
 // НОВОЕ! Перевести конкретные группы (по имени) из активных в Запасы — разовая ручная операция
