@@ -3977,7 +3977,7 @@ function renderReservesList(){
       <div style="background:var(--s1);border-radius:10px;padding:12px;margin-bottom:8px;border-left:4px solid var(--a4)">
         <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">
           <div>
-            <div style="font-weight:700;color:var(--t1);font-size:14px">${group.groupName}</div>
+            <div style="font-weight:700;color:var(--t1);font-size:14px">${group.groupName || '(без названия)'}</div>
             <div style="font-size:11px;color:var(--t2)">${itemCount} товаров</div>
           </div>
           <div style="text-align:right">
@@ -4220,7 +4220,7 @@ function renderBalance(){
           <div style="background:var(--s1);border-radius:8px;padding:10px;margin-bottom:8px;border-left:3px solid var(--a4)">
             <div onclick="openFiGroupDetail('${group.id}')" style="display:flex;justify-content:space-between;align-items:start;margin-bottom:6px;cursor:pointer">
               <div>
-                <div style="font-weight:700;color:var(--t1)">${group.groupName}</div>
+                <div style="font-weight:700;color:var(--t1)">${group.groupName || '(без названия)'}</div>
                 <div style="font-size:11px;color:var(--t2)">${positions.length} поз. · ${itemCount} шт</div>
               </div>
               <div style="text-align:right">
@@ -7019,7 +7019,7 @@ function renderInvFiGroups(){
       const icon  = {draft:'⏳',active:'✅',archived:'🟡'}[g.status]||'';
       return `<div onclick="openFiGroupDetail('${g.id}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid ${gMiss?'var(--exp)':'var(--border)'};border-radius:10px;margin-bottom:6px;cursor:pointer;background:${gMiss?'rgba(255,80,80,0.05)':'var(--s2)'}">
         <div>
-          <div style="font-size:13px;font-weight:600">${icon} ${g.groupName}</div>
+          <div style="font-size:13px;font-weight:600">${icon} ${g.groupName || '(без названия)'}</div>
           <div style="font-size:11px;color:var(--t2)">${(g.positions||[]).length} поз. · ${gQty} шт.</div>
           ${gMiss?`<div style="font-size:11px;color:var(--exp)">⚠️ Не все активированы (${gReal}/${gQty})</div>`:''}
         </div>
@@ -7071,7 +7071,7 @@ function renderInvFiGroups(){
         const tActive = g.activatedAt ? new Date(g.activatedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : null;
         return `<div onclick="openFiGroupDetail('${g.id}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;background:${gMiss?'rgba(255,80,80,0.05)':''}">
           <div>
-            <div style="font-size:13px;font-weight:600">${icon} ${g.groupName}</div>
+            <div style="font-size:13px;font-weight:600">${icon} ${g.groupName || '(без названия)'}</div>
             <div style="font-size:11px;color:var(--t2)">${gQty} шт. · ${fmt(gSum)}</div>
             <div style="font-size:10px;color:var(--t2)">Внесено в ${tCreate}${tActive?' · Активировано в '+tActive:''}</div>
             ${gMiss?`<div style="font-size:11px;color:var(--exp)">⚠️ На складе ${gReal}/${gQty} — нажмите для доактивации</div>`:''}
@@ -8884,7 +8884,7 @@ function renderFirstInventoryGroups(){
     }[g.status] || g.status;
     return `<div class="li" onclick="openFiGroupDetail('${g.id}')" style="cursor:pointer">
       <div class="li-info">
-        <div class="li-name">${g.groupName}</div>
+        <div class="li-name">${g.groupName || '(без названия)'}</div>
         <div class="li-sub">${(g.positions||[]).length} позиций · ${totalQty} шт. · ${fmt(totalSum)}</div>
         <div class="li-sub">${statusBadge}</div>
       </div>
@@ -8893,11 +8893,30 @@ function renderFirstInventoryGroups(){
   }).join('');
 }
 
+let _fiGroupDetailCurrentId = null;
+
+async function saveFiGroupName(){
+  const newName = document.getElementById('fiGroupDetailTitle').value.trim();
+  if(!newName){ showToast('Название не может быть пустым'); return; }
+  const groupId = _fiGroupDetailCurrentId;
+  const g = _fiGroups.find(x=>x.id===groupId); if(!g) return;
+  if(newName === g.groupName) return; // без изменений
+  if(isSaving('fiGroupRename')) return;
+  beginSave('fiGroupRename');
+  try{
+    await db.collection('ws_first_inventory').doc(groupId).update({groupName: newName, updatedAt: now(), updatedBy: session.name});
+    showSavedBanner('✅ Название группы обновлено');
+    logAction('inventory_group_renamed', {oldName: g.groupName || '(без названия)', newName});
+  }catch(e){ showToast('Ошибка: '+e.message); }
+  finally{ endSave('fiGroupRename'); }
+}
+
 function openFiGroupDetail(groupId){
   const g = _fiGroups.find(x=>x.id===groupId); if(!g) return;
   _fiGroupSort = {field: 'none', asc: true};
 
-  document.getElementById('fiGroupDetailTitle').textContent = g.groupName;
+  document.getElementById('fiGroupDetailTitle').value = g.groupName || '';
+  _fiGroupDetailCurrentId = groupId;
 
   const statusMap = {
     draft:    '<span style="color:var(--a4)">⏳ Черновик</span>',
@@ -9597,7 +9616,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 <div class="mo" id="fiGroupDetailMo">
   <div class="md"><div class="mh"></div>
-    <div class="mt" id="fiGroupDetailTitle">Группа</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <input class="fi" id="fiGroupDetailTitle" style="flex:1;font-size:18px;font-weight:700;padding:10px 12px" placeholder="Название группы">
+      <button onclick="saveFiGroupName()" style="background:var(--accent);border:none;border-radius:10px;padding:0 14px;height:44px;color:#000;font-weight:700;font-size:12px;cursor:pointer;flex-shrink:0">💾</button>
+    </div>
     <div id="fiGroupDetailStatus" style="margin-bottom:12px"></div>
     <div id="fiGroupDetailPositions" style="margin-bottom:14px"></div>
     <div id="fiGroupDetailActions"></div>
