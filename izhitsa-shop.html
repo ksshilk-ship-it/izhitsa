@@ -7138,8 +7138,22 @@ function evaluateShiftIssues(sh){
     .reduce(function(s,e){ return s + Math.abs(e.goodsEffect || e.retail || e.opt || 0); }, 0);
   var jStaffDr = jnl.filter(function(e){ return e.type==='staff' && e.goodsType==='dr'; })
     .reduce(function(s,e){ return s + Math.abs(e.goodsDrEffect || e.retail || e.opt || 0); }, 0);
-  var calcEveWood = (sh.goodsMorning||0) + jnl.reduce(function(s,e){ return s+(e.goodsEffect||0); },0);
-  var calcEveDr = (sh.goodsDrMorning||0) + jnl.reduce(function(s,e){ return s+(e.goodsDrEffect||0); },0);
+  function _resolveGoodsEffect(e, isDr){
+    var entryIsDr = e.goodsType==='dr';
+    if(isDr){
+      if(e.goodsDrEffect!=null) return e.goodsDrEffect;
+    } else {
+      if(e.goodsEffect!=null) return e.goodsEffect;
+    }
+    if(entryIsDr !== isDr) return 0; // запись относится к другой категории
+    var amt = e.amount||0;
+    if(e.type==='sale') return -amt;
+    if(e.type==='receive') return amt;
+    if(e.type==='writeoff') return -amt;
+    return 0;
+  }
+  var calcEveWood = (sh.goodsMorning||0) + jnl.reduce(function(s,e){ return s+_resolveGoodsEffect(e,false); },0);
+  var calcEveDr = (sh.goodsDrMorning||0) + jnl.reduce(function(s,e){ return s+_resolveGoodsEffect(e,true); },0);
   if(sh.goodsEvening==null){
     issues.push({code:'eve_wood_zero', label:'🌳 Остаток товара (Дерево) на вечер не занесён'});
   } else if(Math.abs((sh.goodsEvening||0) - calcEveWood) >= 1){
