@@ -5956,7 +5956,10 @@ async function renderTimeControlDetail(){
       db.collection('ws_audit_log').where('userId','==',uidSel).get()
     ]);
     const sessions = sessSnap.docs.map(d=>d.data()).filter(s=>s.loginAt>=from && s.loginAt<=to).sort((a,b)=>b.loginAt.localeCompare(a.loginAt));
-    let actions = auditSnap.docs.map(d=>d.data()).filter(a=>a.timestamp>=from && a.timestamp<=to).sort((a,b)=>a.timestamp.localeCompare(b.timestamp));
+    const allActionsRaw = auditSnap.docs.map(d=>d.data()).filter(a=>a.timestamp>=from && a.timestamp<=to).sort((a,b)=>a.timestamp.localeCompare(b.timestamp));
+    // Технические события (старт черновика, добавление каждой позиции) не показываем отдельными строками —
+    // они используются только для разбора по позициям внутри "Занесение приёмки"
+    let actions = allActionsRaw.filter(a=>a.action!=='manual_acceptance_started' && a.action!=='ma_position_added');
 
     // Схлопываем подряд идущие "Вход в приложение" в пределах 2 минут в одну запись —
     // это не задвоение данных, а реальные повторные открытия/перезагрузки страницы
@@ -6036,8 +6039,39 @@ async function renderTimeControlDetail(){
         }
       }
 
-      const rawDetails = Object.entries(a.details||{}).filter(([k,v])=>v!==undefined && v!=='' && k!=='accId' && k!=='groupId' && k!=='shipId');
+      const rawDetails = Object.entries(a.details||{}).filter(([k,v])=>v!==undefined && v!=='' && k!=='accId' && k!=='groupId' && k!=='shipId' && k!=='draftId');
       const detailsFull = rawDetails.map(([k,v])=>`<div class="at-row"><span class="at-lbl">${FIELD_LABELS[k]||k}</span><span class="at-val">${v}</span></div>`).join('');
+
+      // Разбор по позициям: сколько времени ушло на заполнение каждой позиции внутри этой приёмки
+      let positionsBreakdownHtml = '';
+      if(a.action==='manual_acceptance_created' && a.details?.draftId){
+        const dId = a.details.draftId;
+        const started = allActionsRaw.find(x=>x.action==='manual_acceptance_started' && x.details?.draftId===dId);
+        const posEvents = allActionsRaw.filter(x=>x.action==='ma_position_added' && x.details?.draftId===dId)
+          .sort((x,y)=>(x.details.positionIndex||0)-(y.details.positionIndex||0));
+        if(started && posEvents.length){
+          const marks = [started, ...posEvents];
+          const rows = [];
+          for(let i=0;i<posEvents.length;i++){
+            const posNum = posEvents[i].details.positionIndex - 1;
+            const fromT = new Date(marks[i].timestamp);
+            const toT = new Date(posEvents[i].timestamp);
+            const durSec = Math.round((toT-fromT)/1000);
+            const durLabel = durSec<60 ? durSec+' сек' : tcFmtDuration(Math.round(durSec/60));
+            rows.push(`<div class="at-row"><span class="at-lbl">Позиция ${posNum}</span><span class="at-val">${durLabel}</span></div>`);
+          }
+          const lastStart = new Date(posEvents[posEvents.length-1].timestamp);
+          const lastDurSec = Math.round((t-lastStart)/1000);
+          const lastDurLabel = lastDurSec<60 ? lastDurSec+' сек' : tcFmtDuration(Math.round(lastDurSec/60));
+          rows.push(`<div class="at-row"><span class="at-lbl">Позиция ${posEvents.length+1} (последняя, до сохранения)</span><span class="at-val">${lastDurLabel}</span></div>`);
+
+          const totalDurSec = Math.round((t-new Date(started.timestamp))/1000);
+          positionsBreakdownHtml = `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">
+            <div style="font-size:11px;color:var(--t2);margin-bottom:4px">⏱ Разбор по позициям (всего ${tcFmtDuration(Math.round(totalDurSec/60))} на всю приёмку):</div>
+            ${rows.join('')}
+          </div>`;
+        }
+      }
 
       // Если приёмка проведена с 0 принятых — поясняем, что это не задвоение, а отдельная запись (например, весь товар ушёл в брак, либо это другая приёмка по времени рядом)
       let zeroNote = '';
@@ -6051,12 +6085,13 @@ async function renderTimeControlDetail(){
 
       return gapHtml + `<div class="at-row" style="cursor:pointer" onclick="document.getElementById('tcAct${idx}').style.display=document.getElementById('tcAct${idx}').style.display==='block'?'none':'block'">
         <span class="at-lbl">${t.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})} · ${tcLabel(a)}${a._loginRepeats?' <span style="color:var(--a4)">(переоткрыто '+a._loginRepeats+' раз подряд)</span>':''}</span>
-        <span class="at-val" style="font-size:11px;color:var(--t2)">${Object.entries(a.details||{}).filter(([k,v])=>(typeof v==='string'||typeof v==='number') && !['accId','groupId','shipId'].includes(k)).map(([k,v])=>v).slice(0,2).join(' · ')} ▾</span>
+        <span class="at-val" style="font-size:11px;color:var(--t2)">${Object.entries(a.details||{}).filter(([k,v])=>(typeof v==='string'||typeof v==='number') && !['accId','groupId','shipId','draftId'].includes(k)).map(([k,v])=>v).slice(0,2).join(' · ')} ▾</span>
       </div>
       <div id="tcAct${idx}" style="display:none;padding:6px 0 10px 10px;border-bottom:1px solid var(--border)">
         ${detailsFull}
         ${zeroNote}
         ${speedHtml}
+        ${positionsBreakdownHtml}
         ${canOpen?`<button onclick="event.stopPropagation();tcOpenDocument('${a.action}',${JSON.stringify(a.details||{}).replace(/"/g,'&quot;')})" style="margin-top:8px;width:100%;padding:8px;background:var(--accent);color:#000;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">🔗 Открыть документ</button>`:''}
       </div>`;
     }).join('') || '<div class="empty" style="padding:10px 0">Нет зафиксированных действий за период</div>';
@@ -7762,12 +7797,15 @@ function setPendSubTab(tab){
   }
 }
 
+let _maDraftId = null;
 function openManualAcceptMo(){
   const sel = document.getElementById('maMaster');
   if(sel) sel.innerHTML = '<option value="">— Выберите мастера —</option>' + getEmployees().filter(e=>e.role==='мастер').map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
   document.getElementById('maDate').value = new Date().toISOString().slice(0,10);
   _maItems = [];
   _maToggled = new Set();
+  _maDraftId = uid();
+  logAction('manual_acceptance_started', {draftId: _maDraftId}); // момент, когда кладовщик начал вносить эту приёмку
   addMaItemRow(); // одна строка по умолчанию
   renderMaItemsList();
   openMo('manualAcceptMo');
@@ -7876,6 +7914,8 @@ function addMaItemRow(){
   _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', artikulManual:false, name:'', wood:'', zp:0, price:0, qty:'', status:'accepted'});
   recalcMaAutoArtikuls();
   renderMaItemsList();
+  // Фиксируем момент начала заполнения этой позиции — нужно для расчёта, сколько времени ушло на каждую позицию
+  if(_maDraftId) logAction('ma_position_added', {draftId: _maDraftId, positionIndex: _maItems.length});
 }
 
 let _maToggled = new Set(); // rid-ы, у которых пользователь вручную переключил свёрнуто/развёрнуто (инвертирует поведение по умолчанию)
@@ -8146,10 +8186,11 @@ async function saveManualAccept(){
       positions
     });
     // Логирование в аудит
-    logAction('manual_acceptance_created', {masterName:master?.name, date, count:positions.length, accId: batchId});
+    logAction('manual_acceptance_created', {masterName:master?.name, date, count:positions.length, accId: batchId, draftId: _maDraftId});
     closeMo('manualAcceptMo');
     showSavedBanner(`✅ Приёмка от ${master?.name||''} сохранена · ${positions.length} позиций`);
     renderManualAcceptHistory();
+    _maDraftId = null;
   }catch(e){ showToast('Ошибка: '+e.message); }
   finally{ endSave('maAccept'); }
 }
