@@ -682,6 +682,7 @@ function applyUpdate() {
         <button onclick="openAddWoodMo()" class="btn sec" style="font-size:11px;padding:8px">🌳 Породы</button>
         <button onclick="openAddSizeMo()" class="btn sec" style="font-size:11px;padding:8px">📐 Размеры</button>
         <button onclick="openOtCategoriesMo()" class="btn sec" style="font-size:11px;padding:8px">🛠 Виды работ</button>
+        <button onclick="openAddShopMo()" class="btn sec" style="font-size:11px;padding:8px;grid-column:1/3">🏪 Точки продаж / отгрузки</button>
       </div>
     </div>
   </div>
@@ -959,6 +960,7 @@ function applyUpdate() {
           <button onclick="openAddWoodMo()" class="btn sec" style="font-size:11px;padding:8px">🌳 Породы</button>
           <button onclick="openAddSizeMo()" class="btn sec" style="font-size:11px;padding:8px">📐 Размеры</button>
           <button onclick="openOtCategoriesMo()" class="btn sec" style="font-size:11px;padding:8px">🛠 Виды работ</button>
+          <button onclick="openAddShopMo()" class="btn sec" style="font-size:11px;padding:8px;grid-column:1/3">🏪 Точки продаж / отгрузки</button>
         </div>
       </div>
 
@@ -1384,6 +1386,23 @@ function applyUpdate() {
   </div>
 </div>
 
+<!-- ТОЧКИ ПРОДАЖ / ОТГРУЗКИ -->
+<div class="mo" id="addShopMo">
+  <div class="md"><div class="mh"></div><div class="mt">🏪 Точки продаж / отгрузки</div>
+    <div style="font-size:11px;color:var(--t2);margin-bottom:4px">Этот список используется в выборе «Магазин назначения» при отгрузке. Правьте прямо здесь — изменения применятся везде.</div>
+    <div class="fg"><label class="fl">Новая точка</label>
+      <div style="display:flex;gap:8px">
+        <input class="fi" id="newShopInput" placeholder="Горки, Роза Хутор, Ривьера..." style="flex:1">
+        <button onclick="addPendingShop()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
+      </div>
+    </div>
+    <div class="ctitle" style="margin-top:4px">Список точек</div>
+    <div id="shopsList"></div>
+    <button class="btn green" style="margin-top:14px" onclick="commitShops()">💾 Сохранить</button>
+    <button class="btn sec" style="margin-top:8px" onclick="cancelShopsEdit()">Отмена</button>
+  </div>
+</div>
+
 <!-- ВИДЫ ПРОЧИХ РАБОТ -->
 <div class="mo" id="otCategoriesMo">
   <div class="md"><div class="mh"></div><div class="mt">🛠 Виды прочих работ</div>
@@ -1641,10 +1660,12 @@ function wsSyncListen(lsKey) {
         if(lsKey==='ws_item_names' && typeof renderItemNameSelect==='function') renderItemNameSelect();
         if(lsKey==='ws_woods' && typeof renderWoodSelect==='function') renderWoodSelect();
         if(lsKey==='ws_sizes' && typeof renderSizeSelect==='function') renderSizeSelect();
+        if(lsKey==='iz_admin_shops' && typeof renderShopSelect==='function') renderShopSelect();
         // Если справочник открыт прямо сейчас — обновить видимый список тоже, не только автокомплит
         if(lsKey==='ws_item_names' && typeof renderItemNamesList==='function') renderItemNamesList();
         if(lsKey==='ws_woods' && typeof renderWoodList==='function') renderWoodList();
         if(lsKey==='ws_sizes' && typeof renderSizeList==='function') renderSizeList();
+        if(lsKey==='iz_admin_shops' && typeof renderShopsList==='function' && document.getElementById('addShopMo')?.classList.contains('open')) renderShopsList();
       }catch(e){}
     }
   }, function(e){ console.log('ws sync err', lsKey, e.code||e); });
@@ -3052,6 +3073,77 @@ function commitSizes(){
 function cancelSizesEdit(){
   _pendingSizes = null;
   closeMo('addSizeMo');
+}
+
+// ════════ СПРАВОЧНИК ТОЧЕК ПРОДАЖ / ОТГРУЗКИ ════════
+// Общий с shop/admin список ("iz_settings/shops".shops) — синхронизируется через wsSyncSave/wsSyncListen
+function getShops(){
+  const arr = JSON.parse(localStorage.getItem('iz_admin_shops')||'[]');
+  return arr.slice().sort((a,b)=>a.localeCompare(b,'ru'));
+}
+function saveShops(arr){ wsSyncSave('iz_admin_shops', arr); }
+
+// Обновить все select-ы, где используется список точек
+function renderShopSelect(){
+  const shops = getShops();
+  ['shipPageDest','whShipDest'].forEach(id=>{
+    const sel = document.getElementById(id);
+    if(!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = shops.map(s=>`<option value="${s}">${s}</option>`).join('');
+    if(shops.includes(prev)) sel.value = prev;
+  });
+}
+
+let _pendingShops = null;
+
+function renderShopsList(){
+  const shops = _pendingShops || getShops();
+  const c = document.getElementById('shopsList'); if(!c) return;
+  c.innerHTML = shops.length ? shops.map((s,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;font-size:13px">🏪 ${s}</div>
+      <button onclick="deleteShop(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>
+    </div>`).join('') : '<div style="text-align:center;padding:14px;color:var(--t2);font-size:12px">Список пуст</div>';
+}
+
+async function openAddShopMo(){
+  document.getElementById('newShopInput').value='';
+  openMo('addShopMo');
+  await wsFetchFreshRef('iz_admin_shops'); // подтянуть свежее из общей базы
+  _pendingShops = getShops();
+  renderShopsList();
+}
+
+function addPendingShop(){
+  const val = document.getElementById('newShopInput').value.trim();
+  if(!val){ showToast('Введите название точки'); return; }
+  if(!_pendingShops) _pendingShops = getShops();
+  if(_pendingShops.includes(val)){ showToast('Такая точка уже есть'); return; }
+  _pendingShops.push(val);
+  _pendingShops.sort((a,b)=>a.localeCompare(b,'ru'));
+  renderShopsList();
+  document.getElementById('newShopInput').value='';
+}
+
+function deleteShop(i){
+  if(!_pendingShops) _pendingShops = getShops();
+  _pendingShops.splice(i,1);
+  renderShopsList();
+}
+
+function commitShops(){
+  if(!_pendingShops){ closeMo('addShopMo'); return; }
+  saveShops(_pendingShops);
+  renderShopSelect();
+  _pendingShops = null;
+  closeMo('addShopMo');
+  showSavedBanner('✅ Точки продаж сохранены');
+}
+
+function cancelShopsEdit(){
+  _pendingShops = null;
+  closeMo('addShopMo');
 }
 
 function markMasterNotifsRead(){
@@ -5740,6 +5832,12 @@ function setPdPeriod(p, el){
   document.getElementById('pdTo').value = to;
   renderProdDeep();
 }
+let _pdSortBy = 'sum'; // 'sum' | 'qty'
+function setPdSort(field){
+  _pdSortBy = field;
+  renderProdDeep();
+}
+
 function renderProdDeep(){
   const c = document.getElementById('pdContent'); if(!c) return;
   let from = document.getElementById('pdFrom').value, to = document.getElementById('pdTo').value;
@@ -5753,15 +5851,14 @@ function renderProdDeep(){
   const curRevenue = cur.reduce((s,i)=>s+(i.price||0),0);
   const prevRevenue = prev.reduce((s,i)=>s+(i.price||0),0);
 
-  // Топ товаров по выручке за период
+  // ВСЕ позиции, без искусственного топ-N — сама выбираешь, что считать топом
   const byName = {};
   cur.forEach(i=>{
     const n = i.name||i.itemName||'—';
     if(!byName[n]) byName[n] = {qty:0, sum:0};
     byName[n].qty++; byName[n].sum += (i.price||0);
   });
-  const topByRevenue = Object.entries(byName).sort((a,b)=>b[1].sum-a[1].sum).slice(0,7);
-  const topByQty = Object.entries(byName).sort((a,b)=>b[1].qty-a[1].qty).slice(0,7);
+  const ranked = Object.entries(byName).sort((a,b)=>b[1][_pdSortBy]-a[1][_pdSortBy]);
 
   c.innerHTML = `
     <div class="srow" style="margin-bottom:12px">
@@ -5769,16 +5866,17 @@ function renderProdDeep(){
       <div class="sc"><div class="sc-v" style="color:${curRevenue>=prevRevenue?'var(--inc)':'var(--exp)'}">${pctChange(curRevenue,prevRevenue)}</div><div class="sc-l">к пред. периоду</div></div>
       <div class="sc"><div class="sc-v" style="color:var(--a5)">${cur.length}</div><div class="sc-l">Изделий</div></div>
     </div>
-    <div class="card">
-      <div class="ctitle">🏆 Топ товаров по выручке</div>
-      ${topByRevenue.length ? topByRevenue.map(([name,s])=>`
-        <div class="at-row"><span class="at-lbl">${name}<br><span style="font-size:10px">${s.qty} шт</span></span><span class="at-val" style="color:var(--accent)">${fmt(s.sum)}</span></div>
-      `).join('') : '<div class="empty" style="padding:12px 0">Нет данных за период</div>'}
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button onclick="setPdSort('sum')" style="flex:1;padding:9px;border-radius:10px;border:1px solid ${_pdSortBy==='sum'?'var(--accent)':'var(--border)'};background:${_pdSortBy==='sum'?'var(--s2)':'var(--s1)'};color:${_pdSortBy==='sum'?'var(--accent)':'var(--t2)'};cursor:pointer;font-size:12px;font-weight:700">💰 По выручке</button>
+      <button onclick="setPdSort('qty')" style="flex:1;padding:9px;border-radius:10px;border:1px solid ${_pdSortBy==='qty'?'var(--accent)':'var(--border)'};background:${_pdSortBy==='qty'?'var(--s2)':'var(--s1)'};color:${_pdSortBy==='qty'?'var(--accent)':'var(--t2)'};cursor:pointer;font-size:12px;font-weight:700">📦 По количеству</button>
     </div>
-    <div class="card" style="margin-top:10px">
-      <div class="ctitle">📦 Топ товаров по количеству</div>
-      ${topByQty.length ? topByQty.map(([name,s])=>`
-        <div class="at-row"><span class="at-lbl">${name}</span><span class="at-val" style="color:var(--a5)">${s.qty} шт</span></div>
+    <div class="card">
+      <div class="ctitle">Все позиции (${ranked.length}) — место по ${_pdSortBy==='sum'?'выручке':'количеству'}</div>
+      ${ranked.length ? ranked.map(([name,s],i)=>`
+        <div class="at-row">
+          <span class="at-lbl">${i+1}. ${name}<br><span style="font-size:10px;color:var(--t2)">${s.qty} шт · ${fmt(s.sum)}</span></span>
+          <span class="at-val" style="color:var(--accent)">${_pdSortBy==='sum'?fmt(s.sum):s.qty+' шт'}</span>
+        </div>
       `).join('') : '<div class="empty" style="padding:12px 0">Нет данных за период</div>'}
     </div>
   `;
@@ -6618,6 +6716,7 @@ function renderProductSelectsEverywhere(){
   renderItemNameSelect();
   renderWoodSelect();
   renderSizeSelect();
+  renderShopSelect();
   renderProductSelects(); // для мастера/кладовщика
 }
 
