@@ -7618,7 +7618,7 @@ function getNextArtikulNumber(){
 function addMaItemRow(){
   const names = getItemNames();
   const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
-  _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', artikulManual:false, name:'', wood:'', zp:0, price:0, qty:''});
+  _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', artikulManual:false, name:'', wood:'', zp:0, price:0, qty:'', status:'accepted'});
   recalcMaAutoArtikuls();
   renderMaItemsList();
 }
@@ -7705,7 +7705,23 @@ function renderMaItemsList(){
             autocomplete="off">
         </div>
       </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button onclick="setMaItemStatus('${it.rid}','accepted')"
+          style="flex:1;padding:9px;border-radius:8px;border:1px solid ${it.status==='accepted'?'var(--inc)':'var(--border)'};background:${it.status==='accepted'?'rgba(80,255,150,0.15)':'var(--s1)'};color:${it.status==='accepted'?'var(--inc)':'var(--t2)'};font-size:12px;font-weight:700;cursor:pointer">
+          ✅ Принято
+        </button>
+        <button onclick="setMaItemStatus('${it.rid}','defect')"
+          style="flex:1;padding:9px;border-radius:8px;border:1px solid ${it.status==='defect'?'var(--exp)':'var(--border)'};background:${it.status==='defect'?'rgba(255,90,90,0.15)':'var(--s1)'};color:${it.status==='defect'?'var(--exp)':'var(--t2)'};font-size:12px;font-weight:700;cursor:pointer">
+          ⚠️ Брак / переделка
+        </button>
+      </div>
     </div>`).join('');
+}
+
+function setMaItemStatus(rid, status){
+  const it = _maItems.find(x=>x.rid===rid); if(!it) return;
+  it.status = status;
+  renderMaItemsList();
 }
 
 function getMaxSystemArtikul(){
@@ -7803,7 +7819,8 @@ function copyMaItemRow(rid){
     wood: original.wood, // КОПИРУЕМ
     zp: 0,
     price: 0,
-    qty: ''
+    qty: '',
+    status: 'accepted'
   });
   
   recalcMaAutoArtikuls();
@@ -7830,7 +7847,7 @@ async function saveManualAccept(){
       if(it.artikulMode==='auto' && !isNaN(baseArtikul)) artikul = String(baseArtikul+i);
       positions.push({
         rid: qty>1 ? uid() : it.rid, artikul, name: it.name, wood: it.wood,
-        zp: it.zp||0, price: it.price||0, status: 'pending' // pending → accepted | defect
+        zp: it.zp||0, price: it.price||0, status: it.status || 'accepted' // сразу принято/брак, выбрано кладовщиком в момент внесения
       });
     }
   });
