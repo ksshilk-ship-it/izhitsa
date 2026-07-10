@@ -7152,8 +7152,18 @@ function evaluateShiftIssues(sh){
     if(e.type==='writeoff') return -amt;
     return 0;
   }
-  var calcEveWood = (sh.goodsMorning||0) + jnl.reduce(function(s,e){ return s+_resolveGoodsEffect(e,false); },0);
-  var calcEveDr = (sh.goodsDrMorning||0) + jnl.reduce(function(s,e){ return s+_resolveGoodsEffect(e,true); },0);
+  var _legacyWoodWo = (sh.goodsWriteoffs||[]).reduce(function(s,w){return s+(w.amount!=null?w.amount:(w.amt||0));},0);
+  var _legacyDrWo = (sh.drGoodsWriteoffs||[]).reduce(function(s,w){return s+(w.amount!=null?w.amount:(w.amt||0));},0);
+  var _legacyWoodRcv = (sh.goodsReceives||[]).reduce(function(s,w){return s+(w.amount!=null?w.amount:(w.amt||0));},0);
+  var _legacyDrRcv = (sh.drGoodsReceives||[]).reduce(function(s,w){return s+(w.amount!=null?w.amount:(w.amt||0));},0);
+  var _jnlHasWoodWo = jnl.some(function(e){ return e.type==='writeoff' && e.goodsType!=='dr'; });
+  var _jnlHasDrWo = jnl.some(function(e){ return e.type==='writeoff' && e.goodsType==='dr'; });
+  var _jnlHasWoodRcv = jnl.some(function(e){ return e.type==='receive' && e.goodsType!=='dr'; });
+  var _jnlHasDrRcv = jnl.some(function(e){ return e.type==='receive' && e.goodsType==='dr'; });
+  var calcEveWood = (sh.goodsMorning||0) + jnl.reduce(function(s,e){ return s+_resolveGoodsEffect(e,false); },0)
+    - (_jnlHasWoodWo?0:_legacyWoodWo) + (_jnlHasWoodRcv?0:_legacyWoodRcv);
+  var calcEveDr = (sh.goodsDrMorning||0) + jnl.reduce(function(s,e){ return s+_resolveGoodsEffect(e,true); },0)
+    - (_jnlHasDrWo?0:_legacyDrWo) + (_jnlHasDrRcv?0:_legacyDrRcv);
   if(sh.goodsEvening==null){
     issues.push({code:'eve_wood_zero', label:'🌳 Остаток товара (Дерево) на вечер не занесён'});
   } else if(Math.abs((sh.goodsEvening||0) - calcEveWood) >= 1){
