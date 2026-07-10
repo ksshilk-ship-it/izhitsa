@@ -5833,14 +5833,41 @@ function tcOpenDocument(action, details){
   } else if(action.includes('inventory_group') && details.groupId){
     openFiGroupDetail(details.groupId);
   } else if(action.startsWith('shipment') && details.shipId){
-    showPg('goods', null);
-    showPg('warehouse', null);
-    setWhMainTab('movement');
-    setTimeout(()=>setWhMoveTab('outgoing'), 50);
-    showToast('Открыта вкладка "Движение → Отгрузки" — найдите накладную в списке');
+    openShipDetail(details.shipId);
   } else {
     showToast('Не удалось найти документ (возможно, он был удалён)');
   }
+}
+
+// Карточка накладной поверх текущего экрана — для просмотра из Контроля времени
+function openShipDetail(shipId){
+  const ship = shipments.find(s=>s._id===shipId);
+  if(!ship){ showToast('Накладная не найдена (возможно, удалена)'); return; }
+
+  document.getElementById('shipDetailTitle').textContent = `${ship.num||'Накладная'} → ${ship.destName||'—'}`;
+
+  const statusLabel = ship.status==='sent' ? '✅ Отправлена' : '📦 В процессе';
+  const shipItems = ship.items || [];
+  const total = shipItems.reduce((s,i)=>s+(i.price||0),0);
+
+  document.getElementById('shipDetailBody').innerHTML = `
+    <div style="background:var(--s2);border-radius:10px;padding:12px;margin-bottom:12px">
+      <div class="at-row"><span class="at-lbl">Статус</span><span class="at-val">${statusLabel}</span></div>
+      <div class="at-row"><span class="at-lbl">Магазин</span><span class="at-val">${ship.destName||'—'}</span></div>
+      <div class="at-row"><span class="at-lbl">Дата отгрузки</span><span class="at-val">${ship.shipDate||'—'}</span></div>
+      <div class="at-row"><span class="at-lbl">Создал(а)</span><span class="at-val">${ship.createdByName||'—'}</span></div>
+      ${ship.sentBy?`<div class="at-row"><span class="at-lbl">Отправил(а)</span><span class="at-val">${ship.sentBy}</span></div>`:''}
+      <div class="at-row"><span class="at-lbl">Позиций</span><span class="at-val">${shipItems.length} шт · ${fmt(total)}</span></div>
+    </div>
+    <div class="ctitle">Товары в накладной</div>
+    ${shipItems.map(i=>`
+      <div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:6px">
+        <div style="font-size:13px;font-weight:700">${i.name||'—'}${i.artikul?' · '+i.artikul:''}</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:2px">${i.wood||''} · ${fmt(i.price||0)}</div>
+      </div>
+    `).join('') || '<div class="empty" style="padding:10px 0">Нет позиций</div>'}
+  `;
+  openMo('shipDetailMo');
 }
 let _tcdPeriod = 'today';
 const TC_IDLE_THRESHOLD_MIN = 20; // разрыв между действиями больше этого — считаем простоем
@@ -5929,7 +5956,21 @@ async function renderTimeControlDetail(){
       db.collection('ws_audit_log').where('userId','==',uidSel).get()
     ]);
     const sessions = sessSnap.docs.map(d=>d.data()).filter(s=>s.loginAt>=from && s.loginAt<=to).sort((a,b)=>b.loginAt.localeCompare(a.loginAt));
-    const actions = auditSnap.docs.map(d=>d.data()).filter(a=>a.timestamp>=from && a.timestamp<=to).sort((a,b)=>a.timestamp.localeCompare(b.timestamp));
+    let actions = auditSnap.docs.map(d=>d.data()).filter(a=>a.timestamp>=from && a.timestamp<=to).sort((a,b)=>a.timestamp.localeCompare(b.timestamp));
+
+    // Схлопываем подряд идущие "Вход в приложение" в пределах 2 минут в одну запись —
+    // это не задвоение данных, а реальные повторные открытия/перезагрузки страницы
+    const collapsed = [];
+    actions.forEach(a=>{
+      const last = collapsed[collapsed.length-1];
+      if(a.action==='LOGIN' && last && last.action==='LOGIN' && (new Date(a.timestamp)-new Date(last.timestamp))<=120000){
+        last.timestamp = a.timestamp; // обновляем на последний момент в этой пачке
+        last._loginRepeats = (last._loginRepeats||1)+1;
+      } else {
+        collapsed.push({...a});
+      }
+    });
+    actions = collapsed;
 
     // Итоги по сменам
     let totalMin = 0;
@@ -5960,6 +6001,15 @@ async function renderTimeControlDetail(){
     function tcLabel(a){ return ACTION_LABELS[a.action] || a.action; }
     function tcDocKey(a){ return a.details?.accId || a.details?.groupId || a.details?.shipId || null; }
 
+    // Человекочитаемые подписи для технических названий полей
+    const FIELD_LABELS = {
+      masterName: 'Мастер', count: 'Позиций внесено', date: 'Дата сдачи',
+      accepted: 'Принято на склад', defects: 'В брак',
+      dest: 'Магазин назначения', itemCount: 'Товаров в накладной', shipNum: 'Номер накладной',
+      groupName: 'Группа', created: 'Создано товаров', skippedDup: 'Пропущено (дубли артикула)',
+      username: 'Логин', user: 'Пользователь'
+    };
+
     let idleCount = 0, idleTotalMin = 0;
     let prevTs = null;
     const actionsHtml = actions.map((a,idx)=>{
@@ -5986,19 +6036,26 @@ async function renderTimeControlDetail(){
         }
       }
 
-      const detailsFull = Object.entries(a.details||{}).filter(([k,v])=>v && k!=='accId' && k!=='groupId' && k!=='shipId')
-        .map(([k,v])=>`<div class="at-row"><span class="at-lbl">${k}</span><span class="at-val">${v}</span></div>`).join('');
+      const rawDetails = Object.entries(a.details||{}).filter(([k,v])=>v!==undefined && v!=='' && k!=='accId' && k!=='groupId' && k!=='shipId');
+      const detailsFull = rawDetails.map(([k,v])=>`<div class="at-row"><span class="at-lbl">${FIELD_LABELS[k]||k}</span><span class="at-val">${v}</span></div>`).join('');
+
+      // Если приёмка проведена с 0 принятых — поясняем, что это не задвоение, а отдельная запись (например, весь товар ушёл в брак, либо это другая приёмка по времени рядом)
+      let zeroNote = '';
+      if(a.action==='manual_acceptance_processed' && a.details?.accepted===0){
+        zeroNote = `<div style="font-size:11px;color:var(--a4);margin-top:6px">ℹ️ 0 принято на склад — либо все позиции ушли в брак, либо это отдельная (не повторная) приёмка с другим содержимым. Откройте документ ниже, чтобы увидеть детали.</div>`;
+      }
 
       const canOpen = a.action.startsWith('manual_acceptance') && a.details?.accId
         || (a.action.includes('inventory_group') && a.details?.groupId)
         || (a.action.startsWith('shipment') && a.details?.shipId);
 
       return gapHtml + `<div class="at-row" style="cursor:pointer" onclick="document.getElementById('tcAct${idx}').style.display=document.getElementById('tcAct${idx}').style.display==='block'?'none':'block'">
-        <span class="at-lbl">${t.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})} · ${tcLabel(a)}</span>
+        <span class="at-lbl">${t.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})} · ${tcLabel(a)}${a._loginRepeats?' <span style="color:var(--a4)">(переоткрыто '+a._loginRepeats+' раз подряд)</span>':''}</span>
         <span class="at-val" style="font-size:11px;color:var(--t2)">${Object.entries(a.details||{}).filter(([k,v])=>(typeof v==='string'||typeof v==='number') && !['accId','groupId','shipId'].includes(k)).map(([k,v])=>v).slice(0,2).join(' · ')} ▾</span>
       </div>
       <div id="tcAct${idx}" style="display:none;padding:6px 0 10px 10px;border-bottom:1px solid var(--border)">
         ${detailsFull}
+        ${zeroNote}
         ${speedHtml}
         ${canOpen?`<button onclick="event.stopPropagation();tcOpenDocument('${a.action}',${JSON.stringify(a.details||{}).replace(/"/g,'&quot;')})" style="margin-top:8px;width:100%;padding:8px;background:var(--accent);color:#000;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">🔗 Открыть документ</button>`:''}
       </div>`;
@@ -9458,6 +9515,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
     <button class="btn green" onclick="provedMaAccept()" id="maProvedBtn">✅ Провести</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('maDetailMo')">Закрыть</button>
     <button class="btn" id="maDeleteBtn" style="margin-top:8px;background:none;border:1px solid var(--exp);color:var(--exp);display:none" onclick="deleteMaAcceptance(document.getElementById('maProvedBtn').getAttribute('data-acc-id'));closeMo('maDetailMo')">🗑 Удалить приёмку целиком</button>
+  </div>
+</div>
+
+<!-- КАРТОЧКА НАКЛАДНОЙ (для перехода из Контроля времени) -->
+<div class="mo" id="shipDetailMo">
+  <div class="md"><div class="mh"></div>
+    <div class="mt" id="shipDetailTitle">Накладная</div>
+    <div id="shipDetailBody" style="margin-bottom:14px"></div>
+    <button class="btn sec" onclick="closeMo('shipDetailMo')">Закрыть</button>
   </div>
 </div>
 
