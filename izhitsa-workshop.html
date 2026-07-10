@@ -126,7 +126,7 @@ body{background:var(--bg);color:var(--text);font-family:'Golos Text',sans-serif;
 
 .empty{text-align:center;padding:24px 0;color:var(--t2);font-size:13px}
 .ei{font-size:30px;margin-bottom:6px}
-.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:9px 16px;font-size:13px;z-index:400;opacity:0;transition:opacity .3s;pointer-events:none;max-width:92%;text-align:center}
+.toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:9px 16px;font-size:13px;z-index:400;opacity:0;transition:opacity .3s;pointer-events:none;max-width:92%;text-align:center}
 .toast.show{opacity:1}
 .add-row{display:flex;gap:7px;margin-top:8px}
 .add-row .fi{flex:1}
@@ -1779,12 +1779,12 @@ function showSavedBanner(msg){
   if(!b){
     b = document.createElement('div');
     b.id = 'savedBanner';
-    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;padding:16px 20px;background:var(--inc);color:#04270f;font-weight:800;font-size:15px;text-align:center;transform:translateY(-100%);transition:transform .25s ease;box-shadow:0 4px 16px rgba(0,0,0,.3)';
+    b.style.cssText = 'position:fixed;top:50%;left:50%;z-index:9999;padding:16px 24px;background:var(--inc);color:#04270f;font-weight:800;font-size:15px;text-align:center;border-radius:14px;max-width:88%;opacity:0;transform:translate(-50%,-50%) scale(0.9);transition:opacity .2s ease,transform .2s ease;box-shadow:0 8px 28px rgba(0,0,0,.45)';
     document.body.appendChild(b);
   }
   b.textContent = msg || '✅ Сохранено';
-  requestAnimationFrame(()=>{ b.style.transform = 'translateY(0)'; });
-  setTimeout(()=>{ b.style.transform = 'translateY(-100%)'; }, 1800);
+  requestAnimationFrame(()=>{ b.style.opacity = '1'; b.style.transform = 'translate(-50%,-50%) scale(1)'; });
+  setTimeout(()=>{ b.style.opacity = '0'; b.style.transform = 'translate(-50%,-50%) scale(0.9)'; }, 1800);
 }
 
 // ════════ УНИВЕРСАЛЬНОЕ АВТОДОПОЛНЕНИЕ (наименования/породы/размеры) ════════
@@ -3730,14 +3730,17 @@ async function createShipmentFromPage(){
   beginSave('shipCreate');
   try{
     const shipRef = await db.collection('ws_shipments').add(shipDoc);
-    const batch=db.batch();
     // Товар списывается со склада сразу (уходит из Баланса), но статус "shipping" — ещё НЕ архив,
-    // пока накладная физически не покинула мастерскую (см. markShipmentSent)
-    shipItems.forEach(i=>batch.update(db.collection('ws_items').doc(i._id),{status:'shipping',shippedTo:dest,shipmentNum:shipNum}));
-    await batch.commit();
+    // пока накладная физически не покинула мастерскую (см. markShipmentSent).
+    // Обновляем каждый товар независимо — один устаревший _id не должен срывать всю отгрузку.
+    const results = await Promise.allSettled(
+      shipItems.map(i => db.collection('ws_items').doc(i._id).update({status:'shipping',shippedTo:dest,shipmentNum:shipNum}))
+    );
+    const failCount = results.filter(r=>r.status==='rejected').length;
     _shipPageSelected.clear();
     _shipOpenGroups.clear();
-    showSavedBanner(`✅ ${shipNum} → ${dest} · ${shipItems.length} шт.`);
+    if(failCount) showToast(`⚠️ Накладная создана, но ${failCount} товар(ов) не удалось списать (устаревшие записи)`);
+    else showSavedBanner(`✅ ${shipNum} → ${dest} · ${shipItems.length} шт.`);
     logAction('shipment_created', {shipNum, dest, itemCount: shipItems.length, shipId: shipRef.id});
     setShipTab('progress');
   }catch(e){ showToast('Ошибка: '+e.message); }
@@ -3776,9 +3779,9 @@ async function markShipmentSent(shipId){
     await db.collection('ws_shipments').doc(shipId).update({status:'sent', sentAt: now(), sentBy: session.name});
     // Только теперь товары становятся по-настоящему "отгруженными" (Архив)
     if(ship && ship.items && ship.items.length){
-      const batch = db.batch();
-      ship.items.forEach(i=>batch.update(db.collection('ws_items').doc(i._id),{status:'shipped', shippedAt: now()}));
-      await batch.commit();
+      await Promise.allSettled(
+        ship.items.map(i => db.collection('ws_items').doc(i._id).update({status:'shipped', shippedAt: now()}))
+      );
     }
     showSavedBanner('🚚 Отмечено как отправлено');
     logAction('shipment_sent', {shipNum: ship?.num, dest: ship?.destName, itemCount: (ship?.items||[]).length, shipId: shipId});
@@ -4096,11 +4099,20 @@ async function bulkRenameGroup(oldNameRaw){
   if(isSaving('bulkRename')) return;
   beginSave('bulkRename');
   try{
-    const batch = db.batch();
-    targets.forEach(i=>batch.update(db.collection('ws_items').doc(i._id), {name: trimmed, itemName: trimmed, editedAt: now(), editedBy: session.name}));
-    await batch.commit();
-    logAction('bulk_rename', {oldName: oldNameRaw, newName: trimmed, count: targets.length});
-    showSavedBanner(`✅ Переименовано ${targets.length} товар(ов)`);
+    // Обновляем каждый товар НЕЗАВИСИМО (не единым batch) — чтобы один "протухший" товар
+    // (например, удалённый где-то ещё, но оставшийся в локальном кэше) не блокировал остальные
+    const results = await Promise.allSettled(
+      targets.map(i => db.collection('ws_items').doc(i._id).update({name: trimmed, itemName: trimmed, editedAt: now(), editedBy: session.name}))
+    );
+    const okCount = results.filter(r=>r.status==='fulfilled').length;
+    const failCount = results.length - okCount;
+
+    logAction('bulk_rename', {oldName: oldNameRaw, newName: trimmed, count: okCount});
+    if(failCount){
+      showToast(`⚠️ Переименовано ${okCount} из ${targets.length}. ${failCount} товар(ов) не найдено в базе (устаревшие записи) — они пропали из списка после обновления.`);
+    } else {
+      showSavedBanner(`✅ Переименовано ${okCount} товар(ов)`);
+    }
     loadDataFromFirebase();
     setTimeout(()=>renderWarehouse(), 400);
   }catch(e){ showToast('Ошибка: '+e.message); }
