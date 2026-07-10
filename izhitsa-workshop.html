@@ -737,6 +737,32 @@ function applyUpdate() {
     <div class="stitle">👥 Роли сотрудников</div>
     <div style="font-size:12px;color:var(--t2);margin-bottom:16px">Выберите роль, чтобы открыть её рабочий интерфейс — с правом просмотра, редактирования и удаления записей. Внутри будет доступна Корзина и Аудит именно этой роли.</div>
     <div id="rolesCardsList" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+
+    <div class="card" style="margin-top:16px;cursor:pointer;border-color:var(--a4)" onclick="showPg('timecontrol', null)">
+      <div class="ctitle" style="margin:0">🕵️ Контроль времени</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:4px">Смены, время входа/выхода, детальный тайминг действий по каждому сотруднику — для проверки почасовой оплаты</div>
+    </div>
+  </div>
+
+  <!-- 🕵️ КОНТРОЛЬ ВРЕМЕНИ (только администратор) -->
+  <div class="page" id="pg-timecontrol">
+    <div id="hubBack_timecontrol" style="margin-bottom:8px"><span onclick="showPg('roles',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Роли</span></div>
+    <div class="stitle">🕵️ Контроль времени</div>
+    <div id="tcEmployeeList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
+    <div id="tcDetail"></div>
+  </div>
+
+  <!-- 🕵️ КОНТРОЛЬ ВРЕМЕНИ: ДЕТАЛИ ПО СОТРУДНИКУ -->
+  <div class="page" id="pg-timecontroldetail">
+    <div style="margin-bottom:8px"><span onclick="showPg('timecontrol',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Контроль времени</span></div>
+    <div class="stitle" id="tcdTitle">Сотрудник</div>
+    <div id="tcdFilter" style="display:flex;gap:7px;margin-bottom:10px;overflow-x:auto">
+      <div class="fchip active" onclick="setTcdPeriod('today',this)">Сегодня</div>
+      <div class="fchip" onclick="setTcdPeriod('yesterday',this)">Вчера</div>
+      <div class="fchip" onclick="setTcdPeriod('week',this)">Неделя</div>
+      <div class="fchip" onclick="setTcdPeriod('month',this)">Месяц</div>
+    </div>
+    <div id="tcdContent"></div>
   </div>
 
   <!-- 💰 ФИНАНСЫ (хаб) -->
@@ -1703,6 +1729,8 @@ const TAB_CFG = {
   proddeep:      {icon:'🔎', label:'Анализ',       page:'pg-proddeep'},
   staffstats:    {icon:'📈', label:'Статистика',   page:'pg-staffstats'},
   staffdeep:     {icon:'🔎', label:'Анализ',       page:'pg-staffdeep'},
+  timecontrol:       {icon:'🕵️', label:'Контроль времени', page:'pg-timecontrol'},
+  timecontroldetail: {icon:'🕵️', label:'Сотрудник',         page:'pg-timecontroldetail'},
 };
 
 // ════════ UTILS ════════
@@ -1913,6 +1941,7 @@ function showPg(name,el){
   if(name==='proddeep')  renderProdDeep();
   if(name==='staffstats')renderStaffStats();
   if(name==='staffdeep') renderStaffDeep();
+  if(name==='timecontrol') renderTimeControl();
   if(name==='owner')     renderOwnerDash();
   if(name==='ownerstaff') renderOwnerStaff();
   if(name==='ownerwarehouse') renderOwnerWarehouse();
@@ -2070,18 +2099,17 @@ function saveAuditLog(data){ localStorage.setItem('iz_audit_log_ws',JSON.stringi
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function logAction(action, details) {
   if(!session) return;
-  var log = getAuditLog();
   var entry = {
-    id: uid(),
     timestamp: new Date().toISOString(),
     user: session.name,
+    userId: session.id,
     role: session.role,
     action: action,
     details: details || {}
   };
-  log.push(entry);
-  if(log.length > 5000) log.splice(0, log.length - 5000);
-  saveAuditLog(log);
+  // Пишем в Firestore (не localStorage!) — чтобы администратор видел действия
+  // сотрудника с ЛЮБОГО устройства, а не только с телефона самого сотрудника
+  try{ db.collection('ws_audit_log').add(entry).catch(function(e){console.error('logAction:',e);}); }catch(e){ console.error(e); }
 }
 function logAddTask(name, deadline){ logAction('ADD_TASK', {name:name, deadline:deadline}); }
 function logCompleteTask(name){ logAction('COMPLETE_TASK', {name:name}); }
@@ -2296,6 +2324,28 @@ async function delEmployeeById(staffId){
 // selectRole defined above with _fillLoginList
 
 // ════════ LOGIN ════════
+let _currentSessionDocId = null;
+let _wsHeartbeatInterval = null;
+function startWorkSession(){
+  if(!session) return;
+  db.collection('ws_work_sessions').add({
+    userId: session.id, userName: session.name, role: session.role,
+    loginAt: now(), logoutAt: null, lastActivityAt: now()
+  }).then(function(ref){ _currentSessionDocId = ref.id; }).catch(function(e){console.error(e);});
+  if(_wsHeartbeatInterval) clearInterval(_wsHeartbeatInterval);
+  // Раз в минуту помечаем "последняя активность" — по этому видно, реально ли человек работал, или открыл приложение и ушёл
+  _wsHeartbeatInterval = setInterval(function(){
+    if(_currentSessionDocId) db.collection('ws_work_sessions').doc(_currentSessionDocId).update({lastActivityAt: now()}).catch(function(){});
+  }, 60000);
+}
+function endWorkSession(){
+  if(_currentSessionDocId){
+    db.collection('ws_work_sessions').doc(_currentSessionDocId).update({logoutAt: now()}).catch(function(){});
+  }
+  if(_wsHeartbeatInterval){ clearInterval(_wsHeartbeatInterval); _wsHeartbeatInterval = null; }
+  _currentSessionDocId = null;
+}
+
 function doLogin(){
   var uid_sel=document.getElementById('loginUser').value;
   var pass=document.getElementById('loginPass').value;
@@ -2339,6 +2389,8 @@ function doLogin(){
 }
 
 function doLogout(){
+  endWorkSession();
+  logLogout();
   sessionStorage.removeItem('ws_session');
   session=null;
   const appEl = document.getElementById('appScreen');
@@ -2357,6 +2409,8 @@ function startApp(){
   document.getElementById('mainTabs').style.display='flex';
   document.getElementById('hdrName').textContent=session.name;
   document.getElementById('hdrRole').textContent={заготовщик:'🪚 Заготовщик',мастер:'🔨 Мастер',кладовщик:'📦 Кладовщик',управляющий:'👑 Управляющий',администратор:'🛡 Администратор'}[session.role]||session.role;
+  startWorkSession();
+  logLogin(session.name);
   buildTabs();
   startListeners();
   renderExtraCatSelect('ewCat');
@@ -3557,6 +3611,7 @@ async function createShipmentFromPage(){
     _shipPageSelected.clear();
     _shipOpenGroups.clear();
     showToast(`✅ ${shipNum} → ${dest} · ${shipItems.length} шт. Товар списан со склада`);
+    logAction('shipment_created', {shipNum, dest, itemCount: shipItems.length});
     setShipTab('progress');
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
@@ -3596,6 +3651,7 @@ async function markShipmentSent(shipId){
       await batch.commit();
     }
     showToast('🚚 Отмечено как отправлено');
+    logAction('shipment_sent', {shipNum: ship?.num, dest: ship?.destName, itemCount: (ship?.items||[]).length});
     renderShipProgress();
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
@@ -5629,6 +5685,155 @@ function renderStaffDeep(){
       `).join('') : '<div class="empty" style="padding:12px 0">Нет данных за период</div>'}
     </div>
   `;
+}
+
+// ════════════════════════════════
+// 🕵️ КОНТРОЛЬ ВРЕМЕНИ — смены, вход/выход, тайминг действий (для проверки почасовой оплаты)
+// ════════════════════════════════
+let _tcSelectedUser = null; // {id, name, role}
+let _tcdPeriod = 'today';
+const TC_IDLE_THRESHOLD_MIN = 20; // разрыв между действиями больше этого — считаем простоем
+
+function tcFmtDuration(mins){
+  if(mins == null) return '—';
+  const h = Math.floor(mins/60), m = Math.round(mins%60);
+  return (h?h+'ч ':'')+m+'мин';
+}
+
+function renderTimeControl(){
+  const c = document.getElementById('tcEmployeeList'); if(!c) return;
+  c.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)">Загрузка...</div>';
+  const staff = getStaff().filter(s=>!s._builtin && !s.archived && (s.roles||[]).includes('кладовщик'));
+  if(!staff.length){
+    c.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)">📭 Нет сотрудников с ролью Кладовщик</div>';
+    return;
+  }
+
+  // Подтягиваем сегодняшние сессии, чтобы показать "сейчас работает / когда последний раз был активен"
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  db.collection('ws_work_sessions').where('loginAt','>=', todayStart.toISOString()).get().then(snap=>{
+    const sessionsToday = snap.docs.map(d=>d.data());
+    c.innerHTML = staff.map(s=>{
+      const mySessions = sessionsToday.filter(sess=>sess.userId===s.id).sort((a,b)=>b.loginAt.localeCompare(a.loginAt));
+      const last = mySessions[0];
+      let statusHtml = '<span style="color:var(--t2)">Сегодня не заходил(а)</span>';
+      if(last){
+        if(!last.logoutAt){
+          const idleMin = Math.round((Date.now()-new Date(last.lastActivityAt||last.loginAt))/60000);
+          statusHtml = idleMin > TC_IDLE_THRESHOLD_MIN
+            ? `<span style="color:var(--a4)">🟡 В сети, но неактивен(на) ${idleMin} мин</span>`
+            : `<span style="color:var(--inc)">🟢 Сейчас в работе</span>`;
+        } else {
+          statusHtml = `<span style="color:var(--t2)">Последний вход сегодня ${fmtDT(last.loginAt)}, вышел(а) ${fmtDT(last.logoutAt)}</span>`;
+        }
+      }
+      return `
+        <div class="card" style="cursor:pointer;margin:0" onclick="openTimeControlDetail('${s.id}','${(s.name||'').replace(/'/g,"\\'")}')">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-weight:700">${s.name}</div>
+              <div style="font-size:11px;margin-top:2px">${statusHtml}</div>
+            </div>
+            <span style="font-size:18px;color:var(--t2)">›</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }).catch(e=>{ c.innerHTML = '<div style="color:var(--exp);padding:12px">Ошибка загрузки: '+e.message+'</div>'; });
+}
+
+function openTimeControlDetail(userId, userName){
+  _tcSelectedUser = {id:userId, name:userName};
+  document.getElementById('tcdTitle').textContent = '🕵️ ' + userName;
+  showPg('timecontroldetail', null);
+  _tcdPeriod = 'today';
+  document.querySelectorAll('#tcdFilter .fchip').forEach((el,i)=>el.classList.toggle('active', i===0));
+  renderTimeControlDetail();
+}
+
+function setTcdPeriod(p, el){
+  _tcdPeriod = p;
+  document.querySelectorAll('#tcdFilter .fchip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  renderTimeControlDetail();
+}
+
+function tcdRange(){
+  const now2 = new Date();
+  if(_tcdPeriod==='today'){ const d=new Date(); d.setHours(0,0,0,0); return {from:d.toISOString(), to:now2.toISOString()}; }
+  if(_tcdPeriod==='yesterday'){ const d=new Date(); d.setDate(d.getDate()-1); d.setHours(0,0,0,0); const e=new Date(d); e.setHours(23,59,59,999); return {from:d.toISOString(), to:e.toISOString()}; }
+  if(_tcdPeriod==='week'){ const d=new Date(); d.setDate(d.getDate()-7); return {from:d.toISOString(), to:now2.toISOString()}; }
+  const d=new Date(); d.setDate(d.getDate()-30); return {from:d.toISOString(), to:now2.toISOString()};
+}
+
+async function renderTimeControlDetail(){
+  const c = document.getElementById('tcdContent'); if(!c || !_tcSelectedUser) return;
+  c.innerHTML = '<div style="text-align:center;padding:20px;color:var(--t2)">Загрузка...</div>';
+  const {from, to} = tcdRange();
+  const uidSel = _tcSelectedUser.id;
+
+  try{
+    const [sessSnap, auditSnap] = await Promise.all([
+      db.collection('ws_work_sessions').where('userId','==',uidSel).get(),
+      db.collection('ws_audit_log').where('userId','==',uidSel).get()
+    ]);
+    const sessions = sessSnap.docs.map(d=>d.data()).filter(s=>s.loginAt>=from && s.loginAt<=to).sort((a,b)=>b.loginAt.localeCompare(a.loginAt));
+    const actions = auditSnap.docs.map(d=>d.data()).filter(a=>a.timestamp>=from && a.timestamp<=to).sort((a,b)=>a.timestamp.localeCompare(b.timestamp));
+
+    // Итоги по сменам
+    let totalMin = 0;
+    const sessionsHtml = sessions.map(s=>{
+      const start = new Date(s.loginAt);
+      const end = s.logoutAt ? new Date(s.logoutAt) : new Date(s.lastActivityAt||s.loginAt);
+      const durMin = Math.max(0, Math.round((end-start)/60000));
+      totalMin += durMin;
+      return `<div class="at-row">
+        <span class="at-lbl">${start.toLocaleDateString('ru-RU')} · ${start.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})} → ${s.logoutAt ? end.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '<span style="color:var(--inc)">ещё активна</span>'}</span>
+        <span class="at-val">${tcFmtDuration(durMin)}</span>
+      </div>`;
+    }).join('') || '<div class="empty" style="padding:10px 0">Нет сессий за период</div>';
+
+    // Тайминг действий с обнаружением простоев
+    let idleCount = 0, idleTotalMin = 0;
+    let prevTs = null;
+    const actionsHtml = actions.map(a=>{
+      const t = new Date(a.timestamp);
+      let gapHtml = '';
+      if(prevTs){
+        const gapMin = Math.round((t-prevTs)/60000);
+        if(gapMin >= TC_IDLE_THRESHOLD_MIN){
+          idleCount++; idleTotalMin += gapMin;
+          gapHtml = `<div style="font-size:11px;color:var(--exp);padding:4px 0 4px 10px">⚠️ простой ${tcFmtDuration(gapMin)}</div>`;
+        }
+      }
+      prevTs = t;
+      return gapHtml + `<div class="at-row">
+        <span class="at-lbl">${t.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})} · ${a.action}</span>
+        <span class="at-val" style="font-size:11px;color:var(--t2)">${Object.values(a.details||{}).filter(Boolean).slice(0,2).join(' · ')}</span>
+      </div>`;
+    }).join('') || '<div class="empty" style="padding:10px 0">Нет зафиксированных действий за период</div>';
+
+    c.innerHTML = `
+      <div class="srow" style="margin-bottom:12px">
+        <div class="sc"><div class="sc-v" style="color:var(--accent)">${tcFmtDuration(totalMin)}</div><div class="sc-l">Всего в сменах</div></div>
+        <div class="sc"><div class="sc-v" style="color:var(--a5)">${actions.length}</div><div class="sc-l">Действий</div></div>
+        <div class="sc"><div class="sc-v" style="color:${idleCount?'var(--exp)':'var(--inc)'}">${idleCount}</div><div class="sc-l">Простоев</div></div>
+      </div>
+      ${idleCount ? `<div style="background:rgba(255,80,80,0.1);border:1px solid var(--exp);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:var(--exp)">
+        ⚠️ Суммарно простоев (пауз дольше ${TC_IDLE_THRESHOLD_MIN} мин между действиями): ${tcFmtDuration(idleTotalMin)}
+      </div>` : ''}
+      <div class="card">
+        <div class="ctitle">🕐 Смены (вход/выход)</div>
+        ${sessionsHtml}
+      </div>
+      <div class="card" style="margin-top:10px">
+        <div class="ctitle">📋 Тайминг действий</div>
+        ${actionsHtml}
+      </div>
+    `;
+  }catch(e){
+    c.innerHTML = '<div style="color:var(--exp);padding:12px">Ошибка загрузки: '+e.message+'</div>';
+  }
 }
 // ════════════════════════════════
 
@@ -8464,6 +8669,7 @@ async function reactivateFiGroup(groupId){
     await batch.commit();
     closeMo('fiGroupDetailMo');
     showToast(`✅ Доактивировано: +${created} шт. на складе` + (skippedDup?` (пропущено дублей: ${skippedDup})`:''));
+    logAction('inventory_group_reactivated', {groupName: g.groupName, created, skippedDup});
     loadDataFromFirebase();
     setTimeout(()=>renderWarehouse(), 400);
   }catch(e){ showToast('Ошибка: '+e.message); }
