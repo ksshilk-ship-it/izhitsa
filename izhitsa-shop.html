@@ -224,6 +224,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 <div id="connStatusBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;justify-content:center;padding:6px 12px;border-bottom:1px solid;align-items:center"></div>
 <div id="loginScreen" style="display:flex;flex-direction:column;min-height:100dvh;padding:32px 20px 24px;padding-top:calc(32px + env(safe-area-inset-top, 0px));background:#0f0f13">
   <div style="font-family:Unbounded,sans-serif;font-size:26px;font-weight:700;color:#c8f060;margin-bottom:4px">Ижица</div>
+  <div style="background:#c8f060;color:#0f0f13;font-weight:900;font-size:15px;text-align:center;padding:10px 8px;border-radius:10px;margin-bottom:14px;letter-spacing:0.5px">🏪 ЭТО МОДУЛЬ МАГАЗИНА (izhitsa-shop.html)</div>
   <div style="font-size:12px;color:#8888aa;margin-bottom:20px">Модуль магазина</div>
   <div style="display:flex;gap:10px;margin-bottom:16px">
     <div id="btnSeller"
@@ -272,7 +273,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 </div>
 <div id="appScreen" style="display:none">
   <div class="hdr">
-    <div class="hdr-logo">Ижица</div>
+    <div class="hdr-logo">Ижица <span style="font-size:9px;color:#c8f060;font-weight:700;background:#1e2a14;padding:2px 6px;border-radius:5px;vertical-align:middle">МАГАЗИН</span></div>
     <div style="display:flex;align-items:center;gap:8px">
       <div><div class="hdr-shop" id="hdrShop"></div><div class="hdr-seller" id="hdrSeller"></div></div>
       <button class="exit-btn" id="syncBtn" onclick="manualSync()" ontouchstart="_syncPressStart()" ontouchend="_syncPressEnd()" title="Обновить данные (зажмите для полного обновления приложения)" style="padding:8px 10px">🔄</button>
@@ -1652,6 +1653,15 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
         <div class="pc" onclick="setExpType('inkass',this)">🏦 Инкассация</div>
         <div class="pc" onclick="setExpType('other',this)">📝 Прочее</div>
       </div>
+    </div>
+    <div id="expPayMethodBlock" class="fg" style="display:block">
+      <label class="fl">Как выплачено</label>
+      <div class="pay-chips" id="expPayMethodChips">
+        <div class="pc active" onclick="setExpPayMethod('cash',this)">💵 Наличными из кассы</div>
+        <div class="pc" onclick="setExpPayMethod('transfer',this)">🏦 Переводом</div>
+        <div class="pc" onclick="setExpPayMethod('other',this)">📝 Иначе</div>
+      </div>
+      <div style="font-size:10px;color:#8888aa;margin-top:4px">Если не наличными — сумма не спишется с кассы, но зачтётся в счёт ЗП</div>
     </div>
     <div id="expTypeDrBlock" style="display:none" class="fg">
       <label class="fl">Тип расхода</label>
@@ -4760,6 +4770,11 @@ function setSsPeriod(p){
   if(cd) cd.style.display=p==='custom'?'flex':'none';
   renderSellerStats();
 }
+function _ssMonthsInRange(range){
+  var from=new Date(range.from), to=new Date(range.to);
+  var months=(to.getFullYear()-from.getFullYear())*12+(to.getMonth()-from.getMonth())+1;
+  return Math.max(1, months);
+}
 function _ssDateRange(){
   var now=new Date(),y=now.getFullYear(),m=now.getMonth();
   if(_ssPeriod==='month') return {from:y+'-'+String(m+1).padStart(2,'0')+'-01',to:y+'-'+String(m+1).padStart(2,'0')+'-31'};
@@ -4789,15 +4804,25 @@ function renderSellerStats(){
   shifts.forEach(function(s){
     // Убираем префикс Восст. чтобы смены восстановления суммировались с основными
     var name=(s.sellerName||'—').replace(/^Восст. /,'');
-    if(!sellers[name])sellers[name]={name:name,shifts:0,revenue:0,sales:0,checks:[],zp:0,zpFact:0,travel:0,hasCashDiff:0,shops:{},disc:0,discCash:0,discSales:0};
+    if(!sellers[name])sellers[name]={name:name,shifts:0,revenue:0,sales:0,checks:[],zp:0,zpFact:0,travel:0,hasCashDiff:0,shops:{},disc:0,discCash:0,discSales:0,
+      zpCash:0,zpTransfer:0,zpOther:0,travelCash:0,travelTransfer:0,travelOther:0,travelAccrued:0};
     var sel=sellers[name];
     sel.shifts++;
     var rev=(s.cashRevenue||0)+(s.cardRevenue||0)+(s.totalDiscount||0);
     sel.revenue+=rev;
     var sc=s.salesCount||0; sel.sales+=sc;
     if(sc>0) sel.checks.push(rev/sc);
-    sel.zp+=s.zp||0; sel.zpFact+=(s.zpFact||s.zp||0); sel.travel+=s.travel||0;
+    sel.zp+=s.zp||0; sel.zpFact+=(s.zpFact||s.zp||0); sel.travel+=s.travel||0; sel.travelAccrued+=s.travel||0;
     sel.disc+=s.totalDiscount||0;
+    (s.journal||[]).forEach(function(e){
+      if(e.type==='expense' && (e.expType==='zp'||e.expType==='travel')){
+        var pm = e.payMethod||'cash';
+        var bucket = e.expType==='zp' ? 'zp' : 'travel';
+        if(pm==='cash') sel[bucket+'Cash']+=(e.amount||0);
+        else if(pm==='transfer') sel[bucket+'Transfer']+=(e.amount||0);
+        else sel[bucket+'Other']+=(e.amount||0);
+      }
+    });
     // Скидки по наличным — из journal
     (s.journal||[]).forEach(function(e){
       if(e.type==='sale'&&(e.discount||0)>0){
@@ -4935,8 +4960,23 @@ function renderSellerStats(){
       '<div style="font-size:10px;color:#60f090;font-weight:700;margin-bottom:4px">ЗАРПЛАТА</div>'+
       row('ЗП начислена',fmt(sel.zp)+'₽','#60f090')+
       row('ЗП взято (факт)',fmt(sel.zpFact)+'₽','#f0a060')+
+      row('  · наличными',fmt(sel.zpCash)+'₽','#8888aa')+
+      row('  · переводом',fmt(sel.zpTransfer)+'₽','#8888aa')+
+      (sel.zpOther?row('  · иначе',fmt(sel.zpOther)+'₽','#8888aa'):'')+
       row('Долг/Переплата',fmt(Math.abs(zpDebt))+'₽ '+(zpDebt>0?'← долг':zpDebt<0?'→ переплата':'✔ оплачено'),zpDebt>0?'#f06060':zpDebt<0?'#a060f0':'#60f090')+
       row('Ср. ЗП / смену',fmt(avgZp)+'₽','#60f090')+
+      row('Ср. ЗП / месяц',fmt(sel.zp/_ssMonthsInRange(range))+'₽','#60f090')+
+      (function(){
+        var travelDebt = sel.travelAccrued - (sel.travelCash+sel.travelTransfer+sel.travelOther);
+        return '<div style="border-top:1px solid #2e2e3e;margin:6px 0 4px"></div>'+
+        '<div style="font-size:10px;color:#f0a060;font-weight:700;margin-bottom:4px">ПРОЕЗД</div>'+
+        row('Проезд начислен',fmt(sel.travelAccrued)+'₽','#f0a060')+
+        row('Проезд выплачен',fmt(sel.travelCash+sel.travelTransfer+sel.travelOther)+'₽','#f0a060')+
+        row('  · наличными',fmt(sel.travelCash)+'₽','#8888aa')+
+        row('  · переводом',fmt(sel.travelTransfer)+'₽','#8888aa')+
+        (sel.travelOther?row('  · иначе',fmt(sel.travelOther)+'₽','#8888aa'):'')+
+        row('Долг/Переплата (проезд)',fmt(Math.abs(travelDebt))+'₽ '+(travelDebt>0?'← долг':travelDebt<0?'→ переплата':'✔ оплачено'),travelDebt>0?'#f06060':travelDebt<0?'#a060f0':'#60f090');
+      })()+
       (sel.hasCashDiff>0?row('Расхождения кассы',sel.hasCashDiff+' смен','#f06060'):'')+
       '<div onpointerdown="event.preventDefault();if(!window._ssCalOpen)window._ssCalOpen={};window._ssCalOpen[\''+calKey+'\']='+(calOpen?'false':'true')+';renderSellerStats()" '+
         'style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;margin-top:4px;cursor:pointer;border-top:1px solid #2e2e3e">'+
@@ -6285,12 +6325,24 @@ function setExpGoods(type, el){
   }
   document.getElementById('expSupplierBlock').style.display='none';
 }
+var _expPayMethod = 'cash';
+function setExpPayMethod(m, el){
+  _expPayMethod = m;
+  document.querySelectorAll('#expPayMethodChips .pc').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+}
 function setExpType(type, el){
   expType = type;
   document.querySelectorAll('#expTypeChips .pc, #expTypeDrChips .pc').forEach(p=>p.classList.remove('active'));
   el.classList.add('active');
   var supBlock = document.getElementById('expSupplierBlock');
   if(supBlock) supBlock.style.display = (type==='supplier') ? 'block' : 'none';
+  var payBlock = document.getElementById('expPayMethodBlock');
+  if(payBlock) payBlock.style.display = (type==='zp'||type==='travel') ? 'block' : 'none';
+  if(type!=='zp'&&type!=='travel'){
+    _expPayMethod='cash';
+    document.querySelectorAll('#expPayMethodChips .pc').forEach(function(p,i){ p.classList.toggle('active', i===0); });
+  }
 }
 function saveExpense(){
   var amt = parseFloat((document.getElementById('expAmt')||{}).value)||0;
@@ -6300,14 +6352,17 @@ function saveExpense(){
   var labels = {zp:'💰 ЗП',travel:'🚌 Проезд',inkass:'🏦 Инкассация',other:'📝 Прочее',supplier:'🏭 Поставщику'};
   var label = labels[expType] + (expGoodsType==='dr'?' (ДР)':'');
   var isDr = expGoodsType==='dr';
+  var isZpOrTravel = (expType==='zp'||expType==='travel');
+  var payMethod = isZpOrTravel ? _expPayMethod : 'cash';
+  var payMethodLabels = {cash:'💵 наличными',transfer:'🏦 переводом',other:'📝 иначе'};
   journal.push({
     id:uid(), type:'expense', ts:_workingNowISO(),
     icon:'💸', label:'Расход: '+label,
-    sub:fmt(amt)+(supplier?' · '+supplier:'')+(comment?' · '+comment:''),
-    expType, goodsType:expGoodsType, amount:amt, comment, supplier,
+    sub:fmt(amt)+(isZpOrTravel?' · '+payMethodLabels[payMethod]:'')+(supplier?' · '+supplier:'')+(comment?' · '+comment:''),
+    expType, goodsType:expGoodsType, amount:amt, comment, supplier, payMethod,
     amtCls:'exp', amtSign:'−',
-    cashEffect: isDr?0:-amt,
-    cashDrEffect: isDr?-amt:0,
+    cashEffect: (isDr || (isZpOrTravel && payMethod!=='cash'))?0:-amt,
+    cashDrEffect: (isDr && !(isZpOrTravel && payMethod!=='cash'))?-amt:0,
     cardEffect:0, staffEffect:0, goodsEffect:0
   });
   saveJ();
@@ -6316,6 +6371,7 @@ function saveExpense(){
   document.getElementById('expComment').value='';
   if(document.getElementById('expSupplierName')) document.getElementById('expSupplierName').value='';
   expGoodsType='derevo'; setExpGoods('derevo', document.getElementById('expGoodsDerevo'));
+  _expPayMethod='cash';
   closeMo('expMo');
   renderAll();
   showToast('💸 Расход '+fmt(amt)+' записан');
