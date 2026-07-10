@@ -8694,6 +8694,7 @@ function renderFirstInventoryGroups(){
 
 function openFiGroupDetail(groupId){
   const g = _fiGroups.find(x=>x.id===groupId); if(!g) return;
+  _fiGroupSort = {field: 'none', asc: true};
 
   document.getElementById('fiGroupDetailTitle').textContent = g.groupName;
 
@@ -8754,29 +8755,20 @@ function openFiGroupDetail(groupId){
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div class="ctitle" style="margin:0">Позиции (${(g.positions||[]).length})</div>
     </div>
-    <div style="position:relative;margin-bottom:10px">
+    <div style="position:relative;margin-bottom:8px">
       <input class="fi" id="fiGroupSearchInput" placeholder="🔍 Поиск по наименованию, артикулу..."
         oninput="filterFiGroupPositions()" autocomplete="off"
         style="padding-right:36px">
       <button onclick="document.getElementById('fiGroupSearchInput').value='';filterFiGroupPositions()"
         style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px;padding:0">✕</button>
     </div>
-    <div id="fiGroupPositionsList">
-    ${(g.positions||[]).map((p,i)=>`
-      <div class="fi-pos-row" data-search="${((p.name||'')+(p.artikul||'')+(p.wood||'')+(p.size||'')).toLowerCase()}" style="padding:10px 0;border-bottom:1px solid var(--border)">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-          <div style="flex:1">
-            <div style="font-size:13px;font-weight:700">${p.name||'—'}${p.artikul?' · '+p.artikul:''}</div>
-            <div style="font-size:11px;color:var(--t2);margin-top:2px">${p.wood||''}${p.size?' · '+p.size:''} · ${p.qty||1} шт. · ${fmt(p.price||0)}/шт.</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt((p.price||0)*(p.qty||1))}</div>
-            <button onclick="openFiPositionEdit('${g.id}','${p.rid}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 8px;color:var(--a2);cursor:pointer;font-size:13px">✏️</button>
-            <button onclick="deleteFiPosition('${g.id}','${p.rid}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 8px;color:var(--exp);cursor:pointer;font-size:13px">🗑</button>
-          </div>
-        </div>
-      </div>`).join('')}
-    </div>`;
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button onclick="setFiGroupSort('artikul')" id="fiSortArtikulBtn" style="flex:1;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:8px;color:var(--t2);cursor:pointer;font-size:12px">Артикул</button>
+      <button onclick="setFiGroupSort('price')" id="fiSortPriceBtn" style="flex:1;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:8px;color:var(--t2);cursor:pointer;font-size:12px">Цена</button>
+    </div>
+    <div id="fiGroupPositionsList"></div>`;
+  _fiGroupSortGroupId = groupId;
+  renderFiGroupPositionsList();
 
   let actions = '';
   if(g.status==='draft'){
@@ -8797,6 +8789,57 @@ function openFiGroupDetail(groupId){
   document.getElementById('fiGroupDetailActions').innerHTML = actions;
 
   openMo('fiGroupDetailMo');
+}
+
+let _fiGroupSortGroupId = null;
+let _fiGroupSort = {field: 'none', asc: true};
+
+function setFiGroupSort(field){
+  if(_fiGroupSort.field === field) _fiGroupSort.asc = !_fiGroupSort.asc;
+  else { _fiGroupSort.field = field; _fiGroupSort.asc = true; }
+  renderFiGroupPositionsList();
+}
+
+function renderFiGroupPositionsList(){
+  const g = _fiGroups.find(x=>x.id===_fiGroupSortGroupId); if(!g) return;
+  const c = document.getElementById('fiGroupPositionsList'); if(!c) return;
+
+  let positions = (g.positions||[]).slice();
+  const artBtn = document.getElementById('fiSortArtikulBtn');
+  const priceBtn = document.getElementById('fiSortPriceBtn');
+  if(artBtn){ artBtn.style.background='var(--s2)'; artBtn.style.color='var(--t2)'; artBtn.textContent='Артикул'; }
+  if(priceBtn){ priceBtn.style.background='var(--s2)'; priceBtn.style.color='var(--t2)'; priceBtn.textContent='Цена'; }
+
+  if(_fiGroupSort.field === 'artikul'){
+    positions.sort((a,b)=>{
+      const an = parseInt(a.artikul,10), bn = parseInt(b.artikul,10);
+      const av = isNaN(an) ? (a.artikul||'') : an, bv = isNaN(bn) ? (b.artikul||'') : bn;
+      if(av < bv) return _fiGroupSort.asc ? -1 : 1;
+      if(av > bv) return _fiGroupSort.asc ? 1 : -1;
+      return 0;
+    });
+    if(artBtn){ artBtn.style.background='var(--accent)'; artBtn.style.color='#000'; artBtn.textContent = (_fiGroupSort.asc?'↑':'↓')+' Артикул'; }
+  } else if(_fiGroupSort.field === 'price'){
+    positions.sort((a,b)=> _fiGroupSort.asc ? (a.price||0)-(b.price||0) : (b.price||0)-(a.price||0));
+    if(priceBtn){ priceBtn.style.background='var(--accent)'; priceBtn.style.color='#000'; priceBtn.textContent = (_fiGroupSort.asc?'↑':'↓')+' Цена'; }
+  }
+
+  c.innerHTML = positions.map(p=>`
+    <div class="fi-pos-row" data-search="${((p.name||'')+(p.artikul||'')+(p.wood||'')+(p.size||'')).toLowerCase()}" style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700">${p.name||'—'}${p.artikul?' · '+p.artikul:''}</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:2px">${p.wood||''}${p.size?' · '+p.size:''} · ${p.qty||1} шт. · ${fmt(p.price||0)}/шт.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:13px;font-weight:700;color:var(--accent)">${fmt((p.price||0)*(p.qty||1))}</div>
+          <button onclick="openFiPositionEdit('${g.id}','${p.rid}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 8px;color:var(--a2);cursor:pointer;font-size:13px">✏️</button>
+          <button onclick="deleteFiPosition('${g.id}','${p.rid}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 8px;color:var(--exp);cursor:pointer;font-size:13px">🗑</button>
+        </div>
+      </div>
+    </div>`).join('');
+
+  filterFiGroupPositions(); // применить активный поиск, если он был введён
 }
 
 function filterFiGroupPositions(){
