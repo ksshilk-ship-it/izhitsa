@@ -7108,10 +7108,10 @@ function evaluateShiftIssues(sh){
       issues.push({code:'morn_cash_diff_s', label:'💵 Нал утро (Покупки сотрудников) не сходится с вечером пред. смены ('+fmt(prevChk.cashStaffEvening)+')'});
     }
   })();
-  if(!sh.goodsMorning || sh.goodsMorning<=0){
+  if(sh.goodsMorning==null){
     issues.push({code:'morn_wood_zero', label:'🌳 Остаток товара (Дерево) на утро не занесён'});
   }
-  if(!sh.goodsDrMorning || sh.goodsDrMorning<=0){
+  if(sh.goodsDrMorning==null){
     issues.push({code:'morn_dr_zero', label:'🛍 Остаток товара (ДР Товар) на утро не занесён'});
   }
   function itemAmt(it){ return it.amt!=null?it.amt:(it.price||0)*(it.qty||1); }
@@ -7138,14 +7138,14 @@ function evaluateShiftIssues(sh){
     .reduce(function(s,e){ return s + Math.abs(e.goodsEffect || e.retail || e.opt || 0); }, 0);
   var jStaffDr = jnl.filter(function(e){ return e.type==='staff' && e.goodsType==='dr'; })
     .reduce(function(s,e){ return s + Math.abs(e.goodsDrEffect || e.retail || e.opt || 0); }, 0);
-  var calcEveWood = (sh.goodsMorning||0) + jRcvWood + manRcvWood - jWoWood - manWoWood - grossSold(false) - jStaffWood;
-  var calcEveDr = (sh.goodsDrMorning||0) + jRcvDr + manRcvDr - jWoDr - manWoDr - grossSold(true) - jStaffDr;
-  if(sh.goodsEvening==null || sh.goodsEvening<=0){
+  var calcEveWood = (sh.goodsMorning||0) + jnl.reduce(function(s,e){ return s+(e.goodsEffect||0); },0);
+  var calcEveDr = (sh.goodsDrMorning||0) + jnl.reduce(function(s,e){ return s+(e.goodsDrEffect||0); },0);
+  if(sh.goodsEvening==null){
     issues.push({code:'eve_wood_zero', label:'🌳 Остаток товара (Дерево) на вечер не занесён'});
   } else if(Math.abs((sh.goodsEvening||0) - calcEveWood) >= 1){
     issues.push({code:'eve_wood_mismatch', label:'🌳 Остаток товара (Дерево) на вечер не совпадает с расчётным ('+Math.round(calcEveWood).toLocaleString('ru-RU')+'₽)'});
   }
-  if(sh.drGoodsEvening==null || sh.drGoodsEvening<=0){
+  if(sh.drGoodsEvening==null){
     issues.push({code:'eve_dr_zero', label:'🛍 Остаток товара (ДР Товар) на вечер не занесён'});
   } else if(Math.abs((sh.drGoodsEvening||0) - calcEveDr) >= 1){
     issues.push({code:'eve_dr_mismatch', label:'🛍 Остаток товара (ДР Товар) на вечер не совпадает с расчётным ('+Math.round(calcEveDr).toLocaleString('ru-RU')+'₽)'});
