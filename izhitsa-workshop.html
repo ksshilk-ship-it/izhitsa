@@ -1806,9 +1806,14 @@ function acFieldTap(inputId, onPick, extraArg){
   const input = document.getElementById(inputId);
   if(!input) return;
   if(_acActiveInputId === inputId && input.hasAttribute('readonly')){
-    // Список уже открыт для этого поля — второй тап включает ручной ввод
+    // Список уже открыт для этого поля — второй тап включает ручной ввод.
+    // На iOS повторный focus() у уже сфокусированного поля не поднимает клавиатуру —
+    // нужно сначала снять фокус и сфокусировать заново (синхронно, в рамках того же жеста).
     input.removeAttribute('readonly');
+    input.blur();
     input.focus();
+    // Подстраховка: на некоторых версиях iOS клавиатура поднимается только после микрозадержки
+    setTimeout(function(){ input.focus(); }, 50);
     return;
   }
   acSuggest(inputId, onPick, extraArg);
