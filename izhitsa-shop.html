@@ -6765,6 +6765,7 @@ function _closeShiftReal(){
   const cashSales=journal.filter(e=>e.type==='sale').reduce((s,e)=>s+(e.cashPart||0),0);
   const zpExp=expArr.filter(e=>e.expType==='zp').reduce((s,e)=>s+e.amount,0);
   const travelExp=expArr.filter(e=>e.expType==='travel').reduce((s,e)=>s+e.amount,0);
+  const _zpCalcResult = (function(){ try{ return calcZpForCurrentShift(); }catch(e){ return null; } })();
   const otherExpAmt=expArr.filter(e=>e.expType==='other'&&e.goodsType!=='dr').reduce((s,e)=>s+e.amount,0);
   const supplierExpAmt=expArr.filter(e=>e.expType==='supplier'&&e.goodsType!=='dr').reduce((s,e)=>s+e.amount,0);
   const drSupplierExpAmt=expArr.filter(e=>e.expType==='supplier'&&e.goodsType==='dr').reduce((s,e)=>s+e.amount,0);
@@ -6818,8 +6819,11 @@ function _closeShiftReal(){
     terminalEvening:termEve,terminalDiff:termEve-t.card,staffEvening:staffEve,staffDiff:staffEve-t.staff,
     morningDiff,prevCashEvening:(prev&&prev.cashEvening)||null,
     salesCount:sales.length,totalRevenue:sales.reduce((s,e)=>s+e.totalPaid,0),
-    cashRevenue:cashSales,cardRevenue:termEve,expenses:expArr,zp:zpExp,travel:travelExp,inkass:inkass,otherExp:otherExpAmt,
-    zpFact:zpExp,
+    cashRevenue:cashSales,cardRevenue:termEve,expenses:expArr,
+    zp:(_zpCalcResult?_zpCalcResult.zpCalcTotal:zpExp),
+    travel:(_zpCalcResult?_zpCalcResult.travelCalc:travelExp),
+    inkass:inkass,otherExp:otherExpAmt,
+    zpFact:zpExp,travelFact:travelExp,
     supplierExp:supplierExpAmt,drSupplierAmt:drSupplierExpAmt,drOtherExp:drOtherExpAmt,
     drInkass:(session.drInkass||0)+drInkassFromExp,
     totalDiscount:sales.reduce((s,e)=>s+(e.discount||0),0),journal:[...journal]};
