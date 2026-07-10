@@ -3729,7 +3729,7 @@ async function createShipmentFromPage(){
   };
   beginSave('shipCreate');
   try{
-    await db.collection('ws_shipments').add(shipDoc);
+    const shipRef = await db.collection('ws_shipments').add(shipDoc);
     const batch=db.batch();
     // Товар списывается со склада сразу (уходит из Баланса), но статус "shipping" — ещё НЕ архив,
     // пока накладная физически не покинула мастерскую (см. markShipmentSent)
@@ -3738,7 +3738,7 @@ async function createShipmentFromPage(){
     _shipPageSelected.clear();
     _shipOpenGroups.clear();
     showSavedBanner(`✅ ${shipNum} → ${dest} · ${shipItems.length} шт.`);
-    logAction('shipment_created', {shipNum, dest, itemCount: shipItems.length});
+    logAction('shipment_created', {shipNum, dest, itemCount: shipItems.length, shipId: shipRef.id});
     setShipTab('progress');
   }catch(e){ showToast('Ошибка: '+e.message); }
   finally{ endSave('shipCreate'); }
@@ -3781,7 +3781,7 @@ async function markShipmentSent(shipId){
       await batch.commit();
     }
     showSavedBanner('🚚 Отмечено как отправлено');
-    logAction('shipment_sent', {shipNum: ship?.num, dest: ship?.destName, itemCount: (ship?.items||[]).length});
+    logAction('shipment_sent', {shipNum: ship?.num, dest: ship?.destName, itemCount: (ship?.items||[]).length, shipId: shipId});
     renderShipProgress();
   }catch(e){ showToast('Ошибка: '+e.message); }
   finally{ endSave('shipSent_'+shipId); }
@@ -5825,6 +5825,23 @@ function renderStaffDeep(){
 // 🕵️ КОНТРОЛЬ ВРЕМЕНИ — смены, вход/выход, тайминг действий (для проверки почасовой оплаты)
 // ════════════════════════════════
 let _tcSelectedUser = null; // {id, name, role}
+
+// Переход из журнала действий сразу к документу, который был создан/изменён
+function tcOpenDocument(action, details){
+  if(action.startsWith('manual_acceptance') && details.accId){
+    openMaDetail(details.accId);
+  } else if(action.includes('inventory_group') && details.groupId){
+    openFiGroupDetail(details.groupId);
+  } else if(action.startsWith('shipment') && details.shipId){
+    showPg('goods', null);
+    showPg('warehouse', null);
+    setWhMainTab('movement');
+    setTimeout(()=>setWhMoveTab('outgoing'), 50);
+    showToast('Открыта вкладка "Движение → Отгрузки" — найдите накладную в списке');
+  } else {
+    showToast('Не удалось найти документ (возможно, он был удалён)');
+  }
+}
 let _tcdPeriod = 'today';
 const TC_IDLE_THRESHOLD_MIN = 20; // разрыв между действиями больше этого — считаем простоем
 
@@ -5927,10 +5944,25 @@ async function renderTimeControlDetail(){
       </div>`;
     }).join('') || '<div class="empty" style="padding:10px 0">Нет сессий за период</div>';
 
-    // Тайминг действий с обнаружением простоев
+    // Тайминг действий с обнаружением простоев + группировка "создано → проведено" для расчёта скорости заполнения
+    const ACTION_LABELS = {
+      manual_acceptance_created: '📥 Занесение приёмки',
+      manual_acceptance_processed: '✅ Проведение приёмки',
+      shipment_created: '🚚 Создание накладной',
+      shipment_sent: '📦 Отгрузка отправлена',
+      first_inventory_group_activated: '🟢 Активация группы инвентаризации',
+      inventory_group_reactivated: '🔄 Доактивация группы',
+      first_inventory_group_created: '📋 Создана группа инвентаризации',
+      first_inventory_group_updated: '✏️ Группа дополнена',
+      LOGIN: '🔑 Вход в приложение',
+      LOGOUT: '🚪 Выход из приложения'
+    };
+    function tcLabel(a){ return ACTION_LABELS[a.action] || a.action; }
+    function tcDocKey(a){ return a.details?.accId || a.details?.groupId || a.details?.shipId || null; }
+
     let idleCount = 0, idleTotalMin = 0;
     let prevTs = null;
-    const actionsHtml = actions.map(a=>{
+    const actionsHtml = actions.map((a,idx)=>{
       const t = new Date(a.timestamp);
       let gapHtml = '';
       if(prevTs){
@@ -5941,9 +5973,34 @@ async function renderTimeControlDetail(){
         }
       }
       prevTs = t;
-      return gapHtml + `<div class="at-row">
-        <span class="at-lbl">${t.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})} · ${a.action}</span>
-        <span class="at-val" style="font-size:11px;color:var(--t2)">${Object.values(a.details||{}).filter(Boolean).slice(0,2).join(' · ')}</span>
+
+      // Ищем парное действие по тому же документу (created→processed), чтобы посчитать скорость заполнения
+      const docKey = tcDocKey(a);
+      let speedHtml = '';
+      if(docKey){
+        const paired = actions.find(b => b!==a && tcDocKey(b)===docKey && new Date(b.timestamp) > t);
+        if(paired){
+          const durSec = Math.round((new Date(paired.timestamp) - t)/1000);
+          const durLabel = durSec < 60 ? durSec+' сек' : tcFmtDuration(Math.round(durSec/60));
+          speedHtml = `<div style="font-size:11px;color:var(--a5);margin-top:6px">⏱ От «${tcLabel(a)}» до «${tcLabel(paired)}»: <b>${durLabel}</b></div>`;
+        }
+      }
+
+      const detailsFull = Object.entries(a.details||{}).filter(([k,v])=>v && k!=='accId' && k!=='groupId' && k!=='shipId')
+        .map(([k,v])=>`<div class="at-row"><span class="at-lbl">${k}</span><span class="at-val">${v}</span></div>`).join('');
+
+      const canOpen = a.action.startsWith('manual_acceptance') && a.details?.accId
+        || (a.action.includes('inventory_group') && a.details?.groupId)
+        || (a.action.startsWith('shipment') && a.details?.shipId);
+
+      return gapHtml + `<div class="at-row" style="cursor:pointer" onclick="document.getElementById('tcAct${idx}').style.display=document.getElementById('tcAct${idx}').style.display==='block'?'none':'block'">
+        <span class="at-lbl">${t.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})} · ${tcLabel(a)}</span>
+        <span class="at-val" style="font-size:11px;color:var(--t2)">${Object.entries(a.details||{}).filter(([k,v])=>(typeof v==='string'||typeof v==='number') && !['accId','groupId','shipId'].includes(k)).map(([k,v])=>v).slice(0,2).join(' · ')} ▾</span>
+      </div>
+      <div id="tcAct${idx}" style="display:none;padding:6px 0 10px 10px;border-bottom:1px solid var(--border)">
+        ${detailsFull}
+        ${speedHtml}
+        ${canOpen?`<button onclick="event.stopPropagation();tcOpenDocument('${a.action}',${JSON.stringify(a.details||{}).replace(/"/g,'&quot;')})" style="margin-top:8px;width:100%;padding:8px;background:var(--accent);color:#000;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">🔗 Открыть документ</button>`:''}
       </div>`;
     }).join('') || '<div class="empty" style="padding:10px 0">Нет зафиксированных действий за период</div>';
 
@@ -8032,7 +8089,7 @@ async function saveManualAccept(){
       positions
     });
     // Логирование в аудит
-    logAction('manual_acceptance_created', {masterName:master?.name, date, count:positions.length});
+    logAction('manual_acceptance_created', {masterName:master?.name, date, count:positions.length, accId: batchId});
     closeMo('manualAcceptMo');
     showSavedBanner(`✅ Приёмка от ${master?.name||''} сохранена · ${positions.length} позиций`);
     renderManualAcceptHistory();
@@ -8477,7 +8534,7 @@ async function provedMaAccept(){
     });
 
     // Логирование в аудит
-    logAction('manual_acceptance_processed', {masterName:acc.masterName, accepted:accepted.length, defects:defects.length});
+    logAction('manual_acceptance_processed', {masterName:acc.masterName, accepted:accepted.length, defects:defects.length, accId: acc.id});
     closeMo('maDetailMo');
     showSavedBanner(`✅ Проведено: +${accepted.length} на склад, ${defects.length} в брак мастеру`);
   }catch(e){ showToast('Ошибка: '+e.message); }
@@ -8932,7 +8989,7 @@ async function activateFirstInvGroup(groupId){
     });
     await batch.commit();
     await db.collection('ws_first_inventory').doc(groupId).update({status:'active', activatedAt: now(), activatedBy: session.name});
-    logAction('first_inventory_group_activated',{groupName:g.groupName, count:(g.positions||[]).length});
+    logAction('first_inventory_group_activated',{groupName:g.groupName, count:(g.positions||[]).length, groupId: groupId});
     closeMo('fiGroupDetailMo');
     showSavedBanner(`✅ Группа «${g.groupName}» поставлена на баланс склада`);
   }catch(e){ showToast('Ошибка: '+e.message); }
@@ -9000,7 +9057,7 @@ async function reactivateFiGroup(groupId){
     await batch.commit();
     closeMo('fiGroupDetailMo');
     showSavedBanner(`✅ Доактивировано: +${created} шт. на складе` + (skippedDup?` (пропущено дублей: ${skippedDup})`:''));
-    logAction('inventory_group_reactivated', {groupName: g.groupName, created, skippedDup});
+    logAction('inventory_group_reactivated', {groupName: g.groupName, created, skippedDup, groupId: groupId});
     loadDataFromFirebase();
     setTimeout(()=>renderWarehouse(), 400);
   }catch(e){ showToast('Ошибка: '+e.message); }
