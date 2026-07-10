@@ -7866,11 +7866,36 @@ function openMaDetail(accId){
   const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
   document.getElementById('maDetailTitle').textContent = `${acc.masterName} · сдал ${acc.deliveredDate}`;
 
+  // Редактировать позиции можно только в ДЕНЬ ВНЕСЕНИЯ данных (createdAt). На следующий день — только просмотр.
+  const todayStr = new Date().toISOString().split('T')[0];
+  const entryDay = (acc.createdAt || '').split('T')[0];
+  const isEditable = entryDay === todayStr;
+
   const c = document.getElementById('maDetailItems');
+  if(!isEditable){
+    const lockNote = document.getElementById('maDetailLockNote');
+    if(lockNote){ lockNote.style.display='block'; lockNote.textContent = '🔒 Приёмка внесена ' + entryDay + ' — редактирование позиций закрыто. Можно только принять/забраковать и провести.'; }
+  } else {
+    const lockNote = document.getElementById('maDetailLockNote');
+    if(lockNote) lockNote.style.display='none';
+  }
+
   c.innerHTML = acc.positions.map((p,i)=>`
     <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid var(--border)">
-      <div style="font-size:13px;font-weight:700">${p.name}${p.artikul?' · '+p.artikul:''}</div>
-      <div style="font-size:11px;color:var(--t2);margin:3px 0">🌳 ${p.wood||'—'} · ЗП: ${fmt(p.zp)} · Цена: ${fmt(p.price)}</div>
+      ${isEditable ? `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+          <input class="fi" style="font-size:12px;padding:8px" value="${p.artikul||''}" placeholder="Артикул" inputmode="decimal" onchange="updateMaPosField('${acc.id}','${p.rid}','artikul',this.value)">
+          <input class="fi" style="font-size:12px;padding:8px" value="${p.name||''}" placeholder="Наименование" onchange="updateMaPosField('${acc.id}','${p.rid}','name',this.value)">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
+          <input class="fi" style="font-size:12px;padding:8px" value="${p.wood||''}" placeholder="Порода" onchange="updateMaPosField('${acc.id}','${p.rid}','wood',this.value)">
+          <input class="fi" style="font-size:12px;padding:8px" type="number" value="${p.price||0}" placeholder="Цена" onchange="updateMaPosField('${acc.id}','${p.rid}','price',this.value)">
+          <input class="fi" style="font-size:12px;padding:8px" type="number" value="${p.zp||0}" placeholder="ЗП" onchange="updateMaPosField('${acc.id}','${p.rid}','zp',this.value)">
+        </div>
+      ` : `
+        <div style="font-size:13px;font-weight:700">${p.name}${p.artikul?' · '+p.artikul:''}</div>
+        <div style="font-size:11px;color:var(--t2);margin:3px 0">🌳 ${p.wood||'—'} · ЗП: ${fmt(p.zp)} · Цена: ${fmt(p.price)}</div>
+      `}
       <div style="display:flex;gap:8px;margin-top:8px">
         <button onclick="setMaPosStatus('${acc.id}','${p.rid}','accepted')"
           style="flex:1;padding:8px;border-radius:8px;border:1px solid ${p.status==='accepted'?'var(--inc)':'var(--border)'};background:${p.status==='accepted'?'rgba(80,255,150,0.15)':'var(--s1)'};color:${p.status==='accepted'?'var(--inc)':'var(--t2)'};font-size:12px;font-weight:700;cursor:pointer">
@@ -7888,6 +7913,17 @@ function openMaDetail(accId){
   const delBtn = document.getElementById('maDeleteBtn');
   if(delBtn) delBtn.style.display = (session && (session.role==='администратор'||session.role==='управляющий')) ? 'block' : 'none';
   openMo('maDetailMo');
+}
+
+// Обновление поля позиции внутри приёмки — доступно только в день внесения (проверка на стороне openMaDetail через рендер полей)
+function updateMaPosField(accId, rid, field, value){
+  const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
+  const entryDay = (acc.createdAt || '').split('T')[0];
+  const todayStr = new Date().toISOString().split('T')[0];
+  if(entryDay !== todayStr){ showToast('🔒 Редактирование доступно только в день внесения приёмки'); openMaDetail(accId); return; }
+  const pos = acc.positions.find(p=>p.rid===rid); if(!pos) return;
+  pos[field] = (field==='price'||field==='zp') ? (parseFloat(value)||0) : value;
+  db.collection('ws_master_acceptances').doc(accId).update({positions: acc.positions}).catch(console.error);
 }
 
 function setMaPosStatus(accId, rid, status){
@@ -8814,6 +8850,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 <div class="mo" id="maDetailMo">
   <div class="md"><div class="mh"></div>
     <div class="mt" id="maDetailTitle">Приёмка</div>
+    <div id="maDetailLockNote" style="display:none;background:rgba(255,180,60,0.1);border:1px solid var(--a4);border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px;color:var(--a4)"></div>
     <div id="maDetailItems" style="margin-bottom:14px"></div>
     <button class="btn green" onclick="provedMaAccept()" id="maProvedBtn">✅ Провести</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('maDetailMo')">Закрыть</button>
