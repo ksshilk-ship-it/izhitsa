@@ -1059,6 +1059,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
       </div>
       <div style="font-size:10px;color:#8888aa;margin-bottom:4px">Магазин</div>
       <div id="ss_shop_chips" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+      <button onclick="recalcAllShiftsZp()" style="width:100%;margin-top:10px;padding:9px;background:#1e2a14;border:2px solid #c8f060;border-radius:10px;font-weight:700;font-size:12px;color:#c8f060;cursor:pointer">🔄 Пересчитать ЗП по всем закрытым сменам</button>
     </div>
     <div id="ss_content"></div>
   </div>
@@ -4768,6 +4769,30 @@ function setSsPeriod(p){
   });
   var cd=document.getElementById('ss_custom_dates');
   if(cd) cd.style.display=p==='custom'?'flex':'none';
+  renderSellerStats();
+}
+function recalcAllShiftsZp(){
+  if(!confirm('Пересчитать начисленную ЗП и проезд для ВСЕХ закрытых смен по правильной формуле? Фактически выданные суммы (взято) не изменятся. Это может занять несколько секунд.')) return;
+  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var updated = 0;
+  shifts.forEach(function(s){
+    if(s.status!=='closed') return;
+    try{
+      var result = calcShiftZpStandalone(s.shopName, s);
+      var newZp = result.zpCalcTotal;
+      var newTravel = result.travelCalc;
+      if(Math.abs((s.zp||0)-newZp)>=1 || Math.abs((s.travel||0)-newTravel)>=1){
+        s.zp = newZp;
+        s.travel = newTravel;
+        if(s.travelFact==null) s.travelFact = result.travelFact;
+        s._zpRecalculatedAt = new Date().toISOString();
+        updated++;
+        _pushShiftWithRetry(s.id||s._id, s);
+      }
+    }catch(e){ console.log('[recalcAllShiftsZp] ошибка для смены', s.id, e); }
+  });
+  localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+  showToast('✅ Пересчитано смен: '+updated);
   renderSellerStats();
 }
 function _ssMonthsInRange(range){
