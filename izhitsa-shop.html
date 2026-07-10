@@ -8306,6 +8306,12 @@ function svSaveInvoiceFromArchive(id, isManual){
   all[idx] = data;
   localStorage.setItem(storeKey, JSON.stringify(all));
   try{ db.collection(storeKey).doc(id).set(data,{merge:true}); }catch(e){}
+  if(!_currentShiftView){
+    showToast('✅ Накладная сохранена, но смена для обновления журнала не выбрана — открой накладную через список смены, чтобы обновились остатки');
+    if(isManual) delete window._manInvEdit[id]; else delete window._shInvEdit[id];
+    closeMo('adminInvMo');
+    return;
+  }
   var jnl = _currentShiftView.journal||[];
   var jIdx = jnl.findIndex(function(e){
     if(e.type!=='receive') return false;
@@ -14141,6 +14147,15 @@ function adminMoveReceiptDate(entryId, sourceShiftId){
   showToast('✅ Приход перенесён на '+newDate);
   try{ renderAdminRcvWo(); }catch(e){}
 }
+function adminOpenInvoiceFromList(invId, shiftId){
+  if(shiftId){
+    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var sh = shifts.find(function(s){ return (s.id||s._id)===shiftId; });
+    if(sh) _currentShiftView = sh;
+    else { showToast('⚠️ Смена этой накладной не найдена локально — нажми ☁️ Синх и попробуй снова'); return; }
+  }
+  svOpenInvoiceFromReceive(invId);
+}
 function renderAdminRcvWo(){
   var range = _adminRcvDateRange();
   var allShifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
@@ -14210,7 +14225,7 @@ function renderAdminRcvWo(){
           '<div style="font-size:15px;font-weight:700;color:'+gtColor+'">'+Math.round(r.amount).toLocaleString('ru-RU')+'₽</div>'+
         '</div>'+
       '</div>'+
-      (r.invId?'<button type="button" onclick="svOpenInvoiceFromReceive(\''+r.invId+'\')" style="font-size:11px;padding:3px 9px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#60c8f0;cursor:pointer;margin-top:5px;margin-right:6px">📋 Открыть накладную</button>':'')+
+      (r.invId?'<button type="button" onclick="adminOpenInvoiceFromList(\''+r.invId+'\',\''+(r.shiftId||'')+'\')" style="font-size:11px;padding:3px 9px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#60c8f0;cursor:pointer;margin-top:5px;margin-right:6px">📋 Открыть накладную</button>':'')+
       (r.entryId&&r.shiftId?'<button type="button" onclick="adminToggleMoveDate(this,\''+r.entryId+'\',\''+r.shiftId+'\',\''+r.shop.replace(/'/g,"\\'")+'\')" style="font-size:11px;padding:3px 9px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0a060;cursor:pointer;margin-top:5px">📅 Изменить дату прихода</button>':'')+
     '</div>';
   }
