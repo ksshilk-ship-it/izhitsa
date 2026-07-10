@@ -1342,12 +1342,13 @@ function applyUpdate() {
     <div class="fg"><label class="fl">Новое наименование</label>
       <div style="display:flex;gap:8px">
         <input class="fi" id="newItemNameInput" placeholder="Столешница, подоконник..." style="flex:1">
-        <button onclick="saveItemName()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
+        <button onclick="addPendingItemName()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
       </div>
     </div>
     <div class="ctitle" style="margin-top:4px">Список наименований</div>
     <div id="itemNamesList"></div>
-    <button class="btn sec" style="margin-top:12px" onclick="closeMo('addItemNameMo')">Готово</button>
+    <button class="btn green" style="margin-top:14px" onclick="commitItemNames()">💾 Сохранить</button>
+    <button class="btn sec" style="margin-top:8px" onclick="cancelItemNamesEdit()">Отмена</button>
   </div>
 </div>
 
@@ -1357,12 +1358,13 @@ function applyUpdate() {
     <div class="fg"><label class="fl">Новая порода</label>
       <div style="display:flex;gap:8px">
         <input class="fi" id="newWoodInput" placeholder="Дуб, ясень, орех..." style="flex:1">
-        <button onclick="saveWood()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
+        <button onclick="addPendingWood()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
       </div>
     </div>
     <div class="ctitle" style="margin-top:4px">Список пород</div>
     <div id="woodList"></div>
-    <button class="btn sec" style="margin-top:12px" onclick="closeMo('addWoodMo')">Готово</button>
+    <button class="btn green" style="margin-top:14px" onclick="commitWoods()">💾 Сохранить</button>
+    <button class="btn sec" style="margin-top:8px" onclick="cancelWoodsEdit()">Отмена</button>
   </div>
 </div>
 
@@ -1372,12 +1374,13 @@ function applyUpdate() {
     <div class="fg"><label class="fl">Новый размер</label>
       <div style="display:flex;gap:8px">
         <input class="fi" id="newSizeInput" placeholder="1200×600, 800×400×40..." style="flex:1">
-        <button onclick="saveSize()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
+        <button onclick="addPendingSize()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
       </div>
     </div>
     <div class="ctitle" style="margin-top:4px">Список размеров</div>
     <div id="sizeList"></div>
-    <button class="btn sec" style="margin-top:12px" onclick="closeMo('addSizeMo')">Готово</button>
+    <button class="btn green" style="margin-top:14px" onclick="commitSizes()">💾 Сохранить</button>
+    <button class="btn sec" style="margin-top:8px" onclick="cancelSizesEdit()">Отмена</button>
   </div>
 </div>
 
@@ -1638,17 +1641,38 @@ function wsSyncListen(lsKey) {
         if(lsKey==='ws_item_names' && typeof renderItemNameSelect==='function') renderItemNameSelect();
         if(lsKey==='ws_woods' && typeof renderWoodSelect==='function') renderWoodSelect();
         if(lsKey==='ws_sizes' && typeof renderSizeSelect==='function') renderSizeSelect();
+        // Если справочник открыт прямо сейчас — обновить видимый список тоже, не только автокомплит
+        if(lsKey==='ws_item_names' && typeof renderItemNamesList==='function') renderItemNamesList();
+        if(lsKey==='ws_woods' && typeof renderWoodList==='function') renderWoodList();
+        if(lsKey==='ws_sizes' && typeof renderSizeList==='function') renderSizeList();
       }catch(e){}
     }
   }, function(e){ console.log('ws sync err', lsKey, e.code||e); });
 }
+// Принудительно подтянуть актуальные данные справочника из Firestore (не дожидаясь live-листенера)
+async function wsFetchFreshRef(lsKey){
+  const m = WS_SYNC_SETTINGS[lsKey]; if(!m) return;
+  try{
+    const snap = await db.collection('iz_settings').doc(m.doc).get();
+    if(!snap.exists) return;
+    const val = snap.data()[m.field];
+    if(val !== undefined){
+      const stored = m.shared ? _wsNormalizeShared(val) : val;
+      localStorage.setItem(lsKey, JSON.stringify(stored));
+    }
+  }catch(e){ console.log('wsFetchFreshRef err', lsKey, e.code||e); }
+}
+
 function wsSyncSave(lsKey, data) {
   localStorage.setItem(lsKey, JSON.stringify(data));
   var m = WS_SYNC_SETTINGS[lsKey]; if(!m) return;
   var obj = {};
   obj[m.field] = m.shared ? _wsDenormalizeShared(data) : data;
   obj.updatedAt = new Date().toISOString();
-  db.collection('iz_settings').doc(m.doc).set(obj, {merge:true}).catch(function(e){ console.log('ws save err', lsKey, e.code||e); });
+  db.collection('iz_settings').doc(m.doc).set(obj, {merge:true}).catch(function(e){
+    console.log('ws save err', lsKey, e.code||e);
+    if(typeof showToast==='function') showToast('❌ Не сохранилось в общую базу: '+(e.message||e.code||'ошибка сети'));
+  });
 }
 function startWsSyncListeners() {
   Object.keys(WS_SYNC_SETTINGS).forEach(wsSyncListen);
@@ -1740,6 +1764,20 @@ function now(){return new Date().toISOString();}
 function fmtDT(iso){if(!iso)return'';const d=new Date(iso);return d.toLocaleDateString('ru-RU',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});}
 function elapsed(start,end){if(!start)return'';const ms=(end?new Date(end):new Date())-new Date(start);const h=Math.floor(ms/3600000),m=Math.floor((ms%3600000)/60000);return h>0?h+'ч '+m+'м':m+'м';}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
+
+// Заметный баннер "Сохранено" — крупнее и заметнее обычного тоста, специально для явного сохранения справочников
+function showSavedBanner(msg){
+  let b = document.getElementById('savedBanner');
+  if(!b){
+    b = document.createElement('div');
+    b.id = 'savedBanner';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;padding:16px 20px;background:var(--inc);color:#04270f;font-weight:800;font-size:15px;text-align:center;transform:translateY(-100%);transition:transform .25s ease;box-shadow:0 4px 16px rgba(0,0,0,.3)';
+    document.body.appendChild(b);
+  }
+  b.textContent = msg || '✅ Сохранено';
+  requestAnimationFrame(()=>{ b.style.transform = 'translateY(0)'; });
+  setTimeout(()=>{ b.style.transform = 'translateY(-100%)'; }, 1800);
+}
 
 // ════════ УНИВЕРСАЛЬНОЕ АВТОДОПОЛНЕНИЕ (наименования/породы/размеры) ════════
 // Рендерит инпут с выпадающим списком совпадений по подстроке, без select.
@@ -2708,8 +2746,11 @@ function renderItemNameSelect(){
   _acLists['prodName'] = names;
 }
 
+// Рабочая копия списка, пока окно открыто — ничего не уходит в базу, пока не нажата "Сохранить"
+let _pendingItemNames = null;
+
 function renderItemNamesList(){
-  const names = getItemNames();
+  const names = _pendingItemNames || getItemNames();
   const c = document.getElementById('itemNamesList'); if(!c) return;
   c.innerHTML = names.map((n,i)=>`
     <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
@@ -2718,10 +2759,12 @@ function renderItemNamesList(){
     </div>`).join('');
 }
 
-function openAddItemNameMo(){
-  renderItemNamesList();
+async function openAddItemNameMo(){
   document.getElementById('newItemNameInput').value='';
   openMo('addItemNameMo');
+  await wsFetchFreshRef('ws_item_names'); // подтянуть свежее из общей базы
+  _pendingItemNames = getItemNames(); // рабочая копия для редактирования
+  renderItemNamesList();
 }
 
 // Если справочник открыт из формы "Приёмка от мастера" — сюда записывается
@@ -2731,42 +2774,50 @@ let _maPendingWoodTarget = null;
 let _fiPendingNameTarget = null;
 let _fiPendingWoodTarget = null;
 
-function saveItemName(){
+function addPendingItemName(){
   const val = document.getElementById('newItemNameInput').value.trim();
   if(!val){ showToast('Введите название'); return; }
-  const names = getItemNames();
-  if(names.includes(val)){ showToast('Такое название уже есть'); return; }
-  names.push(val);
-  saveItemNames(names);
-  renderItemNameSelect();
+  if(!_pendingItemNames) _pendingItemNames = getItemNames();
+  if(_pendingItemNames.includes(val)){ showToast('Такое название уже есть'); return; }
+  _pendingItemNames.push(val);
+  _pendingItemNames.sort((a,b)=>a.localeCompare(b,'ru'));
   renderItemNamesList();
-  // Обновить select в каталоге если открыт
-  const pn = document.getElementById('prodName');
-  if(pn) pn.innerHTML = names.map(n=>`<option>${n}</option>`).join('');
   document.getElementById('newItemNameInput').value='';
-  const sel = document.getElementById('blankName');
-  if(sel) sel.value = val;
-  // Если добавляли из формы ручной приёмки — подставляем значение в нужную строку
+  // Если добавляли из формы ручной приёмки — подставляем значение в нужную строку сразу (не дожидаясь сохранения справочника)
   if(_maPendingNameTarget){
     updateMaItem(_maPendingNameTarget, 'name', val);
     renderMaItemsList();
     _maPendingNameTarget = null;
   }
-  // Если добавляли из формы первой инвентаризации — аналогично
   if(_fiPendingNameTarget){
     updateFiItem(_fiPendingNameTarget, 'name', val);
     renderFiItemsList();
     _fiPendingNameTarget = null;
   }
-  showToast(`✅ «${val}» добавлено`);
 }
 
 function deleteItemName(i){
-  const names = getItemNames();
-  names.splice(i,1);
-  saveItemNames(names);
-  renderItemNameSelect();
+  if(!_pendingItemNames) _pendingItemNames = getItemNames();
+  _pendingItemNames.splice(i,1);
   renderItemNamesList();
+}
+
+// 💾 Сохранить — только теперь изменения реально уходят в общую базу
+function commitItemNames(){
+  if(!_pendingItemNames){ closeMo('addItemNameMo'); return; }
+  saveItemNames(_pendingItemNames);
+  renderItemNameSelect();
+  const pn = document.getElementById('prodName');
+  if(pn) pn.innerHTML = _pendingItemNames.map(n=>`<option>${n}</option>`).join('');
+  _pendingItemNames = null;
+  closeMo('addItemNameMo');
+  showSavedBanner('✅ Наименования сохранены');
+}
+
+// Отмена — закрыть без сохранения, отменить все несохранённые правки в этом окне
+function cancelItemNamesEdit(){
+  _pendingItemNames = null;
+  closeMo('addItemNameMo');
 }
 
 // ════════ СПРАВОЧНИК ПОРОД ДЕРЕВА ════════
@@ -2785,8 +2836,10 @@ function renderWoodSelect(){
   _acLists['prodWood'] = woods;
 }
 
+let _pendingWoods = null;
+
 function renderWoodList(){
-  const woods = getWoods();
+  const woods = _pendingWoods || getWoods();
   const c = document.getElementById('woodList'); if(!c) return;
   c.innerHTML = woods.map((w,i)=>`
     <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
@@ -2795,45 +2848,53 @@ function renderWoodList(){
     </div>`).join('');
 }
 
-function openAddWoodMo(){
-  renderWoodList();
+async function openAddWoodMo(){
   document.getElementById('newWoodInput').value='';
   openMo('addWoodMo');
+  await wsFetchFreshRef('ws_woods');
+  _pendingWoods = getWoods();
+  renderWoodList();
 }
 
-function saveWood(){
+function addPendingWood(){
   const val = document.getElementById('newWoodInput').value.trim();
   if(!val){ showToast('Введите название породы'); return; }
-  const woods = getWoods();
-  if(woods.includes(val)){ showToast('Такая порода уже есть'); return; }
-  woods.push(val);
-  saveWoods(woods);
-  renderWoodSelect();
+  if(!_pendingWoods) _pendingWoods = getWoods();
+  if(_pendingWoods.includes(val)){ showToast('Такая порода уже есть'); return; }
+  _pendingWoods.push(val);
+  _pendingWoods.sort((a,b)=>a.localeCompare(b,'ru'));
   renderWoodList();
   document.getElementById('newWoodInput').value='';
-  const sel = document.getElementById('blankWood');
-  if(sel) sel.value = val;
-  // Если добавляли из формы ручной приёмки — подставляем значение в нужную строку
   if(_maPendingWoodTarget){
     updateMaItem(_maPendingWoodTarget, 'wood', val);
     renderMaItemsList();
     _maPendingWoodTarget = null;
   }
-  // Если добавляли из формы первой инвентаризации — аналогично
   if(_fiPendingWoodTarget){
     updateFiItem(_fiPendingWoodTarget, 'wood', val);
     renderFiItemsList();
     _fiPendingWoodTarget = null;
   }
-  showToast(`✅ «${val}» добавлена`);
 }
 
 function deleteWood(i){
-  const woods = getWoods();
-  woods.splice(i,1);
-  saveWoods(woods);
-  renderWoodSelect();
+  if(!_pendingWoods) _pendingWoods = getWoods();
+  _pendingWoods.splice(i,1);
   renderWoodList();
+}
+
+function commitWoods(){
+  if(!_pendingWoods){ closeMo('addWoodMo'); return; }
+  saveWoods(_pendingWoods);
+  renderWoodSelect();
+  _pendingWoods = null;
+  closeMo('addWoodMo');
+  showSavedBanner('✅ Породы дерева сохранены');
+}
+
+function cancelWoodsEdit(){
+  _pendingWoods = null;
+  closeMo('addWoodMo');
 }
 
 // ════════ РАЗМЕР: ДЛИНА × ШИРИНА × ВЫСОТА ════════
@@ -2890,8 +2951,10 @@ function renderSizeSelect(){
   _acLists['prodSize'] = sizes;
 }
 
+let _pendingSizes = null;
+
 function renderSizeList(){
-  const sizes = getSizes();
+  const sizes = _pendingSizes || getSizes();
   const c = document.getElementById('sizeList'); if(!c) return;
   c.innerHTML = sizes.map((s,i)=>`
     <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
@@ -2900,33 +2963,42 @@ function renderSizeList(){
     </div>`).join('');
 }
 
-function openAddSizeMo(){
-  renderSizeList();
+async function openAddSizeMo(){
   document.getElementById('newSizeInput').value='';
   openMo('addSizeMo');
+  await wsFetchFreshRef('ws_sizes');
+  _pendingSizes = getSizes();
+  renderSizeList();
 }
 
-function saveSize(){
+function addPendingSize(){
   const val = document.getElementById('newSizeInput').value.trim();
   if(!val){ showToast('Введите размер'); return; }
-  const sizes = getSizes();
-  if(sizes.includes(val)){ showToast('Такой размер уже есть'); return; }
-  sizes.push(val);
-  saveSizes(sizes);
-  renderSizeSelect();
+  if(!_pendingSizes) _pendingSizes = getSizes();
+  if(_pendingSizes.includes(val)){ showToast('Такой размер уже есть'); return; }
+  _pendingSizes.push(val);
   renderSizeList();
   document.getElementById('newSizeInput').value='';
-  const sel = document.getElementById('blankSize');
-  if(sel) sel.value = val;
-  showToast(`✅ «${val}» добавлен`);
 }
 
 function deleteSize(i){
-  const sizes = getSizes();
-  sizes.splice(i,1);
-  saveSizes(sizes);
-  renderSizeSelect();
+  if(!_pendingSizes) _pendingSizes = getSizes();
+  _pendingSizes.splice(i,1);
   renderSizeList();
+}
+
+function commitSizes(){
+  if(!_pendingSizes){ closeMo('addSizeMo'); return; }
+  saveSizes(_pendingSizes);
+  renderSizeSelect();
+  _pendingSizes = null;
+  closeMo('addSizeMo');
+  showSavedBanner('✅ Размеры сохранены');
+}
+
+function cancelSizesEdit(){
+  _pendingSizes = null;
+  closeMo('addSizeMo');
 }
 
 function markMasterNotifsRead(){
@@ -7510,7 +7582,7 @@ function setPendSubTab(tab){
 
 function openManualAcceptMo(){
   const sel = document.getElementById('maMaster');
-  if(sel) sel.innerHTML = getEmployees().filter(e=>e.role==='мастер').map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+  if(sel) sel.innerHTML = '<option value="">— Выберите мастера —</option>' + getEmployees().filter(e=>e.role==='мастер').map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
   document.getElementById('maDate').value = new Date().toISOString().slice(0,10);
   _maItems = [];
   addMaItemRow(); // одна строка по умолчанию
@@ -8093,6 +8165,24 @@ function openMaDetail(accId){
   const entryDay = (acc.createdAt || '').split('T')[0];
   const isEditable = entryDay === todayStr;
 
+  const h = document.getElementById('maDetailHeader');
+  if(h){
+    if(isEditable){
+      const masters = getEmployees().filter(e=>e.role==='мастер');
+      h.innerHTML = `
+        <div class="fg" style="margin-bottom:8px"><label class="fl">Мастер</label>
+          <select class="fs" onchange="updateMaAccMaster('${acc.id}',this.value)">
+            ${masters.map(m=>`<option value="${m.id}" ${m.id===acc.masterId?'selected':''}>${m.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="fg"><label class="fl">Дата сдачи</label>
+          <input class="fi" type="date" value="${acc.deliveredDate||''}" onchange="updateMaAccDate('${acc.id}',this.value)">
+        </div>`;
+    } else {
+      h.innerHTML = '';
+    }
+  }
+
   const c = document.getElementById('maDetailItems');
   if(!isEditable){
     const lockNote = document.getElementById('maDetailLockNote');
@@ -8135,6 +8225,36 @@ function openMaDetail(accId){
   const delBtn = document.getElementById('maDeleteBtn');
   if(delBtn) delBtn.style.display = (session && (session.role==='администратор'||session.role==='управляющий')) ? 'block' : 'none';
   openMo('maDetailMo');
+}
+
+// Изменить мастера у уже сохранённой приёмки — доступно только в день внесения
+function updateMaAccMaster(accId, masterId){
+  const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
+  const entryDay = (acc.createdAt || '').split('T')[0];
+  const todayStr = new Date().toISOString().split('T')[0];
+  if(entryDay !== todayStr){ showToast('🔒 Редактирование доступно только в день внесения приёмки'); openMaDetail(accId); return; }
+  if(!masterId){ showToast('Выберите мастера'); openMaDetail(accId); return; }
+  const master = getEmployees().find(e=>e.id===masterId);
+  acc.masterId = masterId;
+  acc.masterName = master?.name || '';
+  db.collection('ws_master_acceptances').doc(accId).update({masterId: acc.masterId, masterName: acc.masterName}).then(()=>{
+    showToast('✅ Мастер изменён');
+    openMaDetail(accId);
+  }).catch(e=>showToast('Ошибка: '+e.message));
+}
+
+// Изменить дату сдачи у уже сохранённой приёмки — доступно только в день внесения
+function updateMaAccDate(accId, date){
+  const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
+  const entryDay = (acc.createdAt || '').split('T')[0];
+  const todayStr = new Date().toISOString().split('T')[0];
+  if(entryDay !== todayStr){ showToast('🔒 Редактирование доступно только в день внесения приёмки'); openMaDetail(accId); return; }
+  if(!date){ showToast('Укажите дату'); openMaDetail(accId); return; }
+  acc.deliveredDate = date;
+  db.collection('ws_master_acceptances').doc(accId).update({deliveredDate: date}).then(()=>{
+    showToast('✅ Дата изменена');
+    openMaDetail(accId);
+  }).catch(e=>showToast('Ошибка: '+e.message));
 }
 
 // Обновление поля позиции внутри приёмки — доступно только в день внесения (проверка на стороне openMaDetail через рендер полей)
@@ -9081,6 +9201,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   <div class="md"><div class="mh"></div>
     <div class="mt" id="maDetailTitle">Приёмка</div>
     <div id="maDetailLockNote" style="display:none;background:rgba(255,180,60,0.1);border:1px solid var(--a4);border-radius:10px;padding:10px;margin-bottom:10px;font-size:12px;color:var(--a4)"></div>
+    <div id="maDetailHeader" style="margin-bottom:14px"></div>
     <div id="maDetailItems" style="margin-bottom:14px"></div>
     <button class="btn green" onclick="provedMaAccept()" id="maProvedBtn">✅ Провести</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('maDetailMo')">Закрыть</button>
