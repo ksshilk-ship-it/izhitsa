@@ -8301,6 +8301,8 @@ function svSaveInvoiceFromArchive(id, isManual){
   data.editedAt = new Date().toISOString();
   data.editedBy = (session&&(session.name||session.sellerName))||'admin';
   data.editReason = reason;
+  var _savedGt = (window._manInvEdit&&window._manInvEdit[id]&&window._manInvEdit[id].goodsType) || data.goodsType || all[idx].goodsType || 'derevo';
+  data.goodsType = _savedGt;
   all[idx] = data;
   localStorage.setItem(storeKey, JSON.stringify(all));
   try{ db.collection(storeKey).doc(id).set(data,{merge:true}); }catch(e){}
@@ -8313,7 +8315,6 @@ function svSaveInvoiceFromArchive(id, isManual){
   var newTotal = data.totalAmt!=null ? data.totalAmt : (data.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
   if(jIdx>=0){
     var before = Object.assign({}, jnl[jIdx]);
-    var _savedGt = (window._manInvEdit&&window._manInvEdit[id]&&window._manInvEdit[id].goodsType) || data.goodsType || jnl[jIdx].goodsType || 'derevo';
     var _isDrSave = _savedGt==='dr';
     jnl[jIdx] = Object.assign({}, jnl[jIdx], {
       label:'Приёмка '+data.num+(_isDrSave?' (ДР)':''),
@@ -8325,7 +8326,6 @@ function svSaveInvoiceFromArchive(id, isManual){
       invId:id,
       editedAt:new Date().toISOString()
     });
-    data.goodsType = _savedGt;
     try{ logEntryEdit(before, jnl[jIdx]); }catch(e){}
   }
   _currentShiftView.journal = jnl;
