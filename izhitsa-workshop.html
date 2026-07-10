@@ -8411,7 +8411,9 @@ async function reactivateFiGroup(groupId){
 
   // Найдём все ws_items уже созданные из этой группы
   const existing = items.filter(i=>i.fromFirstInventory===groupId && i.status==='received');
-  const existingArtikuls = new Set(existing.map(i=>i.artikul).filter(Boolean));
+  // Нормализуем артикулы (строка, без пробелов) — иначе число 123 и строка "123" считаются разными
+  const norm = v => String(v==null?'':v).trim();
+  const existingArtikuls = new Set(existing.map(i=>norm(i.artikul)).filter(Boolean));
   const existingCount = existing.length;
 
   // Ожидаемое полное количество
@@ -8426,6 +8428,7 @@ async function reactivateFiGroup(groupId){
     showToast(`Создаём ${missing} позиций...`);
     const batch = db.batch();
     let created = 0;
+    let skippedDup = 0;
 
     g.positions.forEach(p=>{
       const qty = parseInt(p.qty)||1;
@@ -8434,31 +8437,35 @@ async function reactivateFiGroup(groupId){
       for(let q=0; q<qty; q++){
         let artikul = p.artikul||'';
         if(!isNaN(baseArtikul) && qty>1) artikul = String(baseArtikul+q);
+        const artikulN = norm(artikul);
 
-        // Пропускаем если такой артикул уже есть на складе
-        if(artikul && existingArtikuls.has(artikul)) continue;
+        // Пропускаем если такой артикул уже есть на складе (сравнение нормализованное)
+        if(artikulN && existingArtikuls.has(artikulN)){ skippedDup++; continue; }
 
-        // Пропускаем если без артикула — считаем по числу уже созданных из этой позиции
-        // (упрощение: создаём только разницу)
         const ref = db.collection('ws_items').doc();
         batch.set(ref, {
           id: uid(), name: p.name||'', itemName: p.name||'', wood: p.wood||'',
-          size: p.size||'', artikul: artikul, price: p.price||0,
+          size: p.size||'', artikul: artikulN, price: p.price||0,
           zp: 0, zpPaid: false, masterId: '', masterName: 'Начальный остаток',
           status: 'received', createdAt: now(), receivedAt: now(),
           isManual: true, fromFirstInventory: g.id,
-          itemNum: artikul || ('НАЧ-'+g.id.slice(-4).toUpperCase()+'-'+(existingCount+created+1))
+          itemNum: artikulN || ('НАЧ-'+g.id.slice(-4).toUpperCase()+'-'+(existingCount+created+1))
         });
         created++;
-        if(artikul) existingArtikuls.add(artikul);
+        if(artikulN) existingArtikuls.add(artikulN);
       }
     });
 
-    if(created===0){ showToast('Нет новых позиций для добавления — возможно все артикулы уже созданы'); return; }
+    if(created===0){
+      showToast(`Не создано ни одного — все ${skippedDup} проверенных позиций уже числятся на складе по артикулу. Если расхождение реально есть, проверьте позиции без совпадений вручную.`);
+      return;
+    }
 
     await batch.commit();
     closeMo('fiGroupDetailMo');
-    showToast(`✅ Доактивировано: +${created} шт. на складе`);
+    showToast(`✅ Доактивировано: +${created} шт. на складе` + (skippedDup?` (пропущено дублей: ${skippedDup})`:''));
+    loadDataFromFirebase();
+    setTimeout(()=>renderWarehouse(), 400);
   }catch(e){ showToast('Ошибка: '+e.message); }
 }
 
