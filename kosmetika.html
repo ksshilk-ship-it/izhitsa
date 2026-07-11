@@ -356,6 +356,7 @@ function render(){
   else if(currentTab==='import') renderImport(main);
   else if(currentTab==='settings') renderSettings(main);
   wrapTablesForScroll(main);
+  applySectionOpenState(main);
 }
 function wrapTablesForScroll(main){
   main.querySelectorAll('table').forEach(t=>{
@@ -364,6 +365,17 @@ function wrapTablesForScroll(main){
     wrap.className = 'table-scroll';
     t.parentNode.insertBefore(wrap, t);
     wrap.appendChild(t);
+  });
+}
+// Запоминаем, какие блоки пользователь сам открыл/закрыл, чтобы они не сворачивались
+// обратно при каждом обновлении данных (добавление/редактирование записи и т.п.)
+let sectionOpenState = {};
+function isSectionOpen(key, defaultVal){
+  return key in sectionOpenState ? sectionOpenState[key] : defaultVal;
+}
+function applySectionOpenState(main){
+  main.querySelectorAll('details[data-key]').forEach(d=>{
+    d.ontoggle = ()=>{ sectionOpenState[d.dataset.key] = d.open; };
   });
 }
 
@@ -606,7 +618,7 @@ function renderSales(main){
     </div>
 
     <div class="card">
-      <details>
+      <details data-key="sales-import" ${isSectionOpen('sales-import',false)?'open':''}>
         <summary>Импорт нескольких дней сразу</summary>
         <div class="note">Одна строка — один день: дата;наличные;безнал;чистыми;продавец;скидка</div>
         <textarea id="s-import" placeholder="2026-06-01;18000;12000;16000;Анна;0"></textarea>
@@ -621,7 +633,7 @@ function renderSales(main){
         const n = rows.reduce((a,s)=>a+Number(s.net||0),0);
         const pct = g ? (n/g*100).toFixed(0) : '0';
         return `<div class="card">
-          <details class="month-group" ${idx===0?'open':''}>
+          <details class="month-group" data-key="sales-m-${k}" ${isSectionOpen('sales-m-'+k, idx===0)?'open':''}>
             <summary class="month-summary"><span>${monthLabel(k)}</span><span class="stats">${fmt(g)} · ${fmt(n)} · ${pct}%</span></summary>
             <table><thead><tr><th>Дата</th><th>Продавец</th><th>Нал</th><th>Безнал</th><th>Скидка</th><th>Чист.</th><th>%</th><th></th></tr></thead><tbody>
               ${rows.map(s=>{
@@ -754,7 +766,7 @@ function renderExpenses(main){
     </div>
 
     <div class="card">
-      <details>
+      <details data-key="exp-bulk" ${isSectionOpen('exp-bulk',false)?'open':''}>
         <summary>Массово: одни и те же данные на несколько дат</summary>
         <div class="note">Для повторяющегося расхода (проезд, оклад, аренда и т.п.) — заполняете один раз всё, кроме дат, и одной кнопкой создаёте отдельную запись на каждую выбранную дату. Удобно для «задним числом» — забранных денег за проезд/оклад за несколько дней сразу.</div>
 
@@ -817,12 +829,13 @@ function renderExpenses(main){
         rows.forEach(e=>{ (byCat[e.category]=byCat[e.category]||[]).push(e); });
         const catKeys = Object.keys(byCat).sort();
         return `<div class="card">
-          <details class="month-group" ${idx===0?'open':''}>
+          <details class="month-group" data-key="exp-m-${k}" ${isSectionOpen('exp-m-'+k, idx===0)?'open':''}>
             <summary class="month-summary"><span>${k==='—'?'Без даты':monthLabel(k)}</span><span class="stats">Итого ${fmt(total)} · План ${fmt(planned)} · Факт ${fmt(paid)}</span></summary>
             ${catKeys.map(cat=>{
               const catRows = byCat[cat].slice().sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
               const catTotal = catRows.reduce((a,e)=>a+Number(e.amount||0),0);
-              return `<details class="cat-group">
+              const catKey = 'exp-cat-'+k+'-'+cat;
+              return `<details class="cat-group" data-key="${catKey}" ${isSectionOpen(catKey,false)?'open':''}>
               <summary class="cat-group-title">${cat} — ${fmt(catTotal)}</summary>
               <table><thead><tr><th>Дата</th><th>Описание</th><th>Сумма</th><th>Статус</th><th>Счёт</th><th>Оплата</th><th></th></tr></thead><tbody>
                 ${catRows.map(e=>`
@@ -1034,7 +1047,18 @@ function buildSalaryMonthlyData(){
       const avgRevenue = shiftsCount ? revenue/shiftsCount : 0;
       const avgEarn = shiftsCount ? totalWithTravel/shiftsCount : 0;
       const pct = revenue ? totalWithTravel/revenue*100 : 0;
-      return {name, shiftsCount, revenue, oklad, commission, override, travel, totalNoTravel, totalWithTravel, avgRevenue, avgEarn, pct};
+
+      const paidInMonth = state.expenses.filter(e=>
+        e.seller===name && e.status==='paid' && e.paidDate && monthKey(e.paidDate)===k &&
+        (e.category==='ЗП' || e.category==='Проезд')
+      );
+      const factTravel = paidInMonth.filter(e=>e.category==='Проезд').reduce((a,e)=>a+Number(e.amount||0),0);
+      const zpPaid = paidInMonth.filter(e=>e.category==='ЗП');
+      const factOklad = zpPaid.filter(e=>/оклад/i.test(e.description||'')).reduce((a,e)=>a+Number(e.amount||0),0);
+      const factPercent = zpPaid.filter(e=>!/оклад/i.test(e.description||'')).reduce((a,e)=>a+Number(e.amount||0),0);
+      const factTotal = factOklad + factPercent + factTravel;
+
+      return {name, shiftsCount, revenue, oklad, commission, override, travel, totalNoTravel, totalWithTravel, avgRevenue, avgEarn, pct, factOklad, factPercent, factTravel, factTotal};
     });
     return {key:k, label:monthLabel(k), rows};
   });
@@ -1097,7 +1121,7 @@ function renderCommission(main){
       <h2>Зарплата по месяцам</h2>
       ${monthlySalary.length===0 ? '<div class="empty">Пока нет продаж с указанным продавцом</div>' :
         monthlySalary.map((m,idx)=>`
-          <details class="month-group" ${idx===0?'open':''}>
+          <details class="month-group" data-key="sal-m-${m.key}" ${isSectionOpen('sal-m-'+m.key, idx===0)?'open':''}>
             <summary class="month-summary"><span>${m.label}</span></summary>
             ${m.rows.map(r=>`
               <div class="seller-card">
@@ -1115,6 +1139,14 @@ function renderCommission(main){
                 <div class="sc-total-row"><span class="label">Итого без проезда</span><span class="num">${fmt(r.totalNoTravel)}</span></div>
                 <div class="sc-total-row"><span class="label">Итого с проездом</span><span class="num big pos">${fmt(r.totalWithTravel)}</span></div>
                 <div class="row" style="margin-top:6px;"><span class="label">% ЗП от выручки</span><span class="num">${r.pct.toFixed(1)}%</span></div>
+                <div class="cat-group-title">Выплачено фактически</div>
+                <div class="sc-grid">
+                  <div class="sc-stat"><span class="label">По окладу</span><span class="num">${fmt(r.factOklad)}</span></div>
+                  <div class="sc-stat"><span class="label">По %</span><span class="num">${fmt(r.factPercent)}</span></div>
+                  <div class="sc-stat"><span class="label">По проезду</span><span class="num">${fmt(r.factTravel)}</span></div>
+                  <div class="sc-stat"><span class="label">Всего выплачено</span><span class="num">${fmt(r.factTotal)}</span></div>
+                </div>
+                <div class="row"><span class="label">Остаток к выплате (с проездом)</span><span class="num ${(r.totalWithTravel-r.factTotal)>=0?'neg':'pos'}">${fmt(r.totalWithTravel-r.factTotal)}</span></div>
               </div>`).join('')}
           </details>`).join('')}
     </div>
@@ -1219,7 +1251,7 @@ function renderCommission(main){
       <div class="row" style="margin-top:8px;"><span class="label">Факт выплачено (по расходам)</span><span class="num">${fmt(factPaid)}</span></div>
       <div class="row"><span class="label">Остаток к выплате</span><span class="num ${diff>=0?'neg':'pos'}">${fmt(diff)}</span></div>
       ${dayRows.length>0 ? `
-      <details style="margin-top:10px;">
+      <details style="margin-top:10px;" data-key="sal-daybreak" ${isSectionOpen('sal-daybreak',false)?'open':''}>
         <summary>Разбивка по дням (${dayRows.length})</summary>
         <table><thead><tr><th>Дата</th><th>Выручка</th><th>Скидка</th><th>ЗП за смену</th></tr></thead><tbody>
           ${dayRows.map(r=>`<tr><td>${r.date.slice(8,10)}.${r.date.slice(5,7)}</td><td>${fmt(r.gr)}</td><td>${fmt(r.discount)}</td><td>${fmt(r.pay)}${r.isOverride?' <span class="tag">факт</span>':''}</td></tr>`).join('')}
@@ -1274,7 +1306,7 @@ function renderImport(main){
     </div>
 
     <div class="card">
-      <details>
+      <details data-key="imp-text-block" ${isSectionOpen('imp-text-block',false)?'open':''}>
         <summary>Или вставить текстом вручную</summary>
         <div class="note">Одна строка — один день, через точку с запятой: Дата;Продавец;Нал;Безнал;Скидка;Чистыми;ЗП</div>
         <textarea id="imp-text" style="min-height:160px;" placeholder="2021-03-01;Оля;12000;8000;500;9800;2600
@@ -1376,7 +1408,7 @@ function renderSettings(main){
         const currentBalance = getAccountBalance(a.id, todayISO());
         const roleLabel = a.role==='cash'?'Наличные':a.role==='noncash'?'Безнал (РС)':'Прочее';
         return `
-        <details class="month-group">
+        <details class="month-group" data-key="acc-${a.id}" ${isSectionOpen('acc-'+a.id,false)?'open':''}>
           <summary class="month-summary"><span>${a.name} <span style="font-size:0.7rem;color:var(--ink-soft);">(${roleLabel})</span></span><span class="stats">Сейчас: ${fmt(currentBalance)}</span></summary>
           ${report.length===0 ? '<div class="empty">Точек пока нет — добавьте первую точку отсчёта ниже</div>' :
             `<table><thead><tr><th>Дата</th><th>Тип</th><th>Введено</th><th>Расчёт</th><th>Расхожд.</th><th></th></tr></thead><tbody>
