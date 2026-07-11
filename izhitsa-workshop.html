@@ -1858,7 +1858,9 @@ function acSuggest(inputId, onPick, extraArg){
     ? list.filter(function(s){ return s.toLowerCase().indexOf(val)>=0; })
     : list.slice();
 
-  if(!matches.length){ acHideSugg(inputId); return; }
+  // Если совпадений нет — не прячем список молча (выглядит как "не работает"),
+  // а явно показываем, что в справочнике такого нет и можно продолжать вводить своё
+  const noMatches = val && !matches.length;
 
   // Перемещаем бокс в body, чтобы он был вне любого overflow-контейнера
   if(box.parentElement !== document.body) document.body.appendChild(box);
@@ -1884,7 +1886,9 @@ function acSuggest(inputId, onPick, extraArg){
     '-webkit-overflow-scrolling:touch'
   ].join(';');
 
-  box.innerHTML = matches.map(function(m){
+  box.innerHTML = noMatches
+    ? '<div style="padding:13px 16px;font-size:13px;color:var(--t2);text-align:center">Совпадений нет в справочнике — можно ввести своё и продолжить</div>'
+    : matches.map(function(m){
     var safe = String(m).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     var extraSafe = extraArg!==undefined ? String(extraArg).replace(/\\/g,'\\\\').replace(/'/g,"\\'") : null;
     var args = extraSafe!==null ? "'"+safe+"', '"+extraSafe+"'" : "'"+safe+"'";
@@ -2460,16 +2464,21 @@ function doLogin(){
     if(staffEntry.blocked){errEl.style.display='block';errEl.textContent='Аккаунт заблокирован';return;}
     if(staffEntry.pass!==pass){errEl.style.display='block';errEl.textContent='Неверный пароль';return;}
     var wsRoles=['мастер','заготовщик','кладовщик','управляющий'];
-    var adminRoles=['admin','owner','accountant'];
+    var roleAliasMap={владелец:'owner', администратор:'admin'}; // роль на карточке входа (рус.) → системный код в staffEntry.roles
     var selectedCard=document.querySelector('.role-card.selected');
     var selectedRole=selectedCard?selectedCard.getAttribute('data-role'):'мастер';
-    // Determine session role: use selected card role if valid for this user
-    var role=selectedRole;
-    if(!staffEntry.roles||(staffEntry.roles.indexOf(role)<0&&['admin','owner','accountant'].indexOf(role)<0)){
-      role=staffEntry.roles?(staffEntry.roles.find(function(r){return wsRoles.indexOf(r)>=0;})||
-        (staffEntry.roles.some(function(r){return adminRoles.indexOf(r)>=0;})?'администратор':'мастер')):'мастер';
+    var selectedSysRole=roleAliasMap[selectedRole]||selectedRole;
+    var role;
+    if(staffEntry.roles && staffEntry.roles.indexOf(selectedSysRole)>=0){
+      // Сотруднику реально назначена выбранная на карточке роль — используем её как есть
+      role=selectedRole;
+    } else if(staffEntry.roles && staffEntry.roles.indexOf('owner')>=0){
+      role='владелец';
+    } else if(staffEntry.roles && staffEntry.roles.some(function(r){return r==='admin'||r==='accountant';})){
+      role='администратор';
+    } else {
+      role=staffEntry.roles?(staffEntry.roles.find(function(r){return wsRoles.indexOf(r)>=0;})||'мастер'):'мастер';
     }
-    if(role==='admin'||role==='owner'||role==='accountant') role='администратор';
     session={id:staffEntry.id,name:staffEntry.name,role:role,rate:staffEntry.wsRate||0};
     sessionStorage.setItem('ws_session',JSON.stringify(session));
     startApp();return;
@@ -6670,8 +6679,6 @@ function subscribeProducts(){
   db.collection('ws_products').orderBy('createdAt','desc')
     .onSnapshot(snap=>{
       products = snap.docs.map(d=>({...d.data(), _id:d.id}));
-      // Синхронизируем локальные справочники из каталога
-      syncCatalogToLocalDicts();
       // Обновляем все зависимые UI
       renderProductCatalogList();
       renderCatalogPage();
@@ -6679,20 +6686,14 @@ function subscribeProducts(){
     }, err=>console.error('products:', err));
 }
 
-// Синхронизация названий/пород/размеров из каталога в локальные справочники
-function syncCatalogToLocalDicts(){
-  if(!products.length) return;
-  const names  = new Set(getItemNames());
-  const woods  = new Set(getWoods());
-  const sizes  = new Set(getSizes());
-  products.forEach(p=>{
-    if(p.name)   names.add(p.name);
-    if(p.wood)   woods.add(p.wood);
-    if(p.size)   sizes.add(p.size);
-  });
-  saveItemNames([...names]);
-  saveWoods([...woods]);
-  saveSizes([...sizes]);
+// Добавляет название/породу/размер ОДНОГО товара в справочники (вызывается только при
+// сохранении товара в каталоге — НЕ на каждое обновление списка, иначе удалённые вручную
+// значения из Наименований/Пород/Размеров будут постоянно "воскресать" из старых товаров).
+function syncCatalogToLocalDicts(p){
+  if(!p) return;
+  if(p.name){ const names=getItemNames(); if(!names.includes(p.name)){ names.push(p.name); saveItemNames(names); } }
+  if(p.wood){ const woods=getWoods(); if(!woods.includes(p.wood)){ woods.push(p.wood); saveWoods(woods); } }
+  if(p.size){ const sizes=getSizes(); if(!sizes.includes(p.size)){ sizes.push(p.size); saveSizes(sizes); } }
 }
 
 // Обновить все select-ы с товарами во всех формах
@@ -6811,6 +6812,7 @@ function saveProduct(){
 
   ref.set(data, {merge:true})
     .then(()=>{
+      syncCatalogToLocalDicts(data); // зарегистрировать название/породу/размер в справочниках (только для этого товара)
       closeMo('addProductMo');
       showToast(_editProductId ? '✅ Товар обновлён' : '✅ Товар добавлен в каталог');
     })
