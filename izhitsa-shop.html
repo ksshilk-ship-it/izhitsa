@@ -5214,7 +5214,7 @@ function lookupItem(num){
   var lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
   if(!num.trim()){ lr.style.display='none'; mb.style.display='none'; currentLookupItem=null; return; }
   var numStr=num.trim();
-  var shopNm=session&&session.shopName;
+  var shopNm=(typeof _currentShiftView!=='undefined' && _currentShiftView && _currentShiftView.shopName) || (session&&session.shopName);
   var stockEntry=stockGetByNum(shopNm,numStr);
   var items=JSON.parse(localStorage.getItem('iz_items')||'[]');
   var found=stockEntry ? {num:stockEntry.num,name:stockEntry.name,price:stockEntry.price,species:stockEntry.species,goodsType:stockEntry.goodsType,qty:stockEntry.qty,fromStock:true}
@@ -5483,6 +5483,7 @@ function saveSale(){
     jnlArch2.push(newArchEntry);
     jnlArch2.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
     _currentShiftView.journal = jnlArch2;
+    try{ stockApplySale(_currentShiftView.shopName, saleItems); }catch(e){}
     try{ logAction('JOURNAL_ENTRY_ADD_MISSED', {entryType:'sale', shopName:_currentShiftView.shopName, snapshot:newArchEntry}); }catch(e){}
     svPersist();
     _svArchiveAddMode = false;
