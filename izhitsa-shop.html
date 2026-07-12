@@ -179,24 +179,35 @@ window.addEventListener('online', function(){
       }).catch(function(){});
 
       // Актуальные открытые смены (чтобы не было ложной блокировки)
-      db.collection('iz_shifts').where('status','==','open').get({source:'server'}).then(function(snap){
-        var local = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
-        var freshIds = {};
-        snap.forEach(function(doc){
-          freshIds[doc.id] = true;
-          var exists = local.findIndex(function(s){ return (s.id||s._id)===doc.id; });
-          if(exists>=0) local[exists] = Object.assign(local[exists], doc.data(), {id:doc.id});
-          else local.push(Object.assign({id:doc.id}, doc.data()));
-        });
-        // Если смена числилась открытой локально но в облаке её нет среди открытых — закрыта
-        local = local.map(function(s){
-          if((s.status==='open') && s.id && !freshIds[s.id]){
-            return Object.assign({}, s, {status:'closed'});
-          }
-          return s;
-        });
-        localStorage.setItem('iz_shifts', JSON.stringify(local));
-      }).catch(function(){});
+      pullShiftTombstonesFromCloud(function(tombstonedIds){
+        var tset = {}; (tombstonedIds||[]).forEach(function(id){ tset[id]=true; });
+        db.collection('iz_shifts').where('status','==','open').get({source:'server'}).then(function(snap){
+          var local = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+          var freshIds = {};
+          snap.forEach(function(doc){
+            if(tset[doc.id]){
+              // Смена помечена как удалённая, но всё ещё висит в облаке (например,
+              // удаление не прошло из-за плохой связи) — пробуем дочистить её.
+              try{ db.collection('iz_shifts').doc(doc.id).delete(); }catch(e){}
+              return;
+            }
+            freshIds[doc.id] = true;
+            var exists = local.findIndex(function(s){ return (s.id||s._id)===doc.id; });
+            if(exists>=0) local[exists] = Object.assign(local[exists], doc.data(), {id:doc.id});
+            else local.push(Object.assign({id:doc.id}, doc.data()));
+          });
+          // Если смена числилась открытой локально но в облаке её нет среди открытых — закрыта
+          local = local.map(function(s){
+            if((s.status==='open') && s.id && !freshIds[s.id]){
+              return Object.assign({}, s, {status:'closed'});
+            }
+            return s;
+          });
+          // На всякий случай убираем из локального списка смены, помеченные как удалённые
+          local = local.filter(function(s){ return !tset[s.id||s._id]; });
+          localStorage.setItem('iz_shifts', JSON.stringify(local));
+        }).catch(function(){});
+      });
     }catch(e){ console.log('fresh data err', e); }
 
     // 3. Синхронизировать текущую открытую смену если она есть
@@ -2066,7 +2077,13 @@ function syncListenCollection(lsKey, colName) {
     var docs = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
     docs.sort(function(a,b){ return (b.date||b.closedAt||b.createdAt||'').localeCompare(a.date||a.closedAt||a.createdAt||''); });
     if(lsKey === 'iz_shifts'){
+      // Смены, удалённые целиком через svDeleteShift, никогда не должны
+      // вернуться из этого фонового слушателя — даже если облачный документ
+      // почему-то ещё не успел удалиться на сервере.
+      var tomb = {}; getShiftTombstones().forEach(function(id){ tomb[id]=true; });
+      docs = docs.filter(function(d){ return !tomb[d._id||d.id]; });
       var local = JSON.parse(localStorage.getItem(lsKey)||'[]');
+      local = local.filter(function(loc){ return !tomb[loc._id||loc.id]; });
       var remoteIds = {};
       docs.forEach(function(d){ remoteIds[d._id||d.id] = true; });
       local.forEach(function(loc){
@@ -2100,6 +2117,7 @@ function startSyncListeners() {
     }).catch(function(){});
   });
   Object.keys(SYNC_SETTINGS).forEach(syncListen);
+  try{ pullShiftTombstonesFromCloud(); }catch(e){}
   syncListenCollection('iz_shifts', 'iz_shifts');
   syncListenCollection('iz_invoices', 'iz_invoices');
   syncListenCollection('iz_psj', 'iz_psj');
@@ -2228,8 +2246,33 @@ let currentEditShiftId = null;
 let blockSellerAction = null;
 const KEY = {session:'iz_shop_session',journal:'iz_shop_journal',shifts:'iz_shifts',trash:'iz_shop_trash',
   restoreSession:'iz_restore_session',restoreJournal:'iz_restore_journal',
-  liveSessionBackup:'iz_live_session_backup',liveJournalBackup:'iz_live_journal_backup'};
+  liveSessionBackup:'iz_live_session_backup',liveJournalBackup:'iz_live_journal_backup',
+  shiftTombstones:'iz_shift_tombstones'};
 var TRASH_RETENTION_DAYS = 7;
+// Список id смен, удалённых админом целиком (svDeleteShift). Нужен, чтобы
+// синхронизация из Firestore (syncShiftsFromFirestore / фоновый sync) не
+// "воскрешала" смену обратно, если облачная копия не успела/не смогла удалиться.
+function getShiftTombstones(){
+  try{ return JSON.parse(localStorage.getItem(KEY.shiftTombstones)||'[]'); }catch(e){ return []; }
+}
+function addShiftTombstone(id){
+  if(!id) return;
+  var t = getShiftTombstones();
+  if(t.indexOf(id)===-1){ t.push(id); localStorage.setItem(KEY.shiftTombstones, JSON.stringify(t)); }
+  try{ db.collection('iz_shift_tombstones').doc(id).set({deletedAt:new Date().toISOString(), by:(session&&session.name)||'Admin'}); }catch(e){}
+}
+function pullShiftTombstonesFromCloud(cb){
+  try{
+    db.collection('iz_shift_tombstones').get({source:'server'}).then(function(snap){
+      var remoteIds = []; snap.forEach(function(d){ remoteIds.push(d.id); });
+      var local = getShiftTombstones();
+      var merged = local.slice();
+      remoteIds.forEach(function(id){ if(merged.indexOf(id)===-1) merged.push(id); });
+      localStorage.setItem(KEY.shiftTombstones, JSON.stringify(merged));
+      if(cb) cb(merged);
+    }).catch(function(){ if(cb) cb(getShiftTombstones()); });
+  }catch(e){ if(cb) cb(getShiftTombstones()); }
+}
 function getTrash(){
   try{ return JSON.parse(localStorage.getItem(KEY.trash)||'[]'); }catch(e){ return []; }
 }
@@ -7335,22 +7378,29 @@ function syncShiftsFromFirestore(){
   var status=document.getElementById('histSyncStatus');
   if(btn){btn.disabled=true;btn.textContent='⏳...';}
   if(status){status.style.display='block';status.textContent='⏳ Подтягиваю...';}
-  db.collection('iz_shifts').get({source:'server'}).then(function(snap){
-    var local=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-    var lmap={};local.forEach(function(s){lmap[s.id||s._id]=true;});
-    var added=0;
-    snap.forEach(function(doc){
-      var data=doc.data();data.id=doc.id;
-      if(!lmap[doc.id]){local.push(data);added++;}
-      else{var idx=local.findIndex(function(s){return (s.id||s._id)===doc.id;});if(idx>=0)local[idx]=Object.assign(local[idx],data);}
+  pullShiftTombstonesFromCloud(function(tombstoned){
+    var tset={}; (tombstoned||[]).forEach(function(id){ tset[id]=true; });
+    db.collection('iz_shifts').get({source:'server'}).then(function(snap){
+      var local=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+      // На всякий случай убираем из локального списка смены, которые уже
+      // помечены как удалённые (могли остаться от старой версии до фикса).
+      local = local.filter(function(s){ return !tset[s.id||s._id]; });
+      var lmap={};local.forEach(function(s){lmap[s.id||s._id]=true;});
+      var added=0, skipped=0;
+      snap.forEach(function(doc){
+        if(tset[doc.id]){ skipped++; return; } // смена удалена админом — не воскрешаем
+        var data=doc.data();data.id=doc.id;
+        if(!lmap[doc.id]){local.push(data);added++;}
+        else{var idx=local.findIndex(function(s){return (s.id||s._id)===doc.id;});if(idx>=0)local[idx]=Object.assign(local[idx],data);}
+      });
+      localStorage.setItem(KEY.shifts,JSON.stringify(local));
+      if(btn){btn.disabled=false;btn.textContent='☁️ Синх';}
+      if(status){status.textContent='✅ Подтянуто '+snap.size+' смен (новых: '+added+(skipped?', пропущено удалённых: '+skipped:'')+')';}
+      renderShiftHistory();
+    }).catch(function(e){
+      if(btn){btn.disabled=false;btn.textContent='☁️ Синх';}
+      if(status){status.textContent='❌ '+e.message;}
     });
-    localStorage.setItem(KEY.shifts,JSON.stringify(local));
-    if(btn){btn.disabled=false;btn.textContent='☁️ Синх';}
-    if(status){status.textContent='✅ Подтянуто '+snap.size+' смен (новых: '+added+')';}
-    renderShiftHistory();
-  }).catch(function(e){
-    if(btn){btn.disabled=false;btn.textContent='☁️ Синх';}
-    if(status){status.textContent='❌ '+e.message;}
   });
 }
 var _dateCheckShown = false;
@@ -8569,11 +8619,36 @@ function svForceCloseShift(){
 }
 function svDeleteShift(){
   if(!confirm('Удалить смену целиком? Это действие нельзя отменить.')) return;
-  var id=_currentShiftView.id;
+  var sh = _currentShiftView;
+  var id = sh.id;
+  // Tombstone — записываем ДО удаления, чтобы дальнейшая синхронизация из
+  // облака (кнопка "Синх" / фоновый sync) не подтянула смену обратно, даже
+  // если само удаление документа в Firestore не пройдёт (офлайн и т.п.).
+  addShiftTombstone(id);
   var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   shifts=shifts.filter(function(s){return (s.id||s._id)!==id;});
   localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
-  try{db.collection('iz_shifts').doc(id).delete();}catch(e){}
+  try{
+    db.collection('iz_shifts').doc(id).delete().catch(function(err){
+      showToast('⚠️ Удалено локально, но облако не подтвердило удаление: '+(err&&err.message||err));
+    });
+  }catch(e){
+    showToast('⚠️ Удалено локально, но облако не подтвердило удаление');
+  }
+  // Если смена была создана через "Восст. смены" (source:'psj'), исходные
+  // записи там остаются нетронутыми — иначе она снова соберётся при
+  // активации/обновлении из вкладки "Восст. смены".
+  if(sh.source==='psj'){
+    var shopName = sh.shopName||'';
+    var date = sh.date||'';
+    var psjEntries = getPsjEntries();
+    var toDeletePsj = psjEntries.filter(function(e){ return (shopName?e.shopName===shopName:!e.shopName) && e.date===date; });
+    if(toDeletePsj.length){
+      var toKeepPsj = psjEntries.filter(function(e){ return !((shopName?e.shopName===shopName:!e.shopName) && e.date===date); });
+      savePsjEntries(toKeepPsj);
+      toDeletePsj.forEach(function(e){ try{ db.collection('iz_psj').doc(e.id).delete(); }catch(err){} });
+    }
+  }
   closeMo('editShiftMo'); renderShiftHistory(); showToast('🗑 Смена удалена');
 }
 function svRecalcGoodsTotals(){
