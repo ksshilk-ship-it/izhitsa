@@ -1,7 +1,7 @@
 // Ижица Service Worker — офлайн-режим для shop-модуля
 // Кэширует HTML-приложение и Firebase SDK, чтобы приложение запускалось без интернета.
 
-const CACHE_NAME = 'izhitsa-shop-v2';
+const CACHE_NAME = 'izhitsa-shop-v3';
 const CACHE_URLS = [
   './izhitsa-shop.html',
   './manifest-shop.json',
@@ -9,15 +9,32 @@ const CACHE_URLS = [
   'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js'
 ];
 
-// Установка — кэшируем критичные файлы сразу
+// Установка — кэшируем критичные файлы сразу.
+// ВАЖНО: раньше здесь был cache.addAll(CACHE_URLS) — а это операция "всё
+// или ничего": если хотя бы ОДИН файл из списка не подтягивался (404,
+// CORS, обрыв сети), весь кэш оставался пустым — включая сам HTML! Ошибка
+// при этом тихо проглатывалась в .catch(), поэтому SW "устанавливался"
+// без видимых проблем, а офлайн-режим при этом не работал совсем.
+// Теперь каждый файл кэшируется независимо: сам izhitsa-shop.html —
+// первым и обязательным, остальные — по возможности.
 self.addEventListener('install', function(event) {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll(CACHE_URLS).catch(function(err) {
-        // Если что-то не закэшировалось (например нет сети при первой установке) — не валим всю установку
-        console.log('[SW] Частичная ошибка кэширования:', err);
+      // Главный HTML — без него офлайн-режим не имеет смысла, поэтому
+      // пробуем несколько раз, но даже при неудаче не роняем install
+      // (при следующем визите онлайн он всё равно закэшируется через
+      // Network First в обработчике fetch).
+      var mainPage = cache.add('./izhitsa-shop.html').catch(function(err) {
+        console.log('[SW] Не удалось закэшировать izhitsa-shop.html при установке:', err);
       });
+      var rest = CACHE_URLS.filter(function(u) { return u !== './izhitsa-shop.html'; })
+        .map(function(url) {
+          return cache.add(url).catch(function(err) {
+            console.log('[SW] Не удалось закэшировать (не критично):', url, err);
+          });
+        });
+      return Promise.all([mainPage].concat(rest));
     })
   );
 });
@@ -77,7 +94,22 @@ self.addEventListener('fetch', function(event) {
         return caches.match(event.request).then(function(cached) {
           if (cached) return cached;
           // Последний fallback — попробовать отдать главный HTML файл
-          return caches.match('./izhitsa-shop.html');
+          return caches.match('./izhitsa-shop.html').then(function(mainCached) {
+            if (mainCached) return mainCached;
+            // Совсем крайний случай: даже основной HTML не закэширован
+            // (например, это первый в жизни запуск офлайн). Показываем
+            // понятное сообщение вместо белого экрана без объяснений.
+            return new Response(
+              '<!doctype html><html><head><meta charset="utf-8">' +
+              '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+              '<style>body{background:#0d0d12;color:#f0f0f8;font-family:sans-serif;' +
+              'display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;padding:20px}</style>' +
+              '</head><body><div><h2>📴 Нет соединения</h2>' +
+              '<p>Приложение ещё ни разу не открывалось онлайн на этом устройстве, поэтому офлайн-версии пока нет.</p>' +
+              '<p>Подключитесь к интернету хотя бы один раз, чтобы приложение сохранилось для офлайн-режима.</p></div></body></html>',
+              { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+            );
+          });
         });
       })
     );
