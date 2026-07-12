@@ -88,6 +88,7 @@
   .cat-group-title{font-size:0.7rem; text-transform:uppercase; color:var(--ink-soft); letter-spacing:0.5px; margin:12px 0 4px; padding-top:8px; border-top:1px dashed var(--line);}
   .period-btns{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:4px;}
   .period-btns button{padding:6px 10px; font-size:0.74rem; border:1px solid var(--line); background:var(--paper); border-radius:20px; color:var(--ink-soft); cursor:pointer;}
+  .period-btns button.active{background:var(--brick); border-color:var(--brick); color:var(--white); font-weight:600;}
   .cal-nav{display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;}
   .cal-nav button{background:none; border:1px solid var(--line); border-radius:6px; padding:6px 12px; color:var(--ink-soft); cursor:pointer;}
   .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
@@ -148,6 +149,7 @@ let state = {
   salaryRates:[],
   sellers:[],
   suppliers:[],
+  employeePurchases:[],
   balances:{cash:0,bank:0,updatedAt:null}
 };
 let currentTab = 'overview';
@@ -159,6 +161,8 @@ let overviewPeriod = null;
 let forecastMonth = null;
 let salaryFrom = null, salaryTo = null, salarySellerName = '';
 let editingRatePeriodId = null;
+let commissionSubTab = 'monthly';
+let profileSellerName = '';
 
 // ---------- HELPERS ----------
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -228,8 +232,10 @@ function accountFlow(account, from, to){
   let flow = 0;
   if(account.role==='cash'){
     flow += state.sales.filter(s=>s.date>=from && s.date<=to).reduce((a,s)=>a+Number(s.cash||0),0);
+    flow += state.employeePurchases.filter(p=>p.paymentMethod==='cash' && p.date>=from && p.date<=to).reduce((a,p)=>a+Number(p.paidAmount||0),0);
   } else if(account.role==='noncash'){
     flow += state.sales.filter(s=>s.date>=from && s.date<=to).reduce((a,s)=>a+Number(s.cashless||0),0);
+    flow += state.employeePurchases.filter(p=>p.paymentMethod==='transfer' && p.date>=from && p.date<=to).reduce((a,p)=>a+Number(p.paidAmount||0),0);
   }
   flow -= state.expenses.filter(e=>e.paidFrom===account.id && e.status==='paid' && e.paidDate && e.paidDate>=from && e.paidDate<=to)
     .reduce((a,e)=>a+Number(e.amount||0),0);
@@ -292,6 +298,7 @@ async function loadState(){
   if(!state.descriptionPresets) state.descriptionPresets = [];
   if(!state.sellers) state.sellers = [];
   if(!state.suppliers) state.suppliers = [];
+  if(!state.employeePurchases) state.employeePurchases = [];
   if(!state.commissionTiers) state.commissionTiers = [];
   if(!state.salaryBase) state.salaryBase = {amount:2000, threshold:5000};
   if(!state.salaryRates || state.salaryRates.length===0){
@@ -712,6 +719,116 @@ function renderSales(main){
       saveState(); render();
     };
   });
+
+  renderEmployeePurchasesSection(main);
+}
+
+const EP_METHOD_LABEL = {cash:'Нал в кассу', transfer:'Перевод', salary:'В счёт ЗП'};
+
+function renderEmployeePurchasesSection(main){
+  const grouped = {};
+  state.employeePurchases.forEach(p=>{ const k=monthKey(p.date)||'—'; (grouped[k]=grouped[k]||[]).push(p); });
+  const monthKeys = Object.keys(grouped).sort().reverse();
+
+  const statsMap = {};
+  state.employeePurchases.forEach(p=>{
+    const name = p.seller || '— без продавца —';
+    if(!statsMap[name]) statsMap[name] = {count:0, retail:0, paid:0};
+    statsMap[name].count += 1;
+    statsMap[name].retail += Number(p.retailAmount||0);
+    statsMap[name].paid += Number(p.paidAmount||0);
+  });
+  const statsRows = Object.keys(statsMap).sort((a,b)=>a.localeCompare(b,'ru')).map(name=>({name, ...statsMap[name]}));
+
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <div class="card">
+      <details data-key="ep-form" ${isSectionOpen('ep-form',false)?'open':''}>
+        <summary>Покупка сотрудника</summary>
+        <div class="note">Когда продавец покупает товар со скидкой — фиксируется розничная цена, сколько реально заплатил, и способ оплаты. «В счёт ЗП» уменьшает то, что ещё нужно выплатить (видно на вкладке «ЗП продавца»).</div>
+        <label class="field">Дата</label>
+        <input type="date" id="ep-date" value="${todayISO()}">
+        ${state.sellers.length>0 ? `
+        <label class="field">Продавец</label>
+        <select id="ep-seller">
+          <option value="">— не выбран —</option>
+          ${state.sellers.map(s=>`<option value="${s.name}">${s.name}</option>`).join('')}
+        </select>` : '<div class="note">Сначала добавьте продавцов в Настройках.</div>'}
+        <div class="two-col">
+          <div><label class="field">Сумма по рознице</label><input type="number" id="ep-retail" placeholder="0"></div>
+          <div><label class="field">Сумма к оплате (что заплатил)</label><input type="number" id="ep-paid" placeholder="0"></div>
+        </div>
+        <label class="field">Способ оплаты</label>
+        <select id="ep-method">
+          <option value="cash">Нал в кассу</option>
+          <option value="transfer">Перевод</option>
+          <option value="salary">В счёт ЗП</option>
+        </select>
+        <button class="btn" id="ep-add">Добавить</button>
+      </details>
+    </div>
+
+    ${monthKeys.length===0 ? '' : `
+    <div class="card">
+      <h2>Покупки сотрудников</h2>
+      ${monthKeys.map((k,idx)=>{
+        const rows = grouped[k].slice().sort((a,b)=>b.date.localeCompare(a.date));
+        const totalRetail = rows.reduce((a,p)=>a+Number(p.retailAmount||0),0);
+        const totalPaid = rows.reduce((a,p)=>a+Number(p.paidAmount||0),0);
+        return `<details class="month-group" data-key="ep-m-${k}" ${isSectionOpen('ep-m-'+k, idx===0)?'open':''}>
+          <summary class="month-summary"><span>${k==='—'?'Без даты':monthLabel(k)}</span><span class="stats">Розница ${fmt(totalRetail)} · Оплачено ${fmt(totalPaid)}</span></summary>
+          <table><thead><tr><th>Дата</th><th>Продавец</th><th>Розница</th><th>Оплачено</th><th>Способ</th><th></th></tr></thead><tbody>
+            ${rows.map(p=>`
+              <tr>
+                <td>${p.date?p.date.slice(8,10)+'.'+p.date.slice(5,7):'—'}</td>
+                <td class="txt">${p.seller||'—'}</td>
+                <td>${fmt(p.retailAmount)}</td>
+                <td>${fmt(p.paidAmount)}</td>
+                <td class="txt">${EP_METHOD_LABEL[p.paymentMethod]||p.paymentMethod}</td>
+                <td><button class="del-x" data-del-ep="${p.id}">✕</button></td>
+              </tr>`).join('')}
+          </tbody></table>
+        </details>`;
+      }).join('')}
+    </div>
+
+    <div class="card">
+      <h2>Статистика по сотрудникам</h2>
+      ${statsRows.length===0 ? '<div class="empty">Пока нет покупок</div>' :
+        `<table><thead><tr><th>Продавец</th><th>Кол-во</th><th>Розница всего</th><th>Оплачено всего</th><th>Скидка всего</th></tr></thead><tbody>
+          ${statsRows.map(r=>`
+            <tr>
+              <td class="txt">${r.name}</td>
+              <td>${r.count}</td>
+              <td>${fmt(r.retail)}</td>
+              <td>${fmt(r.paid)}</td>
+              <td>${fmt(r.retail-r.paid)}</td>
+            </tr>`).join('')}
+        </tbody></table>`}
+    </div>`}
+  `;
+  while(wrap.firstChild) main.appendChild(wrap.firstChild);
+
+  const epAddBtn = document.getElementById('ep-add');
+  if(epAddBtn){
+    epAddBtn.onclick = ()=>{
+      const date = document.getElementById('ep-date').value;
+      const sellerSel = document.getElementById('ep-seller');
+      const seller = sellerSel ? sellerSel.value : '';
+      const retailAmount = Number(document.getElementById('ep-retail').value||0);
+      const paidAmount = Number(document.getElementById('ep-paid').value||0);
+      const paymentMethod = document.getElementById('ep-method').value;
+      if(!date || !retailAmount) return;
+      state.employeePurchases.push({id:uid(), date, seller, retailAmount, paidAmount, paymentMethod});
+      saveState(); render();
+    };
+  }
+  main.querySelectorAll('[data-del-ep]').forEach(btn=>{
+    btn.onclick = ()=>{
+      state.employeePurchases = state.employeePurchases.filter(p=>p.id!==btn.dataset.delEp);
+      saveState(); render();
+    };
+  });
 }
 
 // ---------- EXPENSES ----------
@@ -1056,12 +1173,41 @@ function buildSalaryMonthlyData(){
       const zpPaid = paidInMonth.filter(e=>e.category==='ЗП');
       const factOklad = zpPaid.filter(e=>/оклад/i.test(e.description||'')).reduce((a,e)=>a+Number(e.amount||0),0);
       const factPercent = zpPaid.filter(e=>!/оклад/i.test(e.description||'')).reduce((a,e)=>a+Number(e.amount||0),0);
-      const factTotal = factOklad + factPercent + factTravel;
+      const factInGoods = state.employeePurchases.filter(p=>p.seller===name && p.paymentMethod==='salary' && monthKey(p.date)===k)
+        .reduce((a,p)=>a+Number(p.paidAmount||0),0);
+      const factTotal = factOklad + factPercent + factTravel + factInGoods;
 
-      return {name, shiftsCount, revenue, oklad, commission, override, travel, totalNoTravel, totalWithTravel, avgRevenue, avgEarn, pct, factOklad, factPercent, factTravel, factTotal};
+      return {name, shiftsCount, revenue, oklad, commission, override, travel, totalNoTravel, totalWithTravel, avgRevenue, avgEarn, pct, factOklad, factPercent, factTravel, factInGoods, factTotal};
     });
     return {key:k, label:monthLabel(k), rows};
   });
+}
+
+function buildSellerProfile(name){
+  const seller = state.sellers.find(s=>s.name===name);
+  const allShifts = state.sales.filter(s=>s.seller===name).sort((a,b)=>a.date.localeCompare(b.date));
+  const firstShiftDate = allShifts.length ? allShifts[0].date : null;
+  const lastShiftDate = allShifts.length ? allShifts[allShifts.length-1].date : null;
+  const monthly = buildSalaryMonthlyData()
+    .map(m=>({key:m.key, label:m.label, row:m.rows.find(r=>r.name===name)}))
+    .filter(m=>m.row)
+    .sort((a,b)=>a.key.localeCompare(b.key));
+
+  const totals = monthly.reduce((acc,m)=>{
+    acc.shifts += m.row.shiftsCount;
+    acc.revenue += m.row.revenue;
+    acc.oklad += m.row.oklad;
+    acc.commission += m.row.commission;
+    acc.travel += m.row.travel;
+    acc.totalWithTravel += m.row.totalWithTravel;
+    acc.factTotal += m.row.factTotal;
+    return acc;
+  }, {shifts:0, revenue:0, oklad:0, commission:0, travel:0, totalWithTravel:0, factTotal:0});
+
+  return {
+    seller, firstShiftDate, lastShiftDate, monthly, totals,
+    balance: totals.totalWithTravel - totals.factTotal // >0 — должны продавцу, <0 — продавец получил больше
+  };
 }
 
 function renderCommission(main){
@@ -1071,7 +1217,17 @@ function renderCommission(main){
   const editingTiers = editingPeriod ? [...editingPeriod.tiers].sort((a,b)=>a.min-b.min) : [];
   const monthlySalary = buildSalaryMonthlyData();
 
+  if(!profileSellerName && state.sellers.length>0) profileSellerName = state.sellers[0].name;
+  const profile = profileSellerName ? buildSellerProfile(profileSellerName) : null;
+
   main.innerHTML = `
+    <div class="period-btns">
+      <button type="button" data-subtab="rates" class="${commissionSubTab==='rates'?'active':''}">Периоды ставок ЗП</button>
+      <button type="button" data-subtab="percents" class="${commissionSubTab==='percents'?'active':''}">Периоды ставок %</button>
+      <button type="button" data-subtab="monthly" class="${commissionSubTab==='monthly'?'active':''}">Зарплата по месяцам</button>
+    </div>
+
+    ${commissionSubTab==='rates' ? `
     <div class="card">
       <h2>Периоды ставок ЗП</h2>
       <div class="note">У разных периодов может быть своя база за выход, порог, проезд и проценты — пригодится для прошлых лет, где ставки отличались. Период действует с указанной даты до начала следующего.</div>
@@ -1098,9 +1254,9 @@ function renderCommission(main){
       <label class="field">Проезд за выход, ₽</label>
       <input type="number" id="rp-travel" placeholder="0" value="600">
       <button class="btn secondary small" id="rp-add">Добавить период</button>
-    </div>
+    </div>` : ''}
 
-    ${editingPeriod ? `
+    ${commissionSubTab==='percents' ? (editingPeriod ? `
     <div class="card">
       <h2>Ставки % для периода «с ${editingPeriod.from}»</h2>
       ${editingTiers.length===0 ? '<div class="empty">Добавьте диапазоны выручки и % ставки</div>' :
@@ -1115,7 +1271,51 @@ function renderCommission(main){
       <label class="field">Ставка (%)</label>
       <input type="number" id="c-rate" placeholder="0">
       <button class="btn" id="c-add">Добавить диапазон</button>
-    </div>` : ''}
+    </div>` : '<div class="card"><div class="empty">Сначала добавьте период ставок ЗП</div></div>') : ''}
+
+    ${commissionSubTab==='monthly' ? `
+
+    <div class="card">
+      <h2>Общие данные по продавцу</h2>
+      ${state.sellers.length===0 ? '<div class="empty">Добавьте продавцов в Настройках</div>' : `
+      <label class="field">Продавец</label>
+      <select id="profile-seller">
+        ${state.sellers.map(s=>`<option value="${s.name}" ${profileSellerName===s.name?'selected':''}>${s.name}</option>`).join('')}
+      </select>
+      <div class="two-col">
+        <div><label class="field">Дата начала работы</label><input type="date" id="profile-start" value="${profile.seller && profile.seller.startDate ? profile.seller.startDate : ''}"></div>
+        <div><label class="field">Дата окончания работы</label><input type="date" id="profile-end" value="${profile.seller && profile.seller.endDate ? profile.seller.endDate : ''}"></div>
+      </div>
+      <div class="note">Если продавец продолжает работать — дату окончания оставьте пустой.</div>
+
+      <div class="sc-grid" style="margin-top:12px;">
+        <div class="sc-stat"><span class="label">Всего смен</span><span class="num">${profile.totals.shifts}</span></div>
+        <div class="sc-stat"><span class="label">Первая / последняя смена</span><span class="num" style="font-size:0.72rem;">${profile.firstShiftDate||'—'} — ${profile.lastShiftDate||'—'}</span></div>
+        <div class="sc-stat"><span class="label">Выручка всего</span><span class="num">${fmt(profile.totals.revenue)}</span></div>
+        <div class="sc-stat"><span class="label">Месяцев с продажами</span><span class="num">${profile.monthly.length}</span></div>
+      </div>
+
+      ${profile.monthly.length>0 ? `
+      <details data-key="profile-months" ${isSectionOpen('profile-months',false)?'open':''}>
+        <summary>Кратко по месяцам (${profile.monthly.length})</summary>
+        <table><thead><tr><th>Месяц</th><th>Смен</th><th>Начислено</th><th>Факт</th></tr></thead><tbody>
+          ${profile.monthly.map(m=>`<tr><td class="txt">${m.label}</td><td>${m.row.shiftsCount}</td><td>${fmt(m.row.totalWithTravel)}</td><td>${fmt(m.row.factTotal)}</td></tr>`).join('')}
+        </tbody></table>
+      </details>` : ''}
+
+      <div class="cat-group-title">Итого за всё время</div>
+      <div class="sc-grid">
+        <div class="sc-stat"><span class="label">Оклад</span><span class="num">${fmt(profile.totals.oklad)}</span></div>
+        <div class="sc-stat"><span class="label">% от продаж</span><span class="num">${fmt(profile.totals.commission)}</span></div>
+        <div class="sc-stat"><span class="label">Проезд</span><span class="num">${fmt(profile.totals.travel)}</span></div>
+        <div class="sc-stat"><span class="label">Итого начислено</span><span class="num">${fmt(profile.totals.totalWithTravel)}</span></div>
+      </div>
+      <div class="sc-total-row"><span class="label">Всего выплачено (факт)</span><span class="num">${fmt(profile.totals.factTotal)}</span></div>
+      <div class="sc-total-row">
+        <span class="label">${profile.balance>=0 ? 'Компания должна продавцу' : 'Продавец получил больше начисленного'}</span>
+        <span class="num big ${profile.balance>=0?'neg':'pos'}">${fmt(Math.abs(profile.balance))}</span>
+      </div>`}
+    </div>
 
     <div class="card">
       <h2>Зарплата по месяцам</h2>
@@ -1144,12 +1344,13 @@ function renderCommission(main){
                   <div class="sc-stat"><span class="label">По окладу</span><span class="num">${fmt(r.factOklad)}</span></div>
                   <div class="sc-stat"><span class="label">По %</span><span class="num">${fmt(r.factPercent)}</span></div>
                   <div class="sc-stat"><span class="label">По проезду</span><span class="num">${fmt(r.factTravel)}</span></div>
-                  <div class="sc-stat"><span class="label">Всего выплачено</span><span class="num">${fmt(r.factTotal)}</span></div>
+                  <div class="sc-stat"><span class="label">В счёт ЗП (покупки)</span><span class="num">${fmt(r.factInGoods)}</span></div>
                 </div>
+                <div class="row"><span class="label">Всего выплачено</span><span class="num">${fmt(r.factTotal)}</span></div>
                 <div class="row"><span class="label">Остаток к выплате (с проездом)</span><span class="num ${(r.totalWithTravel-r.factTotal)>=0?'neg':'pos'}">${fmt(r.totalWithTravel-r.factTotal)}</span></div>
               </div>`).join('')}
           </details>`).join('')}
-    </div>
+    </div>` : ''}
 
     <div class="card">
       <h2>Расчёт зарплаты</h2>
@@ -1172,7 +1373,12 @@ function renderCommission(main){
     </div>
   `;
 
-  document.getElementById('rp-add').onclick = ()=>{
+  main.querySelectorAll('[data-subtab]').forEach(btn=>{
+    btn.onclick = ()=>{ commissionSubTab = btn.dataset.subtab; render(); };
+  });
+
+  const rpAddBtn = document.getElementById('rp-add');
+  if(rpAddBtn) rpAddBtn.onclick = ()=>{
     const from = document.getElementById('rp-from').value;
     const base = Number(document.getElementById('rp-base').value||0);
     const threshold = Number(document.getElementById('rp-threshold').value||0);
@@ -1194,8 +1400,9 @@ function renderCommission(main){
     };
   });
 
-  if(editingPeriod){
-    document.getElementById('c-add').onclick = ()=>{
+  const cAddBtn = document.getElementById('c-add');
+  if(editingPeriod && cAddBtn){
+    cAddBtn.onclick = ()=>{
       const min = Number(document.getElementById('c-min').value||0);
       const maxRaw = document.getElementById('c-max').value;
       const max = maxRaw ? Number(maxRaw) : null;
@@ -1209,6 +1416,25 @@ function renderCommission(main){
         saveState(); render();
       };
     });
+  }
+
+  const profileSellerSel = document.getElementById('profile-seller');
+  if(profileSellerSel){
+    profileSellerSel.onchange = ()=>{ profileSellerName = profileSellerSel.value; render(); };
+  }
+  const profileStart = document.getElementById('profile-start');
+  if(profileStart){
+    profileStart.onchange = ()=>{
+      const s = state.sellers.find(x=>x.name===profileSellerName);
+      if(s){ s.startDate = profileStart.value || null; saveState(); }
+    };
+  }
+  const profileEnd = document.getElementById('profile-end');
+  if(profileEnd){
+    profileEnd.onchange = ()=>{
+      const s = state.sellers.find(x=>x.name===profileSellerName);
+      if(s){ s.endDate = profileEnd.value || null; saveState(); }
+    };
   }
 
   if(state.sellers.length===0) return;
