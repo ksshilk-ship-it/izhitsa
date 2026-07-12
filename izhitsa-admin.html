@@ -50,7 +50,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .exit-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--t2);cursor:pointer;font-size:11px;padding:5px 9px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
 
 .tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:calc(var(--tabh) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);background:var(--s1);border-top:1px solid var(--border);display:none;z-index:100;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
-.tab{flex-shrink:0;min-width:84px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;color:var(--t2);font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-weight:500;border:none;background:none;padding:0 10px;height:100%}
+.tab{flex-shrink:0;min-width:84px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:4px;cursor:pointer;color:var(--t2);font-size:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-weight:500;border:none;background:none;padding:10px 10px 0;height:var(--tabh);box-sizing:border-box}
 .tab.active{color:var(--accent)}
 .ti{font-size:25px;line-height:1}
 
@@ -332,6 +332,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
         <div class="pc" data-sub="expenses" onclick="setFinanceSub('expenses',this)">📉 Расходы</div>
         <div class="pc" data-sub="debt" onclick="setFinanceSub('debt',this)">💰 Долги</div>
         <div class="pc" data-sub="movement" onclick="setFinanceSub('movement',this)">⇄ Движение денег</div>
+        <div class="pc" data-sub="import" onclick="setFinanceSub('import',this)">📥 Импорт выписки</div>
+        <div class="pc" data-sub="calendar" onclick="setFinanceSub('calendar',this)">📅 Календарь баланса</div>
       </div>
     </div>
 
@@ -575,6 +577,60 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
           <input type="month" id="opArchiveMonth" class="fi" style="flex:1;min-width:120px" onchange="renderOpArchive()">
         </div>
         <div id="opArchiveList"></div>
+      </div>
+    </div>
+
+    <!-- ═══ ИМПОРТ ВЫПИСКИ ИЗ БАНКА ═══ -->
+    <div class="fsub" id="fsub-import" style="display:none">
+      <div class="card">
+        <div class="ctitle">📥 Импорт выписки из банка</div>
+        <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.5">
+          Загрузите выписку по расчётному счёту в формате <b>.xlsx / .xls / .csv</b> (экспорт из Тинькофф Бизнес или другого банка). Приходные и расходные операции автоматически добавятся в «Доходы» и «Расходы», без дублирования уже загруженных.
+        </div>
+
+        <div class="fg">
+          <label class="fl">Счёт, на который загружается выписка</label>
+          <select class="fs" id="bankImportAccount"></select>
+        </div>
+
+        <label class="fl">Файл выписки</label>
+        <input type="file" id="bankImportFile" accept=".xlsx,.xls,.csv" style="width:100%;padding:10px;background:var(--s2);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:13px;margin-bottom:10px">
+
+        <div id="bankImportPreview"></div>
+      </div>
+    </div>
+
+    <!-- ═══ КАЛЕНДАРЬ БАЛАНСА ═══ -->
+    <div class="fsub" id="fsub-calendar" style="display:none">
+      <div class="fg">
+        <label class="fl">Счёт</label>
+        <select class="fs" id="calAccountSelect" onchange="renderBalanceCalendar()"></select>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+        <button onclick="calMonthShift(-1)" style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;color:var(--t1);font-size:16px;cursor:pointer">‹</button>
+        <div id="calMonthLabel" style="flex:1;text-align:center;font-weight:700;font-size:14px"></div>
+        <button onclick="calMonthShift(1)" style="background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;color:var(--t1);font-size:16px;cursor:pointer">›</button>
+      </div>
+
+      <div id="calSummary"></div>
+      <div id="calGrid"></div>
+      <div id="calDayDetail"></div>
+
+      <div class="card" style="margin-top:12px">
+        <div class="ctitle">⚓ Точки отсчёта и сверки</div>
+        <div style="font-size:11px;color:var(--t2);margin-bottom:10px">
+          <b>Точка отсчёта</b> — вводите реальный остаток на счёте на конкретную дату, от неё баланс считается вперёд по операциям. <b>Контрольная точка</b> — просто сверка расчёта с фактом, в расчёт баланса не входит.
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <input class="fi" type="date" id="cpDate" placeholder="Дата">
+          <input class="fi" type="number" id="cpAmount" placeholder="Остаток, ₽">
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button class="btn" style="flex:1;margin-bottom:0;background:var(--accent)" onclick="addCheckpoint('anchor')">⚓ Точка отсчёта</button>
+          <button class="btn sec" style="flex:1;margin-bottom:0" onclick="addCheckpoint('audit')">🔍 Контрольная</button>
+        </div>
+        <div id="checkpointsList"></div>
       </div>
     </div>
   </div>
@@ -949,6 +1005,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 
 // ════ FIREBASE + SYNC LAYER ════
@@ -1283,80 +1340,12 @@ function saveAdminUsers(data) {
 }
 
 function getShops() {
-  if(window._sharedRefs && window._sharedRefs.shops && window._sharedRefs.shops.length > 0){
-    return window._sharedRefs.shops;
-  }
   try { return JSON.parse(localStorage.getItem('iz_shops') || '[]'); } 
   catch(e) { return []; }
 }
 
 function saveShops(data) {
-  saveReferenceToUnified('shops', data);
   adminSyncSave('iz_shops', data);
-}
-
-// ════════ ЕДИНАЯ БАЗА СПРАВОЧНИКОВ ════════
-window._sharedRefs = {
-  shops: [],
-  staff: [],
-  itemNames: [],
-  woods: [],
-  sizes: []
-};
-
-async function initUnifiedReferences(){
-  if(typeof db === 'undefined' || !db){
-    loadReferencesFromLocalStorage();
-    return;
-  }
-  try {
-    const docRef = db.collection('iz_shared_references').doc('shops');
-    const doc = await docRef.get();
-    
-    if(!doc.exists){
-      const shops = JSON.parse(localStorage.getItem('iz_shops')||'[]');
-      await db.collection('iz_shared_references').doc('shops').set({
-        type: 'shops',
-        items: shops,
-        createdAt: new Date().toISOString()
-      });
-      window._sharedRefs.shops = shops;
-    } else {
-      window._sharedRefs.shops = doc.data().items || [];
-    }
-    
-    subscribeToReferences();
-  } catch(e){
-    console.error('[References] Error:', e.message);
-    loadReferencesFromLocalStorage();
-  }
-}
-
-function subscribeToReferences(){
-  try {
-    db.collection('iz_shared_references').doc('shops').onSnapshot(snap => {
-      if(snap.exists){
-        window._sharedRefs.shops = snap.data().items || [];
-        localStorage.setItem('cache_shops', JSON.stringify(window._sharedRefs.shops));
-      }
-    });
-  } catch(e){}
-}
-
-function loadReferencesFromLocalStorage(){
-  window._sharedRefs.shops = JSON.parse(localStorage.getItem('iz_shops')||'[]');
-}
-
-function saveReferenceToUnified(refType, items){
-  window._sharedRefs[refType] = items;
-  localStorage.setItem('cache_' + refType, JSON.stringify(items));
-  if(typeof db !== 'undefined' && db){
-    db.collection('iz_shared_references').doc(refType).set({
-      type: refType,
-      items: items,
-      updatedAt: new Date().toISOString()
-    }, {merge: true}).catch(e => console.error('[Ref]:', e));
-  }
 }
 
 function getTransactions() {
@@ -1738,18 +1727,16 @@ function doLogin() {
   populateCategorySelects();
   populateShopCheckboxes();
   applyRoleUI(role);
-  renderPL();
-  renderShops();
-  renderPLBudget();
-  renderDebts();
-  populateShopCheckboxes();
-  renderDashboard();
-  // setTxType('income');
-  // clearOperationForm();
-  // renderPL();
-  // renderShops();
-  // renderWsEmployeesData();
-  // renderAnalytics();
+  if(role === 'owner') {
+    renderOwnerDash();
+  } else {
+    renderPL();
+    renderShops();
+    renderPLBudget();
+    renderDebts();
+    populateShopCheckboxes();
+    renderDashboard();
+  }
 }
 
 function doLogout() {
@@ -2167,6 +2154,8 @@ function setFinanceSub(sub, btn) {
   else if(sub === 'expenses') { populateExpGroups(); setExpMode(_expMode); }
   else if(sub === 'debt') renderDebts();
   else if(sub === 'movement') { populateCategorySelects(); setTxType(currentTxType||'transfer'); }
+  else if(sub === 'import') initBankImport();
+  else if(sub === 'calendar') initBalanceCalendar();
 }
 
 // «Главная» внутри Финансов — текущий баланс по всем счетам, тот же расчёт,
@@ -2234,6 +2223,472 @@ function renderFinanceDash() {
     balEl.innerHTML = '<div style="color:var(--exp);padding:12px;font-size:12px">Ошибка: '+e.message+'</div>';
   }
 }
+
+// ════════════════════════════════════════════════════════════
+// ИМПОРТ БАНКОВСКОЙ ВЫПИСКИ (.xlsx / .xls / .csv)
+// ════════════════════════════════════════════════════════════
+
+function initBankImport() {
+  var sel = document.getElementById('bankImportAccount');
+  if(sel) {
+    var accs = getAccounts();
+    sel.innerHTML = accs.map(function(a){
+      var name = typeof a==='string'?a:(a.name||'');
+      return '<option value="'+name+'">'+name+'</option>';
+    }).join('');
+  }
+  var fileInput = document.getElementById('bankImportFile');
+  if(fileInput && !fileInput._bound) {
+    fileInput._bound = true;
+    fileInput.addEventListener('change', onBankFileSelected);
+  }
+}
+
+// Ищет нужную колонку по нескольким возможным вариантам заголовка
+// (выписки разных банков и разных версий выгрузки называют колонки чуть по-разному).
+function _findCol(headers, variants) {
+  for(var i=0; i<headers.length; i++) {
+    var h = String(headers[i]||'').toLowerCase().trim();
+    for(var j=0; j<variants.length; j++) {
+      if(h.indexOf(variants[j]) >= 0) return i;
+    }
+  }
+  return -1;
+}
+
+// Парсит дату из разных форматов: Date-объект (когда xlsx считал как дату),
+// "ДД.ММ.ГГГГ", "ГГГГ-ММ-ДД", "ДД.ММ.ГГГГ ЧЧ:ММ:СС"
+function _parseStatementDate(val) {
+  if(val instanceof Date && !isNaN(val)) {
+    return val.getFullYear()+'-'+String(val.getMonth()+1).padStart(2,'0')+'-'+String(val.getDate()).padStart(2,'0');
+  }
+  var s = String(val||'').trim();
+  if(!s) return '';
+  // ДД.ММ.ГГГГ (возможно с временем через пробел)
+  var m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+  if(m) return m[3]+'-'+m[2]+'-'+m[1];
+  // ГГГГ-ММ-ДД
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return m[0].substring(0,10);
+  return '';
+}
+
+function onBankFileSelected(e) {
+  var file = e.target.files[0];
+  if(!file) return;
+  var box = document.getElementById('bankImportPreview');
+  box.innerHTML = '<div style="padding:12px;text-align:center;color:var(--t2);font-size:12px">⏳ Читаю файл...</div>';
+
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      var data = new Uint8Array(ev.target.result);
+      var wb = XLSX.read(data, {type:'array', cellDates:true});
+      var sheet = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
+      _processStatementRows(rows);
+    } catch(err) {
+      console.error('bank import error:', err);
+      box.innerHTML = '<div style="color:var(--exp);padding:12px;font-size:12px">❌ Не удалось прочитать файл. Проверьте, что это .xlsx/.xls/.csv из банка.</div>';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+var _pendingStatementRows = [];
+
+function _processStatementRows(rows) {
+  var box = document.getElementById('bankImportPreview');
+
+  // Ищем строку заголовков — первую строку, где есть хотя бы 3 непустых ячейки
+  // и одна из них похожа на "дата" (в выписках Тинькофф над таблицей часто
+  // есть несколько строк с реквизитами счёта до самой шапки таблицы).
+  var headerRowIdx = -1, headers = [];
+  for(var i=0; i<Math.min(rows.length, 20); i++) {
+    var row = rows[i];
+    var nonEmpty = row.filter(function(c){ return String(c||'').trim()!==''; }).length;
+    if(nonEmpty < 3) continue;
+    var joined = row.join(' ').toLowerCase();
+    if(joined.indexOf('дата') >= 0 && (joined.indexOf('сумма') >= 0 || joined.indexOf('дебет') >= 0 || joined.indexOf('кредит') >= 0)) {
+      headerRowIdx = i;
+      headers = row;
+      break;
+    }
+  }
+
+  if(headerRowIdx === -1) {
+    box.innerHTML = '<div style="color:var(--exp);padding:12px;font-size:12px">❌ Не удалось найти таблицу с датой и суммой в файле. Проверьте формат выписки.</div>';
+    return;
+  }
+
+  var dateCol = _findCol(headers, ['дата операции', 'дата платежа', 'дата']);
+  var debitCol = _findCol(headers, ['дебет', 'расход', 'списание']);
+  var creditCol = _findCol(headers, ['кредит', 'приход', 'зачисление', 'поступление']);
+  var singleAmountCol = _findCol(headers, ['сумма операции', 'сумма']);
+  var purposeCol = _findCol(headers, ['назначение платежа', 'назначение', 'описание', 'комментарий']);
+  var counterpartyCol = _findCol(headers, ['контрагент', 'плательщик', 'получатель', 'наименование']);
+
+  if(dateCol === -1) {
+    box.innerHTML = '<div style="color:var(--exp);padding:12px;font-size:12px">❌ Не найдена колонка с датой.</div>';
+    return;
+  }
+
+  var parsed = [];
+  for(var r=headerRowIdx+1; r<rows.length; r++) {
+    var row = rows[r];
+    if(!row || row.every(function(c){ return String(c||'').trim()===''; })) continue;
+
+    var dateStr = _parseStatementDate(row[dateCol]);
+    if(!dateStr) continue;
+
+    var amount = 0, type = null;
+    if(debitCol >= 0 && creditCol >= 0) {
+      var debitVal = parseFloat(String(row[debitCol]||'').replace(/\s/g,'').replace(',','.')) || 0;
+      var creditVal = parseFloat(String(row[creditCol]||'').replace(/\s/g,'').replace(',','.')) || 0;
+      if(debitVal > 0) { amount = debitVal; type = 'expense'; }
+      else if(creditVal > 0) { amount = creditVal; type = 'income'; }
+    } else if(singleAmountCol >= 0) {
+      var raw = parseFloat(String(row[singleAmountCol]||'').replace(/\s/g,'').replace(',','.')) || 0;
+      amount = Math.abs(raw);
+      type = raw >= 0 ? 'income' : 'expense';
+    }
+    if(!type || amount <= 0) continue;
+
+    var purpose = purposeCol >= 0 ? String(row[purposeCol]||'').trim() : '';
+    var counterparty = counterpartyCol >= 0 ? String(row[counterpartyCol]||'').trim() : '';
+
+    parsed.push({
+      date: dateStr,
+      amount: amount,
+      type: type,
+      desc: (counterparty ? counterparty+' — ' : '') + purpose,
+      // Отпечаток строки для защиты от повторного импорта того же файла
+      fingerprint: dateStr+'|'+amount+'|'+type+'|'+purpose.substring(0,40)
+    });
+  }
+
+  if(!parsed.length) {
+    box.innerHTML = '<div style="color:var(--exp);padding:12px;font-size:12px">❌ В файле не найдено ни одной операции.</div>';
+    return;
+  }
+
+  // Защита от дублей: сравниваем с уже импортированными отпечатками
+  var existingFingerprints = {};
+  getTransactions().forEach(function(tx){
+    if(tx.bankFingerprint) existingFingerprints[tx.bankFingerprint] = true;
+  });
+  var newRows = parsed.filter(function(p){ return !existingFingerprints[p.fingerprint]; });
+  var dupCount = parsed.length - newRows.length;
+
+  _pendingStatementRows = newRows;
+
+  var totalIncome = newRows.filter(function(p){return p.type==='income';}).reduce(function(s,p){return s+p.amount;},0);
+  var totalExpense = newRows.filter(function(p){return p.type==='expense';}).reduce(function(s,p){return s+p.amount;},0);
+
+  function fmt(n){ return Math.round(n||0).toLocaleString('ru-RU'); }
+
+  var html = '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-top:12px">'+
+    '<div class="ctitle">📋 Предпросмотр (' + newRows.length + ' новых операций' + (dupCount ? ', ' + dupCount + ' уже загружено ранее — пропущено' : '') + ')</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'+
+      '<div style="background:var(--s2);border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--t2)">Приходы</div><div style="font-size:15px;font-weight:700;color:var(--inc)">'+fmt(totalIncome)+' ₽</div></div>'+
+      '<div style="background:var(--s2);border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--t2)">Расходы</div><div style="font-size:15px;font-weight:700;color:var(--exp)">'+fmt(totalExpense)+' ₽</div></div>'+
+    '</div>'+
+    (newRows.length ? '<button class="btn" onclick="confirmBankImport()" style="margin-bottom:8px">✅ Загрузить ' + newRows.length + ' операций</button>' : '')+
+    '<div style="max-height:300px;overflow-y:auto">'+
+    newRows.slice(0,50).map(function(p){
+      var color = p.type==='income' ? 'var(--inc)' : 'var(--exp)';
+      return '<div style="display:flex;justify-content:space-between;padding:8px;background:var(--s2);border-radius:6px;margin-bottom:6px">'+
+        '<div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--t2)">'+p.date+'</div><div style="font-size:11px;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(p.desc||'—')+'</div></div>'+
+        '<div style="font-weight:700;font-size:12px;color:'+color+';flex-shrink:0;margin-left:8px">'+(p.type==='income'?'+':'−')+fmt(p.amount)+' ₽</div>'+
+      '</div>';
+    }).join('')+
+    (newRows.length>50 ? '<div style="text-align:center;color:var(--t2);font-size:11px;padding:6px">и ещё '+(newRows.length-50)+'...</div>' : '')+
+    '</div>'+
+  '</div>';
+
+  box.innerHTML = html;
+}
+
+function confirmBankImport() {
+  var account = (document.getElementById('bankImportAccount')||{}).value || '';
+  if(!_pendingStatementRows.length) return;
+
+  var txs = getTransactions();
+  _pendingStatementRows.forEach(function(p){
+    var tx = {
+      id: uid(),
+      type: p.type,
+      amount: p.amount,
+      desc: p.desc,
+      date: p.date + 'T00:00:00',
+      createdAt: now(),
+      createdBy: session ? session.name : '',
+      bankFingerprint: p.fingerprint,
+      isBankImport: true
+    };
+    if(p.type === 'income') tx.source = account;
+    else { tx.account = account; tx.category = 'Импорт из банка'; }
+    txs.push(tx);
+  });
+
+  saveTransactions(txs);
+  showToast('✅ Загружено ' + _pendingStatementRows.length + ' операций из выписки');
+  _pendingStatementRows = [];
+  document.getElementById('bankImportFile').value = '';
+  document.getElementById('bankImportPreview').innerHTML = '<div style="padding:12px;text-align:center;color:var(--inc);font-size:12px">✅ Импорт завершён</div>';
+  renderFinanceDash();
+}
+
+// ════════════════════════════════════════════════════════════
+// КАЛЕНДАРЬ БАЛАНСА (точки отсчёта + контрольные точки)
+// ════════════════════════════════════════════════════════════
+
+var _calAccountId = null;
+var _calMonth = new Date();
+
+function getCheckpoints() {
+  try { return JSON.parse(localStorage.getItem('iz_account_checkpoints')||'[]'); }
+  catch(e) { return []; }
+}
+function saveCheckpoints(data) {
+  adminSyncSave('iz_account_checkpoints', data);
+}
+
+function initBalanceCalendar() {
+  var sel = document.getElementById('calAccountSelect');
+  if(sel) {
+    var accs = getAccounts();
+    var prevVal = _calAccountId;
+    sel.innerHTML = accs.map(function(a){
+      var name = typeof a==='string'?a:(a.name||'');
+      return '<option value="'+name+'">'+name+'</option>';
+    }).join('');
+    if(prevVal && accs.some(function(a){ return (typeof a==='string'?a:a.name)===prevVal; })) {
+      sel.value = prevVal;
+    } else if(accs.length) {
+      _calAccountId = typeof accs[0]==='string' ? accs[0] : accs[0].name;
+      sel.value = _calAccountId;
+    }
+  }
+  renderBalanceCalendar();
+}
+
+function calMonthShift(delta) {
+  _calMonth.setMonth(_calMonth.getMonth() + delta);
+  renderBalanceCalendar();
+}
+
+// Приток/отток по счёту за конкретный день (доходы/расходы/переводы, привязанные к этому счёту)
+function _accountDayFlow(accountName, dateStr) {
+  var flow = 0;
+  getTransactions().forEach(function(tx){
+    var txDate = (tx.date||'').substring(0,10);
+    if(txDate !== dateStr) return;
+    if(tx.type === 'income' && tx.source === accountName) flow += (tx.amount||0);
+    else if(tx.type === 'expense' && tx.account === accountName) flow -= (tx.amount||0);
+    else if(tx.type === 'transfer') {
+      if(tx.fromAccount === accountName) flow -= (tx.amount||0);
+      if(tx.toAccount === accountName) flow += (tx.amount||0);
+    }
+  });
+  return flow;
+}
+
+// Приток/отток за период [from, to] включительно
+function _accountFlowRange(accountName, from, to) {
+  var flow = 0;
+  getTransactions().forEach(function(tx){
+    var txDate = (tx.date||'').substring(0,10);
+    if(txDate < from || txDate > to) return;
+    if(tx.type === 'income' && tx.source === accountName) flow += (tx.amount||0);
+    else if(tx.type === 'expense' && tx.account === accountName) flow -= (tx.amount||0);
+    else if(tx.type === 'transfer') {
+      if(tx.fromAccount === accountName) flow -= (tx.amount||0);
+      if(tx.toAccount === accountName) flow += (tx.amount||0);
+    }
+  });
+  return flow;
+}
+
+function _addDays(dateStr, n) {
+  var d = new Date(dateStr+'T00:00:00');
+  d.setDate(d.getDate()+n);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+// Баланс счёта на конец указанной даты, считая от ближайшей предыдущей точки отсчёта (anchor).
+// Контрольные точки (audit) в расчёт не входят — только для сверки.
+function getCalAccountBalance(accountName, asOfDate) {
+  var cps = getCheckpoints().filter(function(c){ return c.account===accountName && c.type==='anchor'; })
+    .sort(function(a,b){ return a.date.localeCompare(b.date); });
+  if(!cps.length) return null; // нет точки отсчёта — баланс неизвестен
+  var base = cps[0];
+  for(var i=0;i<cps.length;i++){ if(cps[i].date<=asOfDate) base=cps[i]; else break; }
+  return (base.amount||0) + _accountFlowRange(accountName, base.date, asOfDate);
+}
+
+function renderBalanceCalendar() {
+  var sel = document.getElementById('calAccountSelect');
+  _calAccountId = sel ? sel.value : _calAccountId;
+  if(!_calAccountId) {
+    document.getElementById('calGrid').innerHTML = '<div style="padding:16px;text-align:center;color:var(--t2);font-size:12px">Добавьте счёт в Настройках → Счета и кассы</div>';
+    return;
+  }
+
+  var year = _calMonth.getFullYear(), month = _calMonth.getMonth();
+  var monthLabel = document.getElementById('calMonthLabel');
+  if(monthLabel) monthLabel.textContent = _calMonth.toLocaleDateString('ru-RU',{month:'long', year:'numeric'});
+
+  function fmt(n){ return Math.round(n||0).toLocaleString('ru-RU'); }
+
+  var firstDay = new Date(year, month, 1);
+  var lastDay = new Date(year, month+1, 0);
+  var daysInMonth = lastDay.getDate();
+  // День недели первого числа (0=Пн для нашей сетки)
+  var startWeekday = (firstDay.getDay()+6)%7;
+
+  var hasAnchor = getCheckpoints().some(function(c){ return c.account===_calAccountId && c.type==='anchor'; });
+
+  var summaryEl = document.getElementById('calSummary');
+  if(!hasAnchor) {
+    summaryEl.innerHTML = '<div class="card" style="background:#2e2a1a;border:1px solid #f0c060;margin-bottom:12px">'+
+      '<div style="font-size:12px;color:#f0c060">⚠️ Для этого счёта не задана точка отсчёта — баланс не может быть рассчитан. Добавьте её ниже.</div>'+
+    '</div>';
+  } else {
+    var monthStart = year+'-'+String(month+1).padStart(2,'0')+'-01';
+    var monthEnd = year+'-'+String(month+1).padStart(2,'0')+'-'+String(daysInMonth).padStart(2,'0');
+    var startBal = getCalAccountBalance(_calAccountId, _addDays(monthStart,-1));
+    var endBal = getCalAccountBalance(_calAccountId, monthEnd);
+    summaryEl.innerHTML = '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-bottom:12px">'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+        '<div style="background:var(--s2);border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--t2)">Баланс на начало месяца</div><div style="font-size:14px;font-weight:700">'+fmt(startBal)+' ₽</div></div>'+
+        '<div style="background:var(--s2);border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--t2)">Баланс на конец месяца</div><div style="font-size:14px;font-weight:700;color:'+(endBal>=startBal?'var(--inc)':'var(--exp)')+'">'+fmt(endBal)+' ₽</div></div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  var weekdayNames = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  var todayStr = getTodayKey ? getTodayKey() : '';
+  var gridHtml = '<div class="card" style="background:var(--bg);border:1px solid var(--border)">'+
+    '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:6px">'+
+      weekdayNames.map(function(w){ return '<div style="text-align:center;font-size:10px;color:var(--t2);font-weight:700">'+w+'</div>'; }).join('')+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">';
+
+  for(var i=0;i<startWeekday;i++) gridHtml += '<div></div>';
+
+  for(var d=1; d<=daysInMonth; d++) {
+    var dateStr = year+'-'+String(month+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    var balance = hasAnchor ? getCalAccountBalance(_calAccountId, dateStr) : null;
+    var flow = _accountDayFlow(_calAccountId, dateStr);
+    var isToday = dateStr === todayStr;
+    var flowColor = flow>0 ? 'var(--inc)' : (flow<0 ? 'var(--exp)' : 'var(--t3)');
+    gridHtml += '<div onclick="showCalDayDetail(\''+dateStr+'\')" style="cursor:pointer;background:var(--s2);border-radius:6px;padding:6px 2px;text-align:center;'+(isToday?'border:1px solid var(--accent);':'')+'min-height:52px;display:flex;flex-direction:column;justify-content:space-between">'+
+      '<div style="font-size:11px;color:'+(isToday?'var(--accent)':'var(--t1)')+';font-weight:'+(isToday?'700':'500')+'">'+d+'</div>'+
+      (balance!=null ? '<div style="font-size:8px;color:var(--t2);line-height:1.2">'+Math.round(balance/1000)+'к</div>' : '')+
+      (flow!==0 ? '<div style="font-size:8px;color:'+flowColor+';font-weight:700">'+(flow>0?'+':'')+Math.round(flow/1000)+'к</div>' : '<div style="font-size:8px">&nbsp;</div>')+
+    '</div>';
+  }
+  gridHtml += '</div></div>';
+  document.getElementById('calGrid').innerHTML = gridHtml;
+
+  renderCheckpointsList();
+}
+
+function showCalDayDetail(dateStr) {
+  var el = document.getElementById('calDayDetail');
+  if(!el) return;
+  var balance = getCalAccountBalance(_calAccountId, dateStr);
+  var flow = _accountDayFlow(_calAccountId, dateStr);
+  var dayTxs = getTransactions().filter(function(tx){
+    var txDate = (tx.date||'').substring(0,10);
+    if(txDate !== dateStr) return false;
+    return (tx.type==='income' && tx.source===_calAccountId) ||
+           (tx.type==='expense' && tx.account===_calAccountId) ||
+           (tx.type==='transfer' && (tx.fromAccount===_calAccountId || tx.toAccount===_calAccountId));
+  });
+  function fmt(n){ return Math.round(n||0).toLocaleString('ru-RU'); }
+
+  var d = new Date(dateStr+'T00:00:00');
+  var dateLabel = d.toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
+
+  el.innerHTML = '<div class="card" style="background:var(--bg);border:1px solid var(--accent);margin-top:10px">'+
+    '<div class="ctitle">📆 '+dateLabel+'</div>'+
+    (balance!=null ? '<div style="display:flex;justify-content:space-between;padding:8px;background:var(--s2);border-radius:6px;margin-bottom:8px"><span style="font-size:12px;color:var(--t2)">Баланс на конец дня</span><span style="font-weight:700">'+fmt(balance)+' ₽</span></div>' : '')+
+    '<div style="display:flex;justify-content:space-between;padding:8px;background:var(--s2);border-radius:6px;margin-bottom:10px"><span style="font-size:12px;color:var(--t2)">Движение за день</span><span style="font-weight:700;color:'+(flow>=0?'var(--inc)':'var(--exp)')+'">'+(flow>=0?'+':'')+fmt(flow)+' ₽</span></div>'+
+    (dayTxs.length ? dayTxs.map(function(tx){
+      var label, color;
+      if(tx.type==='income'){ label='📈 '+(tx.category||tx.source||'Доход'); color='var(--inc)'; }
+      else if(tx.type==='expense'){ label='📉 '+(tx.category||'Расход'); color='var(--exp)'; }
+      else { label='⇄ '+tx.fromAccount+' → '+tx.toAccount; color='var(--a2)'; }
+      return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:11px">'+
+        '<span style="color:var(--t2)">'+label+(tx.desc?' · '+tx.desc:'')+'</span>'+
+        '<span style="font-weight:700;color:'+color+'">'+fmt(tx.amount)+' ₽</span>'+
+      '</div>';
+    }).join('') : '<div style="text-align:center;color:var(--t2);font-size:11px;padding:8px 0">Нет операций в этот день</div>')+
+  '</div>';
+}
+
+function addCheckpoint(type) {
+  var date = (document.getElementById('cpDate')||{}).value || '';
+  var amount = parseFloat((document.getElementById('cpAmount')||{}).value || '0');
+  if(!_calAccountId) { showToast('❌ Выберите счёт'); return; }
+  if(!date) { showToast('❌ Выберите дату'); return; }
+  if(!amount && amount!==0) { showToast('❌ Введите остаток'); return; }
+
+  var cps = getCheckpoints();
+  cps.push({id: uid(), account: _calAccountId, date: date, amount: amount, type: type, createdAt: now()});
+  saveCheckpoints(cps);
+
+  document.getElementById('cpDate').value = '';
+  document.getElementById('cpAmount').value = '';
+  showToast((type==='anchor'?'⚓ Точка отсчёта':'🔍 Контрольная точка')+' добавлена');
+  renderBalanceCalendar();
+}
+
+function deleteCheckpoint(id) {
+  if(!confirm('Удалить точку?')) return;
+  var cps = getCheckpoints().filter(function(c){ return c.id!==id; });
+  saveCheckpoints(cps);
+  renderBalanceCalendar();
+}
+
+function renderCheckpointsList() {
+  var el = document.getElementById('checkpointsList');
+  if(!el) return;
+  var cps = getCheckpoints().filter(function(c){ return c.account===_calAccountId; })
+    .sort(function(a,b){ return b.date.localeCompare(a.date); });
+
+  function fmt(n){ return Math.round(n||0).toLocaleString('ru-RU'); }
+
+  if(!cps.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--t2);font-size:11px;padding:8px 0">Нет точек для этого счёта</div>';
+    return;
+  }
+
+  el.innerHTML = cps.map(function(cp){
+    var isAnchor = cp.type==='anchor';
+    var icon = isAnchor ? '⚓' : '🔍';
+    var predicted = null, discrepancy = null;
+    if(!isAnchor) {
+      // Для контрольной точки — что предсказал бы расчёт от ближайшей предыдущей точки отсчёта
+      predicted = getCalAccountBalance(cp.account, _addDays(cp.date,-1));
+      // сравниваем расчёт на утро этой даты с введённым фактом
+      if(predicted!=null) discrepancy = predicted - cp.amount;
+    }
+    return '<div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:6px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<div><span style="font-size:12px;font-weight:700">'+icon+' '+cp.date+'</span>'+
+        '<div style="font-size:11px;color:var(--t2)">'+(isAnchor?'Точка отсчёта':'Контрольная')+': '+fmt(cp.amount)+' ₽</div></div>'+
+        '<button onclick="deleteCheckpoint(\''+cp.id+'\')" style="background:none;border:1px solid #f0606060;border-radius:5px;color:var(--exp);font-size:10px;padding:2px 6px;cursor:pointer">✕</button>'+
+      '</div>'+
+      (discrepancy!=null ? '<div style="font-size:11px;margin-top:4px;color:'+(Math.abs(discrepancy)<1?'var(--inc)':'var(--exp)')+'">'+
+        (Math.abs(discrepancy)<1 ? '✅ Совпадает с расчётом' : '⚠️ Расхождение: '+fmt(discrepancy)+' ₽')+
+      '</div>' : '')+
+    '</div>';
+  }).join('');
+}
+
 
 function setTxType(type) {
   currentTxType = type;
@@ -5915,7 +6370,6 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   startAdminSyncListeners();
   startStaffSyncListener();
-  try{if(typeof initUnifiedReferences==='function')initUnifiedReferences();}catch(e){} // НОВОЕ!
   // Auto-select first role card
   var firstCard = document.querySelector('.role-card');
   if(firstCard) firstCard.click();
@@ -5998,13 +6452,22 @@ document.addEventListener('DOMContentLoaded', function() {
       populateSalesSourcesList();
       populateCategorySelects();
       populateShopCheckboxes();
-      renderDashboard();
-      setTxType('income');
-      clearOperationForm();
-      renderPL();
-      renderPLBudget();
-      renderShops();
-      renderDebts();
+      applyRoleUI(session.role || 'admin');
+      // Владелец не использует Операцию/P&L/Долги в старом виде — у него
+      // свой набор вкладок owner-*, которые сами инициализируются через
+      // switchTab при клике. Рендерим старые страницы только для
+      // admin/accountant, чтобы не тратить время и не путать состояние owner.
+      if(session.role !== 'owner') {
+        renderDashboard();
+        setTxType('income');
+        clearOperationForm();
+        renderPL();
+        renderPLBudget();
+        renderShops();
+        renderDebts();
+      } else {
+        renderOwnerDash();
+      }
     } catch(e) {}
   }
   
