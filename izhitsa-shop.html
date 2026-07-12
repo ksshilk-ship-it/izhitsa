@@ -5367,6 +5367,10 @@ function _siCopyItem(i){
 function siEditItem(i){
   var it = saleItems[i]; if(!it) return;
   saleItems.splice(i,1); renderSaleItems(); calcSaleTotal();
+  // Важно: сначала переключаем тип товара (Дерево/ДР), т.к. setSiItemType
+  // очищает поля названия и породы — иначе он затрёт значения, которые
+  // мы восстановим ниже, и от позиции останутся только цена и кол-во.
+  setSiItemType(it.goodsType==='dr'?'dr':'derevo');
   var numEl=document.getElementById('siNum');
   if(numEl){ numEl.value = it.num||''; }
   if(it.num){
@@ -5393,7 +5397,6 @@ function siEditItem(i){
     siCalcAmtM();
   }
   showToast('✏️ Исправьте поля и нажмите ＋');
-  setSiItemType(it.goodsType==='dr'?'dr':'derevo');
 }
 function setDiscCategory(cat){
   discCategory = cat;
