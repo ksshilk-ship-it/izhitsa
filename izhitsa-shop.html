@@ -648,7 +648,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
       <button type="button" onclick="clearStockFilters()" style="padding:6px 12px;background:#22222e;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:11px;cursor:pointer">Сбросить</button>
       <div id="stockFilterCount" style="font-size:11px;color:#8888aa;flex:1"></div>
-      <button type="button" onclick="rebuildStock(true)" style="padding:6px 12px;background:#22222e;border:1px solid #2e2e3e;border-radius:8px;color:#c8f060;font-size:11px;cursor:pointer">🔄 Пересчитать</button>
+      <button type="button" onclick="if(confirm('Пересчитать остатки склада заново по всей истории (все накладные + все продажи + все списания)? Это спишет со склада все проданные товары, которые почему-то не списались раньше, включая продажи, добавленные администратором вручную. Действие безопасно и может выполняться сколько угодно раз.')) rebuildStock(true)" style="padding:8px 14px;background:#1e2a14;border:2px solid #c8f060;border-radius:10px;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">🔄 Пересчитать остатки и списать все продажи</button>
     </div>
     <div id="stockSummary" style="margin-bottom:10px"></div>
     <div id="stockList"></div>
@@ -14712,7 +14712,7 @@ function rebuildStock(showMsg){
   if(showMsg){
     var total=0;
     Object.keys(stock).forEach(function(sn){ total+=Object.keys(stock[sn]).length; });
-    showToast('✅ Склад пересчитан: '+total+' позиций');
+    showToast('✅ Остатки пересчитаны по всей истории продаж и приходов: '+total+' позиций во всех магазинах');
   }
   try{ renderStockPage(); }catch(e){}
 }
