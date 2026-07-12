@@ -701,6 +701,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
       <div class="stitle" style="margin:0">Архив смен</div>
       <div style="display:flex;gap:6px;flex-shrink:0">
         <button type="button" id="histShowOpenBtn" onclick="toggleHistShowOpen()" style="padding:7px 10px;border-radius:10px;border:1px solid #f0c060;background:#1a1a22;color:#f0c060;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">⚠️ Незакрытые</button>
+        <button type="button" onclick="toggleDateCheckCalendar()" style="padding:7px 10px;border-radius:10px;border:1px solid #a060f0;background:#1a1a22;color:#a060f0;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📅 Проверка дат</button>
         <button type="button" onclick="openPeriodReport()" style="padding:7px 12px;border-radius:10px;border:1px solid #60c8f0;background:#1a1e2e;color:#60c8f0;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📊 Отчёт</button>
       </div>
     </div>
@@ -721,6 +722,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
       <input id="histSellerSearch" class="fi" placeholder="🔍 Продавец..." oninput="renderShiftHistory()" style="margin:0;padding:5px 10px;font-size:11px;flex:1">
     </div>
     <div id="histSyncStatus" style="font-size:11px;color:#8888aa;margin-bottom:4px;display:none"></div>
+    <div id="dateCheckCalendar" style="display:none;margin-bottom:12px"></div>
     <div id="histShowOpenBanner" style="display:none;background:#2e2a14;border:1px solid #f0c060;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:#f0c060">⚠️ Режим диагностики: показаны ТОЛЬКО незакрытые смены, фильтры периода и магазина временно не действуют. Нажмите «Незакрытые» ещё раз, чтобы вернуться к обычному архиву.</div>
     <div id="shiftHistoryList"></div>
   </div>
@@ -7348,7 +7350,56 @@ function syncShiftsFromFirestore(){
     if(status){status.textContent='❌ '+e.message;}
   });
 }
+var _dateCheckShown = false;
+function toggleDateCheckCalendar(){
+  _dateCheckShown = !_dateCheckShown;
+  var c = document.getElementById('dateCheckCalendar');
+  if(c) c.style.display = _dateCheckShown ? 'block' : 'none';
+  if(_dateCheckShown) renderDateCheckCalendar();
+}
+function renderDateCheckCalendar(){
+  var c = document.getElementById('dateCheckCalendar'); if(!c || !_dateCheckShown) return;
+  var allShifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shopsToCheck = _histShopFilter ? [_histShopFilter] : getShops().map(function(s){ return s.name||s; });
+  var from = _histPeriodFrom, to = _histPeriodTo;
+  if(!from || !to){
+    var now = new Date();
+    from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    to = new Date().toISOString().split('T')[0];
+  }
+  var dates = [];
+  var d = new Date(from+'T00:00:00'), end = new Date(to+'T00:00:00');
+  while(d <= end){ dates.push(d.toISOString().split('T')[0]); d.setDate(d.getDate()+1); }
+  dates.reverse();
+  var missingCount = 0;
+  var rows = '';
+  dates.forEach(function(dt){
+    shopsToCheck.forEach(function(shopName){
+      var shiftsForDay = allShifts.filter(function(s){ return s.shopName===shopName && s.date===dt && !s.isArchive; });
+      var label, color, icon, clickId=null;
+      if(!shiftsForDay.length){
+        label='Нет смены'; color='#f06060'; icon='❌'; missingCount++;
+      } else {
+        var openShift = shiftsForDay.find(function(s){ return s.status==='open'; });
+        var issueShift = shiftsForDay.find(function(s){ try{ return evaluateShiftIssues(s).hasIssues; }catch(e){ return false; } });
+        if(openShift){ label='Открыта'; color='#f0c060'; icon='🔓'; clickId=openShift.id||openShift._id; }
+        else if(issueShift){ label='Есть несовпадения'; color='#f06060'; icon='⚠️'; clickId=issueShift.id||issueShift._id; }
+        else { label='Всё в порядке'; color='#60f090'; icon='✅'; clickId=(shiftsForDay[0].id||shiftsForDay[0]._id); }
+      }
+      rows += '<div onclick="'+(clickId?'openShiftView(\''+clickId+'\')':'')+'" style="display:flex;justify-content:space-between;align-items:center;padding:7px 4px;border-bottom:1px solid #2e2e3e;font-size:12px;'+(clickId?'cursor:pointer':'')+'">'+
+        '<div>'+dt+(shopsToCheck.length>1?' · '+shopName:'')+'</div>'+
+        '<div style="color:'+color+';font-weight:700">'+icon+' '+label+'</div>'+
+      '</div>';
+    });
+  });
+  c.innerHTML = '<div style="background:#1a1a22;border:2px solid #a060f0;border-radius:12px;padding:10px">'+
+    '<div style="font-size:12px;font-weight:700;color:#a060f0;margin-bottom:2px">📅 Проверка по датам</div>'+
+    '<div style="font-size:10px;color:#8888aa;margin-bottom:8px">'+from+' — '+to+(missingCount?' · <span style="color:#f06060;font-weight:700">пропущено: '+missingCount+'</span>':' · <span style="color:#60f090">пропусков нет</span>')+'</div>'+
+    rows+
+  '</div>';
+}
 function renderShiftHistory(){
+  try{ renderDateCheckCalendar(); }catch(e){}
   var c=document.getElementById('shiftHistoryList'); if(!c)return;
   migrateLegacyShiftDates();
   migrateLegacyShiftRevenue();
