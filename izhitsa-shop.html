@@ -80,7 +80,8 @@ body{background:#0f0f13;color:#f0f0f8;font-size:15px;font-family:'Golos Text',sa
 .check-circle.checked{background:#c8f060;border-color:#c8f060;color:#0f0f13}
 .empty{text-align:center;padding:28px 0;color:#8888aa;font-size:13px}
 .ei{font-size:32px;margin-bottom:7px}
-.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:9px 16px;font-size:13px;z-index:400;opacity:0;transition:opacity .3s;pointer-events:none;max-width:92%;text-align:center}
+.toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.9);background:#1a2e1a;border:2px solid #60f090;border-radius:16px;padding:18px 28px;font-size:16px;font-weight:700;color:#60f090;z-index:9999;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;max-width:88%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+.toast.show{transform:translate(-50%,-50%) scale(1)}
 .toast.show{opacity:1}
 </style>
 <script>
@@ -2549,7 +2550,16 @@ function logLogout(){ logAction('LOGOUT', {user: session ? session.name : 'unkno
 function fmt(n){ return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+'₽'; }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function gv(id){ return (document.getElementById(id)||{}).value||''; }
-function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
+function showToast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg;
+  var isWarn = /⚠️|❌|Ошибка|не удал|не найден/i.test(msg);
+  t.style.background = isWarn ? '#2e1a1a' : '#1a2e1a';
+  t.style.borderColor = isWarn ? '#f06060' : '#60f090';
+  t.style.color = isWarn ? '#f06060' : '#60f090';
+  t.classList.add('show');
+  clearTimeout(window._toastHideTimer);
+  window._toastHideTimer = setTimeout(()=>t.classList.remove('show'),2600);
+}
 function _fsWrite(promise){
   try{
     if(promise && typeof promise.catch==='function'){
@@ -4656,10 +4666,11 @@ function migrateOrphanItemNamesToGoods(){
   var goods = getRefBook('iz_goods');
   var goodsNames = {};
   goods.forEach(function(g){ var n=(g&&g.name)||g; if(n) goodsNames[n]=true; });
+  var goodsTombsM = JSON.parse(localStorage.getItem('iz_goods_deleted')||'[]');
   var added = 0;
   items.forEach(function(it){
     var n = it && it.name && it.name.trim();
-    if(n && !goodsNames[n]){
+    if(n && !goodsNames[n] && goodsTombsM.indexOf(n.toLowerCase())<0){
       goods.push({id:uid(), name:n});
       goodsNames[n] = true;
       added++;
@@ -9507,6 +9518,7 @@ function addRefbookItemShop(bookId, key){
         saveRefBookShop(key,items2);
         renderRefbookItemsShop(bookId,key);
         updateRefbookCountShop(bookId,key);
+        showToast('✅ Сохранено');
       }
       input.value='';
     });
@@ -9519,6 +9531,7 @@ function addRefbookItemShop(bookId, key){
   input.value='';
   renderRefbookItemsShop(bookId, key);
   updateRefbookCountShop(bookId, key);
+  showToast('✅ Сохранено');
 }
 function deleteRefbookItemShop(bookId, idx, key){
   var items = getRefBook(key);
@@ -9535,6 +9548,7 @@ function deleteRefbookItemShop(bookId, idx, key){
   saveRefBookShop(key, items);
   renderRefbookItemsShop(bookId, key);
   updateRefbookCountShop(bookId, key);
+  showToast('✅ Удалено и сохранено');
 }
 function refbookIsDeleted(key, name){
   var tombKey = key+'_deleted';
@@ -13166,7 +13180,9 @@ function autoSaveToItemBase(name, num, price, category){
   try{ db.collection('iz_settings').doc('items').set({items:items}); }catch(e){}
   var goods = getRefBook('iz_goods');
   var existsInGoods = goods.some(function(g){ return ((g&&g.name)||g)===name.trim(); });
-  if(!existsInGoods){
+  var goodsTombs = JSON.parse(localStorage.getItem('iz_goods_deleted')||'[]');
+  var wasDeleted = goodsTombs.indexOf(name.trim().toLowerCase())>=0;
+  if(!existsInGoods && !wasDeleted){
     goods.push({id:uid(), name:name.trim()});
     saveRefBookShop('iz_goods', goods);
   }
@@ -13183,7 +13199,9 @@ function saveSpecies(name) {
   name = name.trim();
   var materials = getRefBook('iz_materials');
   var exists = materials.some(function(m){ return ((m && m.name) || m)===name; });
-  if(!exists){
+  var matTombs = JSON.parse(localStorage.getItem('iz_materials_deleted')||'[]');
+  var wasDeleted = matTombs.indexOf(name.toLowerCase())>=0;
+  if(!exists && !wasDeleted){
     materials.push({id:uid(), name:name});
     saveRefBookShop('iz_materials', materials);
   }
