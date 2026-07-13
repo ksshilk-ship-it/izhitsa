@@ -3790,7 +3790,7 @@ function cancelMorning(){
 function getPrevShift(shopName){
   var all=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   return all.filter(function(s){
-    if(s.isRestoreShift || s.backfilled || s.source==='psj') return false;
+    if(s.isRestoreShift && s.status==='open') return false; // исключаем только незакрытые «призрачные» сессии восстановления; закрытые архивные/импортированные смены с реальными данными участвуют в сравнении как обычно
     return s.shopName===shopName;
   }).sort(function(a,b){return new Date(b.closedAt||0)-new Date(a.closedAt||0);})[0]||null;
 }
@@ -3798,7 +3798,7 @@ function getPrevShiftByOpenOrder(shopName, beforeOpenedAt){
   var all = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   var beforeDate = beforeOpenedAt ? beforeOpenedAt.split('T')[0] : '';
   var candidates = all.filter(function(s){
-    if(s.isRestoreShift || s.backfilled || s.source==='psj') return false;
+    if(s.isRestoreShift && s.status==='open') return false; // исключаем только незакрытые «призрачные» сессии восстановления; закрытые архивные/импортированные смены с реальными данными участвуют в сравнении как обычно
     if(s.shopName!==shopName) return false;
     var sDate = s.date || (s.openedAt||'').split('T')[0];
     if(!sDate) return false; // дата открытия — обязательное поле, есть даже у старых смен
@@ -3848,7 +3848,7 @@ function getPrevShiftByDate(shopName){
   var all = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   return all.filter(function(s){
     if(!s.shopName || s.shopName!==shopName) return false;
-    if(s.isRestoreShift || s.backfilled || s.source==='psj') return false;
+    if(s.isRestoreShift && s.status==='open') return false; // исключаем только незакрытые «призрачные» сессии восстановления; закрытые архивные/импортированные смены с реальными данными участвуют в сравнении как обычно
     var sDate = (s.date||(s.openedAt||'').split('T')[0]);
     return sDate < targetDate;
   }).sort(function(a,b){
