@@ -2637,7 +2637,38 @@ function _clearShiftPendingFlag(shiftId){
       localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
     }
   }catch(e){}
+  _checkPendingCloseBanner();
 }
+function _markPendingCloseWarning(shopName, date){
+  try{ localStorage.setItem('iz_pending_close_warning', JSON.stringify({shopName:shopName, date:date, ts:Date.now()})); }catch(e){}
+  _checkPendingCloseBanner();
+}
+function _checkPendingCloseBanner(){
+  try{
+    var raw = localStorage.getItem('iz_pending_close_warning');
+    var el = document.getElementById('connStatusBanner');
+    if(!raw){ return; }
+    var w = JSON.parse(raw);
+    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var stillPending = shifts.some(function(s){ return s.shopName===w.shopName && s.date===w.date && s._pendingSync; });
+    if(!stillPending){
+      localStorage.removeItem('iz_pending_close_warning');
+      return;
+    }
+    if(el && navigator.onLine!==false){
+      // Пытаемся дослать ещё раз прямо сейчас, раз приложение снова открыто
+      _retryPendingShiftSyncs();
+    }
+    if(el){
+      el.style.display='flex';
+      el.style.background='#2e1a14';
+      el.style.borderColor='#f0a060';
+      el.innerHTML='<span style="color:#f0a060;font-size:12px">⚠️ Смена «'+w.shopName+' · '+w.date+'» закрыта, но ещё не сохранена в облаке. Не закрывайте это приложение на этом телефоне без интернета.</span>';
+    }
+  }catch(e){}
+}
+setInterval(_checkPendingCloseBanner, 30000);
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _checkPendingCloseBanner(); });
 function _pushShiftWithRetry(shiftId, data){
   if(!shiftId || !data) return;
   try{
@@ -2663,6 +2694,8 @@ function _retryPendingShiftSyncs(){
 }
 // Фоновая проверка неотправленных смен: сразу при загрузке, затем каждые 45 секунд,
 // плюс сразу при восстановлении интернет-соединения.
+_retryPendingShiftSyncs();
+_checkPendingCloseBanner();
 setInterval(_retryPendingShiftSyncs, 45000);
 window.addEventListener('online', function(){ setTimeout(_retryPendingShiftSyncs, 1500); });
 function openMo(id){
@@ -7020,8 +7053,8 @@ function _closeShiftReal(){
   });
   filteredShifts.unshift(report);
   localStorage.setItem(KEY.shifts,JSON.stringify(filteredShifts));
-  _pushShiftWithRetry(report.id, report);
   if(restoreMode){
+    _pushShiftWithRetry(report.id, report);
     try{
       db.collection('iz_shifts')
         .where('shopName','==',report.shopName)
@@ -7046,14 +7079,41 @@ function _closeShiftReal(){
     showToast('✅ Восстановленная смена сохранена в архив');
     return;
   }
-  stopLiveShiftListener();
-  localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal); clearTombstones();
-  session=null; journal=[];
-  document.getElementById('mainTabs').style.display='none';
-  document.getElementById('appScreen').style.display='none';
-  document.getElementById('loginScreen').style.display='flex';
-  pick('seller');
-  showToast('✅ Смена закрыта');
+  showToast('⏳ Сохраняем смену в облако, подождите...');
+  // Раньше здесь отправка запускалась "и забывалась" (fire-and-forget): экран
+  // сразу переключался на "Смена закрыта", даже если запись в облако ещё не
+  // прошла и позже вообще не проходила из-за плохой связи — продавец
+  // не получал никакого сигнала, что данные не долетели.
+  // Теперь дожидаемся подтверждения от сервера (максимум 8 секунд), и по
+  // итогу честно показываем — сохранилось в облаке или осталось только
+  // на этом телефоне.
+  var _closeConfirmed = false;
+  var _closeSettle = function(ok){
+    if(_closeConfirmed) return; _closeConfirmed = true;
+    if(ok){
+      var cur = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+      var idx = cur.findIndex(function(s){ return (s.id||s._id)===report.id; });
+      if(idx>=0){ delete cur[idx]._pendingSync; localStorage.setItem(KEY.shifts,JSON.stringify(cur)); }
+    }
+    stopLiveShiftListener();
+    localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal); clearTombstones();
+    session=null; journal=[];
+    document.getElementById('mainTabs').style.display='none';
+    document.getElementById('appScreen').style.display='none';
+    document.getElementById('loginScreen').style.display='flex';
+    pick('seller');
+    if(ok){
+      showToast('✅ Смена закрыта и сохранена в облако');
+    } else {
+      _pushShiftWithRetry(report.id, report); // остаётся в очереди на автоповтор
+      _markPendingCloseWarning(report.shopName, report.date);
+      showToast('⚠️ Смена закрыта, но НЕ сохранилась в облаке — данные остались только на этом телефоне. Откройте приложение здесь ещё раз при хорошем интернете.');
+    }
+  };
+  try{
+    db.collection('iz_shifts').doc(report.id).set(report).then(function(){ _closeSettle(true); }).catch(function(){ _closeSettle(false); });
+  }catch(e){ _closeSettle(false); }
+  setTimeout(function(){ _closeSettle(false); }, 8000);
 }
 _closeShiftReal();
 }
