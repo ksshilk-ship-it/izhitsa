@@ -5400,6 +5400,35 @@ function openManualNoArticle(){
   _siNoArticleMode = true;
   var nameMEl=document.getElementById('siNameM'); if(nameMEl) nameMEl.focus();
 }
+function _lookupItemInInvoices(numStr, shopName){
+  // iz_stock (остатки по артикулам) синхронизируется только локально на том
+  // устройстве, где была подтверждена приёмка. Если продавец пробивает
+  // продажу на ДРУГОМ устройстве, локального совпадения там может не быть,
+  // хотя сама накладная уже давно в облаке. Ищем номер прямо в накладных —
+  // они синхронизируются через Firestore и видны на любом устройстве.
+  // Важно: ищем строго по складу конкретного магазина, а не по всем сразу —
+  // один и тот же артикул в разных магазинах может быть разным товаром.
+  var manual = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var auto = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  var all = manual.concat(auto).filter(function(inv){ return !shopName || inv.shopName===shopName; });
+  all.sort(function(a,b){ return (b.acceptedDate||b.date||'').localeCompare(a.acceptedDate||a.date||''); });
+  for(var i=0;i<all.length;i++){
+    var inv = all[i];
+    var items = inv.acceptedItems || inv.items || [];
+    for(var j=0;j<items.length;j++){
+      var it = items[j];
+      var artNum = it.article||it.num||it.artNum;
+      if(artNum!=null && String(artNum)===numStr){
+        return {
+          num:numStr, name:it.name||'', price:(it.factPrice!=null?it.factPrice:it.price)||0,
+          species:it.species||'', goodsType:it.goodsType||inv.goodsType||'derevo',
+          qty:null, fromStock:false, fromInvoiceOnly:true
+        };
+      }
+    }
+  }
+  return null;
+}
 function lookupItem(num){
   _siNoArticleMode = false;
   var lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
@@ -5410,6 +5439,7 @@ function lookupItem(num){
   var items=JSON.parse(localStorage.getItem('iz_items')||'[]');
   var found=stockEntry ? {num:stockEntry.num,name:stockEntry.name,price:stockEntry.price,species:stockEntry.species,goodsType:stockEntry.goodsType,qty:stockEntry.qty,fromStock:true}
     : items.find(function(i){ return String(i.num)===numStr; });
+  if(!found) found = _lookupItemInInvoices(numStr, shopNm);
   if(found){
     currentLookupItem=found;
     document.getElementById('siName').value=found.name||'';
@@ -5422,6 +5452,10 @@ function lookupItem(num){
       var hint=lr.querySelector('.stock-qty-hint');
       if(!hint){ hint=document.createElement('div'); hint.className='stock-qty-hint'; hint.style.cssText='font-size:11px;color:#60c8f0;margin-top:3px'; lr.appendChild(hint); }
       hint.textContent=found.qty>0?('В наличии: '+found.qty+' шт.'):'⚠️ Нет в наличии';
+    } else if(found.fromInvoiceOnly){
+      var hint2=lr.querySelector('.stock-qty-hint');
+      if(!hint2){ hint2=document.createElement('div'); hint2.className='stock-qty-hint'; hint2.style.cssText='font-size:11px;color:#f0c060;margin-top:3px'; lr.appendChild(hint2); }
+      hint2.textContent='⚠️ Найден в накладной (не в локальном остатке этого устройства) — проверьте цену и породу';
     }
     siCalcAmt();
   } else {
