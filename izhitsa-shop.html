@@ -3168,8 +3168,17 @@ function syncLiveShift(){
   if(restoreMode) return;
   if(!journal || journal.length<=1) return; // length 1 = just the "Смена открыта" entry, nothing real yet
   if(!session.shiftId){ session.shiftId = uid(); saveS(); }
+  if(getShiftTombstones().indexOf(session.shiftId)!==-1){
+    // Эта смена была удалена администратором — устройство не должно
+    // воскрешать её повторной фоновой отправкой в облако.
+    _shiftForceClosedRemotely = true;
+    try{ stopLiveShiftListener(); }catch(e){}
+    showToast('🗑 Эта смена была удалена администратором. Откройте новую смену через "Выйти".');
+    return;
+  }
   if(_liveShiftSyncTimer) clearTimeout(_liveShiftSyncTimer);
   _liveShiftSyncTimer = setTimeout(function(){
+    if(getShiftTombstones().indexOf(session.shiftId)!==-1) return; // повторная проверка на случай гонки
     var docRef = db.collection('iz_shifts').doc(session.shiftId);
     docRef.get().then(function(snap){
       if(snap.exists && snap.data().status==='closed'){
@@ -4294,9 +4303,15 @@ function clearTestSession(){
   if(!openShifts.length){ showToast('Нет открытых смен для сброса'); return; }
   var labels = openShifts.map(function(s){ return s.shopName+' · '+(s.sellerName||'')+' ('+(s.id||'')+')'; }).join('\n');
   if(!confirm('Сбросить следующие открытые смены?\n\n'+labels+'\n\nЭто удалит их без сохранения данных.')) return;
+  var ids = {};
   openShifts.forEach(function(s){
+    addShiftTombstone(s.id);
+    ids[s.id] = true;
     try{ db.collection('iz_shifts').doc(s.id).delete(); }catch(e){}
   });
+  var local = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  local = local.filter(function(s){ return !ids[s.id||s._id]; });
+  localStorage.setItem(KEY.shifts, JSON.stringify(local));
   showToast('🗑 Открытые смены сброшены');
 }
 var _todayActiveShop = null;
@@ -11529,6 +11544,7 @@ function setPrMode(mode, el) {
 }
 function deletePeriodReportShift(id){
   if(!confirm('Удалить эту смену?')) return;
+  addShiftTombstone(id);
   var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   shifts=shifts.filter(function(s){return (s.id||s._id)!==id;});
   localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
