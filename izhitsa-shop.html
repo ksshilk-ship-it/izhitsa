@@ -3800,11 +3800,18 @@ function getPrevShiftByOpenOrder(shopName, beforeOpenedAt){
   var candidates = all.filter(function(s){
     if(s.isRestoreShift || s.backfilled || s.source==='psj') return false;
     if(s.shopName!==shopName) return false;
-    if(!s.openedAt) return false;
-    var sDate = s.openedAt.split('T')[0];
+    var sDate = s.date || (s.openedAt||'').split('T')[0];
+    if(!sDate) return false; // дата открытия — обязательное поле, есть даже у старых смен
     return beforeDate ? sDate < beforeDate : true;
   });
-  return candidates.sort(function(a,b){ return new Date(b.openedAt)-new Date(a.openedAt); })[0] || null;
+  candidates.sort(function(a,b){
+    var da = a.date || (a.openedAt||'').split('T')[0];
+    var db2 = b.date || (b.openedAt||'').split('T')[0];
+    if(da !== db2) return da < db2 ? 1 : -1; // по убыванию даты
+    var ao = a.openedAt||'', bo = b.openedAt||'';
+    return ao < bo ? 1 : (ao > bo ? -1 : 0); // при совпадении даты — точное время как тай-брейкер
+  });
+  return candidates[0] || null;
 }
 function getMorningCashDiff(){
   if(!session) return {hasDiff:false, parts:[]};
@@ -7392,15 +7399,13 @@ function evaluateShiftIssues(sh){
   var jnl = sh.journal||[];
   var sales = jnl.filter(function(e){ return e.type==='sale'; });
   (function(){
-    var allShiftsChk = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-    var candidatesChk = allShiftsChk.filter(function(s){
-      if(s.isRestoreShift || s.backfilled || s.source==='psj') return false; // не сравниваем с восстановленными/призрачными сменами
-      return s.shopName===sh.shopName && s.id!==sh.id && s.openedAt && sh.openedAt && s.openedAt < sh.openedAt;
-    });
-    // Сортировка и выбор предыдущей смены — строго по дате ОТКРЫТИЯ (openedAt),
-    // а не по дате/времени закрытия. Так продавцы, забывшие вовремя закрыть
-    // смену, не собьют порядок сравнения для следующих смен.
-    var prevChk = candidatesChk.sort(function(a,b){ return new Date(b.openedAt)-new Date(a.openedAt); })[0] || null;
+    // Раньше здесь была своя копия логики поиска "предыдущей смены", завязанная
+    // строго на точный openedAt. У части старых/импортированных смен openedAt
+    // отсутствует (есть только date) — такие смены выпадали из сравнения, и
+    // проверка по ошибке сравнивала текущую смену не с непосредственно
+    // предыдущей, а с более старой. Теперь используется единая функция
+    // getPrevShiftByOpenOrder, которая сравнивает по календарной дате открытия.
+    var prevChk = getPrevShiftByOpenOrder(sh.shopName, sh.openedAt || (sh.date ? sh.date+'T23:59:59' : ''));
     if(!prevChk) return;
     if(prevChk.cashEvening!=null && prevChk.cashEvening>=100 && Math.abs((sh.cashMorning||0)-prevChk.cashEvening)>=1){
       issues.push({code:'morn_cash_diff_t', label:'💵 Нал утро (Дерево) не сходится с вечером пред. смены ('+fmt(prevChk.cashEvening)+')'});
@@ -8624,7 +8629,7 @@ function svOpenInvoiceFromReceive(invId){
             var exists = manArr.find(function(i){ return String(i._id||i.id)===invId; });
             if(!exists){ manArr.push(Object.assign({id:invId},data)); localStorage.setItem('iz_manual_invoices',JSON.stringify(manArr)); }
             svOpenInvoiceFromReceive(invId);
-          } else { showToast('Накладная не найдена — возможно, удалена'); }
+          } else { _showFallbackInvoiceView(invId); }
         } else {
           db.collection('iz_invoices').doc(invId).get({source:'server'}).then(function(snap2){
             if(snap2.exists){
@@ -8634,12 +8639,12 @@ function svOpenInvoiceFromReceive(invId){
                 var ex2 = invArr.find(function(i){ return String(i._id||i.id)===invId; });
                 if(!ex2){ invArr.push(Object.assign({id:invId},data2)); localStorage.setItem('iz_invoices',JSON.stringify(invArr)); }
                 svOpenInvoiceFromReceive(invId);
-              } else { showToast('Накладная не найдена — возможно, удалена'); }
-            } else { showToast('Накладная не найдена — возможно, удалена'); }
-          }).catch(function(){ showToast('Накладная не найдена — возможно, удалена'); });
+              } else { _showFallbackInvoiceView(invId); }
+            } else { _showFallbackInvoiceView(invId); }
+          }).catch(function(err){ console.log('[svOpenInvoiceFromReceive] iz_invoices get error:', err&&err.code, err); _showFallbackInvoiceView(invId); });
         }
-      }).catch(function(){ showToast('Накладная не найдена — возможно, удалена'); });
-    }catch(e){ showToast('Накладная не найдена — возможно, удалена'); }
+      }).catch(function(err){ console.log('[svOpenInvoiceFromReceive] iz_manual_invoices get error:', err&&err.code, err); _showFallbackInvoiceView(invId); });
+    }catch(e){ console.log('[svOpenInvoiceFromReceive] exception:', e); _showFallbackInvoiceView(invId); }
     return;
   }
   document.getElementById('adminInvTitle').textContent = '📋 Накладная '+(inv.num||'');
@@ -14606,6 +14611,29 @@ function adminOpenInvoiceFromList(invId, shiftId){
   }
   svOpenInvoiceFromReceive(invId);
 }
+function _showFallbackInvoiceView(invId){
+  // Настоящий документ накладной не найден (ни локально, ни в облаке), но
+  // сама запись прихода в журнале смены сохранилась — показываем то, что
+  // есть, вместо тупикового сообщения об ошибке.
+  var r = (window._adminRcvRowsByInv||{})[invId];
+  if(!r){ showToast('Накладная не найдена — возможно, удалена'); return; }
+  document.getElementById('adminInvTitle').textContent = '📋 '+(r.label||'Накладная')+' (только просмотр)';
+  var itemsHtml = (r.items&&r.items.length)
+    ? r.items.map(function(it){
+        return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:12px">'+
+          '<span>'+(it.name||it.article||'—')+(it.species?' · '+it.species:'')+'</span>'+
+          '<span>'+(it.qty||1)+' × '+Math.round(it.price||0).toLocaleString('ru-RU')+'₽</span>'+
+        '</div>';
+      }).join('')
+    : '<div style="font-size:12px;color:#8888aa">Состав позиций недоступен — сохранилась только итоговая сумма.</div>';
+  document.getElementById('adminInvBody').innerHTML =
+    '<div style="background:#2e2a14;border:1px solid #f0c060;border-radius:9px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:#f0c060">⚠️ Оригинал накладной не найден (ни на устройстве, ни в облаке) — редактирование недоступно. Ниже данные из журнала смены на момент приёмки.</div>'+
+    '<div style="font-size:11px;color:#8888aa;margin-bottom:6px">'+(r.shop||'')+(r.date?' · '+r.date:'')+'</div>'+
+    itemsHtml+
+    '<div style="display:flex;justify-content:space-between;font-weight:700;padding-top:8px;margin-top:6px;border-top:1px solid #2e2e3e"><span>Итого</span><span>'+Math.round(r.amount||0).toLocaleString('ru-RU')+'₽</span></div>'+
+    '<button onclick="closeMo(\'adminInvMo\')" style="width:100%;margin-top:12px;padding:9px;border-radius:8px;border:1px solid #2e2e3e;background:none;color:#8888aa;font-size:12px;cursor:pointer">Закрыть</button>';
+  openMo('adminInvMo');
+}
 function renderAdminRcvWo(){
   var range = _adminRcvDateRange();
   var allShifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
@@ -14635,6 +14663,8 @@ function renderAdminRcvWo(){
     }
   });
   rows.sort(function(a,b){ return (b.ts||b.date).localeCompare(a.ts||a.date); });
+  window._adminRcvRowsByInv = {};
+  rows.forEach(function(r){ if(r.invId) window._adminRcvRowsByInv[r.invId] = r; });
   var totalWood=0, totalDr=0;
   rows.forEach(function(r){ if(r.goodsType==='dr') totalDr+=r.amount; else totalWood+=r.amount; });
   var sumEl=document.getElementById('adminRcvSummary');
