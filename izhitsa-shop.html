@@ -5131,6 +5131,26 @@ function svPushToFirestore(shiftId){
     showToast('❌ Ошибка: '+e.message);
   });
 }
+function svPromoteToNormal(shiftId){
+  // Снимает флаги "восстановленной/задним числом" смены, чтобы она перестала
+  // исключаться из сверки нала и остатков товара с предыдущей сменой.
+  if(!confirm('Сделать эту смену обычной? Она начнёт участвовать в сверке кассы и товара с соседними сменами по этому магазину.')) return;
+  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var idx=shifts.findIndex(function(s){return (s.id||s._id)===shiftId;});
+  if(idx<0){showToast('Смена не найдена');return;}
+  var sh=shifts[idx];
+  delete sh.isRestoreShift;
+  delete sh.backfilled;
+  if(sh.source==='psj') sh.source='shop';
+  if(sh.sellerName){ sh.sellerName = sh.sellerName.replace(/^Восст\.\s*/,''); }
+  shifts[idx]=sh;
+  localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+  try{db.collection('iz_shifts').doc(shiftId).set(sh);}catch(e){}
+  if(_currentShiftView&&(_currentShiftView.id===shiftId||_currentShiftView._id===shiftId)){
+    _currentShiftView=sh;_renderShiftView();
+  }
+  showToast('✅ Смена теперь обычная — участвует в сверке');
+}
 function svRepairExpenses(shiftId){
   // Пересчитывает zp/travel/inkass/otherExp из expenses[] для старых PSJ-смен
   var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
@@ -7291,6 +7311,9 @@ function evaluateShiftIssues(sh){
       if(s.isRestoreShift || s.backfilled || s.source==='psj') return false; // не сравниваем с восстановленными/призрачными сменами
       return s.shopName===sh.shopName && s.id!==sh.id && s.openedAt && sh.openedAt && s.openedAt < sh.openedAt;
     });
+    // Сортировка и выбор предыдущей смены — строго по дате ОТКРЫТИЯ (openedAt),
+    // а не по дате/времени закрытия. Так продавцы, забывшие вовремя закрыть
+    // смену, не собьют порядок сравнения для следующих смен.
     var prevChk = candidatesChk.sort(function(a,b){ return new Date(b.openedAt)-new Date(a.openedAt); })[0] || null;
     if(!prevChk) return;
     if(prevChk.cashEvening!=null && prevChk.cashEvening>=100 && Math.abs((sh.cashMorning||0)-prevChk.cashEvening)>=1){
@@ -7301,6 +7324,12 @@ function evaluateShiftIssues(sh){
     }
     if(prevChk.cashStaffEvening!=null && prevChk.cashStaffEvening>=100 && Math.abs((sh.cashStaffMorning||0)-prevChk.cashStaffEvening)>=1){
       issues.push({code:'morn_cash_diff_s', label:'💵 Нал утро (Покупки сотрудников) не сходится с вечером пред. смены ('+fmt(prevChk.cashStaffEvening)+')'});
+    }
+    if(prevChk.goodsEvening!=null && prevChk.goodsEvening>=100 && sh.goodsMorning!=null && Math.abs((sh.goodsMorning||0)-prevChk.goodsEvening)>=1){
+      issues.push({code:'morn_goods_diff_t', label:'🌳 Остаток товара (Дерево) на утро не сходится с вечером пред. смены ('+fmt(prevChk.goodsEvening)+')'});
+    }
+    if(prevChk.drGoodsEvening!=null && prevChk.drGoodsEvening>=100 && sh.goodsDrMorning!=null && Math.abs((sh.goodsDrMorning||0)-prevChk.drGoodsEvening)>=1){
+      issues.push({code:'morn_goods_diff_g', label:'🛍 Остаток товара (ДР Товар) на утро не сходится с вечером пред. смены ('+fmt(prevChk.drGoodsEvening)+')'});
     }
   })();
   if(sh.goodsMorning==null){
@@ -8262,6 +8291,7 @@ function _renderShiftView(){
       :'');
   var sid2=sh.id||sh._id||'';
   var repairExpHtml=(sh.backfilled||sh.isArchive||sh.source==='psj')?'<button onpointerdown="event.preventDefault();svRepairExpenses(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a1a2e;border:1px solid #a060f0;border-radius:9px;font-weight:700;font-size:12px;color:#a060f0;cursor:pointer;margin-bottom:8px">🔧 Пересчитать расходы (ЗП/проезд/прочие)</button>':'';
+  var promoteHtml=(sh.isRestoreShift||sh.backfilled||sh.source==='psj')?'<button onpointerdown="event.preventDefault();svPromoteToNormal(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a1a2e;border:1px solid #60c8f0;border-radius:9px;font-weight:700;font-size:12px;color:#60c8f0;cursor:pointer;margin-bottom:8px">🔄 Сделать обычной сменой (включить в сверку)</button>':'';
   var pushFirestoreHtml='<button onpointerdown="event.preventDefault();svPushToFirestore(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a2a1e;border:1px solid #60f090;border-radius:9px;font-weight:700;font-size:12px;color:#60f090;cursor:pointer;margin-bottom:8px">☁️ Синхронизировать смену в Firestore</button>';
   var deleteShiftHtml = '<button onclick="svDeleteShift()" style="width:100%;padding:16px;background:#2e1a1a;border:2px solid #f06060;border-radius:12px;font-weight:700;font-size:14px;color:#f06060;cursor:pointer;margin-top:14px">🗑 Удалить смену целиком</button>';
   document.getElementById('editShiftBody').innerHTML =
@@ -8277,6 +8307,7 @@ function _renderShiftView(){
     acc('staff', '🛒', 'Покупки сотрудников', '#a060f0', staffArr.length||null, staffBody) +
     pushFirestoreHtml +
     repairExpHtml +
+    promoteHtml +
     deleteShiftHtml;
 }
 var _svOpenAccs = {};
