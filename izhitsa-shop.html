@@ -110,6 +110,18 @@ if ('serviceWorker' in navigator) {
       .catch(function(e) { console.log('[PWA] SW ошибка:', e); });
   });
 }
+// После долгого пребывания в фоне (заблокированный экран и т.п.) живые
+// Firestore-слушатели админ-панели могут тихо отвалиться и не
+// восстановиться сами. При возврате на передний план — переподключаем их
+// и разово тянем свежие данные, чтобы карточки смен не "зависали".
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState!=='visible') return;
+  if(typeof session==='undefined' || !session || session.role!=='admin') return;
+  try{ if(typeof startAdminShiftListener==='function') startAdminShiftListener(); }catch(e){}
+  try{ if(typeof startAdminAlertsListener==='function') startAdminAlertsListener(); }catch(e){}
+  try{ if(typeof startAdminAuditListener==='function') startAdminAuditListener(); }catch(e){}
+  try{ if(typeof renderTodayShift==='function') renderTodayShift(); }catch(e){}
+});
 function applyUpdate() {
   var banner = document.getElementById('updateBanner');
   if(banner) banner.innerHTML = '<div style="font-size:13px;color:#f0f0f8;padding:12px">⏳ Загружаю обновление...</div>';
