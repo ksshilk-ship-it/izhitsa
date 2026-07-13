@@ -3687,15 +3687,29 @@ function confirmMorning(){
     var detailLines = diffParts.map(function(p){
       return p.label+': ввёл '+fmt(p.morning)+', вечер был '+fmt(p.prevEvening)+' ('+(p.diff>0?'+':'')+fmt(p.diff)+')';
     });
-    saveAdminAlert({
-      type:'morning_diff',
-      shopName:session.shopName,
-      sellerName:session.sellerName,
-      date:new Date().toISOString().split('T')[0],
-      diffParts:diffParts,
-      message:'⚠️ Расхождение нала на утро — '+detailLines.join(' · '),
-      forRoles:['admin','owner']
+    var mainPart = diffParts[0]||{};
+    var todayStr = new Date().toISOString().split('T')[0];
+    var existingAlerts = JSON.parse(localStorage.getItem('iz_admin_alerts')||'[]');
+    var alreadySent = existingAlerts.some(function(a){
+      return a.type==='morning_diff' && a.shopName===session.shopName &&
+        a.sellerName===session.sellerName && a.date===todayStr;
     });
+    if(!alreadySent){
+      saveAdminAlert({
+        type:'morning_diff',
+        shopName:session.shopName,
+        sellerName:session.sellerName,
+        date:todayStr,
+        diffParts:diffParts,
+        // Плоские поля — их читает карточка уведомления при отрисовке.
+        // Без них карточка всегда показывала 0₽/0₽/0₽, даже при реальном расхождении.
+        cashMorning:mainPart.morning,
+        prevCashEve:mainPart.prevEvening,
+        morningDiff:mainPart.diff,
+        message:'⚠️ Расхождение нала на утро — '+detailLines.join(' · '),
+        forRoles:['admin','owner']
+      });
+    }
   }
   journal=[{id:uid(),type:'open',ts:_workingNowISO(),icon: hasCashDiff?'⚠️':'🔓',
     label:'Смена открыта'+(hasCashDiff?' ⚠️ Расхождение нала':'')+(restoreMode?' (восстановление)':''),
@@ -4187,9 +4201,17 @@ function alertCard(a){
   }
   var diff = a.morningDiff!=null ? a.morningDiff : a.cashDiff;
   var title = a.type==='cash_diff' ? '⚠️ Расхождение при закрытии — '+(a.shopName||'') : '⚠️ Расхождение нала — '+(a.shopName||'');
-  var detail = a.type==='cash_diff'
-    ? (a.sellerName||'')+' · итог не сошёлся на '+(diff>0?'+':'')+fmt(diff)
-    : (a.sellerName||'')+' · ввёл: '+fmt(a.cashMorning)+' · вечер был: '+fmt(a.prevCashEve||0)+' · разница: '+(diff>0?'+':'')+fmt(diff);
+  var detail;
+  if(a.type==='cash_diff'){
+    detail = (a.sellerName||'')+' · итог не сошёлся на '+(diff>0?'+':'')+fmt(diff);
+  } else if(a.diffParts && a.diffParts.length){
+    detail = (a.sellerName||'')+' · '+a.diffParts.map(function(p){
+      var d = p.diff||0;
+      return p.label+': ввёл '+fmt(p.morning)+', вечер был '+fmt(p.prevEvening)+' ('+(d>0?'+':'')+fmt(d)+')';
+    }).join(' · ');
+  } else {
+    detail = (a.sellerName||'')+' · ввёл: '+fmt(a.cashMorning)+' · вечер был: '+fmt(a.prevCashEve||0)+' · разница: '+(diff>0?'+':'')+fmt(diff);
+  }
   return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #3e2e2e">'+
     '<div><div style="font-size:12px;font-weight:700;color:#f06060">'+title+'</div>'+
     '<div style="font-size:11px;color:#8888aa">'+detail+'</div>'+
@@ -7266,6 +7288,7 @@ function evaluateShiftIssues(sh){
   (function(){
     var allShiftsChk = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
     var candidatesChk = allShiftsChk.filter(function(s){
+      if(s.isRestoreShift || s.backfilled || s.source==='psj') return false; // не сравниваем с восстановленными/призрачными сменами
       return s.shopName===sh.shopName && s.id!==sh.id && s.openedAt && sh.openedAt && s.openedAt < sh.openedAt;
     });
     var prevChk = candidatesChk.sort(function(a,b){ return new Date(b.openedAt)-new Date(a.openedAt); })[0] || null;
@@ -7455,7 +7478,7 @@ function renderDateCheckCalendar(){
   var rows = '';
   dates.forEach(function(dt){
     shopsToCheck.forEach(function(shopName){
-      var shiftsForDay = allShifts.filter(function(s){ return s.shopName===shopName && s.date===dt && !s.isArchive; });
+      var shiftsForDay = allShifts.filter(function(s){ return s.shopName===shopName && s.date===dt; });
       var label, color, icon, clickId=null;
       if(!shiftsForDay.length){
         label='Нет смены'; color='#f06060'; icon='❌'; missingCount++;
