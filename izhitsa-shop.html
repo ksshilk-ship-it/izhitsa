@@ -3162,6 +3162,28 @@ function buildLiveShiftDoc(){
   };
 }
 var _shiftForceClosedRemotely = false;
+var _liveSyncFailCount = 0;
+var _liveSyncRetryTimer = null;
+function _showLiveSyncFailBanner(){
+  var el = document.getElementById('connStatusBanner');
+  if(!el || !navigator.onLine) return; // офлайн уже показывает свой баннер — не перекрываем его
+  el.style.display='flex';
+  el.style.background='#2e1a14';
+  el.style.borderColor='#f0a060';
+  el.innerHTML='<span style="color:#f0a060;font-size:12px">⚠️ Продажи сохраняются только на телефоне — не получается отправить в облако. Держите приложение открытым при хорошем сигнале.</span>';
+}
+function _hideLiveSyncFailBanner(){
+  if(_liveSyncFailCount===0) return;
+  _liveSyncFailCount = 0;
+  try{ if(typeof _renderConnStatus==='function') _renderConnStatus(); }catch(e){}
+}
+function _onLiveSyncFailed(){
+  _liveSyncFailCount++;
+  if(_liveSyncFailCount>=3) _showLiveSyncFailBanner();
+  if(_liveSyncRetryTimer) clearTimeout(_liveSyncRetryTimer);
+  var delay = Math.min(30000, 4000*_liveSyncFailCount); // нарастающая пауза, максимум 30 сек
+  _liveSyncRetryTimer = setTimeout(function(){ syncLiveShift(); }, delay);
+}
 function syncLiveShift(){
   if(!session || session.isPreview) return;
   if(_shiftForceClosedRemotely) return;
@@ -3187,9 +3209,13 @@ function syncLiveShift(){
         return;
       }
       if(snap.exists) mergeRemoteJournal(snap.data());
-      try{ docRef.set(buildLiveShiftDoc()); }catch(e){}
+      docRef.set(buildLiveShiftDoc()).then(function(){
+        _hideLiveSyncFailBanner();
+      }).catch(function(){ _onLiveSyncFailed(); });
     }).catch(function(){
-      try{ docRef.set(buildLiveShiftDoc()); }catch(e){}
+      docRef.set(buildLiveShiftDoc()).then(function(){
+        _hideLiveSyncFailBanner();
+      }).catch(function(){ _onLiveSyncFailed(); });
     });
   }, 600);
 }
@@ -7621,6 +7647,31 @@ function openShiftView(id){
   _svOpenAccs = {};
   _renderShiftView();
   openMo('editShiftMo');
+  // Локальный кэш мог застрять на старых данных (например, если синхронизация
+  // где-то оборвалась). При каждом открытии карточки — подтягиваем свежую
+  // версию именно этой смены из облака и обновляем экран, если там данные
+  // новее или полнее, чем в локальном кэше.
+  try{
+    db.collection('iz_shifts').doc(id).get({source:'server'}).then(function(snap){
+      if(!snap.exists) return;
+      if(currentEditShiftId !== id) return; // администратор уже открыл другую смену
+      var remote = snap.data(); remote.id = id;
+      var localJnlLen = (_currentShiftView.journal||[]).length;
+      var remoteJnlLen = (remote.journal||[]).length;
+      var localUpd = _currentShiftView.updatedAt || _currentShiftView.closedAt || '';
+      var remoteUpd = remote.updatedAt || remote.closedAt || '';
+      if(remoteJnlLen > localJnlLen || remoteUpd > localUpd){
+        _currentShiftView = remote;
+        _svOpenAccs = {};
+        _renderShiftView();
+        var allShifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+        var idx = allShifts.findIndex(function(s){ return (s.id||s._id)===id; });
+        if(idx>=0) allShifts[idx] = remote; else allShifts.push(remote);
+        localStorage.setItem(KEY.shifts, JSON.stringify(allShifts));
+        showToast('🔄 Данные смены обновлены из облака');
+      }
+    }).catch(function(){});
+  }catch(e){}
 }
 function _renderShiftView(){
   var sh = _currentShiftView; if(!sh) return;
