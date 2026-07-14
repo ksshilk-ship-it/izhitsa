@@ -2671,13 +2671,43 @@ function _checkPendingCloseBanner(){
 }
 setInterval(_checkPendingCloseBanner, 30000);
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _checkPendingCloseBanner(); });
+function _mergeRemoteShiftIntoLocal(shiftId, remoteData){
+  try{
+    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var idx = shifts.findIndex(function(s){ return (s.id||s._id)===shiftId; });
+    var clean = Object.assign({}, remoteData, {id:shiftId});
+    if(idx>=0) shifts[idx] = clean; else shifts.push(clean);
+    localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+  }catch(e){}
+}
 function _pushShiftWithRetry(shiftId, data){
   if(!shiftId || !data) return;
   try{
-    db.collection('iz_shifts').doc(shiftId).set(data).then(function(){
-      _clearShiftPendingFlag(shiftId);
+    // Перед отправкой ОБЯЗАТЕЛЬНО сверяемся с тем, что уже лежит на сервере.
+    // Раньше здесь был слепой перезаписывающий set() — если, например, админ
+    // уже добавил в эту смену пропущенную продажу ПОСЛЕ того, как это
+    // устройство сохранило свою (более старую) локальную копию, повторная
+    // фоновая отправка с этого устройства стирала админскую правку, и она
+    // раз за разом "пропадала". Теперь: если на сервере уже более полная
+    // версия (больше записей в журнале) — не затираем её, а забираем себе.
+    db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
+      if(snap.exists){
+        var remote = snap.data();
+        var remoteLen = (remote.journal||[]).length;
+        var localLen = (data.journal||[]).length;
+        if(remoteLen > localLen){
+          _mergeRemoteShiftIntoLocal(shiftId, remote);
+          _clearShiftPendingFlag(shiftId);
+          return;
+        }
+      }
+      db.collection('iz_shifts').doc(shiftId).set(data).then(function(){
+        _clearShiftPendingFlag(shiftId);
+      }).catch(function(err){
+        console.log('[_pushShiftWithRetry] не удалось, останется в очереди на повтор:', shiftId, err);
+      });
     }).catch(function(err){
-      console.log('[_pushShiftWithRetry] не удалось, останется в очереди на повтор:', shiftId, err);
+      console.log('[_pushShiftWithRetry] не удалось проверить сервер, попробуем позже:', shiftId, err);
     });
   }catch(e){}
 }
@@ -8922,10 +8952,48 @@ function svPersist(skipGoodsRecalc){
   var idx=shifts.findIndex(function(s){return (s.id||s._id)===_currentShiftView.id;}); if(idx<0) return;
   shifts[idx]=_currentShiftView;
   localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+  var shiftId = _currentShiftView.id;
+  var toSave = _currentShiftView;
+  // Раньше здесь была слепая перезапись всего документа смены (set() без
+  // проверки). Если в это же время где-то ещё (например, фоновая довозка с
+  // телефона продавца) шла своя запись в ту же смену — одна правка стирала
+  // другую. Теперь перед отправкой сверяемся с сервером и, если там есть
+  // записи журнала, которых нет у нас локально, объединяем их, а не
+  // выбрасываем.
   try{
-    db.collection('iz_shifts').doc(_currentShiftView.id).set(_currentShiftView).catch(function(err){
-      showToast('⚠️ Сохранено только локально! Ошибка облака: '+(err&&err.message||err));
-      console.log('[svPersist] ошибка сохранения в Firestore:', err);
+    db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
+      var dataToSend = toSave;
+      if(snap.exists){
+        var remote = snap.data();
+        var remoteJnl = remote.journal||[];
+        var localJnl = toSave.journal||[];
+        var localIds = {}; localJnl.forEach(function(e){ if(e.id) localIds[e.id]=true; });
+        var missingFromServer = remoteJnl.filter(function(e){ return e.id && !localIds[e.id]; });
+        if(missingFromServer.length){
+          var mergedJnl = localJnl.concat(missingFromServer);
+          mergedJnl.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
+          dataToSend = Object.assign({}, toSave, {journal: mergedJnl});
+          // Сохраняем объединённый вариант и локально, чтобы админ сразу увидел
+          // довезённые записи, которых не было в его копии.
+          var shifts2 = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+          var idx2 = shifts2.findIndex(function(s){ return (s.id||s._id)===shiftId; });
+          if(idx2>=0){ shifts2[idx2] = dataToSend; localStorage.setItem(KEY.shifts, JSON.stringify(shifts2)); }
+          if(_currentShiftView && _currentShiftView.id===shiftId) _currentShiftView = dataToSend;
+          showToast('ℹ️ В облаке нашлись записи, которых не было локально — объединила, ничего не потеряно');
+        }
+      }
+      db.collection('iz_shifts').doc(shiftId).set(dataToSend).catch(function(err){
+        showToast('⚠️ Сохранено только локально! Ошибка облака: '+(err&&err.message||err));
+        console.log('[svPersist] ошибка сохранения в Firestore:', err);
+      });
+    }).catch(function(err){
+      // Не удалось свериться с сервером (например, нет сети) — сохраняем
+      // как есть, чтобы не блокировать работу; при следующей успешной
+      // синхронизации расхождения будет видно через проверки несовпадений.
+      db.collection('iz_shifts').doc(shiftId).set(toSave).catch(function(err2){
+        showToast('⚠️ Сохранено только локально! Ошибка облака: '+(err2&&err2.message||err2));
+        console.log('[svPersist] ошибка сохранения в Firestore:', err2);
+      });
     });
   }catch(e){
     showToast('⚠️ Сохранено только локально! Ошибка: '+(e&&e.message||e));
