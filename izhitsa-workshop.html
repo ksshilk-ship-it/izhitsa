@@ -307,6 +307,9 @@ function applyUpdate() {
     <div class="card" style="border-color:var(--a4);margin-top:4px">
       <div class="ctitle">🪵 Внеплановая заготовка</div>
       <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Для работы без заготовщика — заготовка сразу берётся в работу</div>
+      <div class="fg"><label class="fl">Категория товара</label>
+        <div id="selfBlankGoodsTypeToggle"></div>
+      </div>
       <div class="fg"><label class="fl">Изделие</label>
         <div style="display:flex;gap:8px">
           <div style="flex:1;position:relative">
@@ -314,17 +317,17 @@ function applyUpdate() {
               oninput="acSuggest('selfBlankItem','acPickSelfBlankItem')" onclick="acFieldTap('selfBlankItem','acPickSelfBlankItem')">
             <div id="selfBlankItem_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
           </div>
-          <button onclick="openAddItemNameMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+          <button onclick="_selfBlankGoodsType==='dr'?openAddItemNameDrMo():openAddItemNameMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
         </div>
       </div>
-      <div class="fg"><label class="fl">Порода дерева</label>
+      <div class="fg"><label class="fl" id="selfBlankWoodLabel">Порода дерева</label>
         <div style="display:flex;gap:8px">
           <div style="flex:1;position:relative">
             <input class="fi" id="selfBlankWood" placeholder="Начните вводить..." autocomplete="off"
               oninput="acSuggest('selfBlankWood','acPickSelfBlankWood')" onclick="acFieldTap('selfBlankWood','acPickSelfBlankWood')">
             <div id="selfBlankWood_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
           </div>
-          <button onclick="openAddWoodMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+          <button onclick="_selfBlankGoodsType==='dr'?openAddFlavorMo():openAddWoodMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
         </div>
       </div>
       <div class="fg"><label class="fl">Размер</label>
@@ -351,7 +354,7 @@ function applyUpdate() {
   <div class="page" id="pg-blanks">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="stitle" style="margin:0">Заготовки</div>
-      <button class="btn green" style="width:auto;padding:8px 14px;font-size:11px" onclick="renderMasterSelect();renderItemNameSelect();renderWoodSelect();renderSizeSelect();openMo('addBlankMo')">＋ Выдать</button>
+      <button class="btn green" style="width:auto;padding:8px 14px;font-size:11px" onclick="renderMasterSelect();renderItemNameSelect();renderWoodSelect();renderSizeSelect();setBlankGoodsType('derevo');openMo('addBlankMo')">＋ Выдать</button>
     </div>
     <div class="card"><div class="ctitle">История выдач</div><div id="blanksList"></div></div>
   </div>
@@ -496,6 +499,9 @@ function applyUpdate() {
     <!-- Добавить изделие -->
     <div class="card" style="border-color:var(--a6)">
       <div class="ctitle">Добавить изделие</div>
+      <div class="fg"><label class="fl">Категория товара</label>
+        <div id="delivGoodsTypeToggle"></div>
+      </div>
       <div class="fg"><label class="fl">Изделие</label>
         <div style="display:flex;gap:8px">
           <div style="flex:1;position:relative">
@@ -503,17 +509,17 @@ function applyUpdate() {
               oninput="onDelivItemChange();acSuggest('delivItemSelect','acPickDelivItem')" onclick="acFieldTap('delivItemSelect','acPickDelivItem')">
             <div id="delivItemSelect_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
           </div>
-          <button onclick="openAddItemNameMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+          <button onclick="_delivGoodsType==='dr'?openAddItemNameDrMo():openAddItemNameMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
         </div>
       </div>
-      <div class="fg"><label class="fl">Порода дерева</label>
+      <div class="fg"><label class="fl" id="delivWoodLabel">Порода дерева</label>
         <div style="display:flex;gap:8px">
           <div style="flex:1;position:relative">
             <input class="fi" id="delivWoodSelect" placeholder="Начните вводить..." autocomplete="off"
               oninput="acSuggest('delivWoodSelect','acPickDelivWood')" onclick="acFieldTap('delivWoodSelect','acPickDelivWood')">
             <div id="delivWoodSelect_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
           </div>
-          <button onclick="openAddWoodMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+          <button onclick="_delivGoodsType==='dr'?openAddFlavorMo():openAddWoodMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
         </div>
       </div>
       <div class="fg"><label class="fl">Размер</label>
@@ -680,6 +686,8 @@ function applyUpdate() {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <button onclick="openAddItemNameMo()" class="btn sec" style="font-size:11px;padding:8px">📋 Наимен.</button>
         <button onclick="openAddWoodMo()" class="btn sec" style="font-size:11px;padding:8px">🌳 Породы</button>
+        <button onclick="openAddItemNameDrMo()" class="btn sec" style="font-size:11px;padding:8px">🛍 Наимен. ДР товара</button>
+        <button onclick="openAddFlavorMo()" class="btn sec" style="font-size:11px;padding:8px">🍬 Вкус / Состав</button>
         <button onclick="openAddSizeMo()" class="btn sec" style="font-size:11px;padding:8px">📐 Размеры</button>
         <button onclick="openOtCategoriesMo()" class="btn sec" style="font-size:11px;padding:8px">🛠 Виды работ</button>
         <button onclick="openAddShopMo()" class="btn sec" style="font-size:11px;padding:8px;grid-column:1/3">🏪 Точки продаж / отгрузки</button>
@@ -958,6 +966,8 @@ function applyUpdate() {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <button onclick="openAddItemNameMo()" class="btn sec" style="font-size:11px;padding:8px">📋 Наимен.</button>
           <button onclick="openAddWoodMo()" class="btn sec" style="font-size:11px;padding:8px">🌳 Породы</button>
+          <button onclick="openAddItemNameDrMo()" class="btn sec" style="font-size:11px;padding:8px">🛍 Наимен. ДР товара</button>
+          <button onclick="openAddFlavorMo()" class="btn sec" style="font-size:11px;padding:8px">🍬 Вкус / Состав</button>
           <button onclick="openAddSizeMo()" class="btn sec" style="font-size:11px;padding:8px">📐 Размеры</button>
           <button onclick="openOtCategoriesMo()" class="btn sec" style="font-size:11px;padding:8px">🛠 Виды работ</button>
           <button onclick="openAddShopMo()" class="btn sec" style="font-size:11px;padding:8px;grid-column:1/3">🏪 Точки продаж / отгрузки</button>
@@ -1284,6 +1294,10 @@ function applyUpdate() {
       <div style="font-size:10px;color:var(--t2);margin-top:4px">Нет нужного мастера? Нажмите ＋ чтобы добавить</div>
     </div>
     <div class="fg">
+      <label class="fl">Категория товара</label>
+      <div id="blankGoodsTypeToggle"></div>
+    </div>
+    <div class="fg">
       <label class="fl">Название изделия</label>
       <div style="display:flex;gap:8px">
         <div style="flex:1;position:relative">
@@ -1291,18 +1305,18 @@ function applyUpdate() {
             oninput="acSuggest('blankName','acPickBlankName')" onclick="acFieldTap('blankName','acPickBlankName')">
           <div id="blankName_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
         </div>
-        <button onclick="openAddItemNameMo()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
+        <button onclick="_blankGoodsType==='dr'?openAddItemNameDrMo():openAddItemNameMo()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
       </div>
     </div>
     <div class="fg">
-      <label class="fl">Порода дерева</label>
+      <label class="fl" id="blankWoodLabel">Порода дерева</label>
       <div style="display:flex;gap:8px">
         <div style="flex:1;position:relative">
           <input class="fi" id="blankWood" placeholder="Начните вводить..." autocomplete="off"
             oninput="acSuggest('blankWood','acPickBlankWood')" onclick="acFieldTap('blankWood','acPickBlankWood')">
           <div id="blankWood_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
         </div>
-        <button onclick="openAddWoodMo()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
+        <button onclick="_blankGoodsType==='dr'?openAddFlavorMo():openAddWoodMo()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
       </div>
     </div>
     <div class="fg"><label class="fl">Количество заготовок</label><input class="fi" type="number" id="blankQty" placeholder="1" inputmode="numeric" value="1"></div>
@@ -1367,6 +1381,40 @@ function applyUpdate() {
     <div id="woodList"></div>
     <button class="btn green" style="margin-top:14px" onclick="commitWoods()">💾 Сохранить</button>
     <button class="btn sec" style="margin-top:8px" onclick="cancelWoodsEdit()">Отмена</button>
+  </div>
+</div>
+
+<!-- ДОБАВИТЬ НАИМЕНОВАНИЕ ДР ТОВАРА -->
+<div class="mo" id="addItemNameDrMo">
+  <div class="md"><div class="mh"></div><div class="mt">🛍 Наименования ДР товара</div>
+    <div style="font-size:11px;color:var(--t2);margin-bottom:4px">Отдельный список для категории «ДР товар» (не дерево) — используется вместо обычных Наименований, когда в форме выбрана эта категория.</div>
+    <div class="fg"><label class="fl">Новое наименование</label>
+      <div style="display:flex;gap:8px">
+        <input class="fi" id="newItemNameDrInput" placeholder="Название ДР товара..." style="flex:1">
+        <button onclick="addPendingItemNameDr()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
+      </div>
+    </div>
+    <div class="ctitle" style="margin-top:4px">Список наименований</div>
+    <div id="itemNamesDrList"></div>
+    <button class="btn green" style="margin-top:14px" onclick="commitItemNamesDr()">💾 Сохранить</button>
+    <button class="btn sec" style="margin-top:8px" onclick="cancelItemNamesDrEdit()">Отмена</button>
+  </div>
+</div>
+
+<!-- ДОБАВИТЬ ВКУС / СОСТАВ -->
+<div class="mo" id="addFlavorMo">
+  <div class="md"><div class="mh"></div><div class="mt">🍬 Вкус / Состав</div>
+    <div style="font-size:11px;color:var(--t2);margin-bottom:4px">Аналог «Пород дерева» для категории «ДР товар».</div>
+    <div class="fg"><label class="fl">Новый вкус/состав</label>
+      <div style="display:flex;gap:8px">
+        <input class="fi" id="newFlavorInput" placeholder="Вкус или состав..." style="flex:1">
+        <button onclick="addPendingFlavor()" style="background:var(--a2);border:none;border-radius:10px;padding:0 14px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0">＋</button>
+      </div>
+    </div>
+    <div class="ctitle" style="margin-top:4px">Список</div>
+    <div id="flavorsList"></div>
+    <button class="btn green" style="margin-top:14px" onclick="commitFlavors()">💾 Сохранить</button>
+    <button class="btn sec" style="margin-top:8px" onclick="cancelFlavorsEdit()">Отмена</button>
   </div>
 </div>
 
@@ -1476,6 +1524,9 @@ function applyUpdate() {
 <div class="mo" id="addProductMo">
   <div class="md"><div class="mh"></div>
     <div class="mt" id="addProductMoTitle">📦 Новый товар</div>
+    <div class="fg"><label class="fl">Категория товара</label>
+      <div id="prodGoodsTypeToggle"></div>
+    </div>
     <div class="fg"><label class="fl">Название</label>
       <div style="display:flex;gap:8px">
         <div style="flex:1;position:relative">
@@ -1483,17 +1534,17 @@ function applyUpdate() {
             oninput="acSuggest('prodName','acPickProdName')" onclick="acFieldTap('prodName','acPickProdName')">
           <div id="prodName_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
         </div>
-        <button onclick="openAddItemNameMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">✏️</button>
+        <button onclick="_prodGoodsType==='dr'?openAddItemNameDrMo():openAddItemNameMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">✏️</button>
       </div>
     </div>
-    <div class="fg"><label class="fl">Порода дерева</label>
+    <div class="fg"><label class="fl" id="prodWoodLabel">Порода дерева</label>
       <div style="display:flex;gap:8px">
         <div style="flex:1;position:relative">
           <input class="fi" id="prodWood" placeholder="Начните вводить..." autocomplete="off"
             oninput="acSuggest('prodWood','acPickProdWood')" onclick="acFieldTap('prodWood','acPickProdWood')">
           <div id="prodWood_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
         </div>
-        <button onclick="openAddWoodMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">✏️</button>
+        <button onclick="_prodGoodsType==='dr'?openAddFlavorMo():openAddWoodMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">✏️</button>
       </div>
     </div>
     <div class="fg"><label class="fl">Размер</label>
@@ -1631,6 +1682,8 @@ var _wsSyncUnsubs = {};
 var WS_SYNC_SETTINGS = {
   'ws_employees':   {doc:'ws_employees', field:'data'},
   'ws_item_names':  {doc:'goods',        field:'data', shared:true},   // ↔ shop/admin "iz_goods"
+  'ws_item_names_dr': {doc:'goods_dr',   field:'data', shared:true},   // ↔ shop/admin "iz_goods_dr" (ДР товар)
+  'ws_flavors':     {doc:'dr_species',   field:'data', shared:true},   // ↔ shop/admin "iz_dr_species" (Вкус/Состав)
   'ws_woods':       {doc:'materials',    field:'data', shared:true},   // ↔ shop/admin "iz_materials"
   'ws_sizes':       {doc:'sizes',        field:'data', shared:true},   // ↔ shop/admin "iz_sizes"
   'ws_extra_cats':  {doc:'ws_extra_cats',field:'data'},
@@ -2809,6 +2862,22 @@ function renderDash(){
 }
 
 // ════════ СПРАВОЧНИК НАИМЕНОВАНИЙ ИЗДЕЛИЙ ════════
+// Записывает "надгробие" удалённого значения в общую базу (тот же формат, что использует
+// izhitsa-shop.html: iz_settings/refbook_deleted_<key>.deleted[]) — иначе Shop-приложение
+// при следующей синхронизации своего каталога товаров/истории продаж тихо возвращает
+// удалённое отсюда название обратно (именно так "воскресали" уже удалённые позиции).
+function writeSharedRefbookTombstone(refKey, deletedNames){
+  if(!deletedNames || !deletedNames.length) return;
+  const docId = 'refbook_deleted_'+refKey;
+  db.collection('iz_settings').doc(docId).get().then(function(snap){
+    const existing = (snap.exists && snap.data().deleted) || [];
+    const set = new Set(existing);
+    deletedNames.forEach(function(n){ set.add(String(n).toLowerCase().trim()); });
+    db.collection('iz_settings').doc(docId).set({deleted:[...set], updatedAt:new Date().toISOString()}, {merge:true})
+      .catch(function(e){ console.log('tombstone save err', refKey, e); });
+  }).catch(function(e){ console.log('tombstone read err', refKey, e); });
+}
+
 function getItemNames(){
   const arr = JSON.parse(localStorage.getItem('ws_item_names')||'["Столешница","Подоконник","Столешница барная","Полка","Дверь","Фасад","Панель","Тумба","Тумба прикроватная","Комод"]');
   return arr.slice().sort((a,b)=>a.localeCompare(b,'ru'));
@@ -2817,15 +2886,17 @@ function saveItemNames(arr){ wsSyncSave('ws_item_names', arr); }
 
 function renderItemNameSelect(){
   const names = getItemNames();
-  _acLists['blankName'] = names;
-  _acLists['delivItemSelect'] = names;
-  _acLists['selfBlankItem'] = names;
-  _acLists['msName'] = names;
-  _acLists['prodName'] = names;
+  const namesDr = getItemNamesDr();
+  _acLists['blankName'] = _blankGoodsType==='dr' ? namesDr : names;
+  _acLists['delivItemSelect'] = _delivGoodsType==='dr' ? namesDr : names;
+  _acLists['selfBlankItem'] = _selfBlankGoodsType==='dr' ? namesDr : names;
+  _acLists['msName'] = _msGoodsType==='dr' ? namesDr : names;
+  _acLists['prodName'] = _prodGoodsType==='dr' ? namesDr : names;
 }
 
 // Рабочая копия списка, пока окно открыто — ничего не уходит в базу, пока не нажата "Сохранить"
 let _pendingItemNames = null;
+let _pendingItemNamesDeleted = []; // накапливаем удалённые за сессию редактирования — уйдут как "надгробия" при сохранении
 
 function renderItemNamesList(){
   const names = _pendingItemNames || getItemNames();
@@ -2842,6 +2913,7 @@ async function openAddItemNameMo(){
   openMo('addItemNameMo');
   await wsFetchFreshRef('ws_item_names'); // подтянуть свежее из общей базы
   _pendingItemNames = getItemNames(); // рабочая копия для редактирования
+  _pendingItemNamesDeleted = [];
   renderItemNamesList();
 }
 
@@ -2859,6 +2931,7 @@ function addPendingItemName(){
   if(_pendingItemNames.includes(val)){ showToast('Такое название уже есть'); return; }
   _pendingItemNames.push(val);
   _pendingItemNames.sort((a,b)=>a.localeCompare(b,'ru'));
+  _pendingItemNamesDeleted = _pendingItemNamesDeleted.filter(n=>n.toLowerCase()!==val.toLowerCase());
   renderItemNamesList();
   document.getElementById('newItemNameInput').value='';
   // Если добавляли из формы ручной приёмки — подставляем значение в нужную строку сразу (не дожидаясь сохранения справочника)
@@ -2876,6 +2949,8 @@ function addPendingItemName(){
 
 function deleteItemName(i){
   if(!_pendingItemNames) _pendingItemNames = getItemNames();
+  const removed = _pendingItemNames[i];
+  if(removed) _pendingItemNamesDeleted.push(removed);
   _pendingItemNames.splice(i,1);
   renderItemNamesList();
 }
@@ -2884,6 +2959,8 @@ function deleteItemName(i){
 function commitItemNames(){
   if(!_pendingItemNames){ closeMo('addItemNameMo'); return; }
   saveItemNames(_pendingItemNames);
+  writeSharedRefbookTombstone('iz_goods', _pendingItemNamesDeleted);
+  _pendingItemNamesDeleted = [];
   renderItemNameSelect();
   const pn = document.getElementById('prodName');
   if(pn) pn.innerHTML = _pendingItemNames.map(n=>`<option>${n}</option>`).join('');
@@ -2907,14 +2984,16 @@ function saveWoods(arr){ wsSyncSave('ws_woods', arr); }
 
 function renderWoodSelect(){
   const woods = getWoods();
-  _acLists['blankWood'] = woods;
-  _acLists['delivWoodSelect'] = woods;
-  _acLists['selfBlankWood'] = woods;
-  _acLists['msWood'] = woods;
-  _acLists['prodWood'] = woods;
+  const flavors = getFlavors();
+  _acLists['blankWood'] = _blankGoodsType==='dr' ? flavors : woods;
+  _acLists['delivWoodSelect'] = _delivGoodsType==='dr' ? flavors : woods;
+  _acLists['selfBlankWood'] = _selfBlankGoodsType==='dr' ? flavors : woods;
+  _acLists['msWood'] = _msGoodsType==='dr' ? flavors : woods;
+  _acLists['prodWood'] = _prodGoodsType==='dr' ? flavors : woods;
 }
 
 let _pendingWoods = null;
+let _pendingWoodsDeleted = []; // накапливаем удалённые за сессию — уйдут как "надгробия" при сохранении
 
 function renderWoodList(){
   const woods = _pendingWoods || getWoods();
@@ -2931,6 +3010,7 @@ async function openAddWoodMo(){
   openMo('addWoodMo');
   await wsFetchFreshRef('ws_woods');
   _pendingWoods = getWoods();
+  _pendingWoodsDeleted = [];
   renderWoodList();
 }
 
@@ -2941,6 +3021,7 @@ function addPendingWood(){
   if(_pendingWoods.includes(val)){ showToast('Такая порода уже есть'); return; }
   _pendingWoods.push(val);
   _pendingWoods.sort((a,b)=>a.localeCompare(b,'ru'));
+  _pendingWoodsDeleted = _pendingWoodsDeleted.filter(n=>n.toLowerCase()!==val.toLowerCase());
   renderWoodList();
   document.getElementById('newWoodInput').value='';
   if(_maPendingWoodTarget){
@@ -2957,6 +3038,8 @@ function addPendingWood(){
 
 function deleteWood(i){
   if(!_pendingWoods) _pendingWoods = getWoods();
+  const removed = _pendingWoods[i];
+  if(removed) _pendingWoodsDeleted.push(removed);
   _pendingWoods.splice(i,1);
   renderWoodList();
 }
@@ -2964,6 +3047,8 @@ function deleteWood(i){
 function commitWoods(){
   if(!_pendingWoods){ closeMo('addWoodMo'); return; }
   saveWoods(_pendingWoods);
+  writeSharedRefbookTombstone('iz_materials', _pendingWoodsDeleted);
+  _pendingWoodsDeleted = [];
   renderWoodSelect();
   _pendingWoods = null;
   closeMo('addWoodMo');
@@ -2973,6 +3058,195 @@ function commitWoods(){
 function cancelWoodsEdit(){
   _pendingWoods = null;
   closeMo('addWoodMo');
+}
+
+// ════════ СПРАВОЧНИК: НАИМЕНОВАНИЯ ДР ТОВАРА ════════
+// Отдельный список от обычных "Наименований" — используется, когда выбрана категория "🛍 ДР товар"
+// вместо "🌳 Дерево". Общий с Shop-приложением список (iz_goods_dr).
+function getItemNamesDr(){
+  const arr = JSON.parse(localStorage.getItem('ws_item_names_dr')||'[]');
+  return arr.slice().sort((a,b)=>a.localeCompare(b,'ru'));
+}
+function saveItemNamesDr(arr){ wsSyncSave('ws_item_names_dr', arr); }
+
+let _pendingItemNamesDr = null;
+let _pendingItemNamesDrDeleted = [];
+
+function renderItemNamesDrList(){
+  const names = _pendingItemNamesDr || getItemNamesDr();
+  const c = document.getElementById('itemNamesDrList'); if(!c) return;
+  c.innerHTML = names.length ? names.map((n,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;font-size:13px">🛍 ${n}</div>
+      <button onclick="deleteItemNameDr(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>
+    </div>`).join('') : '<div style="text-align:center;padding:14px;color:var(--t2);font-size:12px">Список пуст</div>';
+}
+
+async function openAddItemNameDrMo(){
+  document.getElementById('newItemNameDrInput').value='';
+  openMo('addItemNameDrMo');
+  await wsFetchFreshRef('ws_item_names_dr');
+  _pendingItemNamesDr = getItemNamesDr();
+  _pendingItemNamesDrDeleted = [];
+  renderItemNamesDrList();
+}
+
+function addPendingItemNameDr(){
+  const val = document.getElementById('newItemNameDrInput').value.trim();
+  if(!val){ showToast('Введите название'); return; }
+  if(!_pendingItemNamesDr) _pendingItemNamesDr = getItemNamesDr();
+  if(_pendingItemNamesDr.includes(val)){ showToast('Такое название уже есть'); return; }
+  _pendingItemNamesDr.push(val);
+  _pendingItemNamesDr.sort((a,b)=>a.localeCompare(b,'ru'));
+  _pendingItemNamesDrDeleted = _pendingItemNamesDrDeleted.filter(n=>n.toLowerCase()!==val.toLowerCase());
+  renderItemNamesDrList();
+  document.getElementById('newItemNameDrInput').value='';
+  if(_maPendingNameTarget){
+    updateMaItem(_maPendingNameTarget, 'name', val);
+    renderMaItemsList();
+    _maPendingNameTarget = null;
+  }
+  if(_fiPendingNameTarget){
+    updateFiItem(_fiPendingNameTarget, 'name', val);
+    renderFiItemsList();
+    _fiPendingNameTarget = null;
+  }
+}
+
+function deleteItemNameDr(i){
+  if(!_pendingItemNamesDr) _pendingItemNamesDr = getItemNamesDr();
+  const removed = _pendingItemNamesDr[i];
+  if(removed) _pendingItemNamesDrDeleted.push(removed);
+  _pendingItemNamesDr.splice(i,1);
+  renderItemNamesDrList();
+}
+
+function commitItemNamesDr(){
+  if(!_pendingItemNamesDr){ closeMo('addItemNameDrMo'); return; }
+  saveItemNamesDr(_pendingItemNamesDr);
+  writeSharedRefbookTombstone('iz_goods_dr', _pendingItemNamesDrDeleted);
+  _pendingItemNamesDrDeleted = [];
+  renderGoodsTypeSelects();
+  _pendingItemNamesDr = null;
+  closeMo('addItemNameDrMo');
+  showSavedBanner('✅ Наименования ДР товара сохранены');
+}
+
+function cancelItemNamesDrEdit(){
+  _pendingItemNamesDr = null;
+  closeMo('addItemNameDrMo');
+}
+
+// ════════ СПРАВОЧНИК: ВКУС / СОСТАВ (для ДР товара) ════════
+// Аналог "Пород дерева", но для категории "ДР товар" — общий с Shop-приложением список (iz_dr_species).
+function getFlavors(){
+  const arr = JSON.parse(localStorage.getItem('ws_flavors')||'[]');
+  return arr.slice().sort((a,b)=>a.localeCompare(b,'ru'));
+}
+function saveFlavors(arr){ wsSyncSave('ws_flavors', arr); }
+
+let _pendingFlavors = null;
+let _pendingFlavorsDeleted = [];
+
+function renderFlavorsList(){
+  const flavors = _pendingFlavors || getFlavors();
+  const c = document.getElementById('flavorsList'); if(!c) return;
+  c.innerHTML = flavors.length ? flavors.map((f,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="flex:1;font-size:13px">🍬 ${f}</div>
+      <button onclick="deleteFlavor(${i})" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>
+    </div>`).join('') : '<div style="text-align:center;padding:14px;color:var(--t2);font-size:12px">Список пуст</div>';
+}
+
+async function openAddFlavorMo(){
+  document.getElementById('newFlavorInput').value='';
+  openMo('addFlavorMo');
+  await wsFetchFreshRef('ws_flavors');
+  _pendingFlavors = getFlavors();
+  _pendingFlavorsDeleted = [];
+  renderFlavorsList();
+}
+
+function addPendingFlavor(){
+  const val = document.getElementById('newFlavorInput').value.trim();
+  if(!val){ showToast('Введите вкус/состав'); return; }
+  if(!_pendingFlavors) _pendingFlavors = getFlavors();
+  if(_pendingFlavors.includes(val)){ showToast('Такое значение уже есть'); return; }
+  _pendingFlavors.push(val);
+  _pendingFlavors.sort((a,b)=>a.localeCompare(b,'ru'));
+  _pendingFlavorsDeleted = _pendingFlavorsDeleted.filter(n=>n.toLowerCase()!==val.toLowerCase());
+  renderFlavorsList();
+  document.getElementById('newFlavorInput').value='';
+  if(_maPendingWoodTarget){
+    updateMaItem(_maPendingWoodTarget, 'wood', val);
+    renderMaItemsList();
+    _maPendingWoodTarget = null;
+  }
+  if(_fiPendingWoodTarget){
+    updateFiItem(_fiPendingWoodTarget, 'wood', val);
+    renderFiItemsList();
+    _fiPendingWoodTarget = null;
+  }
+}
+
+function deleteFlavor(i){
+  if(!_pendingFlavors) _pendingFlavors = getFlavors();
+  const removed = _pendingFlavors[i];
+  if(removed) _pendingFlavorsDeleted.push(removed);
+  _pendingFlavors.splice(i,1);
+  renderFlavorsList();
+}
+
+function commitFlavors(){
+  if(!_pendingFlavors){ closeMo('addFlavorMo'); return; }
+  saveFlavors(_pendingFlavors);
+  writeSharedRefbookTombstone('iz_dr_species', _pendingFlavorsDeleted);
+  _pendingFlavorsDeleted = [];
+  renderGoodsTypeSelects();
+  _pendingFlavors = null;
+  closeMo('addFlavorMo');
+  showSavedBanner('✅ Вкус/Состав сохранены');
+}
+
+function cancelFlavorsEdit(){
+  _pendingFlavors = null;
+  closeMo('addFlavorMo');
+}
+
+// ════════ УНИВЕРСАЛЬНЫЙ ПЕРЕКЛЮЧАТЕЛЬ КАТЕГОРИИ "🌳 Дерево / 🛍 ДР товар" ════════
+// Используется во всех формах с парой полей Наименование+Порода: при "ДР товар"
+// вместо Наименований/Пород дерева подставляются Наименования ДР/Вкус-Состав.
+function applyGoodsTypeLists(nameId, woodId, goodsType){
+  _acLists[nameId] = goodsType==='dr' ? getItemNamesDr() : getItemNames();
+  _acLists[woodId] = goodsType==='dr' ? getFlavors() : getWoods();
+}
+function goodsTypeToggleHtml(onClickPrefix, current){
+  const isDr = current==='dr';
+  return `<div style="display:flex;gap:8px;margin-bottom:8px">
+    <div onclick="${onClickPrefix}('derevo')" style="flex:1;text-align:center;padding:9px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;background:${!isDr?'var(--accent)':'var(--s2)'};color:${!isDr?'#000':'var(--t2)'};border:1px solid ${!isDr?'var(--accent)':'var(--border)'}">🌳 Дерево</div>
+    <div onclick="${onClickPrefix}('dr')" style="flex:1;text-align:center;padding:9px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;background:${isDr?'var(--accent)':'var(--s2)'};color:${isDr?'#000':'var(--t2)'};border:1px solid ${isDr?'var(--accent)':'var(--border)'}">🛍 ДР товар</div>
+  </div>`;
+}
+// Подпись второго поля меняется: "Порода" ⇄ "Вкус / Состав"
+function goodsTypeWoodLabel(goodsType){ return goodsType==='dr' ? 'Вкус / Состав' : 'Порода'; }
+function goodsTypeWoodPlaceholder(goodsType){ return goodsType==='dr' ? 'Вкус/Состав...' : 'Начните вводить...'; }
+// Обновляет списки автодополнения во ВСЕХ формах, где используется категория "Дерево/ДР товар" —
+// вызывается после сохранения любого из четырёх связанных справочников (Наименования/ДР/Породы/Вкусы)
+function renderGoodsTypeSelects(){
+  renderItemNameSelect();
+  renderWoodSelect();
+  if(typeof renderMaItemsList==='function' && document.getElementById('maItemsList')) renderMaItemsList();
+  if(typeof renderFiItemsList==='function' && document.getElementById('fiItemsList')) renderFiItemsList();
+}
+
+// ── Выдать заготовки мастеру: категория товара ──
+let _blankGoodsType = 'derevo';
+function setBlankGoodsType(type){
+  _blankGoodsType = type;
+  applyGoodsTypeLists('blankName','blankWood', type);
+  const lbl = document.getElementById('blankWoodLabel'); if(lbl) lbl.textContent = goodsTypeWoodLabel(type);
+  const woodInput = document.getElementById('blankWood'); if(woodInput) woodInput.placeholder = goodsTypeWoodPlaceholder(type);
+  const t = document.getElementById('blankGoodsTypeToggle'); if(t) t.innerHTML = goodsTypeToggleHtml('setBlankGoodsType', type);
 }
 
 // ════════ РАЗМЕР: ДЛИНА × ШИРИНА × ВЫСОТА ════════
@@ -3219,7 +3493,7 @@ function addBlank(){
   if(!masterId||!itemName){showToast('Заполните мастера и изделие');return;}
   const master=getEmployees().find(e=>e.id===masterId);
   const blank={
-    id:uid(),itemName,wood,size,qty,comment,
+    id:uid(),itemName,wood,size,qty,comment,goodsType:_blankGoodsType,
     masterId,masterName:(master&&master.name)||'',
     createdById:session.id,createdByName:session.name,
     status:'new',createdAt:now()
@@ -6702,8 +6976,15 @@ function subscribeProducts(){
 // значения из Наименований/Пород/Размеров будут постоянно "воскресать" из старых товаров).
 function syncCatalogToLocalDicts(p){
   if(!p) return;
-  if(p.name){ const names=getItemNames(); if(!names.includes(p.name)){ names.push(p.name); saveItemNames(names); } }
-  if(p.wood){ const woods=getWoods(); if(!woods.includes(p.wood)){ woods.push(p.wood); saveWoods(woods); } }
+  const isDr = p.goodsType==='dr';
+  if(p.name){
+    const names = isDr ? getItemNamesDr() : getItemNames();
+    if(!names.includes(p.name)){ names.push(p.name); isDr ? saveItemNamesDr(names) : saveItemNames(names); }
+  }
+  if(p.wood){
+    const woods = isDr ? getFlavors() : getWoods();
+    if(!woods.includes(p.wood)){ woods.push(p.wood); isDr ? saveFlavors(woods) : saveWoods(woods); }
+  }
   if(p.size){ const sizes=getSizes(); if(!sizes.includes(p.size)){ sizes.push(p.size); saveSizes(sizes); } }
 }
 
@@ -6714,6 +6995,9 @@ function renderProductSelectsEverywhere(){
   renderSizeSelect();
   renderShopSelect();
   renderProductSelects(); // для мастера/кладовщика
+  // Переключатели категории на страницах, которые не открываются как модалка (всегда в DOM)
+  if(document.getElementById('delivGoodsTypeToggle') && typeof setDelivGoodsType==='function') setDelivGoodsType(_delivGoodsType);
+  if(document.getElementById('selfBlankGoodsTypeToggle') && typeof setSelfBlankGoodsType==='function') setSelfBlankGoodsType(_selfBlankGoodsType);
 }
 
 // Select товара из каталога (для мастера при выборе изделия)
@@ -6768,13 +7052,22 @@ function renderProductCatalogList(){
     </div>`).join('');
 }
 
+// ── Каталог товаров: категория товара ──
+let _prodGoodsType = 'derevo';
+function setProdGoodsType(type){
+  _prodGoodsType = type;
+  applyGoodsTypeLists('prodName','prodWood', type);
+  _acLists['prodSize'] = getSizes();
+  const lbl = document.getElementById('prodWoodLabel'); if(lbl) lbl.textContent = goodsTypeWoodLabel(type);
+  const woodInput = document.getElementById('prodWood'); if(woodInput) woodInput.placeholder = goodsTypeWoodPlaceholder(type);
+  const t = document.getElementById('prodGoodsTypeToggle'); if(t) t.innerHTML = goodsTypeToggleHtml('setProdGoodsType', type);
+}
+
 function openAddProductMo(){
   _editProductId = null;
   document.getElementById('addProductMoTitle').textContent = '📦 Новый товар';
   document.getElementById('addProductBtn').textContent = '💾 Добавить в каталог';
-  _acLists['prodName'] = getItemNames();
-  _acLists['prodWood'] = getWoods();
-  _acLists['prodSize'] = getSizes();
+  setProdGoodsType('derevo');
   ['prodName','prodWood','prodSize'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   ['prodPrice','prodZP','prodArtikul','prodDesc'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('prodStatus').value = 'active';
@@ -6786,9 +7079,7 @@ function editProduct(id){
   _editProductId = id;
   document.getElementById('addProductMoTitle').textContent = '✏️ Редактировать товар';
   document.getElementById('addProductBtn').textContent = '💾 Сохранить изменения';
-  _acLists['prodName'] = getItemNames();
-  _acLists['prodWood'] = getWoods();
-  _acLists['prodSize'] = getSizes();
+  setProdGoodsType(p.goodsType||'derevo');
   document.getElementById('prodName').value = p.name||'';
   document.getElementById('prodWood').value = p.wood||'';
   document.getElementById('prodSize').value = p.size||'';
@@ -6805,6 +7096,7 @@ function saveProduct(){
     name:     document.getElementById('prodName').value,
     wood:     document.getElementById('prodWood').value,
     size:     document.getElementById('prodSize').value,
+    goodsType: _prodGoodsType,
     price:    parseFloat(document.getElementById('prodPrice').value)||0,
     zp:       parseFloat(document.getElementById('prodZP').value)||0,
     artikul:  document.getElementById('prodArtikul').value.trim(),
@@ -6847,14 +7139,19 @@ function toggleAdminCatalog(){
 // СДАЧА НА СКЛАД (Мастер)
 // ════════════════════════════════
 let _deliveryList = [];
+let _delivGoodsType = 'derevo';
+function setDelivGoodsType(type){
+  _delivGoodsType = type;
+  applyGoodsTypeLists('delivItemSelect','delivWoodSelect', type);
+  const lbl = document.getElementById('delivWoodLabel'); if(lbl) lbl.textContent = goodsTypeWoodLabel(type);
+  const woodInput = document.getElementById('delivWoodSelect'); if(woodInput) woodInput.placeholder = goodsTypeWoodPlaceholder(type);
+  const t = document.getElementById('delivGoodsTypeToggle'); if(t) t.innerHTML = goodsTypeToggleHtml('setDelivGoodsType', type);
+}
 
 function renderDeliveryPage(){
-  const names = getItemNames();
-  const woods = getWoods();
   const sizes = getSizes();
+  setDelivGoodsType(_delivGoodsType);
 
-  _acLists['delivItemSelect'] = names;
-  _acLists['delivWoodSelect'] = woods;
   _acLists['delivSizeSelect'] = sizes;
 
   renderDeliveryList();
@@ -6880,7 +7177,7 @@ function addToDeliveryList(){
   const size  = (document.getElementById('delivSizeSelect')||{}).value;
   const qty   = parseInt((document.getElementById('delivQty')||{}).value)||1;
   if(!name){ showToast('Выберите изделие'); return; }
-  _deliveryList.push({id:uid(), name, wood, size, qty});
+  _deliveryList.push({id:uid(), name, wood, size, qty, goodsType:_delivGoodsType});
   renderDeliveryList();
   document.getElementById('delivQty').value = '1';
 }
@@ -6928,7 +7225,7 @@ async function submitDelivery(){
       batch.set(ref, {
         id: uid(),
         name: item.name, itemName: item.name,
-        wood: item.wood, size: item.size,
+        wood: item.wood, size: item.size, goodsType: item.goodsType||'derevo',
         price: item.price, zp: 0, zpPaid: false,
         masterId: session.id, masterName: session.name,
         status: 'delivered',
@@ -6971,6 +7268,16 @@ function renderDeliveryHistory(){
     </div>`).join('');
 }
 
+// ── Внеплановая заготовка: категория товара ──
+let _selfBlankGoodsType = 'derevo';
+function setSelfBlankGoodsType(type){
+  _selfBlankGoodsType = type;
+  applyGoodsTypeLists('selfBlankItem','selfBlankWood', type);
+  const lbl = document.getElementById('selfBlankWoodLabel'); if(lbl) lbl.textContent = goodsTypeWoodLabel(type);
+  const woodInput = document.getElementById('selfBlankWood'); if(woodInput) woodInput.placeholder = goodsTypeWoodPlaceholder(type);
+  const t = document.getElementById('selfBlankGoodsTypeToggle'); if(t) t.innerHTML = goodsTypeToggleHtml('setSelfBlankGoodsType', type);
+}
+
 function addSelfBlank(){
   const name    = (document.getElementById('selfBlankItem')||{}).value;
   const wood    = (document.getElementById('selfBlankWood')||{}).value;
@@ -6983,7 +7290,7 @@ function addSelfBlank(){
   // Создаём заготовку сразу со статусом accepted и изделие в работе
   const blankId = uid();
   const blank = {
-    id: blankId, itemName: name, wood, size, qty, comment,
+    id: blankId, itemName: name, wood, size, qty, comment, goodsType: _selfBlankGoodsType,
     masterId: session.id, masterName: session.name,
     createdById: session.id, createdByName: session.name+' (самостоятельно)',
     status: 'accepted', isSelfAdded: true,
@@ -6991,7 +7298,7 @@ function addSelfBlank(){
   };
   const item = {
     id: uid(), blankId,
-    name, itemName: name, wood, size, qty,
+    name, itemName: name, wood, size, qty, goodsType: _selfBlankGoodsType,
     masterId: session.id, masterName: session.name,
     masterRate: (emp&&emp.rate)||0,
     status: 'in_work', isSelfAdded: true,
@@ -7058,9 +7365,17 @@ function renderCatalogPage(){
 // ════════════════════════════════
 // РУЧНОЕ ДОБАВЛЕНИЕ НА СКЛАД
 // ════════════════════════════════
+let _msGoodsType = 'derevo';
+function setMsGoodsType(type){
+  _msGoodsType = type;
+  applyGoodsTypeLists('msName','msWood', type);
+  const lbl = document.getElementById('msWoodLabel'); if(lbl) lbl.textContent = goodsTypeWoodLabel(type);
+  const woodInput = document.getElementById('msWood'); if(woodInput) woodInput.placeholder = goodsTypeWoodPlaceholder(type);
+  const t = document.getElementById('msGoodsTypeToggle'); if(t) t.innerHTML = goodsTypeToggleHtml('setMsGoodsType', type);
+}
+
 function openManualStockMo(){
-  _acLists['msName'] = getItemNames();
-  _acLists['msWood'] = getWoods();
+  setMsGoodsType('derevo');
   _acLists['msSize'] = getSizes();
   ['msName','msWood','msSize','msQty','msPrice','msArtikul','msComment'].forEach(id=>{ const el=document.getElementById(id); if(el&&id==='msQty') el.value='1'; else if(el) el.value=''; });
   openMo('manualStockMo');
@@ -7091,7 +7406,7 @@ async function saveManualStock(){
   for(let i=0; i<qty; i++){
     const ref = db.collection('ws_items').doc();
     batch.set(ref, {
-      id: uid(), name, itemName: name, wood, size, price,
+      id: uid(), name, itemName: name, wood, size, price, goodsType: _msGoodsType,
       artikul: artikul||'', comment: comment||'',
       status: 'received',
       masterId: '', masterName: 'Ручной ввод',
@@ -8053,7 +8368,7 @@ function getNextArtikulNumber(){
 function addMaItemRow(){
   const names = getItemNames();
   const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
-  _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', artikulManual:false, name:'', wood:'', zp:0, price:0, qty:'', status:'accepted'});
+  _maItems.push({rid:uid(), artikul:'', artikulMode:'auto', artikulManual:false, name:'', wood:'', zp:0, price:0, qty:'', status:'accepted', goodsType:'derevo'});
   recalcMaAutoArtikuls();
   renderMaItemsList();
   // Фиксируем момент начала заполнения этой позиции — нужно для расчёта, сколько времени ушло на каждую позицию
@@ -8067,11 +8382,8 @@ function toggleMaItemCollapse(rid){
 }
 
 function renderMaItemsList(){
-  const names = getItemNames();
-  const woods = getWoods().slice().sort((a,b)=>a.localeCompare(b,'ru'));
   _maItems.forEach(it=>{
-    _acLists['maName_'+it.rid] = names;
-    _acLists['maWood_'+it.rid] = woods;
+    applyGoodsTypeLists('maName_'+it.rid, 'maWood_'+it.rid, it.goodsType||'derevo');
   });
   const c = document.getElementById('maItemsList'); if(!c) return;
   c.innerHTML = _maItems.map((it,i)=>{
@@ -8136,6 +8448,9 @@ function renderMaItemsList(){
           autocomplete="off">
         <div style="font-size:11px;color:var(--t2);margin-top:4px">Если сдано несколько одинаковых изделий по одной цене — укажите количество, остальные поля заполните один раз</div>
       </div>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">Категория товара</label>
+        ${goodsTypeToggleHtml(`setMaItemGoodsType('${it.rid}',`, it.goodsType||'derevo')}
+      </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label>
         <div style="display:flex;gap:8px">
           <div style="flex:1;position:relative">
@@ -8144,18 +8459,18 @@ function renderMaItemsList(){
               onclick="acFieldTap('maName_${it.rid}','acPickMaName','${it.rid}')">
             <div id="maName_${it.rid}_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
           </div>
-          <button onclick="_maPendingNameTarget='${it.rid}';openAddItemNameMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+          <button onclick="_maPendingNameTarget='${it.rid}';${it.goodsType==='dr'?'openAddItemNameDrMo':'openAddItemNameMo'}()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
         </div>
       </div>
-      <div class="fg" style="margin-bottom:8px"><label class="fl">Древесина</label>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">${goodsTypeWoodLabel(it.goodsType||'derevo')}</label>
         <div style="display:flex;gap:8px">
           <div style="flex:1;position:relative">
-            <input class="fi" id="maWood_${it.rid}" value="${(it.wood||'').replace(/"/g,'&quot;')}" placeholder="Начните вводить..." autocomplete="off"
+            <input class="fi" id="maWood_${it.rid}" value="${(it.wood||'').replace(/"/g,'&quot;')}" placeholder="${goodsTypeWoodPlaceholder(it.goodsType||'derevo')}" autocomplete="off"
               oninput="updateMaItem('${it.rid}','wood',this.value);acSuggest('maWood_${it.rid}','acPickMaWood','${it.rid}')"
               onclick="acFieldTap('maWood_${it.rid}','acPickMaWood','${it.rid}')">
             <div id="maWood_${it.rid}_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
           </div>
-          <button onclick="_maPendingWoodTarget='${it.rid}';openAddWoodMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+          <button onclick="_maPendingWoodTarget='${it.rid}';${it.goodsType==='dr'?'openAddFlavorMo':'openAddWoodMo'}()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -8224,6 +8539,12 @@ function finalizeMaAutoArtikul(){
   renderMaItemsList();
 }
 
+function setMaItemGoodsType(rid, type){
+  const it = _maItems.find(x=>x.rid===rid); if(!it) return;
+  it.goodsType = type;
+  renderMaItemsList();
+}
+
 function updateMaItem(rid, field, val){
   const it = _maItems.find(x=>x.rid===rid); if(!it) return;
   if(field==='qty'){
@@ -8281,6 +8602,7 @@ function copyMaItemRow(rid){
     artikulManual: false,
     name: original.name, // КОПИРУЕМ
     wood: original.wood, // КОПИРУЕМ
+    goodsType: original.goodsType || 'derevo', // КОПИРУЕМ
     zp: 0,
     price: 0,
     qty: '',
@@ -8311,7 +8633,7 @@ async function saveManualAccept(){
       let artikul = it.artikul||'';
       if(it.artikulMode==='auto' && !isNaN(baseArtikul)) artikul = String(baseArtikul+i);
       positions.push({
-        rid: qty>1 ? uid() : it.rid, artikul, name: it.name, wood: it.wood,
+        rid: qty>1 ? uid() : it.rid, artikul, name: it.name, wood: it.wood, goodsType: it.goodsType||'derevo',
         zp: it.zp||0, price: it.price||0, status: it.status || 'accepted' // сразу принято/брак, выбрано кладовщиком в момент внесения
       });
     }
@@ -8628,7 +8950,7 @@ function openMaDetail(accId){
           <input class="fi" style="font-size:12px;padding:8px" value="${p.name||''}" placeholder="Наименование" onchange="updateMaPosField('${acc.id}','${p.rid}','name',this.value)">
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
-          <input class="fi" style="font-size:12px;padding:8px" value="${p.wood||''}" placeholder="Порода" onchange="updateMaPosField('${acc.id}','${p.rid}','wood',this.value)">
+          <input class="fi" style="font-size:12px;padding:8px" value="${p.wood||''}" placeholder="${goodsTypeWoodLabel(p.goodsType||'derevo')}" onchange="updateMaPosField('${acc.id}','${p.rid}','wood',this.value)">
           <input class="fi" style="font-size:12px;padding:8px" type="number" value="${p.price||0}" placeholder="Цена" onchange="updateMaPosField('${acc.id}','${p.rid}','price',this.value)">
           <input class="fi" style="font-size:12px;padding:8px" type="number" value="${p.zp||0}" placeholder="ЗП" onchange="updateMaPosField('${acc.id}','${p.rid}','zp',this.value)">
         </div>
@@ -8842,14 +9164,18 @@ function openFiGroupForEdit(groupId){
 }
 
 function addFiItemRow(){
-  const names = getItemNames();
-  const woods = getWoods();
-  _fiItems.push({rid:uid(), artikul:'', artikulMode:'none', artikulManual:false, name:'', wood:'', price:0, qty:''});
+  _fiItems.push({rid:uid(), artikul:'', artikulMode:'none', artikulManual:false, name:'', wood:'', price:0, qty:'', goodsType:'derevo'});
   renderFiItemsList();
 }
 
 function removeFiItemRow(rid){
   _fiItems = _fiItems.filter(x=>x.rid!==rid);
+  renderFiItemsList();
+}
+
+function setFiItemGoodsType(rid, type){
+  const it = _fiItems.find(x=>x.rid===rid); if(!it) return;
+  it.goodsType = type;
   renderFiItemsList();
 }
 
@@ -8882,12 +9208,9 @@ function finalizeFiAutoArtikul(){
 }
 
 function renderFiItemsList(){
-  const names = getItemNames();
-  const woods = getWoods();
   const sizes = getSizes();
   _fiItems.forEach(it=>{
-    _acLists['fiName_'+it.rid] = names;
-    _acLists['fiWood_'+it.rid] = woods;
+    applyGoodsTypeLists('fiName_'+it.rid, 'fiWood_'+it.rid, it.goodsType||'derevo');
     _acLists['fiSize_'+it.rid] = sizes;
   });
   const c = document.getElementById('fiItemsList'); if(!c) return;
@@ -8911,6 +9234,9 @@ function renderFiItemsList(){
           style="${it.artikulMode==='none'?'opacity:0.6':''}">
         ${it.artikulMode==='auto'?`<div style="font-size:11px;color:var(--t2);margin-top:5px">Последний номер в системе: ${getMaxSystemArtikul()}. По умолчанию — следующий по порядку, можно ввести свой</div>`:''}
       </div>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">Категория товара</label>
+        ${goodsTypeToggleHtml(`setFiItemGoodsType('${it.rid}',`, it.goodsType||'derevo')}
+      </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label>
         <div style="display:flex;gap:8px">
           <div style="flex:1;position:relative">
@@ -8919,18 +9245,18 @@ function renderFiItemsList(){
               onclick="acFieldTap('fiName_${it.rid}','acPickFiName','${it.rid}')">
             <div id="fiName_${it.rid}_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
           </div>
-          <button onclick="_fiPendingNameTarget='${it.rid}';openAddItemNameMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+          <button onclick="_fiPendingNameTarget='${it.rid}';${it.goodsType==='dr'?'openAddItemNameDrMo':'openAddItemNameMo'}()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
         </div>
       </div>
-      <div class="fg" style="margin-bottom:8px"><label class="fl">Порода дерева</label>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">${goodsTypeWoodLabel(it.goodsType||'derevo')}</label>
         <div style="display:flex;gap:8px">
           <div style="flex:1;position:relative">
-            <input class="fi" id="fiWood_${it.rid}" value="${(it.wood||'').replace(/"/g,'&quot;')}" placeholder="Начните вводить..." autocomplete="off"
+            <input class="fi" id="fiWood_${it.rid}" value="${(it.wood||'').replace(/"/g,'&quot;')}" placeholder="${goodsTypeWoodPlaceholder(it.goodsType||'derevo')}" autocomplete="off"
               oninput="updateFiItem('${it.rid}','wood',this.value);acSuggest('fiWood_${it.rid}','acPickFiWood','${it.rid}')"
               onclick="acFieldTap('fiWood_${it.rid}','acPickFiWood','${it.rid}')">
             <div id="fiWood_${it.rid}_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
           </div>
-          <button onclick="_fiPendingWoodTarget='${it.rid}';openAddWoodMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+          <button onclick="_fiPendingWoodTarget='${it.rid}';${it.goodsType==='dr'?'openAddFlavorMo':'openAddWoodMo'}()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
         </div>
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Размер</label>
@@ -8983,7 +9309,7 @@ async function saveFirstInvGroup(){
   _fiDupChecked = new Set();
 
   const newPositions = _fiItems.map(it=>({
-    rid: it.rid, artikul: it.artikul||'', name: it.name, wood: it.wood,
+    rid: it.rid, artikul: it.artikul||'', name: it.name, wood: it.wood, goodsType: it.goodsType||'derevo',
     size: getSizeFromFields('fiSz_'+it.rid) || it.size||'',
     price: it.price||0, qty: it.qty||1
   }));
@@ -9602,6 +9928,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
 <!-- РУЧНОЕ ДОБАВЛЕНИЕ НА СКЛАД -->
 <div class="mo" id="manualStockMo">
   <div class="md"><div class="mh"></div><div class="mt">➕ Добавить товар на склад</div>
+    <div class="fg"><label class="fl">Категория товара</label>
+      <div id="msGoodsTypeToggle"></div>
+    </div>
     <div class="fg"><label class="fl">Название</label>
       <div style="display:flex;gap:8px">
         <div style="flex:1;position:relative">
@@ -9609,10 +9938,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
             oninput="acSuggest('msName','acPickMsName')" onclick="acFieldTap('msName','acPickMsName')">
           <div id="msName_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
         </div>
-        <button onclick="openAddItemNameMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer">＋</button>
+        <button onclick="_msGoodsType==='dr'?openAddItemNameDrMo():openAddItemNameMo()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer">＋</button>
       </div>
     </div>
-    <div class="fg"><label class="fl">Порода дерева</label>
+    <div class="fg"><label class="fl" id="msWoodLabel">Порода дерева</label>
       <div style="position:relative">
         <input class="fi" id="msWood" placeholder="Начните вводить..." autocomplete="off"
           oninput="acSuggest('msWood','acPickMsWood')" onclick="acFieldTap('msWood','acPickMsWood')">
