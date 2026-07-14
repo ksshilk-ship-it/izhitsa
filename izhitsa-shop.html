@@ -2113,10 +2113,12 @@ function syncListenCollection(lsKey, colName) {
   }, function(e){ console.log('col sync err', colName, e.code||e); });
 }
 function startSyncListeners() {
-  ['iz_goods_derevo','iz_goods_dr','iz_species','iz_dr_species'].forEach(function(key){
+  ['iz_goods_derevo','iz_goods_dr','iz_species','iz_dr_species','iz_goods','iz_materials'].forEach(function(key){
     var docName = key==='iz_goods_derevo'?'goods_derevo_deleted':
                   key==='iz_goods_dr'?'goods_dr_deleted':
-                  key==='iz_species'?'species_deleted':'dr_species_deleted';
+                  key==='iz_species'?'species_deleted':
+                  key==='iz_dr_species'?'dr_species_deleted':
+                  'refbook_deleted_'+key; // iz_goods → refbook_deleted_iz_goods, iz_materials → refbook_deleted_iz_materials
     db.collection('iz_settings').doc(docName).get().then(function(snap){
       if(snap.exists && snap.data().deleted){
         var tombKey = key+'_deleted';
@@ -4821,6 +4823,7 @@ function startAdminApp(){
   migrateOrphanItemNamesToGoods();
 }
 function migrateOrphanItemNamesToGoods(){
+  if(localStorage.getItem('iz_orphan_names_migrated_v1')) return; // разовая миграция, не гонять при каждом входе
   var items = getItemsBase();
   if(!items.length) return;
   var goods = getRefBook('iz_goods');
@@ -4837,6 +4840,7 @@ function migrateOrphanItemNamesToGoods(){
     }
   });
   if(added) saveRefBookShop('iz_goods', goods);
+  localStorage.setItem('iz_orphan_names_migrated_v1','1');
 }
 function renderAdminInvoices(){
   var c = document.getElementById('adminInvoicesList'); if(!c) return;

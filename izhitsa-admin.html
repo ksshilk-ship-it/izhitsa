@@ -3520,7 +3520,15 @@ function getRefBook(key) {
 }
 
 function saveRefBook(key, data) {
-  localStorage.setItem(key, JSON.stringify(data));
+  // Раньше эта функция сохраняла ТОЛЬКО локально на устройство и никогда не отправляла
+  // изменения в общую базу — из-за этого правки/удаления в Справочниках здесь не были
+  // видны ни в Shop-приложении, ни в Мастерской. Теперь используем тот же путь синхронизации,
+  // что и остальные общие справочники (ADMIN_SYNC_SETTINGS ↔ iz_settings/<doc>).
+  if(ADMIN_SYNC_SETTINGS[key]){
+    adminSyncSave(key, data);
+  } else {
+    localStorage.setItem(key, JSON.stringify(data));
+  }
 }
 
 function renderRefBooks() {
@@ -3659,11 +3667,27 @@ function addRefBookItem(bookId, key) {
 
 function deleteRefBookItem(bookId, idx, key) {
   if(!confirm('Удалить?')) return;
-  
+
   var items = getRefBook(key);
-  items.splice(idx, 1);
+  var deleted = items.splice(idx, 1);
   saveRefBook(key, items);
-  
+
+  // Общее "надгробие" (тот же формат, что использует izhitsa-shop.html), чтобы удалённое
+  // название не вернулось само собой из истории продаж/товаров при следующей синхронизации.
+  if(deleted.length){
+    var dname = ((deleted[0] && deleted[0].name) || deleted[0] || '').toString().toLowerCase().trim();
+    if(dname){
+      var tombKey = key + '_deleted';
+      var tombs = JSON.parse(localStorage.getItem(tombKey) || '[]');
+      if(tombs.indexOf(dname) < 0) tombs.push(dname);
+      localStorage.setItem(tombKey, JSON.stringify(tombs));
+      var tombDocKey = key==='iz_goods_derevo' ? 'goods_derevo_deleted' :
+                        key==='iz_goods_dr'    ? 'goods_dr_deleted' :
+                        'refbook_deleted_'+key; // iz_goods → refbook_deleted_iz_goods, iz_materials → refbook_deleted_iz_materials
+      try{ db.collection('iz_settings').doc(tombDocKey).set({deleted:tombs, updatedAt:new Date().toISOString()}, {merge:true}); }catch(e){}
+    }
+  }
+
   renderRefBookItems(bookId, key);
 }
 
