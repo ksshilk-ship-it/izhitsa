@@ -1867,17 +1867,28 @@ function acSuggest(inputId, onPick, extraArg){
 
   const rect = input.getBoundingClientRect();
   const maxH = val ? 200 : 260;
-  // Если снизу не хватает места (например, из-за открытой клавиатуры) — показываем список НАД полем
-  const spaceBelow = window.innerHeight - rect.bottom;
-  const showAbove = spaceBelow < maxH + 20 && rect.top > maxH + 20;
+  // На iOS при открытой клавиатуре window.innerHeight НЕ уменьшается (в отличие от Android),
+  // поэтому используем visualViewport — он корректно учитывает видимую область над клавиатурой.
+  const vv = window.visualViewport;
+  const viewTop = vv ? vv.offsetTop : 0;
+  const viewH = vv ? vv.height : window.innerHeight;
+  const spaceBelow = (viewTop+viewH) - rect.bottom;
+  const spaceAbove = rect.top - viewTop;
+  const showAbove = spaceBelow < maxH + 20 && spaceAbove > maxH + 20;
+  // ВАЖНО: используем position:absolute с координатами, пересчитанными в систему координат документа
+  // (rect + scrollY/scrollX), а НЕ position:fixed. На iOS position:fixed при открытой клавиатуре
+  // "отрывается" от реально видимой (visual viewport) области и элемент рендерится вне экрана —
+  // именно поэтому список подсказок не был виден при вводе с клавиатуры.
+  const docTop = rect.top + window.scrollY;
+  const docLeft = rect.left + window.scrollX;
   box.style.cssText = [
     'display:block',
-    'position:fixed',
-    showAbove ? 'top:'+(rect.top-2-Math.min(maxH,rect.top-20))+'px' : 'top:'+(rect.bottom+2)+'px',
-    'left:'+rect.left+'px',
+    'position:absolute',
+    showAbove ? 'top:'+(docTop-2-Math.min(maxH,spaceAbove-20))+'px' : 'top:'+(docTop+rect.height+2)+'px',
+    'left:'+docLeft+'px',
     'width:'+rect.width+'px',
     'z-index:99999',
-    'max-height:'+Math.min(maxH, showAbove ? rect.top-20 : spaceBelow-10)+'px',
+    'max-height:'+Math.min(maxH, showAbove ? spaceAbove-20 : spaceBelow-10)+'px',
     'overflow-y:auto',
     'background:var(--s1)',
     'border:1px solid var(--border)',
