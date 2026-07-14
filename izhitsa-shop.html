@@ -1135,6 +1135,21 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
     </div>
     </div>
     <div class="card" style="margin-bottom:8px;padding:0;overflow:hidden">
+      <div onclick="toggleSettingsSection('devices');renderDeviceVersions()" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:9px">
+          <span style="font-size:18px">📱</span>
+          <div><div style="font-size:13px;font-weight:700">Версии на устройствах</div>
+          <div id="ssCount_devices" style="font-size:11px;color:#8888aa">— устройств</div></div>
+        </div>
+        <div id="ssArr_devices" style="color:#c8f060">▶</div>
+      </div>
+      <div id="ssBody_devices" style="display:none;padding:0 14px 14px">
+        <div style="font-size:11px;color:#8888aa;margin-bottom:8px">Кто на какой версии приложения — обновляется при каждом входе устройства. Текущая версия: <b style="color:#c8f060" id="ssDevicesCurVer"></b></div>
+        <div id="deviceVersionsList">Загрузка...</div>
+        <button class="btn sec" style="margin-top:8px" onclick="renderDeviceVersions()">🔄 Обновить список</button>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:8px;padding:0;overflow:hidden">
       <div onclick="toggleSettingsSection('zp')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
         <div style="display:flex;align-items:center;gap:9px">
           <span style="font-size:18px">💰</span>
@@ -1867,11 +1882,66 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.14.1';
+var APP_BUILD_VERSION = '07.14.2';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
+  var _sdv = document.getElementById('ssDevicesCurVer'); if(_sdv) _sdv.textContent = 'v'+APP_BUILD_VERSION;
 }catch(e){}
+function _getDeviceId(){
+  try{
+    var id = localStorage.getItem('iz_device_id');
+    if(!id){ id = (typeof uid==='function'?uid():(Date.now()+'_'+Math.random().toString(36).slice(2))); localStorage.setItem('iz_device_id', id); }
+    return id;
+  }catch(e){ return 'unknown'; }
+}
+function _reportAppVersion(){
+  try{
+    if(typeof db==='undefined' || !db) return;
+    var devId = _getDeviceId();
+    var ua = navigator.userAgent||'';
+    var platform = /iPhone|iPad|iPod/.test(ua) ? 'iOS' : (/Android/.test(ua) ? 'Android' : 'Другое');
+    db.collection('iz_device_versions').doc(devId).set({
+      version: APP_BUILD_VERSION,
+      shopName: (session&&session.shopName) || '',
+      sellerName: (session&&(session.sellerName||session.name)) || '',
+      role: (session&&session.role) || '',
+      platform: platform,
+      lastSeen: new Date().toISOString()
+    }, {merge:true}).catch(function(){});
+  }catch(e){}
+}
+function renderDeviceVersions(){
+  var c = document.getElementById('deviceVersionsList'); if(!c) return;
+  c.innerHTML = 'Загрузка...';
+  try{
+    db.collection('iz_device_versions').orderBy('lastSeen','desc').limit(50).get({source:'server'}).then(function(snap){
+      if(snap.empty){ c.innerHTML='<div style="font-size:11px;color:#8888aa">Пока нет данных — устройства ещё не отчитались</div>'; updateSettingsSectionCount('devices', 0); return; }
+      var rows = [];
+      snap.forEach(function(doc){ rows.push(doc.data()); });
+      updateSettingsSectionCount('devices', rows.length);
+      c.innerHTML = rows.map(function(d){
+        var isCurrent = d.version===APP_BUILD_VERSION;
+        var seenAgo = '';
+        try{
+          var mins = Math.round((Date.now()-new Date(d.lastSeen).getTime())/60000);
+          seenAgo = mins<60 ? (mins+' мин назад') : (mins<1440 ? (Math.round(mins/60)+' ч назад') : (Math.round(mins/1440)+' дн назад'));
+        }catch(e){}
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #2e2e3e">'+
+          '<div>'+
+            '<div style="font-size:12px;font-weight:700">'+(d.sellerName||'—')+' · '+(d.shopName||'—')+'</div>'+
+            '<div style="font-size:10px;color:#8888aa">'+(d.platform||'')+' · был(а) в сети: '+seenAgo+'</div>'+
+          '</div>'+
+          '<div style="font-size:12px;font-weight:700;padding:3px 8px;border-radius:6px;background:'+(isCurrent?'#1e2a14':'#2e1a14')+';color:'+(isCurrent?'#c8f060':'#f0a060')+'">v'+(d.version||'?')+'</div>'+
+        '</div>';
+      }).join('');
+    }).catch(function(err){
+      c.innerHTML='<div style="font-size:11px;color:#f06060">Не удалось загрузить: '+(err&&err.message||err)+'</div>';
+    });
+  }catch(e){
+    c.innerHTML='<div style="font-size:11px;color:#f06060">Ошибка: '+(e&&e.message||e)+'</div>';
+  }
+}
 var loginRole = 'seller';
 function pick(role) {
   loginRole = role;
@@ -4135,6 +4205,7 @@ function migrateLegacyDrExpenses(){
   if(changed) saveJ();
 }
 function startApp(){
+  try{ _reportAppVersion(); }catch(e){}
   setTimeout(_updateDraftBadges, 500);
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
@@ -4825,6 +4896,7 @@ function _autoRepairStaffRoles(){
   }
 }
 function startAdminApp(){
+  try{ _reportAppVersion(); }catch(e){}
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
   document.getElementById('hdrShop').textContent='🔐 Администратор';
