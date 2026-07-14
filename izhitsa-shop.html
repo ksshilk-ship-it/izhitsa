@@ -5220,16 +5220,53 @@ function renderSellerStats(){
 }
 
 
+function _shiftSetSafe(shiftId, sh, successMsg, errPrefix){
+  // Общая безопасная запись смены в Firestore: сверяется с сервером и
+  // объединяет журнал (по id записи), а не слепо перезаписывает документ —
+  // иначе правка отсюда могла столкнуться с фоновой довозкой данных с
+  // телефона продавца и стереть друг друга.
+  try{
+    db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
+      var dataToSend = sh;
+      if(snap.exists){
+        var remote = snap.data();
+        var remoteJnl = remote.journal||[];
+        var localJnl = sh.journal||[];
+        var localIds = {}; localJnl.forEach(function(e){ if(e.id) localIds[e.id]=true; });
+        var missingFromServer = remoteJnl.filter(function(e){ return e.id && !localIds[e.id]; });
+        if(missingFromServer.length){
+          var mergedJnl = localJnl.concat(missingFromServer);
+          mergedJnl.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
+          dataToSend = Object.assign({}, sh, {journal: mergedJnl});
+          var shifts2 = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+          var idx2 = shifts2.findIndex(function(s){ return (s.id||s._id)===shiftId; });
+          if(idx2>=0){ shifts2[idx2] = dataToSend; localStorage.setItem(KEY.shifts, JSON.stringify(shifts2)); }
+          if(_currentShiftView && (_currentShiftView.id===shiftId||_currentShiftView._id===shiftId)) _currentShiftView = dataToSend;
+          showToast('ℹ️ В облаке нашлись записи, которых не было локально — объединила, ничего не потеряно');
+        }
+      }
+      db.collection('iz_shifts').doc(shiftId).set(dataToSend).then(function(){
+        if(successMsg) showToast(successMsg);
+      }).catch(function(err){
+        showToast((errPrefix||'❌ Ошибка: ')+(err&&err.message||err));
+      });
+    }).catch(function(){
+      db.collection('iz_shifts').doc(shiftId).set(sh).then(function(){
+        if(successMsg) showToast(successMsg);
+      }).catch(function(err2){
+        showToast((errPrefix||'❌ Ошибка: ')+(err2&&err2.message||err2));
+      });
+    });
+  }catch(e){
+    showToast((errPrefix||'❌ Ошибка: ')+(e&&e.message||e));
+  }
+}
 function svPushToFirestore(shiftId){
   if(!shiftId){showToast('Нет ID смены');return;}
   var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   var sh=shifts.find(function(s){return (s.id||s._id)===shiftId;});
   if(!sh){showToast('Смена не найдена');return;}
-  db.collection('iz_shifts').doc(shiftId).set(sh).then(function(){
-    showToast('✅ Смена отправлена в Firestore');
-  }).catch(function(e){
-    showToast('❌ Ошибка: '+e.message);
-  });
+  _shiftSetSafe(shiftId, sh, '✅ Смена отправлена в Firestore');
 }
 function svPromoteToNormal(shiftId){
   // Снимает флаги "восстановленной/задним числом" смены, чтобы она перестала
@@ -5245,11 +5282,10 @@ function svPromoteToNormal(shiftId){
   if(sh.sellerName){ sh.sellerName = sh.sellerName.replace(/^Восст\.\s*/,''); }
   shifts[idx]=sh;
   localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
-  try{db.collection('iz_shifts').doc(shiftId).set(sh);}catch(e){}
+  _shiftSetSafe(shiftId, sh, '✅ Смена теперь обычная — участвует в сверке');
   if(_currentShiftView&&(_currentShiftView.id===shiftId||_currentShiftView._id===shiftId)){
     _currentShiftView=sh;_renderShiftView();
   }
-  showToast('✅ Смена теперь обычная — участвует в сверке');
 }
 function svRepairExpenses(shiftId){
   // Пересчитывает zp/travel/inkass/otherExp из expenses[] для старых PSJ-смен
@@ -5271,11 +5307,10 @@ function svRepairExpenses(shiftId){
   sh.zp=zpR;sh.travel=travR;sh.inkass=inkR;sh.otherExp=othR;
   shifts[idx]=sh;
   localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
-  try{db.collection('iz_shifts').doc(shiftId).set(sh);}catch(e){}
+  _shiftSetSafe(shiftId, sh, '✅ Расходы пересчитаны');
   if(_currentShiftView&&(_currentShiftView.id===shiftId||_currentShiftView._id===shiftId)){
     _currentShiftView=sh;_renderShiftView();
   }
-  showToast('✅ Расходы пересчитаны');
 }
 
 function buildAdminTabs(){
@@ -6578,6 +6613,26 @@ function acceptInvoice(){
       return;
     }
   }
+  // Сначала сверяемся с облаком: не приняли ли эту накладную уже на другом
+  // устройстве буквально только что. Если проверку сделать ПОСЛЕ списания
+  // товара, при одновременной приёмке на двух устройствах товар задвоится
+  // в остатках и в кассе — поэтому проверяем ДО любых изменений.
+  var invRef = db.collection('iz_invoices').doc(currentInvId);
+  invRef.get({source:'server'}).then(function(snap){
+    if(snap.exists && snap.data().status==='accepted'){
+      showToast('⚠️ Эта накладная уже принята на другом устройстве ('+(snap.data().acceptedBy||'?')+'). Повторный приём отменён, чтобы не задвоить остатки.');
+      closeMo('invMo'); renderInvoices();
+      return;
+    }
+    _acceptInvoiceProceed(inv, who);
+  }).catch(function(){
+    // Не удалось проверить сервер (нет сети) — продолжаем как раньше, чтобы
+    // не блокировать работу продавца при плохом интернете.
+    _acceptInvoiceProceed(inv, who);
+  });
+}
+function _acceptInvoiceProceed(inv, who){
+  const invs=getInvoices();
   const inv2=JSON.parse(JSON.stringify(inv));
   const accepted=inv2.items.map((it,i)=>({...it,factPrice:(invCheckState[i]&&invCheckState[i].factPrice!=null?invCheckState[i].factPrice:it.price),ok:(invCheckState[i]&&invCheckState[i].ok)||false}));
   inv2.status='accepted'; inv2.acceptedBy=who; inv2.acceptedDate=new Date().toISOString().split('T')[0]; inv2.acceptedItems=accepted;
@@ -8877,7 +8932,7 @@ function svForceCloseShift(){
   shifts[idx].closedAt=new Date().toISOString();
   shifts[idx].forceClosedBy=(session&&session.sellerName)||'Администратор';
   localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
-  try{db.collection('iz_shifts').doc(id).set(shifts[idx]);}catch(e){}
+  _shiftSetSafe(id, shifts[idx]);
   _currentShiftView = shifts[idx];
   _renderShiftView();
   showToast('🔐 Смена принудительно закрыта. Если она снова появится как открытая, найдите устройство продавца и закройте смену там, либо выйдите из её сессии.');
@@ -13610,7 +13665,28 @@ function autoSaveToItemBase(name, num, price, category){
     items.push({name:name.trim(), num:num||'', price:price||0, category:category||''});
   }
   localStorage.setItem('iz_items', JSON.stringify(items));
-  try{ db.collection('iz_settings').doc('items').set({items:items}); }catch(e){}
+  // Каталог товаров общий на все устройства/магазины. Раньше весь список
+  // целиком перезаписывался в облаке при каждом сохранении — если два
+  // устройства почти одновременно добавляли РАЗНЫЕ новые товары, тот, кто
+  // сохранял вторым, стирал добавление первого. Теперь перед отправкой
+  // сверяемся с облаком и объединяем — добавляем к своему списку только те
+  // серверные товары, которых у нас ещё нет, вместо слепой перезаписи.
+  try{
+    db.collection('iz_settings').doc('items').get({source:'server'}).then(function(snap){
+      var remoteItems = (snap.exists && snap.data().items) ? snap.data().items : [];
+      var localKeys = {};
+      items.forEach(function(it){ localKeys[(it.num||'')+'|'+(it.name||'')] = true; });
+      var missingFromLocal = remoteItems.filter(function(it){
+        return !localKeys[(it.num||'')+'|'+(it.name||'')];
+      });
+      var merged = missingFromLocal.length ? items.concat(missingFromLocal) : items;
+      if(missingFromLocal.length){ localStorage.setItem('iz_items', JSON.stringify(merged)); }
+      db.collection('iz_settings').doc('items').set({items:merged}).catch(function(e){ console.log('[autoSaveToItemBase] ошибка сохранения каталога', e); });
+    }).catch(function(){
+      // Нет сети — сохраняем как есть, лучше так, чем не сохранить вообще.
+      try{ db.collection('iz_settings').doc('items').set({items:items}); }catch(e){}
+    });
+  }catch(e){}
   var goods = getRefBook('iz_goods');
   var existsInGoods = goods.some(function(g){ return ((g&&g.name)||g)===name.trim(); });
   var goodsTombs = JSON.parse(localStorage.getItem('iz_goods_deleted')||'[]');
