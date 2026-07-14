@@ -294,12 +294,13 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
       📝 Внести смену за прошлый день
     </button>
   </div>
+  <div style="text-align:center;font-size:10px;color:#4a4a5a;margin-top:14px" id="loginVersionTag"></div>
 </div>
 <div id="appScreen" style="display:none">
   <div class="hdr">
     <div class="hdr-logo">Ижица <span style="font-size:9px;color:#c8f060;font-weight:700;background:#1e2a14;padding:2px 6px;border-radius:5px;vertical-align:middle">МАГАЗИН</span></div>
     <div style="display:flex;align-items:center;gap:8px">
-      <div><div class="hdr-shop" id="hdrShop"></div><div class="hdr-seller" id="hdrSeller"></div></div>
+      <div><div class="hdr-shop" id="hdrShop"></div><div class="hdr-seller" id="hdrSeller"></div><div style="font-size:9px;color:#4a4a5a" id="hdrVersionTag"></div></div>
       <button class="exit-btn" id="syncBtn" onclick="manualSync()" ontouchstart="_syncPressStart()" ontouchend="_syncPressEnd()" title="Обновить данные (зажмите для полного обновления приложения)" style="padding:8px 10px">🔄</button>
       <button class="exit-btn" onclick="exitShift()">Выйти</button>
     </div>
@@ -1861,6 +1862,16 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 <div class="toast" id="toast"></div>
 <!-- Firebase SDK загружается асинхронно через _loadFirebaseSDK() -->
 <script>
+// Метка версии/сборки — обновляется вручную при каждой правке кода.
+// Нужна, чтобы можно было на глаз (по экрану входа или шапке) отличить,
+// какая версия файла реально загружена на конкретном устройстве — это
+// частая причина "почему на одном телефоне уже починилось, а на другом ещё
+// нет": устройство просто ещё не подтянуло новый файл.
+var APP_BUILD_VERSION = '07.14.1';
+try{
+  var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
+  var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
+}catch(e){}
 var loginRole = 'seller';
 function pick(role) {
   loginRole = role;
