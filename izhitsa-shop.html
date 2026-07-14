@@ -588,6 +588,8 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
       </div>
     </div>
     <div id="closeSummary"></div>
+    <div id="backupCheckStatus" style="margin-bottom:10px"></div>
+    <button class="btn" id="backupCheckBtn" style="margin-bottom:10px;background:#1a1a2e;border:2px solid #f0c060;color:#f0c060" onpointerdown="event.preventDefault();runBackupCheck()">🛟 Подстраховка</button>
     <button class="btn red" id="closeShiftBtn" style="margin-bottom:16px;opacity:.5" disabled onpointerdown="event.preventDefault();closeShift()">🔐 Закрыть смену</button>
   </div>
   <div class="page" id="pg-personal">
@@ -1882,12 +1884,137 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.14.2';
+var APP_BUILD_VERSION = '07.14.6';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
   var _sdv = document.getElementById('ssDevicesCurVer'); if(_sdv) _sdv.textContent = 'v'+APP_BUILD_VERSION;
 }catch(e){}
+function _markJournalEntryConfirmed(id){
+  try{
+    var confirmed = JSON.parse(localStorage.getItem('iz_confirmed_jnl_ids')||'[]');
+    if(confirmed.indexOf(id)===-1){ confirmed.push(id); localStorage.setItem('iz_confirmed_jnl_ids', JSON.stringify(confirmed.slice(-500))); }
+  }catch(e){}
+}
+function _isJournalEntryConfirmed(id){
+  try{ return JSON.parse(localStorage.getItem('iz_confirmed_jnl_ids')||'[]').indexOf(id)!==-1; }catch(e){ return false; }
+}
+function _recordJournalEntryIndependently(entry, shopName, kind){
+  // Та же подстраховка, что и для продаж (см. _recordSaleIndependently), но
+  // для расходов/приходов/списаний — общая коллекция iz_journal_backup,
+  // каждая запись сама по себе, под своим id, её нельзя случайно затереть.
+  try{
+    if(!entry || !entry.id) return;
+    var doc = Object.assign({}, entry, {
+      kind: kind,
+      shopName: shopName || (session&&session.shopName) || '',
+      sellerName: (session&&(session.sellerName||session.name)) || '',
+      shiftId: (session&&session.shiftId) || '',
+      date: (entry.ts||'').split('T')[0],
+      recordedAt: new Date().toISOString()
+    });
+    if(typeof db==='undefined' || !db){ _queuePendingJournalEntry(doc); return; }
+    db.collection('iz_journal_backup').doc(entry.id).set(doc).then(function(){
+      _clearPendingJournalEntry(entry.id);
+      _markJournalEntryConfirmed(entry.id);
+    }).catch(function(){
+      _queuePendingJournalEntry(doc);
+    });
+  }catch(e){
+    try{ _queuePendingJournalEntry(Object.assign({}, entry, {kind:kind, shopName:shopName||(session&&session.shopName)||''})); }catch(e2){}
+  }
+}
+function _queuePendingJournalEntry(doc){
+  try{
+    var pending = JSON.parse(localStorage.getItem('iz_pending_jnl')||'[]');
+    if(!pending.some(function(d){ return d.id===doc.id; })) pending.push(doc);
+    localStorage.setItem('iz_pending_jnl', JSON.stringify(pending));
+  }catch(e){}
+}
+function _clearPendingJournalEntry(id){
+  try{
+    var pending = JSON.parse(localStorage.getItem('iz_pending_jnl')||'[]');
+    var filtered = pending.filter(function(d){ return d.id!==id; });
+    if(filtered.length!==pending.length) localStorage.setItem('iz_pending_jnl', JSON.stringify(filtered));
+  }catch(e){}
+}
+function _retryPendingJournalEntries(){
+  try{
+    if(typeof db==='undefined' || !db) return;
+    var pending = JSON.parse(localStorage.getItem('iz_pending_jnl')||'[]');
+    if(!pending.length) return;
+    pending.forEach(function(doc){
+      db.collection('iz_journal_backup').doc(doc.id).set(doc).then(function(){
+        _clearPendingJournalEntry(doc.id);
+        _markJournalEntryConfirmed(doc.id);
+      }).catch(function(){});
+    });
+  }catch(e){}
+}
+function _markSaleConfirmed(id){
+  try{
+    var confirmed = JSON.parse(localStorage.getItem('iz_confirmed_sale_ids')||'[]');
+    if(confirmed.indexOf(id)===-1){ confirmed.push(id); localStorage.setItem('iz_confirmed_sale_ids', JSON.stringify(confirmed.slice(-500))); }
+  }catch(e){}
+}
+function _isSaleConfirmed(id){
+  try{ return JSON.parse(localStorage.getItem('iz_confirmed_sale_ids')||'[]').indexOf(id)!==-1; }catch(e){ return false; }
+}
+function _recordSaleIndependently(entry, shopName){
+  // КАЖДАЯ продажа сохраняется ещё и как САМОСТОЯТЕЛЬНЫЙ документ в
+  // отдельной коллекции iz_sales — независимо от общего документа смены.
+  // Смысл: документ смены целиком иногда может перезаписаться/потеряться
+  // (гонки между устройствами, плохая связь и т.п.) — а эта запись живёт
+  // сама по себе под своим уникальным id, и её никто и ничто не может
+  // случайно стереть при сохранении чего-то другого. Это и есть подстраховка,
+  // из которой при необходимости можно восстановить пропавшую продажу.
+  try{
+    if(!entry || !entry.id) return;
+    var saleDoc = Object.assign({}, entry, {
+      shopName: shopName || (session&&session.shopName) || '',
+      sellerName: (session&&(session.sellerName||session.name)) || '',
+      shiftId: (session&&session.shiftId) || '',
+      date: (entry.ts||'').split('T')[0],
+      recordedAt: new Date().toISOString()
+    });
+    if(typeof db==='undefined' || !db){ _queuePendingSale(saleDoc); return; }
+    db.collection('iz_sales').doc(entry.id).set(saleDoc).then(function(){
+      _clearPendingSale(entry.id);
+      _markSaleConfirmed(entry.id);
+    }).catch(function(){
+      _queuePendingSale(saleDoc);
+    });
+  }catch(e){
+    try{ _queuePendingSale(Object.assign({}, entry, {shopName: shopName||(session&&session.shopName)||''})); }catch(e2){}
+  }
+}
+function _queuePendingSale(saleDoc){
+  try{
+    var pending = JSON.parse(localStorage.getItem('iz_pending_sales')||'[]');
+    if(!pending.some(function(s){ return s.id===saleDoc.id; })) pending.push(saleDoc);
+    localStorage.setItem('iz_pending_sales', JSON.stringify(pending));
+  }catch(e){}
+}
+function _clearPendingSale(id){
+  try{
+    var pending = JSON.parse(localStorage.getItem('iz_pending_sales')||'[]');
+    var filtered = pending.filter(function(s){ return s.id!==id; });
+    if(filtered.length!==pending.length) localStorage.setItem('iz_pending_sales', JSON.stringify(filtered));
+  }catch(e){}
+}
+function _retryPendingSales(){
+  try{
+    if(typeof db==='undefined' || !db) return;
+    var pending = JSON.parse(localStorage.getItem('iz_pending_sales')||'[]');
+    if(!pending.length) return;
+    pending.forEach(function(saleDoc){
+      db.collection('iz_sales').doc(saleDoc.id).set(saleDoc).then(function(){
+        _clearPendingSale(saleDoc.id);
+        _markSaleConfirmed(saleDoc.id);
+      }).catch(function(){});
+    });
+  }catch(e){}
+}
 function _getDeviceId(){
   try{
     var id = localStorage.getItem('iz_device_id');
@@ -2751,7 +2878,7 @@ function _checkPendingCloseBanner(){
   }catch(e){}
 }
 setInterval(_checkPendingCloseBanner, 30000);
-document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _checkPendingCloseBanner(); });
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ _checkPendingCloseBanner(); _retryPendingSales(); _retryPendingJournalEntries(); } });
 function _mergeRemoteShiftIntoLocal(shiftId, remoteData){
   try{
     var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
@@ -2808,9 +2935,13 @@ function _retryPendingShiftSyncs(){
 // Фоновая проверка неотправленных смен: сразу при загрузке, затем каждые 45 секунд,
 // плюс сразу при восстановлении интернет-соединения.
 _retryPendingShiftSyncs();
+_retryPendingSales();
+_retryPendingJournalEntries();
 _checkPendingCloseBanner();
 setInterval(_retryPendingShiftSyncs, 45000);
-window.addEventListener('online', function(){ setTimeout(_retryPendingShiftSyncs, 1500); });
+setInterval(_retryPendingSales, 45000);
+setInterval(_retryPendingJournalEntries, 45000);
+window.addEventListener('online', function(){ setTimeout(_retryPendingShiftSyncs, 1500); setTimeout(_retryPendingSales, 1500); setTimeout(_retryPendingJournalEntries, 1500); });
 function openMo(id){
   var el = document.getElementById(id);
   if(!el) return;
@@ -3811,6 +3942,7 @@ function checkMorningValid(){
   else { btn.disabled=true; btn.style.opacity='.4'; }
 }
 function confirmMorning(){
+  _backupCheckPassed = false;
   function filledNonNeg(id){
     var el = document.getElementById(id);
     var v = el ? el.value : '';
@@ -5344,6 +5476,45 @@ function _shiftSetSafe(shiftId, sh, successMsg, errPrefix){
     showToast((errPrefix||'❌ Ошибка: ')+(e&&e.message||e));
   }
 }
+function svRecoverSalesFromBackup(shiftId){
+  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var idx=shifts.findIndex(function(s){return (s.id||s._id)===shiftId;});
+  if(idx<0){showToast('Смена не найдена');return;}
+  var sh=shifts[idx];
+  showToast('🔍 Сверяю с подстраховкой...');
+  Promise.all([
+    db.collection('iz_sales').where('shopName','==',sh.shopName).where('date','==',sh.date).get({source:'server'}),
+    db.collection('iz_journal_backup').where('shopName','==',sh.shopName).where('date','==',sh.date).get({source:'server'})
+  ]).then(function(results){
+      var backupAll = [];
+      results[0].forEach(function(doc){ backupAll.push(doc.data()); });
+      results[1].forEach(function(doc){ backupAll.push(doc.data()); });
+      if(!backupAll.length){ showToast('В подстраховке пока нет записей за этот день'); return; }
+      var jnl = sh.journal||[];
+      var jnlIds = {}; jnl.forEach(function(e){ if(e.id) jnlIds[e.id]=true; });
+      var missing = backupAll.filter(function(s){ return s.id && !jnlIds[s.id]; });
+      if(!missing.length){ showToast('✅ Всё сходится — в подстраховке нет ничего лишнего'); return; }
+      var total = missing.reduce(function(s,m){ return s+(m.amount||0); },0);
+      var kindLabels = {sale:'продаж', expense:'расходов', receive:'приходов', writeoff:'списаний'};
+      var byKind = {}; missing.forEach(function(m){ byKind[m.type]=(byKind[m.type]||0)+1; });
+      var breakdown = Object.keys(byKind).map(function(k){ return byKind[k]+' '+(kindLabels[k]||k); }).join(', ');
+      if(!confirm('Найдено записей: '+breakdown+' (на сумму '+fmt(total)+'), которых нет в этой смене, но они сохранены в подстраховке. Добавить их в смену?')) return;
+      var merged = jnl.concat(missing.map(function(m){
+        var clean = Object.assign({}, m);
+        delete clean.shopName; delete clean.date; delete clean.shiftId; delete clean.recordedAt; delete clean.sellerName; delete clean.kind;
+        return clean;
+      }));
+      merged.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
+      sh.journal = merged;
+      shifts[idx]=sh;
+      localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+      _shiftSetSafe(shiftId, sh, '✅ Восстановлено записей: '+missing.length+' из подстраховки');
+      if(_currentShiftView&&(_currentShiftView.id===shiftId||_currentShiftView._id===shiftId)){
+        _currentShiftView=sh;_renderShiftView();
+      }
+    })
+    .catch(function(err){ showToast('❌ Не удалось сверить: '+(err&&err.message||err)); });
+}
 function svPushToFirestore(shiftId){
   if(!shiftId){showToast('Нет ID смены');return;}
   var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
@@ -5863,6 +6034,7 @@ function saveSale(){
     jnlArch2.push(newArchEntry);
     jnlArch2.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
     _currentShiftView.journal = jnlArch2;
+    _recordSaleIndependently(newArchEntry, _currentShiftView.shopName);
     try{ stockApplySale(_currentShiftView.shopName, saleItems); }catch(e){}
     try{ logAction('JOURNAL_ENTRY_ADD_MISSED', {entryType:'sale', shopName:_currentShiftView.shopName, snapshot:newArchEntry}); }catch(e){}
     svPersist();
@@ -5897,7 +6069,10 @@ function saveSale(){
     showToast('✅ Продажа обновлена');
     return;
   }
-  journal.push(Object.assign({id:uid(),type:'sale'}, newEntryData));
+  var _liveSaleEntry = Object.assign({id:uid(),type:'sale'}, newEntryData);
+  journal.push(_liveSaleEntry);
+  _recordSaleIndependently(_liveSaleEntry, session&&session.shopName);
+  _backupCheckPassed = false;
   try{ stockApplySale(session&&session.shopName, saleItems); }catch(e){}
   var shopType = session.shopType || getShopType(session.shopName);
   if(shopType !== 'shop'){
@@ -6099,11 +6274,14 @@ function saveWriteoff(){
     var sub = g.items.length===1
       ? ((g.items[0].num?'№'+g.items[0].num+' ':'')+g.items[0].name+(g.items[0].species?' · '+g.items[0].species:'')+(g.items[0].qty&&g.items[0].qty!==1?' × '+g.items[0].qty:'')+' · '+g.reason)
       : (g.items.length+' позиций ('+totalQty+' шт.): '+namesPreview+' · '+g.reason);
-    journal.push({id:uid(),type:'writeoff',ts:ts,icon:'🗑️',label:'Списание',
+    var entry = {id:uid(),type:'writeoff',ts:ts,icon:'🗑️',label:'Списание',
       sub:sub,
       goodsType: g.isDr?'dr':'derevo', items: g.items,
       amount:total,amtCls:'exp',amtSign:'−',cashEffect:0,cardEffect:0,staffEffect:0,
-      goodsEffect: g.isDr?0:-total, goodsDrEffect: g.isDr?-total:0});
+      goodsEffect: g.isDr?0:-total, goodsDrEffect: g.isDr?-total:0};
+    journal.push(entry);
+    _recordJournalEntryIndependently(entry, session&&session.shopName, 'writeoff');
+    _backupCheckPassed = false;
     g.items.forEach(function(it){ logWriteoff(it.reason, it.amt, session.shopName); });
   });
   var total = woItems.reduce(function(s,it){ return s+(it.amt||0); },0);
@@ -6152,6 +6330,8 @@ function saveReceive(){
     goodsType: _rcvGoodsType,
     article:article};
   journal.push(entry);
+  _recordJournalEntryIndependently(entry, session&&session.shopName, 'receive');
+  _backupCheckPassed = false;
   if(article){ try{ stockApplyReceive(session&&session.shopName,[{num:article,name:name,price:price,qty:rcvQtyNum,goodsType:_rcvGoodsType}],gv('rcvDate')||new Date().toISOString().split('T')[0]); }catch(e){} }
   saveJ(); ['rcvArticle','rcvName','rcvQty','rcvPrice','rcvFrom'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   logReceive(gv('rcvFrom'), price, session.shopName);
@@ -6721,8 +6901,11 @@ function _acceptInvoiceProceed(inv, who){
   inv2.status='accepted'; inv2.acceptedBy=who; inv2.acceptedDate=new Date().toISOString().split('T')[0]; inv2.acceptedItems=accepted;
   const idx=invs.findIndex(i=>(i.id||i._id)===currentInvId); invs[idx]=inv2; saveInvoices(invs);
   const goodsTotal=accepted.reduce((s,a)=>s+a.factPrice,0);
-  journal.push({id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',label:'Приёмка '+inv2.num,
-    sub:inv2.items.length+' изд. · принял: '+who,amount:goodsTotal,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:goodsTotal});
+  var _rcvEntry = {id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',label:'Приёмка '+inv2.num,
+    sub:inv2.items.length+' изд. · принял: '+who,amount:goodsTotal,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:goodsTotal};
+  journal.push(_rcvEntry);
+  _recordJournalEntryIndependently(_rcvEntry, session&&session.shopName, 'receive');
+  _backupCheckPassed = false;
   try{ stockApplyReceive(session&&session.shopName, accepted, inv2.acceptedDate, inv2.goodsType); }catch(e){}
   saveJ(); try{ db.collection('iz_invoices').doc(currentInvId).set(inv2); }catch(e){}
   clearInvProgress(currentInvId);
@@ -6781,7 +6964,7 @@ function saveExpense(){
   var isZpOrTravel = (expType==='zp'||expType==='travel');
   var payMethod = isZpOrTravel ? _expPayMethod : 'cash';
   var payMethodLabels = {cash:'💵 наличными',transfer:'🏦 переводом',other:'📝 иначе'};
-  journal.push({
+  var _expEntry = {
     id:uid(), type:'expense', ts:_workingNowISO(),
     icon:'💸', label:'Расход: '+label,
     sub:fmt(amt)+(isZpOrTravel?' · '+payMethodLabels[payMethod]:'')+(supplier?' · '+supplier:'')+(comment?' · '+comment:''),
@@ -6790,7 +6973,10 @@ function saveExpense(){
     cashEffect: (isDr || (isZpOrTravel && payMethod!=='cash'))?0:-amt,
     cashDrEffect: (isDr && !(isZpOrTravel && payMethod!=='cash'))?-amt:0,
     cardEffect:0, staffEffect:0, goodsEffect:0
-  });
+  };
+  journal.push(_expEntry);
+  _recordJournalEntryIndependently(_expEntry, session&&session.shopName, 'expense');
+  _backupCheckPassed = false;
   saveJ();
   logExpense(expType, amt, comment);
   document.getElementById('expAmt').value='';
@@ -7150,13 +7336,134 @@ function validateClose(){
   if(hasDiff || hasDiffDr || hasDiffStaff){
     if(crb) crb.style.display = 'block';
     if(btn){ btn.disabled=true; btn.style.opacity='.5'; }
+  } else if(!_backupCheckPassed){
+    if(crb) crb.style.display = 'none';
+    if(btn){ btn.disabled=true; btn.style.opacity='.5'; }
   } else {
     if(crb) crb.style.display = 'none';
     if(btn){ btn.disabled=false; btn.style.opacity='1'; }
   }
   renderClose();
 }
+var _backupCheckPassed = false;
+function _backupEntryDesc(e){
+  var icons = {sale:'💰', expense:'💸', receive:'📥', writeoff:'🗑️'};
+  var kindNames = {sale:'Продажа', expense:'Расход', receive:'Приход', writeoff:'Списание'};
+  return {
+    icon: e.icon || icons[e.type] || '📄',
+    title: e.label || kindNames[e.type] || 'Запись',
+    sub: e.sub || e.comment || '',
+    amount: e.amount!=null ? e.amount : (e.totalPaid!=null ? e.totalPaid : 0)
+  };
+}
+function _renderBackupStatusList(){
+  var statusEl = document.getElementById('backupCheckStatus');
+  if(!statusEl) return;
+  var sales = (journal||[]).filter(function(e){ return e.type==='sale'; });
+  var others = (journal||[]).filter(function(e){ return e.type==='expense'||e.type==='receive'||e.type==='writeoff'; });
+  var totalCount = sales.length + others.length;
+  var unconfirmed = sales.filter(function(e){ return !_isSaleConfirmed(e.id); })
+    .concat(others.filter(function(e){ return !_isJournalEntryConfirmed(e.id); }));
+  if(!unconfirmed.length){
+    _backupCheckPassed = true;
+    statusEl.innerHTML = totalCount
+      ? '<div style="background:#1a2e1e;border:1px solid #60f090;border-radius:9px;padding:10px;font-size:12px;color:#60f090;text-align:center">✅ Все записи ('+totalCount+') сохранены в подстраховке. Теперь можно закрыть смену.</div>'
+      : '<div style="font-size:12px;color:#8888aa;text-align:center;padding:4px">Записей в этой смене не было</div>';
+    validateClose();
+    return;
+  }
+  _backupCheckPassed = false;
+  var rows = unconfirmed.map(function(e){
+    var d = _backupEntryDesc(e);
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid #f06060;border-radius:8px;margin-bottom:6px;background:#2e1a1a">'+
+      '<div style="font-size:16px">'+d.icon+'</div>'+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="font-size:12px;font-weight:700;color:#f0f0f8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+d.title+(d.amount?' · '+fmt(d.amount):'')+'</div>'+
+        (d.sub?'<div style="font-size:10px;color:#8888aa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+d.sub+'</div>':'')+
+      '</div>'+
+      '<button id="retryBackup_'+e.id+'" onpointerdown="event.preventDefault();retrySingleBackupEntry(\''+e.id+'\')" style="flex-shrink:0;padding:7px 10px;background:#f06060;border:none;border-radius:7px;color:#1a0808;font-size:11px;font-weight:700;cursor:pointer">📤 Отправить</button>'+
+    '</div>';
+  }).join('');
+  statusEl.innerHTML = '<div style="font-size:11px;color:#f06060;text-align:center;margin-bottom:6px">⚠️ '+unconfirmed.length+' из '+totalCount+' записей не сохранились в облаке. Ничего не потеряно — данные есть на телефоне. Отправьте каждую по кнопке ниже:</div>'+rows+
+    '<button onpointerdown="event.preventDefault();runBackupCheck()" style="width:100%;padding:8px;background:none;border:1px solid #f0c060;border-radius:8px;color:#f0c060;font-size:11px;font-weight:700;cursor:pointer;margin-top:2px">🔄 Отправить все сразу</button>';
+}
+function retrySingleBackupEntry(id){
+  var btn = document.getElementById('retryBackup_'+id);
+  if(btn){ btn.disabled=true; btn.textContent='⏳ ...'; btn.style.opacity='.7'; }
+  var e = (journal||[]).find(function(x){ return x.id===id; });
+  if(!e){ _renderBackupStatusList(); return; }
+  var shopName = (session&&session.shopName)||'';
+  var finish = function(){ _renderBackupStatusList(); };
+  if(e.type==='sale'){
+    var saleDoc = Object.assign({}, e, {
+      shopName: shopName, sellerName:(session&&(session.sellerName||session.name))||'',
+      shiftId:(session&&session.shiftId)||'', date:(e.ts||'').split('T')[0], recordedAt:new Date().toISOString()
+    });
+    db.collection('iz_sales').doc(e.id).set(saleDoc).then(function(){
+      _clearPendingSale(e.id); _markSaleConfirmed(e.id); finish();
+    }).catch(function(err){ _queuePendingSale(saleDoc); showToast('❌ Не отправилось: '+(err&&err.message||err)); finish(); });
+  } else {
+    var doc = Object.assign({}, e, {
+      kind: e.type, shopName: shopName, sellerName:(session&&(session.sellerName||session.name))||'',
+      shiftId:(session&&session.shiftId)||'', date:(e.ts||'').split('T')[0], recordedAt:new Date().toISOString()
+    });
+    db.collection('iz_journal_backup').doc(e.id).set(doc).then(function(){
+      _clearPendingJournalEntry(e.id); _markJournalEntryConfirmed(e.id); finish();
+    }).catch(function(err){ _queuePendingJournalEntry(doc); showToast('❌ Не отправилось: '+(err&&err.message||err)); finish(); });
+  }
+}
+function runBackupCheck(){
+  var statusEl = document.getElementById('backupCheckStatus');
+  var closeBtn = document.getElementById('closeShiftBtn');
+  var checkBtn = document.getElementById('backupCheckBtn');
+  var sales = (journal||[]).filter(function(e){ return e.type==='sale'; });
+  var others = (journal||[]).filter(function(e){ return e.type==='expense'||e.type==='receive'||e.type==='writeoff'; });
+  var totalCount = sales.length + others.length;
+  if(!totalCount){
+    _backupCheckPassed = true;
+    if(statusEl) statusEl.innerHTML = '<div style="font-size:12px;color:#8888aa;text-align:center;padding:4px">Записей в этой смене не было</div>';
+    validateClose();
+    return;
+  }
+  if(checkBtn){ checkBtn.disabled=true; checkBtn.style.opacity='.6'; checkBtn.textContent='🛟 Проверяю...'; }
+  if(statusEl) statusEl.innerHTML = '<div style="font-size:12px;color:#f0c060;text-align:center;padding:4px">🛟 Проверяю, что все записи ('+totalCount+') сохранены...</div>';
+  var unconfirmedSales = sales.filter(function(e){ return !_isSaleConfirmed(e.id); });
+  var unconfirmedOthers = others.filter(function(e){ return !_isJournalEntryConfirmed(e.id); });
+  var shopName = (session&&session.shopName)||'';
+  var saleAttempts = unconfirmedSales.map(function(e){
+    return new Promise(function(resolve){
+      if(typeof db==='undefined' || !db){ resolve(); return; }
+      var saleDoc = Object.assign({}, e, {
+        shopName: shopName, sellerName:(session&&(session.sellerName||session.name))||'',
+        shiftId:(session&&session.shiftId)||'', date:(e.ts||'').split('T')[0], recordedAt:new Date().toISOString()
+      });
+      db.collection('iz_sales').doc(e.id).set(saleDoc).then(function(){
+        _clearPendingSale(e.id); _markSaleConfirmed(e.id); resolve();
+      }).catch(function(){ _queuePendingSale(saleDoc); resolve(); });
+    });
+  });
+  var otherAttempts = unconfirmedOthers.map(function(e){
+    return new Promise(function(resolve){
+      if(typeof db==='undefined' || !db){ resolve(); return; }
+      var doc = Object.assign({}, e, {
+        kind: e.type, shopName: shopName, sellerName:(session&&(session.sellerName||session.name))||'',
+        shiftId:(session&&session.shiftId)||'', date:(e.ts||'').split('T')[0], recordedAt:new Date().toISOString()
+      });
+      db.collection('iz_journal_backup').doc(e.id).set(doc).then(function(){
+        _clearPendingJournalEntry(e.id); _markJournalEntryConfirmed(e.id); resolve();
+      }).catch(function(){ _queuePendingJournalEntry(doc); resolve(); });
+    });
+  });
+  Promise.all(saleAttempts.concat(otherAttempts)).then(function(){
+    if(checkBtn){ checkBtn.disabled=false; checkBtn.style.opacity='1'; checkBtn.textContent='🛟 Подстраховка'; }
+    _renderBackupStatusList();
+  });
+}
 function closeShift(){
+  if(!_backupCheckPassed){
+    showToast('🛟 Сначала нажмите «Подстраховка» — нужно убедиться, что все данные сохранены');
+    return;
+  }
   // Останавливаем "живую" фоновую синхронизацию сразу — иначе она может успеть
   // отправить в облако снимок со status:'open' уже ПОСЛЕ того как смена закрыта,
   // и закрытие "отменится" в облаке само по себе.
@@ -8615,6 +8922,7 @@ function _renderShiftView(){
   var repairExpHtml=(sh.backfilled||sh.isArchive||sh.source==='psj')?'<button onpointerdown="event.preventDefault();svRepairExpenses(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a1a2e;border:1px solid #a060f0;border-radius:9px;font-weight:700;font-size:12px;color:#a060f0;cursor:pointer;margin-bottom:8px">🔧 Пересчитать расходы (ЗП/проезд/прочие)</button>':'';
   var promoteHtml=(sh.isRestoreShift||sh.backfilled||sh.source==='psj')?'<button onpointerdown="event.preventDefault();svPromoteToNormal(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a1a2e;border:1px solid #60c8f0;border-radius:9px;font-weight:700;font-size:12px;color:#60c8f0;cursor:pointer;margin-bottom:8px">🔄 Сделать обычной сменой (включить в сверку)</button>':'';
   var pushFirestoreHtml='<button onpointerdown="event.preventDefault();svPushToFirestore(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a2a1e;border:1px solid #60f090;border-radius:9px;font-weight:700;font-size:12px;color:#60f090;cursor:pointer;margin-bottom:8px">☁️ Синхронизировать смену в Firestore</button>';
+  var recoverSalesHtml='<button onpointerdown="event.preventDefault();svRecoverSalesFromBackup(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a1a2e;border:1px solid #f0c060;border-radius:9px;font-weight:700;font-size:12px;color:#f0c060;cursor:pointer;margin-bottom:8px">🛟 Сверить с подстраховкой (продажи/расходы/приходы/списания)</button>';
   var deleteShiftHtml = '<button onclick="svDeleteShift()" style="width:100%;padding:16px;background:#2e1a1a;border:2px solid #f06060;border-radius:12px;font-weight:700;font-size:14px;color:#f06060;cursor:pointer;margin-top:14px">🗑 Удалить смену целиком</button>';
   document.getElementById('editShiftBody').innerHTML =
     summaryHtml +
@@ -8628,6 +8936,7 @@ function _renderShiftView(){
     acc('exp', '💸', 'Расходы', '#f0a060', (expenses.length||(zp||inkass||otherExp||drInkass||drSupplier?1:0))||null, expBody) +
     acc('staff', '🛒', 'Покупки сотрудников', '#a060f0', staffArr.length||null, staffBody) +
     pushFirestoreHtml +
+    recoverSalesHtml +
     repairExpHtml +
     promoteHtml +
     deleteShiftHtml;
@@ -9189,8 +9498,10 @@ function svAddExp(type){
   var comment = _svVal(isWood?'svAdd_expWoodComment':'svAdd_expDrComment');
   if(!amt){showToast('Укажите сумму');return;}
   var jnl = _currentShiftView.journal||[];
-  jnl.push({id:uid(),type:'expense',expType:expType,amount:amt,comment:comment,goodsType:isWood?'wood':'dr',ts:_workingNowISO(),
-    cashEffect: isWood?-amt:0, cashDrEffect: isWood?0:-amt, cardEffect:0, staffEffect:0, goodsEffect:0});
+  var _expEntryAdm = {id:uid(),type:'expense',expType:expType,amount:amt,comment:comment,goodsType:isWood?'wood':'dr',ts:_workingNowISO(),
+    cashEffect: isWood?-amt:0, cashDrEffect: isWood?0:-amt, cardEffect:0, staffEffect:0, goodsEffect:0};
+  jnl.push(_expEntryAdm);
+  _recordJournalEntryIndependently(_expEntryAdm, _currentShiftView.shopName, 'expense');
   _currentShiftView.journal = jnl;
   svPersist(); _svOpenAccs['acc_exp']=true; _renderShiftView();
   showToast('✅ Расход добавлен');
