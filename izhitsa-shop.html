@@ -1888,7 +1888,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.14.13';
+var APP_BUILD_VERSION = '07.14.14';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -9105,18 +9105,25 @@ function svRenderManualInvForm(){
   var box = document.getElementById('svManualInvForm'); if(!box || !_svManInv) return;
   var s = _svManInv;
   var itemsHtml = s.items.map(function(it,i){
-    return '<div style="display:flex;gap:5px;margin-bottom:6px;align-items:flex-end">'+
-      '<div style="flex:0 0 56px"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">№</div>'+
-        '<input class="fi" value="'+(it.article||'')+'" oninput="svManInvItemField('+i+',\'article\',this.value)" style="margin:0;padding:7px;font-size:12px"></div>'+
-      '<div style="flex:1"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Наименование</div>'+
-        '<input class="fi" value="'+(it.name||'')+'" oninput="svManInvItemField('+i+',\'name\',this.value)" style="margin:0;padding:7px;font-size:12px"></div>'+
-      '<div style="flex:0 0 70px"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Порода</div>'+
-        '<input class="fi" value="'+(it.species||'')+'" oninput="svManInvItemField('+i+',\'species\',this.value)" style="margin:0;padding:7px;font-size:12px"></div>'+
-      '<div style="flex:0 0 60px"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Цена</div>'+
-        '<input class="fi" type="text" inputmode="numeric" value="'+(it.price||'')+'" oninput="svManInvItemField('+i+',\'price\',this.value)" style="margin:0;padding:7px;font-size:12px"></div>'+
-      '<div style="flex:0 0 44px"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Кол</div>'+
-        '<input class="fi" type="text" inputmode="numeric" value="'+(it.qty||1)+'" oninput="svManInvItemField('+i+',\'qty\',this.value)" style="margin:0;padding:7px;font-size:12px"></div>'+
-      '<button onpointerdown="event.preventDefault();svManInvRemoveItem('+i+')" style="flex-shrink:0;padding:7px 9px;background:none;border:1px solid #f06060;border-radius:7px;color:#f06060;font-size:12px;cursor:pointer">✕</button>'+
+    return '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:9px;padding:8px;margin-bottom:6px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+        '<div style="font-size:10px;color:#8888aa;font-weight:700">Позиция '+(i+1)+'</div>'+
+        '<button onpointerdown="event.preventDefault();svManInvRemoveItem('+i+')" style="padding:4px 8px;background:none;border:1px solid #f06060;border-radius:6px;color:#f06060;font-size:11px;cursor:pointer">✕ Удалить</button>'+
+      '</div>'+
+      '<div style="display:flex;gap:5px;margin-bottom:5px">'+
+        '<div style="flex:0 0 62px"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">№</div>'+
+          '<input class="fi" value="'+(it.article||'')+'" oninput="svManInvItemField('+i+',\'article\',this.value)" style="margin:0;padding:7px;font-size:12px;width:100%;box-sizing:border-box"></div>'+
+        '<div style="flex:1;min-width:0"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Наименование</div>'+
+          '<input class="fi" value="'+(it.name||'')+'" oninput="svManInvItemField('+i+',\'name\',this.value)" style="margin:0;padding:7px;font-size:12px;width:100%;box-sizing:border-box"></div>'+
+      '</div>'+
+      '<div style="display:flex;gap:5px">'+
+        '<div style="flex:1;min-width:0"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Порода</div>'+
+          '<input class="fi" value="'+(it.species||'')+'" oninput="svManInvItemField('+i+',\'species\',this.value)" style="margin:0;padding:7px;font-size:12px;width:100%;box-sizing:border-box"></div>'+
+        '<div style="flex:0 0 72px"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Цена</div>'+
+          '<input class="fi" type="text" inputmode="numeric" value="'+(it.price||'')+'" oninput="svManInvItemField('+i+',\'price\',this.value)" style="margin:0;padding:7px;font-size:12px;width:100%;box-sizing:border-box"></div>'+
+        '<div style="flex:0 0 52px"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Кол-во</div>'+
+          '<input class="fi" type="text" inputmode="numeric" value="'+(it.qty||1)+'" oninput="svManInvItemField('+i+',\'qty\',this.value)" style="margin:0;padding:7px;font-size:12px;width:100%;box-sizing:border-box"></div>'+
+      '</div>'+
     '</div>';
   }).join('');
   var total = s.items.reduce(function(sum,it){ return sum+(it.price||0)*(it.qty||1); },0);
