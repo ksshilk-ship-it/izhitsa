@@ -1888,7 +1888,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.14.8';
+var APP_BUILD_VERSION = '07.14.10';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -2293,7 +2293,41 @@ function syncSave(lsKey, data) {
   var m = SYNC_SETTINGS[lsKey]; if(!m) return;
   _syncSaveGuard[lsKey] = Date.now(); // mark as just saved locally
   var obj = {}; obj[m.field] = data; obj.updatedAt = new Date().toISOString();
-  db.collection('iz_settings').doc(m.doc).set(obj, {merge:true}).catch(function(e){ console.log('syncSave err', lsKey, e.code||e); });
+  db.collection('iz_settings').doc(m.doc).set(obj, {merge:true}).then(function(){
+    _clearPendingRefbookSave(lsKey);
+  }).catch(function(e){
+    console.log('syncSave err', lsKey, e.code||e);
+    _queuePendingRefbookSave(lsKey, obj);
+    showToast('⚠️ Не удалось сохранить в облако — сохранится автоматически, когда появится связь');
+  });
+}
+function _queuePendingRefbookSave(lsKey, obj){
+  try{
+    var pending = JSON.parse(localStorage.getItem('iz_pending_refbook_saves')||'{}');
+    pending[lsKey] = obj;
+    localStorage.setItem('iz_pending_refbook_saves', JSON.stringify(pending));
+  }catch(e){}
+}
+function _clearPendingRefbookSave(lsKey){
+  try{
+    var pending = JSON.parse(localStorage.getItem('iz_pending_refbook_saves')||'{}');
+    if(pending[lsKey]){ delete pending[lsKey]; localStorage.setItem('iz_pending_refbook_saves', JSON.stringify(pending)); }
+  }catch(e){}
+}
+function _retryPendingRefbookSaves(){
+  try{
+    if(typeof db==='undefined' || !db) return;
+    var pending = JSON.parse(localStorage.getItem('iz_pending_refbook_saves')||'{}');
+    var keys = Object.keys(pending);
+    if(!keys.length) return;
+    keys.forEach(function(lsKey){
+      var m = SYNC_SETTINGS[lsKey];
+      if(!m){ _clearPendingRefbookSave(lsKey); return; }
+      db.collection('iz_settings').doc(m.doc).set(pending[lsKey], {merge:true}).then(function(){
+        _clearPendingRefbookSave(lsKey);
+      }).catch(function(){});
+    });
+  }catch(e){}
 }
 function syncListenCollection(lsKey, colName) {
   if(_syncUnsubs[lsKey]) return;
@@ -2882,7 +2916,7 @@ function _checkPendingCloseBanner(){
   }catch(e){}
 }
 setInterval(_checkPendingCloseBanner, 30000);
-document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ _checkPendingCloseBanner(); _retryPendingSales(); _retryPendingJournalEntries(); } });
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ _checkPendingCloseBanner(); _retryPendingSales(); _retryPendingJournalEntries(); _retryPendingRefbookSaves(); } });
 function _mergeRemoteShiftIntoLocal(shiftId, remoteData){
   try{
     var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
@@ -2941,11 +2975,13 @@ function _retryPendingShiftSyncs(){
 _retryPendingShiftSyncs();
 _retryPendingSales();
 _retryPendingJournalEntries();
+_retryPendingRefbookSaves();
 _checkPendingCloseBanner();
 setInterval(_retryPendingShiftSyncs, 45000);
 setInterval(_retryPendingSales, 45000);
 setInterval(_retryPendingJournalEntries, 45000);
-window.addEventListener('online', function(){ setTimeout(_retryPendingShiftSyncs, 1500); setTimeout(_retryPendingSales, 1500); setTimeout(_retryPendingJournalEntries, 1500); });
+setInterval(_retryPendingRefbookSaves, 45000);
+window.addEventListener('online', function(){ setTimeout(_retryPendingShiftSyncs, 1500); setTimeout(_retryPendingSales, 1500); setTimeout(_retryPendingJournalEntries, 1500); setTimeout(_retryPendingRefbookSaves, 1500); });
 function openMo(id){
   var el = document.getElementById(id);
   if(!el) return;
@@ -5452,7 +5488,8 @@ function _shiftSetSafe(shiftId, sh, successMsg, errPrefix){
         var remoteJnl = remote.journal||[];
         var localJnl = sh.journal||[];
         var localIds = {}; localJnl.forEach(function(e){ if(e.id) localIds[e.id]=true; });
-        var missingFromServer = remoteJnl.filter(function(e){ return e.id && !localIds[e.id]; });
+        var deletedIds = {}; getTombstones().forEach(function(id){ deletedIds[id]=true; });
+        var missingFromServer = remoteJnl.filter(function(e){ return e.id && !localIds[e.id] && !deletedIds[e.id]; });
         if(missingFromServer.length){
           var mergedJnl = localJnl.concat(missingFromServer);
           mergedJnl.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
@@ -5496,7 +5533,8 @@ function svRecoverSalesFromBackup(shiftId){
       if(!backupAll.length){ showToast('В подстраховке пока нет записей за этот день'); return; }
       var jnl = sh.journal||[];
       var jnlIds = {}; jnl.forEach(function(e){ if(e.id) jnlIds[e.id]=true; });
-      var missing = backupAll.filter(function(s){ return s.id && !jnlIds[s.id]; });
+      var deletedIds = {}; getTombstones().forEach(function(id){ deletedIds[id]=true; });
+      var missing = backupAll.filter(function(s){ return s.id && !jnlIds[s.id] && !deletedIds[s.id]; });
       if(!missing.length){ showToast('✅ Всё сходится — в подстраховке нет ничего лишнего'); return; }
       var total = missing.reduce(function(s,m){ return s+(m.amount||0); },0);
       var kindLabels = {sale:'продаж', expense:'расходов', receive:'приходов', writeoff:'списаний'};
@@ -9477,7 +9515,11 @@ function svPersist(skipGoodsRecalc){
         var remoteJnl = remote.journal||[];
         var localJnl = toSave.journal||[];
         var localIds = {}; localJnl.forEach(function(e){ if(e.id) localIds[e.id]=true; });
-        var missingFromServer = remoteJnl.filter(function(e){ return e.id && !localIds[e.id]; });
+        // Записи, которые только что специально удалили (лежат в корзине),
+        // ни в коем случае не подтягиваем обратно — иначе объединение "чинит"
+        // намеренное удаление, и запись как будто сама возвращается.
+        var deletedIds = {}; getTombstones().forEach(function(id){ deletedIds[id]=true; });
+        var missingFromServer = remoteJnl.filter(function(e){ return e.id && !localIds[e.id] && !deletedIds[e.id]; });
         if(missingFromServer.length){
           var mergedJnl = localJnl.concat(missingFromServer);
           mergedJnl.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
