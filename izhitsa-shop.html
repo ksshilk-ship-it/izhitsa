@@ -1692,6 +1692,8 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
           style="flex:1;padding:8px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">🌳 Дерево</button>
         <button type="button" id="expGoodsDr" onclick="setExpGoods('dr',this)"
           style="flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
+        <button type="button" id="expGoodsStaff" onclick="setExpGoods('staff',this)"
+          style="flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer">🛒 Покупки сотр.</button>
       </div>
     </div>
     <div id="expTypeDerevoBlock" class="fg">
@@ -1718,6 +1720,13 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
         <div class="pc active" onclick="setExpType('inkass',this)">🏦 Инкассация</div>
         <div class="pc" onclick="setExpType('supplier',this)">🏭 Поставщику</div>
       </div>
+    </div>
+    <div id="expTypeStaffBlock" style="display:none" class="fg">
+      <label class="fl">Тип расхода</label>
+      <div class="pay-chips" id="expTypeStaffChips">
+        <div class="pc active" onclick="setExpType('inkass',this)">🏦 Инкассация</div>
+      </div>
+      <div style="font-size:10px;color:#8888aa;margin-top:4px">Списывается из кассы «Покупки сотрудников», отдельно от Дерева и ДР Товара</div>
     </div>
     <div id="expSupplierBlock" style="display:none" class="fg">
       <label class="fl">Поставщик</label>
@@ -1888,7 +1897,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.14.17';
+var APP_BUILD_VERSION = '07.14.19';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -4578,6 +4587,27 @@ function startAdminShiftListener(){
       } else { renderTodayShift(); }
     });
 }
+// Живой слушатель (onSnapshot) в теории должен обновляться сам и сразу —
+// но на практике его соединение иногда молча "зависает" (обрыв WebSocket
+// без явной ошибки, особенно на нестабильном мобильном интернете), и тогда
+// "Главная" продолжает показывать старые цифры, хотя реально всё давно
+// изменилось. Поэтому раз в 30 секунд, пока открыта админ-сессия, делаем
+// прямой запрос к серверу как подстраховку — если данные отличаются от
+// того, что уже отрисовано, обновляем.
+setInterval(function(){
+  try{
+    if(!session || session.role!=='admin' || !navigator.onLine || typeof db==='undefined' || !db) return;
+    var today=new Date().toISOString().split('T')[0];
+    db.collection('iz_shifts').where('date','==',today).get({source:'server'}).then(function(snap){
+      var fresh=[];
+      snap.forEach(function(doc){ var d=doc.data(); d.id=doc.id; fresh.push(d); });
+      if(JSON.stringify(fresh)!==JSON.stringify(_adminActiveShifts)){
+        _adminActiveShifts = fresh;
+        renderTodayShift();
+      }
+    }).catch(function(){});
+  }catch(e){}
+}, 30000);
 var _adminAuditLog=[], _adminAuditUnsub=null;
 function startAdminAuditListener(){
   if(_adminAuditUnsub){try{_adminAuditUnsub();}catch(e){}}
@@ -7076,21 +7106,18 @@ function setExpGoods(type, el){
   expGoodsType = type;
   var db = document.getElementById('expGoodsDerevo');
   var dr = document.getElementById('expGoodsDr');
+  var stf = document.getElementById('expGoodsStaff');
   var dBlock = document.getElementById('expTypeDerevoBlock');
   var drBlock = document.getElementById('expTypeDrBlock');
-  if(type==='derevo'){
-    if(db){ db.style.cssText='flex:1;padding:8px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer'; }
-    if(dr){ dr.style.cssText='flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer'; }
-    if(dBlock) dBlock.style.display='block';
-    if(drBlock) drBlock.style.display='none';
-    expType='zp';
-  } else {
-    if(dr){ dr.style.cssText='flex:1;padding:8px;border-radius:10px;border:2px solid #a060f0;background:#1e1a2e;color:#a060f0;font-size:12px;font-weight:700;cursor:pointer'; }
-    if(db){ db.style.cssText='flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer'; }
-    if(dBlock) dBlock.style.display='none';
-    if(drBlock) drBlock.style.display='block';
-    expType='inkass';
-  }
+  var stfBlock = document.getElementById('expTypeStaffBlock');
+  var offStyle = 'flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer';
+  if(db) db.style.cssText = type==='derevo' ? 'flex:1;padding:8px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer' : offStyle;
+  if(dr) dr.style.cssText = type==='dr' ? 'flex:1;padding:8px;border-radius:10px;border:2px solid #a060f0;background:#1e1a2e;color:#a060f0;font-size:12px;font-weight:700;cursor:pointer' : offStyle;
+  if(stf) stf.style.cssText = type==='staff' ? 'flex:1;padding:8px;border-radius:10px;border:2px solid #60c8f0;background:#0c1a20;color:#60c8f0;font-size:12px;font-weight:700;cursor:pointer' : offStyle;
+  if(dBlock) dBlock.style.display = type==='derevo' ? 'block' : 'none';
+  if(drBlock) drBlock.style.display = type==='dr' ? 'block' : 'none';
+  if(stfBlock) stfBlock.style.display = type==='staff' ? 'block' : 'none';
+  expType = type==='derevo' ? 'zp' : 'inkass';
   document.getElementById('expSupplierBlock').style.display='none';
 }
 var _expPayMethod = 'cash';
@@ -7118,7 +7145,8 @@ function saveExpense(){
   var comment = (document.getElementById('expComment')||{}).value||'';
   var supplier = (document.getElementById('expSupplierName')||{}).value||'';
   var labels = {zp:'💰 ЗП',travel:'🚌 Проезд',inkass:'🏦 Инкассация',other:'📝 Прочее',supplier:'🏭 Поставщику'};
-  var label = labels[expType] + (expGoodsType==='dr'?' (ДР)':'');
+  var isStaff = expGoodsType==='staff';
+  var label = labels[expType] + (expGoodsType==='dr'?' (ДР)':(isStaff?' (Покупки сотр.)':''));
   var isDr = expGoodsType==='dr';
   var isZpOrTravel = (expType==='zp'||expType==='travel');
   var payMethod = isZpOrTravel ? _expPayMethod : 'cash';
@@ -7129,9 +7157,9 @@ function saveExpense(){
     sub:fmt(amt)+(isZpOrTravel?' · '+payMethodLabels[payMethod]:'')+(supplier?' · '+supplier:'')+(comment?' · '+comment:''),
     expType, goodsType:expGoodsType, amount:amt, comment, supplier, payMethod,
     amtCls:'exp', amtSign:'−',
-    cashEffect: (isDr || (isZpOrTravel && payMethod!=='cash'))?0:-amt,
+    cashEffect: (isDr || isStaff || (isZpOrTravel && payMethod!=='cash'))?0:-amt,
     cashDrEffect: (isDr && !(isZpOrTravel && payMethod!=='cash'))?-amt:0,
-    cardEffect:0, staffEffect:0, goodsEffect:0
+    cardEffect:0, staffEffect: isStaff?-amt:0, goodsEffect:0
   };
   journal.push(_expEntry);
   _recordJournalEntryIndependently(_expEntry, session&&session.shopName, 'expense');
@@ -8892,8 +8920,9 @@ function _renderShiftView(){
   if(!drWoCount) woBody += '<div style="font-size:11px;color:#555568;padding:6px 0">Списаний не было</div>';
   var expHasData = zp||inkass||otherExp||drInkass||drSupplier||expenses.length;
   var expBody = '';
-  var woodExp = expenses.filter(function(e){ return e.goodsType !== 'dr'; });
+  var woodExp = expenses.filter(function(e){ return e.goodsType !== 'dr' && e.goodsType !== 'staff'; });
   var drExp   = expenses.filter(function(e){ return e.goodsType === 'dr'; });
+  var staffExp = expenses.filter(function(e){ return e.goodsType === 'staff'; });
   function expItem(label, amt, color, deleteFn){
     return '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
       '<div style="display:flex;justify-content:space-between;align-items:center">'+
@@ -8935,6 +8964,18 @@ function _renderShiftView(){
     if(drSupplier){ expBody += expItem('🏭 Поставщик ДР'+(sh.drSupplierName?' ('+sh.drSupplierName+')':''), drSupplier, '#a060f0', null); drExpCount++; }
   }
   if(!drExpCount) expBody += '<div style="font-size:11px;color:#555568;padding:6px 0">Расходов не было</div>';
+  expBody += '<div style="font-size:10px;color:#60c8f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛒 ПОКУПКИ СОТРУДНИКОВ</div>';
+  var staffExpCount = 0;
+  if(staffExp.length){
+    var etypes3={zp:'💰 ЗП',travel:'🚌 Проезд',inkass:'🏦 Инкассация',other:'📝 Прочее'};
+    staffExp.forEach(function(e){
+      var label=(etypes3[e.expType]||e.expType||'Расход')+(e.comment?' · '+e.comment:'');
+      var realIdx = expenses.indexOf(e);
+      expBody += expItem(label, e.amount||0, '#60c8f0', 'svDeleteJEntry(\'expense\','+realIdx+')');
+      staffExpCount++;
+    });
+  }
+  if(!staffExpCount) expBody += '<div style="font-size:11px;color:#555568;padding:6px 0">Расходов не было</div>';
   var staffBody = '';
   var woodStaff = staffArr.filter(function(s){ return s.goodsType !== 'dr'; });
   var drStaff   = staffArr.filter(function(s){ return s.goodsType === 'dr'; });
@@ -9068,6 +9109,14 @@ function _renderShiftView(){
       {id:'expDrAmt',label:'Сумма, ₽',type:'number',inputmode:'numeric',placeholder:'0'},
       {id:'expDrComment',label:'Комментарий',placeholder:'необязательно'}
     ],'svAddExp(\'dr\')')+
+    addFormBtn('#60c8f0','showAddForm(\'expStaff\')','Добавить расход Покупки сотрудников')+
+    addForm('expStaff','#60c8f0',[
+      {id:'expStaffType',label:'Тип',type:'select',options:[
+        {v:'inkass',l:'🏦 Инкассация'},{v:'other',l:'📝 Прочее'}
+      ]},
+      {id:'expStaffAmt',label:'Сумма, ₽',type:'number',inputmode:'numeric',placeholder:'0'},
+      {id:'expStaffComment',label:'Комментарий',placeholder:'необязательно'}
+    ],'svAddExp(\'staff\')')+
   '</div>';
   staffBody += '<div style="border-top:1px solid #2e2e3e;margin-top:8px;padding-top:8px">'+
     addFormBtn('#c8f060','showAddForm(\'staffWood\')','Добавить покупку Дерево')+
@@ -9907,13 +9956,16 @@ function svAddWo(type){
 }
 function svAddExp(type){
   var isWood = type==='wood';
-  var expType = _svVal(isWood?'svAdd_expWoodType':'svAdd_expDrType');
-  var amt     = _svNum(isWood?'svAdd_expWoodAmt':'svAdd_expDrAmt');
-  var comment = _svVal(isWood?'svAdd_expWoodComment':'svAdd_expDrComment');
+  var isStaff = type==='staff';
+  var fieldPrefix = isStaff?'svAdd_expStaff':(isWood?'svAdd_expWood':'svAdd_expDr');
+  var expType = _svVal(fieldPrefix+'Type');
+  var amt     = _svNum(fieldPrefix+'Amt');
+  var comment = _svVal(fieldPrefix+'Comment');
   if(!amt){showToast('Укажите сумму');return;}
   var jnl = _currentShiftView.journal||[];
-  var _expEntryAdm = {id:uid(),type:'expense',expType:expType,amount:amt,comment:comment,goodsType:isWood?'wood':'dr',ts:_workingNowISO(),
-    cashEffect: isWood?-amt:0, cashDrEffect: isWood?0:-amt, cardEffect:0, staffEffect:0, goodsEffect:0};
+  var gType = isStaff?'staff':(isWood?'wood':'dr');
+  var _expEntryAdm = {id:uid(),type:'expense',expType:expType,amount:amt,comment:comment,goodsType:gType,ts:_workingNowISO(),
+    cashEffect: (isWood&&!isStaff)?-amt:0, cashDrEffect: (!isWood&&!isStaff)?-amt:0, cardEffect:0, staffEffect: isStaff?-amt:0, goodsEffect:0};
   jnl.push(_expEntryAdm);
   _recordJournalEntryIndependently(_expEntryAdm, _currentShiftView.shopName, 'expense');
   _currentShiftView.journal = jnl;
