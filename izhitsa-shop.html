@@ -725,10 +725,11 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
   <div class="page" id="pg-history">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px">
       <div class="stitle" style="margin:0">Архив смен</div>
-      <div style="display:flex;gap:6px;flex-shrink:0">
-        <button type="button" id="histShowOpenBtn" onclick="toggleHistShowOpen()" style="padding:7px 10px;border-radius:10px;border:1px solid #f0c060;background:#1a1a22;color:#f0c060;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">⚠️ Незакрытые</button>
-        <button type="button" onclick="toggleDateCheckCalendar()" style="padding:7px 10px;border-radius:10px;border:1px solid #a060f0;background:#1a1a22;color:#a060f0;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📅 Проверка дат</button>
-        <button type="button" onclick="openPeriodReport()" style="padding:7px 12px;border-radius:10px;border:1px solid #60c8f0;background:#1a1e2e;color:#60c8f0;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">📊 Отчёт</button>
+      <div style="display:flex;gap:6px;flex-shrink:0;overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%">
+        <button type="button" id="histShowOpenBtn" onclick="toggleHistShowOpen()" style="padding:7px 10px;border-radius:10px;border:1px solid #f0c060;background:#1a1a22;color:#f0c060;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">⚠️ Незакрытые</button>
+        <button type="button" onclick="toggleDateCheckCalendar()" style="padding:7px 10px;border-radius:10px;border:1px solid #a060f0;background:#1a1a22;color:#a060f0;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">📅 Проверка дат</button>
+        <button type="button" onclick="openPeriodReport()" style="padding:7px 12px;border-radius:10px;border:1px solid #60c8f0;background:#1a1e2e;color:#60c8f0;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">📊 Отчёт</button>
+        <button type="button" onclick="openProfitabilityReport()" style="padding:7px 12px;border-radius:10px;border:1px solid #c8f060;background:#1a1e14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">📈 Рентабельность</button>
       </div>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:10px;overflow-x:auto" id="histPeriodFilter">
@@ -1163,6 +1164,21 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
       <div id="ssBody_zp" style="display:none;padding:0 14px 14px">
         <div id="shopSettingsList"></div>
         <button class="btn" style="margin-top:8px" onclick="saveShopSettings()">💾 Сохранить настройки ЗП</button>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:8px;padding:0;overflow:hidden">
+      <div onclick="toggleSettingsSection('rent');renderRentSettings()" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:9px">
+          <span style="font-size:18px">🏠</span>
+          <div><div style="font-size:13px;font-weight:700">Аренда по магазинам</div>
+          <div id="ssCount_rent" style="font-size:11px;color:#8888aa">— записей</div></div>
+        </div>
+        <div id="ssArr_rent" style="color:#c8f060">▶</div>
+      </div>
+      <div id="ssBody_rent" style="display:none;padding:0 14px 14px">
+        <div style="font-size:11px;color:#8888aa;margin-bottom:8px">Нужна для отчёта «Рентабельность» — используется, чтобы посчитать реальную стоимость аренды за выбранный период, даже если оплата помесячная.</div>
+        <div id="rentSettingsList"></div>
+        <button class="btn" style="margin-top:8px" onclick="saveRentSettings()">💾 Сохранить аренду</button>
       </div>
     </div>
     <div class="card" style="margin-bottom:12px">
@@ -1767,6 +1783,50 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
     <div id="periodReportBody"></div>
   </div>
 </div>
+<div class="mo" id="profitabilityMo">
+  <div class="md" style="max-height:95dvh">
+    <div class="mh"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="mt" style="margin:0">📈 Рентабельность</div>
+      <button onclick="closeMo('profitabilityMo')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:5px 10px;color:#8888aa;cursor:pointer;font-size:12px">✕</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      <button type="button" id="profPeriod_month" onclick="setProfPeriodType('month',this)" style="padding:6px 12px;border-radius:20px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">Месяц</button>
+      <button type="button" id="profPeriod_quarter" onclick="setProfPeriodType('quarter',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">Квартал</button>
+      <button type="button" id="profPeriod_half" onclick="setProfPeriodType('half',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">Полугодие</button>
+      <button type="button" id="profPeriod_year" onclick="setProfPeriodType('year',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">Год</button>
+      <button type="button" id="profPeriod_custom" onclick="setProfPeriodType('custom',this)" style="padding:6px 12px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;cursor:pointer">Период</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div class="fg" id="profMonthWrap" style="flex:1;margin:0"><label class="fl">Месяц</label>
+        <select class="fs" id="profMonth" onchange="generateProfitabilityReport()"></select>
+      </div>
+      <div class="fg" id="profQuarterWrap" style="display:none;flex:1;margin:0"><label class="fl">Квартал</label>
+        <select class="fs" id="profQuarter" onchange="generateProfitabilityReport()">
+          <option value="1">I квартал (янв–мар)</option><option value="2">II квартал (апр–июн)</option>
+          <option value="3">III квартал (июл–сен)</option><option value="4">IV квартал (окт–дек)</option>
+        </select>
+      </div>
+      <div class="fg" id="profHalfWrap" style="display:none;flex:1;margin:0"><label class="fl">Полугодие</label>
+        <select class="fs" id="profHalf" onchange="generateProfitabilityReport()">
+          <option value="1">I полугодие (янв–июн)</option><option value="2">II полугодие (июл–дек)</option>
+        </select>
+      </div>
+      <div class="fg" id="profYearWrap" style="flex:1;margin:0"><label class="fl">Год</label>
+        <select class="fs" id="profYear" onchange="generateProfitabilityReport()"></select>
+      </div>
+    </div>
+    <div id="profCustomDates" style="display:none;gap:8px;margin-bottom:12px">
+      <div class="fg" style="flex:1;margin:0"><label class="fl">С</label><input class="fi" type="date" id="profDateFrom" onchange="generateProfitabilityReport()" style="-webkit-appearance:none;color-scheme:dark"></div>
+      <div class="fg" style="flex:1;margin:0"><label class="fl">По</label><input class="fi" type="date" id="profDateTo" onchange="generateProfitabilityReport()" style="-webkit-appearance:none;color-scheme:dark"></div>
+    </div>
+    <div class="fg" style="margin-bottom:12px">
+      <label class="fl">Магазин</label>
+      <select class="fs" id="profShopFilter" onchange="generateProfitabilityReport()"><option value="">Все магазины</option></select>
+    </div>
+    <div id="profitabilityBody"></div>
+  </div>
+</div>
 <div class="mo" id="psjSaleMo">
   <div class="md">
     <div class="mh"></div><div class="mt">Продажа (задним числом)</div>
@@ -1897,7 +1957,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.14.19';
+var APP_BUILD_VERSION = '07.14.20';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -2236,6 +2296,7 @@ var SYNC_SETTINGS = {
   'iz_shop_admins':      {doc:'admins',   field:'admins'},
   'iz_sellers':          {doc:'sellers',  field:'sellers'},
   'iz_shop_zp_settings': {doc:'zp',       field:'zp'},
+  'iz_shop_rent':        {doc:'rent',     field:'data'},
   'iz_items':            {doc:'items',    field:'items'},
   'iz_species':          {doc:'species',  field:'list'},
   'iz_accounts':         {doc:'accounts', field:'accounts'},
@@ -10634,6 +10695,61 @@ function populatePastShiftSellers(){
 function getShopZpSettings(){
   return JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
 }
+function getShopRentSettings(){
+  return JSON.parse(localStorage.getItem('iz_shop_rent')||'{}');
+}
+function rentDailyRate(rentCfg){
+  // Приводим любой режим оплаты аренды к цене за один день —
+  // это единственное, что нужно для расчёта за произвольный период.
+  if(!rentCfg || !rentCfg.amount) return 0;
+  return rentCfg.mode==='month' ? (rentCfg.amount/30) : rentCfg.amount;
+}
+function renderRentSettings(){
+  var c = document.getElementById('rentSettingsList'); if(!c) return;
+  var shops = getShopNames();
+  var settings = getShopRentSettings();
+  updateSettingsSectionCount('rent', shops.length);
+  if(!shops.length){ c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:8px">Сначала добавьте магазины в разделе выше</div>'; return; }
+  c.innerHTML = shops.map(function(shop){
+    var sid = encodeURIComponent(shop).replace(/%/g,'_');
+    var r = settings[shop] || {mode:'month', amount:0};
+    var isMonth = r.mode!=='day';
+    return '<div style="border:1px solid #2e2e3e;border-radius:12px;margin-bottom:8px;padding:12px">'+
+      '<div style="font-size:13px;font-weight:700;margin-bottom:8px">🏪 '+shop+'</div>'+
+      '<div style="display:flex;gap:8px;margin-bottom:8px">'+
+        '<button type="button" id="rent_mode_month_'+sid+'" onclick="setRentMode(\''+sid+'\',\'month\')" style="flex:1;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:'+(isMonth?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(isMonth?'#1e2a14':'#22222e')+';color:'+(isMonth?'#c8f060':'#8888aa')+'">в месяц</button>'+
+        '<button type="button" id="rent_mode_day_'+sid+'" onclick="setRentMode(\''+sid+'\',\'day\')" style="flex:1;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:'+(!isMonth?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(!isMonth?'#1e2a14':'#22222e')+';color:'+(!isMonth?'#c8f060':'#8888aa')+'">в день</button>'+
+      '</div>'+
+      '<div class="fg" style="margin-bottom:0"><label class="fl">Сумма (₽)</label>'+
+        '<input class="fi" type="text" id="rent_amt_'+sid+'" data-mode="'+(isMonth?'month':'day')+'" data-shop="'+shop.replace(/"/g,'&quot;')+'" value="'+(r.amount||'')+'" inputmode="numeric" placeholder="0"></div>'+
+      '<div style="font-size:10px;color:#8888aa;margin-top:4px">≈ '+fmt(rentDailyRate(r))+' в день</div>'+
+    '</div>';
+  }).join('');
+}
+function setRentMode(sid, mode){
+  var mBtn = document.getElementById('rent_mode_month_'+sid), dBtn = document.getElementById('rent_mode_day_'+sid);
+  var isMonth = mode==='month';
+  if(mBtn) mBtn.style.cssText = 'flex:1;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:'+(isMonth?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(isMonth?'#1e2a14':'#22222e')+';color:'+(isMonth?'#c8f060':'#8888aa');
+  if(dBtn) dBtn.style.cssText = 'flex:1;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:'+(!isMonth?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(!isMonth?'#1e2a14':'#22222e')+';color:'+(!isMonth?'#c8f060':'#8888aa');
+  var input = document.getElementById('rent_amt_'+sid);
+  if(input) input.setAttribute('data-mode', mode);
+}
+function saveRentSettings(){
+  var shops = getShopNames();
+  var settings = {};
+  shops.forEach(function(shop){
+    var sid = encodeURIComponent(shop).replace(/%/g,'_');
+    var input = document.getElementById('rent_amt_'+sid);
+    if(!input) return;
+    var amount = parseFloat(input.value)||0;
+    var mode = input.getAttribute('data-mode') || 'month';
+    settings[shop] = {mode: mode, amount: amount};
+  });
+  localStorage.setItem('iz_shop_rent', JSON.stringify(settings));
+  syncSave('iz_shop_rent', settings);
+  showToast('✅ Аренда сохранена');
+  renderRentSettings();
+}
 function numDef(val, def){
   return (val===undefined || val===null || val==='' || isNaN(val)) ? def : val;
 }
@@ -12956,6 +13072,152 @@ function generatePeriodReport(){
   });
   html+='</div>';
   c.innerHTML=html;
+}
+var profPeriodType = 'month';
+var PROF_MONTH_NAMES = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+function openProfitabilityReport(){
+  var shops = getShopNames();
+  var shopSel = document.getElementById('profShopFilter');
+  if(shopSel) shopSel.innerHTML = '<option value="">Все магазины</option>'+shops.map(function(s){ return '<option>'+s+'</option>'; }).join('');
+  var now = new Date(), curYear = now.getFullYear(), curMonth = now.getMonth();
+  var monthSel = document.getElementById('profMonth');
+  if(monthSel) monthSel.innerHTML = PROF_MONTH_NAMES.map(function(name,i){ return '<option value="'+i+'"'+(i===curMonth?' selected':'')+'>'+name.charAt(0).toUpperCase()+name.slice(1)+'</option>'; }).join('');
+  var yearSel = document.getElementById('profYear');
+  if(yearSel){
+    var years = [];
+    for(var y=curYear; y>=curYear-4; y--) years.push(y);
+    yearSel.innerHTML = years.map(function(y){ return '<option value="'+y+'"'+(y===curYear?' selected':'')+'>'+y+'</option>'; }).join('');
+  }
+  setProfPeriodType('month', document.getElementById('profPeriod_month'));
+  openMo('profitabilityMo');
+}
+function setProfPeriodType(type, el){
+  profPeriodType = type;
+  ['month','quarter','half','year','custom'].forEach(function(t){
+    var btn = document.getElementById('profPeriod_'+t); if(!btn) return;
+    var active = t===type;
+    btn.style.borderWidth = active?'2px':'1px'; btn.style.background = active?'#1e2a14':'#22222e';
+    btn.style.color = active?'#c8f060':'#8888aa'; btn.style.borderColor = active?'#c8f060':'#2e2e3e';
+    btn.style.fontWeight = active?'700':'400';
+  });
+  var mW=document.getElementById('profMonthWrap'), qW=document.getElementById('profQuarterWrap'),
+      hW=document.getElementById('profHalfWrap'), yW=document.getElementById('profYearWrap'),
+      cD=document.getElementById('profCustomDates');
+  if(mW) mW.style.display = type==='month' ? 'block':'none';
+  if(qW) qW.style.display = type==='quarter' ? 'block':'none';
+  if(hW) hW.style.display = type==='half' ? 'block':'none';
+  if(yW) yW.style.display = (type==='custom') ? 'none':'block';
+  if(cD) cD.style.display = type==='custom' ? 'flex':'none';
+  generateProfitabilityReport();
+}
+function _profLastDayOfMonth(y, mIdx){ return new Date(y, mIdx+1, 0).getDate(); }
+function generateProfitabilityReport(){
+  var c = document.getElementById('profitabilityBody'); if(!c) return;
+  var year = parseInt((document.getElementById('profYear')||{}).value) || new Date().getFullYear();
+  var from, to, periodLabel;
+  if(profPeriodType==='month'){
+    var mIdx = parseInt((document.getElementById('profMonth')||{}).value)||0;
+    from = year+'-'+String(mIdx+1).padStart(2,'0')+'-01';
+    to = year+'-'+String(mIdx+1).padStart(2,'0')+'-'+String(_profLastDayOfMonth(year,mIdx)).padStart(2,'0');
+    periodLabel = PROF_MONTH_NAMES[mIdx]+' '+year;
+  } else if(profPeriodType==='quarter'){
+    var q = parseInt((document.getElementById('profQuarter')||{}).value)||1;
+    var qStartM = (q-1)*3;
+    from = year+'-'+String(qStartM+1).padStart(2,'0')+'-01';
+    to = year+'-'+String(qStartM+3).padStart(2,'0')+'-'+String(_profLastDayOfMonth(year,qStartM+2)).padStart(2,'0');
+    periodLabel = 'Q'+q+' '+year;
+  } else if(profPeriodType==='half'){
+    var h = parseInt((document.getElementById('profHalf')||{}).value)||1;
+    if(h===1){ from=year+'-01-01'; to=year+'-06-30'; periodLabel='I полугодие '+year; }
+    else { from=year+'-07-01'; to=year+'-12-31'; periodLabel='II полугодие '+year; }
+  } else if(profPeriodType==='year'){
+    from = year+'-01-01'; to = year+'-12-31'; periodLabel = year+' год';
+  } else {
+    from = (document.getElementById('profDateFrom')||{}).value||'';
+    to = (document.getElementById('profDateTo')||{}).value||'';
+    periodLabel = from && to ? (from+' — '+to) : '';
+  }
+  if(!from||!to){ c.innerHTML='<div class="empty"><div class="ei">📈</div>Укажите период</div>'; return; }
+  var shopF = (document.getElementById('profShopFilter')||{}).value||'';
+  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var filtered = shifts.filter(function(s){ return s.date>=from && s.date<=to && (!shopF||s.shopName===shopF); });
+  var f2 = function(n){ return Math.round(n||0).toLocaleString('ru-RU')+'₽'; };
+  if(!filtered.length){
+    c.innerHTML = '<div class="empty"><div class="ei">📈</div>Нет данных за '+periodLabel+(shopF?' по магазину '+shopF:'')+'</div>';
+    return;
+  }
+  var totCash=0, totCard=0, totDisc=0, totZp=0, totTravel=0, totOper=0;
+  filtered.forEach(function(s){
+    totCash += s.cashRevenue||0; totCard += s.cardRevenue||0; totDisc += s.totalDiscount||0;
+    var exps = s.expenses||[];
+    if(exps.length){
+      totZp += exps.filter(function(e){ return e.expType==='zp'; }).reduce(function(a,e){ return a+(e.amount||0); },0);
+      totTravel += exps.filter(function(e){ return e.expType==='travel'; }).reduce(function(a,e){ return a+(e.amount||0); },0);
+      totOper += exps.filter(function(e){ return e.expType==='other'||e.expType==='supplier'; }).reduce(function(a,e){ return a+(e.amount||0); },0);
+    } else {
+      totZp += s.zp||0; totTravel += s.travel||0;
+      totOper += (s.otherExp||0)+(s.supplierExp||0)+(s.drSupplierAmt||0);
+    }
+  });
+  // Аренда: считаем по дням периода × дневная ставка. Если выбран конкретный
+  // магазин — берём его ставку. Если "Все магазины" — суммируем аренду по
+  // всем магазинам, у которых она вообще настроена (аренда идёт независимо
+  // от того, были ли в конкретный день смены).
+  var daysInPeriod = Math.round((new Date(to)-new Date(from))/86400000)+1;
+  var rentSettings = getShopRentSettings();
+  var totRent = 0;
+  if(shopF){
+    totRent = rentDailyRate(rentSettings[shopF]) * daysInPeriod;
+  } else {
+    Object.keys(rentSettings).forEach(function(shop){
+      totRent += rentDailyRate(rentSettings[shop]) * daysInPeriod;
+    });
+  }
+  var oborot = totCash + totCard + totDisc;
+  var dohod = totCash + totCard;
+  var fot = totZp + totTravel;
+  var totalCosts = fot + totOper + totRent;
+  var profit = dohod - totalCosts;
+  var pct = function(n){ return oborot>0 ? Math.round(n/oborot*1000)/10 : 0; };
+  var Row = function(label, val, color, pctVal, bold){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:'+(bold?'9px':'6px')+' 0;border-bottom:1px solid #2e2e3e">'+
+      '<span style="font-size:'+(bold?'14px':'13px')+';color:'+(bold?'#f0f0f8':'#8888aa')+';font-weight:'+(bold?'700':'400')+'">'+label+'</span>'+
+      '<span style="font-size:'+(bold?'15px':'13px')+';font-weight:700;color:'+color+'">'+f2(val)+(pctVal!=null?' <span style="color:#555568;font-size:11px;font-weight:400">('+pctVal+'%)</span>':'')+'</span>'+
+    '</div>';
+  };
+  var html = '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:14px">';
+  html += '<div style="font-size:11px;color:#8888aa;margin-bottom:10px">📅 '+periodLabel+' · '+filtered.length+' смен'+(shopF?' · '+shopF:' · все магазины')+(daysInPeriod?' · '+daysInPeriod+' дн.':'')+'</div>';
+  html += '<div style="font-size:10px;color:#60c8f0;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Оборот</div>';
+  html += Row('💵 Нал', totCash, '#60f090');
+  html += Row('💳 Безнал', totCard, '#60c8f0');
+  html += Row('🎁 Скидка', totDisc, '#8888aa', pct(totDisc));
+  html += Row('Итого оборот', oborot, '#c8f060', 100, true);
+  html += Row('Итого доход (нал+безнал)', dohod, '#c8f060', pct(dohod), true);
+  html += '<div style="font-size:10px;color:#f06060;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 4px">Расходы</div>';
+  html += Row('💰 ФОТ (оклад/%+проезд)', fot, '#f0a060', pct(fot));
+  html += Row('📝 Расходы операционные', totOper, '#f0a060', pct(totOper));
+  html += Row('🏠 Аренда', totRent, '#f0a060', pct(totRent))+(!Object.keys(rentSettings).length?'<div style="font-size:10px;color:#8888aa;padding:2px 0 6px">Аренда не настроена — задайте её в Настройках</div>':'');
+  html += Row('Итого расходы', totalCosts, '#f06060', pct(totalCosts), true);
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0 2px;margin-top:6px;border-top:2px solid '+(profit>=0?'#60f090':'#f06060')+'">'+
+    '<span style="font-size:15px;font-weight:700">Доходы − Расходы</span>'+
+    '<span style="font-size:19px;font-weight:700;color:'+(profit>=0?'#60f090':'#f06060')+';font-family:Unbounded,sans-serif">'+f2(profit)+'</span>'+
+  '</div>';
+  html += '<div style="text-align:right;font-size:12px;color:'+(profit>=0?'#60f090':'#f06060')+'">'+pct(profit)+'% от оборота</div>';
+  html += '</div>';
+  if(!shopF){
+    var byShop = {};
+    filtered.forEach(function(s){
+      if(!byShop[s.shopName]) byShop[s.shopName] = {n:0, cash:0, card:0, disc:0};
+      var b = byShop[s.shopName]; b.n++; b.cash+=s.cashRevenue||0; b.card+=s.cardRevenue||0; b.disc+=s.totalDiscount||0;
+    });
+    html += '<div style="margin-top:10px;font-size:11px;color:#8888aa;font-weight:700;text-transform:uppercase;letter-spacing:.5px">По магазинам</div>';
+    Object.keys(byShop).forEach(function(shop){
+      var b = byShop[shop], rev = b.cash+b.card+b.disc;
+      html += '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #2e2e3e;font-size:12px">'+
+        '<span>🏪 '+shop+' <span style="color:#555568">('+b.n+' см.)</span></span><span style="font-weight:700;color:#c8f060">'+f2(rev)+'</span></div>';
+    });
+  }
+  c.innerHTML = html;
 }
 function initRestore() {
   initRestoreShiftUI();
