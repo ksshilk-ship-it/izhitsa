@@ -1888,7 +1888,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.14.10';
+var APP_BUILD_VERSION = '07.14.12';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -2865,6 +2865,34 @@ function showToast(msg){
   clearTimeout(window._toastHideTimer);
   window._toastHideTimer = setTimeout(()=>t.classList.remove('show'),2600);
 }
+function _queuePendingInvoice(colName, inv){
+  try{
+    var pending = JSON.parse(localStorage.getItem('iz_pending_invoices')||'[]');
+    if(!pending.some(function(p){ return p.id===inv.id && p.col===colName; })){
+      pending.push({col:colName, id:inv.id, data:inv});
+      localStorage.setItem('iz_pending_invoices', JSON.stringify(pending));
+    }
+  }catch(e){}
+}
+function _clearPendingInvoice(colName, id){
+  try{
+    var pending = JSON.parse(localStorage.getItem('iz_pending_invoices')||'[]');
+    var filtered = pending.filter(function(p){ return !(p.id===id && p.col===colName); });
+    if(filtered.length!==pending.length) localStorage.setItem('iz_pending_invoices', JSON.stringify(filtered));
+  }catch(e){}
+}
+function _retryPendingInvoices(){
+  try{
+    if(typeof db==='undefined' || !db) return;
+    var pending = JSON.parse(localStorage.getItem('iz_pending_invoices')||'[]');
+    if(!pending.length) return;
+    pending.forEach(function(p){
+      db.collection(p.col).doc(p.id).set(p.data).then(function(){
+        _clearPendingInvoice(p.col, p.id);
+      }).catch(function(){});
+    });
+  }catch(e){}
+}
 function _fsWrite(promise){
   try{
     if(promise && typeof promise.catch==='function'){
@@ -2916,7 +2944,7 @@ function _checkPendingCloseBanner(){
   }catch(e){}
 }
 setInterval(_checkPendingCloseBanner, 30000);
-document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ _checkPendingCloseBanner(); _retryPendingSales(); _retryPendingJournalEntries(); _retryPendingRefbookSaves(); } });
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ _checkPendingCloseBanner(); _retryPendingSales(); _retryPendingJournalEntries(); _retryPendingRefbookSaves(); _retryPendingInvoices(); } });
 function _mergeRemoteShiftIntoLocal(shiftId, remoteData){
   try{
     var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
@@ -2976,12 +3004,14 @@ _retryPendingShiftSyncs();
 _retryPendingSales();
 _retryPendingJournalEntries();
 _retryPendingRefbookSaves();
+_retryPendingInvoices();
 _checkPendingCloseBanner();
 setInterval(_retryPendingShiftSyncs, 45000);
 setInterval(_retryPendingSales, 45000);
 setInterval(_retryPendingJournalEntries, 45000);
 setInterval(_retryPendingRefbookSaves, 45000);
-window.addEventListener('online', function(){ setTimeout(_retryPendingShiftSyncs, 1500); setTimeout(_retryPendingSales, 1500); setTimeout(_retryPendingJournalEntries, 1500); setTimeout(_retryPendingRefbookSaves, 1500); });
+setInterval(_retryPendingInvoices, 45000);
+window.addEventListener('online', function(){ setTimeout(_retryPendingShiftSyncs, 1500); setTimeout(_retryPendingSales, 1500); setTimeout(_retryPendingJournalEntries, 1500); setTimeout(_retryPendingRefbookSaves, 1500); setTimeout(_retryPendingInvoices, 1500); });
 function openMo(id){
   var el = document.getElementById(id);
   if(!el) return;
@@ -8977,10 +9007,12 @@ function _renderShiftView(){
     return html;
   }
   rcvBody += '<div style="border-top:1px solid #2e2e3e;margin-top:8px;padding-top:8px">'+
-    addFormBtn('#60f090','showAddForm(\'rcvWood\')','Добавить приход Дерево')+
+    addFormBtn('#60f090','showAddForm(\'rcvWood\')','Добавить приход Дерево (1 позиция)')+
     itemForm('rcvWood','#60f090',{extra:{id:'from',label:'Откуда / поставщик',placeholder:'необязательно'},saveFn:'svAddRcv(\'wood\')'})+
-    addFormBtn('#a060f0','showAddForm(\'rcvDr\')','Добавить приход ДР')+
+    addFormBtn('#a060f0','showAddForm(\'rcvDr\')','Добавить приход ДР (1 позиция)')+
     itemForm('rcvDr','#a060f0',{saveFn:'svAddRcv(\'dr\')'})+
+    addFormBtn('#60c8f0','svShowInvoicePicker()','Принять накладную целиком')+
+    '<div id="svInvoicePicker" style="display:none;background:#0c1a20;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-top:8px"></div>'+
   '</div>';
   woBody += '<div style="border-top:1px solid #2e2e3e;margin-top:8px;padding-top:8px">'+
     addFormBtn('#f06060','showAddForm(\'woWood\')','Добавить списание Дерево')+
@@ -9054,6 +9086,75 @@ function toggleShiftAcc(id){
 function showAddForm(id){
   var el=document.getElementById('svAddForm_'+id);
   if(el) el.style.display = (el.style.display==='none'||!el.style.display) ? 'block' : 'none';
+}
+function svShowInvoicePicker(){
+  var box = document.getElementById('svInvoicePicker');
+  if(!box) return;
+  if(box.style.display==='block'){ box.style.display='none'; return; }
+  var shopName = _currentShiftView && _currentShiftView.shopName;
+  var manual = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var auto = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  var pending = manual.concat(auto).filter(function(inv){
+    return inv.shopName===shopName && inv.status!=='accepted';
+  });
+  pending.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+  if(!pending.length){
+    box.innerHTML = '<div style="font-size:12px;color:#8888aa;text-align:center;padding:6px">Непринятых накладных для этого магазина не найдено</div>';
+    box.style.display='block';
+    return;
+  }
+  box.innerHTML = '<div style="font-size:11px;color:#60c8f0;font-weight:700;margin-bottom:8px">Выберите накладную для приёмки целиком:</div>'+
+    pending.map(function(inv){
+      var id = inv.id||inv._id;
+      var itemsCount = (inv.items||[]).length;
+      var total = (inv.items||[]).reduce(function(s,it){ return s+(it.price||0)*(it.qty||1); },0);
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #1a2a30">'+
+        '<div style="flex:1;min-width:0">'+
+          '<div style="font-size:12px;font-weight:700">'+(inv.num||'Накладная')+' · '+(inv.date||'')+'</div>'+
+          '<div style="font-size:10px;color:#8888aa">'+itemsCount+' изд. · '+fmt(total)+(inv.goodsType==='dr'?' · ДР':' · Дерево')+'</div>'+
+        '</div>'+
+        '<button onpointerdown="event.preventDefault();svAcceptInvoiceIntoShift(\''+id+'\')" style="flex-shrink:0;padding:7px 12px;background:#60c8f0;border:none;border-radius:7px;color:#0c1a20;font-size:11px;font-weight:700;cursor:pointer">✅ Принять</button>'+
+      '</div>';
+    }).join('');
+  box.style.display='block';
+}
+function svAcceptInvoiceIntoShift(invId){
+  if(!_currentShiftView) return;
+  var who = (session&&(session.name||session.sellerName))||'Администратор';
+  if(!confirm('Принять эту накладную целиком в смену «'+_currentShiftView.shopName+' · '+_currentShiftView.date+'»?')) return;
+  var manual = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var auto = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  var manIdx = manual.findIndex(function(i){ return (i.id||i._id)===invId; });
+  var isManual = manIdx>=0;
+  var invArr = isManual ? manual : auto;
+  var idx = isManual ? manIdx : invArr.findIndex(function(i){ return (i.id||i._id)===invId; });
+  if(idx<0){ showToast('Накладная не найдена'); return; }
+  var inv = invArr[idx];
+  var accepted = (inv.items||[]).map(function(it){
+    return Object.assign({}, it, {factPrice: it.price, ok:true});
+  });
+  var goodsTotal = accepted.reduce(function(s,a){ return s+(a.factPrice||a.price||0)*(a.qty||1); },0);
+  var isDr = inv.goodsType==='dr';
+  var rcvEntry = {
+    id:uid(), type:'receive', ts:_currentShiftView.date+'T'+(new Date().toTimeString().slice(0,8)), icon:'📥',
+    label:'Приёмка '+(inv.num||''), sub:accepted.length+' изд. · принял: '+who,
+    amount:goodsTotal, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
+    goodsType: isDr?'dr':'derevo',
+    goodsEffect: isDr?0:goodsTotal, goodsDrEffect: isDr?goodsTotal:0
+  };
+  var jnl = _currentShiftView.journal||[];
+  jnl.push(rcvEntry);
+  _currentShiftView.journal = jnl;
+  _recordJournalEntryIndependently(rcvEntry, _currentShiftView.shopName, 'receive');
+  try{ stockApplyReceive(_currentShiftView.shopName, accepted, _currentShiftView.date, inv.goodsType); }catch(e){}
+  inv.status='accepted'; inv.acceptedBy=who; inv.acceptedDate=_currentShiftView.date; inv.acceptedItems=accepted;
+  invArr[idx]=inv;
+  if(isManual){ localStorage.setItem('iz_manual_invoices', JSON.stringify(manual)); try{ db.collection('iz_manual_invoices').doc(invId).set(inv,{merge:true}); }catch(e){} }
+  else { localStorage.setItem('iz_invoices', JSON.stringify(auto)); try{ db.collection('iz_invoices').doc(invId).set(inv,{merge:true}); }catch(e){} }
+  svPersist();
+  var box = document.getElementById('svInvoicePicker'); if(box) box.style.display='none';
+  _svOpenAccs['acc_rcv']=true; _renderShiftView();
+  showToast('✅ Накладная принята целиком: '+accepted.length+' изд. на '+fmt(goodsTotal));
 }
 function svItemLookup(id){
   var artEl=document.getElementById('svAdd_'+id+'_art');
@@ -13813,7 +13914,11 @@ function saveManualInvoice() {
   var existing = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   existing.unshift(inv);
   localStorage.setItem('iz_manual_invoices', JSON.stringify(existing));
-  try { _fsWrite(db.collection('iz_manual_invoices').doc(inv.id).set(inv)); } catch(e){ showToast('⚠️ Не сохранилось в облако: '+(e&&e.message||e)); }
+  db.collection('iz_manual_invoices').doc(inv.id).set(inv).catch(function(e){
+    console.log('[saveManualInvoice] ошибка сохранения в облако:', e);
+    _queuePendingInvoice('iz_manual_invoices', inv);
+    showToast('⚠️ Накладная сохранена только на телефоне — досошлётся автоматически, когда появится связь');
+  });
   var _gt4save = _manInvGoodsType || 'derevo';
   _manInvItems.forEach(function(item){
     autoSaveToItemBase(item.name, item.article, item.price, _gt4save);
@@ -14056,7 +14161,11 @@ function saveManualInvoiceEdit(id){
   data.editedBy = (session&&session.sellerName)||'';
   all[idx]=data;
   localStorage.setItem('iz_manual_invoices', JSON.stringify(all));
-  try{ db.collection('iz_manual_invoices').doc(id).set(data,{merge:true}); }catch(e){}
+  db.collection('iz_manual_invoices').doc(id).set(data,{merge:true}).catch(function(e){
+    console.log('[saveManualInvoiceEdit] ошибка сохранения:', e);
+    _queuePendingInvoice('iz_manual_invoices', data);
+    showToast('⚠️ Правка накладной сохранена только на телефоне — досошлётся автоматически');
+  });
   var oldEntry = journal.find(function(e){
     if(e.type!=='receive') return false;
     if(e.invId) return e.invId===id;
