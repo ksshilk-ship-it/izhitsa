@@ -1,7 +1,7 @@
 // Ижица Service Worker — офлайн-режим для shop-модуля
 // Кэширует HTML-приложение и Firebase SDK, чтобы приложение запускалось без интернета.
 
-const CACHE_NAME = 'izhitsa-shop-v3';
+const CACHE_NAME = 'izhitsa-shop-v4';
 const CACHE_URLS = [
   './izhitsa-shop.html',
   './manifest-shop.json',
@@ -21,10 +21,6 @@ self.addEventListener('install', function(event) {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
-      // Главный HTML — без него офлайн-режим не имеет смысла, поэтому
-      // пробуем несколько раз, но даже при неудаче не роняем install
-      // (при следующем визите онлайн он всё равно закэшируется через
-      // Network First в обработчике fetch).
       var mainPage = cache.add('./izhitsa-shop.html').catch(function(err) {
         console.log('[SW] Не удалось закэшировать izhitsa-shop.html при установке:', err);
       });
@@ -81,10 +77,20 @@ self.addEventListener('fetch', function(event) {
     return;
   }
 
-  // HTML-страница и манифест — Network First с fallback на кэш
+  // HTML-страница и манифест — Network First с fallback на кэш.
+  //
+  // ГЛАВНАЯ НАЙДЕННАЯ ПРИЧИНА "не подгружается новая версия": fetch() внутри
+  // Service Worker по умолчанию сам может быть обслужен из ОБЫЧНОГО HTTP-кэша
+  // браузера, а не уйти в сеть по-настоящему — Service Worker этого не видит
+  // и искренне думает, что сходил в сеть и получил "свежий" ответ, хотя это
+  // был кэш браузера. GitHub Pages может отдавать HTML с заголовками, которые
+  // разрешают браузеру кэшировать его. Раньше это означало: даже "Network
+  // First" стратегия могла на деле годами показывать одну и ту же версию.
+  // Теперь запрос явно помечен cache:'no-store' — это заставляет браузер
+  // ВСЕГДА реально дойти до сервера, а не подставить свою кэш-копию.
   if (event.request.mode === 'navigate' || url.indexOf('.html') >= 0 || url.indexOf('manifest') >= 0) {
     event.respondWith(
-      fetch(event.request).then(function(resp) {
+      fetch(event.request, { cache: 'no-store' }).then(function(resp) {
         var respClone = resp.clone();
         caches.open(CACHE_NAME).then(function(cache) {
           cache.put(event.request, respClone);
@@ -93,12 +99,8 @@ self.addEventListener('fetch', function(event) {
       }).catch(function() {
         return caches.match(event.request).then(function(cached) {
           if (cached) return cached;
-          // Последний fallback — попробовать отдать главный HTML файл
           return caches.match('./izhitsa-shop.html').then(function(mainCached) {
             if (mainCached) return mainCached;
-            // Совсем крайний случай: даже основной HTML не закэширован
-            // (например, это первый в жизни запуск офлайн). Показываем
-            // понятное сообщение вместо белого экрана без объяснений.
             return new Response(
               '<!doctype html><html><head><meta charset="utf-8">' +
               '<meta name="viewport" content="width=device-width,initial-scale=1">' +
