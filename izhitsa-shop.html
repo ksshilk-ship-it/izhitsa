@@ -1407,8 +1407,12 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
         <div class="pc" id="pcRS" onclick="setPayM('rs',this)" style="display:none">🏦 РС</div>
       </div>
       <div id="mixedBlock" style="display:none" class="row2">
-        <div class="fg"><label class="fl">Нал (₽)</label><input class="fi" type="text" id="mixCash" placeholder="0" inputmode="numeric"></div>
-        <div class="fg"><label class="fl">Безнал (₽)</label><input class="fi" type="text" id="mixCard" placeholder="0" inputmode="numeric"></div>
+        <div class="fg"><label class="fl">Нал (₽)</label><input class="fi" type="text" id="mixCash" placeholder="0" inputmode="numeric" oninput="_mixPerItemCleared()"></div>
+        <div class="fg"><label class="fl">Безнал (₽)</label><input class="fi" type="text" id="mixCard" placeholder="0" inputmode="numeric" oninput="_mixPerItemCleared()"></div>
+      </div>
+      <div id="mixPerItemBlock" style="display:none;margin-top:8px">
+        <div style="font-size:11px;color:#8888aa;margin-bottom:6px">Или укажите способ оплаты для каждой позиции отдельно (точнее, чем просто разбить суммы):</div>
+        <div id="mixPerItemList"></div>
       </div>
       <div id="transferCardBlock" style="display:none" class="fg">
         <label class="fl">На какую карту перевод</label>
@@ -1884,7 +1888,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.14.6';
+var APP_BUILD_VERSION = '07.14.7';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -5864,6 +5868,7 @@ function addSaleItem(){
 function renderSaleItems(){
   const c=document.getElementById('saleItemsDisplay');
   updateDiscCategoryVisibility();
+  if(typeof payMethod!=='undefined' && payMethod==='mixed') renderMixPerItemBlock();
   if(!saleItems.length){c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:4px 0">Добавьте товары ↑</div>';return;}
   c.innerHTML=saleItems.map((it,i)=>`
     <div class="sir" style="border-color:${it.hasDiff?'#f06060':'#2e2e3e'};background:${it.hasDiff?'#2e1a1a':'#22222e'}">
@@ -5980,6 +5985,38 @@ function setPayM(m,el){
   var rsSel=document.getElementById('rsAccountBlock');
   if(transferSel) transferSel.style.display=m==='transfer'?'block':'none';
   if(rsSel) rsSel.style.display=m==='rs'?'block':'none';
+  if(m==='mixed') renderMixPerItemBlock(); else { var b=document.getElementById('mixPerItemBlock'); if(b) b.style.display='none'; }
+}
+function renderMixPerItemBlock(){
+  var wrap = document.getElementById('mixPerItemBlock');
+  var list = document.getElementById('mixPerItemList');
+  if(!wrap || !list) return;
+  if(!saleItems.length || saleItems.length<2){ wrap.style.display='none'; return; }
+  wrap.style.display='block';
+  list.innerHTML = saleItems.map(function(it,idx){
+    var amt = it.amt!=null?it.amt:it.price*(it.qty||1);
+    var isCash = it.mixPay==='cash', isCard = it.mixPay==='card';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #2e2e3e">'+
+      '<div style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(it.name||'')+' · '+fmt(amt)+'</div>'+
+      '<button type="button" onpointerdown="event.preventDefault();setMixItemPay('+idx+',\'cash\')" style="padding:5px 9px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:'+(isCash?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(isCash?'#1e2a14':'#22222e')+';color:'+(isCash?'#c8f060':'#8888aa')+'">💵 Нал</button>'+
+      '<button type="button" onpointerdown="event.preventDefault();setMixItemPay('+idx+',\'card\')" style="padding:5px 9px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:'+(isCard?'2px solid #60c8f0':'1px solid #2e2e3e')+';background:'+(isCard?'#0c1a20':'#22222e')+';color:'+(isCard?'#60c8f0':'#8888aa')+'">💳 Безнал</button>'+
+    '</div>';
+  }).join('');
+}
+function setMixItemPay(idx, method){
+  if(!saleItems[idx]) return;
+  saleItems[idx].mixPay = method;
+  // Раз выбрали способ оплаты по позициям — общие поля "Нал/Безнал" сверху
+  // больше не используются, чтобы не было двух противоречащих источников.
+  var mc=document.getElementById('mixCash'), mcr=document.getElementById('mixCard');
+  if(mc) mc.value=''; if(mcr) mcr.value='';
+  renderMixPerItemBlock();
+}
+function _mixPerItemCleared(){
+  // Если начали вручную вводить общие суммы нал/безнал — сбрасываем
+  // построчный выбор, чтобы не было двух противоречащих источников.
+  saleItems.forEach(function(it){ delete it.mixPay; });
+  renderMixPerItemBlock();
 }
 var _savingSale = false;
 function saveSale(){
@@ -6010,11 +6047,35 @@ function saveSale(){
   }
   var paidWood = Math.max(0, totalWood-discWood);
   var paidDr = Math.max(0, totalDr-discDr);
-  var sharePaidWood = paid>0 ? paidWood/paid : (total>0?totalWood/total:0);
-  var cashPartWood = Math.round(cashPart*sharePaidWood);
-  var cardPartWood = Math.round(cardPart*sharePaidWood);
-  var cashPartDr = cashPart-cashPartWood;
-  var cardPartDr = cardPart-cardPartWood;
+  var perItemMixed = payMethod==='mixed' && saleItems.length>1 && saleItems.every(function(it){ return it.mixPay==='cash'||it.mixPay==='card'; });
+  var cashPartWood, cardPartWood, cashPartDr, cardPartDr;
+  if(perItemMixed){
+    // Точный расчёт по факту: каждая позиция сама сообщает, чем она была
+    // оплачена — вместо того чтобы размазывать общую сумму нал/безнал
+    // пропорционально по категориям (это давало неверные суммы, если,
+    // например, один товар полностью оплачен налом, а другой — картой).
+    var cashItemsWood=0, cardItemsWood=0, cashItemsDr=0, cardItemsDr=0;
+    saleItems.forEach(function(it){
+      var a = it.amt!=null?it.amt:it.price*(it.qty||1);
+      var isDr = it.goodsType==='dr';
+      if(it.mixPay==='cash'){ if(isDr) cashItemsDr+=a; else cashItemsWood+=a; }
+      else { if(isDr) cardItemsDr+=a; else cardItemsWood+=a; }
+    });
+    var shareCashWood = totalWood>0 ? cashItemsWood/totalWood : 0;
+    var shareCashDr = totalDr>0 ? cashItemsDr/totalDr : 0;
+    cashPartWood = Math.round(paidWood*shareCashWood);
+    cardPartWood = paidWood - cashPartWood;
+    cashPartDr = Math.round(paidDr*shareCashDr);
+    cardPartDr = paidDr - cashPartDr;
+    cashPart = cashPartWood + cashPartDr;
+    cardPart = cardPartWood + cardPartDr;
+  } else {
+    var sharePaidWood = paid>0 ? paidWood/paid : (total>0?totalWood/total:0);
+    cashPartWood = Math.round(cashPart*sharePaidWood);
+    cardPartWood = Math.round(cardPart*sharePaidWood);
+    cashPartDr = cashPart-cashPartWood;
+    cardPartDr = cardPart-cardPartWood;
+  }
   var hasWood = saleItems.some(function(it){ return it.goodsType!=='dr'; });
   var hasDr = saleItems.some(function(it){ return it.goodsType==='dr'; });
   var overallGoodsType = (hasWood && hasDr) ? 'mixed' : (hasDr ? 'dr' : 'derevo');
