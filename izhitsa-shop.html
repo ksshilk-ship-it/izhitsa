@@ -1888,7 +1888,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.14.15';
+var APP_BUILD_VERSION = '07.14.16';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -9089,6 +9089,34 @@ function showAddForm(id){
   var el=document.getElementById('svAddForm_'+id);
   if(el) el.style.display = (el.style.display==='none'||!el.style.display) ? 'block' : 'none';
 }
+function svManInvSuggest(kind, idx, val){
+  var box = document.getElementById('svManInv_'+kind+'_sugg_'+idx);
+  if(!box) return;
+  val = (val||'').trim().toLowerCase();
+  if(!val){ box.style.display='none'; box.innerHTML=''; return; }
+  var list;
+  if(kind==='name'){
+    list = getItemsBase().map(function(it){ return it.name; }).filter(Boolean);
+  } else {
+    list = (_svManInv && _svManInv.goodsType==='dr') ? getRefBook('iz_dr_species').map(function(g){return g.name||g;}) : getSpecies();
+  }
+  var matches = list.filter(function(nm){ return nm && String(nm).toLowerCase().indexOf(val)===0; }).slice(0,8);
+  if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.innerHTML = matches.map(function(m){
+    return '<div onpointerdown="event.preventDefault();svManInvPick(\''+kind+'\','+idx+',\''+String(m).replace(/'/g,"\\'")+'\')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m+'</div>';
+  }).join('');
+  box.style.display='block';
+}
+function svManInvPick(kind, idx, val){
+  svManInvItemField(idx, kind, val);
+  var input = document.getElementById('svManInv_'+kind+'_'+idx);
+  if(input) input.value = val;
+  var box = document.getElementById('svManInv_'+kind+'_sugg_'+idx);
+  if(box) box.style.display='none';
+}
+function svManInvHideSugg(kind, idx){
+  setTimeout(function(){ var box=document.getElementById('svManInv_'+kind+'_sugg_'+idx); if(box) box.style.display='none'; }, 150);
+}
 var _svManInv = null;
 function svOpenManualInvForm(){
   var box = document.getElementById('svManualInvForm');
@@ -9100,14 +9128,25 @@ function svOpenManualInvForm(){
   }
   svRenderManualInvForm();
   box.style.display='block';
+  // На случай если каталог товаров на этом телефоне отстал от облака —
+  // подтягиваем свежую версию прямо сейчас, а не надеемся на локальный кэш.
+  try{
+    ['goods_derevo','goods_dr','items'].forEach(function(doc){
+      db.collection('iz_settings').doc(doc).get({source:'server'}).then(function(snap){
+        if(!snap.exists) return;
+        var data = snap.data();
+        var field = doc==='items' ? 'items' : 'data';
+        if(data[field]!==undefined){
+          var lsKey = doc==='items' ? 'iz_items' : (doc==='goods_derevo' ? 'iz_goods_derevo' : 'iz_goods_dr');
+          localStorage.setItem(lsKey, JSON.stringify(data[field]));
+        }
+      }).catch(function(){});
+    });
+  }catch(e){}
 }
 function svRenderManualInvForm(){
   var box = document.getElementById('svManualInvForm'); if(!box || !_svManInv) return;
   var s = _svManInv;
-  var catalogItems = getItemsBase();
-  var speciesList = s.goodsType==='dr' ? getRefBook('iz_dr_species').map(function(g){return g.name||g;}) : getSpecies();
-  var datalists = '<datalist id="svManInvNameList">'+catalogItems.slice(0,150).map(function(it){ return '<option value="'+(it.name||'').replace(/"/g,'&quot;')+'">'; }).join('')+'</datalist>'+
-    '<datalist id="svManInvSpeciesList">'+speciesList.slice(0,80).map(function(sp){ return '<option value="'+String(sp).replace(/"/g,'&quot;')+'">'; }).join('')+'</datalist>';
   var itemsHtml = s.items.map(function(it,i){
     return '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:9px;padding:8px;margin-bottom:6px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
@@ -9117,12 +9156,22 @@ function svRenderManualInvForm(){
       '<div style="display:flex;gap:5px;margin-bottom:5px">'+
         '<div style="flex:0 0 62px"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">№</div>'+
           '<input class="fi" value="'+(it.article||'')+'" oninput="svManInvItemField('+i+',\'article\',this.value)" style="margin:0;padding:7px;font-size:12px;width:100%;box-sizing:border-box"></div>'+
-        '<div style="flex:1;min-width:0"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Наименование</div>'+
-          '<input class="fi" value="'+(it.name||'')+'" list="svManInvNameList" autocomplete="off" oninput="svManInvItemField('+i+',\'name\',this.value)" style="margin:0;padding:7px;font-size:12px;width:100%;box-sizing:border-box"></div>'+
+        '<div style="flex:1;min-width:0;position:relative"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Наименование</div>'+
+          '<input class="fi" id="svManInv_name_'+i+'" value="'+(it.name||'')+'" autocomplete="off" '+
+            'oninput="svManInvItemField('+i+',\'name\',this.value);svManInvSuggest(\'name\','+i+',this.value)" '+
+            'onblur="svManInvHideSugg(\'name\','+i+')" '+
+            'style="margin:0;padding:7px;font-size:12px;width:100%;box-sizing:border-box">'+
+          '<div id="svManInv_name_sugg_'+i+'" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'+
+        '</div>'+
       '</div>'+
       '<div style="display:flex;gap:5px">'+
-        '<div style="flex:1;min-width:0"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Порода</div>'+
-          '<input class="fi" value="'+(it.species||'')+'" list="svManInvSpeciesList" autocomplete="off" oninput="svManInvItemField('+i+',\'species\',this.value)" style="margin:0;padding:7px;font-size:12px;width:100%;box-sizing:border-box"></div>'+
+        '<div style="flex:1;min-width:0;position:relative"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Порода</div>'+
+          '<input class="fi" id="svManInv_species_'+i+'" value="'+(it.species||'')+'" autocomplete="off" '+
+            'oninput="svManInvItemField('+i+',\'species\',this.value);svManInvSuggest(\'species\','+i+',this.value)" '+
+            'onblur="svManInvHideSugg(\'species\','+i+')" '+
+            'style="margin:0;padding:7px;font-size:12px;width:100%;box-sizing:border-box">'+
+          '<div id="svManInv_species_sugg_'+i+'" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'+
+        '</div>'+
         '<div style="flex:0 0 72px"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Цена</div>'+
           '<input class="fi" type="text" inputmode="numeric" value="'+(it.price||'')+'" oninput="svManInvItemField('+i+',\'price\',this.value);svManInvUpdateTotal()" style="margin:0;padding:7px;font-size:12px;width:100%;box-sizing:border-box"></div>'+
         '<div style="flex:0 0 52px"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Кол-во</div>'+
@@ -9131,7 +9180,7 @@ function svRenderManualInvForm(){
     '</div>';
   }).join('');
   var total = s.items.reduce(function(sum,it){ return sum+(it.price||0)*(it.qty||1); },0);
-  box.innerHTML = datalists +
+  box.innerHTML =
     '<div style="font-size:11px;color:#f0c060;font-weight:700;margin-bottom:8px">📝 Ручной ввод накладной</div>'+
     '<div style="display:flex;gap:5px;margin-bottom:6px">'+
       '<div style="flex:1"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">№ накладной</div><input class="fi" id="svManInv_num" value="'+s.num+'" oninput="svManInvField(\'num\',this.value)" style="margin:0;padding:8px"></div>'+
