@@ -1888,7 +1888,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.14.16';
+var APP_BUILD_VERSION = '07.14.17';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -2998,9 +2998,38 @@ function _retryPendingShiftSyncs(){
     });
   }catch(e){}
 }
+function _verifyRecentClosedShifts(){
+  // Смены, закрытые ДО того, как появилась метка _pendingSync (то есть на
+  // старых версиях приложения), никогда не попадали в обычную очередь
+  // повторной отправки — устройство просто не знало, что их нужно
+  // перепроверить. Раз в загрузку сверяем недавние закрытые смены этого
+  // устройства с тем, что реально лежит в облаке, и, если там пусто или
+  // меньше данных, чем локально — досылаем сами, без участия продавца.
+  try{
+    if(typeof db==='undefined' || !db || !navigator.onLine) return;
+    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var cutoff = Date.now() - 3*86400000; // последние 3 дня — не грузим облако проверкой всей истории
+    var candidates = shifts.filter(function(s){
+      if(!s.id || s.status!=='closed' || s._pendingSync) return false;
+      var closedTime = s.closedAt ? new Date(s.closedAt).getTime() : 0;
+      return closedTime > cutoff;
+    });
+    candidates.forEach(function(s){
+      db.collection('iz_shifts').doc(s.id).get({source:'server'}).then(function(snap){
+        var localLen = (s.journal||[]).length;
+        var remoteLen = snap.exists ? ((snap.data().journal||[]).length) : -1;
+        if(remoteLen < localLen){
+          console.log('[_verifyRecentClosedShifts] досылаю смену, которой не было в облаке:', s.id);
+          db.collection('iz_shifts').doc(s.id).set(s).catch(function(){});
+        }
+      }).catch(function(){});
+    });
+  }catch(e){}
+}
 // Фоновая проверка неотправленных смен: сразу при загрузке, затем каждые 45 секунд,
 // плюс сразу при восстановлении интернет-соединения.
 _retryPendingShiftSyncs();
+_verifyRecentClosedShifts();
 _retryPendingSales();
 _retryPendingJournalEntries();
 _retryPendingRefbookSaves();
