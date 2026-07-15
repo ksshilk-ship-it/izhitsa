@@ -1975,7 +1975,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.14.21';
+var APP_BUILD_VERSION = '07.14.22';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -10766,51 +10766,107 @@ function rentDailyRate(rentCfg){
   if(!rentCfg || !rentCfg.amount) return 0;
   return rentCfg.mode==='month' ? (rentCfg.amount/30) : rentCfg.amount;
 }
+var _rentEditState = {}; // {shop: {mode, amount, workedDaysOnly, overrides:{'YYYY-MM':amount}}}
+var RENT_MONTH_NAMES = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
 function renderRentSettings(){
   var c = document.getElementById('rentSettingsList'); if(!c) return;
   var shops = getShopNames();
   var settings = getShopRentSettings();
   updateSettingsSectionCount('rent', shops.length);
   if(!shops.length){ c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:8px">Сначала добавьте магазины в разделе выше</div>'; return; }
-  c.innerHTML = shops.map(function(shop){
-    var sid = encodeURIComponent(shop).replace(/%/g,'_');
-    var r = settings[shop] || {mode:'month', amount:0};
-    var isMonth = r.mode!=='day';
-    return '<div style="border:1px solid #2e2e3e;border-radius:12px;margin-bottom:8px;padding:12px">'+
-      '<div style="font-size:13px;font-weight:700;margin-bottom:8px">🏪 '+shop+'</div>'+
-      '<div style="display:flex;gap:8px;margin-bottom:8px">'+
-        '<button type="button" id="rent_mode_month_'+sid+'" onclick="setRentMode(\''+sid+'\',\'month\')" style="flex:1;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:'+(isMonth?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(isMonth?'#1e2a14':'#22222e')+';color:'+(isMonth?'#c8f060':'#8888aa')+'">в месяц</button>'+
-        '<button type="button" id="rent_mode_day_'+sid+'" onclick="setRentMode(\''+sid+'\',\'day\')" style="flex:1;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:'+(!isMonth?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(!isMonth?'#1e2a14':'#22222e')+';color:'+(!isMonth?'#c8f060':'#8888aa')+'">в день</button>'+
-      '</div>'+
-      '<div class="fg" style="margin-bottom:0"><label class="fl">Сумма (₽)</label>'+
-        '<input class="fi" type="text" id="rent_amt_'+sid+'" data-mode="'+(isMonth?'month':'day')+'" data-shop="'+shop.replace(/"/g,'&quot;')+'" value="'+(r.amount||'')+'" inputmode="numeric" placeholder="0"></div>'+
-      '<div style="font-size:10px;color:#8888aa;margin-top:4px">≈ '+fmt(rentDailyRate(r))+' в день</div>'+
-    '</div>';
-  }).join('');
+  shops.forEach(function(shop){
+    if(!_rentEditState[shop]){
+      var r = settings[shop] || {mode:'month', amount:0, workedDaysOnly:false, overrides:{}};
+      _rentEditState[shop] = {mode:r.mode||'month', amount:r.amount||0, workedDaysOnly:!!r.workedDaysOnly, overrides:Object.assign({},r.overrides||{})};
+    }
+  });
+  c.innerHTML = shops.map(function(shop){ return _renderRentShopCard(shop); }).join('');
 }
-function setRentMode(sid, mode){
-  var mBtn = document.getElementById('rent_mode_month_'+sid), dBtn = document.getElementById('rent_mode_day_'+sid);
-  var isMonth = mode==='month';
-  if(mBtn) mBtn.style.cssText = 'flex:1;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:'+(isMonth?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(isMonth?'#1e2a14':'#22222e')+';color:'+(isMonth?'#c8f060':'#8888aa');
-  if(dBtn) dBtn.style.cssText = 'flex:1;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:'+(!isMonth?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(!isMonth?'#1e2a14':'#22222e')+';color:'+(!isMonth?'#c8f060':'#8888aa');
-  var input = document.getElementById('rent_amt_'+sid);
-  if(input) input.setAttribute('data-mode', mode);
+function _renderRentShopCard(shop){
+  var sid = encodeURIComponent(shop).replace(/%/g,'_');
+  var r = _rentEditState[shop];
+  var isMonth = r.mode!=='day';
+  var overrideKeys = Object.keys(r.overrides).sort();
+  var overridesHtml = overrideKeys.length ? overrideKeys.map(function(k){
+    var parts = k.split('-'), mLabel = RENT_MONTH_NAMES[parseInt(parts[1])-1]+' '+parts[0];
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3e;font-size:12px">'+
+      '<span>'+mLabel+': <b style="color:#c8f060">'+fmt(r.overrides[k])+'</b></span>'+
+      '<button type="button" onclick="removeRentOverride(\''+shop.replace(/'/g,"\\'")+'\',\''+k+'\')" style="background:none;border:1px solid #f06060;border-radius:6px;padding:3px 8px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
+    '</div>';
+  }).join('') : '<div style="font-size:11px;color:#555568;padding:4px 0">Помесячных сумм пока нет — используется базовая ставка ниже</div>';
+  var now = new Date();
+  var monthOpts = RENT_MONTH_NAMES.map(function(n,i){return {i:i,n:n};});
+  return '<div style="border:1px solid #2e2e3e;border-radius:12px;margin-bottom:8px;padding:12px">'+
+    '<div style="font-size:13px;font-weight:700;margin-bottom:8px">🏪 '+shop+'</div>'+
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
+      '<input type="checkbox" id="rent_worked_'+sid+'" '+(r.workedDaysOnly?'checked':'')+' onchange="setRentWorkedDaysOnly(\''+shop.replace(/'/g,"\\'")+'\',this.checked)" style="width:18px;height:18px;cursor:pointer">'+
+      '<label for="rent_worked_'+sid+'" style="font-size:12px;color:#8888aa;cursor:pointer">Платим только за фактически отработанные дни (не за все дни месяца)</label>'+
+    '</div>'+
+    '<div style="font-size:11px;color:#8888aa;margin-bottom:4px">Базовая ставка (для месяцев без своей суммы ниже)</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:8px">'+
+      '<button type="button" id="rent_mode_month_'+sid+'" onclick="setRentMode(\''+sid+'\',\'month\')" style="flex:1;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:'+(isMonth?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(isMonth?'#1e2a14':'#22222e')+';color:'+(isMonth?'#c8f060':'#8888aa')+'">в месяц</button>'+
+      '<button type="button" id="rent_mode_day_'+sid+'" onclick="setRentMode(\''+sid+'\',\'day\')" style="flex:1;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:'+(!isMonth?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(!isMonth?'#1e2a14':'#22222e')+';color:'+(!isMonth?'#c8f060':'#8888aa')+'">в день</button>'+
+    '</div>'+
+    '<div class="fg" style="margin-bottom:0"><label class="fl">Сумма (₽)</label>'+
+      '<input class="fi" type="text" id="rent_amt_'+sid+'" data-mode="'+(isMonth?'month':'day')+'" value="'+(r.amount||'')+'" inputmode="numeric" placeholder="0" oninput="setRentAmount(\''+shop.replace(/'/g,"\\'")+'\',this.value)"></div>'+
+    '<div style="font-size:10px;color:#8888aa;margin:4px 0 12px">≈ '+fmt(rentDailyRate(r))+' в день</div>'+
+    '<div style="border-top:1px solid #2e2e3e;padding-top:10px">'+
+      '<div style="font-size:11px;color:#8888aa;margin-bottom:6px">Своя сумма аренды за конкретный месяц (перекрывает базовую ставку)</div>'+
+      overridesHtml+
+      '<div style="display:flex;gap:6px;margin-top:8px">'+
+        '<select class="fs" id="rent_ovr_month_'+sid+'" style="flex:1;padding:7px;font-size:11px">'+monthOpts.map(function(o){return '<option value="'+o.i+'"'+(o.i===now.getMonth()?' selected':'')+'>'+o.n.charAt(0).toUpperCase()+o.n.slice(1)+'</option>';}).join('')+'</select>'+
+        '<select class="fs" id="rent_ovr_year_'+sid+'" style="flex:0 0 80px;padding:7px;font-size:11px">'+[now.getFullYear(),now.getFullYear()+1,now.getFullYear()-1].sort().map(function(y){return '<option value="'+y+'"'+(y===now.getFullYear()?' selected':'')+'>'+y+'</option>';}).join('')+'</select>'+
+      '</div>'+
+      '<div style="display:flex;gap:6px;margin-top:6px">'+
+        '<input class="fi" type="text" id="rent_ovr_amt_'+sid+'" inputmode="numeric" placeholder="Сумма за этот месяц" style="flex:1;padding:7px;font-size:11px;margin:0">'+
+        '<button type="button" onclick="addRentOverride(\''+shop.replace(/'/g,"\\'")+'\',\''+sid+'\')" style="flex-shrink:0;padding:7px 14px;background:#1e2a14;border:1px solid #c8f060;border-radius:8px;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">+ Добавить</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+function setRentMode(shop, mode){
+  if(!_rentEditState[shop]) return;
+  _rentEditState[shop].mode = mode;
+  _rerenderRentShop(shop);
+}
+function setRentAmount(shop, val){
+  if(!_rentEditState[shop]) return;
+  _rentEditState[shop].amount = parseFloat(val)||0;
+}
+function setRentWorkedDaysOnly(shop, checked){
+  if(!_rentEditState[shop]) return;
+  _rentEditState[shop].workedDaysOnly = checked;
+}
+function addRentOverride(shop, sid){
+  if(!_rentEditState[shop]) return;
+  var mIdx = parseInt((document.getElementById('rent_ovr_month_'+sid)||{}).value)||0;
+  var year = parseInt((document.getElementById('rent_ovr_year_'+sid)||{}).value)||new Date().getFullYear();
+  var amt = parseFloat((document.getElementById('rent_ovr_amt_'+sid)||{}).value)||0;
+  if(!amt){ showToast('Укажите сумму'); return; }
+  var key = year+'-'+String(mIdx+1).padStart(2,'0');
+  _rentEditState[shop].overrides[key] = amt;
+  _rerenderRentShop(shop);
+}
+function removeRentOverride(shop, key){
+  if(!_rentEditState[shop]) return;
+  delete _rentEditState[shop].overrides[key];
+  _rerenderRentShop(shop);
+}
+function _rerenderRentShop(shop){
+  var shops = getShopNames();
+  var idx = shops.indexOf(shop);
+  var cards = document.querySelectorAll('#rentSettingsList > div');
+  if(cards[idx]) cards[idx].outerHTML = _renderRentShopCard(shop);
 }
 function saveRentSettings(){
   var shops = getShopNames();
   var settings = {};
   shops.forEach(function(shop){
-    var sid = encodeURIComponent(shop).replace(/%/g,'_');
-    var input = document.getElementById('rent_amt_'+sid);
-    if(!input) return;
-    var amount = parseFloat(input.value)||0;
-    var mode = input.getAttribute('data-mode') || 'month';
-    settings[shop] = {mode: mode, amount: amount};
+    if(_rentEditState[shop]) settings[shop] = _rentEditState[shop];
   });
   localStorage.setItem('iz_shop_rent', JSON.stringify(settings));
   syncSave('iz_shop_rent', settings);
   showToast('✅ Аренда сохранена');
-  renderRentSettings();
 }
 function numDef(val, def){
   return (val===undefined || val===null || val==='' || isNaN(val)) ? def : val;
@@ -13173,6 +13229,40 @@ function setProfPeriodType(type, el){
   generateProfitabilityReport();
 }
 function _profLastDayOfMonth(y, mIdx){ return new Date(y, mIdx+1, 0).getDate(); }
+function _computeRentForShop(shop, from, to, allShifts, rentCfg){
+  if(!rentCfg || !rentCfg.amount) return 0;
+  var overrides = rentCfg.overrides || {};
+  var dailyRate = rentDailyRate(rentCfg);
+  var fromD = new Date(from+'T00:00:00'), toD = new Date(to+'T00:00:00');
+  var total = 0;
+  var cursor = new Date(fromD.getFullYear(), fromD.getMonth(), 1);
+  while(cursor <= toD){
+    var y = cursor.getFullYear(), mIdx = cursor.getMonth();
+    var monthKey = y+'-'+String(mIdx+1).padStart(2,'0');
+    var daysInMonth = new Date(y, mIdx+1, 0).getDate();
+    var monthStart = new Date(y, mIdx, 1), monthEnd = new Date(y, mIdx, daysInMonth);
+    var rangeStart = fromD > monthStart ? fromD : monthStart;
+    var rangeEnd = toD < monthEnd ? toD : monthEnd;
+    var daysInRangeThisMonth = Math.round((rangeEnd-rangeStart)/86400000)+1;
+    if(daysInRangeThisMonth>0){
+      if(overrides[monthKey]!=null){
+        var wholeMonth = daysInRangeThisMonth===daysInMonth;
+        total += wholeMonth ? overrides[monthKey] : (overrides[monthKey]/daysInMonth*daysInRangeThisMonth);
+      } else if(rentCfg.workedDaysOnly){
+        var rangeStartStr = rangeStart.toISOString().split('T')[0], rangeEndStr = rangeEnd.toISOString().split('T')[0];
+        var workedDates = {};
+        allShifts.forEach(function(s){
+          if(s.shopName===shop && s.date>=rangeStartStr && s.date<=rangeEndStr) workedDates[s.date]=true;
+        });
+        total += dailyRate * Object.keys(workedDates).length;
+      } else {
+        total += dailyRate * daysInRangeThisMonth;
+      }
+    }
+    cursor = new Date(y, mIdx+1, 1);
+  }
+  return total;
+}
 function generateProfitabilityReport(){
   var c = document.getElementById('profitabilityBody'); if(!c) return;
   var year = parseInt((document.getElementById('profYear')||{}).value) || new Date().getFullYear();
@@ -13221,21 +13311,22 @@ function generateProfitabilityReport(){
       totOper += (s.otherExp||0)+(s.supplierExp||0)+(s.drSupplierAmt||0);
     }
   });
-  // Аренда: считаем по дням периода × дневная ставка. Если выбран конкретный
-  // магазин — берём его ставку. Если "Все магазины" — суммируем аренду по
-  // всем магазинам, у которых она вообще настроена (аренда идёт независимо
-  // от того, были ли в конкретный день смены).
-  var daysInPeriod = Math.round((new Date(to)-new Date(from))/86400000)+1;
+  // Аренда считается ПОМЕСЯЧНО (не одной ставкой на весь период) — так можно
+  // задать разную сумму на каждый месяц, а для магазинов с оплатой "только
+  // за рабочие дни" — учитывать реально отработанные даты, а не все дни
+  // месяца подряд.
   var rentSettings = getShopRentSettings();
+  var shiftsForRentCalc = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   var totRent = 0;
   if(shopF){
-    totRent = rentDailyRate(rentSettings[shopF]) * daysInPeriod;
+    totRent = _computeRentForShop(shopF, from, to, shiftsForRentCalc, rentSettings[shopF]);
   } else {
     Object.keys(rentSettings).forEach(function(shop){
-      totRent += rentDailyRate(rentSettings[shop]) * daysInPeriod;
+      totRent += _computeRentForShop(shop, from, to, shiftsForRentCalc, rentSettings[shop]);
     });
   }
   var oborot = totCash + totCard + totDisc;
+  var daysInPeriod = Math.round((new Date(to)-new Date(from))/86400000)+1;
   var dohod = totCash + totCard;
   var fot = totZp + totTravel;
   var totalCosts = fot + totOper + totRent;
