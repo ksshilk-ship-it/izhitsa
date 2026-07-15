@@ -1975,7 +1975,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.14.22';
+var APP_BUILD_VERSION = '07.14.23';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -13232,7 +13232,6 @@ function _profLastDayOfMonth(y, mIdx){ return new Date(y, mIdx+1, 0).getDate(); 
 function _computeRentForShop(shop, from, to, allShifts, rentCfg){
   if(!rentCfg || !rentCfg.amount) return 0;
   var overrides = rentCfg.overrides || {};
-  var dailyRate = rentDailyRate(rentCfg);
   var fromD = new Date(from+'T00:00:00'), toD = new Date(to+'T00:00:00');
   var total = 0;
   var cursor = new Date(fromD.getFullYear(), fromD.getMonth(), 1);
@@ -13244,9 +13243,15 @@ function _computeRentForShop(shop, from, to, allShifts, rentCfg){
     var rangeStart = fromD > monthStart ? fromD : monthStart;
     var rangeEnd = toD < monthEnd ? toD : monthEnd;
     var daysInRangeThisMonth = Math.round((rangeEnd-rangeStart)/86400000)+1;
+    var wholeMonth = daysInRangeThisMonth===daysInMonth;
+    // Дневная ставка для ЭТОГО конкретного месяца считается по реальному
+    // числу дней в нём (28-31), а не по условным "30 дням". Раньше при
+    // помесячной оплате сумма делилась на 30 и умножалась обратно на
+    // фактические дни месяца — в 31-дневном месяце это добавляло лишний
+    // "день", а в 28-дневном — наоборот теряло.
+    var dailyRateThisMonth = rentCfg.mode==='month' ? (rentCfg.amount/daysInMonth) : rentCfg.amount;
     if(daysInRangeThisMonth>0){
       if(overrides[monthKey]!=null){
-        var wholeMonth = daysInRangeThisMonth===daysInMonth;
         total += wholeMonth ? overrides[monthKey] : (overrides[monthKey]/daysInMonth*daysInRangeThisMonth);
       } else if(rentCfg.workedDaysOnly){
         var rangeStartStr = rangeStart.toISOString().split('T')[0], rangeEndStr = rangeEnd.toISOString().split('T')[0];
@@ -13254,9 +13259,12 @@ function _computeRentForShop(shop, from, to, allShifts, rentCfg){
         allShifts.forEach(function(s){
           if(s.shopName===shop && s.date>=rangeStartStr && s.date<=rangeEndStr) workedDates[s.date]=true;
         });
-        total += dailyRate * Object.keys(workedDates).length;
+        total += dailyRateThisMonth * Object.keys(workedDates).length;
+      } else if(rentCfg.mode==='month' && wholeMonth){
+        // Целый месяц, помесячная оплата, без переопределения — сумма как есть.
+        total += rentCfg.amount;
       } else {
-        total += dailyRate * daysInRangeThisMonth;
+        total += dailyRateThisMonth * daysInRangeThisMonth;
       }
     }
     cursor = new Date(y, mIdx+1, 1);
