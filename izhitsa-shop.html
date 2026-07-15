@@ -1443,6 +1443,24 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
         </select>
       </div>
     </div>
+    <div id="onlineOrderBlock" style="display:none;background:#1a1420;border:2px solid #f0a0c0;border-radius:14px;padding:12px;margin-bottom:14px">
+      <div style="font-size:11px;color:#f0a0c0;font-weight:700;margin-bottom:8px">📱 ОНЛАЙН-ЗАКАЗ</div>
+      <div class="fg"><label class="fl">Канал продажи</label>
+        <div style="display:flex;gap:6px">
+          <button type="button" id="chOrderTg" onclick="setOrderChannel('Telegram')" style="flex:1;padding:8px;border-radius:9px;border:2px solid #60c8f0;background:#0c1a20;color:#60c8f0;font-size:12px;font-weight:700;cursor:pointer">✈️ Telegram</button>
+          <button type="button" id="chOrderInsta" onclick="setOrderChannel('Instagram')" style="flex:1;padding:8px;border-radius:9px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer">📷 Instagram</button>
+        </div>
+      </div>
+      <div class="fg"><label class="fl">ФИО покупателя</label><input class="fi" id="ordCustName" placeholder="Имя Фамилия"></div>
+      <div class="fg"><label class="fl">№ телефона получателя</label><input class="fi" id="ordRecipPhone" placeholder="+7..." inputmode="tel"></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <input type="checkbox" id="ordDiffOrderer" onchange="toggleOrdererPhone(this.checked)" style="width:18px;height:18px;cursor:pointer">
+        <label for="ordDiffOrderer" style="font-size:12px;color:#8888aa;cursor:pointer">Заказчик — другой человек (не получатель)</label>
+      </div>
+      <div class="fg" id="ordOrdererPhoneBlock" style="display:none"><label class="fl">№ телефона заказчика</label><input class="fi" id="ordOrdererPhone" placeholder="+7..." inputmode="tel"></div>
+      <div class="fg"><label class="fl">Город / адрес доставки (пункт ПВЗ)</label><input class="fi" id="ordDeliveryAddr" placeholder="Город, ПВЗ или адрес"></div>
+      <div class="fg" style="margin-bottom:0"><label class="fl">Комментарий к заказу</label><input class="fi" id="ordComment" placeholder="Срочность и прочее — необязательно"></div>
+    </div>
     <div class="fg"><label class="fl">Комментарий</label><input class="fi" id="saleComment" placeholder="Необязательно"></div>
     <button class="btn" onclick="saveSale()">✅ Зафиксировать продажу</button>
     <button class="btn sec" style="margin-top:8px" onclick="_svArchiveAddMode=false;_svArchiveEditId=null;closeMo('saleMo')">Отмена</button>
@@ -1957,7 +1975,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.14.20';
+var APP_BUILD_VERSION = '07.14.21';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -4593,7 +4611,21 @@ function adaptUIForShopType(){
       var payContainer = payBlock ? (payBlock.closest('.fg') || payBlock.parentElement) : null;
       if(payContainer) saleMo.querySelector('.md').insertBefore(sourceBlock, payContainer);
     }
+    var onlineBlock = document.getElementById('onlineOrderBlock');
+    if(onlineBlock) onlineBlock.style.display = isOnline ? 'block' : 'none';
   }
+}
+function setOrderChannel(ch){
+  _orderChannel = ch;
+  var tgBtn=document.getElementById('chOrderTg'), instaBtn=document.getElementById('chOrderInsta');
+  var onStyle='flex:1;padding:8px;border-radius:9px;border:2px solid #60c8f0;background:#0c1a20;color:#60c8f0;font-size:12px;font-weight:700;cursor:pointer';
+  var offStyle='flex:1;padding:8px;border-radius:9px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer';
+  if(tgBtn) tgBtn.style.cssText = ch==='Telegram' ? onStyle : offStyle;
+  if(instaBtn) instaBtn.style.cssText = ch==='Instagram' ? onStyle : offStyle;
+}
+function toggleOrdererPhone(checked){
+  var block = document.getElementById('ordOrdererPhoneBlock');
+  if(block) block.style.display = checked ? 'block' : 'none';
 }
 function getRSAccounts(){
   var accounts = JSON.parse(localStorage.getItem('iz_accounts')||'[]');
@@ -6010,7 +6042,9 @@ function resetSaleForm(){
   setSiItemType('derevo');
   setDiscCategory('derevo');
   renderSaleItems(); calcSaleTotal();
-  ['siNum','siName','siPrice','siQty','siAmt','siSpecies','siNameM','siPriceM','siQtyM','siAmtM','siSpeciesM','saleComment','mixCash','mixCard','discInput','saleDiscount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['siNum','siName','siPrice','siQty','siAmt','siSpecies','siNameM','siPriceM','siQtyM','siAmtM','siSpeciesM','saleComment','mixCash','mixCard','discInput','saleDiscount','ordCustName','ordRecipPhone','ordOrdererPhone','ordDeliveryAddr','ordComment'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  var ordChk = document.getElementById('ordDiffOrderer'); if(ordChk){ ordChk.checked=false; toggleOrdererPhone(false); }
+  setOrderChannel('Telegram');
   document.getElementById('siLookupResult').style.display='none';
   document.getElementById('siManualBlock').style.display='none';
   document.getElementById('siDiffWarn').style.display='none';
@@ -6165,6 +6199,7 @@ function calcSaleTotal(){
   const total=saleItems.reduce((s,it)=>s+(it.amt!=null?it.amt:it.price*(it.qty||1)),0), disc=parseFloat(gv('saleDiscount'))||0;
   const el=document.getElementById('saleFinal'); if(el)el.textContent=fmt(Math.max(0,total-disc));
 }
+var _orderChannel = 'Telegram';
 function setPayM(m,el){
   payMethod=m;
   document.querySelectorAll('#saleMo .pc').forEach(p=>p.classList.remove('active'));
@@ -6268,13 +6303,26 @@ function saveSale(){
   var hasWood = saleItems.some(function(it){ return it.goodsType!=='dr'; });
   var hasDr = saleItems.some(function(it){ return it.goodsType==='dr'; });
   var overallGoodsType = (hasWood && hasDr) ? 'mixed' : (hasDr ? 'dr' : 'derevo');
+  var _onlineOrderInfo = null;
+  var _shopTypeNow = session.shopType || getShopType(session.shopName);
+  if(_shopTypeNow==='online'){
+    _onlineOrderInfo = {
+      channel: _orderChannel,
+      customerName: gv('ordCustName'),
+      recipientPhone: gv('ordRecipPhone'),
+      ordererPhone: (document.getElementById('ordDiffOrderer')&&document.getElementById('ordDiffOrderer').checked) ? gv('ordOrdererPhone') : '',
+      deliveryAddress: gv('ordDeliveryAddr'),
+      orderComment: gv('ordComment')
+    };
+  }
   var newEntryData = {ts:_workingNowISO(),icon:'💰',
     label:'Продажа',
     sub:saleItems.map(i=>'№'+(i.num||'—')+' '+i.name+(i.goodsType==='dr'?' · ДР':'')+(i.hasDiff?' ⚠️':'')).join(', ')+(disc?' · Скидка '+fmt(disc):'')+' · '+payL,
     items:[...saleItems],totalPrice:total,discount:disc,discCategory:discCategory,totalPaid:paid,payMethod,cashPart,cardPart,goodsType:overallGoodsType,
     hasDiff,comment:gv('saleComment'),amount:paid,amtCls:'inc',amtSign:'+',
     cashEffect:cashPartWood,cardEffect:cardPartWood,staffEffect:0,goodsEffect:-totalWood,
-    cashDrEffect:cashPartDr,cardDrEffect:cardPartDr,goodsDrEffect:-totalDr};
+    cashDrEffect:cashPartDr,cardDrEffect:cardPartDr,goodsDrEffect:-totalDr,
+    onlineOrder:_onlineOrderInfo};
   if(_svArchiveAddMode && _currentShiftView){
     var jnlArch2 = _currentShiftView.journal||[];
     var newArchEntry = Object.assign({id:uid(), type:'sale'}, newEntryData, {
@@ -6323,27 +6371,36 @@ function saveSale(){
   journal.push(_liveSaleEntry);
   _recordSaleIndependently(_liveSaleEntry, session&&session.shopName);
   _backupCheckPassed = false;
-  try{ stockApplySale(session&&session.shopName, saleItems); }catch(e){}
   var shopType = session.shopType || getShopType(session.shopName);
+  var sourceShop = '';
   if(shopType !== 'shop'){
-    var sourceShop = (document.getElementById('goodsSource')||{}).value || '';
-    if(sourceShop){
-      var notif = {
-        id:uid(), type:'online_sale',
-        fromChannel: session.shopName,
-        sellerName: session.sellerName,
-        sourceShop: sourceShop,
-        items: [...saleItems],
-        date: new Date().toISOString().split('T')[0],
-        ts: _workingNowISO(),
-        read: false
-      };
-      var alerts = JSON.parse(localStorage.getItem('iz_shop_notifications')||'[]');
-      alerts.unshift(notif);
-      localStorage.setItem('iz_shop_notifications', JSON.stringify(alerts.slice(0,100)));
-      try{ db.collection('iz_shop_notifications').add(notif); }catch(e){}
-      var sKey = 'iz_shop_goods_'+sourceShop;
-    }
+    sourceShop = (document.getElementById('goodsSource')||{}).value || '';
+  }
+  // Списываем товар со СКЛАДА-ИСТОЧНИКА (тот магазин, где физически лежит
+  // товар), а не с самой точки продаж ОПТ/онлайн — иначе остатки нигде не
+  // уменьшались и товар можно было продать повторно.
+  try{ stockApplySale(sourceShop || (session&&session.shopName), saleItems); }catch(e){}
+  if(shopType !== 'shop' && sourceShop){
+    var notif = {
+      id:uid(), type:'online_sale',
+      fromChannel: session.shopName,
+      sellerName: session.sellerName,
+      sourceShop: sourceShop,
+      items: [...saleItems],
+      date: new Date().toISOString().split('T')[0],
+      ts: _workingNowISO(),
+      read: false,
+      orderChannel: _onlineOrderInfo ? _onlineOrderInfo.channel : '',
+      customerName: _onlineOrderInfo ? _onlineOrderInfo.customerName : '',
+      recipientPhone: _onlineOrderInfo ? _onlineOrderInfo.recipientPhone : '',
+      ordererPhone: _onlineOrderInfo ? _onlineOrderInfo.ordererPhone : '',
+      deliveryAddress: _onlineOrderInfo ? _onlineOrderInfo.deliveryAddress : '',
+      orderComment: _onlineOrderInfo ? _onlineOrderInfo.orderComment : ''
+    };
+    var alerts = JSON.parse(localStorage.getItem('iz_shop_notifications')||'[]');
+    alerts.unshift(notif);
+    localStorage.setItem('iz_shop_notifications', JSON.stringify(alerts.slice(0,100)));
+    try{ db.collection('iz_shop_notifications').add(notif); }catch(e){}
   }
   saveJ(); resetSaleForm(); closeMo('saleMo'); renderAll();
   logSale(saleItems.length, paid, session.shopName);
@@ -6839,7 +6896,7 @@ function renderPendingAlert(){
     var notifs=JSON.parse(localStorage.getItem('iz_shop_notifications')||'[]')
       .filter(function(n){ return n.sourceShop===(session&&session.shopName) && !n.shopAcked; });
     if(notifs.length) html+=`<div class="al-warn" style="cursor:pointer" onclick="showOnlineSaleNotifs()">
-      📱 ${notifs.length} онлайн-продажа — нужно убрать товар с прилавка
+      📦 ${notifs.length} онлайн-продажа — упакуйте отправку
     </div>`;
   }
   c.innerHTML = html;
@@ -6850,9 +6907,14 @@ function showOnlineSaleNotifs(){
   if(!notifs.length) return;
   var lines = notifs.map(function(n,i){
     var itemLines = n.items.map(function(it){ return it.name; }).join(', ');
-    return (i+1)+'. '+n.fromChannel+' ('+n.sellerName+'): '+itemLines;
+    var chan = n.orderChannel ? ' ['+n.orderChannel+']' : '';
+    var who = n.customerName ? ' · '+n.customerName : '';
+    var phone = n.recipientPhone ? ' · тел. '+n.recipientPhone : '';
+    var addr = n.deliveryAddress ? ' · доставка: '+n.deliveryAddress : '';
+    var cmt = n.orderComment ? ' · комментарий: '+n.orderComment : '';
+    return (i+1)+'.'+chan+' '+n.fromChannel+' ('+n.sellerName+'): '+itemLines+who+phone+addr+cmt;
   });
-  var msgText = 'Онлайн-продажи. Убрать с прилавка: ' + lines.join('; ') + '. Подтвердить?';
+  var msgText = '📦 Онлайн-продажи — упакуйте отправку:\n\n' + lines.join('\n\n') + '\n\nУбрать товар с прилавка и подтвердить?';
   if(confirm(msgText)){
     var all=JSON.parse(localStorage.getItem('iz_shop_notifications')||'[]');
     notifs.forEach(function(n){
