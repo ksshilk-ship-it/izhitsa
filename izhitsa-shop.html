@@ -1088,8 +1088,32 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
       <div style="font-size:10px;color:#8888aa;margin-bottom:4px">Магазин</div>
       <div id="ss_shop_chips" style="display:flex;gap:5px;flex-wrap:wrap"></div>
       <button onclick="recalcAllShiftsZp()" style="width:100%;margin-top:10px;padding:9px;background:#1e2a14;border:2px solid #c8f060;border-radius:10px;font-weight:700;font-size:12px;color:#c8f060;cursor:pointer">🔄 Пересчитать ЗП по всем закрытым сменам</button>
+      <button onclick="openShiftsCalendar()" style="width:100%;margin-top:8px;padding:9px;background:#1a1a2e;border:2px solid #60c8f0;border-radius:10px;font-weight:700;font-size:12px;color:#60c8f0;cursor:pointer">📅 Общий календарь смен</button>
     </div>
     <div id="ss_content"></div>
+  </div>
+  <div class="mo" id="shiftsCalendarMo">
+    <div class="md" style="max-height:95dvh">
+      <div class="mh"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="mt" style="margin:0">📅 Календарь смен</div>
+        <button onclick="closeMo('shiftsCalendarMo')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:5px 10px;color:#8888aa;cursor:pointer;font-size:12px">✕</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <div class="fg" style="flex:1;margin:0"><label class="fl">Месяц</label>
+          <select class="fs" id="scMonth" onchange="renderShiftsCalendar()"></select>
+        </div>
+        <div class="fg" style="flex:1;margin:0"><label class="fl">Год</label>
+          <select class="fs" id="scYear" onchange="renderShiftsCalendar()"></select>
+        </div>
+      </div>
+      <div class="fg" style="margin-bottom:12px">
+        <label class="fl">Магазин</label>
+        <select class="fs" id="scShopFilter" onchange="renderShiftsCalendar()"><option value="">Все магазины</option></select>
+      </div>
+      <div id="scLegend" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;font-size:10px;color:#8888aa"></div>
+      <div id="scBody" style="overflow-x:auto"></div>
+    </div>
   </div>
   <div class="page" id="pg-sellers">
     <div class="stitle">Управление сотрудниками</div>
@@ -1972,7 +1996,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.17.2';
+var APP_BUILD_VERSION = '07.17.5';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -5454,6 +5478,87 @@ function _ssDateRange(){
   var t=(document.getElementById('ss_date_to')||{}).value||'';
   return {from:f||'2000-01-01',to:t||'2099-12-31'};
 }
+var SC_SHOP_COLORS = ['#60f090','#60c8f0','#a060f0','#f0a060','#f06090','#c8f060','#f0c060','#60f0d0'];
+function _scShopColor(shopName, shopList){
+  var idx = shopList.indexOf(shopName);
+  return SC_SHOP_COLORS[idx % SC_SHOP_COLORS.length];
+}
+function openShiftsCalendar(){
+  var now=new Date(), curYear=now.getFullYear(), curMonth=now.getMonth();
+  var monthSel=document.getElementById('scMonth');
+  if(monthSel) monthSel.innerHTML=RENT_MONTH_NAMES.map(function(n,i){return '<option value="'+i+'"'+(i===curMonth?' selected':'')+'>'+n.charAt(0).toUpperCase()+n.slice(1)+'</option>';}).join('');
+  var yearSel=document.getElementById('scYear');
+  if(yearSel){
+    var years=[]; for(var y=curYear;y>=curYear-3;y--) years.push(y);
+    yearSel.innerHTML=years.map(function(y){return '<option value="'+y+'"'+(y===curYear?' selected':'')+'>'+y+'</option>';}).join('');
+  }
+  var shopSel=document.getElementById('scShopFilter');
+  if(shopSel) shopSel.innerHTML='<option value="">Все магазины</option>'+getShopNames().map(function(s){return '<option>'+s+'</option>';}).join('');
+  openMo('shiftsCalendarMo');
+  renderShiftsCalendar();
+}
+function renderShiftsCalendar(){
+  var body=document.getElementById('scBody'), legend=document.getElementById('scLegend');
+  if(!body) return;
+  var mIdx=parseInt((document.getElementById('scMonth')||{}).value)||0;
+  var year=parseInt((document.getElementById('scYear')||{}).value)||new Date().getFullYear();
+  var shopF=(document.getElementById('scShopFilter')||{}).value||'';
+  var daysInMonth=new Date(year,mIdx+1,0).getDate();
+  var from=year+'-'+String(mIdx+1).padStart(2,'0')+'-01';
+  var to=year+'-'+String(mIdx+1).padStart(2,'0')+'-'+String(daysInMonth).padStart(2,'0');
+  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]').filter(function(s){
+    return s.date>=from && s.date<=to && (!shopF||s.shopName===shopF) && s.sellerName;
+  });
+  if(!shifts.length){
+    body.innerHTML='<div class="empty"><div class="ei">📅</div>Нет смен за этот месяц'+(shopF?' в «'+shopF+'»':'')+'</div>';
+    legend.innerHTML='';
+    return;
+  }
+  var shopList=getShopNames();
+  legend.innerHTML=(shopF?[shopF]:shopList).map(function(sh){
+    return '<div style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:3px;background:'+_scShopColor(sh,shopList)+';display:inline-block"></span>'+sh+'</div>';
+  }).join('');
+  // seller -> {date: [shopNames]}
+  var bySeller={};
+  shifts.forEach(function(s){
+    var nm=(s.sellerName||'').replace(/^Восст\.\s*/,'');
+    if(!nm) return;
+    if(!bySeller[nm]) bySeller[nm]={};
+    if(!bySeller[nm][s.date]) bySeller[nm][s.date]=[];
+    bySeller[nm][s.date].push(s.shopName);
+  });
+  var sellers=Object.keys(bySeller).sort(function(a,b){
+    return Object.keys(bySeller[b]).length-Object.keys(bySeller[a]).length;
+  });
+  var dayNames=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  var html='<div style="display:inline-block;min-width:100%">';
+  html+='<div style="display:grid;grid-template-columns:96px repeat('+daysInMonth+',24px);gap:2px;margin-bottom:4px">';
+  html+='<div></div>';
+  for(var d=1; d<=daysInMonth; d++){
+    var dow=new Date(year,mIdx,d).getDay();
+    var isWE=dow===0||dow===6;
+    html+='<div style="text-align:center;font-size:8px;color:'+(isWE?'#f0a060':'#555568')+'">'+d+'</div>';
+  }
+  html+='</div>';
+  sellers.forEach(function(nm){
+    html+='<div style="display:grid;grid-template-columns:96px repeat('+daysInMonth+',24px);gap:2px;margin-bottom:2px;align-items:center">';
+    html+='<div style="font-size:10px;color:#f0f0f8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:4px">'+nm+'</div>';
+    for(var d2=1; d2<=daysInMonth; d2++){
+      var dKey=year+'-'+String(mIdx+1).padStart(2,'0')+'-'+String(d2).padStart(2,'0');
+      var worked=bySeller[nm][dKey];
+      if(worked && worked.length){
+        var multi=worked.length>1;
+        var color=multi?'#a060f0':_scShopColor(worked[0],shopList);
+        html+='<div title="'+worked.join(', ')+'" style="height:20px;border-radius:4px;background:'+color+';opacity:'+(multi?'1':'0.85')+'"></div>';
+      } else {
+        html+='<div style="height:20px;border-radius:4px;background:#1a1a22"></div>';
+      }
+    }
+    html+='</div>';
+  });
+  html+='</div>';
+  body.innerHTML=html;
+}
 function renderSellerStats(){
   var range=_ssDateRange();
   var allShifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]').filter(function(s){
@@ -5566,34 +5671,83 @@ function renderSellerStats(){
     var calShifts=shifts.filter(function(s){return (s.sellerName||'').replace(/^Восст\. /,'')===sel.name;});
     var calByDate={};
     calShifts.forEach(function(s){calByDate[s.date]=(calByDate[s.date]||[]);calByDate[s.date].push(s.shopName);});
-    // Generate calendar HTML
+    // Серии подряд идущих рабочих и выходных дней — считаем по всему
+    // диапазону между первой и последней сменой продавца, а не только по
+    // самим рабочим дням, иначе выходные вообще не видно.
+    var calStats={maxWorkStreak:0,maxRestStreak:0,currentStreak:0,currentStreakType:''};
     var calHtml='';
     if(calOpen){
       var dates=Object.keys(calByDate).sort();
       if(dates.length){
         var firstD=new Date(dates[0]),lastD=new Date(dates[dates.length-1]);
-        // Group by month
-        var months={};
-        dates.forEach(function(d){var m=d.substring(0,7);if(!months[m])months[m]=[];months[m].push(d);});
+        var workStreak=0, restStreak=0, prevType=null;
+        var cursorD=new Date(firstD);
+        var dayCells={}; // date -> {worked, streakLen, streakType}
+        while(cursorD<=lastD){
+          var dStr=cursorD.toISOString().split('T')[0];
+          var worked=!!calByDate[dStr];
+          if(worked){ workStreak++; restStreak=0; if(workStreak>calStats.maxWorkStreak) calStats.maxWorkStreak=workStreak; }
+          else { restStreak++; workStreak=0; if(restStreak>calStats.maxRestStreak) calStats.maxRestStreak=restStreak; }
+          dayCells[dStr]={worked:worked};
+          cursorD.setDate(cursorD.getDate()+1);
+        }
+        calStats.currentStreakType = dayCells[dates[dates.length-1]] && workStreak>0 ? 'work' : 'rest';
+        calStats.currentStreak = workStreak>0?workStreak:restStreak;
+        // Группируем по месяцам весь диапазон (включая нерабочие дни)
+        var monthsAll={};
+        var cur2=new Date(firstD.getFullYear(),firstD.getMonth(),1);
+        var lastMonthStart=new Date(lastD.getFullYear(),lastD.getMonth(),1);
+        while(cur2<=lastMonthStart){
+          var mk2=cur2.getFullYear()+'-'+String(cur2.getMonth()+1).padStart(2,'0');
+          var daysInM=new Date(cur2.getFullYear(),cur2.getMonth()+1,0).getDate();
+          var monthDays=[];
+          for(var dnum=1; dnum<=daysInM; dnum++){
+            var dObj=new Date(cur2.getFullYear(),cur2.getMonth(),dnum);
+            var dKey=dObj.toISOString().split('T')[0];
+            if(dObj>=firstD && dObj<=lastD) monthDays.push(dKey);
+          }
+          monthsAll[mk2]=monthDays;
+          cur2.setMonth(cur2.getMonth()+1);
+        }
         var mnames=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+        var dayNames=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
         calHtml='<div style="margin-top:8px;background:#111118;border-radius:8px;padding:8px;overflow-x:auto">';
-        Object.keys(months).sort().forEach(function(mk){
+        calHtml+='<div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">'+
+          '<div style="font-size:10px;color:#60f090">🔥 Макс. подряд рабочих: <b>'+calStats.maxWorkStreak+'</b></div>'+
+          '<div style="font-size:10px;color:#8888aa">💤 Макс. подряд выходных: <b>'+calStats.maxRestStreak+'</b></div>'+
+          '<div style="font-size:10px;color:'+(calStats.currentStreakType==='work'?'#60f090':'#8888aa')+'">Сейчас: <b>'+calStats.currentStreak+' '+(calStats.currentStreakType==='work'?'раб. подряд':'вых. подряд')+'</b></div>'+
+        '</div>';
+        Object.keys(monthsAll).sort().forEach(function(mk){
           var p=mk.split('-');
+          var monthDaysArr=monthsAll[mk];
+          if(!monthDaysArr.length) return;
           calHtml+='<div style="font-size:10px;color:#8888aa;font-weight:700;margin-bottom:4px">'+mnames[parseInt(p[1])-1]+' '+p[0]+'</div>';
-          calHtml+='<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:8px">';
-          months[mk].forEach(function(d){
-            var shops=calByDate[d];
-            var dd=new Date(d);
-            var dayNames=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
-            var dn=dayNames[dd.getDay()];
-            var isWE=dd.getDay()===0||dd.getDay()===6;
-            var multi=shops.length>1;
-            calHtml+='<div style="text-align:center;width:36px;background:'+(isWE?'#1e2a14':'#1a1a22')+';border:1px solid '+(multi?'#a060f0':'#c8f060')+';border-radius:6px;padding:3px 2px">'+
-              '<div style="font-size:9px;color:#8888aa">'+dn+'</div>'+
-              '<div style="font-size:11px;font-weight:700;color:'+(multi?'#a060f0':'#c8f060')+'">'+dd.getDate()+'</div>'+
-              (multi?'<div style="font-size:8px;color:#a060f0">2М</div>':'<div style="font-size:8px;color:#555568">'+shops[0].replace('Роза Хутор','РХ').replace('Горки','Г')+'</div>')+
+          // Заголовок дней недели
+          calHtml+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px;max-width:280px">'+
+            dayNames.map(function(dn){return '<div style="text-align:center;font-size:8px;color:#555568">'+dn+'</div>';}).join('')+
+          '</div>';
+          // Пустые клетки в начале месяца до первого дня недели (Пн=0)
+          var firstOfMonth=new Date(parseInt(p[0]),parseInt(p[1])-1,1);
+          var leadEmpty=(firstOfMonth.getDay()+6)%7; // Пн=0..Вс=6
+          calHtml+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:8px;max-width:280px">';
+          for(var le=0; le<leadEmpty; le++) calHtml+='<div></div>';
+          var daysInMonthFull=new Date(parseInt(p[0]),parseInt(p[1]),0).getDate();
+          for(var dn2=1; dn2<=daysInMonthFull; dn2++){
+            var dObj2=new Date(parseInt(p[0]),parseInt(p[1])-1,dn2);
+            var dKey2=dObj2.toISOString().split('T')[0];
+            if(dObj2<firstD || dObj2>lastD){ calHtml+='<div></div>'; continue; }
+            var shopsArr=calByDate[dKey2];
+            var worked2=!!shopsArr;
+            var multi2=worked2&&shopsArr.length>1;
+            var isWE2=dObj2.getDay()===0||dObj2.getDay()===6;
+            var bg = worked2 ? (multi2?'#2a1a3e':'#1a2e1e') : (isWE2?'#1a1418':'#141418');
+            var border = worked2 ? (multi2?'#a060f0':'#60f090') : '#2e2e3e';
+            var txtColor = worked2 ? (multi2?'#a060f0':'#60f090') : '#4a4a5a';
+            calHtml+='<div style="text-align:center;background:'+bg+';border:1px solid '+border+';border-radius:5px;padding:3px 1px">'+
+              '<div style="font-size:10px;font-weight:700;color:'+txtColor+'">'+dn2+'</div>'+
+              (worked2?(multi2?'<div style="font-size:7px;color:#a060f0">2М</div>':'<div style="font-size:6.5px;color:#60f090">'+shopsArr[0].replace('Роза Хутор','РХ').replace('Горки','Г').replace('Парк Ривьера Сочи','ПР').replace('Колесо Роза','КР').slice(0,2)+'</div>'):'')+
             '</div>';
-          });
+          }
           calHtml+='</div>';
         });
         calHtml+='</div>';
@@ -5601,10 +5755,32 @@ function renderSellerStats(){
     }
     // ZP debt
     var zpDebt=sel.zp-sel.zpFact;
+    var discKey='ss_disc_'+sel.name.replace(/\s/g,'_');
+    var zpKey='ss_zp_'+sel.name.replace(/\s/g,'_');
+    var travelKey='ss_travel_'+sel.name.replace(/\s/g,'_');
+    var cardKey='ss_card_'+sel.name.replace(/\s/g,'_');
+    var discOpen=!!(window._ssSecOpen&&window._ssSecOpen[discKey]);
+    var zpOpen=!!(window._ssSecOpen&&window._ssSecOpen[zpKey]);
+    var travelOpen=!!(window._ssSecOpen&&window._ssSecOpen[travelKey]);
+    var cardOpen=!!(window._ssSecOpen&&window._ssSecOpen[cardKey]);
+    function secToggle(key,open){
+      return 'event.preventDefault();if(!window._ssSecOpen)window._ssSecOpen={};window._ssSecOpen[\''+key+'\']='+(open?'false':'true')+';renderSellerStats()';
+    }
+    function secHeader(icon,label,extra,color,key,open){
+      return '<div onpointerdown="'+secToggle(key,open)+'" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:2px 0">'+
+        '<div style="font-size:10px;color:'+color+';font-weight:700">'+icon+' '+label+(extra?' '+extra:'')+'</div>'+
+        '<span style="color:#8888aa;font-size:11px">'+(open?'▾':'▸')+'</span>'+
+      '</div>';
+    }
     return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
+      '<div onpointerdown="'+secToggle(cardKey,cardOpen)+'" style="display:flex;justify-content:space-between;align-items:center;'+(cardOpen?'margin-bottom:8px':'')+';cursor:pointer">'+
         '<div style="font-size:14px;font-weight:700">'+sel.name+'</div>'+
-        '<div style="font-size:10px;color:#8888aa">'+shopsStr+'</div></div>'+
+        '<div style="display:flex;align-items:center;gap:10px">'+
+          (!cardOpen?'<div style="font-size:11px;color:#c8f060;font-weight:700">'+sel.shifts+' см. · '+fmt(sel.revenue)+'₽</div>':'<div style="font-size:10px;color:#8888aa">'+shopsStr+'</div>')+
+          '<span style="color:#8888aa;font-size:13px">'+(cardOpen?'▾':'▸')+'</span>'+
+        '</div>'+
+      '</div>'+
+      (!cardOpen?'':(
       row('Смен',sel.shifts)+
       row('Выручка итого',fmt(sel.revenue)+'₽','#c8f060')+
       row('Ср. выручка / смену',fmt(avgRev)+'₽','#c8f060')+
@@ -5618,34 +5794,40 @@ function renderSellerStats(){
         var avgDiscPerSale=sel.discSales>0?Math.round(sel.disc/sel.discSales):0;
         var riskLvl=discPct>=15?'🔴 Высокий':discPct>=8?'🟡 Средний':'🟢 Норма';
         return '<div style="background:#1a1a14;border:1px solid #3e3e2e;border-radius:10px;padding:10px;margin-bottom:6px">'+
-          '<div style="font-size:10px;color:#f0a060;font-weight:700;margin-bottom:6px">🎁 АНАЛИЗ СКИДОК '+riskLvl+'</div>'+
-          row('Скидки итого',fmt(sel.disc)+'₽','#f0a060')+
-          row('Скидки % от выручки',discPct+'%',discPct>=15?'#f06060':discPct>=8?'#f0a060':'#60f090')+
-          row('Скидки по наличным',fmt(sel.discCash)+'₽ ('+cashDiscPct+'%)',cashDiscPct>=70?'#f06060':'#f0a060')+
-          row('Продаж со скидкой',sel.discSales+' шт.')+
-          row('Ср. скидка за сделку',fmt(avgDiscPerSale)+'₽','#f0a060')+
+          secHeader('🎁','АНАЛИЗ СКИДОК',riskLvl,'#f0a060',discKey,discOpen)+
+          (discOpen?(
+            row('Скидки итого',fmt(sel.disc)+'₽','#f0a060')+
+            row('Скидки % от выручки',discPct+'%',discPct>=15?'#f06060':discPct>=8?'#f0a060':'#60f090')+
+            row('Скидки по наличным',fmt(sel.discCash)+'₽ ('+cashDiscPct+'%)',cashDiscPct>=70?'#f06060':'#f0a060')+
+            row('Продаж со скидкой',sel.discSales+' шт.')+
+            row('Ср. скидка за сделку',fmt(avgDiscPerSale)+'₽','#f0a060')
+          ):'')+
         '</div>';
       })()+
       '<div style="border-top:1px solid #2e2e3e;margin:6px 0 4px"></div>'+
-      '<div style="font-size:10px;color:#60f090;font-weight:700;margin-bottom:4px">ЗАРПЛАТА</div>'+
-      row('ЗП начислена',fmt(sel.zp)+'₽','#60f090')+
-      row('ЗП взято (факт)',fmt(sel.zpFact)+'₽','#f0a060')+
-      row('  · наличными',fmt(sel.zpCash)+'₽','#8888aa')+
-      row('  · переводом',fmt(sel.zpTransfer)+'₽','#8888aa')+
-      (sel.zpOther?row('  · иначе',fmt(sel.zpOther)+'₽','#8888aa'):'')+
-      row('Долг/Переплата',fmt(Math.abs(zpDebt))+'₽ '+(zpDebt>0?'← долг':zpDebt<0?'→ переплата':'✔ оплачено'),zpDebt>0?'#f06060':zpDebt<0?'#a060f0':'#60f090')+
-      row('Ср. ЗП / смену',fmt(avgZp)+'₽','#60f090')+
-      row('Ср. ЗП / месяц',fmt(sel.zp/_ssMonthsInRange(range))+'₽','#60f090')+
+      secHeader('💰','ЗАРПЛАТА','','#60f090',zpKey,zpOpen)+
+      (zpOpen?(
+        row('ЗП начислена',fmt(sel.zp)+'₽','#60f090')+
+        row('ЗП взято (факт)',fmt(sel.zpFact)+'₽','#f0a060')+
+        row('  · наличными',fmt(sel.zpCash)+'₽','#8888aa')+
+        row('  · переводом',fmt(sel.zpTransfer)+'₽','#8888aa')+
+        (sel.zpOther?row('  · иначе',fmt(sel.zpOther)+'₽','#8888aa'):'')+
+        row('Долг/Переплата',fmt(Math.abs(zpDebt))+'₽ '+(zpDebt>0?'← долг':zpDebt<0?'→ переплата':'✔ оплачено'),zpDebt>0?'#f06060':zpDebt<0?'#a060f0':'#60f090')+
+        row('Ср. ЗП / смену',fmt(avgZp)+'₽','#60f090')+
+        row('Ср. ЗП / месяц',fmt(sel.zp/_ssMonthsInRange(range))+'₽','#60f090')
+      ):'')+
       (function(){
         var travelDebt = sel.travelAccrued - (sel.travelCash+sel.travelTransfer+sel.travelOther);
         return '<div style="border-top:1px solid #2e2e3e;margin:6px 0 4px"></div>'+
-        '<div style="font-size:10px;color:#f0a060;font-weight:700;margin-bottom:4px">ПРОЕЗД</div>'+
-        row('Проезд начислен',fmt(sel.travelAccrued)+'₽','#f0a060')+
-        row('Проезд выплачен',fmt(sel.travelCash+sel.travelTransfer+sel.travelOther)+'₽','#f0a060')+
-        row('  · наличными',fmt(sel.travelCash)+'₽','#8888aa')+
-        row('  · переводом',fmt(sel.travelTransfer)+'₽','#8888aa')+
-        (sel.travelOther?row('  · иначе',fmt(sel.travelOther)+'₽','#8888aa'):'')+
-        row('Долг/Переплата (проезд)',fmt(Math.abs(travelDebt))+'₽ '+(travelDebt>0?'← долг':travelDebt<0?'→ переплата':'✔ оплачено'),travelDebt>0?'#f06060':travelDebt<0?'#a060f0':'#60f090');
+        secHeader('🚌','ПРОЕЗД','','#f0a060',travelKey,travelOpen)+
+        (travelOpen?(
+          row('Проезд начислен',fmt(sel.travelAccrued)+'₽','#f0a060')+
+          row('Проезд выплачен',fmt(sel.travelCash+sel.travelTransfer+sel.travelOther)+'₽','#f0a060')+
+          row('  · наличными',fmt(sel.travelCash)+'₽','#8888aa')+
+          row('  · переводом',fmt(sel.travelTransfer)+'₽','#8888aa')+
+          (sel.travelOther?row('  · иначе',fmt(sel.travelOther)+'₽','#8888aa'):'')+
+          row('Долг/Переплата (проезд)',fmt(Math.abs(travelDebt))+'₽ '+(travelDebt>0?'← долг':travelDebt<0?'→ переплата':'✔ оплачено'),travelDebt>0?'#f06060':travelDebt<0?'#a060f0':'#60f090')
+        ):'');
       })()+
       (sel.hasCashDiff>0?row('Расхождения кассы',sel.hasCashDiff+' смен','#f06060'):'')+
       '<div onpointerdown="event.preventDefault();if(!window._ssCalOpen)window._ssCalOpen={};window._ssCalOpen[\''+calKey+'\']='+(calOpen?'false':'true')+';renderSellerStats()" '+
@@ -5653,7 +5835,8 @@ function renderSellerStats(){
         '<span style="font-size:11px;color:#8888aa">📅 Календарь смен ('+Object.keys(calByDate).length+')</span>'+
         '<span style="color:#8888aa;font-size:12px">'+(calOpen?'▾':'▸')+'</span>'+
       '</div>'+
-      calHtml+
+      calHtml
+      ))+
     '</div>';
   }).join('');
   cont.innerHTML=html;
