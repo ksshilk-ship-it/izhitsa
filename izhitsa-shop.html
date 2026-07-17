@@ -1972,7 +1972,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.14.30';
+var APP_BUILD_VERSION = '07.17.2';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -9450,6 +9450,22 @@ function svSaveManualInvIntoShift(){
   if(!s.num){ showToast('Укажите номер накладной'); return; }
   var who = (session&&(session.name||session.sellerName))||'Администратор';
   var totalAmt = items.reduce(function(sum,it){ return sum+(it.price||0)*(it.qty||1); },0);
+  // Проверка на возможный дубль: если в системе уже есть накладная (принятая
+  // или ещё нет) на ту же сумму и то же число позиций для этого же магазина
+  // за последние 5 дней — она может быть той самой настоящей накладной,
+  // которую сейчас вносят вручную второй раз. Предупреждаем, а не тихо
+  // создаём копию — иначе позже эта же накладная может ещё раз "всплыть"
+  // через «Принять накладную целиком» и задвоить приход.
+  var cutoffDate = new Date(Date.now()-5*86400000).toISOString().split('T')[0];
+  var allInv = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]').concat(JSON.parse(localStorage.getItem('iz_invoices')||'[]'));
+  var possibleDup = allInv.find(function(iv){
+    var ivShop = iv.destName||iv.shopName;
+    var ivItems = iv.acceptedItems||iv.items||[];
+    var ivTotal = ivItems.reduce(function(sum,it){ return sum+(it.factPrice!=null?it.factPrice:(it.price||0))*(it.qty||1); },0);
+    return ivShop===_currentShiftView.shopName && (iv.date||'')>=cutoffDate &&
+      Math.abs(ivTotal-totalAmt)<1 && ivItems.length===items.length;
+  });
+  if(possibleDup && !confirm('⚠️ Похоже, в системе уже есть накладная на ту же сумму ('+fmt(totalAmt)+') и то же число позиций ('+items.length+') для этого магазина за последние дни'+(possibleDup.status==='accepted'?' (уже принята)':' (ещё не принята)')+'.\n\nЭто может быть та же самая накладная, внесённая ещё раз — тогда приход задвоится.\n\nВсё равно продолжить?')) return;
   var isDr = s.goodsType==='dr';
   var inv = {
     id: uid(), num: s.num, date: s.date, docDate: s.date, from: s.from,
@@ -9521,7 +9537,6 @@ function svShowInvoicePicker(){
 function svAcceptInvoiceIntoShift(invId){
   if(!_currentShiftView) return;
   var who = (session&&(session.name||session.sellerName))||'Администратор';
-  if(!confirm('Принять эту накладную целиком в смену «'+_currentShiftView.shopName+' · '+_currentShiftView.date+'»?')) return;
   var manual = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   var auto = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
   var manIdx = manual.findIndex(function(i){ return (i.id||i._id)===invId; });
@@ -9530,6 +9545,23 @@ function svAcceptInvoiceIntoShift(invId){
   var idx = isManual ? manIdx : invArr.findIndex(function(i){ return (i.id||i._id)===invId; });
   if(idx<0){ showToast('Накладная не найдена'); return; }
   var inv = invArr[idx];
+  var invTotalCheck = (inv.items||[]).reduce(function(s,it){ return s+(it.price||0)*(it.qty||1); },0);
+  var cutoffDateChk = new Date(Date.now()-5*86400000).toISOString().split('T')[0];
+  var jnlForDup = _currentShiftView.journal||[];
+  var dupInShift = jnlForDup.find(function(e){
+    return e.type==='receive' && Math.abs((e.amount||0)-invTotalCheck)<1;
+  });
+  var allShiftsChk = JSON.parse(localStorage.getItem(KEY.shifts)||'[]').filter(function(s){
+    return s.shopName===_currentShiftView.shopName && (s.date||'')>=cutoffDateChk;
+  });
+  var dupInRecentShifts = allShiftsChk.some(function(s){
+    return (s.journal||[]).some(function(e){ return e.type==='receive' && Math.abs((e.amount||0)-invTotalCheck)<1; });
+  });
+  var warnMsg = 'Принять эту накладную целиком в смену «'+_currentShiftView.shopName+' · '+_currentShiftView.date+'»?';
+  if(dupInShift || dupInRecentShifts){
+    warnMsg = '⚠️ За последние дни в этом магазине уже был приход на такую же сумму ('+fmt(invTotalCheck)+'). Возможно, эта накладная уже принята (например, внесена вручную) — проверьте, прежде чем продолжить.\n\n'+warnMsg;
+  }
+  if(!confirm(warnMsg)) return;
   var accepted = (inv.items||[]).map(function(it){
     return Object.assign({}, it, {factPrice: it.price, ok:true});
   });
