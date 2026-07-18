@@ -1203,6 +1203,35 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
         <button class="btn" style="margin-top:8px" onclick="saveRentSettings()">💾 Сохранить аренду</button>
       </div>
     </div>
+    <div class="card" style="margin-bottom:8px;padding:0;overflow:hidden">
+      <div onclick="toggleSettingsSection('backup')" style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:9px">
+          <span style="font-size:18px">💾</span>
+          <div><div style="font-size:13px;font-weight:700">Скачать данные магазина</div>
+          <div style="font-size:11px;color:#8888aa">резервная копия на телефон</div></div>
+        </div>
+        <div id="ssArr_backup" style="color:#c8f060">▶</div>
+      </div>
+      <div id="ssBody_backup" style="display:none;padding:0 14px 14px">
+        <div style="font-size:11px;color:#8888aa;margin-bottom:10px">Сохраняет данные файлом на телефон/компьютер — можно открыть в Excel, переслать, положить в архив. Данные при этом остаются в приложении как есть, ничего не удаляется.</div>
+        <button class="btn" style="background:#c8f060;color:#0f0f13;margin-bottom:10px" onclick="exportFullBackup()">💾 Скачать всё целиком (JSON)</button>
+        <div style="font-size:10px;color:#8888aa;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Или по частям:</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button class="btn sec" onclick="exportShiftsData()">📁 Смены</button>
+          <button class="btn sec" onclick="exportInvoicesData()">📥 Накладные</button>
+          <button class="btn sec" onclick="exportStockData()">📦 Остатки склада</button>
+          <button class="btn sec" onclick="exportCatalogData()">📚 Каталог товаров</button>
+          <button class="btn sec" onclick="exportStaffData()">👥 Сотрудники</button>
+          <button class="btn sec" onclick="exportSettingsData()">⚙️ Настройки (ЗП/аренда)</button>
+        </div>
+        <div style="font-size:10px;color:#8888aa;margin:12px 0 6px;text-transform:uppercase;letter-spacing:.5px">Таблицами (Excel):</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <button class="btn sec" onclick="exportShiftsExcel()">📁 Смены</button>
+          <button class="btn sec" onclick="exportReceivesExcel()">📥 Приходы</button>
+          <button class="btn sec" onclick="exportWriteoffsExcel()">🗑 Списания</button>
+        </div>
+      </div>
+    </div>
     <div class="card" style="margin-bottom:12px">
       <div class="ctitle">📚 Справочники системы</div>
       <div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:8px;overflow:hidden">
@@ -1996,7 +2025,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.17.5';
+var APP_BUILD_VERSION = '07.17.7';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -11101,6 +11130,148 @@ function saveRentSettings(){
   localStorage.setItem('iz_shop_rent', JSON.stringify(settings));
   syncSave('iz_shop_rent', settings);
   showToast('✅ Аренда сохранена');
+}
+function _downloadJSON(filename, dataObj){
+  try{
+    var blob = new Blob([JSON.stringify(dataObj, null, 2)], {type:'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+    showToast('✅ Файл сохранён: '+filename);
+  }catch(e){
+    showToast('❌ Не удалось скачать: '+(e&&e.message||e));
+  }
+}
+function _todayStr(){ return new Date().toISOString().split('T')[0]; }
+function _lsGet(key){ try{ return JSON.parse(localStorage.getItem(key)||'null'); }catch(e){ return null; } }
+function exportFullBackup(){
+  var data = {
+    exportedAt: new Date().toISOString(),
+    exportType: 'full_backup',
+    shifts: _lsGet(KEY.shifts),
+    manualInvoices: _lsGet('iz_manual_invoices'),
+    invoices: _lsGet('iz_invoices'),
+    stock: _lsGet('iz_stock'),
+    items: _lsGet('iz_items'),
+    goodsDerevo: _lsGet('iz_goods_derevo'),
+    goodsDr: _lsGet('iz_goods_dr'),
+    suppliers: _lsGet('iz_suppliers'),
+    shopAdmins: _lsGet('iz_shop_admins'),
+    sellers: _lsGet('iz_sellers'),
+    shopZpSettings: _lsGet('iz_shop_zp_settings'),
+    shopRent: _lsGet('iz_shop_rent'),
+    trash: _lsGet(KEY.trash)
+  };
+  _downloadJSON('izhitsa-backup-полный-'+_todayStr()+'.json', data);
+}
+function exportShiftsData(){
+  _downloadJSON('izhitsa-смены-'+_todayStr()+'.json', {exportedAt:new Date().toISOString(), shifts:_lsGet(KEY.shifts)});
+}
+function exportInvoicesData(){
+  _downloadJSON('izhitsa-накладные-'+_todayStr()+'.json', {exportedAt:new Date().toISOString(), manualInvoices:_lsGet('iz_manual_invoices'), invoices:_lsGet('iz_invoices')});
+}
+function exportStockData(){
+  _downloadJSON('izhitsa-остатки-склада-'+_todayStr()+'.json', {exportedAt:new Date().toISOString(), stock:_lsGet('iz_stock')});
+}
+function exportCatalogData(){
+  _downloadJSON('izhitsa-каталог-товаров-'+_todayStr()+'.json', {exportedAt:new Date().toISOString(), items:_lsGet('iz_items'), goodsDerevo:_lsGet('iz_goods_derevo'), goodsDr:_lsGet('iz_goods_dr'), suppliers:_lsGet('iz_suppliers')});
+}
+function exportStaffData(){
+  _downloadJSON('izhitsa-сотрудники-'+_todayStr()+'.json', {exportedAt:new Date().toISOString(), shopAdmins:_lsGet('iz_shop_admins'), sellers:_lsGet('iz_sellers')});
+}
+function exportSettingsData(){
+  _downloadJSON('izhitsa-настройки-'+_todayStr()+'.json', {exportedAt:new Date().toISOString(), shopZpSettings:_lsGet('iz_shop_zp_settings'), shopRent:_lsGet('iz_shop_rent')});
+}
+function _loadXLSXLib(cb){
+  if(typeof XLSX!=='undefined'){ cb(); return; }
+  showToast('⏳ Загружаю модуль Excel...');
+  var s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  s.onload=function(){ cb(); };
+  s.onerror=function(){ showToast('❌ Не удалось загрузить модуль Excel — нужен интернет хотя бы один раз для этого'); };
+  document.head.appendChild(s);
+}
+function _downloadExcel(filename, sheetName, headers, rows){
+  var ws = XLSX.utils.aoa_to_sheet([headers].concat(rows));
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, filename);
+  showToast('✅ Файл сохранён: '+filename);
+}
+function exportShiftsExcel(){
+  _loadXLSXLib(function(){
+    var shifts = _lsGet(KEY.shifts)||[];
+    var headers = ['Дата','Магазин','Продавец','Статус','Открыта','Закрыта',
+      'Выручка нал (Дерево)','Выручка безнал (Дерево)','Скидка (Дерево)',
+      'Выручка нал (ДР)','Выручка безнал (ДР)','Скидка (ДР)',
+      'Остаток утро Дерево','Остаток вечер Дерево','Остаток утро ДР','Остаток вечер ДР',
+      'Нал утро','Нал вечер (расч.)','Нал вечер (факт)','Итого расходы'];
+    var rows = shifts.map(function(s){
+      var exps=(s.journal||[]).filter(function(e){return e.type==='expense';});
+      var totExp=exps.reduce(function(a,e){return a+(e.amount||0);},0);
+      var goodsDrEve = s.drGoodsEvening!=null ? s.drGoodsEvening : s.goodsDrEvening;
+      var calcEve = (s.cashMorning||0) + (s.journal||[]).reduce(function(a,e){return a+(e.cashEffect||0);},0);
+      return [
+        s.date||'', s.shopName||'', (s.sellerName||'').replace(/^Восст\.\s*/,''), s.status||'',
+        s.openedAt||'', s.closedAt||'',
+        s.cashRevenue||0, s.cardRevenue||0, s.totalDiscount||0,
+        s.drCashRevenue||0, s.drCardRevenue||0, s.drDiscount||0,
+        s.goodsMorning||0, s.goodsEvening||0, s.goodsDrMorning||0, goodsDrEve||0,
+        s.cashMorning||0, calcEve, s.cashEvening!=null?s.cashEvening:'',
+        totExp
+      ];
+    });
+    _downloadExcel('izhitsa-смены-'+_todayStr()+'.xlsx','Смены',headers,rows);
+  });
+}
+function exportReceivesExcel(){
+  _loadXLSXLib(function(){
+    var shifts = _lsGet(KEY.shifts)||[];
+    var headers = ['Дата','Время','Магазин','Продавец','Тип товара','Откуда/поставщик','Число позиций','Сумма','Накладная'];
+    var rows = [];
+    shifts.forEach(function(s){
+      (s.journal||[]).filter(function(e){return e.type==='receive';}).forEach(function(e){
+        var timePart = (e.ts||'').split('T')[1]||'';
+        rows.push([
+          s.date||'', timePart.slice(0,5), s.shopName||'', (s.sellerName||'').replace(/^Восст\.\s*/,''),
+          e.goodsType==='dr'?'ДР':'Дерево', (e.sub||'').split('·')[0].trim()||'', 
+          (e.items||[]).length||'', e.amount||0, e.label||''
+        ]);
+      });
+    });
+    rows.sort(function(a,b){ return (a[0]+a[1]).localeCompare(b[0]+b[1]); });
+    _downloadExcel('izhitsa-приходы-'+_todayStr()+'.xlsx','Приходы',headers,rows);
+  });
+}
+function exportWriteoffsExcel(){
+  _loadXLSXLib(function(){
+    var shifts = _lsGet(KEY.shifts)||[];
+    var headers = ['Дата','Время','Магазин','Продавец','Тип товара','Причина','Сумма'];
+    var rows = [];
+    shifts.forEach(function(s){
+      (s.journal||[]).filter(function(e){return e.type==='writeoff';}).forEach(function(e){
+        var timePart = (e.ts||'').split('T')[1]||'';
+        var items = e.items||[];
+        if(items.length){
+          items.forEach(function(it){
+            rows.push([
+              s.date||'', timePart.slice(0,5), s.shopName||'', (s.sellerName||'').replace(/^Восст\.\s*/,''),
+              e.goodsType==='dr'?'ДР':'Дерево', it.reason||e.label||'', it.amt||0
+            ]);
+          });
+        } else {
+          rows.push([
+            s.date||'', timePart.slice(0,5), s.shopName||'', (s.sellerName||'').replace(/^Восст\.\s*/,''),
+            e.goodsType==='dr'?'ДР':'Дерево', e.reason||e.label||'', e.amount||0
+          ]);
+        }
+      });
+    });
+    rows.sort(function(a,b){ return (a[0]+a[1]).localeCompare(b[0]+b[1]); });
+    _downloadExcel('izhitsa-списания-'+_todayStr()+'.xlsx','Списания',headers,rows);
+  });
 }
 function numDef(val, def){
   return (val===undefined || val===null || val==='' || isNaN(val)) ? def : val;
