@@ -2025,7 +2025,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.17.7';
+var APP_BUILD_VERSION = '07.17.8';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -3504,8 +3504,13 @@ function calcShiftZpStandalone(shopName, report){
   var zpFact, travelFact;
   var zpEntries = expenses.filter(function(e){return e.expType==='zp';});
   var travelEntries = expenses.filter(function(e){return e.expType==='travel';});
-  zpFact = zpEntries.length ? zpEntries.reduce(function(a,e){return a+e.amount;},0) : ((report && report.zp)||0);
-  travelFact = travelEntries.length ? travelEntries.reduce(function(a,e){return a+e.amount;},0) : 0;
+  // ВАЖНО: если продавец не вносил запись о фактическом заборе ЗП — факт
+  // должен быть 0, а не подставляться расчётной/сохранённой суммой. Раньше
+  // здесь был запасной вариант "report.zp" (это старое ПОЛЕ РАСЧЁТА, а не
+  // подтверждение реального забора денег) — из-за него смена могла
+  // выглядеть так, будто ЗП забрали, хотя по факту этого не было.
+  zpFact = zpEntries.reduce(function(a,e){return a+e.amount;},0);
+  travelFact = travelEntries.reduce(function(a,e){return a+e.amount;},0);
   var zpSettings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
   var s = zpSettings[shopName] || null;
   var base = s ? numDef(s.base, 1500) : 1500;
