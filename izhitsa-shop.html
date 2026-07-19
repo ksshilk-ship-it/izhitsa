@@ -693,6 +693,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
       <input class="fi" type="date" id="adminRcvTo" style="-webkit-appearance:none;color-scheme:dark;margin:0;flex:1" oninput="renderAdminRcvWo()">
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" id="adminRcvShopChips"></div>
+    <button type="button" onclick="findAndCleanDuplicateReceives()" style="width:100%;margin-bottom:10px;padding:8px;border-radius:10px;border:1px solid #f06060;background:#22161a;color:#f06060;font-size:12px;font-weight:700;cursor:pointer">🧹 Найти и убрать дубли приходов</button>
     <div style="display:flex;gap:6px;margin-bottom:10px">
       <button type="button" id="adminRcvBtnRcv" onclick="adminRcvSetType('receive',this)" style="flex:1;padding:8px;border-radius:10px;border:2px solid #60f090;background:#1e2a14;color:#60f090;font-size:12px;font-weight:700;cursor:pointer">📥 Приходы</button>
       <button type="button" id="adminRcvBtnWo" onclick="adminRcvSetType('writeoff',this)" style="flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">🗑 Списания</button>
@@ -2025,7 +2026,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.17.11';
+var APP_BUILD_VERSION = '07.17.12';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -3102,15 +3103,26 @@ function _pushShiftWithRetry(shiftId, data){
     // фоновая отправка с этого устройства стирала админскую правку, и она
     // раз за разом "пропадала". Теперь: если на сервере уже более полная
     // версия (больше записей в журнале) — не затираем её, а забираем себе.
+    //
+    // ВАЖНО: записи, которые только что специально удалили (например, при
+    // переносе прихода на другую дату — там запись убирают из одной смены
+    // и добавляют в другую), не должны считаться "потерянными" и
+    // воскрешаться обратно — иначе перенос превращается в задвоение.
     db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
       if(snap.exists){
         var remote = snap.data();
-        var remoteLen = (remote.journal||[]).length;
-        var localLen = (data.journal||[]).length;
-        if(remoteLen > localLen){
-          _mergeRemoteShiftIntoLocal(shiftId, remote);
-          _clearShiftPendingFlag(shiftId);
-          return;
+        var remoteJnl = remote.journal||[];
+        var localJnl = data.journal||[];
+        var localIds = {}; localJnl.forEach(function(e){ if(e.id) localIds[e.id]=true; });
+        var deletedIds = {}; getTombstones().forEach(function(id){ deletedIds[id]=true; });
+        var missingFromServer = remoteJnl.filter(function(e){ return e.id && !localIds[e.id] && !deletedIds[e.id]; });
+        if(missingFromServer.length){
+          var merged = localJnl.concat(missingFromServer);
+          merged.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
+          data = Object.assign({}, data, {journal: merged});
+          var shifts2 = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+          var idx2 = shifts2.findIndex(function(s){ return (s.id||s._id)===shiftId; });
+          if(idx2>=0){ shifts2[idx2] = data; localStorage.setItem(KEY.shifts, JSON.stringify(shifts2)); }
         }
       }
       db.collection('iz_shifts').doc(shiftId).set(data).then(function(){
@@ -16403,6 +16415,49 @@ function runGlobalNameFix(){
 var _adminRcvPeriod = 'today';
 var _adminRcvShop = '';
 var _adminRcvType = 'receive';
+function findAndCleanDuplicateReceives(){
+  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var groups = {};
+  shifts.forEach(function(s, sIdx){
+    (s.journal||[]).forEach(function(e, eIdx){
+      if(e.type!=='receive') return;
+      var key = s.shopName+'|'+s.date+'|'+(e.label||'')+'|'+Math.round(e.amount||0);
+      if(!groups[key]) groups[key]=[];
+      groups[key].push({shiftIdx:sIdx, entryIdx:eIdx, shopName:s.shopName, date:s.date, entry:e});
+    });
+  });
+  var dupGroups = Object.keys(groups).filter(function(k){ return groups[k].length>1; }).map(function(k){ return groups[k]; });
+  if(!dupGroups.length){ showToast('✅ Дублей приходов не найдено'); return; }
+  var totalDup = dupGroups.reduce(function(s,g){ return s+g.length-1; },0);
+  var summary = dupGroups.slice(0,10).map(function(g){
+    return '• '+g[0].shopName+' · '+g[0].date+' · '+(g[0].entry.label||'')+' · '+g.length+' шт. вместо 1';
+  }).join('\n');
+  if(!confirm('Найдено '+dupGroups.length+' групп дублей, лишних записей: '+totalDup+'\n\n'+summary+(dupGroups.length>10?'\n...и ещё '+(dupGroups.length-10):'')+'\n\nОставить по одной записи в каждой группе (самую первую), остальные убрать в корзину?')) return;
+  // Удаляем начиная с самых поздних индексов, чтобы не сбить нумерацию при splice
+  var toRemove = [];
+  dupGroups.forEach(function(g){
+    g.slice(1).forEach(function(item){ toRemove.push(item); });
+  });
+  toRemove.sort(function(a,b){ return b.entryIdx-a.entryIdx; });
+  var touchedShifts = {};
+  toRemove.forEach(function(item){
+    var s = shifts[item.shiftIdx];
+    var jnl = s.journal||[];
+    var e = jnl[item.entryIdx];
+    if(!e || e.id!==item.entry.id) return; // на всякий случай, если что-то сдвинулось
+    addToTrash(e, {shopName:s.shopName, shiftId:s.id, deletedByOverride:(session&&(session.name||session.sellerName))||'admin (очистка дублей прихода)'});
+    jnl.splice(item.entryIdx,1);
+    s.journal = jnl;
+    touchedShifts[item.shiftIdx]=true;
+  });
+  localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+  Object.keys(touchedShifts).forEach(function(idx){
+    var s = shifts[idx];
+    _pushShiftWithRetry(s.id||s._id, s);
+  });
+  showToast('✅ Убрано дублей: '+toRemove.length);
+  try{ renderAdminRcvWo(); }catch(e){}
+}
 function initAdminRcvWo(){
   var chips = document.getElementById('adminRcvShopChips');
   if(chips){
@@ -16499,13 +16554,22 @@ function adminMoveReceiptDate(entryId, sourceShiftId){
   var dateInput = document.getElementById('moveDateInput_'+entryId);
   var newDate = dateInput && dateInput.value;
   if(!newDate){ showToast('Укажи новую дату'); return; }
+  // Защита от повторного нажатия: сразу убираем/блокируем форму, чтобы
+  // случайный второй клик (или повторное открытие той же формы) не смог
+  // ещё раз запустить перенос той же самой записи.
+  var formEl = dateInput ? dateInput.closest('.moveDateForm') : null;
+  if(formEl){
+    if(formEl.dataset.moving==='1') return;
+    formEl.dataset.moving='1';
+    formEl.querySelectorAll('button').forEach(function(b){ b.disabled=true; b.style.opacity='0.5'; });
+  }
   var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
   var srcIdx = shifts.findIndex(function(s){ return (s.id||s._id)===sourceShiftId; });
   if(srcIdx<0){ showToast('Исходная смена не найдена локально — сначала нажми ☁️ Синх'); return; }
   var srcShift = shifts[srcIdx];
   var jnl = srcShift.journal||[];
   var eIdx = jnl.findIndex(function(e){ return e.id===entryId; });
-  if(eIdx<0){ showToast('Запись прихода не найдена в смене'); return; }
+  if(eIdx<0){ showToast('Запись прихода не найдена в смене — возможно, уже перенесена'); return; }
   if(srcShift.date===newDate){ showToast('Это и есть текущая дата прихода'); return; }
   var entry = jnl[eIdx];
   var tgtIdx = shifts.findIndex(function(s){ return s.shopName===srcShift.shopName && s.date===newDate; });
@@ -16513,15 +16577,38 @@ function adminMoveReceiptDate(entryId, sourceShiftId){
     showToast('⚠️ У магазина «'+srcShift.shopName+'» нет смены за '+newDate+'. Сначала должна существовать смена на эту дату (открытая или закрытая), потом перенос.');
     return;
   }
-  if(!confirm('Перенести приход "'+(entry.label||entry.sub||'')+'" на '+newDate+' — из смены '+srcShift.date+' в смену '+newDate+'? Остатки товара в обеих сменах пересчитаются.')) return;
-  // убираем из исходной смены
+  // Проверка на уже перенесённую похожую запись — если в целевой смене уже
+  // есть приход с той же меткой и суммой (например, эту же запись уже
+  // переносили раньше, или это был повторный клик), предупреждаем, а не
+  // тихо создаём ещё одну копию.
+  var tgtJnlCheck = shifts[tgtIdx].journal||[];
+  var alreadyMoved = tgtJnlCheck.some(function(e){
+    return e.type==='receive' && e.label===entry.label && Math.abs((e.amount||0)-(entry.amount||0))<1;
+  });
+  if(alreadyMoved && !confirm('⚠️ В смене на '+newDate+' уже есть приход с такой же меткой и суммой ('+fmt(entry.amount||0)+'). Похоже, эта запись уже переносилась раньше.\n\nВсё равно перенести ещё раз?')){
+    if(formEl){ formEl.dataset.moving=''; formEl.querySelectorAll('button').forEach(function(b){ b.disabled=false; b.style.opacity='1'; }); }
+    return;
+  }
+  if(!confirm('Перенести приход "'+(entry.label||entry.sub||'')+'" на '+newDate+' — из смены '+srcShift.date+' в смену '+newDate+'? Остатки товара в обеих сменах пересчитаются.')){
+    if(formEl){ formEl.dataset.moving=''; formEl.querySelectorAll('button').forEach(function(b){ b.disabled=false; b.style.opacity='1'; }); }
+    return;
+  }
+  // убираем из исходной смены и тромбируем старую запись (через корзину —
+  // тот же механизм, что и обычное удаление записи) — иначе защита от
+  // потери данных при следующей фоновой синхронизации "заботливо" вернёт её
+  // обратно, решив, что она случайно пропала, и приход задвоится.
+  addToTrash(entry, {shopName:srcShift.shopName, shiftId:srcShift.id, deletedByOverride:(session&&(session.name||session.sellerName))||'admin (перенос даты прихода)'});
   jnl.splice(eIdx,1);
   srcShift.journal = jnl;
-  // добавляем в целевую смену, сохраняя время суток, но меняя дату
+  // добавляем в целевую смену под НОВЫМ id (не переиспользуем старый —
+  // старый id теперь в списке удалённых, и с ним запись нигде не должна
+  // фигурировать, чтобы не пересекаться с тромбстоуном)
   var timePart = (entry.ts||'').split('T')[1] || '12:00:00.000Z';
   var movedEntry = Object.assign({}, entry, {
+    id: uid(),
     ts: newDate+'T'+timePart,
     movedFrom: srcShift.date,
+    movedFromEntryId: entry.id,
     movedAt: new Date().toISOString(),
     movedBy: (session&&(session.name||session.sellerName))||'admin'
   });
