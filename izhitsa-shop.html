@@ -2025,7 +2025,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.17.8';
+var APP_BUILD_VERSION = '07.17.11';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -3860,10 +3860,13 @@ function stopLiveShiftListener(){
 }
 function renderLoginSellers(){
   const shop=gv('loginShop');
-  const sellers=getSellers().filter(s=>!s.blocked);
-  document.getElementById('loginSeller').innerHTML=sellers.length
+  const sellers=getSellers().filter(s=>!s.blocked && (!s.shops || !s.shops.length || s.shops.indexOf(shop)>=0));
+  const selEl=document.getElementById('loginSeller');
+  const prevSelected = selEl ? selEl.value : '';
+  selEl.innerHTML=sellers.length
     ?sellers.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')
     :'<option value="">— нет продавцов —</option>';
+  if(prevSelected && sellers.some(function(s){return s.id===prevSelected;})){ selEl.value = prevSelected; }
 }
 function refreshRecentClosedShiftsFromCloud(shopName){
   try{
@@ -3897,6 +3900,11 @@ function doLogin(){
   if(!seller){ err.style.display='block'; err.textContent='Продавец не найден'; return; }
   if(seller.blocked){ err.style.display='block'; err.textContent='Аккаунт заблокирован'; return; }
   if(seller.pass!==pass){ err.style.display='block'; err.textContent='Неверный пароль'; return; }
+  if(seller.shops && seller.shops.length && seller.shops.indexOf(shopName)<0){
+    err.style.display='block';
+    err.textContent='Этот продавец не привязан к магазину «'+shopName+'» (в Ролях указаны: '+seller.shops.join(', ')+')';
+    return;
+  }
   try{ refreshRecentClosedShiftsFromCloud(shopName); }catch(e){}
   var existing = JSON.parse(localStorage.getItem(KEY.session)||'null');
   var sameSeller = existing && (existing.sellerId===sellerId || existing.sellerName===seller.name);
@@ -5621,7 +5629,7 @@ function renderSellerStats(){
     sel.revenue+=rev;
     var sc=s.salesCount||0; sel.sales+=sc;
     if(sc>0) sel.checks.push(rev/sc);
-    sel.zp+=s.zp||0; sel.zpFact+=(s.zpFact||s.zp||0); sel.travel+=s.travel||0; sel.travelAccrued+=s.travel||0;
+    sel.zp+=s.zp||0; sel.zpFact+=(s.zpFact!=null?s.zpFact:0); sel.travel+=s.travel||0; sel.travelAccrued+=s.travel||0;
     sel.disc+=s.totalDiscount||0;
     (s.journal||[]).forEach(function(e){
       if(e.type==='expense' && (e.expType==='zp'||e.expType==='travel')){
@@ -15500,7 +15508,17 @@ function addNewSupplier() {
 function renderLoginShopSelect(){
   const shopNames=getShopNames();
   const shopSel=document.getElementById('loginShop');
-  if(shopSel) shopSel.innerHTML=shopNames.map(s=>`<option>${s}</option>`).join('');
+  if(!shopSel) return;
+  // ВАЖНО: эта функция может вызваться в фоне (например, когда где-то ещё
+  // поменялись настройки магазинов), в том числе прямо в момент, когда
+  // продавец уже выбрал нужный магазин на экране входа и вводит пароль.
+  // Раньше список тупо перезаписывался целиком, и выбор сбрасывался на
+  // первый пункт в списке — продавец мог набрать пароль и попасть совсем
+  // не туда, куда выбирал. Теперь сохраняем и восстанавливаем выбор.
+  const prevSelected = shopSel.value;
+  shopSel.innerHTML=shopNames.map(s=>`<option>${s}</option>`).join('');
+  if(prevSelected && shopNames.indexOf(prevSelected)>=0){ shopSel.value = prevSelected; }
+  try{ if(typeof renderLoginSellers==='function') renderLoginSellers(); }catch(e){}
 }
 function _staffSyncUpdateCb(){
   try{pick(loginRole);}catch(e){}
