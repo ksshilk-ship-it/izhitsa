@@ -2026,7 +2026,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.17.12';
+var APP_BUILD_VERSION = '07.17.16';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -3746,9 +3746,15 @@ function syncLiveShift(){
         _hideLiveSyncFailBanner();
       }).catch(function(){ _onLiveSyncFailed(); });
     }).catch(function(){
-      docRef.set(buildLiveShiftDoc()).then(function(){
-        _hideLiveSyncFailBanner();
-      }).catch(function(){ _onLiveSyncFailed(); });
+      // ВАЖНО: если не удалось проверить, не закрыта ли уже смена на
+      // сервере (например, кратковременный сбой сети — обычное дело на
+      // мобильном), НЕЛЬЗЯ вслепую отправлять статус "открыта" — так уже
+      // закрытая смена может "ожить" обратно. Раньше здесь была слепая
+      // отправка без проверки — именно из-за неё смена могла показать
+      // status:'open', даже когда была реально закрыта. Теперь просто
+      // пропускаем эту попытку — следующее изменение в журнале запустит
+      // синхронизацию заново, уже с полноценной проверкой.
+      _onLiveSyncFailed();
     });
   }, 600);
 }
@@ -8030,6 +8036,40 @@ function closeShift(){
     }
     return;
   }
+  // Финальная сверка с независимой подстраховкой прямо перед закрытием.
+  // Проверка "Подстраховка" (кнопка выше) гарантирует, что каждая запись НА
+  // МОМЕНТ ЕЁ ПРОВЕРКИ была где-то сохранена отдельно от журнала смены — но
+  // если что-то всё же выпало из самого журнала УЖЕ ПОСЛЕ этой проверки
+  // (до нажатия «Закрыть смену»), это осталось бы незамеченным. Здесь мы
+  // сверяемся с независимыми копиями (iz_sales/iz_journal_backup) ещё раз,
+  // прямо сейчас, и возвращаем в журнал всё, чего там не хватает, — только
+  // потом реально закрываем смену.
+  showToast('🛟 Финальная проверка перед закрытием...');
+  if(typeof db==='undefined' || !db || !session.shiftId){ _closeShiftReal(); return; }
+  var _deletedIdsForClose = {}; getTombstones().forEach(function(id){ _deletedIdsForClose[id]=true; });
+  Promise.all([
+    db.collection('iz_sales').where('shiftId','==',session.shiftId).get().catch(function(){ return null; }),
+    db.collection('iz_journal_backup').where('shiftId','==',session.shiftId).get().catch(function(){ return null; })
+  ]).then(function(results){
+    var localIds = {}; journal.forEach(function(e){ if(e.id) localIds[e.id]=true; });
+    var recovered = 0;
+    results.forEach(function(snap){
+      if(!snap) return;
+      snap.forEach(function(doc){
+        var d = doc.data();
+        if(!d || !d.id || localIds[d.id] || _deletedIdsForClose[d.id]) return;
+        journal.push(d); localIds[d.id]=true; recovered++;
+      });
+    });
+    if(recovered>0){
+      journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
+      saveJ();
+      showToast('🛟 Перед закрытием нашлись и восстановлены пропавшие записи: '+recovered+'. Проверьте смену и нажмите «Закрыть смену» ещё раз.');
+      try{ renderAll(); }catch(e){}
+      return;
+    }
+    _closeShiftReal();
+  }).catch(function(){ _closeShiftReal(); });
 function _closeShiftReal(){
   const morningChkReal = getMorningCashDiff();
   if(morningChkReal.hasDiff){
@@ -8185,7 +8225,6 @@ function _closeShiftReal(){
   }catch(e){ _closeSettle(false); }
   setTimeout(function(){ _closeSettle(false); }, 8000);
 }
-_closeShiftReal();
 }
 var _histPeriod = 'week'; // 'today' | 'week' | 'month' | 'all' | 'custom'
 function setHistPeriod(period, el){
@@ -9575,13 +9614,28 @@ function svManInvHideSugg(kind, idx){
   setTimeout(function(){ var box=document.getElementById('svManInv_'+kind+'_sugg_'+idx); if(box) box.style.display='none'; }, 150);
 }
 var _svManInv = null;
+function _suggestNextInvoiceNum(shopName, dateStr){
+  try{
+    var monthKey = (dateStr||new Date().toISOString().split('T')[0]).slice(0,7); // 'YYYY-MM'
+    var all = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]').concat(JSON.parse(localStorage.getItem('iz_invoices')||'[]'));
+    var maxNum = 0;
+    all.forEach(function(iv){
+      if((iv.destName||iv.shopName)!==shopName) return;
+      if((iv.date||'').slice(0,7)!==monthKey) return;
+      var n = parseInt(String(iv.num||'').replace(/\D/g,''),10);
+      if(!isNaN(n) && n>maxNum) maxNum = n;
+    });
+    return String(maxNum+1);
+  }catch(e){ return '1'; }
+}
 function svOpenManualInvForm(){
   var box = document.getElementById('svManualInvForm');
   if(!box) return;
   if(box.style.display==='block'){ box.style.display='none'; return; }
   if(!_svManInv || !_svManInv._open){
     var today = (_currentShiftView && _currentShiftView.date) || new Date().toISOString().split('T')[0];
-    _svManInv = {_open:true, num:'', date:today, from:'', goodsType:'derevo', items:[]};
+    var suggestedNum = _suggestNextInvoiceNum(_currentShiftView && _currentShiftView.shopName, today);
+    _svManInv = {_open:true, num:suggestedNum, date:today, from:'', goodsType:'derevo', items:[]};
   }
   svRenderManualInvForm();
   box.style.display='block';
@@ -9640,8 +9694,8 @@ function svRenderManualInvForm(){
   box.innerHTML =
     '<div style="font-size:11px;color:#f0c060;font-weight:700;margin-bottom:8px">📝 Ручной ввод накладной</div>'+
     '<div style="display:flex;gap:5px;margin-bottom:6px">'+
-      '<div style="flex:1"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">№ накладной</div><input class="fi" id="svManInv_num" value="'+s.num+'" oninput="svManInvField(\'num\',this.value)" style="margin:0;padding:8px"></div>'+
-      '<div style="flex:1"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Дата</div><input class="fi" id="svManInv_date" type="date" value="'+s.date+'" oninput="svManInvField(\'date\',this.value)" style="margin:0;padding:8px"></div>'+
+      '<div style="flex:1"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">№ накладной (авто, можно поправить)</div><input class="fi" id="svManInv_num" value="'+s.num+'" oninput="svManInvField(\'num\',this.value)" style="margin:0;padding:8px"></div>'+
+      '<div style="flex:1"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">Дата</div><input class="fi" id="svManInv_date" type="date" value="'+s.date+'" onchange="svManInvDateChanged(this.value)" style="margin:0;padding:8px"></div>'+
     '</div>'+
     '<div style="margin-bottom:6px"><div style="font-size:9px;color:#8888aa;margin-bottom:2px">От кого / поставщик</div><input class="fi" id="svManInv_from" value="'+s.from+'" oninput="svManInvField(\'from\',this.value)" style="margin:0;padding:8px"></div>'+
     '<div style="display:flex;gap:6px;margin-bottom:10px">'+
@@ -9658,6 +9712,12 @@ function svRenderManualInvForm(){
     '</div>';
 }
 function svManInvField(field, val){ if(_svManInv) _svManInv[field]=val; }
+function svManInvDateChanged(val){
+  if(!_svManInv) return;
+  _svManInv.date = val;
+  _svManInv.num = _suggestNextInvoiceNum(_currentShiftView && _currentShiftView.shopName, val);
+  svRenderManualInvForm();
+}
 function svManInvSetType(type){ if(_svManInv){ _svManInv.goodsType=type; svRenderManualInvForm(); } }
 function svManInvAddItem(){
   if(!_svManInv) return;
