@@ -2026,7 +2026,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.17.16';
+var APP_BUILD_VERSION = '07.17.17';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -3423,7 +3423,9 @@ function calcZpForCurrentShift(){
       base=2000; thresh=0; pctNorm=0.08; highThresh=20000; pctHigh=0.10;
     } else { base=1500; thresh=5000; pctNorm=0.08; }
   }
-  var pct = (highThresh!==null && totalGross >= highThresh) ? pctHigh : pctNorm;
+  var highThreshGross = s ? ((s.highThreshGross !== undefined) ? s.highThreshGross : true) : true;
+  var highThreshBasis = highThreshGross ? totalGross : totalNet;
+  var pct = (highThresh!==null && highThreshBasis >= highThresh) ? pctHigh : pctNorm;
   var zpCalcWood = 0, zpCalcDr = 0;
   if(totalNet < thresh){
     zpCalcWood = base; zpCalcDr = 0;
@@ -3537,7 +3539,9 @@ function calcShiftZpStandalone(shopName, report){
       base=2000; thresh=0; pctNorm=0.08; highThresh=20000; pctHigh=0.10;
     } else { base=1500; thresh=5000; pctNorm=0.08; }
   }
-  var pct = (highThresh!==null && totalGross >= highThresh) ? pctHigh : pctNorm;
+  var highThreshGross = s ? ((s.highThreshGross !== undefined) ? s.highThreshGross : true) : true;
+  var highThreshBasis = highThreshGross ? totalGross : totalNet;
+  var pct = (highThresh!==null && highThreshBasis >= highThresh) ? pctHigh : pctNorm;
   var zpCalcWood = 0, zpCalcDr = 0;
   if(totalNet < thresh){
     zpCalcWood = base; zpCalcDr = 0;
@@ -7776,7 +7780,9 @@ function renderClose(){
               base=2000; thresh=0; pctNorm=0.08; highThresh=20000; pctHigh=0.10;
             } else { base=1500; thresh=5000; pctNorm=0.08; }
           }
-          var pct = (highThresh!==null && totalGross >= highThresh) ? pctHigh : pctNorm;
+          var highThreshGross = s ? ((s.highThreshGross !== undefined) ? s.highThreshGross : true) : true;
+  var highThreshBasis = highThreshGross ? totalGross : totalNet;
+  var pct = (highThresh!==null && highThreshBasis >= highThresh) ? pctHigh : pctNorm;
           if(totalNet < thresh){
             zpCalcWood = base; zpCalcDr = 0;
           } else {
@@ -11644,6 +11650,7 @@ function renderShopSettings(){
     var base = numDef(s.base, 1500), pct = numDef(s.pct, 8), threshold = numDef(s.threshold, 5000), travel = numDef(s.travel, 0);
     var highThresh = numDef(s.highThreshold, 20000), highPct = numDef(s.highPct, 10);
     var highEnabled = (s.highEnabled !== undefined) ? s.highEnabled : !!s.highThreshold;
+    var highThreshGross = (s.highThreshGross !== undefined) ? s.highThreshGross : true;
     return '<div style="border:1px solid #2e2e3e;border-radius:12px;margin-bottom:8px;overflow:hidden">'+
       '<div onclick="toggleZpAcc(\''+sid+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:12px;cursor:pointer;background:#1a1a22">'+
         '<div style="font-size:13px;font-weight:700">🏪 '+shop+'</div>'+
@@ -11672,6 +11679,11 @@ function renderShopSettings(){
             '<input class="fi" type="text" id="zp_highthresh_'+sid+'" value="'+highThresh+'" inputmode="numeric"></div>'+
           '<div class="fg"><label class="fl">Повышенный % (%)</label>'+
             '<input class="fi" type="text" id="zp_highpct_'+sid+'" value="'+highPct+'" inputmode="numeric" step="0.5"></div>'+
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+
+            '<input type="checkbox" id="zp_highgross_'+sid+'" '+(highThreshGross?'checked':'')+' style="width:18px;height:18px;cursor:pointer">'+
+            '<label for="zp_highgross_'+sid+'" style="font-size:12px;color:#8888aa;cursor:pointer">Порог считать с учётом скидки (по общей сумме продаж, скидка не вычитается)</label>'+
+          '</div>'+
+          '<div style="font-size:10px;color:#8888aa;margin:-4px 0 8px">Если снять галочку — порог будет сравниваться с суммой, которая реально пришла (продажи минус скидка)</div>'+
         '</div>'+
         '<button onclick="saveOneShopZp(\''+shop+'\',\''+sid+'\')" style="width:100%;padding:10px;border-radius:10px;border:none;background:#1e2a14;border:1px solid #c8f060;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer;margin-top:4px">💾 Сохранить '+shop+'</button>'+
       '</div>'+
@@ -11693,6 +11705,7 @@ function toggleHighPct(sid, checked){
 function saveOneShopZp(shop, sid){
   var settings=getShopZpSettings();
   var hasHigh=(document.getElementById('zp_has_high_'+sid)||{}).checked;
+  var highGrossEl=document.getElementById('zp_highgross_'+sid);
   var threshRaw = (document.getElementById('zp_thresh_'+sid)||{}).value;
   settings[shop]={
     base: numDef(parseFloat((document.getElementById('zp_base_'+sid)||{}).value), 1500),
@@ -11702,6 +11715,7 @@ function saveOneShopZp(shop, sid){
     highThreshold: hasHigh?numDef(parseFloat((document.getElementById('zp_highthresh_'+sid)||{}).value), 20000):null,
     highPct: hasHigh?numDef(parseFloat((document.getElementById('zp_highpct_'+sid)||{}).value), 10):null,
     highEnabled: !!hasHigh,
+    highThreshGross: highGrossEl ? !!highGrossEl.checked : true,
   };
   saveShopZpSettingsData(settings);
   renderShopSettings();
@@ -11713,6 +11727,7 @@ function saveShopSettings(){
   shops.forEach(function(shop){
     var sid=encodeURIComponent(shop).replace(/%/g,'_');
     var hasHigh=(document.getElementById('zp_has_high_'+sid)||{}).checked;
+    var highGrossEl2=document.getElementById('zp_highgross_'+sid);
     var baseEl=document.getElementById('zp_base_'+sid);
     if(!baseEl) return; // accordion not opened, skip
     var threshRaw2 = (document.getElementById('zp_thresh_'+sid)||{}).value;
@@ -11724,6 +11739,7 @@ function saveShopSettings(){
       highThreshold: hasHigh?numDef(parseFloat((document.getElementById('zp_highthresh_'+sid)||{}).value), 20000):null,
       highPct: hasHigh?numDef(parseFloat((document.getElementById('zp_highpct_'+sid)||{}).value), 10):null,
       highEnabled: !!hasHigh,
+      highThreshGross: highGrossEl2 ? !!highGrossEl2.checked : true,
     };
   });
   saveShopZpSettingsData(settings);
