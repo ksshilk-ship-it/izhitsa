@@ -645,9 +645,11 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
   </div>
   <div class="page" id="pg-stock">
     <div class="stitle" id="stockPageTitle">Склад</div>
-    <div style="display:flex;gap:6px;margin-bottom:10px">
-      <button type="button" id="stockModeAvail" onpointerdown="event.preventDefault();setStockMode('avail')" style="flex:1;padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:13px;font-weight:700;cursor:pointer">📦 Наличие</button>
-      <button type="button" id="stockModeArchive" onpointerdown="event.preventDefault();setStockMode('archive')" style="flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:13px;font-weight:700;cursor:pointer">🗂 Архив</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+      <button type="button" id="stockModeAvail" onpointerdown="event.preventDefault();setStockMode('avail')" style="padding:9px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:12px;font-weight:700;cursor:pointer">📦 Наличие</button>
+      <button type="button" id="stockModeArchive" onpointerdown="event.preventDefault();setStockMode('archive')" style="padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">🗂 Архив</button>
+      <button type="button" id="stockModeProduct" onpointerdown="event.preventDefault();setStockMode('byproduct')" style="padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">📦 По изделиям</button>
+      <button type="button" id="stockModeInvoice" onpointerdown="event.preventDefault();setStockMode('byinvoice')" style="padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">📥 По накладным</button>
     </div>
     <div id="stockShopRow" style="display:none;margin-bottom:8px">
       <select class="fs" id="stockFilterShop" onchange="renderStockPage()" style="margin:0">
@@ -2026,7 +2028,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.17.20';
+var APP_BUILD_VERSION = '07.17.21';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -17214,11 +17216,115 @@ function setStockSort(key){
 }
 function setStockMode(mode){
   _stockMode = mode;
-  var btnA = document.getElementById('stockModeAvail');
-  var btnAr = document.getElementById('stockModeArchive');
-  if(btnA){ btnA.style.borderColor=mode==='avail'?'#c8f060':'#2e2e3e'; btnA.style.background=mode==='avail'?'#1e2a14':'#22222e'; btnA.style.color=mode==='avail'?'#c8f060':'#8888aa'; btnA.style.borderWidth=mode==='avail'?'2px':'1px'; }
-  if(btnAr){ btnAr.style.borderColor=mode==='archive'?'#f0a060':'#2e2e3e'; btnAr.style.background=mode==='archive'?'#2a1e10':'#22222e'; btnAr.style.color=mode==='archive'?'#f0a060':'#8888aa'; btnAr.style.borderWidth=mode==='archive'?'2px':'1px'; }
+  var btns = {avail:'stockModeAvail', archive:'stockModeArchive', byproduct:'stockModeProduct', byinvoice:'stockModeInvoice'};
+  var colors = {avail:'#c8f060', archive:'#f0a060', byproduct:'#60c8f0', byinvoice:'#a060f0'};
+  var bgs = {avail:'#1e2a14', archive:'#2a1e10', byproduct:'#0c1a20', byinvoice:'#1a1420'};
+  Object.keys(btns).forEach(function(m){
+    var btn = document.getElementById(btns[m]);
+    if(!btn) return;
+    var active = m===mode;
+    btn.style.borderColor = active?colors[m]:'#2e2e3e';
+    btn.style.background = active?bgs[m]:'#22222e';
+    btn.style.color = active?colors[m]:'#8888aa';
+    btn.style.borderWidth = active?'2px':'1px';
+  });
+  var isCustomView = (mode==='byproduct'||mode==='byinvoice');
+  var filterByRow = document.getElementById('stockFilterBy'); if(filterByRow && filterByRow.parentElement) filterByRow.parentElement.style.display = isCustomView?'none':'block';
+  var sortRow = document.getElementById('stockSortBtns'); if(sortRow && sortRow.parentElement && sortRow.parentElement.parentElement) sortRow.parentElement.parentElement.style.display = isCustomView?'none':'flex';
+  var rebuildRow = document.getElementById('stockFilterCount'); if(rebuildRow && rebuildRow.parentElement) rebuildRow.parentElement.style.display = isCustomView?'none':'flex';
+  if(mode==='byproduct'){ renderStockByProduct(); return; }
+  if(mode==='byinvoice'){ renderStockByInvoice(); return; }
   renderStockPage();
+}
+function _stockGroupShops(){
+  var isAdmin=session&&session.role==='shopadmin';
+  var filterShop=(document.getElementById('stockFilterShop')||{}).value||'';
+  if(filterShop) return [filterShop];
+  return isAdmin?getShopNames():(session&&session.shopName?[session.shopName]:[]);
+}
+function renderStockByProduct(){
+  var listEl = document.getElementById('stockList'); if(!listEl) return;
+  var sumEl = document.getElementById('stockSummary'); if(sumEl) sumEl.innerHTML='';
+  var rows = _stockGetAllItems().filter(function(it){ return (it.qty||0)>0; });
+  var groups = {};
+  rows.forEach(function(it){
+    var key = (it.name||'—').trim();
+    if(!groups[key]) groups[key] = {name:key, qty:0, sum:0, items:[]};
+    groups[key].qty += (it.qty||0);
+    groups[key].sum += (it.qty||0)*(it.price||0);
+    groups[key].items.push(it);
+  });
+  var groupList = Object.values(groups).sort(function(a,b){ return b.qty-a.qty; });
+  if(!groupList.length){ listEl.innerHTML = '<div class="empty"><div class="ei">📦</div>Нет товаров в наличии</div>'; return; }
+  listEl.innerHTML = '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">'+groupList.length+' наименований в наличии</div>'+
+    groupList.map(function(g,gi){
+      var gkey = 'stprod_'+gi;
+      return '<div style="border:1px solid #2e2e3e;border-radius:12px;margin-bottom:8px;overflow:hidden">'+
+        '<div onclick="_toggleStockGroup(\''+gkey+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:12px;cursor:pointer;background:#1a1a22">'+
+          '<div style="font-size:13px;font-weight:700">'+g.name+'</div>'+
+          '<div style="display:flex;align-items:center;gap:8px">'+
+            '<div style="font-size:12px;color:#c8f060;font-weight:700">'+g.qty+' шт. · '+fmt(g.sum)+'</div>'+
+            '<span id="'+gkey+'_arr" style="color:#8888aa">▶</span>'+
+          '</div>'+
+        '</div>'+
+        '<div id="'+gkey+'" style="display:none;padding:0 12px 12px">'+
+          g.items.sort(function(a,b){ return (a.species||'').localeCompare(b.species||'','ru'); }).map(function(it){
+            return '<div style="display:flex;justify-content:space-between;padding:8px;background:#13131a;border-radius:8px;margin-top:6px;font-size:12px">'+
+              '<div><span style="color:#8888aa">№'+(it.num||'—')+'</span> · '+(it.species||'')+' · <span style="color:#555568">'+(it._shop||'')+'</span></div>'+
+              '<div style="font-weight:700">'+it.qty+' шт. · '+fmt(it.price||0)+'</div>'+
+            '</div>';
+          }).join('')+
+        '</div>'+
+      '</div>';
+    }).join('');
+}
+function _toggleStockGroup(key){
+  var el = document.getElementById(key); var arr = document.getElementById(key+'_arr');
+  if(!el) return;
+  var open = el.style.display==='block';
+  el.style.display = open?'none':'block';
+  if(arr) arr.textContent = open?'▶':'▾';
+}
+function renderStockByInvoice(){
+  var listEl = document.getElementById('stockList'); if(!listEl) return;
+  var sumEl = document.getElementById('stockSummary'); if(sumEl) sumEl.innerHTML='';
+  var shops = _stockGroupShops();
+  var stock = getStock();
+  var allInv = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]').concat(JSON.parse(localStorage.getItem('iz_invoices')||'[]'));
+  var invoices = allInv.filter(function(iv){ return shops.indexOf(iv.destName||iv.shopName)>=0 && iv.status==='accepted'; });
+  invoices.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+  if(!invoices.length){ listEl.innerHTML = '<div class="empty"><div class="ei">📥</div>Принятых накладных не найдено</div>'; return; }
+  listEl.innerHTML = '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">'+invoices.length+' накладных. Показывает текущий остаток по каждому артикулу — если по этому же артикулу были и другие приходы, остаток общий на всех, не только из этой накладной.</div>'+
+    invoices.map(function(inv, ii){
+      var ikey = 'stinv_'+ii;
+      var shopName = inv.destName||inv.shopName;
+      var shopStock = stock[shopName]||{};
+      var items = inv.acceptedItems||inv.items||[];
+      var stillHave = 0, soldOut = 0;
+      var rows = items.map(function(it){
+        var art = String(it.num||it.article||'');
+        var stockItem = shopStock[art];
+        var curQty = stockItem ? (stockItem.qty||0) : 0;
+        var received = it.qty||1;
+        if(curQty>0) stillHave++; else soldOut++;
+        var statusIcon = curQty<=0 ? '🔴' : (curQty<received ? '🟡' : '🟢');
+        return '<div style="display:flex;justify-content:space-between;padding:8px;background:#13131a;border-radius:8px;margin-top:6px;font-size:12px">'+
+          '<div>'+statusIcon+' <span style="color:#8888aa">№'+(art||'—')+'</span> '+(it.name||'')+'</div>'+
+          '<div style="text-align:right"><div>получено: '+received+'</div><div style="color:'+(curQty<=0?'#f06060':'#60f090')+'">в наличии: '+curQty+'</div></div>'+
+        '</div>';
+      }).join('');
+      return '<div style="border:1px solid #2e2e3e;border-radius:12px;margin-bottom:8px;overflow:hidden">'+
+        '<div onclick="_toggleStockGroup(\''+ikey+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:12px;cursor:pointer;background:#1a1a22">'+
+          '<div><div style="font-size:13px;font-weight:700">'+(inv.num?'№'+inv.num+' · ':'')+(inv.date||'')+'</div>'+
+            '<div style="font-size:10px;color:#8888aa">'+shopName+(inv.from?' · от '+inv.from:'')+' · '+items.length+' поз.</div></div>'+
+          '<div style="display:flex;align-items:center;gap:8px">'+
+            '<div style="font-size:11px;color:#8888aa">🟢'+stillHave+' 🔴'+soldOut+'</div>'+
+            '<span id="'+ikey+'_arr" style="color:#8888aa">▶</span>'+
+          '</div>'+
+        '</div>'+
+        '<div id="'+ikey+'" style="display:none;padding:0 12px 12px">'+rows+'</div>'+
+      '</div>';
+    }).join('');
 }
 function stockOnFilterChange(){
   var sel = document.getElementById('stockFilterBy');
