@@ -2029,7 +2029,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.17.29';
+var APP_BUILD_VERSION = '07.17.30';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -17517,6 +17517,59 @@ function _stockGetAllItems(){
   });
   return rows;
 }
+function _fetchMissingInvoicesById(cb){
+  // Массовый "живой" слушатель всей коллекции iz_manual_invoices почему-то
+  // не приносит документы (похоже, правила доступа Firestore разрешают
+  // читать документ по конкретному ID, но запрещают выборку/листинг всей
+  // коллекции целиком). Кнопка "Открыть накладную" при этом всегда
+  // работала — потому что запрашивает ОДИН документ по ID. Используем
+  // этот же надёжный способ: собираем все invId, на которые ссылаются
+  // приходы в журналах смен, и по каждому, которого нет локально,
+  // делаем точечный запрос.
+  try{
+    if(typeof db==='undefined' || !db){ cb(); return; }
+    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var manualIds = {};
+    JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]').forEach(function(i){ manualIds[String(i._id!=null?i._id:i.id)]=true; });
+    var wsIds = {};
+    JSON.parse(localStorage.getItem('iz_invoices')||'[]').forEach(function(i){ wsIds[String(i._id!=null?i._id:i.id)]=true; });
+    var missing = {};
+    shifts.forEach(function(sh){
+      (sh.journal||[]).forEach(function(e){
+        if(e.type==='receive' && e.invId && !manualIds[String(e.invId)] && !wsIds[String(e.invId)]){
+          missing[String(e.invId)] = true;
+        }
+      });
+    });
+    var ids = Object.keys(missing);
+    if(!ids.length){ cb(); return; }
+    var remaining = ids.length;
+    var done = function(){ remaining--; if(remaining<=0) cb(); };
+    ids.forEach(function(invId){
+      db.collection('iz_manual_invoices').doc(invId).get({source:'server'}).then(function(snap){
+        if(snap.exists){
+          var manArr = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+          if(!manArr.some(function(i){ return String(i._id||i.id)===invId; })){
+            manArr.push(Object.assign({id:invId}, snap.data()));
+            localStorage.setItem('iz_manual_invoices', JSON.stringify(manArr));
+          }
+          done();
+        } else {
+          db.collection('iz_invoices').doc(invId).get({source:'server'}).then(function(snap2){
+            if(snap2.exists){
+              var invArr = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+              if(!invArr.some(function(i){ return String(i._id||i.id)===invId; })){
+                invArr.push(Object.assign({id:invId}, snap2.data()));
+                localStorage.setItem('iz_invoices', JSON.stringify(invArr));
+              }
+            }
+            done();
+          }).catch(done);
+        }
+      }).catch(done);
+    });
+  }catch(e){ cb(); }
+}
 function initStockPage(){
   // Локальный кэш остатков (iz_stock) у каждого устройства копится по-своему
   // и год за годом расходится с другими устройствами — то, что физически
@@ -17525,6 +17578,9 @@ function initStockPage(){
   // накладные и смены. Поэтому при каждом открытии Склада пересчитываем
   // остатки заново именно из них — тогда на любом устройстве цифры совпадут.
   try{ rebuildStock(false); }catch(e){}
+  _fetchMissingInvoicesById(function(){
+    try{ rebuildStock(false); if(_stockMode==='byinvoice') renderStockByInvoice(); else if(_stockMode==='avail') renderStockPage(); }catch(e){}
+  });
   var isAdmin=session&&session.role==='shopadmin';
   var shopRow=document.getElementById('stockShopRow');
   var shopSel=document.getElementById('stockFilterShop');
