@@ -2028,7 +2028,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.17.25';
+var APP_BUILD_VERSION = '07.17.26';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -17020,6 +17020,38 @@ function rebuildStock(showMsg){
   allShifts.forEach(function(sh){
     var sn=sh.shopName; if(!sn) return;
     if(!stock[sn]) stock[sn]={};
+    // Легаси-приходы/списания «по одной позиции» — старый инструмент писал
+    // их прямо в эти поля смены, отдельно и от журнала, и от накладных.
+    // Пересчёт остатков раньше их вообще не видел.
+    var legacyRcvDate = sh.date || (sh.closedAt?sh.closedAt.split('T')[0]:(sh.openedAt?sh.openedAt.split('T')[0]:''));
+    (sh.goodsReceives||[]).forEach(function(it){
+      var an=it.article||it.num; if(!an) an=_noArticleStockKey(it.name,it.price,it.species,'derevo');
+      if(!an) return;
+      var k=String(an);
+      if(!stock[sn][k]) stock[sn][k]={num:k,name:it.name||'',price:it.price||0,species:it.species||'',goodsType:'derevo',size:'',qty:0,lastReceived:''};
+      stock[sn][k].qty+=(it.qty||1);
+      if(legacyRcvDate>(stock[sn][k].lastReceived||'')) stock[sn][k].lastReceived=legacyRcvDate;
+    });
+    (sh.drGoodsReceives||[]).forEach(function(it){
+      var an=it.article||it.num; if(!an) an=_noArticleStockKey(it.name,it.price,it.species,'dr');
+      if(!an) return;
+      var k=String(an);
+      if(!stock[sn][k]) stock[sn][k]={num:k,name:it.name||'',price:it.price||0,species:it.species||'',goodsType:'dr',size:'',qty:0,lastReceived:''};
+      stock[sn][k].qty+=(it.qty||1);
+      if(legacyRcvDate>(stock[sn][k].lastReceived||'')) stock[sn][k].lastReceived=legacyRcvDate;
+    });
+    (sh.goodsWriteoffs||[]).forEach(function(it){
+      var an=it.article||it.num; if(!an) an=_noArticleStockKey(it.name,it.price,it.species,'derevo');
+      if(!an || !stock[sn][String(an)]) return;
+      var k=String(an);
+      stock[sn][k].qty=Math.max(0,(stock[sn][k].qty||0)-(it.qty||1));
+    });
+    (sh.drGoodsWriteoffs||[]).forEach(function(it){
+      var an=it.article||it.num; if(!an) an=_noArticleStockKey(it.name,it.price,it.species,'dr');
+      if(!an || !stock[sn][String(an)]) return;
+      var k=String(an);
+      stock[sn][k].qty=Math.max(0,(stock[sn][k].qty||0)-(it.qty||1));
+    });
     var shJ=sh.journal||[];
     shJ.forEach(function(e){
       if(e.type==='sale'){
