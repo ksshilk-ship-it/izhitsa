@@ -111,6 +111,28 @@ if ('serviceWorker' in navigator) {
       .catch(function(e) { console.log('[PWA] SW ошибка:', e); });
   });
 }
+// Прямая проверка версии — надёжнее, чем ждать событие "updatefound" от
+// service worker (оно на iOS-PWA не всегда срабатывает вовремя). Просто
+// скачиваем сам файл заново, в обход кэша, и сравниваем номер версии внутри
+// него с тем, что выполняется прямо сейчас.
+function checkForNewVersion(){
+  try{
+    fetch('./izhitsa-shop.html', {cache:'no-store'}).then(function(r){ return r.text(); }).then(function(html){
+      var m = html.match(/APP_BUILD_VERSION\s*=\s*'([^']+)'/);
+      if(m && m[1] && typeof APP_BUILD_VERSION!=='undefined' && m[1]!==APP_BUILD_VERSION){
+        var banner = document.getElementById('updateBanner');
+        if(banner && banner.style.display!=='flex') banner.style.display = 'flex';
+      }
+    }).catch(function(){});
+  }catch(e){}
+}
+window.addEventListener('load', function(){
+  setTimeout(checkForNewVersion, 2000);
+  setInterval(checkForNewVersion, 2 * 60 * 1000);
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState==='visible') checkForNewVersion();
+  });
+});
 // После долгого пребывания в фоне (заблокированный экран и т.п.) живые
 // Firestore-слушатели админ-панели могут тихо отвалиться и не
 // восстановиться сами. При возврате на передний план — переподключаем их
@@ -127,7 +149,14 @@ function applyUpdate() {
   var banner = document.getElementById('updateBanner');
   if(banner) banner.innerHTML = '<div style="font-size:13px;color:#f0f0f8;padding:12px">⏳ Загружаю обновление...</div>';
   if(_newSW) { _newSW.postMessage({type:'SKIP_WAITING'}); }
-  setTimeout(function(){ window.location.reload(); }, 1500);
+  setTimeout(function(){
+    if('caches' in window){
+      caches.keys().then(function(names){ names.forEach(function(n){ caches.delete(n); }); })
+        .finally(function(){ window.location.href = window.location.pathname + '?v=' + Date.now(); });
+    } else {
+      window.location.href = window.location.pathname + '?v=' + Date.now();
+    }
+  }, 1500);
 }
 function hardRefreshApp() {
   if ('caches' in window) {
@@ -2029,7 +2058,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.17.30';
+var APP_BUILD_VERSION = '07.17.31';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
