@@ -2026,7 +2026,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.17.17';
+var APP_BUILD_VERSION = '07.17.20';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -3996,10 +3996,19 @@ function doLogin(){
             // Смена из прошлого дня всё ещё числится "открытой" в облаке — это застрявшая
             // запись (скорее всего, сбой при закрытии). Не открываем её заново молча —
             // сами чиним статус на "закрыта" и продолжаем как обычный вход/открытие новой смены.
-            db.collection('iz_shifts').doc(sameSellerShift.id).set({status:'closed',_autoFixedStale:true},{merge:true}).then(function(){
+            db.collection('iz_shifts').doc(sameSellerShift.id).set({status:'closed',_autoFixedStale:true,closedAt: sameSellerShift.closedAt || new Date().toISOString()},{merge:true}).then(function(){
               doLogin();
             }).catch(function(){ doLogin(); });
-            try{ logAction('STALE_OPEN_SHIFT_AUTOFIXED', {shiftId:sameSellerShift.id, shopName:shopName, date:shiftDate0}); }catch(e){}
+            try{
+              // logAction() тут не срабатывает — сессии входа ещё нет на этом
+              // шаге, а функция без сессии молча ничего не пишет. Пишем
+              // напрямую, чтобы это автоисправление было видно и проверяемо.
+              db.collection('iz_audit_log').add({
+                id: uid(), timestamp: new Date().toISOString(), user: seller.name, shopName: shopName,
+                shiftId: sameSellerShift.id, action: 'STALE_OPEN_SHIFT_AUTOFIXED',
+                details: {shopName: shopName, date: shiftDate0}
+              });
+            }catch(e){}
             showToast('⚠️ Найдена зависшая смена за '+shiftDate0+' — статус исправлен, открываем сегодняшнюю');
             _shiftForceClosedRemotely = false;
             return;
@@ -8016,7 +8025,21 @@ function runBackupCheck(){
       }).catch(function(){ _queuePendingJournalEntry(doc); resolve(); });
     });
   });
+  var _backupCheckTimedOut = false;
+  var backupTimeoutTimer = setTimeout(function(){
+    // ВАЖНО: если проверка не завершилась за разумное время — скорее всего,
+    // застрял именно запрос к серверу (плохая связь: не пришёл ни успех, ни
+    // ошибка, тогда Promise.all может ждать вечно). Раньше тут не было
+    // тайм-аута вообще, и кнопка «Проверяю...» могла висеть бесконечно,
+    // не давая закрыть смену. Теперь через 15 секунд честно говорим об
+    // этом и снимаем блокировку кнопки, чтобы можно было попробовать ещё раз.
+    _backupCheckTimedOut = true;
+    if(checkBtn){ checkBtn.disabled=false; checkBtn.style.opacity='1'; checkBtn.textContent='🛟 Подстраховка'; }
+    if(statusEl) statusEl.innerHTML = '<div style="font-size:12px;color:#f06060;text-align:center;padding:4px">⚠️ Проверка не завершилась — похоже, плохая связь. Закрыть смену пока нельзя. Попробуйте нажать «Подстраховка» ещё раз, когда связь появится.</div>';
+  }, 15000);
   Promise.all(saleAttempts.concat(otherAttempts)).then(function(){
+    clearTimeout(backupTimeoutTimer);
+    if(_backupCheckTimedOut) return; // уже показали сообщение о тайм-ауте, не перетираем его
     if(checkBtn){ checkBtn.disabled=false; checkBtn.style.opacity='1'; checkBtn.textContent='🛟 Подстраховка'; }
     _renderBackupStatusList();
   });
