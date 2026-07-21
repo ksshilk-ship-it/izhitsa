@@ -93,6 +93,7 @@ if ('serviceWorker' in navigator) {
       .then(function(reg) {
         console.log('[PWA] SW зарегистрирован');
         _swReg = reg;
+        reg.update(); // проверить обновление сразу при открытии, не дожидаясь таймера
         setInterval(function() { reg.update(); }, 2 * 60 * 1000);
         document.addEventListener('visibilitychange', function(){
           if(document.visibilityState==='visible') reg.update();
@@ -2028,7 +2029,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.17.26';
+var APP_BUILD_VERSION = '07.17.28';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -2521,6 +2522,7 @@ function startSyncListeners() {
   try{ pullShiftTombstonesFromCloud(); }catch(e){}
   syncListenCollection('iz_shifts', 'iz_shifts');
   syncListenCollection('iz_invoices', 'iz_invoices');
+  syncListenCollection('iz_manual_invoices', 'iz_manual_invoices');
   syncListenCollection('iz_psj', 'iz_psj');
   syncListenCollection('iz_shop_notifications', 'iz_shop_notifications');
 }
