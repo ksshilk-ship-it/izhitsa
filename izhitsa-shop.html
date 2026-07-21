@@ -2029,7 +2029,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 // какая версия файла реально загружена на конкретном устройстве — это
 // частая причина "почему на одном телефоне уже починилось, а на другом ещё
 // нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.17.28';
+var APP_BUILD_VERSION = '07.17.29';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -16946,12 +16946,43 @@ function stockUpdateQty(shopName,num,name,price,species,goodsType,size,qtyDelta,
 }
 function stockApplySale(shopName,items){
   if(!shopName) return;
+  var stock=getStock();
+  var shopStock=stock[shopName]||{};
   items.forEach(function(it){
+    var hasRealArticle = !!(it.article||it.num||it.artNum);
     var artNum=it.article||it.num||it.artNum;
     if(!artNum) artNum=_noArticleStockKey(it.name,it.price,it.species,it.goodsType);
     if(!artNum) return;
-    stockUpdateQty(shopName,artNum,it.name,it.price,it.species,it.goodsType,it.size,-(it.qty||1),null);
+    var useKey = artNum;
+    if(!hasRealArticle && !(shopStock[artNum] && (shopStock[artNum].qty||0)>0)){
+      // Точного совпадения (название+цена+порода) нет в наличии — это частый
+      // случай, когда при приёмке породу не указали (например, у ложек и
+      // ножей в самом начале), а продавец при продаже её вписывает, увидев
+      // товар вживую. Ищем по названию+цене, не обращая внимания на породу.
+      var found = _findStockKeyByNamePrice(shopStock, it.name, it.price, it.goodsType, artNum);
+      if(found) useKey = found;
+    }
+    stockUpdateQty(shopName,useKey,it.name,it.price,it.species,it.goodsType,it.size,-(it.qty||1),null);
   });
+}
+function _findStockKeyByNamePrice(shopStock, name, price, goodsType, excludeKey){
+  var nm=(name||'').trim().toLowerCase();
+  var pr=Math.round(parseFloat(price)||0);
+  if(!nm) return null;
+  var candidates = Object.keys(shopStock).filter(function(k){
+    if(k===excludeKey) return false;
+    var e = shopStock[k];
+    if(!e || (e.qty||0)<=0) return false;
+    if((e.goodsType||'derevo')!==(goodsType||'derevo')) return false;
+    if((e.name||'').trim().toLowerCase()!==nm) return false;
+    if(Math.round(parseFloat(e.price)||0)!==pr) return false;
+    return true;
+  });
+  if(!candidates.length) return null;
+  // Если несколько подходящих (например, разные породы) — берём ту, где
+  // порода не указана (это и есть "принято без породы"), иначе первую попавшуюся.
+  var noSpecies = candidates.find(function(k){ return !(shopStock[k].species||'').trim(); });
+  return noSpecies || candidates[0];
 }
 function stockApplyReceive(shopName,items,date,invGoodsType){
   if(!shopName) return;
@@ -17059,10 +17090,15 @@ function rebuildStock(showMsg){
       if(e.type==='sale'){
         var saleDate=e.ts?e.ts.split('T')[0]:(sh.date||sh.closedAt?sh.closedAt.split('T')[0]:'');
         (e.items||[]).forEach(function(it){
+          var hasArt = !!(it.article||it.num||it.artNum||it.art);
           var artNum=it.article||it.num||it.artNum||it.art;
           if(!artNum) artNum=_noArticleStockKey(it.name,it.price,it.species,it.goodsType);
           if(!artNum) return;
           var key=String(artNum);
+          if(!stock[sn][key] && !hasArt){
+            var foundKey = _findStockKeyByNamePrice(stock[sn], it.name, it.price, it.goodsType, key);
+            if(foundKey) key = foundKey;
+          }
           if(!stock[sn][key]) return;
           var prev=stock[sn][key].qty||0;
           stock[sn][key].qty=Math.max(0,prev-(it.qty||1));
