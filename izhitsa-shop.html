@@ -111,10 +111,6 @@ if ('serviceWorker' in navigator) {
       .catch(function(e) { console.log('[PWA] SW ошибка:', e); });
   });
 }
-// Прямая проверка версии — надёжнее, чем ждать событие "updatefound" от
-// service worker (оно на iOS-PWA не всегда срабатывает вовремя). Просто
-// скачиваем сам файл заново, в обход кэша, и сравниваем номер версии внутри
-// него с тем, что выполняется прямо сейчас.
 function checkForNewVersion(){
   try{
     fetch('./izhitsa-shop.html', {cache:'no-store'}).then(function(r){ return r.text(); }).then(function(html){
@@ -133,10 +129,6 @@ window.addEventListener('load', function(){
     if(document.visibilityState==='visible') checkForNewVersion();
   });
 });
-// После долгого пребывания в фоне (заблокированный экран и т.п.) живые
-// Firestore-слушатели админ-панели могут тихо отвалиться и не
-// восстановиться сами. При возврате на передний план — переподключаем их
-// и разово тянем свежие данные, чтобы карточки смен не "зависали".
 document.addEventListener('visibilitychange', function(){
   if(document.visibilityState!=='visible') return;
   if(typeof session==='undefined' || !session || session.role!=='admin') return;
@@ -172,7 +164,6 @@ function hardRefreshApp() {
 function checkForAppUpdate() {
   if(_swReg && _swReg.update) { try{ _swReg.update(); }catch(e){} }
 }
-// ════ OFFLINE/ONLINE STATUS BANNER ════
 function _renderConnStatus(){
   var el = document.getElementById('connStatusBanner');
   if(!el) return;
@@ -193,15 +184,11 @@ function _renderConnStatus(){
 window.addEventListener('online', function(){
   _renderConnStatus();
   if(typeof _offlineNoFirebase!=='undefined' && _offlineNoFirebase){
-    // Firebase SDK не был загружен — перезагружаем страницу чтобы подхватить SDK
     setTimeout(function(){ window.location.reload(); }, 800);
     return;
   }
-  // Firebase SDK есть — переподключаем слушателей и принудительно тянем свежие данные
   setTimeout(function(){
     try{
-      // 1. Переподключаем onSnapshot слушателей если они отвалились
-      //    (сбрасываем _syncUnsubs чтобы syncListen не пропустил уже "зарегистрированные")
       Object.keys(_syncUnsubs).forEach(function(k){
         try{ if(typeof _syncUnsubs[k]==='function') _syncUnsubs[k](); }catch(e){}
         delete _syncUnsubs[k];
@@ -209,9 +196,7 @@ window.addEventListener('online', function(){
       if(typeof startSyncListeners==='function') startSyncListeners();
     }catch(e){ console.log('sync reconnect err', e); }
 
-    // 2. Принудительно тянем свежие данные для критичных коллекций
     try{
-      // Актуальный список сотрудников (для проверки при входе)
       db.collection('iz_settings').doc('staff').get({source:'server'}).then(function(snap){
         if(snap.exists && snap.data().staff){
           localStorage.setItem('iz_staff', JSON.stringify(snap.data().staff));
@@ -220,7 +205,6 @@ window.addEventListener('online', function(){
         }
       }).catch(function(){});
 
-      // Актуальные открытые смены (чтобы не было ложной блокировки)
       pullShiftTombstonesFromCloud(function(tombstonedIds){
         var tset = {}; (tombstonedIds||[]).forEach(function(id){ tset[id]=true; });
         db.collection('iz_shifts').where('status','==','open').get({source:'server'}).then(function(snap){
@@ -228,8 +212,6 @@ window.addEventListener('online', function(){
           var freshIds = {};
           snap.forEach(function(doc){
             if(tset[doc.id]){
-              // Смена помечена как удалённая, но всё ещё висит в облаке (например,
-              // удаление не прошло из-за плохой связи) — пробуем дочистить её.
               try{ db.collection('iz_shifts').doc(doc.id).delete(); }catch(e){}
               return;
             }
@@ -238,24 +220,20 @@ window.addEventListener('online', function(){
             if(exists>=0) local[exists] = Object.assign(local[exists], doc.data(), {id:doc.id});
             else local.push(Object.assign({id:doc.id}, doc.data()));
           });
-          // Если смена числилась открытой локально но в облаке её нет среди открытых — закрыта
           local = local.map(function(s){
             if((s.status==='open') && s.id && !freshIds[s.id]){
               return Object.assign({}, s, {status:'closed'});
             }
             return s;
           });
-          // На всякий случай убираем из локального списка смены, помеченные как удалённые
           local = local.filter(function(s){ return !tset[s.id||s._id]; });
           localStorage.setItem('iz_shifts', JSON.stringify(local));
         }).catch(function(){});
       });
     }catch(e){ console.log('fresh data err', e); }
 
-    // 3. Синхронизировать текущую открытую смену если она есть
     try{ if(typeof syncLiveShift==='function') syncLiveShift(); }catch(e){}
 
-    // 4. Обновить UI
     try{ if(typeof renderAll==='function') renderAll(); }catch(e){}
     try{ if(typeof renderTodayShift==='function') renderTodayShift(); }catch(e){}
   }, 1000); // небольшая задержка чтобы сеть стабилизировалась
@@ -2053,12 +2031,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 <div class="toast" id="toast"></div>
 <!-- Firebase SDK загружается асинхронно через _loadFirebaseSDK() -->
 <script>
-// Метка версии/сборки — обновляется вручную при каждой правке кода.
-// Нужна, чтобы можно было на глаз (по экрану входа или шапке) отличить,
-// какая версия файла реально загружена на конкретном устройстве — это
-// частая причина "почему на одном телефоне уже починилось, а на другом ещё
-// нет": устройство просто ещё не подтянуло новый файл.
-var APP_BUILD_VERSION = '07.17.31';
+var APP_BUILD_VERSION = '07.17.33';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -2074,9 +2047,6 @@ function _isJournalEntryConfirmed(id){
   try{ return JSON.parse(localStorage.getItem('iz_confirmed_jnl_ids')||'[]').indexOf(id)!==-1; }catch(e){ return false; }
 }
 function _recordJournalEntryIndependently(entry, shopName, kind){
-  // Та же подстраховка, что и для продаж (см. _recordSaleIndependently), но
-  // для расходов/приходов/списаний — общая коллекция iz_journal_backup,
-  // каждая запись сама по себе, под своим id, её нельзя случайно затереть.
   try{
     if(!entry || !entry.id) return;
     var doc = Object.assign({}, entry, {
@@ -2135,13 +2105,6 @@ function _isSaleConfirmed(id){
   try{ return JSON.parse(localStorage.getItem('iz_confirmed_sale_ids')||'[]').indexOf(id)!==-1; }catch(e){ return false; }
 }
 function _recordSaleIndependently(entry, shopName){
-  // КАЖДАЯ продажа сохраняется ещё и как САМОСТОЯТЕЛЬНЫЙ документ в
-  // отдельной коллекции iz_sales — независимо от общего документа смены.
-  // Смысл: документ смены целиком иногда может перезаписаться/потеряться
-  // (гонки между устройствами, плохая связь и т.п.) — а эта запись живёт
-  // сама по себе под своим уникальным id, и её никто и ничто не может
-  // случайно стереть при сохранении чего-то другого. Это и есть подстраховка,
-  // из которой при необходимости можно восстановить пропавшую продажу.
   try{
     if(!entry || !entry.id) return;
     var saleDoc = Object.assign({}, entry, {
@@ -2276,7 +2239,6 @@ function pick(role) {
     renderLoginSellers();
   }
 }
-// ════ FIREBASE — асинхронная загрузка, не блокирует UI ════
 var db;
 var _offlineNoFirebase = true;
 var _firebaseReady = false;
@@ -2317,7 +2279,6 @@ function _initFirebase(){
       _fbLoadAttempts++;
       console.log('[App] Таймаут загрузки Firebase SDK, попытка', _fbLoadAttempts);
       try{ if(typeof _renderConnStatus==='function') _renderConnStatus(); }catch(e){}
-      // Пытаемся снова, с небольшой задержкой, до бесконечности (пока не подключится)
       setTimeout(function(){ _initFirebase(); }, 3000);
     }, timeoutMs);
     function finish(){
@@ -2358,10 +2319,6 @@ function _initFirebase(){
           else rdb.collection(w.col).add(w.data);}catch(e){}
         });_pendingWrites=[];
       }
-      // КРИТИЧНО: слушатели могли "зарегистрироваться" на заглушке db ещё до того,
-      // как загрузился настоящий Firebase. Заглушка возвращает fake-unsubscribe (truthy),
-      // из-за чего startSyncListeners() второй раз ничего не переподключает.
-      // Поэтому явно сбрасываем реестр перед повторной регистрацией на реальном db.
       Object.keys(_syncUnsubs).forEach(function(k){
         try{ if(typeof _syncUnsubs[k]==='function') _syncUnsubs[k](); }catch(e){}
         delete _syncUnsubs[k];
@@ -2376,8 +2333,6 @@ function _initFirebase(){
         }
       }catch(e){}
       try{if(typeof syncLiveShift==='function')syncLiveShift();}catch(e){}
-      // Перезапускаем admin-слушатели если пользователь — администратор
-      // (при первом запуске они могли запуститься на заглушке db)
       try{
         if(typeof session!=='undefined' && session && session.role==='shopadmin'){
           if(typeof startAdminShiftListener==='function') startAdminShiftListener();
@@ -2391,7 +2346,6 @@ function _initFirebase(){
   });
 }
 var _syncUnsubs = {};
-// _initFirebase() вызывается после загрузки DOM (см. DOMContentLoaded)
 var SYNC_SETTINGS = {
   'iz_admin_shops':      {doc:'sales_sources', field:'data'},
   'iz_shop_admins':      {doc:'admins',   field:'admins'},
@@ -2506,9 +2460,6 @@ function syncListenCollection(lsKey, colName) {
     var docs = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
     docs.sort(function(a,b){ return (b.date||b.closedAt||b.createdAt||'').localeCompare(a.date||a.closedAt||a.createdAt||''); });
     if(lsKey === 'iz_shifts'){
-      // Смены, удалённые целиком через svDeleteShift, никогда не должны
-      // вернуться из этого фонового слушателя — даже если облачный документ
-      // почему-то ещё не успел удалиться на сервере.
       var tomb = {}; getShiftTombstones().forEach(function(id){ tomb[id]=true; });
       docs = docs.filter(function(d){ return !tomb[d._id||d.id]; });
       var local = JSON.parse(localStorage.getItem(lsKey)||'[]');
@@ -2522,7 +2473,6 @@ function syncListenCollection(lsKey, colName) {
       docs.sort(function(a,b){ return (b.date||b.closedAt||b.createdAt||'').localeCompare(a.date||a.closedAt||a.createdAt||''); });
     }
     localStorage.setItem(lsKey, JSON.stringify(docs));
-    // Обновляем UI архива если он открыт
     if(lsKey==='iz_shifts'){
       try{if(typeof renderShiftHistory==='function') renderShiftHistory();}catch(e){}
       try{if(typeof renderTodayShift==='function') renderTodayShift();}catch(e){}
@@ -2559,11 +2509,6 @@ let session = null, pendingSession = null;
 let journal = [];
 var restoreMode = false;
 var restoreMeta = null;
-function _workingDateStr(){
-  if(session && session.isBackfill && session.backfillDate) return session.backfillDate;
-  var n=new Date();
-  return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
-}
 function _workingNowISO(){
   if(restoreMode && restoreMeta && restoreMeta.date){
     var t=new Date();
@@ -2680,10 +2625,13 @@ const KEY = {session:'iz_shop_session',journal:'iz_shop_journal',shifts:'iz_shif
   restoreSession:'iz_restore_session',restoreJournal:'iz_restore_journal',
   liveSessionBackup:'iz_live_session_backup',liveJournalBackup:'iz_live_journal_backup',
   shiftTombstones:'iz_shift_tombstones'};
+function getShifts(){
+  try{ return JSON.parse(localStorage.getItem(KEY.shifts)||'[]'); }catch(e){ return []; }
+}
+function saveShifts(shifts){
+  localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+}
 var TRASH_RETENTION_DAYS = 7;
-// Список id смен, удалённых админом целиком (svDeleteShift). Нужен, чтобы
-// синхронизация из Firestore (syncShiftsFromFirestore / фоновый sync) не
-// "воскрешала" смену обратно, если облачная копия не успела/не смогла удалиться.
 function getShiftTombstones(){
   try{ return JSON.parse(localStorage.getItem(KEY.shiftTombstones)||'[]'); }catch(e){ return []; }
 }
@@ -2826,11 +2774,6 @@ function saveStaffShop(data) {
     .catch(function(e){ console.log('saveStaffShop err', e); showToast('⚠️ Сотрудник сохранён только локально! Ошибка облака: '+(e&&e.message||e)); });
   syncDerivedFromStaff(data);
 }
-function getStaffBySingleRole(role) {
-  return getStaff().filter(function(s){
-    return !s.blocked && s.roles && s.roles.indexOf(role) >= 0;
-  });
-}
 function syncDerivedFromStaff(staff) {
   if(!staff || !staff.length) return;
   var sellers = staff.filter(function(s){
@@ -2925,14 +2868,12 @@ function migrateLegacyManualInvoices(){
       manualList.unshift(inv);
       try{
         db.collection('iz_manual_invoices').doc(iid).set(inv).then(function(){
-          // Удаляем старую копию только после подтверждённого успешного переноса
           try{ db.collection('iz_invoices').doc(iid).delete(); }catch(e){}
         }).catch(function(err){
           console.log('[migrateLegacyManualInvoices] перенос не удался, старую копию не трогаем:', iid, err);
         });
       }catch(e){}
     } else {
-      // Уже перенесена ранее — можно спокойно убрать дубликат из старой коллекции
       try{ db.collection('iz_invoices').doc(iid).delete(); }catch(e){}
     }
   });
@@ -2955,16 +2896,12 @@ function sortByTypeThenName(arr, typeOrder){
 }
 function getShops(){ return sortByTypeThenName(JSON.parse(localStorage.getItem('iz_admin_shops')||'[]'), SHOP_TYPE_ORDER); }
 function saveShops(d){ syncSave('iz_admin_shops', sortByTypeThenName(d, SHOP_TYPE_ORDER)); }
-function saveSellers(d){ syncSave('iz_sellers', d); }
 function getShopNames(){ var s=getShops(); return s.length?s.map(x=>x.name||x):['Дерево','ДР Товар']; }
 function getShopType(name){
   var shops=getShops();
   var s=shops.find(function(x){return (x.name||x)===name;});
   return s?s.type||'shop':'shop';
 }
-function isShopType(name){ return getShopType(name)==='shop'; }
-function isOnlineType(name){ return getShopType(name)==='online'; }
-function isOfflineType(name){ return getShopType(name)==='offline'; }
 function saveJ(){ localStorage.setItem(restoreMode?KEY.restoreJournal:KEY.journal,JSON.stringify(journal)); }
 function loadAndCleanJournal(){
   var isRestore = restoreMode;
@@ -3002,9 +2939,7 @@ function logAction(action, details) {
 function logSale(itemCount, total, shop){ logAction('SALE', {itemCount:itemCount, total:total, shop:shop}); }
 function logWriteoff(reason, amount, shop){ logAction('WRITEOFF', {reason:reason, amount:amount, shop:shop}); }
 function logReceive(type, amount, shop){ logAction('RECEIVE', {type:type, amount:amount, shop:shop}); }
-function logStaff(name, role, amount){ logAction('STAFF_PAYMENT', {name:name, role:role, amount:amount}); }
 function logExpense(category, amount, desc){ logAction('EXPENSE', {category:category, amount:amount, desc:desc}); }
-function logShiftClose(shop, revenue, cashStart, cashEnd){ logAction('SHIFT_CLOSE', {shop:shop, revenue:revenue, cashStart:cashStart, cashEnd:cashEnd}); }
 function logShiftOpen(shop, cashAmount){ logAction('SHIFT_OPEN', {shop:shop, cashAmount:cashAmount}); }
 function logEntryEdit(before, after){
   logAction('JOURNAL_ENTRY_EDIT', {
@@ -3022,8 +2957,6 @@ function logEntryDelete(entry){
       payMethod:entry.payMethod, cashPart:entry.cashPart, cardPart:entry.cardPart, items:entry.items, comment:entry.comment, ts:entry.ts}
   });
 }
-function logLogin(seller){ logAction('LOGIN', {seller:seller}); }
-function logLogout(){ logAction('LOGOUT', {user: session ? session.name : 'unknown'}); }
 function fmt(n){ return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+'₽'; }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function gv(id){ return (document.getElementById(id)||{}).value||''; }
@@ -3065,24 +2998,13 @@ function _retryPendingInvoices(){
     });
   }catch(e){}
 }
-function _fsWrite(promise){
-  try{
-    if(promise && typeof promise.catch==='function'){
-      promise.catch(function(err){
-        console.log('[Firestore] ошибка сохранения:', err);
-        showToast('⚠️ Не сохранилось в облако: '+(err&&err.message||err));
-      });
-    }
-  }catch(e){}
-  return promise;
-}
 function _clearShiftPendingFlag(shiftId){
   try{
-    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var shifts = getShifts();
     var idx = shifts.findIndex(function(s){ return (s.id||s._id)===shiftId; });
     if(idx>=0 && shifts[idx]._pendingSync){
       delete shifts[idx]._pendingSync;
-      localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+      saveShifts(shifts);
     }
   }catch(e){}
   _checkPendingCloseBanner();
@@ -3097,14 +3019,13 @@ function _checkPendingCloseBanner(){
     var el = document.getElementById('connStatusBanner');
     if(!raw){ return; }
     var w = JSON.parse(raw);
-    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var shifts = getShifts();
     var stillPending = shifts.some(function(s){ return s.shopName===w.shopName && s.date===w.date && s._pendingSync; });
     if(!stillPending){
       localStorage.removeItem('iz_pending_close_warning');
       return;
     }
     if(el && navigator.onLine!==false){
-      // Пытаемся дослать ещё раз прямо сейчас, раз приложение снова открыто
       _retryPendingShiftSyncs();
     }
     if(el){
@@ -3117,30 +3038,9 @@ function _checkPendingCloseBanner(){
 }
 setInterval(_checkPendingCloseBanner, 30000);
 document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ _checkPendingCloseBanner(); _retryPendingSales(); _retryPendingJournalEntries(); _retryPendingRefbookSaves(); _retryPendingInvoices(); } });
-function _mergeRemoteShiftIntoLocal(shiftId, remoteData){
-  try{
-    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-    var idx = shifts.findIndex(function(s){ return (s.id||s._id)===shiftId; });
-    var clean = Object.assign({}, remoteData, {id:shiftId});
-    if(idx>=0) shifts[idx] = clean; else shifts.push(clean);
-    localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
-  }catch(e){}
-}
 function _pushShiftWithRetry(shiftId, data){
   if(!shiftId || !data) return;
   try{
-    // Перед отправкой ОБЯЗАТЕЛЬНО сверяемся с тем, что уже лежит на сервере.
-    // Раньше здесь был слепой перезаписывающий set() — если, например, админ
-    // уже добавил в эту смену пропущенную продажу ПОСЛЕ того, как это
-    // устройство сохранило свою (более старую) локальную копию, повторная
-    // фоновая отправка с этого устройства стирала админскую правку, и она
-    // раз за разом "пропадала". Теперь: если на сервере уже более полная
-    // версия (больше записей в журнале) — не затираем её, а забираем себе.
-    //
-    // ВАЖНО: записи, которые только что специально удалили (например, при
-    // переносе прихода на другую дату — там запись убирают из одной смены
-    // и добавляют в другую), не должны считаться "потерянными" и
-    // воскрешаться обратно — иначе перенос превращается в задвоение.
     db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
       if(snap.exists){
         var remote = snap.data();
@@ -3153,9 +3053,9 @@ function _pushShiftWithRetry(shiftId, data){
           var merged = localJnl.concat(missingFromServer);
           merged.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
           data = Object.assign({}, data, {journal: merged});
-          var shifts2 = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+          var shifts2 = getShifts();
           var idx2 = shifts2.findIndex(function(s){ return (s.id||s._id)===shiftId; });
-          if(idx2>=0){ shifts2[idx2] = data; localStorage.setItem(KEY.shifts, JSON.stringify(shifts2)); }
+          if(idx2>=0){ shifts2[idx2] = data; saveShifts(shifts2); }
         }
       }
       db.collection('iz_shifts').doc(shiftId).set(data).then(function(){
@@ -3171,7 +3071,7 @@ function _pushShiftWithRetry(shiftId, data){
 function _retryPendingShiftSyncs(){
   try{
     if(typeof firebase==='undefined' || !navigator.onLine) return;
-    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var shifts = getShifts();
     var pending = shifts.filter(function(s){ return s._pendingSync; });
     if(!pending.length) return;
     console.log('[_retryPendingShiftSyncs] повторная отправка смен:', pending.length);
@@ -3182,15 +3082,9 @@ function _retryPendingShiftSyncs(){
   }catch(e){}
 }
 function _verifyRecentClosedShifts(){
-  // Смены, закрытые ДО того, как появилась метка _pendingSync (то есть на
-  // старых версиях приложения), никогда не попадали в обычную очередь
-  // повторной отправки — устройство просто не знало, что их нужно
-  // перепроверить. Раз в загрузку сверяем недавние закрытые смены этого
-  // устройства с тем, что реально лежит в облаке, и, если там пусто или
-  // меньше данных, чем локально — досылаем сами, без участия продавца.
   try{
     if(typeof db==='undefined' || !db || !navigator.onLine) return;
-    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var shifts = getShifts();
     var cutoff = Date.now() - 3*86400000; // последние 3 дня — не грузим облако проверкой всей истории
     var candidates = shifts.filter(function(s){
       if(!s.id || s.status!=='closed' || s._pendingSync) return false;
@@ -3209,8 +3103,6 @@ function _verifyRecentClosedShifts(){
     });
   }catch(e){}
 }
-// Фоновая проверка неотправленных смен: сразу при загрузке, затем каждые 45 секунд,
-// плюс сразу при восстановлении интернет-соединения.
 _retryPendingShiftSyncs();
 _verifyRecentClosedShifts();
 _retryPendingSales();
@@ -3229,8 +3121,6 @@ function openMo(id){
   if(!el) return;
   document.body.appendChild(el);
   el.classList.add('open');
-  // Тот же фикс iOS Safari: при открытии окна поверх другого (вложенные модалки)
-  // скролл нового окна иногда "не активируется" сразу. Форсируем reflow, как при закрытии.
   requestAnimationFrame(function(){
     var md = el.querySelector('.md');
     if(md){
@@ -3244,9 +3134,6 @@ function openMo(id){
 function closeMo(id){
   var el=document.getElementById(id);
   if(el) el.classList.remove('open');
-  // Фикс для iOS Safari: закрытие fixed-окна поверх прокручиваемого блока
-  // иногда "замораживает" скролл фона (-webkit-overflow-scrolling:touch).
-  // Форсируем reflow активной страницы и открытых модалок, чтобы разблокировать скролл.
   requestAnimationFrame(function(){
     document.querySelectorAll('.page.active, .mo.open .md').forEach(function(sEl){
       var prevDisplay = sEl.style.display;
@@ -3551,11 +3438,6 @@ function calcShiftZpStandalone(shopName, report){
   var zpFact, travelFact;
   var zpEntries = expenses.filter(function(e){return e.expType==='zp';});
   var travelEntries = expenses.filter(function(e){return e.expType==='travel';});
-  // ВАЖНО: если продавец не вносил запись о фактическом заборе ЗП — факт
-  // должен быть 0, а не подставляться расчётной/сохранённой суммой. Раньше
-  // здесь был запасной вариант "report.zp" (это старое ПОЛЕ РАСЧЁТА, а не
-  // подтверждение реального забора денег) — из-за него смена могла
-  // выглядеть так, будто ЗП забрали, хотя по факту этого не было.
   zpFact = zpEntries.reduce(function(a,e){return a+e.amount;},0);
   travelFact = travelEntries.reduce(function(a,e){return a+e.amount;},0);
   var zpSettings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
@@ -3625,7 +3507,7 @@ function renderPersonalTab(){
   if(!sumEl || !listEl) return;
   var fromStr = (document.getElementById('personalDateFrom')||{}).value || '';
   var toStr = (document.getElementById('personalDateTo')||{}).value || '';
-  var allShifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var allShifts = getShifts();
   var mine = allShifts.filter(function(sh){
     if(sh.status && sh.status!=='closed') return false; // skip the live/open shift
     if(sh.sellerName !== session.sellerName) return false;
@@ -3761,8 +3643,6 @@ function syncLiveShift(){
   if(!journal || journal.length<=1) return; // length 1 = just the "Смена открыта" entry, nothing real yet
   if(!session.shiftId){ session.shiftId = uid(); saveS(); }
   if(getShiftTombstones().indexOf(session.shiftId)!==-1){
-    // Эта смена была удалена администратором — устройство не должно
-    // воскрешать её повторной фоновой отправкой в облако.
     _shiftForceClosedRemotely = true;
     try{ stopLiveShiftListener(); }catch(e){}
     showToast('🗑 Эта смена была удалена администратором. Откройте новую смену через "Выйти".');
@@ -3783,21 +3663,9 @@ function syncLiveShift(){
         _hideLiveSyncFailBanner();
       }).catch(function(){ _onLiveSyncFailed(); });
     }).catch(function(){
-      // ВАЖНО: если не удалось проверить, не закрыта ли уже смена на
-      // сервере (например, кратковременный сбой сети — обычное дело на
-      // мобильном), НЕЛЬЗЯ вслепую отправлять статус "открыта" — так уже
-      // закрытая смена может "ожить" обратно. Раньше здесь была слепая
-      // отправка без проверки — именно из-за неё смена могла показать
-      // status:'open', даже когда была реально закрыта. Теперь просто
-      // пропускаем эту попытку — следующее изменение в журнале запустит
-      // синхронизацию заново, уже с полноценной проверкой.
       _onLiveSyncFailed();
     });
   }, 600);
-}
-function clearLiveShift(){
-  if(!session || !session.shiftId) return;
-  try{ db.collection('iz_shifts').doc(session.shiftId).delete(); }catch(e){}
 }
 function mergeRemoteJournal(remote){
   if(!remote || !Array.isArray(remote.journal)) return 0;
@@ -3928,13 +3796,13 @@ function refreshRecentClosedShiftsFromCloud(shopName){
     db.collection('iz_shifts').where('shopName','==',shopName).where('status','==','closed')
       .orderBy('openedAt','desc').limit(5).get({source:'server'}).then(function(snap){
         if(snap.empty) return;
-        var local = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+        var local = getShifts();
         var byId = {}; local.forEach(function(s){ byId[String(s.id||s._id)]=s; });
         snap.forEach(function(doc){
           var d = doc.data(); var id = String(d.id||doc.id);
           byId[id] = Object.assign({}, d, {id:id});
         });
-        localStorage.setItem(KEY.shifts, JSON.stringify(Object.values(byId)));
+        saveShifts(Object.values(byId));
       }).catch(function(){});
   }catch(e){}
 }
@@ -4026,16 +3894,10 @@ function doLogin(){
           var todayStr0 = new Date().toISOString().split('T')[0];
           var shiftDate0 = sameSellerShift.date || (sameSellerShift.openedAt||'').split('T')[0] || '';
           if(shiftDate0 && shiftDate0 < todayStr0){
-            // Смена из прошлого дня всё ещё числится "открытой" в облаке — это застрявшая
-            // запись (скорее всего, сбой при закрытии). Не открываем её заново молча —
-            // сами чиним статус на "закрыта" и продолжаем как обычный вход/открытие новой смены.
             db.collection('iz_shifts').doc(sameSellerShift.id).set({status:'closed',_autoFixedStale:true,closedAt: sameSellerShift.closedAt || new Date().toISOString()},{merge:true}).then(function(){
               doLogin();
             }).catch(function(){ doLogin(); });
             try{
-              // logAction() тут не срабатывает — сессии входа ещё нет на этом
-              // шаге, а функция без сессии молча ничего не пишет. Пишем
-              // напрямую, чтобы это автоисправление было видно и проверяемо.
               db.collection('iz_audit_log').add({
                 id: uid(), timestamp: new Date().toISOString(), user: seller.name, shopName: shopName,
                 shiftId: sameSellerShift.id, action: 'STALE_OPEN_SHIFT_AUTOFIXED',
@@ -4061,14 +3923,10 @@ function doLogin(){
         }
         var shopTypeNow = getShopType(shopName);
         if(otherSellerShift && shopTypeNow!=='online'){
-          // Проверяем дату конфликтующей смены — если она открыта вчера или раньше,
-          // это зависшая незакрытая смена. Даём войти, но посылаем тревогу администратору.
           var todayStr = new Date().toISOString().split('T')[0];
           var otherDate = (otherSellerShift.date || (otherSellerShift.openedAt||'').split('T')[0] || '');
           var isStaleShift = otherDate && otherDate < todayStr;
           if(isStaleShift){
-            // Зависшая смена с прошлого дня — не трогаем данные в Firestore
-            // (реальное закрытие может ещё не дойти), просто пускаем продавца и шлём тревогу
             try{
               saveAdminAlert({type:'stale_shift_warning', shopName:shopName,
                 blockedSellerName:seller.name, activeSellerName:otherSellerShift.sellerName,
@@ -4076,9 +3934,7 @@ function doLogin(){
                 note:'Смена от '+otherDate+' висит открытой в Firestore — возможно не успела сохраниться при закрытии'});
             }catch(e){}
             showToast('⚠️ Завишшая смена '+otherSellerShift.sellerName+' за '+otherDate+' — админ уведомлён');
-            // Просто пропускаем блокировку — данные в Firestore не трогаем
           } else {
-            // Смена открыта сегодня — реальный конфликт
             err.style.display='block';
             err.textContent='⛔ Смена для «'+shopName+'» уже открыта продавцом '+(otherSellerShift.sellerName||'—')+'. Одновременно вести смену в одном магазине может только один человек.';
             try{
@@ -4321,8 +4177,6 @@ function confirmMorning(){
         sellerName:session.sellerName,
         date:todayStr,
         diffParts:diffParts,
-        // Плоские поля — их читает карточка уведомления при отрисовке.
-        // Без них карточка всегда показывала 0₽/0₽/0₽, даже при реальном расхождении.
         cashMorning:mainPart.morning,
         prevCashEve:mainPart.prevEvening,
         morningDiff:mainPart.diff,
@@ -4349,14 +4203,14 @@ function cancelMorning(){
   if(restoreMode){ restoreMode=false; restoreMeta=null; }
 }
 function getPrevShift(shopName){
-  var all=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var all=getShifts();
   return all.filter(function(s){
     if(s.isRestoreShift && s.status==='open') return false; // исключаем только незакрытые «призрачные» сессии восстановления; закрытые архивные/импортированные смены с реальными данными участвуют в сравнении как обычно
     return s.shopName===shopName;
   }).sort(function(a,b){return new Date(b.closedAt||0)-new Date(a.closedAt||0);})[0]||null;
 }
 function getPrevShiftByOpenOrder(shopName, beforeOpenedAt){
-  var all = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var all = getShifts();
   var beforeDate = beforeOpenedAt ? beforeOpenedAt.split('T')[0] : '';
   var candidates = all.filter(function(s){
     if(s.isRestoreShift && s.status==='open') return false; // исключаем только незакрытые «призрачные» сессии восстановления; закрытые архивные/импортированные смены с реальными данными участвуют в сравнении как обычно
@@ -4406,7 +4260,7 @@ function getPrevShiftByDate(shopName){
   var targetDate = pendingSession && pendingSession._restoreOpenedAt
     ? pendingSession._restoreOpenedAt.split('T')[0]
     : new Date().toISOString().split('T')[0];
-  var all = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var all = getShifts();
   return all.filter(function(s){
     if(!s.shopName || s.shopName!==shopName) return false;
     if(s.isRestoreShift && s.status==='open') return false; // исключаем только незакрытые «призрачные» сессии восстановления; закрытые архивные/импортированные смены с реальными данными участвуют в сравнении как обычно
@@ -4488,9 +4342,6 @@ function _reconcileReceiveEntries(archivedInvIds){
     var iid = String(inv._id!=null?inv._id:inv.id);
     return !archivedInvIds[iid];
   });
-  // Защита: если накладная старше 3 дней относительно открытия смены и всё ещё не "архивирована" —
-  // скорее всего, она уже была учтена ранее, но потеряла связь с той сменой. Не подмешиваем её
-  // повторно в новые смены бесконечно, чтобы старые записи не "воскресали" каждый день.
   var shiftOpenDate = session.openedAt ? new Date(session.openedAt) : new Date();
   manualInvoices = manualInvoices.filter(function(inv){
     var invDate = new Date(inv.acceptedAt || inv.date || 0);
@@ -4561,7 +4412,7 @@ function _reconcileReceiveEntries(archivedInvIds){
 function migrateLegacyReceiveEntries(){
   if(!journal.length) return;
   var localShifts = [];
-  try{ localShifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]'); }catch(e){}
+  try{ localShifts = getShifts(); }catch(e){}
   _reconcileReceiveEntries(_archivedReceiveInvIds(localShifts));
   try{
     db.collection('iz_shifts').where('shopName','==',session.shopName).get().then(function(snap){
@@ -4758,10 +4609,6 @@ function toggleOrdererPhone(checked){
   var block = document.getElementById('ordOrdererPhoneBlock');
   if(block) block.style.display = checked ? 'block' : 'none';
 }
-function getRSAccounts(){
-  var accounts = JSON.parse(localStorage.getItem('iz_accounts')||'[]');
-  return accounts.filter(function(a){ return a.type==='bank'||a.type==='rs'; });
-}
 function buildSellerTabs(){
   const t=document.getElementById('mainTabs'); t.style.display='flex';
   t.innerHTML=`
@@ -4797,7 +4644,6 @@ function startAdminShiftListener(){
       renderTodayShift();
     },function(e){
       console.log('shift listener err:',e&&e.code);
-      // Fallback: попробовать через get() если onSnapshot не работает
       if(_firebaseReady){
         db.collection('iz_shifts').where('date','==',today).get({source:'server'})
           .then(function(snap){
@@ -4811,13 +4657,6 @@ function startAdminShiftListener(){
       } else { renderTodayShift(); }
     });
 }
-// Живой слушатель (onSnapshot) в теории должен обновляться сам и сразу —
-// но на практике его соединение иногда молча "зависает" (обрыв WebSocket
-// без явной ошибки, особенно на нестабильном мобильном интернете), и тогда
-// "Главная" продолжает показывать старые цифры, хотя реально всё давно
-// изменилось. Поэтому раз в 30 секунд, пока открыта админ-сессия, делаем
-// прямой запрос к серверу как подстраховку — если данные отличаются от
-// того, что уже отрисовано, обновляем.
 setInterval(function(){
   try{
     if(!session || session.role!=='admin' || !navigator.onLine || typeof db==='undefined' || !db) return;
@@ -4996,9 +4835,9 @@ function clearTestSession(){
     ids[s.id] = true;
     try{ db.collection('iz_shifts').doc(s.id).delete(); }catch(e){}
   });
-  var local = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var local = getShifts();
   local = local.filter(function(s){ return !ids[s.id||s._id]; });
-  localStorage.setItem(KEY.shifts, JSON.stringify(local));
+  saveShifts(local);
   showToast('🗑 Открытые смены сброшены');
 }
 var _todayActiveShop = null;
@@ -5345,10 +5184,10 @@ function openLiveShiftView(id){
   db.collection('iz_shifts').doc(id).get({source:'server'}).then(function(doc){
     if(!doc.exists){ showToast('Смена не найдена в облаке'); return; }
     var d = doc.data(); d.id = doc.id;
-    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var shifts = getShifts();
     var idx = shifts.findIndex(function(s){ return (s.id||s._id)===id; });
     if(idx>=0) shifts[idx]=d; else shifts.push(d);
-    localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+    saveShifts(shifts);
     openShiftView(id);
   }).catch(function(err){
     showToast('⚠️ Не удалось загрузить смену: '+(err&&err.message||err));
@@ -5369,7 +5208,6 @@ function toggleSBlock(bid){
   if(card) card.style.paddingBottom = open?'0':'14px';
 }
 function _autoRepairStaffRoles(){
-  // Автоматически исправляем записи с пустыми roles при каждом запуске
   var staff = getStaff();
   var fixed = 0;
   staff.forEach(function(s){
@@ -5406,7 +5244,6 @@ function startAdminApp(){
   startAdminAlertsListener();
   startAdminAuditListener();
   renderTodayShift();
-  // Если Firebase ещё не готов — повторно запустим слушателей как только он загрузится
   if(!_firebaseReady){
     var _adminRetryCount = 0;
     var _adminRetryTimer = setInterval(function(){
@@ -5550,7 +5387,7 @@ function setSsPeriod(p){
 }
 function recalcAllShiftsZp(){
   if(!confirm('Пересчитать начисленную ЗП и проезд для ВСЕХ закрытых смен по правильной формуле? Фактически выданные суммы (взято) не изменятся. Это может занять несколько секунд.')) return;
-  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts = getShifts();
   var updated = 0;
   shifts.forEach(function(s){
     if(s.status!=='closed') return;
@@ -5568,7 +5405,7 @@ function recalcAllShiftsZp(){
       }
     }catch(e){ console.log('[recalcAllShiftsZp] ошибка для смены', s.id, e); }
   });
-  localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+  saveShifts(shifts);
   showToast('✅ Пересчитано смен: '+updated);
   renderSellerStats();
 }
@@ -5614,7 +5451,7 @@ function renderShiftsCalendar(){
   var daysInMonth=new Date(year,mIdx+1,0).getDate();
   var from=year+'-'+String(mIdx+1).padStart(2,'0')+'-01';
   var to=year+'-'+String(mIdx+1).padStart(2,'0')+'-'+String(daysInMonth).padStart(2,'0');
-  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]').filter(function(s){
+  var shifts=getShifts().filter(function(s){
     return s.date>=from && s.date<=to && (!shopF||s.shopName===shopF) && s.sellerName;
   });
   if(!shifts.length){
@@ -5626,7 +5463,6 @@ function renderShiftsCalendar(){
   legend.innerHTML=(shopF?[shopF]:shopList).map(function(sh){
     return '<div style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:3px;background:'+_scShopColor(sh,shopList)+';display:inline-block"></span>'+sh+'</div>';
   }).join('');
-  // seller -> {date: [shopNames]}
   var bySeller={};
   shifts.forEach(function(s){
     var nm=(s.sellerName||'').replace(/^Восст\.\s*/,'');
@@ -5669,9 +5505,8 @@ function renderShiftsCalendar(){
 }
 function renderSellerStats(){
   var range=_ssDateRange();
-  var allShifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]').filter(function(s){
+  var allShifts=getShifts().filter(function(s){
     if(s.status!=='closed'||!s.sellerName) return false;
-    // Тестовый аккаунт Ксения с нулевой выручкой — исключаем
     if(s.sellerName==='Ксения'&&(s.totalRevenue||0)===0&&(s.cashRevenue||0)===0) return false;
     return s.date>=range.from&&s.date<=range.to;
   });
@@ -5685,7 +5520,6 @@ function renderSellerStats(){
   var shifts=_ssShop==='all'?allShifts:allShifts.filter(function(s){return s.shopName===_ssShop;});
   var sellers={};
   shifts.forEach(function(s){
-    // Убираем префикс Восст. чтобы смены восстановления суммировались с основными
     var name=(s.sellerName||'—').replace(/^Восст. /,'');
     if(!sellers[name])sellers[name]={name:name,shifts:0,revenue:0,sales:0,checks:[],zp:0,zpFact:0,travel:0,hasCashDiff:0,shops:{},disc:0,discCash:0,discSales:0,
       zpCash:0,zpTransfer:0,zpOther:0,travelCash:0,travelTransfer:0,travelOther:0,travelAccrued:0};
@@ -5706,7 +5540,6 @@ function renderSellerStats(){
         else sel[bucket+'Other']+=(e.amount||0);
       }
     });
-    // Скидки по наличным — из journal
     (s.journal||[]).forEach(function(e){
       if(e.type==='sale'&&(e.discount||0)>0){
         sel.discSales++;
@@ -5772,16 +5605,11 @@ function renderSellerStats(){
     var avgZpT=sel.shifts>0?(sel.zp+sel.travel)/sel.shifts:0;
     var shopsStr=Object.keys(sel.shops).map(function(sh){return sh+'('+sel.shops[sh]+')';}).join(', ');
     function row(lbl,val,col){return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e1e2e;font-size:12px"><span style="color:#8888aa">'+lbl+'</span><span style="font-weight:700;color:'+(col||'#f0f0f8')+'">'+val+'</span></div>';}
-    // Calendar
     var calKey='ss_cal_'+sel.name.replace(/\s/g,'_');
     var calOpen=window._ssCalOpen&&window._ssCalOpen[calKey];
-    // Build calendar data
     var calShifts=shifts.filter(function(s){return (s.sellerName||'').replace(/^Восст\. /,'')===sel.name;});
     var calByDate={};
     calShifts.forEach(function(s){calByDate[s.date]=(calByDate[s.date]||[]);calByDate[s.date].push(s.shopName);});
-    // Серии подряд идущих рабочих и выходных дней — считаем по всему
-    // диапазону между первой и последней сменой продавца, а не только по
-    // самим рабочим дням, иначе выходные вообще не видно.
     var calStats={maxWorkStreak:0,maxRestStreak:0,currentStreak:0,currentStreakType:''};
     var calHtml='';
     if(calOpen){
@@ -5801,7 +5629,6 @@ function renderSellerStats(){
         }
         calStats.currentStreakType = dayCells[dates[dates.length-1]] && workStreak>0 ? 'work' : 'rest';
         calStats.currentStreak = workStreak>0?workStreak:restStreak;
-        // Группируем по месяцам весь диапазон (включая нерабочие дни)
         var monthsAll={};
         var cur2=new Date(firstD.getFullYear(),firstD.getMonth(),1);
         var lastMonthStart=new Date(lastD.getFullYear(),lastD.getMonth(),1);
@@ -5830,11 +5657,9 @@ function renderSellerStats(){
           var monthDaysArr=monthsAll[mk];
           if(!monthDaysArr.length) return;
           calHtml+='<div style="font-size:10px;color:#8888aa;font-weight:700;margin-bottom:4px">'+mnames[parseInt(p[1])-1]+' '+p[0]+'</div>';
-          // Заголовок дней недели
           calHtml+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px;max-width:280px">'+
             dayNames.map(function(dn){return '<div style="text-align:center;font-size:8px;color:#555568">'+dn+'</div>';}).join('')+
           '</div>';
-          // Пустые клетки в начале месяца до первого дня недели (Пн=0)
           var firstOfMonth=new Date(parseInt(p[0]),parseInt(p[1])-1,1);
           var leadEmpty=(firstOfMonth.getDay()+6)%7; // Пн=0..Вс=6
           calHtml+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:8px;max-width:280px">';
@@ -5861,7 +5686,6 @@ function renderSellerStats(){
         calHtml+='</div>';
       }
     }
-    // ZP debt
     var zpDebt=sel.zp-sel.zpFact;
     var discKey='ss_disc_'+sel.name.replace(/\s/g,'_');
     var zpKey='ss_zp_'+sel.name.replace(/\s/g,'_');
@@ -5952,10 +5776,6 @@ function renderSellerStats(){
 
 
 function _shiftSetSafe(shiftId, sh, successMsg, errPrefix){
-  // Общая безопасная запись смены в Firestore: сверяется с сервером и
-  // объединяет журнал (по id записи), а не слепо перезаписывает документ —
-  // иначе правка отсюда могла столкнуться с фоновой довозкой данных с
-  // телефона продавца и стереть друг друга.
   try{
     db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
       var dataToSend = sh;
@@ -5970,9 +5790,9 @@ function _shiftSetSafe(shiftId, sh, successMsg, errPrefix){
           var mergedJnl = localJnl.concat(missingFromServer);
           mergedJnl.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
           dataToSend = Object.assign({}, sh, {journal: mergedJnl});
-          var shifts2 = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+          var shifts2 = getShifts();
           var idx2 = shifts2.findIndex(function(s){ return (s.id||s._id)===shiftId; });
-          if(idx2>=0){ shifts2[idx2] = dataToSend; localStorage.setItem(KEY.shifts, JSON.stringify(shifts2)); }
+          if(idx2>=0){ shifts2[idx2] = dataToSend; saveShifts(shifts2); }
           if(_currentShiftView && (_currentShiftView.id===shiftId||_currentShiftView._id===shiftId)) _currentShiftView = dataToSend;
           showToast('ℹ️ В облаке нашлись записи, которых не было локально — объединила, ничего не потеряно');
         }
@@ -5994,7 +5814,7 @@ function _shiftSetSafe(shiftId, sh, successMsg, errPrefix){
   }
 }
 function svRecoverSalesFromBackup(shiftId){
-  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts=getShifts();
   var idx=shifts.findIndex(function(s){return (s.id||s._id)===shiftId;});
   if(idx<0){showToast('Смена не найдена');return;}
   var sh=shifts[idx];
@@ -6025,7 +5845,7 @@ function svRecoverSalesFromBackup(shiftId){
       merged.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
       sh.journal = merged;
       shifts[idx]=sh;
-      localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+      saveShifts(shifts);
       _shiftSetSafe(shiftId, sh, '✅ Восстановлено записей: '+missing.length+' из подстраховки');
       if(_currentShiftView&&(_currentShiftView.id===shiftId||_currentShiftView._id===shiftId)){
         _currentShiftView=sh;_renderShiftView();
@@ -6035,16 +5855,14 @@ function svRecoverSalesFromBackup(shiftId){
 }
 function svPushToFirestore(shiftId){
   if(!shiftId){showToast('Нет ID смены');return;}
-  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts=getShifts();
   var sh=shifts.find(function(s){return (s.id||s._id)===shiftId;});
   if(!sh){showToast('Смена не найдена');return;}
   _shiftSetSafe(shiftId, sh, '✅ Смена отправлена в Firestore');
 }
 function svPromoteToNormal(shiftId){
-  // Снимает флаги "восстановленной/задним числом" смены, чтобы она перестала
-  // исключаться из сверки нала и остатков товара с предыдущей сменой.
   if(!confirm('Сделать эту смену обычной? Она начнёт участвовать в сверке кассы и товара с соседними сменами по этому магазину.')) return;
-  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts=getShifts();
   var idx=shifts.findIndex(function(s){return (s.id||s._id)===shiftId;});
   if(idx<0){showToast('Смена не найдена');return;}
   var sh=shifts[idx];
@@ -6053,15 +5871,14 @@ function svPromoteToNormal(shiftId){
   if(sh.source==='psj') sh.source='shop';
   if(sh.sellerName){ sh.sellerName = sh.sellerName.replace(/^Восст\.\s*/,''); }
   shifts[idx]=sh;
-  localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+  saveShifts(shifts);
   _shiftSetSafe(shiftId, sh, '✅ Смена теперь обычная — участвует в сверке');
   if(_currentShiftView&&(_currentShiftView.id===shiftId||_currentShiftView._id===shiftId)){
     _currentShiftView=sh;_renderShiftView();
   }
 }
 function svRepairExpenses(shiftId){
-  // Пересчитывает zp/travel/inkass/otherExp из expenses[] для старых PSJ-смен
-  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts=getShifts();
   var idx=shifts.findIndex(function(s){return (s.id||s._id)===shiftId;});
   if(idx<0){showToast('Смена не найдена');return;}
   var sh=shifts[idx];
@@ -6078,7 +5895,7 @@ function svRepairExpenses(shiftId){
   });
   sh.zp=zpR;sh.travel=travR;sh.inkass=inkR;sh.otherExp=othR;
   shifts[idx]=sh;
-  localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+  saveShifts(shifts);
   _shiftSetSafe(shiftId, sh, '✅ Расходы пересчитаны');
   if(_currentShiftView&&(_currentShiftView.id===shiftId||_currentShiftView._id===shiftId)){
     _currentShiftView=sh;_renderShiftView();
@@ -6202,9 +6019,6 @@ function getItemNames(goodsType){
   var key = type==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
   var names = {};
   getRefBook(key).forEach(function(it){ if(it.name||it) names[it.name||it]=true; });
-  // Всегда подмешиваем общий каталог товаров (iz_items) — так подсказка не
-  // окажется пустой, даже если тип товара выбран не тот, или конкретный
-  // товар ещё не попал в справочник именно этой категории.
   getItemsBase().forEach(function(it){ if(it.name) names[it.name]=true; });
   return Object.keys(names);
 }
@@ -6243,13 +6057,6 @@ function openManualNoArticle(){
   var nameMEl=document.getElementById('siNameM'); if(nameMEl) nameMEl.focus();
 }
 function _lookupItemInInvoices(numStr, shopName){
-  // iz_stock (остатки по артикулам) синхронизируется только локально на том
-  // устройстве, где была подтверждена приёмка. Если продавец пробивает
-  // продажу на ДРУГОМ устройстве, локального совпадения там может не быть,
-  // хотя сама накладная уже давно в облаке. Ищем номер прямо в накладных —
-  // они синхронизируются через Firestore и видны на любом устройстве.
-  // Важно: ищем строго по складу конкретного магазина, а не по всем сразу —
-  // один и тот же артикул в разных магазинах может быть разным товаром.
   var manual = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   var auto = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
   var all = manual.concat(auto).filter(function(inv){ return !shopName || inv.shopName===shopName; });
@@ -6406,7 +6213,6 @@ function renderSaleItems(){
 }
 function _siCopyItem(i){
   var it = saleItems[i]; if(!it) return;
-  // Заполняем поля формы из копируемой позиции (кроме артикула)
   currentLookupItem = null;
   var lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
   var numEl=document.getElementById('siNum'); if(numEl) numEl.value='';
@@ -6424,9 +6230,6 @@ function _siCopyItem(i){
 function siEditItem(i){
   var it = saleItems[i]; if(!it) return;
   saleItems.splice(i,1); renderSaleItems(); calcSaleTotal();
-  // Важно: сначала переключаем тип товара (Дерево/ДР), т.к. setSiItemType
-  // очищает поля названия и породы — иначе он затрёт значения, которые
-  // мы восстановим ниже, и от позиции останутся только цена и кол-во.
   setSiItemType(it.goodsType==='dr'?'dr':'derevo');
   var numEl=document.getElementById('siNum');
   if(numEl){ numEl.value = it.num||''; }
@@ -6524,15 +6327,11 @@ function renderMixPerItemBlock(){
 function setMixItemPay(idx, method){
   if(!saleItems[idx]) return;
   saleItems[idx].mixPay = method;
-  // Раз выбрали способ оплаты по позициям — общие поля "Нал/Безнал" сверху
-  // больше не используются, чтобы не было двух противоречащих источников.
   var mc=document.getElementById('mixCash'), mcr=document.getElementById('mixCard');
   if(mc) mc.value=''; if(mcr) mcr.value='';
   renderMixPerItemBlock();
 }
 function _mixPerItemCleared(){
-  // Если начали вручную вводить общие суммы нал/безнал — сбрасываем
-  // построчный выбор, чтобы не было двух противоречащих источников.
   saleItems.forEach(function(it){ delete it.mixPay; });
   renderMixPerItemBlock();
 }
@@ -6568,10 +6367,6 @@ function saveSale(){
   var perItemMixed = payMethod==='mixed' && saleItems.length>1 && saleItems.every(function(it){ return it.mixPay==='cash'||it.mixPay==='card'; });
   var cashPartWood, cardPartWood, cashPartDr, cardPartDr;
   if(perItemMixed){
-    // Точный расчёт по факту: каждая позиция сама сообщает, чем она была
-    // оплачена — вместо того чтобы размазывать общую сумму нал/безнал
-    // пропорционально по категориям (это давало неверные суммы, если,
-    // например, один товар полностью оплачен налом, а другой — картой).
     var cashItemsWood=0, cardItemsWood=0, cashItemsDr=0, cardItemsDr=0;
     saleItems.forEach(function(it){
       var a = it.amt!=null?it.amt:it.price*(it.qty||1);
@@ -6670,9 +6465,6 @@ function saveSale(){
   if(shopType !== 'shop'){
     sourceShop = (document.getElementById('goodsSource')||{}).value || '';
   }
-  // Списываем товар со СКЛАДА-ИСТОЧНИКА (тот магазин, где физически лежит
-  // товар), а не с самой точки продаж ОПТ/онлайн — иначе остатки нигде не
-  // уменьшались и товар можно было продать повторно.
   try{ stockApplySale(sourceShop || (session&&session.shopName), saleItems); }catch(e){}
   if(shopType !== 'shop' && sourceShop){
     var notif = {
@@ -6820,7 +6612,6 @@ function renderWoItems(){
 }
 function _woCopyItem(i){
   var src = woItems[i];
-  // Заполняем форму полями из копируемой позиции (кроме артикула)
   var nameEl=document.getElementById('woName');
   var specEl=document.getElementById('woSpecies');
   var priceEl=document.getElementById('woPrice');
@@ -6832,7 +6623,6 @@ function _woCopyItem(i){
   if(qtyEl) qtyEl.value=src.qty&&src.qty!==1?src.qty:'';
   if(amtEl) amtEl.value='';
   setWoItemType(src.goodsType==='dr'?'dr':'derevo');
-  // Фокус на поле кол-во чтобы продавец сразу менял что нужно
   setTimeout(function(){ var f=document.getElementById('woQty');if(f)f.focus(); },100);
   showToast('📋 Поля скопированы — измените нужное и добавьте');
 }
@@ -7482,10 +7272,6 @@ function acceptInvoice(){
       return;
     }
   }
-  // Сначала сверяемся с облаком: не приняли ли эту накладную уже на другом
-  // устройстве буквально только что. Если проверку сделать ПОСЛЕ списания
-  // товара, при одновременной приёмке на двух устройствах товар задвоится
-  // в остатках и в кассе — поэтому проверяем ДО любых изменений.
   var invRef = db.collection('iz_invoices').doc(currentInvId);
   invRef.get({source:'server'}).then(function(snap){
     if(snap.exists && snap.data().status==='accepted'){
@@ -7495,8 +7281,6 @@ function acceptInvoice(){
     }
     _acceptInvoiceProceed(inv, who);
   }).catch(function(){
-    // Не удалось проверить сервер (нет сети) — продолжаем как раньше, чтобы
-    // не блокировать работу продавца при плохом интернете.
     _acceptInvoiceProceed(inv, who);
   });
 }
@@ -7894,7 +7678,6 @@ function validateClose(){
   const staffCashEveVal = (document.getElementById('staffCashEveInput')||{}).value||'';
   const staffCashEve = parseFloat(staffCashEveVal)||0;
   const staffCv = document.getElementById('staffCashValidation');
-  // Если покупок сотрудников не было — поле кассы сотрудников не обязательно (считается 0)
   var hasStaffPurchases = journal.some(function(e){return e.type==='staff';});
   var staffCashEveRequired = hasStaffPurchases || (session.cashStaffMorning||0) > 0;
   if(!cashEveVal || (drBlockVisible && !drCashEveVal) || (staffCashEveRequired && !staffCashEveVal)){
@@ -8062,12 +7845,6 @@ function runBackupCheck(){
   });
   var _backupCheckTimedOut = false;
   var backupTimeoutTimer = setTimeout(function(){
-    // ВАЖНО: если проверка не завершилась за разумное время — скорее всего,
-    // застрял именно запрос к серверу (плохая связь: не пришёл ни успех, ни
-    // ошибка, тогда Promise.all может ждать вечно). Раньше тут не было
-    // тайм-аута вообще, и кнопка «Проверяю...» могла висеть бесконечно,
-    // не давая закрыть смену. Теперь через 15 секунд честно говорим об
-    // этом и снимаем блокировку кнопки, чтобы можно было попробовать ещё раз.
     _backupCheckTimedOut = true;
     if(checkBtn){ checkBtn.disabled=false; checkBtn.style.opacity='1'; checkBtn.textContent='🛟 Подстраховка'; }
     if(statusEl) statusEl.innerHTML = '<div style="font-size:12px;color:#f06060;text-align:center;padding:4px">⚠️ Проверка не завершилась — похоже, плохая связь. Закрыть смену пока нельзя. Попробуйте нажать «Подстраховка» ещё раз, когда связь появится.</div>';
@@ -8084,9 +7861,6 @@ function closeShift(){
     showToast('🛟 Сначала нажмите «Подстраховка» — нужно убедиться, что все данные сохранены');
     return;
   }
-  // Останавливаем "живую" фоновую синхронизацию сразу — иначе она может успеть
-  // отправить в облако снимок со status:'open' уже ПОСЛЕ того как смена закрыта,
-  // и закрытие "отменится" в облаке само по себе.
   if(typeof _liveShiftSyncTimer!=='undefined' && _liveShiftSyncTimer){ clearTimeout(_liveShiftSyncTimer); _liveShiftSyncTimer=null; }
   _shiftForceClosedRemotely = true;
   if(session && session.isPreview){
@@ -8100,14 +7874,6 @@ function closeShift(){
     }
     return;
   }
-  // Финальная сверка с независимой подстраховкой прямо перед закрытием.
-  // Проверка "Подстраховка" (кнопка выше) гарантирует, что каждая запись НА
-  // МОМЕНТ ЕЁ ПРОВЕРКИ была где-то сохранена отдельно от журнала смены — но
-  // если что-то всё же выпало из самого журнала УЖЕ ПОСЛЕ этой проверки
-  // (до нажатия «Закрыть смену»), это осталось бы незамеченным. Здесь мы
-  // сверяемся с независимыми копиями (iz_sales/iz_journal_backup) ещё раз,
-  // прямо сейчас, и возвращаем в журнал всё, чего там не хватает, — только
-  // потом реально закрываем смену.
   showToast('🛟 Финальная проверка перед закрытием...');
   if(typeof db==='undefined' || !db || !session.shiftId){ _closeShiftReal(); return; }
   var _deletedIdsForClose = {}; getTombstones().forEach(function(id){ _deletedIdsForClose[id]=true; });
@@ -8189,7 +7955,7 @@ function _closeShiftReal(){
   })();
   var finalReportId = session.shiftId || uid();
   if(restoreMode){
-    var allExisting = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var allExisting = getShifts();
     var origOpen = allExisting.find(function(s){
       return s.shopName===session.shopName && s.sellerName===session.sellerName &&
         s.date===openedDateStr && (s.status==='open'||!s.closedAt) && s.id!==session.shiftId;
@@ -8219,14 +7985,14 @@ function _closeShiftReal(){
       date:report.date,cashDiff,cashDiffReason:reason,morningDiff,prevCashEve:(prev&&prev.cashEvening),cashMorning:session.cashMorning});
   }
   report._pendingSync = true;
-  const shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  const shifts=getShifts();
   var filteredShifts = shifts.filter(function(s){
     if(!restoreMode) return true;
     return !(s.shopName===report.shopName && s.date===report.date &&
       (s.status==='open'||!s.closedAt) && s.id!==report.id);
   });
   filteredShifts.unshift(report);
-  localStorage.setItem(KEY.shifts,JSON.stringify(filteredShifts));
+  saveShifts(filteredShifts);
   if(restoreMode){
     _pushShiftWithRetry(report.id, report);
     try{
@@ -8254,20 +8020,13 @@ function _closeShiftReal(){
     return;
   }
   showToast('⏳ Сохраняем смену в облако, подождите...');
-  // Раньше здесь отправка запускалась "и забывалась" (fire-and-forget): экран
-  // сразу переключался на "Смена закрыта", даже если запись в облако ещё не
-  // прошла и позже вообще не проходила из-за плохой связи — продавец
-  // не получал никакого сигнала, что данные не долетели.
-  // Теперь дожидаемся подтверждения от сервера (максимум 8 секунд), и по
-  // итогу честно показываем — сохранилось в облаке или осталось только
-  // на этом телефоне.
   var _closeConfirmed = false;
   var _closeSettle = function(ok){
     if(_closeConfirmed) return; _closeConfirmed = true;
     if(ok){
-      var cur = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+      var cur = getShifts();
       var idx = cur.findIndex(function(s){ return (s.id||s._id)===report.id; });
-      if(idx>=0){ delete cur[idx]._pendingSync; localStorage.setItem(KEY.shifts,JSON.stringify(cur)); }
+      if(idx>=0){ delete cur[idx]._pendingSync; saveShifts(cur); }
     }
     stopLiveShiftListener();
     localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal); clearTombstones();
@@ -8443,7 +8202,7 @@ function migrateGoodsRefbooks(){
   localStorage.setItem('iz_goods_migrated_v1','1');
 }
 function migrateLegacyShiftDates(){
-  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts = getShifts();
   if(!shifts.length) return;
   function localDateStr(iso){
     var d = new Date(iso);
@@ -8460,7 +8219,7 @@ function migrateLegacyShiftDates(){
     }
   });
   if(changed){
-    localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+    saveShifts(shifts);
     try{
       shifts.forEach(function(sh){
         var id = sh.id||sh._id; if(!id) return;
@@ -8470,7 +8229,7 @@ function migrateLegacyShiftDates(){
   }
 }
 function migrateLegacyShiftRevenue(){
-  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts = getShifts();
   if(!shifts.length) return;
   var changed = false;
   shifts.forEach(function(sh){
@@ -8492,7 +8251,7 @@ function migrateLegacyShiftRevenue(){
       }
     });
   });
-  if(changed) localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+  if(changed) saveShifts(shifts);
   shifts.forEach(function(sh){
     if(sh.isArchive || sh.status!=='closed' || !sh.journal || !sh.journal.length) return;
     var sales = sh.journal.filter(function(e){ return e.type==='sale'; });
@@ -8533,7 +8292,7 @@ function migrateLegacyShiftRevenue(){
     });
   });
   if(changed){
-    localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+    saveShifts(shifts);
     try{
       shifts.forEach(function(sh){
         var id = sh.id||sh._id; if(!id) return;
@@ -8565,12 +8324,6 @@ function evaluateShiftIssues(sh){
   var jnl = sh.journal||[];
   var sales = jnl.filter(function(e){ return e.type==='sale'; });
   (function(){
-    // Раньше здесь была своя копия логики поиска "предыдущей смены", завязанная
-    // строго на точный openedAt. У части старых/импортированных смен openedAt
-    // отсутствует (есть только date) — такие смены выпадали из сравнения, и
-    // проверка по ошибке сравнивала текущую смену не с непосредственно
-    // предыдущей, а с более старой. Теперь используется единая функция
-    // getPrevShiftByOpenOrder, которая сравнивает по календарной дате открытия.
     var prevChk = getPrevShiftByOpenOrder(sh.shopName, sh.openedAt || (sh.date ? sh.date+'T23:59:59' : ''));
     if(!prevChk) return;
     if(prevChk.cashEvening!=null && prevChk.cashEvening>=100 && Math.abs((sh.cashMorning||0)-prevChk.cashEvening)>=1){
@@ -8614,7 +8367,6 @@ function evaluateShiftIssues(sh){
   var manWoWood = (sh.goodsWriteoffs||[]).reduce(function(s,w){return s+(w.amt!=null?w.amt:(w.amount||0));},0);
   var manRcvDr = (sh.drGoodsReceives||[]).reduce(function(s,r){return s+(r.amt!=null?r.amt:(r.amount||0));},0);
   var manWoDr = (sh.drGoodsWriteoffs||[]).reduce(function(s,w){return s+(w.amt!=null?w.amt:(w.amount||0));},0);
-  // Покупки сотрудников вычитаются по розничной цене (retail/opt)
   var jStaffWood = jnl.filter(function(e){ return e.type==='staff' && (e.goodsType||'wood')!=='dr'; })
     .reduce(function(s,e){ return s + Math.abs(e.goodsEffect || e.retail || e.opt || 0); }, 0);
   var jStaffDr = jnl.filter(function(e){ return e.type==='staff' && e.goodsType==='dr'; })
@@ -8677,9 +8429,6 @@ function evaluateShiftIssues(sh){
   var staffCashEffectChk = jnl.reduce(function(s,e){
     if(e.type==='sale') return s;
     if(e.staffEffect) return s+e.staffEffect;
-    // Защита: если по какой-то причине у записи расхода категории
-    // "Покупки сотрудников" не сохранилось поле staffEffect — всё равно
-    // учитываем её как списание, по сумме и типу записи.
     if(e.type==='expense' && e.goodsType==='staff') return s-(e.amount||0);
     return s;
   }, 0);
@@ -8692,7 +8441,7 @@ function evaluateShiftIssues(sh){
     }
   }
   (function(){
-    var allShiftsG = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var allShiftsG = getShifts();
     var candidatesG = allShiftsG.filter(function(s){
       return s.shopName===sh.shopName && s.id!==sh.id && s.openedAt && sh.openedAt && s.openedAt < sh.openedAt;
     });
@@ -8725,9 +8474,7 @@ function syncShiftsFromFirestore(){
   pullShiftTombstonesFromCloud(function(tombstoned){
     var tset={}; (tombstoned||[]).forEach(function(id){ tset[id]=true; });
     db.collection('iz_shifts').get({source:'server'}).then(function(snap){
-      var local=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-      // На всякий случай убираем из локального списка смены, которые уже
-      // помечены как удалённые (могли остаться от старой версии до фикса).
+      var local=getShifts();
       local = local.filter(function(s){ return !tset[s.id||s._id]; });
       var lmap={};local.forEach(function(s){lmap[s.id||s._id]=true;});
       var added=0, skipped=0;
@@ -8737,7 +8484,7 @@ function syncShiftsFromFirestore(){
         if(!lmap[doc.id]){local.push(data);added++;}
         else{var idx=local.findIndex(function(s){return (s.id||s._id)===doc.id;});if(idx>=0)local[idx]=Object.assign(local[idx],data);}
       });
-      localStorage.setItem(KEY.shifts,JSON.stringify(local));
+      saveShifts(local);
       if(btn){btn.disabled=false;btn.textContent='☁️ Синх';}
       if(status){status.textContent='✅ Подтянуто '+snap.size+' смен (новых: '+added+(skipped?', пропущено удалённых: '+skipped:'')+')';}
       renderShiftHistory();
@@ -8756,7 +8503,7 @@ function toggleDateCheckCalendar(){
 }
 function renderDateCheckCalendar(){
   var c = document.getElementById('dateCheckCalendar'); if(!c || !_dateCheckShown) return;
-  var allShifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var allShifts = getShifts();
   var shopsToCheck = _histShopFilter ? [_histShopFilter] : getShops().map(function(s){ return s.name||s; });
   var from = _histPeriodFrom, to = _histPeriodTo;
   if(!from || !to){
@@ -8815,7 +8562,7 @@ function renderShiftHistory(){
       return '<div style="padding:5px 12px;border-radius:20px;border:'+(active?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(active?'#c8f060':'#1a1a22')+';color:'+(active?'#0f0f13':'#8888aa')+';font-size:11px;cursor:pointer;white-space:nowrap;font-weight:'+(active?'700':'400')+'" onclick="filterHistShop(\''+name.replace(/'/g,"\\'")+'\',this)">'+name+'</div>';
     }).join('');
   }
-  var allShifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var allShifts=getShifts();
   allShifts = allShifts.filter(function(s){
     if(_histShowOpen) return s.status==='open'; // diagnostic mode: show ONLY stuck open shifts
     if(s.isArchive) return !!s.activated || s.source==='import';
@@ -8879,17 +8626,13 @@ function filterHistShop(shop, el){
 function openShiftView(id){
   currentEditShiftId = id;
   migrateLegacyShiftRevenue();
-  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts = getShifts();
   var sh = shifts.find(function(s){ return (s.id||s._id)===id; }); if(!sh) return;
   _currentShiftView = JSON.parse(JSON.stringify(sh));
   if(!_currentShiftView.id) _currentShiftView.id = _currentShiftView._id;
   _svOpenAccs = {};
   _renderShiftView();
   openMo('editShiftMo');
-  // Локальный кэш мог застрять на старых данных (например, если синхронизация
-  // где-то оборвалась). При каждом открытии карточки — подтягиваем свежую
-  // версию именно этой смены из облака и обновляем экран, если там данные
-  // новее или полнее, чем в локальном кэше.
   try{
     db.collection('iz_shifts').doc(id).get({source:'server'}).then(function(snap){
       if(!snap.exists) return;
@@ -8903,10 +8646,10 @@ function openShiftView(id){
         _currentShiftView = remote;
         _svOpenAccs = {};
         _renderShiftView();
-        var allShifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+        var allShifts = getShifts();
         var idx = allShifts.findIndex(function(s){ return (s.id||s._id)===id; });
         if(idx>=0) allShifts[idx] = remote; else allShifts.push(remote);
-        localStorage.setItem(KEY.shifts, JSON.stringify(allShifts));
+        saveShifts(allShifts);
         showToast('🔄 Данные смены обновлены из облака');
       }
     }).catch(function(){});
@@ -8990,9 +8733,6 @@ function _renderShiftView(){
   var staffCashEffect = jnl.reduce(function(s,e){
     if(e.type==='sale') return s;
     if(e.staffEffect) return s+e.staffEffect;
-    // Защита: если по какой-то причине у записи расхода категории
-    // "Покупки сотрудников" не сохранилось поле staffEffect — всё равно
-    // учитываем её как списание, по сумме и типу записи.
     if(e.type==='expense' && e.goodsType==='staff') return s-(e.amount||0);
     return s;
   }, 0);
@@ -9703,8 +9443,6 @@ function svOpenManualInvForm(){
   }
   svRenderManualInvForm();
   box.style.display='block';
-  // На случай если каталог товаров на этом телефоне отстал от облака —
-  // подтягиваем свежую версию прямо сейчас, а не надеемся на локальный кэш.
   try{
     ['goods_derevo','goods_dr','items'].forEach(function(doc){
       db.collection('iz_settings').doc(doc).get({source:'server'}).then(function(snap){
@@ -9811,12 +9549,6 @@ function svSaveManualInvIntoShift(){
   if(!s.num){ showToast('Укажите номер накладной'); return; }
   var who = (session&&(session.name||session.sellerName))||'Администратор';
   var totalAmt = items.reduce(function(sum,it){ return sum+(it.price||0)*(it.qty||1); },0);
-  // Проверка на возможный дубль: если в системе уже есть накладная (принятая
-  // или ещё нет) на ту же сумму и то же число позиций для этого же магазина
-  // за последние 5 дней — она может быть той самой настоящей накладной,
-  // которую сейчас вносят вручную второй раз. Предупреждаем, а не тихо
-  // создаём копию — иначе позже эта же накладная может ещё раз "всплыть"
-  // через «Принять накладную целиком» и задвоить приход.
   var cutoffDate = new Date(Date.now()-5*86400000).toISOString().split('T')[0];
   var allInv = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]').concat(JSON.parse(localStorage.getItem('iz_invoices')||'[]'));
   var possibleDup = allInv.find(function(iv){
@@ -9912,7 +9644,7 @@ function svAcceptInvoiceIntoShift(invId){
   var dupInShift = jnlForDup.find(function(e){
     return e.type==='receive' && Math.abs((e.amount||0)-invTotalCheck)<1;
   });
-  var allShiftsChk = JSON.parse(localStorage.getItem(KEY.shifts)||'[]').filter(function(s){
+  var allShiftsChk = getShifts().filter(function(s){
     return s.shopName===_currentShiftView.shopName && (s.date||'')>=cutoffDateChk;
   });
   var dupInRecentShifts = allShiftsChk.some(function(s){
@@ -10104,7 +9836,6 @@ function svSaveStaffEdit(idx, formId){
   if(who) target.who = who;
   target.article = d.art; target.item = d.name; target.species = d.species;
   target.qty = d.qty; target.price = d.price; target.opt = d.amt; target.amount = d.amt; target.retail = retail;
-  // Пересчитываем goodsEffect и goodsDrEffect из retail
   var isWoodStaff = (target.goodsType||'wood') !== 'dr';
   if(retail > 0){
     target.goodsEffect = isWoodStaff ? -retail : 0;
@@ -10311,13 +10042,13 @@ function svDeleteDrWo(idx){
 function svForceCloseShift(){
   if(!confirm('Принудительно закрыть эту смену? Она будет помечена как закрытая с текущими данными.')) return;
   var id=_currentShiftView.id;
-  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts=getShifts();
   var idx=shifts.findIndex(function(s){return (s.id||s._id)===id;});
   if(idx<0) return;
   shifts[idx].status='closed';
   shifts[idx].closedAt=new Date().toISOString();
   shifts[idx].forceClosedBy=(session&&session.sellerName)||'Администратор';
-  localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+  saveShifts(shifts);
   _shiftSetSafe(id, shifts[idx]);
   _currentShiftView = shifts[idx];
   _renderShiftView();
@@ -10327,13 +10058,10 @@ function svDeleteShift(){
   if(!confirm('Удалить смену целиком? Это действие нельзя отменить.')) return;
   var sh = _currentShiftView;
   var id = sh.id;
-  // Tombstone — записываем ДО удаления, чтобы дальнейшая синхронизация из
-  // облака (кнопка "Синх" / фоновый sync) не подтянула смену обратно, даже
-  // если само удаление документа в Firestore не пройдёт (офлайн и т.п.).
   addShiftTombstone(id);
-  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts=getShifts();
   shifts=shifts.filter(function(s){return (s.id||s._id)!==id;});
-  localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+  saveShifts(shifts);
   try{
     db.collection('iz_shifts').doc(id).delete().catch(function(err){
       showToast('⚠️ Удалено локально, но облако не подтвердило удаление: '+(err&&err.message||err));
@@ -10341,9 +10069,6 @@ function svDeleteShift(){
   }catch(e){
     showToast('⚠️ Удалено локально, но облако не подтвердило удаление');
   }
-  // Если смена была создана через "Восст. смены" (source:'psj'), исходные
-  // записи там остаются нетронутыми — иначе она снова соберётся при
-  // активации/обновлении из вкладки "Восст. смены".
   if(sh.source==='psj'){
     var shopName = sh.shopName||'';
     var date = sh.date||'';
@@ -10356,22 +10081,6 @@ function svDeleteShift(){
     }
   }
   closeMo('editShiftMo'); renderShiftHistory(); showToast('🗑 Смена удалена');
-}
-function svRecalcGoodsTotals(){
-  var sh = _currentShiftView; if(!sh) return;
-  var jnl = sh.journal||[];
-  var goods = sh.goodsMorning||0;
-  var goodsDr = sh.goodsDrMorning||0;
-  jnl.forEach(function(e){
-    goods += (e.goodsEffect||0);
-    goodsDr += (e.goodsDrEffect||0);
-  });
-  (sh.goodsReceives||[]).forEach(function(r){ goods += (r.amt||r.amount||0); });
-  (sh.drGoodsReceives||[]).forEach(function(r){ goodsDr += (r.amt||r.amount||0); });
-  (sh.goodsWriteoffs||[]).forEach(function(w){ goods -= (w.amt||w.amount||0); });
-  (sh.drGoodsWriteoffs||[]).forEach(function(w){ goodsDr -= (w.amt||w.amount||0); });
-  sh.goodsEvening = Math.max(0, Math.round(goods));
-  sh.drGoodsEvening = Math.max(0, Math.round(goodsDr));
 }
 function svRecalcGoodsEvening(){
   var sh = _currentShiftView; if(!sh) return;
@@ -10389,18 +10098,12 @@ function svRecalcGoodsEvening(){
 }
 function svPersist(skipGoodsRecalc){
   if(!skipGoodsRecalc) svRecalcGoodsEvening();
-  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts=getShifts();
   var idx=shifts.findIndex(function(s){return (s.id||s._id)===_currentShiftView.id;}); if(idx<0) return;
   shifts[idx]=_currentShiftView;
-  localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+  saveShifts(shifts);
   var shiftId = _currentShiftView.id;
   var toSave = _currentShiftView;
-  // Раньше здесь была слепая перезапись всего документа смены (set() без
-  // проверки). Если в это же время где-то ещё (например, фоновая довозка с
-  // телефона продавца) шла своя запись в ту же смену — одна правка стирала
-  // другую. Теперь перед отправкой сверяемся с сервером и, если там есть
-  // записи журнала, которых нет у нас локально, объединяем их, а не
-  // выбрасываем.
   try{
     db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
       var dataToSend = toSave;
@@ -10409,20 +10112,15 @@ function svPersist(skipGoodsRecalc){
         var remoteJnl = remote.journal||[];
         var localJnl = toSave.journal||[];
         var localIds = {}; localJnl.forEach(function(e){ if(e.id) localIds[e.id]=true; });
-        // Записи, которые только что специально удалили (лежат в корзине),
-        // ни в коем случае не подтягиваем обратно — иначе объединение "чинит"
-        // намеренное удаление, и запись как будто сама возвращается.
         var deletedIds = {}; getTombstones().forEach(function(id){ deletedIds[id]=true; });
         var missingFromServer = remoteJnl.filter(function(e){ return e.id && !localIds[e.id] && !deletedIds[e.id]; });
         if(missingFromServer.length){
           var mergedJnl = localJnl.concat(missingFromServer);
           mergedJnl.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
           dataToSend = Object.assign({}, toSave, {journal: mergedJnl});
-          // Сохраняем объединённый вариант и локально, чтобы админ сразу увидел
-          // довезённые записи, которых не было в его копии.
-          var shifts2 = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+          var shifts2 = getShifts();
           var idx2 = shifts2.findIndex(function(s){ return (s.id||s._id)===shiftId; });
-          if(idx2>=0){ shifts2[idx2] = dataToSend; localStorage.setItem(KEY.shifts, JSON.stringify(shifts2)); }
+          if(idx2>=0){ shifts2[idx2] = dataToSend; saveShifts(shifts2); }
           if(_currentShiftView && _currentShiftView.id===shiftId) _currentShiftView = dataToSend;
           showToast('ℹ️ В облаке нашлись записи, которых не было локально — объединила, ничего не потеряно');
         }
@@ -10432,9 +10130,6 @@ function svPersist(skipGoodsRecalc){
         console.log('[svPersist] ошибка сохранения в Firestore:', err);
       });
     }).catch(function(err){
-      // Не удалось свериться с сервером (например, нет сети) — сохраняем
-      // как есть, чтобы не блокировать работу; при следующей успешной
-      // синхронизации расхождения будет видно через проверки несовпадений.
       db.collection('iz_shifts').doc(shiftId).set(toSave).catch(function(err2){
         showToast('⚠️ Сохранено только локально! Ошибка облака: '+(err2&&err2.message||err2));
         console.log('[svPersist] ошибка сохранения в Firestore:', err2);
@@ -10445,8 +10140,6 @@ function svPersist(skipGoodsRecalc){
   }
   renderShiftHistory();
 }
-function openEditShift(id){ openShiftView(id); }
-function toggleEditForm(){}
 function saveEditShift(){}
 function _svVal(id){ var el=document.getElementById(id); return el ? el.value : ''; }
 function _svNum(id){ return parseFloat(_svVal(id))||0; }
@@ -10592,8 +10285,8 @@ function savePastShift(){
     drGoodsReceives:[...psDrReceives],drGoodsWriteoffs:[...psDrWriteoffs],
     staffPurchases:[...psStaffs],staffCashTotal:staffTotalOpt,
     comment:gv('psComment'),backfilled:true,backfilledBy:session.name,backfilledAt:new Date().toISOString(),journal:[]};
-  const shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
-  shifts.unshift(shift); localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+  const shifts=getShifts();
+  shifts.unshift(shift); saveShifts(shifts);
   try{ db.collection('iz_shifts').add(shift); }catch(e){}
   ['psCashMorn','psCashEve','psZP','psInkass','psOtherExp','psDiscount','psCashRev','psTerminal','psTransfer','psQR','psWoodMorn','psDrCashMorn','psDrCashEve','psDrInkass','psDrDiscount','psDrCashRev','psDrTerminal','psDrTransfer','psDrQR','psDrMorn','psComment'].forEach(id=>{var el=document.getElementById(id);if(el)el.value='';});
   psWriteoffs=[]; psDrWriteoffs=[]; psReceives=[]; psDrReceives=[]; psStaffs=[];
@@ -10722,30 +10415,6 @@ function psCalcGoods(){
   if(val2) val2.textContent=fmt2(eve);
   var block=document.getElementById('psWoodEveBlock'); if(block) block.style.display='none';
 }
-function psCalcDr(){
-  var morn=parseFloat(gv('psDrCashMorn'))||0;
-  var salesCash=parseFloat(gv('psDrCashRev'))||0;
-  var terminal=parseFloat(gv('psDrTerminal'))||0;
-  var transfer=parseFloat(gv('psDrTransfer'))||0;
-  var qr=parseFloat(gv('psDrQR'))||0;
-  var disc=parseFloat(gv('psDrDiscount'))||0;
-  var inkass=parseFloat(gv('psDrInkass'))||0;
-  var totalRev=salesCash+terminal+transfer+qr+disc; // валовая = нал+безнал+скидка
-  var trVal=document.getElementById('psDrTotalRevVal');
-  if(trVal) trVal.textContent=fmt2(totalRev);
-  var calcEve=morn+salesCash-inkass;
-  var block=document.getElementById('psDrCashCalc'), valEl=document.getElementById('psDrCashCalcVal');
-  if(morn||salesCash||inkass){block.style.display='block';valEl.textContent=fmt2(calcEve);}
-  else block.style.display='none';
-  var check=document.getElementById('psDrCashCheck');
-  if(gv('psDrCashEve')!==''){
-    var ent=parseFloat(gv('psDrCashEve'))||0, diff=Math.round(ent-calcEve);
-    check.innerHTML=Math.abs(diff)===0
-      ?'<div class="al-ok">✅ Нал вечер сходится</div>'
-      :'<div class="al-err">⛔ Расхождение: '+fmt2(diff)+'<br><span style="font-size:10px">Расчётный: '+fmt2(calcEve)+' · Введено: '+fmt2(ent)+'</span></div>';
-  } else check.innerHTML='';
-  psCalcDrGoods();
-}
 function psCalcDrGoods(){
   var morn=parseFloat(gv('psDrMorn'))||0;
   var salesCash=parseFloat(gv('psDrCashRev'))||0;
@@ -10757,58 +10426,6 @@ function psCalcDrGoods(){
   var val2=document.getElementById('psDrEveVal');
   if(val2) val2.textContent=fmt2(eve);
   var block=document.getElementById('psDrEveBlock'); if(block) block.style.display='none';
-}
-function psAddWriteoff(){
-  var name=(document.getElementById('psWoName')||{}).value||"";
-  var amt=parseFloat((document.getElementById('psWoAmt')||{}).value)||0;
-  if(!name||!amt){showToast('Введите название и сумму');return;}
-  psWriteoffs.push({num:(document.getElementById('psWoNum')||{}).value||'',name,qty:(document.getElementById('psWoQty')||{}).value||'1',amt,reason:(document.getElementById('psWoReason')||{}).value||''});
-  ['psWoNum','psWoName','psWoQty','psWoAmt','psWoReason'].forEach(id=>{var el=document.getElementById(id);if(el)el.value='';});
-  renderPsLists(); psCalcGoods();
-}
-function psDrAddWriteoff(){
-  var name=(document.getElementById('psDrWoName')||{}).value||"";
-  var amt=parseFloat((document.getElementById('psDrWoAmt')||{}).value)||0;
-  if(!name||!amt){showToast('Введите название и сумму');return;}
-  psDrWriteoffs.push({name,qty:(document.getElementById('psDrWoQty')||{}).value||'1',amt,reason:(document.getElementById('psDrWoReason')||{}).value||''});
-  ['psDrWoName','psDrWoQty','psDrWoAmt','psDrWoReason'].forEach(id=>{var el=document.getElementById(id);if(el)el.value='';});
-  renderPsLists(); psCalcDrGoods();
-}
-function psAddReceive(){
-  var name=(document.getElementById('psRcvName')||{}).value||"";
-  if(!name){showToast('Введите название');return;}
-  var qty=(document.getElementById('psRcvQty')||{}).value||'';
-  var price=parseFloat((document.getElementById('psRcvPrice')||{}).value)||0;
-  var amt=parseFloat((document.getElementById('psRcvAmt')||{}).value)||(price*parseFloat(qty)||0)||0;
-  psReceives.push({
-    num:(document.getElementById('psRcvNum')||{}).value||'',
-    name, qty, price, from:(document.getElementById('psRcvFrom')||{}).value||'', amt
-  });
-  ['psRcvNum','psRcvName','psRcvQty','psRcvPrice','psRcvFrom','psRcvAmt'].forEach(id=>{var el=document.getElementById(id);if(el)el.value='';});
-  renderPsLists(); psCalcGoods();
-}
-function psDrAddReceive(){
-  var name=(document.getElementById('psDrRcvName')||{}).value||"";
-  if(!name){showToast('Введите название');return;}
-  var qty=(document.getElementById('psDrRcvQty')||{}).value||'';
-  var price=parseFloat((document.getElementById('psDrRcvPrice')||{}).value)||0;
-  var amt=parseFloat((document.getElementById('psDrRcvAmt')||{}).value)||(price*parseFloat(qty)||0)||0;
-  psDrReceives.push({
-    num:(document.getElementById('psDrRcvNum')||{}).value||'',
-    name, qty, price, from:(document.getElementById('psDrRcvFrom')||{}).value||'', amt
-  });
-  ['psDrRcvNum','psDrRcvName','psDrRcvQty','psDrRcvPrice','psDrRcvFrom','psDrRcvAmt'].forEach(id=>{var el=document.getElementById(id);if(el)el.value='';});
-  renderPsLists(); psCalcDrGoods();
-}
-function psAddStaff(){
-  var who=(document.getElementById('psStaffWho')||{}).value||"";
-  var item=(document.getElementById('psStaffItem')||{}).value||"";
-  var retail=parseFloat((document.getElementById('psStaffRetail')||{}).value)||0;
-  var opt=parseFloat((document.getElementById('psStaffOpt')||{}).value)||0;
-  if(!who||!item){showToast('Введите кто и что покупает');return;}
-  psStaffs.push({who,item,retail,opt,comment:(document.getElementById('psStaffComment')||{}).value||''});
-  ['psStaffWho','psStaffItem','psStaffRetail','psStaffOpt','psStaffComment'].forEach(id=>{var el=document.getElementById(id);if(el)el.value='';});
-  renderPsLists();
 }
 function psAddStaffFromWo(idx){
   var allWo=[...psWriteoffs.map(w=>({...w,src:'дерево'})),...psDrWriteoffs.map(w=>({...w,src:'дртовар'}))];
@@ -10863,265 +10480,8 @@ function renderPsLists(){
 }
 var psCurrentInvoice = null;
 var psInvoiceCheckState = [];
-function psToggleRcvMode(mode){
-  var invBtn=document.getElementById('psRcvByInv');
-  var manBtn=document.getElementById('psRcvByManual');
-  var invBlock=document.getElementById('psRcvInvoiceBlock');
-  var manBlock=document.getElementById('psRcvManualBlock');
-  if(mode==='invoice'){
-    invBtn.style.cssText='flex:1;padding:9px;border-radius:10px;border:2px solid #60f090;background:#1a2e1e;color:#60f090;font-size:12px;font-weight:700;cursor:pointer';
-    manBtn.style.cssText='flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer';
-    invBlock.style.display='block'; manBlock.style.display='none';
-    psPopulateInvoices();
-  } else {
-    manBtn.style.cssText='flex:1;padding:9px;border-radius:10px;border:2px solid #60f090;background:#1a2e1e;color:#60f090;font-size:12px;font-weight:700;cursor:pointer';
-    invBtn.style.cssText='flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer';
-    invBlock.style.display='none'; manBlock.style.display='block';
-  }
-}
-function psPopulateInvoices(){
-  var shop=gv('psShop');
-  var invs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-  var shopInvs=invs.filter(function(i){ return !shop||i.destName===shop; });
-  var sel=document.getElementById('psInvoiceSelect');
-  if(!sel) return;
-  if(!shopInvs.length){
-    sel.innerHTML='<option value="">— нет накладных —</option>';
-  } else {
-    sel.innerHTML='<option value="">Выберите накладную...</option>'+
-      shopInvs.map(function(i){ return '<option value="'+(i.id||i._id)+'">'+i.num+' · '+i.date+' · '+i.items.length+' изд.</option>'; }).join('');
-  }
-}
-function psLoadInvoice(){
-  var id=(document.getElementById('psInvoiceSelect')||{}).value;
-  var btn=document.getElementById('psAcceptInvBtn');
-  var c=document.getElementById('psInvoiceItems');
-  if(!id||!c){ if(c)c.innerHTML=''; if(btn)btn.style.display='none'; return; }
-  var invs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-  var inv=invs.find(function(i){ return (i.id||i._id)===id; });
-  if(!inv){ c.innerHTML=''; return; }
-  psCurrentInvoice=inv;
-  psInvoiceCheckState=inv.items.map(function(it){ return {ok:false,factPrice:it.price,comment:'',diff:false}; });
-  c.innerHTML=inv.items.map(function(item,i){
-    return '<div id="psInvRow'+i+'" style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;padding:10px;margin-bottom:6px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'+
-        '<div><div style="font-size:13px;font-weight:700">№'+(item.num||'—')+' '+item.name+'</div>'+
-        '<div style="font-size:11px;color:#8888aa">По накладной: '+fmt2(item.price)+'</div></div>'+
-        '<div onclick="psToggleInvItem('+i+')" id="psInvOk'+i+'" style="width:26px;height:26px;border-radius:8px;border:2px solid #2e2e3e;background:#0f0f13;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;flex-shrink:0"></div>'+
-      '</div>'+
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'+
-        '<span style="font-size:11px;color:#8888aa">Факт цена:</span>'+
-        '<input id="psInvFact'+i+'" type="text" value="'+item.price+'" inputmode="numeric" oninput="psCheckInvDiff('+i+','+item.price+')"'+
-          ' style="flex:1;padding:7px;background:#0f0f13;border:1px solid #2e2e3e;border-radius:8px;color:#f0f0f8;font-size:13px;outline:none;text-align:right"> ₽'+
-      '</div>'+
-      '<input id="psInvComment'+i+'" placeholder="Комментарий при расхождении..." style="width:100%;padding:7px;background:#0f0f13;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:11px;outline:none;display:none">'+
-    '</div>';
-  }).join('');
-  if(btn) btn.style.display='block';
-}
-function psToggleInvItem(i){
-  psInvoiceCheckState[i].ok=!psInvoiceCheckState[i].ok;
-  var el=document.getElementById('psInvOk'+i);
-  if(el){ el.textContent=psInvoiceCheckState[i].ok?'✓':''; el.style.background=psInvoiceCheckState[i].ok?'#c8f060':'#0f0f13'; el.style.color='#0f0f13'; el.style.borderColor=psInvoiceCheckState[i].ok?'#c8f060':'#2e2e3e'; }
-}
-function psCheckInvDiff(i,orig){
-  var fEl=document.getElementById('psInvFact'+i);
-  var cEl=document.getElementById('psInvComment'+i);
-  var row=document.getElementById('psInvRow'+i);
-  if(!fEl||!psCurrentInvoice) return;
-  var fact=parseFloat(fEl.value)||0;
-  var diff=Math.abs(fact-orig)>0;
-  psInvoiceCheckState[i].factPrice=fact;
-  psInvoiceCheckState[i].diff=diff;
-  if(cEl) cEl.style.display=diff?'block':'none';
-  if(row) row.style.borderColor=diff?'#f06060':'#2e2e3e';
-  if(fEl) fEl.style.borderColor=diff?'#f06060':'#2e2e3e';
-}
-function psAcceptInvoice(){
-  if(!psCurrentInvoice) return;
-  var inv=psCurrentInvoice;
-  var hasDiffs=psInvoiceCheckState.some(function(s){ return s.diff; });
-  inv.items.forEach(function(item,i){
-    var state=psInvoiceCheckState[i];
-    var comment=(document.getElementById('psInvComment'+i)||{}).value||'';
-    psReceives.push({
-      num:item.num||'',name:item.name,qty:'1',
-      price:state.factPrice,amt:state.factPrice,
-      from:'Накладная '+inv.num,
-      diff:state.diff, diffComment:comment,
-      invoiceId:inv.id||inv._id
-    });
-  });
-  if(hasDiffs){
-    var diffItems=inv.items.filter(function(it,i){ return psInvoiceCheckState[i].diff; });
-    var alerts=JSON.parse(localStorage.getItem('iz_admin_alerts')||'[]');
-    alerts.unshift({id:uid(),type:'invoice_diff',shopName:gv('psShop'),
-      invoiceNum:inv.num,date:gv('psDate'),
-      diffItems:diffItems.map(function(it,i){ return {name:it.name,orig:it.price,fact:psInvoiceCheckState[i].factPrice}; }),
-      read:false,createdAt:new Date().toISOString()});
-    localStorage.setItem('iz_admin_alerts',JSON.stringify(alerts.slice(0,50)));
-    try{ db.collection('iz_admin_alerts').add(alerts[0]); }catch(e){}
-    var invs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-    var idx=invs.findIndex(function(i){ return (i.id||i._id)===(inv.id||inv._id); });
-    if(idx>=0){ invs[idx].hasDiffs=true; invs[idx].disputed=true; localStorage.setItem('iz_invoices',JSON.stringify(invs)); try{ db.collection('iz_invoices').doc(inv.id||inv._id).update({hasDiffs:true,disputed:true}); }catch(e){} }
-    showToast('⚠️ Приход с расхождениями — уведомление отправлено кладовщику');
-  } else {
-    showToast('✅ Принято по накладной '+inv.num);
-  }
-  renderPsLists(); psCalcGoods();
-  document.getElementById('psInvoiceItems').innerHTML='';
-  document.getElementById('psInvoiceSelect').value='';
-  document.getElementById('psAcceptInvBtn').style.display='none';
-  psCurrentInvoice=null;
-}
-function psLookupWriteoff(num){
-  var hint=document.getElementById('psWoLookupHint');
-  var nameEl=document.getElementById('psWoName');
-  var amtEl=document.getElementById('psWoAmt');
-  if(!num.trim()||!hint) return;
-  var items=JSON.parse(localStorage.getItem('iz_items')||'[]');
-  var found=items.find(function(i){ return String(i.num)===num.trim(); });
-  if(found){
-    if(nameEl&&!nameEl.value) nameEl.value=found.name||'';
-    if(amtEl&&!amtEl.value) amtEl.value=found.price||'';
-    hint.style.display='block'; hint.style.color='#60f090';
-    hint.textContent='✓ '+found.name+(found.price?' · '+fmt2(found.price):'');
-  } else {
-    hint.style.display='block'; hint.style.color='#8888aa';
-    hint.textContent='Артикул не найден — введите вручную';
-  }
-}
-function psLookupReceive(num){
-  var hint=document.getElementById('psRcvLookupHint');
-  var nameEl=document.getElementById('psRcvName');
-  var priceEl=document.getElementById('psRcvPrice');
-  if(!num.trim()||!hint) return;
-  var items=JSON.parse(localStorage.getItem('iz_items')||'[]');
-  var found=items.find(function(i){ return String(i.num)===num.trim(); });
-  if(found){
-    if(nameEl&&!nameEl.value) nameEl.value=found.name||'';
-    if(priceEl&&!priceEl.value) priceEl.value=found.price||'';
-    hint.style.display='block';
-    hint.textContent='✓ Найдено: '+found.name+(found.price?' · '+fmt2(found.price):'');
-  } else {
-    hint.style.display='block';
-    hint.style.color='#8888aa';
-    hint.textContent='Артикул не найден в базе — введите вручную';
-  }
-}
 var psDrCurrentInvoice = null;
 var psDrInvoiceCheckState = [];
-function psDrToggleRcvMode(mode){
-  var invBtn=document.getElementById('psDrRcvByInv');
-  var manBtn=document.getElementById('psDrRcvByManual');
-  var invBlock=document.getElementById('psDrRcvInvoiceBlock');
-  var manBlock=document.getElementById('psDrRcvManualBlock');
-  if(mode==='invoice'){
-    invBtn.style.cssText='flex:1;padding:9px;border-radius:10px;border:2px solid #60f090;background:#1a2e1e;color:#60f090;font-size:12px;font-weight:700;cursor:pointer';
-    manBtn.style.cssText='flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer';
-    invBlock.style.display='block'; manBlock.style.display='none';
-    psDrPopulateInvoices();
-  } else {
-    manBtn.style.cssText='flex:1;padding:9px;border-radius:10px;border:2px solid #60f090;background:#1a2e1e;color:#60f090;font-size:12px;font-weight:700;cursor:pointer';
-    invBtn.style.cssText='flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer';
-    invBlock.style.display='none'; manBlock.style.display='block';
-  }
-}
-function psDrPopulateInvoices(){
-  var invs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-  var sel=document.getElementById('psDrInvoiceSelect'); if(!sel) return;
-  sel.innerHTML='<option value="">Выберите накладную...</option>'+
-    invs.map(function(i){ return '<option value="'+(i.id||i._id)+'">'+i.num+' · '+i.date+'</option>'; }).join('');
-}
-function psDrLoadInvoice(){
-  var id=(document.getElementById('psDrInvoiceSelect')||{}).value;
-  var btn=document.getElementById('psDrAcceptInvBtn');
-  var c=document.getElementById('psDrInvoiceItems');
-  if(!id||!c){ if(c)c.innerHTML=''; if(btn)btn.style.display='none'; return; }
-  var inv=JSON.parse(localStorage.getItem('iz_invoices')||'[]').find(function(i){ return (i.id||i._id)===id; });
-  if(!inv){ c.innerHTML=''; return; }
-  psDrCurrentInvoice=inv;
-  psDrInvoiceCheckState=inv.items.map(function(it){ return {ok:false,factPrice:it.price,diff:false}; });
-  c.innerHTML=inv.items.map(function(item,i){
-    return '<div id="psDrInvRow'+i+'" style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;padding:10px;margin-bottom:6px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
-        '<div><div style="font-size:13px;font-weight:700">№'+(item.num||'—')+' '+item.name+'</div>'+
-        '<div style="font-size:11px;color:#8888aa">'+fmt2(item.price)+'</div></div>'+
-        '<div onclick="psDrToggleInvItem('+i+')" id="psDrInvOk'+i+'" style="width:26px;height:26px;border-radius:8px;border:2px solid #2e2e3e;background:#0f0f13;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0"></div>'+
-      '</div>'+
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'+
-        '<span style="font-size:11px;color:#8888aa">Факт:</span>'+
-        '<input id="psDrInvFact'+i+'" type="text" value="'+item.price+'" inputmode="numeric" oninput="psDrCheckInvDiff('+i+','+item.price+')"'+
-          ' style="flex:1;padding:7px;background:#0f0f13;border:1px solid #2e2e3e;border-radius:8px;color:#f0f0f8;font-size:13px;outline:none;text-align:right"> ₽'+
-      '</div>'+
-      '<input id="psDrInvComment'+i+'" placeholder="Комментарий при расхождении..." style="width:100%;padding:7px;background:#0f0f13;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:11px;outline:none;display:none">'+
-    '</div>';
-  }).join('');
-  if(btn) btn.style.display='block';
-}
-function psDrToggleInvItem(i){
-  psDrInvoiceCheckState[i].ok=!psDrInvoiceCheckState[i].ok;
-  var el=document.getElementById('psDrInvOk'+i);
-  if(el){ el.textContent=psDrInvoiceCheckState[i].ok?'✓':''; el.style.background=psDrInvoiceCheckState[i].ok?'#c8f060':'#0f0f13'; el.style.borderColor=psDrInvoiceCheckState[i].ok?'#c8f060':'#2e2e3e'; el.style.color='#0f0f13'; }
-}
-function psDrCheckInvDiff(i,orig){
-  var fEl=document.getElementById('psDrInvFact'+i);
-  var cEl=document.getElementById('psDrInvComment'+i);
-  var row=document.getElementById('psDrInvRow'+i);
-  if(!fEl) return;
-  var fact=parseFloat(fEl.value)||0, diff=Math.abs(fact-orig)>0;
-  psDrInvoiceCheckState[i].factPrice=fact; psDrInvoiceCheckState[i].diff=diff;
-  if(cEl) cEl.style.display=diff?'block':'none';
-  if(row) row.style.borderColor=diff?'#f06060':'#2e2e3e';
-  if(fEl) fEl.style.borderColor=diff?'#f06060':'#2e2e3e';
-}
-function psDrAcceptInvoice(){
-  if(!psDrCurrentInvoice) return;
-  var inv=psDrCurrentInvoice;
-  var hasDiffs=psDrInvoiceCheckState.some(function(s){ return s.diff; });
-  inv.items.forEach(function(item,i){
-    psDrReceives.push({num:item.num||'',name:item.name,qty:'1',price:psDrInvoiceCheckState[i].factPrice,amt:psDrInvoiceCheckState[i].factPrice,from:'Накладная '+inv.num,diff:psDrInvoiceCheckState[i].diff});
-  });
-  if(hasDiffs){
-    var alerts=JSON.parse(localStorage.getItem('iz_admin_alerts')||'[]');
-    alerts.unshift({id:uid(),type:'invoice_diff',shopName:gv('psShop'),invoiceNum:inv.num,date:gv('psDate'),read:false,createdAt:new Date().toISOString()});
-    localStorage.setItem('iz_admin_alerts',JSON.stringify(alerts.slice(0,50)));
-    try{ db.collection('iz_admin_alerts').add(alerts[0]); }catch(e){}
-    showToast('⚠️ Принято с расхождениями — кладовщик уведомлён');
-  } else { showToast('✅ Принято по накладной '+inv.num); }
-  renderPsLists(); psCalcDrGoods();
-  document.getElementById('psDrInvoiceItems').innerHTML='';
-  document.getElementById('psDrInvoiceSelect').value='';
-  document.getElementById('psDrAcceptInvBtn').style.display='none';
-  psDrCurrentInvoice=null;
-}
-function psDrLookupReceive(num){
-  var hint=document.getElementById('psDrRcvLookupHint');
-  var nameEl=document.getElementById('psDrRcvName');
-  var priceEl=document.getElementById('psDrRcvPrice');
-  if(!num.trim()||!hint) return;
-  var items=JSON.parse(localStorage.getItem('iz_items')||'[]');
-  var found=items.find(function(i){ return String(i.num)===num.trim(); });
-  if(found){ if(nameEl&&!nameEl.value)nameEl.value=found.name||''; if(priceEl&&!priceEl.value)priceEl.value=found.price||''; hint.style.display='block';hint.style.color='#60f090';hint.textContent='✓ '+found.name; }
-  else { hint.style.display='block';hint.style.color='#8888aa';hint.textContent='Не найдено — введите вручную'; }
-}
-function psLookupStaff(num){
-  var hint=document.getElementById('psStaffLookupHint');
-  var nameEl=document.getElementById('psStaffItem');
-  var retailEl=document.getElementById('psStaffRetail');
-  if(!num.trim()||!hint) return;
-  var items=JSON.parse(localStorage.getItem('iz_items')||'[]');
-  var found=items.find(function(i){ return String(i.num)===num.trim(); });
-  if(found){
-    if(nameEl) nameEl.value=found.name||'';
-    if(retailEl) retailEl.value=found.price||'';
-    hint.style.display='block'; hint.style.color='#a060f0';
-    hint.textContent='✓ '+found.name+(found.price?' · розница: '+fmt2(found.price):'');
-  } else {
-    hint.style.display='block'; hint.style.color='#8888aa';
-    hint.textContent='Артикул не найден — введите вручную';
-  }
-}
 function getSupplierslist(){ return JSON.parse(localStorage.getItem('iz_suppliers')||'[]'); }
 function saveSupplierslist(d){ localStorage.setItem('iz_suppliers',JSON.stringify(d)); }
 function psPopulateSuppliers(){
@@ -11173,8 +10533,6 @@ function getShopRentSettings(){
   return JSON.parse(localStorage.getItem('iz_shop_rent')||'{}');
 }
 function rentDailyRate(rentCfg){
-  // Приводим любой режим оплаты аренды к цене за один день —
-  // это единственное, что нужно для расчёта за произвольный период.
   if(!rentCfg || !rentCfg.amount) return 0;
   return rentCfg.mode==='month' ? (rentCfg.amount/30) : rentCfg.amount;
 }
@@ -11478,9 +10836,9 @@ function renameShopAdmin(idx){
   saveShops(shops);
   var renamed = 0;
   try{
-    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var shifts = getShifts();
     shifts.forEach(function(s){ if(s.shopName===oldName){ s.shopName=newName; renamed++; } });
-    localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+    saveShifts(shifts);
     shifts.forEach(function(s){ if(s.shopName===newName){ try{ db.collection('iz_shifts').doc(s.id).set(s); }catch(e){} } });
   }catch(e){}
   try{
@@ -11685,11 +11043,6 @@ function deleteRefbookItemShop(bookId, idx, key){
   updateRefbookCountShop(bookId, key);
   showToast('✅ Удалено и сохранено');
 }
-function refbookIsDeleted(key, name){
-  var tombKey = key+'_deleted';
-  var tombs = JSON.parse(localStorage.getItem(tombKey)||'[]');
-  return tombs.indexOf((name||'').toLowerCase().trim()) >= 0;
-}
 function updateRefbookCountShop(bookId, key){
   var items = getRefBook(key);
   var el = document.getElementById('rbCount_'+bookId);
@@ -11836,7 +11189,6 @@ function renderSellersAdmin(){
   renderAdminsAdminList();
   const c=document.getElementById('sellersAdminList'); if(!c)return;
   const staff=getStaff();
-  // Показываем кнопку починки если есть сотрудники без роли seller
   var noRoleStaff=staff.filter(function(s){ return s.archived!==true && (!s.roles||!s.roles.length); });
   var repairEl=document.getElementById('staffRepairBtn');
   if(!repairEl && noRoleStaff.length){
@@ -11849,16 +11201,12 @@ function renderSellersAdmin(){
   } else if(repairEl && !noRoleStaff.length){
     repairEl.remove();
   }
-  // Показываем продавцов + тех у кого нет roles вообще (могли потерять при сохранении)
-  // Показываем всех продавцов: у кого есть роль seller, или нет ролей вообще
   const sellers=staff.filter(function(s){
     if(s.archived===true) return false;
     if(s.roles && s.roles.indexOf('seller')>=0) return true;
     if(!s.roles || !s.roles.length) return true;
     return false;
   });
-  // Диагностика: сотрудники, которые есть в базе, но не попадают ни в продавцов,
-  // ни в админов, ни в архив — из-за нестандартной/битой роли. Иначе их не видно совсем.
   var adminRolesSet=STAFF_ADMIN_ROLES;
   var ghosts=staff.filter(function(s){
     if(s.archived===true) return false;
@@ -12087,7 +11435,6 @@ function saveUnifiedStaffShop(){
   if(!name||!pass){showToast('Введите имя и пароль');return;}
   var roles=[];
   document.querySelectorAll('#staffRolesBlock2 input[type=checkbox]:checked').forEach(function(cb){ roles.push(cb.value); });
-  // Если выбраны магазины но роль продавца не отмечена — добавляем автоматически
   var shops2=[];
   document.querySelectorAll('#staffShopsList2 input[type=checkbox]:checked').forEach(function(cb){ shops2.push(cb.value); });
   if(shops2.length && roles.indexOf('seller')<0){ roles.push('seller'); }
@@ -12129,16 +11476,6 @@ function saveUnifiedStaffShop(){
   if(blocked && !prevBlocked) msg+=' · 🚫 доступ автоматически заблокирован (статус «Уволен»)';
   else if(!blocked && prevBlocked && prev && prev.blockedByStatus) msg+=' · ✅ доступ автоматически разблокирован';
   showToast(msg);
-}
-function switchPsTab(tab) {
-  var isJournal = tab === 'journal';
-  document.getElementById('psJournalTab').style.display = isJournal ? 'block' : 'none';
-  document.getElementById('psReportTab').style.display = isJournal ? 'none' : 'block';
-  var btnJ = document.getElementById('psTab_journal');
-  var btnR = document.getElementById('psTab_report');
-  if(btnJ) { btnJ.style.borderWidth = isJournal ? '2px' : '1px'; btnJ.style.background = isJournal ? '#1e2a14' : '#22222e'; btnJ.style.color = isJournal ? '#c8f060' : '#8888aa'; btnJ.style.borderColor = isJournal ? '#c8f060' : '#2e2e3e'; }
-  if(btnR) { btnR.style.borderWidth = isJournal ? '1px' : '2px'; btnR.style.background = isJournal ? '#22222e' : '#1e2a14'; btnR.style.color = isJournal ? '#8888aa' : '#c8f060'; btnR.style.borderColor = isJournal ? '#2e2e3e' : '#c8f060'; }
-  if(isJournal) psjInit();
 }
 var RESTORE_SHIFT_KEY = 'iz_restore_shift';
 var _restoreShift = null;
@@ -12499,11 +11836,11 @@ function activateRestoreShift(shop, date){
       journal: journalForShift,
       savedAt: new Date().toISOString(), savedBy: (session&&session.name)||'Admin'
     };
-    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var shifts = getShifts();
     var oldPsjShifts = shifts.filter(function(s){ return s.date===date && s.shopName===(shop||'') && s.source==='psj'; });
     shifts = shifts.filter(function(s){ return !(s.date===date && s.shopName===(shop||'') && s.source==='psj'); });
     shifts.unshift(shiftObj);
-    localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+    saveShifts(shifts);
     try {
       oldPsjShifts.forEach(function(old){
         var oldId = old.id || old._id;
@@ -12545,12 +11882,6 @@ function psjDiagnostic(){
 }
 function psjInit() {
   renderRestoreShiftState();
-}
-function psjPopulateSellers() {
-  var shop = (document.getElementById('psjShop')||{}).value || '';
-  var sellers = getSellers().filter(function(s){ return !s.blocked && (!s.shop || s.shop === shop || !shop); });
-  var sel = document.getElementById('psjSeller');
-  if(sel) sel.innerHTML = sellers.map(function(s){ return '<option value="'+s.id+'">'+s.name+'</option>'; }).join('');
 }
 var PSJ_KEY = 'iz_psj';
 function getPsjEntries() {
@@ -13184,95 +12515,16 @@ function savePsjAsShift() {
     journal: journal,
     savedAt: new Date().toISOString(), savedBy: (session&&session.name)||'Admin'
   };
-  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts = getShifts();
   shifts = shifts.filter(function(s){ return !(s.date===date && s.shopName===shopName && s.source==='psj'); });
   shifts.unshift(shift);
-  localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+  saveShifts(shifts);
   try { db.collection('iz_shifts').doc(shift.id).set(shift); } catch(e) {}
   showToast('✅ Отчёт за '+date+' сохранён');
 }
-function switchDuTab(tab) {
-  var isPhoto = tab === 'photo';
-  document.getElementById('duPhotoTab').style.display = isPhoto ? 'block' : 'none';
-  document.getElementById('duFileTab').style.display = isPhoto ? 'none' : 'block';
-  var btnP = document.getElementById('duTab_photo');
-  var btnF = document.getElementById('duTab_file');
-  if(btnP){ btnP.style.borderWidth=isPhoto?'2px':'1px'; btnP.style.background=isPhoto?'#1e2a14':'#22222e'; btnP.style.color=isPhoto?'#c8f060':'#8888aa'; btnP.style.borderColor=isPhoto?'#c8f060':'#2e2e3e'; }
-  if(btnF){ btnF.style.borderWidth=isPhoto?'1px':'2px'; btnF.style.background=isPhoto?'#22222e':'#1e2a14'; btnF.style.color=isPhoto?'#8888aa':'#c8f060'; btnF.style.borderColor=isPhoto?'#2e2e3e':'#c8f060'; }
-  if(isPhoto) duPhotoInit();
-}
-function duPhotoInit() {
-  var shops = getShopNames();
-  var sel = document.getElementById('duPhotoShop');
-  if(sel) sel.innerHTML = shops.map(function(s){ return '<option>'+s+'</option>'; }).join('');
-  renderDuPhotoHistory();
-}
 var duPhotoFiles = [];
 var duPendingRecognized = [];
-function handlePhotoSelect(input) {
-  duPhotoFiles = Array.from(input.files);
-  showPhotoPreview();
-}
-function handlePhotoDrop(event) {
-  event.preventDefault();
-  document.getElementById('duPhotoZone').style.borderColor = '#2e2e3e';
-  duPhotoFiles = Array.from(event.dataTransfer.files).filter(function(f){ return f.type.startsWith('image/'); });
-  showPhotoPreview();
-}
-function showPhotoPreview() {
-  var p = document.getElementById('duPhotoPreview');
-  var btn = document.getElementById('duRecognizeBtn');
-  if(!duPhotoFiles.length){ p.style.display='none'; btn.style.display='none'; return; }
-  p.style.display = 'block';
-  p.innerHTML = '<div style="font-size:12px;color:#8888aa;margin-bottom:8px">Выбрано фото: '+duPhotoFiles.length+'</div>' +
-    '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-    duPhotoFiles.map(function(f){
-      return '<div><img src="'+URL.createObjectURL(f)+'" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid #2e2e3e"></div>';
-    }).join('') + '</div>';
-  btn.style.display = 'block';
-}
 var AI_PROXY_URL = 'https://izhitsa-ai-proxy.YOUR-SUBDOMAIN.workers.dev';
-function recognizeJournalPhoto() {
-  if(!duPhotoFiles.length){ showToast('Выберите фото'); return; }
-  var shopName = (document.getElementById('duPhotoShop')||{}).value || '';
-  var sellerHint = (document.getElementById('duPhotoSeller')||{}).value || '';
-  var res = document.getElementById('duRecognizeResult');
-  var btn = document.getElementById('duRecognizeBtn');
-  btn.textContent = '⏳ Распознаю...'; btn.disabled = true;
-  res.style.display = 'block';
-  res.innerHTML = '<div class="card"><div style="text-align:center;padding:20px"><div style="font-size:24px;margin-bottom:8px">🤖</div><div style="font-size:13px;color:#8888aa">AI читает журнал...</div></div></div>';
-  var promises = duPhotoFiles.map(function(file){ return fileToBase64(file); });
-  Promise.all(promises).then(function(base64arr) {
-    var images = base64arr.map(function(b64, i){
-      return { mediaType: duPhotoFiles[i].type||'image/jpeg', base64: b64 };
-    });
-    var prompt = 'Ты помощник для распознавания журналов продаж деревянных изделий.\n\n' +
-      'На фото — рукописная страница журнала магазина "' + shopName + '".\n' +
-      (sellerHint ? 'Продавец по умолчанию: ' + sellerHint + '\n' : '') +
-      'Распознай ВСЕ записи о продажах, расходах, списаниях и приходах товара.\n\n' +
-      'Правила: нал→cash, П/Т/QR/СБП→cardAmount. Год 2026 если не указан. Для групп товаров под одной скобкой указывай реальную цену каждого товара в поле price (через запятую, не делить общую сумму поровну).';
-    return fetch(AI_PROXY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: prompt, images: images })
-    });
-  }).then(function(r){ return r.json(); }).then(function(data) {
-    btn.textContent = '🤖 Распознать'; btn.disabled = false;
-    if(data.error){ res.innerHTML='<div class="al-err">❌ Ошибка сервера: '+(data.error.message||data.error)+'</div>'; return; }
-    var text = ((data.choices||[])[0]||{}).message && data.choices[0].message.content || '';
-    try {
-      var parsed = JSON.parse(text);
-      var entries = parsed.entries||[];
-      if(!entries.length){ res.innerHTML='<div class="al-warn">⚠️ Записей не найдено. Попробуйте фото лучшего качества.</div>'; return; }
-      showRecognizedEntries(entries, shopName);
-    } catch(e) {
-      res.innerHTML='<div class="al-err">❌ Не удалось распознать. Попробуйте фото лучшего качества.<br><small style="color:#8888aa">'+text.substring(0,200)+'</small></div>';
-    }
-  }).catch(function(e) {
-    btn.textContent = '🤖 Распознать'; btn.disabled = false;
-    res.innerHTML = '<div class="al-err">❌ Ошибка: '+e.message+'</div>';
-  });
-}
 function fileToBase64(file) {
   return new Promise(function(resolve, reject) {
     var reader = new FileReader();
@@ -13369,14 +12621,6 @@ function renderDuPhotoHistory() {
   }).join('');
 }
 var pendingImportData = null;
-function handleFileSelect(input){
-  var file = input.files[0]; if(!file) return; readImportFile(file);
-}
-function handleFileDrop(event){
-  event.preventDefault();
-  document.getElementById('dropZone').style.borderColor='#2e2e3e';
-  var file = event.dataTransfer.files[0]; if(file) readImportFile(file);
-}
 function readImportFile(file){
   var reader = new FileReader();
   reader.onload = function(e){
@@ -13452,14 +12696,14 @@ function showImportError(msg){
 }
 function confirmImport(){
   if(!pendingImportData||!pendingImportData.length) return;
-  var existing=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var existing=getShifts();
   var deduped=pendingImportData.filter(function(s){
     return !existing.some(function(e){return e.date===s.date&&e.shopName===s.shopName;});
   });
   var dupes=pendingImportData.length-deduped.length;
   var merged=existing.concat(deduped);
   merged.sort(function(a,b){return b.date.localeCompare(a.date);});
-  localStorage.setItem(KEY.shifts,JSON.stringify(merged));
+  saveShifts(merged);
   deduped.forEach(function(s){try{db.collection('iz_shifts').doc(s.id).set(s);}catch(e){}});
   var hist=JSON.parse(localStorage.getItem('iz_photo_imports')||'[]');
   hist.unshift({id:uid(),date:new Date().toISOString().split('T')[0],count:deduped.length,
@@ -13476,17 +12720,6 @@ function cancelImport(){
   var xb=document.getElementById('rstjFileCancelBtn'); if(xb) xb.style.display='none';
   var fi=document.getElementById('rstjFileInput'); if(fi) fi.value='';
 }
-function renderImportHistory(){
-  var c=document.getElementById('importHistoryList'); if(!c) return;
-  var history=JSON.parse(localStorage.getItem('iz_import_history')||'[]');
-  if(!history.length){c.innerHTML='<div class="empty"><div class="ei">📭</div>Импортов не было</div>';return;}
-  c.innerHTML=history.map(function(h){
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:#22222e;border-radius:10px;margin-bottom:6px">'+
-      '<div><div style="font-size:13px;font-weight:700">📄 '+h.filename+'</div>'+
-      '<div style="font-size:11px;color:#8888aa">'+h.date+' · '+h.importedBy+' · '+h.count+' смен'+(h.dupes?' ('+h.dupes+' дублей)':'')+'</div></div>'+
-      '<div style="color:#60f090;font-weight:700;font-size:12px">+'+h.count+'</div></div>';
-  }).join('');
-}
 function downloadTemplate(){
   var t=JSON.stringify([{date:'2024-01-15',shopName:'Роза Хутор',sellerName:'Ксения',cashMorning:5000,cashEvening:8200,cashRevenue:12000,cardRevenue:8500,discount:500,goodsMorning:450000,goodsEvening:438000,zp:1500,inkass:0,otherExp:200,comment:''}],null,2);
   var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([t],{type:'application/json'})); a.download='izhitsa_template.json'; a.click();
@@ -13494,17 +12727,6 @@ function downloadTemplate(){
 function downloadCsvTemplate(){
   var csv='date,shopName,sellerName,cashMorning,cashEvening,cashRevenue,cardRevenue,discount,goodsMorning,goodsEvening,zp,inkass,otherExp,comment\n2024-01-15,Роза Хутор,Ксения,5000,8200,12000,8500,500,450000,438000,1500,0,200,';
   var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download='izhitsa_template.csv'; a.click();
-}
-function openPeriodReport(){
-  var shops=getShopNames();
-  var sel=document.getElementById('prShopFilter');
-  if(sel) sel.innerHTML='<option value="">Все магазины</option>'+shops.map(function(s){return '<option>'+s+'</option>';}).join('');
-  var now=new Date(), y=now.getFullYear(), m=String(now.getMonth()+1).padStart(2,'0');
-  document.getElementById('prDateFrom').value=y+'-'+m+'-01';
-  document.getElementById('prDateTo').value=new Date(y,now.getMonth()+1,0).toISOString().split('T')[0];
-  generatePeriodReport();
-  openMo('profitabilityMo');
-  setProfView('detail');
 }
 function setProfView(mode){
   var simpleBtn=document.getElementById('profView_simple'), detailBtn=document.getElementById('profView_detail');
@@ -13545,9 +12767,9 @@ function setPrMode(mode, el) {
 function deletePeriodReportShift(id){
   if(!confirm('Удалить эту смену?')) return;
   addShiftTombstone(id);
-  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts=getShifts();
   shifts=shifts.filter(function(s){return (s.id||s._id)!==id;});
-  localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+  saveShifts(shifts);
   try{db.collection('iz_shifts').doc(id).delete();}catch(e){}
   generatePeriodReport();
   showToast('✅ Смена удалена');
@@ -13557,7 +12779,7 @@ function generatePeriodReport(){
   var to=(document.getElementById('prDateTo')||{}).value||'';
   var shopF=(document.getElementById('prShopFilter')||{}).value||'';
   if(!from||!to) return;
-  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts=getShifts();
   if(prMode==='live') shifts=shifts.filter(function(s){return !s.isArchive;});
   else if(prMode==='archive') shifts=shifts.filter(function(s){return !!s.isArchive;});
   var filtered=shifts.filter(function(s){return s.date>=from&&s.date<=to&&(!shopF||s.shopName===shopF);});
@@ -13567,8 +12789,6 @@ function generatePeriodReport(){
   var totCash=0,totCard=0,totDisc=0,totZp=0,totTravel=0,totInkass=0,totOther=0,totSupplier=0,totDrInkass=0,totDrSupplier=0,totDrOther=0;
   filtered.forEach(function(s){
     totCash+=s.cashRevenue||0;totCard+=s.cardRevenue||0;totDisc+=s.totalDiscount||0;
-    // Всегда пересчитываем из expenses[] если они есть — это точнее сохранённых полей
-    // т.к. старые смены могли сохранить ДР инкассацию в s.inkass вместо s.drInkass
     var exps=s.expenses||[];
     if(exps.length){
       totZp+=exps.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
@@ -13580,7 +12800,6 @@ function generatePeriodReport(){
       totDrSupplier+=exps.filter(function(e){return e.expType==='supplier'&&e.goodsType==='dr';}).reduce(function(a,e){return a+e.amount;},0);
       totDrOther+=exps.filter(function(e){return e.expType==='other'&&e.goodsType==='dr';}).reduce(function(a,e){return a+e.amount;},0);
     } else {
-      // Fallback на сохранённые поля для PSJ-смен без expenses[]
       totZp+=s.zp||0;totTravel+=s.travel||0;totInkass+=s.inkass||0;
       totOther+=s.otherExp||0;totSupplier+=s.supplierExp||0;
       totDrInkass+=s.drInkass||0;totDrSupplier+=s.drSupplierAmt||0;
@@ -13614,7 +12833,6 @@ function generatePeriodReport(){
         var inkRows=[], supRows=[], othRows=[], drInkRows=[], drSupRows=[], drOthRows=[];
         filtered.forEach(function(s){
           var exps = s.expenses||[];
-          // Дерево инкассация
           if(exps.length){
             exps.filter(function(e){return e.expType==='inkass'&&e.goodsType!=='dr';}).forEach(function(e){
               inkRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||e.sub||''});
@@ -13622,15 +12840,12 @@ function generatePeriodReport(){
           } else if(s.inkass){
             inkRows.push({date:s.date,shop:s.shopName,amt:s.inkass,note:s.inkassComment||''});
           }
-          // ДР инкассация из expenses[]
           exps.filter(function(e){return e.expType==='inkass'&&e.goodsType==='dr';}).forEach(function(e){
             drInkRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||e.sub||''});
           });
-          // Также из s.drInkass (PSJ)
           if((s.drInkass||0)>0&&!exps.some(function(e){return e.expType==='inkass'&&e.goodsType==='dr';})){
             drInkRows.push({date:s.date,shop:s.shopName,amt:s.drInkass,note:''});
           }
-          // Дерево поставщики
           if(exps.length){
             exps.filter(function(e){return e.expType==='supplier'&&e.goodsType!=='dr';}).forEach(function(e){
               supRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||''});
@@ -13638,22 +12853,18 @@ function generatePeriodReport(){
           } else if(s.supplierExp){
             supRows.push({date:s.date,shop:s.shopName,amt:s.supplierExp,note:s.supplierName||''});
           }
-          // ДР поставщики
           exps.filter(function(e){return e.expType==='supplier'&&e.goodsType==='dr';}).forEach(function(e){
             drSupRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||''});
           });
           if((s.drSupplierAmt||0)>0&&!exps.some(function(e){return e.expType==='supplier'&&e.goodsType==='dr';})){
             drSupRows.push({date:s.date,shop:s.shopName,amt:s.drSupplierAmt,note:s.drSupplierName||''});
           }
-          // Прочие Дерево
           exps.filter(function(e){return e.expType==='other'&&e.goodsType!=='dr';}).forEach(function(e){
             othRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||''});
           });
-          // Прочие ДР
           exps.filter(function(e){return e.expType==='other'&&e.goodsType==='dr';}).forEach(function(e){
             drOthRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||''});
           });
-          // Fallback: s.otherExp — scalar field for shifts that don't use expenses array
           if((s.otherExp||0)>0 && !exps.some(function(e){return e.expType==='other'&&e.goodsType!=='dr';})){
             othRows.push({date:s.date,shop:s.shopName,amt:s.otherExp,note:s.expComment||''});
           }
@@ -13826,11 +13037,6 @@ function _computeRentForShop(shop, from, to, allShifts, rentCfg){
     var rangeEnd = toD < monthEnd ? toD : monthEnd;
     var daysInRangeThisMonth = Math.round((rangeEnd-rangeStart)/86400000)+1;
     var wholeMonth = daysInRangeThisMonth===daysInMonth;
-    // Дневная ставка для ЭТОГО конкретного месяца считается по реальному
-    // числу дней в нём (28-31), а не по условным "30 дням". Раньше при
-    // помесячной оплате сумма делилась на 30 и умножалась обратно на
-    // фактические дни месяца — в 31-дневном месяце это добавляло лишний
-    // "день", а в 28-дневном — наоборот теряло.
     var dailyRateThisMonth = rentCfg.mode==='month' ? (rentCfg.amount/daysInMonth) : rentCfg.amount;
     if(daysInRangeThisMonth>0){
       if(overrides[monthKey]!=null){
@@ -13843,7 +13049,6 @@ function _computeRentForShop(shop, from, to, allShifts, rentCfg){
         });
         total += dailyRateThisMonth * Object.keys(workedDates).length;
       } else if(rentCfg.mode==='month' && wholeMonth){
-        // Целый месяц, помесячная оплата, без переопределения — сумма как есть.
         total += rentCfg.amount;
       } else {
         total += dailyRateThisMonth * daysInRangeThisMonth;
@@ -13881,7 +13086,7 @@ function generateProfitabilityReport(){
   }
   if(!from||!to){ c.innerHTML='<div class="empty"><div class="ei">📈</div>Укажите период</div>'; return; }
   var shopF = (document.getElementById('profShopFilter')||{}).value||'';
-  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts = getShifts();
   var filtered = shifts.filter(function(s){ return s.date>=from && s.date<=to && (!shopF||s.shopName===shopF); });
   var f2 = function(n){ return Math.round(n||0).toLocaleString('ru-RU')+'₽'; };
   if(!filtered.length){
@@ -13901,12 +13106,8 @@ function generateProfitabilityReport(){
       totOper += (s.otherExp||0)+(s.supplierExp||0)+(s.drSupplierAmt||0);
     }
   });
-  // Аренда считается ПОМЕСЯЧНО (не одной ставкой на весь период) — так можно
-  // задать разную сумму на каждый месяц, а для магазинов с оплатой "только
-  // за рабочие дни" — учитывать реально отработанные даты, а не все дни
-  // месяца подряд.
   var rentSettings = getShopRentSettings();
-  var shiftsForRentCalc = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shiftsForRentCalc = getShifts();
   var totRent = 0;
   if(shopF){
     totRent = _computeRentForShop(shopF, from, to, shiftsForRentCalc, rentSettings[shopF]);
@@ -13936,9 +13137,6 @@ function generateProfitabilityReport(){
   html += Row('🎁 Скидка', totDisc, '#8888aa', pct(totDisc));
   html += Row('Итого оборот', oborot, '#c8f060', 100, true);
   html += Row('Итого доход (нал+безнал)', dohod, '#c8f060', pct(dohod), true);
-  // Если выбранный период ещё не закончился (например, идёт текущий месяц) —
-  // делим не на весь период, а только на реально прошедшие дни, включая
-  // сегодняшний. Иначе средняя выручка занижена ещё не наступившими днями.
   var todayStr = new Date().toISOString().split('T')[0];
   var avgDivisorDays = daysInPeriod;
   if(to > todayStr){
@@ -14019,65 +13217,11 @@ function rstInitInvoices() {
   loadPendingInvoices();
   renderAcceptedInvoices();
 }
-function rstLoadInvoiceFile(input){
-  var file = input.files && input.files[0];
-  if(!file) return;
-  var resultEl = document.getElementById('rstInvFileResult');
-  if(resultEl) resultEl.innerHTML = '⏳ Читаю файл...';
-  var reader = new FileReader();
-  reader.onload = function(e){
-    try{
-      var data = JSON.parse(e.target.result);
-      var invs = Array.isArray(data) ? data : [data];
-      var inv = invs.find(function(i){ return i.items && i.items.length; }) || invs[0];
-      if(!inv){ if(resultEl) resultEl.innerHTML='<span style="color:#f06060">❌ Нет позиций в файле</span>'; return; }
-      var fileGt2=inv.goodsType||'derevo'; _rstInvGoodsType=fileGt2; if(typeof setRstInvType==='function') setRstInvType(fileGt2);
-      var numEl=document.getElementById('rstInvNum');
-      var fromEl=document.getElementById('rstInvFrom');
-      var dateEl=document.getElementById('rstInvDate');
-      if(numEl && inv.num) numEl.value = inv.num;
-      if(fromEl && !fromEl.value) fromEl.value = inv.from||inv.destName||'Мастерская Ижица';
-      if(dateEl && inv.date && !dateEl.value){
-        var d = inv.date;
-        if(d && d.indexOf('.')>0){
-          var p=d.split('.'); if(p.length===3) d=p[2]+'-'+p[1]+'-'+p[0];
-        }
-        dateEl.value = d;
-      }
-      _rstInvItems = (inv.items||[]).map(function(it){
-        return {
-          id: uid(),
-          num: it.article||it.num||it.artNum||'',
-          name: it.name||'',
-          species: it.species||'',
-          price: it.price||it.factPrice||0,
-          qty: it.qty||1,
-          goodsType: it.goodsType||(inv.goodsType||'derevo')
-        };
-      });
-      renderRstInvItems();
-      updateRstInvTotal();
-      var total = _rstInvItems.reduce(function(s,it){return s+(it.qty||1)*(it.price||0);},0);
-      if(resultEl) resultEl.innerHTML='<span style="color:#60f090">✅ Загружено '+_rstInvItems.length+' позиций · '+Math.round(total).toLocaleString('ru-RU')+'₽</span>';
-      input.value='';
-    }catch(err){
-      if(resultEl) resultEl.innerHTML='<span style="color:#f06060">❌ Ошибка: '+err.message+'</span>';
-    }
-  };
-  reader.readAsText(file);
-}
 function addRstInvItem() {
   rstInvItems.push({name:'',article:'',qty:1,price:0});
   renderRstInvItems();
 }
 var _rstPickFns = {};
-function _rstMakePick(i){
-  return function(val){
-    rstInvItems[i].name=val;
-    var el=document.getElementById('rstInvName_'+i); if(el) el.value=val;
-    rstCalcInvTotal();
-  };
-}
 function renderRstInvItems() {
   var c = document.getElementById('rstInvItems'); if(!c) return;
   if(!rstInvItems.length) { c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:4px">Нет позиций</div>'; return; }
@@ -14603,7 +13747,7 @@ function rstActPreview(){
   var c=document.getElementById('rstActPreviewBlock'); if(!c) return;
   if(!from||!to){c.style.display='none';return;}
   var entries=getPsjEntries().filter(function(e){return e.date>=from&&e.date<=to&&(!shop||e.shopName===shop)&&e.isArchive&&!e.activated;});
-  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]').filter(function(s){return s.date>=from&&s.date<=to&&(!shop||s.shopName===shop)&&s.isArchive&&!s.activated;});
+  var shifts=getShifts().filter(function(s){return s.date>=from&&s.date<=to&&(!shop||s.shopName===shop)&&s.isArchive&&!s.activated;});
   c.style.display='block';
   var totRev=0;
   entries.forEach(function(e){if(e.type==='sale')totRev+=(e.cashEffect||0)+(e.cardEffect||0)+(e.discEffect||0);});
@@ -14636,7 +13780,7 @@ function activateArchivePeriod(){
       groupsToBuild[gKey].push(e);
     }
   });
-  var shifts=JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts=getShifts();
   Object.keys(groupsToBuild).forEach(function(gKey){
     var groupEntries = groupsToBuild[gKey];
     var gShop = groupEntries[0].shopName||'';
@@ -14674,7 +13818,7 @@ function activateArchivePeriod(){
     shifts.unshift(shiftObj);
     try { db.collection('iz_shifts').doc(shiftObj.id).set(shiftObj); } catch(e) {}
   });
-  localStorage.setItem(KEY.shifts,JSON.stringify(shifts));
+  saveShifts(shifts);
   var acts=JSON.parse(localStorage.getItem('iz_activations')||'[]');
   acts.unshift({id:uid(),from:from,to:to,shopName:shop||'Все',activatedAt:new Date().toISOString(),count:activated,by:(session&&session.name)||'Admin'});
   localStorage.setItem('iz_activations',JSON.stringify(acts));
@@ -14707,11 +13851,9 @@ function _showDraftSaved(elId){
   }, 2000);
 }
 function _updateDraftBadges(){
-  // Бейдж на вкладке Приход
   var hasinv=!!localStorage.getItem(_manInvDraftKey?_manInvDraftKey():'');
   var rcvBadge=document.getElementById('tabBadgeRcv');
   if(rcvBadge) rcvBadge.style.display=hasinv?'block':'none';
-  // Бейдж на вкладке Списание
   var haswo=!!localStorage.getItem(_woDraftKey?_woDraftKey():'');
   var woBadge=document.getElementById('tabBadgeWo');
   if(woBadge) woBadge.style.display=haswo?'block':'none';
@@ -15059,7 +14201,6 @@ function _manInvPickNameAt(i,val){
     })(_ii);
   }
 })();
-function _manInvNameBlurCheck(el){ var catKey = (_manInvGoodsType==='dr') ? 'iz_goods_dr' : 'iz_goods_derevo'; dupCheckField(el, catKey); }
 function manInvLoadFile(input){
   var file = input.files && input.files[0];
   if(!file) return;
@@ -15230,29 +14371,6 @@ function saveManualInvoice() {
   renderReceiveArchive();
   renderAll();
   showToast('✅ Накладная '+num+' принята на баланс');
-}
-function renderManInvAccepted() {
-  var c = document.getElementById('manInvAccepted'); if(!c) return;
-  var all = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-  var mine = all.filter(function(inv){ return inv.destName === session.shopName; });
-  if(!mine.length) { c.innerHTML='<div class="empty"><div class="ei">📋</div>Нет</div>'; return; }
-  c.innerHTML = mine.slice(0,10).map(function(inv){
-    var iid=String(inv._id!=null?inv._id:inv.id);
-    return '<div id="maninv_'+iid+'" style="padding:10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
-        '<div>'+
-          '<div style="font-size:13px;font-weight:700">'+inv.num+'</div>'+
-          '<div style="font-size:11px;color:#8888aa">Принято '+inv.date+(inv.docDate&&inv.docDate!==inv.date?' · накл. от '+inv.docDate:'')+' · '+(inv.from||'')+'</div>'+
-          '<div style="font-size:11px;color:#8888aa">'+(inv.items||[]).length+' позиций · '+Math.round(inv.totalAmt||0).toLocaleString('ru-RU')+'₽</div>'+
-        '</div>'+
-        '<div style="font-size:11px;color:#60f090;font-weight:700">✅ Принята</div>'+
-      '</div>'+
-      '<div style="display:flex;gap:6px">'+
-        '<button onclick="editManualInvoice(\''+iid+'\')" style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#c8f060;font-size:11px;cursor:pointer">✏️ Исправить</button>'+
-        '<button onclick="deleteManualInvoice(\''+iid+'\')" style="padding:7px 12px;border-radius:8px;border:1px solid #3e2020;background:#2a1010;color:#f06060;font-size:11px;cursor:pointer">🗑 Удалить</button>'+
-      '</div>'+
-    '</div>';
-  }).join('');
 }
 window._manInvEdit = window._manInvEdit || {};
 function editManualInvoice(id){
@@ -15552,12 +14670,6 @@ function autoSaveToItemBase(name, num, price, category){
     items.push({name:name.trim(), num:num||'', price:price||0, category:category||''});
   }
   localStorage.setItem('iz_items', JSON.stringify(items));
-  // Каталог товаров общий на все устройства/магазины. Раньше весь список
-  // целиком перезаписывался в облаке при каждом сохранении — если два
-  // устройства почти одновременно добавляли РАЗНЫЕ новые товары, тот, кто
-  // сохранял вторым, стирал добавление первого. Теперь перед отправкой
-  // сверяемся с облаком и объединяем — добавляем к своему списку только те
-  // серверные товары, которых у нас ещё нет, вместо слепой перезаписи.
   try{
     db.collection('iz_settings').doc('items').get({source:'server'}).then(function(snap){
       var remoteItems = (snap.exists && snap.data().items) ? snap.data().items : [];
@@ -15570,7 +14682,6 @@ function autoSaveToItemBase(name, num, price, category){
       if(missingFromLocal.length){ localStorage.setItem('iz_items', JSON.stringify(merged)); }
       db.collection('iz_settings').doc('items').set({items:merged}).catch(function(e){ console.log('[autoSaveToItemBase] ошибка сохранения каталога', e); });
     }).catch(function(){
-      // Нет сети — сохраняем как есть, лучше так, чем не сохранить вообще.
       try{ db.collection('iz_settings').doc('items').set({items:items}); }catch(e){}
     });
   }catch(e){}
@@ -15655,12 +14766,6 @@ function renderLoginShopSelect(){
   const shopNames=getShopNames();
   const shopSel=document.getElementById('loginShop');
   if(!shopSel) return;
-  // ВАЖНО: эта функция может вызваться в фоне (например, когда где-то ещё
-  // поменялись настройки магазинов), в том числе прямо в момент, когда
-  // продавец уже выбрал нужный магазин на экране входа и вводит пароль.
-  // Раньше список тупо перезаписывался целиком, и выбор сбрасывался на
-  // первый пункт в списке — продавец мог набрать пароль и попасть совсем
-  // не туда, куда выбирал. Теперь сохраняем и восстанавливаем выбор.
   const prevSelected = shopSel.value;
   shopSel.innerHTML=shopNames.map(s=>`<option>${s}</option>`).join('');
   if(prevSelected && shopNames.indexOf(prevSelected)>=0){ shopSel.value = prevSelected; }
@@ -15683,16 +14788,6 @@ function init(){
 }
 _initFirebase(); // Firebase загружается асинхронно, не блокируя UI
 init();
-function fixWordCapitalization(text, fixes){
-  if(!text || typeof text !== 'string') return text;
-  fixes.forEach(function(f){
-    var re = new RegExp('\\b'+f.from+'\\b', 'gi');
-    text = text.replace(re, function(match){
-      return match === f.to ? match : f.to;
-    });
-  });
-  return text;
-}
 var _rcvWordFixes = [
   {from:'доска', to:'Доска'},
   {from:'доска для подачи', to:'Доска для подачи'},
@@ -15717,54 +14812,6 @@ var _rcvWordFixes = [
   {from:'шкатулка', to:'Шкатулка'},
   {from:'шпатель', to:'Шпатель'}
 ];
-function fixItemName(name){
-  if(!name) return name;
-  return fixWordCapitalization(name, _rcvWordFixes);
-}
-function rebuildGoodsDerevoFromHistory(){
-  if(!confirm('Собрать все названия товаров из накладных и смен и добавить в "База товаров — Дерево"?')) return;
-  var existing = getRefBook('iz_goods_derevo');
-  var existingNames = {};
-  existing.forEach(function(g){ existingNames[(g.name||g).toLowerCase()]=true; });
-  var toAdd = [];
-  function tryAdd(name, goodsType){
-    if(!name || typeof name !=='string' || name.length<2) return;
-    if(goodsType==='dr') return; // skip DR items
-    var key = name.trim().toLowerCase();
-    if(refbookIsDeleted('iz_goods_derevo', name)) return;
-    if(!existingNames[key]){ existingNames[key]=true; toAdd.push(name.trim()); }
-  }
-  var items = JSON.parse(localStorage.getItem('iz_items')||'[]');
-  items.forEach(function(it){ tryAdd(it.name, it.goodsType); });
-  var manInvs = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-  manInvs.forEach(function(inv){
-    var gt = inv.goodsType||'derevo';
-    (inv.items||[]).forEach(function(it){ tryAdd(it.name, gt); });
-  });
-  var wsInvs = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-  wsInvs.forEach(function(inv){
-    (inv.items||[]).forEach(function(it){ tryAdd(it.name, inv.goodsType||'derevo'); });
-    (inv.acceptedItems||[]).forEach(function(it){ tryAdd(it.name, inv.goodsType||'derevo'); });
-  });
-  var shifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
-  shifts.forEach(function(sh){
-    (sh.journal||[]).forEach(function(e){
-      (e.items||[]).forEach(function(it){ tryAdd(it.name, it.goodsType||e.goodsType||'derevo'); });
-    });
-  });
-  if(!toAdd.length){
-    showToast('Нет новых товаров для добавления');
-    return;
-  }
-  var merged = existing.concat(toAdd.map(function(n){ return {name:n}; }));
-  saveRefBookShop('iz_goods_derevo', merged);
-  showToast('✅ Добавлено '+toAdd.length+' товаров в базу Дерево');
-  try{ renderRefbookSections(); }catch(e){}
-}
-function getInvDate(inv){
-  var d = inv.date||inv.acceptedAt||inv.acceptedDate||inv.createdAt||inv.savedAt||'';
-  return d ? d.split('T')[0] : '';
-}
 function uploadToGitHub(){
   var tokenEl = document.getElementById('ghTokenInput');
   var statusEl = document.getElementById('ghUploadStatus');
@@ -15831,73 +14878,6 @@ function uploadToGitHub(){
     if(statusEl) statusEl.innerHTML='<span style="color:#f06060">❌ '+msg+'</span>';
   });
 }
-function renameAllInvoices(){
-  if(!confirm('Переименовать все накладные по новому формату (001/дд.мм.гггг/Магазин)?\nЭто изменит номера в Firestore.')) return;
-  showToast('⏳ Загружаю накладные из Firestore...');
-  Promise.all([
-    db.collection('iz_manual_invoices').get({source:'server'}),
-    db.collection('iz_invoices').get({source:'server'})
-  ]).then(function(results){
-    var manInvs=[], wsInvs=[];
-    results[0].forEach(function(d){ manInvs.push(Object.assign({id:d.id},d.data())); });
-    results[1].forEach(function(d){ wsInvs.push(Object.assign({id:d.id},d.data())); });
-    localStorage.setItem('iz_manual_invoices', JSON.stringify(manInvs));
-    localStorage.setItem('iz_invoices', JSON.stringify(wsInvs));
-    var seen = {};
-    var allInvs = [];
-    manInvs.concat(wsInvs).forEach(function(inv){
-      var id = inv.id||inv._id;
-      if(id && seen[id]) return;
-      if(id) seen[id]=true;
-      allInvs.push(inv);
-    });
-    var groups = {};
-    allInvs.forEach(function(inv){
-      var date = getInvDate(inv);
-      if(!date){ date = '2026-06-01'; } // fallback
-      var parts = date.split('-');
-      var yyyy=parts[0]||'2026', mm=parts[1]||'06';
-      var shop = inv.destName||inv.shopName||inv.shop||'Магазин';
-      var monthKey = yyyy+'-'+mm+'|'+shop;
-      if(!groups[monthKey]) groups[monthKey]=[];
-      groups[monthKey].push(inv);
-    });
-    var renamed=0;
-    Object.keys(groups).forEach(function(key){
-      var grp = groups[key];
-      grp.sort(function(a,b){
-        var da=getInvDate(a)+(a.acceptedAt||a.createdAt||'');
-        var db2=getInvDate(b)+(b.acceptedAt||b.createdAt||'');
-        return da.localeCompare(db2);
-      });
-      grp.forEach(function(inv,i){
-        var date = getInvDate(inv)||'2026-06-01';
-        var parts = date.split('-');
-        var yyyy=parts[0]||'2026', mm=parts[1]||'06', dd=parts[2]||'01';
-        var shop = inv.destName||inv.shopName||inv.shop||'Магазин';
-        var newNum = String(i+1).padStart(3,'0')+'/'+dd+'.'+mm+'.'+yyyy+'/'+shopAbbrev(shop);
-        if(inv.num!==newNum){ inv.num=newNum; renamed++; }
-      });
-    });
-    var idToInv={};
-    allInvs.forEach(function(inv){ var id=inv.id||inv._id; if(id) idToInv[id]=inv; });
-    manInvs.forEach(function(inv,i){ var id=inv.id||inv._id; if(id&&idToInv[id]) manInvs[i]=idToInv[id]; });
-    wsInvs.forEach(function(inv,i){ var id=inv.id||inv._id; if(id&&idToInv[id]) wsInvs[i]=idToInv[id]; });
-    localStorage.setItem('iz_manual_invoices', JSON.stringify(manInvs));
-    localStorage.setItem('iz_invoices', JSON.stringify(wsInvs));
-    var ops=[];
-    allInvs.forEach(function(inv){
-      var id=inv.id||inv._id; if(!id) return;
-      ops.push(db.collection('iz_invoices').doc(id).set(inv,{merge:true}).catch(function(){}));
-      ops.push(db.collection('iz_manual_invoices').doc(id).set(inv,{merge:true}).catch(function(){}));
-    });
-    return Promise.all(ops);
-  }).then(function(){
-    showToast('✅ Готово! Переименование завершено');
-  }).catch(function(e){
-    showToast('Ошибка: '+(e&&e.message||e));
-  });
-}
 var _nameMatchQueue = [];   // [{oldName, newName, type, path}]
 var _nameMatchIdx = 0;
 var _nameMatchApproved = [];
@@ -15913,94 +14893,6 @@ function nameSimilarity(a, b){
   var score = matches / Math.max(wa.length, wb.length);
   if(wa[0] === wb[0]) score = Math.min(1, score + 0.2);
   return score;
-}
-function findBestMatch(name, catalog){
-  var n = (name||'').toLowerCase().trim();
-  if(!n) return null;
-  var best = null, bestScore = 0;
-  catalog.forEach(function(cat){
-    var cn = (cat.name||cat).toLowerCase().trim();
-    var score = nameSimilarity(n, cn);
-    if(score > bestScore){ bestScore = score; best = cat; }
-  });
-  if(bestScore >= 0.4 && best){
-    var catName = best.name||best;
-    if(catName.toLowerCase().trim() !== n) return {match: catName, score: bestScore};
-  }
-  return null;
-}
-function startNameMatchReview(){
-  var catalog = getRefBook('iz_goods_derevo');
-  if(!catalog.length){ showToast('База товаров Дерево пуста'); return; }
-  _nameMatchQueue = [];
-  _nameMatchApproved = [];
-  _nameMatchSkipped = 0;
-  var seen = {}; // oldName -> newName, avoid duplicates
-  var shifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
-  shifts.forEach(function(sh){
-    (sh.journal||[]).forEach(function(e){
-      if(e.type !== 'sale' && e.type !== 'receive') return;
-      (e.items||[]).forEach(function(it){
-        if(!it.name || it.goodsType === 'dr') return;
-        var key = it.name.toLowerCase().trim();
-        if(seen[key]) return;
-        var match = findBestMatch(it.name, catalog);
-        if(match){
-          seen[key] = match.match;
-          _nameMatchQueue.push({
-            oldName: it.name,
-            newName: match.match,
-            score: match.score,
-            ctx: 'Смена ' + sh.shopName + ' · ' + sh.date
-          });
-        }
-      });
-    });
-  });
-  var manInvs = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-  manInvs.forEach(function(inv){
-    if(inv.goodsType === 'dr') return;
-    (inv.items||[]).forEach(function(it){
-      if(!it.name) return;
-      var key = it.name.toLowerCase().trim();
-      if(seen[key]) return;
-      var match = findBestMatch(it.name, catalog);
-      if(match){
-        seen[key] = match.match;
-        _nameMatchQueue.push({
-          oldName: it.name,
-          newName: match.match,
-          score: match.score,
-          ctx: 'Накладная ' + (inv.num||'') + ' · ' + (inv.destName||inv.shopName||'')
-        });
-      }
-    });
-  });
-  var wsInvs = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-  wsInvs.forEach(function(inv){
-    (inv.items||[]).forEach(function(it){
-      if(!it.name || it.goodsType === 'dr') return;
-      var key = it.name.toLowerCase().trim();
-      if(seen[key]) return;
-      var match = findBestMatch(it.name, catalog);
-      if(match){
-        seen[key] = match.match;
-        _nameMatchQueue.push({
-          oldName: it.name,
-          newName: match.match,
-          score: match.score,
-          ctx: 'Накладная ' + (inv.num||'') + ' (мастерская)'
-        });
-      }
-    });
-  });
-  _nameMatchQueue.sort(function(a,b){ return b.score - a.score; });
-  if(!_nameMatchQueue.length){
-    showToast('Нет позиций требующих проверки');
-    return;
-  }
-  _nameMatchIdx = 0;
-  nameMatchShowNext();
 }
 function nameMatchShowNext(){
   if(_nameMatchIdx >= _nameMatchQueue.length){
@@ -16099,24 +14991,6 @@ function dupWarnDismiss(){
   if(_dupWarnCallback) _dupWarnCallback(false);
   _dupWarnCallback = null;
 }
-function checkDuplicate(name, catalogKey){
-  if(!name || name.length < 2) return null;
-  var catalog = getRefBook(catalogKey);
-  if(!catalog.length) return null;
-  var n = name.toLowerCase().trim();
-  var exact = catalog.find(function(c){ return (c.name||c).toLowerCase().trim()===n; });
-  if(exact) return null;
-  var best = null, bestScore = 0;
-  catalog.forEach(function(c){
-    var cn = (c.name||c).toLowerCase().trim();
-    var score = nameSimilarity(n, cn);
-    if(score > bestScore){ bestScore=score; best=c; }
-  });
-  if(bestScore >= 0.65 && best){
-    return {match: best.name||best, score: bestScore};
-  }
-  return null;
-}
 function showDupWarning(entered, existingName, onDismiss){
   var banner = document.getElementById('dupWarnBanner');
   var entEl = document.getElementById('dupWarnEntered');
@@ -16127,91 +15001,10 @@ function showDupWarning(entered, existingName, onDismiss){
   banner.style.display='flex';
   _dupWarnCallback = onDismiss;
 }
-function dupCheckField(fieldEl, catalogKey, goodsTypeFilter){
-  if(!fieldEl) return;
-  var val = (fieldEl.value||'').trim();
-  if(!val || val.length < 2) return;
-  if(goodsTypeFilter && _siItemGoodsType !== goodsTypeFilter) return;
-  var dup = checkDuplicate(val, catalogKey);
-  if(dup){
-    showDupWarning(val, dup.match, function(useExisting){
-      if(useExisting){ fieldEl.value = dup.match; fieldEl.dispatchEvent(new Event('input')); }
-    });
-  }
-}
-function dupCheckSpeciesField(fieldEl, isdr){
-  if(!fieldEl) return;
-  var val = (fieldEl.value||'').trim();
-  if(!val || val.length < 2) return;
-  var catalogKey = isdr ? 'iz_dr_species' : 'iz_species';
-  var dup = checkDuplicate(val, catalogKey);
-  if(dup){
-    showDupWarning(val, dup.match, function(useExisting){
-      if(useExisting){ fieldEl.value = dup.match; fieldEl.dispatchEvent(new Event('input')); }
-    });
-  }
-}
 var _speciesMatchQueue = [];
 var _speciesMatchIdx = 0;
 var _speciesMatchApproved = [];
 var _speciesMatchSkipped = 0;
-function startSpeciesMatchReview(){
-  var catalog = getSpecies(); // iz_species list
-  if(!catalog.length){ showToast('База пород дерева пуста'); return; }
-  _speciesMatchQueue = [];
-  _speciesMatchApproved = [];
-  _speciesMatchSkipped = 0;
-  var seen = {};
-  function trySpecies(name, ctx){
-    if(!name || typeof name !== 'string') return;
-    var key = name.toLowerCase().trim();
-    if(seen[key]) return;
-    var exactMatch = catalog.find(function(c){
-      return (typeof c==='string'?c:c.name||'').toLowerCase().trim() === key;
-    });
-    if(exactMatch) return; // already correct
-    var match = findBestMatch(name, catalog.map(function(c){ return {name: typeof c==='string'?c:c.name||c}; }));
-    if(match){
-      seen[key] = match.match;
-      _speciesMatchQueue.push({oldName:name, newName:match.match, score:match.score, ctx:ctx, field:'species'});
-    }
-  }
-  var shifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
-  shifts.forEach(function(sh){
-    (sh.journal||[]).forEach(function(e){
-      (e.items||[]).forEach(function(it){
-        if(it.goodsType==='dr') return;
-        trySpecies(it.species, 'Смена '+sh.shopName+' · '+sh.date);
-      });
-    });
-  });
-  var manInvs = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-  manInvs.forEach(function(inv){
-    if(inv.goodsType==='dr') return;
-    (inv.items||[]).forEach(function(it){
-      trySpecies(it.species, 'Накладная '+(inv.num||'')+' · '+(inv.destName||inv.shopName||''));
-    });
-  });
-  var wsInvs = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-  wsInvs.forEach(function(inv){
-    (inv.items||[]).forEach(function(it){
-      if(it.goodsType==='dr') return;
-      trySpecies(it.species, 'Накладная '+(inv.num||'')+' (мастерская)');
-    });
-    (inv.acceptedItems||[]).forEach(function(it){
-      if(it.goodsType==='dr') return;
-      trySpecies(it.species, 'Накладная '+(inv.num||'')+' (принятая)');
-    });
-  });
-  _speciesMatchQueue.sort(function(a,b){ return b.score-a.score; });
-  if(!_speciesMatchQueue.length){
-    showToast('Нет пород требующих проверки');
-    return;
-  }
-  _speciesMatchIdx = 0;
-  _speciesMatchQueue_active = true;
-  nameMatchShowNextSpecies();
-}
 var _speciesMatchQueue_active = false;
 function nameMatchShowNextSpecies(){
   if(_speciesMatchIdx >= _speciesMatchQueue.length){
@@ -16292,70 +15085,6 @@ var _drMatchIdx = 0;
 var _drMatchApproved = [];
 var _drMatchSkipped = 0;
 var _drMatchQueue_active = false;
-function startDrMatchReview(){
-  var catalogNames = getRefBook('iz_goods_dr');
-  var catalogSpecies = getRefBook('iz_dr_species');
-  if(!catalogNames.length && !catalogSpecies.length){ showToast('Базы ДР Товар пусты'); return; }
-  _drMatchQueue = [];
-  _drMatchApproved = [];
-  _drMatchSkipped = 0;
-  var seenNames = {}, seenSpecies = {};
-  function tryDrName(name, ctx){
-    if(!name||typeof name!=='string') return;
-    var key=name.toLowerCase().trim();
-    if(seenNames[key]) return;
-    if(!catalogNames.length) return;
-    var exactMatch=catalogNames.find(function(c){ return (c.name||c).toLowerCase().trim()===key; });
-    if(exactMatch) return;
-    var match=findBestMatch(name, catalogNames.map(function(c){ return {name:c.name||c}; }));
-    if(match){ seenNames[key]=match.match; _drMatchQueue.push({oldName:name,newName:match.match,score:match.score,ctx:ctx,field:'name'}); }
-  }
-  function tryDrSpecies(name, ctx){
-    if(!name||typeof name!=='string') return;
-    var key=name.toLowerCase().trim();
-    if(seenSpecies[key]) return;
-    if(!catalogSpecies.length) return;
-    var exactMatch=catalogSpecies.find(function(c){ return (c.name||c).toLowerCase().trim()===key; });
-    if(exactMatch) return;
-    var match=findBestMatch(name, catalogSpecies.map(function(c){ return {name:c.name||c}; }));
-    if(match){ seenSpecies[key]=match.match; _drMatchQueue.push({oldName:name,newName:match.match,score:match.score,ctx:ctx,field:'species'}); }
-  }
-  var shifts=JSON.parse(localStorage.getItem('iz_shifts')||'[]');
-  shifts.forEach(function(sh){
-    (sh.journal||[]).forEach(function(e){
-      (e.items||[]).forEach(function(it){
-        if(it.goodsType!=='dr') return;
-        tryDrName(it.name, 'Смена '+sh.shopName+' · '+sh.date);
-        tryDrSpecies(it.species, 'Смена '+sh.shopName+' · '+sh.date);
-      });
-    });
-  });
-  var manInvs=JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-  manInvs.forEach(function(inv){
-    if(inv.goodsType!=='dr') return;
-    (inv.items||[]).forEach(function(it){
-      tryDrName(it.name, 'Накладная '+(inv.num||'')+' · '+(inv.destName||inv.shopName||''));
-      tryDrSpecies(it.species, 'Накладная '+(inv.num||''));
-    });
-  });
-  var wsInvs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-  wsInvs.forEach(function(inv){
-    (inv.items||[]).concat(inv.acceptedItems||[]).forEach(function(it){
-      if(it.goodsType!=='dr') return;
-      tryDrName(it.name, 'Накладная '+(inv.num||'')+' (мастерская)');
-      tryDrSpecies(it.species, 'Накладная '+(inv.num||''));
-    });
-  });
-  _drMatchQueue.sort(function(a,b){ return b.score-a.score; });
-  if(!_drMatchQueue.length){
-    showToast('Нет позиций ДР Товар требующих проверки');
-    return;
-  }
-  _drMatchIdx=0;
-  _drMatchQueue_active=true;
-  _speciesMatchQueue_active=false;
-  drMatchShowNext();
-}
 function drMatchShowNext(){
   if(_drMatchIdx>=_drMatchQueue.length){
     closeMo('nameMatchMo');
@@ -16471,86 +15200,11 @@ function purgeStaleReceives(){
     showToast('Старых записей не найдено');
   }
 }
-function runGlobalNameFix(){
-  if(!confirm('Исправить регистр названий товаров во всех сменах, накладных и позициях? Это займёт несколько секунд.')) return;
-  var fixed = 0;
-  var shifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
-  shifts.forEach(function(sh){
-    var changed = false;
-    (sh.journal||[]).forEach(function(e){
-      (e.items||[]).forEach(function(it){
-        var newName = fixItemName(it.name);
-        if(newName !== it.name){ it.name = newName; changed = true; fixed++; }
-      });
-      if(e.type==='receive'){
-        var newSub = fixItemName(e.sub);
-        if(newSub !== e.sub){ e.sub = newSub; changed = true; }
-      }
-    });
-    (sh.goodsReceives||[]).forEach(function(r){
-      var newName = fixItemName(r.name);
-      if(newName !== r.name){ r.name = newName; changed = true; fixed++; }
-    });
-    (sh.drGoodsReceives||[]).forEach(function(r){
-      var newName = fixItemName(r.name);
-      if(newName !== r.name){ r.name = newName; changed = true; fixed++; }
-    });
-    if(changed){
-      try{ db.collection('iz_shifts').doc(sh.id||sh._id).set(sh, {merge:true}); }catch(e){}
-    }
-  });
-  localStorage.setItem('iz_shifts', JSON.stringify(shifts));
-  var manInvs = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-  manInvs.forEach(function(inv){
-    var changed = false;
-    (inv.items||[]).forEach(function(it){
-      var newName = fixItemName(it.name);
-      if(newName !== it.name){ it.name = newName; changed = true; fixed++; }
-    });
-    if(changed){
-      try{ db.collection('iz_manual_invoices').doc(inv.id||inv._id).set(inv, {merge:true}); }catch(e){}
-    }
-  });
-  localStorage.setItem('iz_manual_invoices', JSON.stringify(manInvs));
-  var invs = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-  invs.forEach(function(inv){
-    var changed = false;
-    (inv.items||[]).forEach(function(it){
-      var newName = fixItemName(it.name);
-      if(newName !== it.name){ it.name = newName; changed = true; fixed++; }
-    });
-    (inv.acceptedItems||[]).forEach(function(it){
-      var newName = fixItemName(it.name);
-      if(newName !== it.name){ it.name = newName; changed = true; fixed++; }
-    });
-    if(changed){
-      try{ db.collection('iz_invoices').doc(inv.id||inv._id).set(inv, {merge:true}); }catch(e){}
-    }
-  });
-  localStorage.setItem('iz_invoices', JSON.stringify(invs));
-  var items = JSON.parse(localStorage.getItem('iz_items')||'[]');
-  items.forEach(function(it){
-    var newName = fixItemName(it.name);
-    if(newName !== it.name){ it.name = newName; fixed++; }
-  });
-  localStorage.setItem('iz_items', JSON.stringify(items));
-  var stock = JSON.parse(localStorage.getItem('iz_stock')||'{}');
-  Object.keys(stock).forEach(function(sn){
-    Object.keys(stock[sn]||{}).forEach(function(key){
-      var it = stock[sn][key];
-      var newName = fixItemName(it.name);
-      if(newName !== it.name){ it.name = newName; fixed++; }
-    });
-  });
-  localStorage.setItem('iz_stock', JSON.stringify(stock));
-  showToast('✅ Исправлено: '+fixed+' названий. Синхронизация...');
-  setTimeout(function(){ showToast('✅ Готово! Обновите страницу.'); }, 3000);
-}
 var _adminRcvPeriod = 'today';
 var _adminRcvShop = '';
 var _adminRcvType = 'receive';
 function findAndCleanDuplicateReceives(){
-  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts = getShifts();
   var groups = {};
   shifts.forEach(function(s, sIdx){
     (s.journal||[]).forEach(function(e, eIdx){
@@ -16567,7 +15221,6 @@ function findAndCleanDuplicateReceives(){
     return '• '+g[0].shopName+' · '+g[0].date+' · '+(g[0].entry.label||'')+' · '+g.length+' шт. вместо 1';
   }).join('\n');
   if(!confirm('Найдено '+dupGroups.length+' групп дублей, лишних записей: '+totalDup+'\n\n'+summary+(dupGroups.length>10?'\n...и ещё '+(dupGroups.length-10):'')+'\n\nОставить по одной записи в каждой группе (самую первую), остальные убрать в корзину?')) return;
-  // Удаляем начиная с самых поздних индексов, чтобы не сбить нумерацию при splice
   var toRemove = [];
   dupGroups.forEach(function(g){
     g.slice(1).forEach(function(item){ toRemove.push(item); });
@@ -16584,7 +15237,7 @@ function findAndCleanDuplicateReceives(){
     s.journal = jnl;
     touchedShifts[item.shiftIdx]=true;
   });
-  localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+  saveShifts(shifts);
   Object.keys(touchedShifts).forEach(function(idx){
     var s = shifts[idx];
     _pushShiftWithRetry(s.id||s._id, s);
@@ -16658,15 +15311,6 @@ function _adminRcvDateRange(){
   }
   return {from:todayStr, to:todayStr};
 }
-function _rcvRowLabel(r){
-  if(r.invId){
-    var manI=JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-    var wsI=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-    var f=manI.concat(wsI).find(function(i){ return (i.id||i._id)===r.invId; });
-    if(f&&f.num) return 'Приёмка '+f.num;
-  }
-  return r.label||'';
-}
 var _adminRcvOpen = {}; // groupKey -> bool
 function adminRcvToggle(key){
   _adminRcvOpen[key] = !_adminRcvOpen[key];
@@ -16688,16 +15332,13 @@ function adminMoveReceiptDate(entryId, sourceShiftId){
   var dateInput = document.getElementById('moveDateInput_'+entryId);
   var newDate = dateInput && dateInput.value;
   if(!newDate){ showToast('Укажи новую дату'); return; }
-  // Защита от повторного нажатия: сразу убираем/блокируем форму, чтобы
-  // случайный второй клик (или повторное открытие той же формы) не смог
-  // ещё раз запустить перенос той же самой записи.
   var formEl = dateInput ? dateInput.closest('.moveDateForm') : null;
   if(formEl){
     if(formEl.dataset.moving==='1') return;
     formEl.dataset.moving='1';
     formEl.querySelectorAll('button').forEach(function(b){ b.disabled=true; b.style.opacity='0.5'; });
   }
-  var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+  var shifts = getShifts();
   var srcIdx = shifts.findIndex(function(s){ return (s.id||s._id)===sourceShiftId; });
   if(srcIdx<0){ showToast('Исходная смена не найдена локально — сначала нажми ☁️ Синх'); return; }
   var srcShift = shifts[srcIdx];
@@ -16711,10 +15352,6 @@ function adminMoveReceiptDate(entryId, sourceShiftId){
     showToast('⚠️ У магазина «'+srcShift.shopName+'» нет смены за '+newDate+'. Сначала должна существовать смена на эту дату (открытая или закрытая), потом перенос.');
     return;
   }
-  // Проверка на уже перенесённую похожую запись — если в целевой смене уже
-  // есть приход с той же меткой и суммой (например, эту же запись уже
-  // переносили раньше, или это был повторный клик), предупреждаем, а не
-  // тихо создаём ещё одну копию.
   var tgtJnlCheck = shifts[tgtIdx].journal||[];
   var alreadyMoved = tgtJnlCheck.some(function(e){
     return e.type==='receive' && e.label===entry.label && Math.abs((e.amount||0)-(entry.amount||0))<1;
@@ -16727,16 +15364,9 @@ function adminMoveReceiptDate(entryId, sourceShiftId){
     if(formEl){ formEl.dataset.moving=''; formEl.querySelectorAll('button').forEach(function(b){ b.disabled=false; b.style.opacity='1'; }); }
     return;
   }
-  // убираем из исходной смены и тромбируем старую запись (через корзину —
-  // тот же механизм, что и обычное удаление записи) — иначе защита от
-  // потери данных при следующей фоновой синхронизации "заботливо" вернёт её
-  // обратно, решив, что она случайно пропала, и приход задвоится.
   addToTrash(entry, {shopName:srcShift.shopName, shiftId:srcShift.id, deletedByOverride:(session&&(session.name||session.sellerName))||'admin (перенос даты прихода)'});
   jnl.splice(eIdx,1);
   srcShift.journal = jnl;
-  // добавляем в целевую смену под НОВЫМ id (не переиспользуем старый —
-  // старый id теперь в списке удалённых, и с ним запись нигде не должна
-  // фигурировать, чтобы не пересекаться с тромбстоуном)
   var timePart = (entry.ts||'').split('T')[1] || '12:00:00.000Z';
   var movedEntry = Object.assign({}, entry, {
     id: uid(),
@@ -16749,7 +15379,7 @@ function adminMoveReceiptDate(entryId, sourceShiftId){
   var tgtShift = shifts[tgtIdx];
   tgtShift.journal = (tgtShift.journal||[]).concat([movedEntry])
     .sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
-  localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+  saveShifts(shifts);
   try{ logAction('RECEIPT_DATE_MOVED', {entryId:entryId, from:srcShift.date, to:newDate, shopName:srcShift.shopName}); }catch(e){}
   _pushShiftWithRetry(srcShift.id||srcShift._id, srcShift);
   _pushShiftWithRetry(tgtShift.id||tgtShift._id, tgtShift);
@@ -16758,7 +15388,7 @@ function adminMoveReceiptDate(entryId, sourceShiftId){
 }
 function adminOpenInvoiceFromList(invId, shiftId){
   if(shiftId){
-    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var shifts = getShifts();
     var sh = shifts.find(function(s){ return (s.id||s._id)===shiftId; });
     if(sh) _currentShiftView = sh;
     else { showToast('⚠️ Смена этой накладной не найдена локально — нажми ☁️ Синх и попробуй снова'); return; }
@@ -16766,9 +15396,6 @@ function adminOpenInvoiceFromList(invId, shiftId){
   svOpenInvoiceFromReceive(invId);
 }
 function _showFallbackInvoiceView(invId){
-  // Настоящий документ накладной не найден (ни локально, ни в облаке), но
-  // сама запись прихода в журнале смены сохранилась — показываем то, что
-  // есть, вместо тупикового сообщения об ошибке.
   var r = (window._adminRcvRowsByInv||{})[invId];
   if(!r){ showToast('Накладная не найдена — возможно, удалена'); return; }
   document.getElementById('adminInvTitle').textContent = '📋 '+(r.label||'Накладная')+' (только просмотр)';
@@ -16984,10 +15611,6 @@ function stockApplySale(shopName,items){
     if(!artNum) return;
     var useKey = artNum;
     if(!hasRealArticle && !(shopStock[artNum] && (shopStock[artNum].qty||0)>0)){
-      // Точного совпадения (название+цена+порода) нет в наличии — это частый
-      // случай, когда при приёмке породу не указали (например, у ложек и
-      // ножей в самом начале), а продавец при продаже её вписывает, увидев
-      // товар вживую. Ищем по названию+цене, не обращая внимания на породу.
       var found = _findStockKeyByNamePrice(shopStock, it.name, it.price, it.goodsType, artNum);
       if(found) useKey = found;
     }
@@ -17008,8 +15631,6 @@ function _findStockKeyByNamePrice(shopStock, name, price, goodsType, excludeKey)
     return true;
   });
   if(!candidates.length) return null;
-  // Если несколько подходящих (например, разные породы) — берём ту, где
-  // порода не указана (это и есть "принято без породы"), иначе первую попавшуюся.
   var noSpecies = candidates.find(function(k){ return !(shopStock[k].species||'').trim(); });
   return noSpecies || candidates[0];
 }
@@ -17082,9 +15703,6 @@ function rebuildStock(showMsg){
   allShifts.forEach(function(sh){
     var sn=sh.shopName; if(!sn) return;
     if(!stock[sn]) stock[sn]={};
-    // Легаси-приходы/списания «по одной позиции» — старый инструмент писал
-    // их прямо в эти поля смены, отдельно и от журнала, и от накладных.
-    // Пересчёт остатков раньше их вообще не видел.
     var legacyRcvDate = sh.date || (sh.closedAt?sh.closedAt.split('T')[0]:(sh.openedAt?sh.openedAt.split('T')[0]:''));
     (sh.goodsReceives||[]).forEach(function(it){
       var an=it.article||it.num; if(!an) an=_noArticleStockKey(it.name,it.price,it.species,'derevo');
@@ -17238,55 +15856,6 @@ function rebuildStock(showMsg){
     showToast('✅ Остатки пересчитаны по всей истории продаж и приходов: '+total+' позиций во всех магазинах');
   }
   try{ renderStockPage(); }catch(e){}
-}
-function stockDiagnostic(){
-  var manInvs=JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-  var wsInvs=JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-  var shifts=JSON.parse(localStorage.getItem('iz_shifts')||'[]');
-  var drManInvs=manInvs.filter(function(i){return i.goodsType==='dr';});
-  var stock=getStock();
-  var drStockItems=0, totalStockItems=0;
-  Object.keys(stock).forEach(function(sn){
-    Object.keys(stock[sn]||{}).forEach(function(k){
-      totalStockItems++;
-      if(stock[sn][k].goodsType==='dr') drStockItems++;
-    });
-  });
-  var msg='iz_manual_invoices: '+manInvs.length+' (ДР: '+drManInvs.length+')'+'\n';
-  msg+='iz_invoices accepted: '+wsInvs.filter(function(i){return i.status==='accepted';}).length+'\n';
-  msg+='\niz_stock всего: '+totalStockItems+' позиций\n';
-  msg+='iz_stock ДР: '+drStockItems+' позиций\n';
-  if(drManInvs.length){
-    msg+='\nПример ДР накладной:\n';
-    var inv=drManInvs[0];
-    msg+='  goodsType='+inv.goodsType+'\n';
-    (inv.items||[]).slice(0,3).forEach(function(it){
-      msg+='  '+it.name+' goodsType='+it.goodsType+' price='+it.price+'\n';
-    });
-  }
-  msg+='\n→ Загружаю из Firestore...';
-  alert(msg);
-  var jRcvDbg = journal.filter(function(e){ return e.type==='receive'; });
-  var jMsg = 'shiftId: '+(session&&session.shiftId||'?')+'\njournalReceives: '+jRcvDbg.length+'\n';
-  jRcvDbg.forEach(function(e,i){
-    jMsg += '['+(i+1)+'] ts='+(e.ts||'').slice(0,16)+' id='+(e.id||'').slice(0,8)+' invId='+(e.invId||'-')+'\n  '+e.label+'\n';
-  });
-  alert(jMsg);
-  try{
-    db.collection('iz_manual_invoices').get({source:'server'}).then(function(snap){
-      var arr=[];
-      snap.forEach(function(d){ var data=d.data(); if(data) arr.push(Object.assign({id:d.id},data)); });
-      localStorage.setItem('iz_manual_invoices',JSON.stringify(arr));
-      var msg2='Firestore iz_manual_invoices: '+arr.length+' шт.\n';
-      arr.slice(0,3).forEach(function(inv,i){
-        msg2+='['+(i+1)+'] destName='+inv.destName+' items='+(inv.items||[]).length+'\n';
-        var firstItem=(inv.items||[])[0];
-        if(firstItem) msg2+='  item keys: '+Object.keys(firstItem).join(', ')+'\n  values: '+Object.values(firstItem).slice(0,8).join(' | ')+'\n';
-      });
-      alert(msg2);
-      rebuildStock(true);
-    }).catch(function(e){ alert('Ошибка iz_manual_invoices: '+e.message); });
-  }catch(e){ alert('catch: '+e.message); }
 }
 var _stockMode = 'avail';
 var _stockSort = 'date_desc'; // default: newest first // 'avail' | 'archive'
@@ -17547,17 +16116,9 @@ function _stockGetAllItems(){
   return rows;
 }
 function _fetchMissingInvoicesById(cb){
-  // Массовый "живой" слушатель всей коллекции iz_manual_invoices почему-то
-  // не приносит документы (похоже, правила доступа Firestore разрешают
-  // читать документ по конкретному ID, но запрещают выборку/листинг всей
-  // коллекции целиком). Кнопка "Открыть накладную" при этом всегда
-  // работала — потому что запрашивает ОДИН документ по ID. Используем
-  // этот же надёжный способ: собираем все invId, на которые ссылаются
-  // приходы в журналах смен, и по каждому, которого нет локально,
-  // делаем точечный запрос.
   try{
     if(typeof db==='undefined' || !db){ cb(); return; }
-    var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+    var shifts = getShifts();
     var manualIds = {};
     JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]').forEach(function(i){ manualIds[String(i._id!=null?i._id:i.id)]=true; });
     var wsIds = {};
@@ -17600,12 +16161,6 @@ function _fetchMissingInvoicesById(cb){
   }catch(e){ cb(); }
 }
 function initStockPage(){
-  // Локальный кэш остатков (iz_stock) у каждого устройства копится по-своему
-  // и год за годом расходится с другими устройствами — то, что физически
-  // происходило (приёмки, продажи) на ДРУГИХ телефонах/компьютерах, сюда
-  // само не долетает. Настоящий источник правды — синхронизированные
-  // накладные и смены. Поэтому при каждом открытии Склада пересчитываем
-  // остатки заново именно из них — тогда на любом устройстве цифры совпадут.
   try{ rebuildStock(false); }catch(e){}
   _fetchMissingInvoicesById(function(){
     try{ rebuildStock(false); if(_stockMode==='byinvoice') renderStockByInvoice(); else if(_stockMode==='avail') renderStockPage(); }catch(e){}
@@ -17779,7 +16334,6 @@ function startStockSync(){
 
 /* ===== Управление свайпами ===== */
 (function(){
-  // --- Свайп вниз для закрытия открытого окна ---
   var mTouch = {active:false, startY:0, startX:0, md:null, mo:null};
   document.addEventListener('touchstart', function(e){
     var md = e.target.closest('.mo.open .md');
@@ -17820,7 +16374,6 @@ function startStockSync(){
     mTouch.active=false; mTouch.md=null; mTouch.mo=null;
   }, {passive:true});
 
-  // --- Свайп влево/вправо для переключения вкладок нижнего меню ---
   var tTouch = {tracking:false, startX:0, startY:0};
   document.addEventListener('touchstart', function(e){
     if(document.querySelector('.mo.open')){ tTouch.tracking=false; return; }
