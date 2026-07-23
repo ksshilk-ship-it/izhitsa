@@ -2031,7 +2031,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 <div class="toast" id="toast"></div>
 <!-- Firebase SDK загружается асинхронно через _loadFirebaseSDK() -->
 <script>
-var APP_BUILD_VERSION = '07.17.33';
+var APP_BUILD_VERSION = '07.17.34';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -2046,55 +2046,64 @@ function _markJournalEntryConfirmed(id){
 function _isJournalEntryConfirmed(id){
   try{ return JSON.parse(localStorage.getItem('iz_confirmed_jnl_ids')||'[]').indexOf(id)!==-1; }catch(e){ return false; }
 }
-function _recordJournalEntryIndependently(entry, shopName, kind){
+// Общая логика "надёжно сохранить документ в коллекцию, а при неудаче —
+// встать в очередь и повторить позже". Раньше это было отдельно написано
+// для продаж и отдельно для расходов/приходов/списаний — хотя устроено
+// было один в один, отличалась только коллекция и ключ очереди.
+function _writeIndependentDoc(collectionName, queueKey, entry, extraFields, onConfirmed){
   try{
     if(!entry || !entry.id) return;
-    var doc = Object.assign({}, entry, {
-      kind: kind,
-      shopName: shopName || (session&&session.shopName) || '',
+    var doc = Object.assign({}, entry, extraFields || {}, {
+      shopName: (extraFields&&extraFields.shopName) || (session&&session.shopName) || '',
       sellerName: (session&&(session.sellerName||session.name)) || '',
       shiftId: (session&&session.shiftId) || '',
       date: (entry.ts||'').split('T')[0],
       recordedAt: new Date().toISOString()
     });
-    if(typeof db==='undefined' || !db){ _queuePendingJournalEntry(doc); return; }
-    db.collection('iz_journal_backup').doc(entry.id).set(doc).then(function(){
-      _clearPendingJournalEntry(entry.id);
-      _markJournalEntryConfirmed(entry.id);
+    if(typeof db==='undefined' || !db){ _queuePendingDoc(queueKey, doc); return; }
+    db.collection(collectionName).doc(entry.id).set(doc).then(function(){
+      _clearPendingDoc(queueKey, entry.id);
+      if(onConfirmed) onConfirmed(entry.id);
     }).catch(function(){
-      _queuePendingJournalEntry(doc);
+      _queuePendingDoc(queueKey, doc);
     });
   }catch(e){
-    try{ _queuePendingJournalEntry(Object.assign({}, entry, {kind:kind, shopName:shopName||(session&&session.shopName)||''})); }catch(e2){}
+    try{ _queuePendingDoc(queueKey, Object.assign({}, entry, extraFields||{})); }catch(e2){}
   }
 }
-function _queuePendingJournalEntry(doc){
+function _queuePendingDoc(queueKey, doc){
   try{
-    var pending = JSON.parse(localStorage.getItem('iz_pending_jnl')||'[]');
+    var pending = JSON.parse(localStorage.getItem(queueKey)||'[]');
     if(!pending.some(function(d){ return d.id===doc.id; })) pending.push(doc);
-    localStorage.setItem('iz_pending_jnl', JSON.stringify(pending));
+    localStorage.setItem(queueKey, JSON.stringify(pending));
   }catch(e){}
 }
-function _clearPendingJournalEntry(id){
+function _clearPendingDoc(queueKey, id){
   try{
-    var pending = JSON.parse(localStorage.getItem('iz_pending_jnl')||'[]');
+    var pending = JSON.parse(localStorage.getItem(queueKey)||'[]');
     var filtered = pending.filter(function(d){ return d.id!==id; });
-    if(filtered.length!==pending.length) localStorage.setItem('iz_pending_jnl', JSON.stringify(filtered));
+    if(filtered.length!==pending.length) localStorage.setItem(queueKey, JSON.stringify(filtered));
   }catch(e){}
 }
-function _retryPendingJournalEntries(){
+function _retryPendingDocs(queueKey, collectionName, onConfirmed){
   try{
     if(typeof db==='undefined' || !db) return;
-    var pending = JSON.parse(localStorage.getItem('iz_pending_jnl')||'[]');
+    var pending = JSON.parse(localStorage.getItem(queueKey)||'[]');
     if(!pending.length) return;
     pending.forEach(function(doc){
-      db.collection('iz_journal_backup').doc(doc.id).set(doc).then(function(){
-        _clearPendingJournalEntry(doc.id);
-        _markJournalEntryConfirmed(doc.id);
+      db.collection(collectionName).doc(doc.id).set(doc).then(function(){
+        _clearPendingDoc(queueKey, doc.id);
+        if(onConfirmed) onConfirmed(doc.id);
       }).catch(function(){});
     });
   }catch(e){}
 }
+function _recordJournalEntryIndependently(entry, shopName, kind){
+  _writeIndependentDoc('iz_journal_backup', 'iz_pending_jnl', entry, {kind:kind, shopName:shopName}, _markJournalEntryConfirmed);
+}
+function _queuePendingJournalEntry(doc){ _queuePendingDoc('iz_pending_jnl', doc); }
+function _clearPendingJournalEntry(id){ _clearPendingDoc('iz_pending_jnl', id); }
+function _retryPendingJournalEntries(){ _retryPendingDocs('iz_pending_jnl', 'iz_journal_backup', _markJournalEntryConfirmed); }
 function _markSaleConfirmed(id){
   try{
     var confirmed = JSON.parse(localStorage.getItem('iz_confirmed_sale_ids')||'[]');
@@ -2105,53 +2114,11 @@ function _isSaleConfirmed(id){
   try{ return JSON.parse(localStorage.getItem('iz_confirmed_sale_ids')||'[]').indexOf(id)!==-1; }catch(e){ return false; }
 }
 function _recordSaleIndependently(entry, shopName){
-  try{
-    if(!entry || !entry.id) return;
-    var saleDoc = Object.assign({}, entry, {
-      shopName: shopName || (session&&session.shopName) || '',
-      sellerName: (session&&(session.sellerName||session.name)) || '',
-      shiftId: (session&&session.shiftId) || '',
-      date: (entry.ts||'').split('T')[0],
-      recordedAt: new Date().toISOString()
-    });
-    if(typeof db==='undefined' || !db){ _queuePendingSale(saleDoc); return; }
-    db.collection('iz_sales').doc(entry.id).set(saleDoc).then(function(){
-      _clearPendingSale(entry.id);
-      _markSaleConfirmed(entry.id);
-    }).catch(function(){
-      _queuePendingSale(saleDoc);
-    });
-  }catch(e){
-    try{ _queuePendingSale(Object.assign({}, entry, {shopName: shopName||(session&&session.shopName)||''})); }catch(e2){}
-  }
+  _writeIndependentDoc('iz_sales', 'iz_pending_sales', entry, {shopName:shopName}, _markSaleConfirmed);
 }
-function _queuePendingSale(saleDoc){
-  try{
-    var pending = JSON.parse(localStorage.getItem('iz_pending_sales')||'[]');
-    if(!pending.some(function(s){ return s.id===saleDoc.id; })) pending.push(saleDoc);
-    localStorage.setItem('iz_pending_sales', JSON.stringify(pending));
-  }catch(e){}
-}
-function _clearPendingSale(id){
-  try{
-    var pending = JSON.parse(localStorage.getItem('iz_pending_sales')||'[]');
-    var filtered = pending.filter(function(s){ return s.id!==id; });
-    if(filtered.length!==pending.length) localStorage.setItem('iz_pending_sales', JSON.stringify(filtered));
-  }catch(e){}
-}
-function _retryPendingSales(){
-  try{
-    if(typeof db==='undefined' || !db) return;
-    var pending = JSON.parse(localStorage.getItem('iz_pending_sales')||'[]');
-    if(!pending.length) return;
-    pending.forEach(function(saleDoc){
-      db.collection('iz_sales').doc(saleDoc.id).set(saleDoc).then(function(){
-        _clearPendingSale(saleDoc.id);
-        _markSaleConfirmed(saleDoc.id);
-      }).catch(function(){});
-    });
-  }catch(e){}
-}
+function _queuePendingSale(saleDoc){ _queuePendingDoc('iz_pending_sales', saleDoc); }
+function _clearPendingSale(id){ _clearPendingDoc('iz_pending_sales', id); }
+function _retryPendingSales(){ _retryPendingDocs('iz_pending_sales', 'iz_sales', _markSaleConfirmed); }
 function _getDeviceId(){
   try{
     var id = localStorage.getItem('iz_device_id');
