@@ -1949,45 +1949,13 @@ function acSuggest(inputId, onPick, extraArg){
   // Перемещаем бокс в body, чтобы он был вне любого overflow-контейнера
   if(box.parentElement !== document.body) document.body.appendChild(box);
 
-  const rect = input.getBoundingClientRect();
-  const maxH = val ? 200 : 260;
-  // На iOS при открытой клавиатуре window.innerHeight НЕ уменьшается (в отличие от Android),
-  // поэтому используем visualViewport — он корректно учитывает видимую область над клавиатурой.
-  const vv = window.visualViewport;
-  const viewTop = vv ? vv.offsetTop : 0;
-  const viewH = vv ? vv.height : window.innerHeight;
-  const spaceBelow = (viewTop+viewH) - rect.bottom;
-  const spaceAbove = rect.top - viewTop;
-  const showAbove = spaceBelow < maxH + 20 && spaceAbove > maxH + 20;
-  // ВАЖНО: используем position:absolute с координатами, пересчитанными в систему координат документа
-  // (rect + scrollY/scrollX), а НЕ position:fixed. На iOS position:fixed при открытой клавиатуре
-  // "отрывается" от реально видимой (visual viewport) области и элемент рендерится вне экрана —
-  // именно поэтому список подсказок не был виден при вводе с клавиатуры.
-  const docTop = rect.top + window.scrollY;
-  const docLeft = rect.left + window.scrollX;
-  box.style.cssText = [
-    'display:block',
-    'position:absolute',
-    showAbove ? 'top:'+(docTop-2-Math.min(maxH,spaceAbove-20))+'px' : 'top:'+(docTop+rect.height+2)+'px',
-    'left:'+docLeft+'px',
-    'width:'+rect.width+'px',
-    'z-index:99999',
-    'max-height:'+Math.min(maxH, showAbove ? spaceAbove-20 : spaceBelow-10)+'px',
-    'overflow-y:auto',
-    'background:var(--s1)',
-    'border:1px solid var(--border)',
-    'border-radius:10px',
-    'box-shadow:0 8px 32px rgba(0,0,0,.7)',
-    '-webkit-overflow-scrolling:touch'
-  ].join(';');
-
+  // Рендерим контент СНАЧАЛА
   box.innerHTML = noMatches
     ? '<div style="padding:13px 16px;font-size:13px;color:var(--t2);text-align:center">Совпадений нет в справочнике — можно ввести своё и продолжить</div>'
     : matches.map(function(m){
     var safe = String(m).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     var extraSafe = extraArg!==undefined ? String(extraArg).replace(/\\/g,'\\\\').replace(/'/g,"\\'") : null;
     var args = extraSafe!==null ? "'"+safe+"', '"+extraSafe+"'" : "'"+safe+"'";
-    // Подсвечиваем совпавшую часть при фильтрации
     var label = m;
     if(val){
       var idx = m.toLowerCase().indexOf(val);
@@ -2002,6 +1970,38 @@ function acSuggest(inputId, onPick, extraArg){
   }).join('');
 
   _acActiveInputId = inputId;
+
+  // ПОТОМ пересчитываем позицию ПОСЛЕ того, как контент отрисован в DOM — так box будет всегда привязан к input-полю
+  // Это решает проблему когда список фильтруется до 1-2 строк и улетает вверх
+  requestAnimationFrame(function(){
+    const rect = input.getBoundingClientRect();
+    const actualHeight = box.scrollHeight; // Фактическая высота после рендера
+    const vv = window.visualViewport;
+    const viewTop = vv ? vv.offsetTop : 0;
+    const viewH = vv ? vv.height : window.innerHeight;
+    const spaceBelow = (viewTop+viewH) - rect.bottom;
+    const spaceAbove = rect.top - viewTop;
+    const showAbove = spaceBelow < actualHeight + 20 && spaceAbove > actualHeight + 20;
+    
+    const docTop = rect.top + window.scrollY;
+    const docLeft = rect.left + window.scrollX;
+    
+    box.style.cssText = [
+      'display:block',
+      'position:absolute',
+      showAbove ? 'top:'+(docTop - actualHeight - 6)+'px' : 'top:'+(docTop + rect.height + 2)+'px',
+      'left:'+docLeft+'px',
+      'width:'+rect.width+'px',
+      'z-index:99999',
+      'max-height:200px',
+      'overflow-y:auto',
+      'background:var(--s1)',
+      'border:1px solid var(--border)',
+      'border-radius:10px',
+      'box-shadow:0 8px 32px rgba(0,0,0,.7)',
+      '-webkit-overflow-scrolling:touch'
+    ].join(';');
+  });
 }
 
 function acHideSugg(inputId){
@@ -8872,6 +8872,68 @@ async function saveManualAccept(){
   finally{ endSave('maAccept'); }
 }
 
+// ════ ПРОВЕДЕНИЕ ПРИЁМКИ: ЗАВЕРШАЕТ ПРОЦЕСС И ПЕРЕВОДИТ ТОВАР НА СКЛАД ════
+async function finalizeMaAcceptance(accId){
+  const acc = _maHistory.find(a=>a.id===accId);
+  if(!acc){ showToast('Приёмка не найдена'); return; }
+  if(acc.status==='done'){ showToast('✅ Приёмка уже проведена'); return; }
+  
+  if(!confirm(`Провести приёмку от ${acc.masterName}?\n${acc.positions.length} изделий будут приняты на склад.`)) return;
+  
+  if(isSaving('maFinalize')) return;
+  beginSave('maFinalize');
+  
+  try{
+    // Обновляем статус приёмки на 'done' — это закрывает приёмку, товар переходит на склад
+    await db.collection('ws_master_acceptances').doc(accId).update({
+      status: 'done',
+      concludedAt: now(),
+      concludedBy: session.name
+    });
+    
+    // Логирование в аудит
+    logAction('acceptance_finalized', {accId, masterName: acc.masterName, count: acc.positions.length});
+    
+    showToast(`✅ Приёмка от ${acc.masterName} проведена · ${acc.positions.length} изделий на склад`);
+    renderManualAcceptHistory();
+  }catch(e){
+    showToast('❌ Ошибка при проведении: '+e.message);
+  }finally{
+    endSave('maFinalize');
+  }
+}
+
+// ════ ПРОВЕДЕНИЕ ПРИЁМКИ: ЗАВЕРШАЕТ ПРОЦЕСС И ПЕРЕВОДИТ ТОВАР НА СКЛАД ════
+async function finalizeMaAcceptance(accId){
+  const acc = _maHistory.find(a=>a.id===accId);
+  if(!acc){ showToast('Приёмка не найдена'); return; }
+  if(acc.status==='done'){ showToast('✅ Приёмка уже проведена'); return; }
+  
+  if(!confirm(`Провести приёмку от ${acc.masterName}?\n${acc.positions.length} изделий будут приняты на склад.`)) return;
+  
+  if(isSaving('maFinalize')) return;
+  beginSave('maFinalize');
+  
+  try{
+    // Обновляем статус приёмки на 'done'
+    await db.collection('ws_master_acceptances').doc(accId).update({
+      status: 'done',
+      concludedAt: now(),
+      concludedBy: session.name
+    });
+    
+    // Логирование
+    logAction('acceptance_finalized', {accId, masterName: acc.masterName, count: acc.positions.length});
+    
+    showToast(`✅ Приёмка от ${acc.masterName} проведена · ${acc.positions.length} изделий на склад`);
+    renderManualAcceptHistory();
+  }catch(e){
+    showToast('Ошибка при проведении: '+e.message);
+  }finally{
+    endSave('maFinalize');
+  }
+}
+
 // НОВОЕ! Переменные для навигации архива приёмок
 let _archiveViewLevel = 'periods'; // periods → masters → dates → items
 let _archiveSelectedPeriod = null;
@@ -9063,7 +9125,13 @@ function renderArchiveItems(c){
     <div class="at-row"><span class="at-lbl">Сумма изделий</span><span class="at-val" style="color:var(--accent)">${fmt(acc.positions.reduce((s,p)=>s+(p.price||0),0))}</span></div>
     <div class="at-row"><span class="at-lbl">Сумма ЗП</span><span class="at-val" style="color:var(--a5)">${fmt(acc.positions.reduce((s,p)=>s+(p.zp||0),0))}</span></div>
     ${acc.status!=='done'
-      ? `<button onclick="openMaDetail('${acc.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--accent);color:#000;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">✏️ Разметить и провести</button>`
+      ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+          ${isMaEditAllowed(acc)
+            ? `<button onclick="openMaDetail('${acc.id}')" style="padding:8px;background:var(--s2);border:1px solid var(--border);color:var(--text);border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">✏️ Изменить</button>`
+            : `<button disabled style="padding:8px;background:var(--s2);border:1px solid var(--border);color:var(--t2);border-radius:8px;cursor:not-allowed;font-weight:700;font-size:12px;opacity:0.5">✏️ Изменить</button>`
+          }
+          <button onclick="finalizeMaAcceptance('${acc.id}')" style="padding:8px;background:var(--accent);color:#000;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">✅ Провести</button>
+        </div>`
       : (session && session.role==='администратор'
         ? `<button onclick="openMaDetail('${acc.id}')" style="width:100%;margin-top:8px;padding:8px;background:var(--s1);border:1px solid var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">✏️ Открыть для правки (Администратор)</button>`
         : '')}
