@@ -1849,7 +1849,7 @@ let session = JSON.parse(sessionStorage.getItem('ws_session')||'null');
 let _adminViewingRole = null; // НОВОЕ! Роль которую администратор просматривает
 
 // ════ ВЕРСИОНИРОВАНИЕ ПРИЛОЖЕНИЯ ════
-const APP_VERSION = '1.1.0'; // Текущая версия приложения
+const APP_VERSION = '1.2.0'; // Текущая версия приложения
 let _remoteVersion = null; // Версия на сервере (Firebase)
 let _updateAvailable = false; // Есть ли обновление
 
@@ -9770,8 +9770,22 @@ function updateMaPosField(accId, rid, field, value){
   const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
   if(!isMaEditAllowed(acc)){ showToast('🔒 Редактирование доступно только в день внесения приёмки'); openMaDetail(accId); return; }
   const pos = acc.positions.find(p=>p.rid===rid); if(!pos) return;
-  pos[field] = (field==='price'||field==='zp') ? (parseFloat(value)||0) : value;
-  db.collection('ws_master_acceptances').doc(accId).update({positions: acc.positions}).catch(console.error);
+  
+  // Преобразование значения в правильный тип
+  if(field==='price' || field==='zp') {
+    pos[field] = parseFloat(value)||0;
+  } else if(field==='qty') {
+    pos[field] = parseInt(value,10)||1;
+  } else {
+    pos[field] = value;
+  }
+  
+  db.collection('ws_master_acceptances').doc(accId).update({positions: acc.positions})
+    .then(() => {
+      openMaDetail(accId); // перерисовать форму с обновлёнными ИТОГО
+      renderManualAcceptHistory(); // перерисовать архив
+    })
+    .catch(console.error);
 }
 
 function setMaPosStatus(accId, rid, status){
