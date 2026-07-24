@@ -9711,6 +9711,7 @@ function openMaDetail(accId){
           style="flex:1;padding:8px;border-radius:8px;border:1px solid ${p.status==='defect'?'var(--exp)':'var(--border)'};background:${p.status==='defect'?'rgba(255,90,90,0.15)':'var(--s1)'};color:${p.status==='defect'?'var(--exp)':'var(--t2)'};font-size:12px;font-weight:700;cursor:pointer">
           ⚠️ Брак / переделка
         </button>
+        ${isEditable ? `<button onclick="deleteMaPosition('${acc.id}','${p.rid}')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--exp);background:rgba(255,90,90,0.1);color:var(--exp);font-size:12px;font-weight:700;cursor:pointer">🗑 Удалить</button>` : ''}
       </div>
     </div>`).join('');
 
@@ -9772,6 +9773,31 @@ function setMaPosStatus(accId, rid, status){
   // Обновляем в Firebase сразу (чтобы не потерять при закрытии)
   db.collection('ws_master_acceptances').doc(accId).update({positions: acc.positions}).catch(console.error);
   openMaDetail(accId); // перерисовать
+}
+
+// ════ УДАЛЕНИЕ ПОЗИЦИИ ИЗ ПРИЁМКИ ════
+function deleteMaPosition(accId, rid){
+  const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
+  const posIndex = acc.positions.findIndex(p=>p.rid===rid);
+  if(posIndex === -1) return;
+  
+  // Проверка прав
+  const isEditable = isMaEditAllowed(acc);
+  if(!isEditable){ showToast('Вы не можете редактировать эту приёмку'); return; }
+  
+  if(!confirm('Удалить эту позицию из приёмки?')) return;
+  
+  // Удалить позицию
+  acc.positions.splice(posIndex, 1);
+  
+  // Сохранить в Firebase
+  db.collection('ws_master_acceptances').doc(accId).update({positions: acc.positions})
+    .then(() => {
+      logAction('acceptance_position_deleted', {accId, masterName: acc.masterName, remainingCount: acc.positions.length});
+      showToast('✅ Позиция удалена');
+      openMaDetail(accId); // перерисовать
+    })
+    .catch(e => showToast('❌ Ошибка: ' + e.message));
 }
 
 let _maDupChecked = new Set();
