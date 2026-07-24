@@ -182,8 +182,37 @@ function applyUpdate() {
   banner.style.background = '#1a2a14';
   if(_newSW) { _newSW.postMessage({type:'SKIP_WAITING'}); }
   else if(navigator.serviceWorker.controller) { navigator.serviceWorker.controller.postMessage({type:'SKIP_WAITING'}); }
-  setTimeout(function(){ window.location.reload(); }, 1500);
+  setTimeout(function(){ window.location.reload(true); }, 1500);
 }
+
+// ════ ВЕРСИОНИРОВАНИЕ ПРИЛОЖЕНИЯ ════
+async function checkAppVersion(){
+  try {
+    // Проверяем версию на Firebase в iz_settings/app_version
+    const versionDoc = await db.collection('iz_settings').doc('app_version').get();
+    if(versionDoc.exists){
+      _remoteVersion = versionDoc.data().current || APP_VERSION;
+      if(_remoteVersion !== APP_VERSION){
+        _updateAvailable = true;
+        showUpdateBanner();
+      }
+    }
+  } catch(e) {
+    // Ошибка при проверке версии — не показываем плашку
+    console.log('Version check error:', e.message);
+  }
+}
+
+function showUpdateBanner(){
+  const banner = document.getElementById('updateBanner');
+  if(banner){
+    banner.innerHTML = `<div style="font-size:13px;color:#f0f0f8">🔄 Доступно обновление приложения (v${_remoteVersion})</div>
+      <button onclick="applyUpdate()" style="background:#c8f060;border:none;border-radius:8px;padding:8px 20px;font-size:13px;font-weight:700;color:#0f0f13;cursor:pointer">Обновить</button>
+      <button onclick="document.getElementById('updateBanner').style.display='none'" style="background:none;border:none;color:#8888aa;font-size:12px;cursor:pointer;margin-left:8px">Позже</button>`;
+    banner.style.display = 'block';
+  }
+}
+
 </script>
 <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
 
@@ -240,6 +269,7 @@ function applyUpdate() {
       <div>
         <div class="hdr-name" id="hdrName"></div>
         <div class="hdr-role" id="hdrRole"></div>
+        <div style="font-size:10px;color:var(--t2);margin-top:2px" id="hdrVersion"></div>
       </div>
       <button class="exit-btn" onclick="doLogout()">Выйти</button>
     </div>
@@ -1801,6 +1831,12 @@ function setSync(s){
 // ════════ STATE ════════
 let session = JSON.parse(sessionStorage.getItem('ws_session')||'null');
 let _adminViewingRole = null; // НОВОЕ! Роль которую администратор просматривает
+
+// ════ ВЕРСИОНИРОВАНИЕ ПРИЛОЖЕНИЯ ════
+const APP_VERSION = '1.0.0'; // Текущая версия приложения
+let _remoteVersion = null; // Версия на сервере (Firebase)
+let _updateAvailable = false; // Есть ли обновление
+
 let employees = [];
 let blanks = [];
 let items = [];
@@ -2610,10 +2646,12 @@ function startApp(){
   document.getElementById('mainTabs').style.display='flex';
   document.getElementById('hdrName').textContent=session.name;
   document.getElementById('hdrRole').textContent={заготовщик:'🪚 Заготовщик',мастер:'🔨 Мастер',кладовщик:'📦 Кладовщик',управляющий:'👑 Управляющий',администратор:'🛡 Администратор'}[session.role]||session.role;
+  document.getElementById('hdrVersion').textContent='v'+APP_VERSION;
   startWorkSession();
   logLogin(session.name);
   buildTabs();
   startListeners();
+  checkAppVersion(); // Проверить наличие обновления
   renderExtraCatSelect('ewCat');
   renderExtraCatSelect('editEwCat');
   // Populate master select for extra work
