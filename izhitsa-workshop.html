@@ -8937,8 +8937,9 @@ async function finalizeMaAcceptance(accId){
 }
 
 // НОВОЕ! Переменные для навигации архива приёмок
-let _archiveViewLevel = 'periods'; // periods → masters → dates → items
+let _archiveViewLevel = 'periods'; // periods → mode → dates/masters → items
 let _archiveSelectedPeriod = null;
+let _archiveSelectedViewMode = null; // 'dates' или 'masters'
 let _archiveSelectedMaster = null;
 let _archiveSelectedDate = null;
 
@@ -8968,8 +8969,14 @@ function renderManualAcceptHistory(){
   if(!c) return;
   
   if(_archiveViewLevel === 'periods') renderArchivePeriods(c);
+  else if(_archiveViewLevel === 'mode') renderArchiveMode(c);
+  else if(_archiveViewLevel === 'dates') {
+    if(_archiveSelectedViewMode === 'masters' && _archiveSelectedMaster) renderArchiveMasterDates(c);
+    else if(_archiveSelectedViewMode === 'masters') renderArchiveMasters(c);
+    else renderArchiveDatesByPeriod(c);
+  }
+  else if(_archiveViewLevel === 'dateItems') renderDateItems(c);
   else if(_archiveViewLevel === 'masters') renderArchiveMasters(c);
-  else if(_archiveViewLevel === 'dates') renderArchiveDates(c);
   else if(_archiveViewLevel === 'items') renderArchiveItems(c);
 }
 
@@ -9005,11 +9012,163 @@ function renderArchivePeriods(c){
 
 function selectArchivePeriod(monthKey){
   _archiveSelectedPeriod = monthKey;
-  _archiveViewLevel = 'masters';
+  _archiveSelectedViewMode = null;
+  _archiveViewLevel = 'mode';
   renderManualAcceptHistory();
 }
 
-// ═══ УРОВЕНЬ 2: МАСТЕРА В ПЕРИОДЕ ═══
+// ═══ УРОВЕНЬ 1.5: ВЫБОР РЕЖИМА ПРОСМОТРА ═══
+function renderArchiveMode(c){
+  if(!_archiveSelectedPeriod){
+    _archiveViewLevel = 'periods';
+    renderManualAcceptHistory();
+    return;
+  }
+  
+  const [year, month] = _archiveSelectedPeriod.split('-');
+  const monthName = new Date(year, parseInt(month)-1).toLocaleDateString('ru-RU', {month:'long', year:'numeric'});
+  
+  c.innerHTML = `<div class="li" onclick="archiveGoBack()" style="cursor:pointer;opacity:0.7;margin-bottom:8px">
+    <div class="li-ico">←</div>
+    <div class="li-info"><div class="li-name">Вернуться к периодам</div></div>
+  </div>
+  <div style="font-size:12px;color:var(--t2);padding:10px 0;margin-bottom:10px">Выберите режим просмотра архива для <b>${monthName}</b>:</div>
+  <div class="li" onclick="selectArchiveViewMode('dates')" style="cursor:pointer;background:var(--a2);margin-bottom:8px">
+    <div class="li-ico" style="background:var(--accent);color:#000;font-weight:700">📅</div>
+    <div class="li-info">
+      <div class="li-name">По датам</div>
+      <div class="li-sub">Сколько произведено за каждый день (все мастера вместе)</div>
+    </div>
+  </div>
+  <div class="li" onclick="selectArchiveViewMode('masters')" style="cursor:pointer;background:var(--s2);margin-bottom:8px">
+    <div class="li-ico" style="background:var(--s1);color:var(--text)">👥</div>
+    <div class="li-info">
+      <div class="li-name">По мастерам</div>
+      <div class="li-sub">Сколько приёмок у каждого мастера</div>
+    </div>
+  </div>`;
+}
+
+function selectArchiveViewMode(mode){
+  _archiveSelectedViewMode = mode;
+  _archiveViewLevel = mode;
+  renderManualAcceptHistory();
+}
+
+// ═══ УРОВЕНЬ 2: ДАТЫ В ПЕРИОДЕ ═══
+function renderArchiveDatesByPeriod(c){
+  if(!_archiveSelectedPeriod){
+    _archiveViewLevel = 'periods';
+    renderManualAcceptHistory();
+    return;
+  }
+  
+  const [year, month] = _archiveSelectedPeriod.split('-');
+  const accsForPeriod = _maHistory.filter(acc => {
+    const date = new Date(acc.deliveredDate);
+    return date.getFullYear() === parseInt(year) && 
+           date.getMonth()+1 === parseInt(month);
+  });
+  
+  // Группируем по датам
+  const byDate = {};
+  accsForPeriod.forEach(acc => {
+    if(!byDate[acc.deliveredDate]) byDate[acc.deliveredDate] = [];
+    byDate[acc.deliveredDate].push(acc);
+  });
+  
+  c.innerHTML = `<div class="li" onclick="archiveGoBack()" style="cursor:pointer;opacity:0.7">
+    <div class="li-ico">←</div>
+    <div class="li-info"><div class="li-name">Вернуться к режимам</div></div>
+  </div>` +
+  Object.entries(byDate).sort((a,b)=>b[0].localeCompare(a[0])).map(([dateStr, accs])=>{
+    const [year, month, day] = dateStr.split('-');
+    const dateFormatted = `${day}/${month}/${year}`;
+    const totalCount = accs.reduce((sum, a) => sum + a.positions.length, 0);
+    const doneCount = accs.filter(a=>a.status==='done').length;
+    const openCount = accs.length - doneCount;
+    
+    return `<div class="li" onclick="selectArchiveDateView('${dateStr}')">
+      <div class="li-ico" style="background:#1a1e2a">📅</div>
+      <div class="li-info">
+        <div class="li-name">${dateFormatted}</div>
+        <div class="li-sub">${accs.length} приёмок · ${totalCount} товаров</div>
+        <div class="li-sub" style="color:var(--t2);font-size:10px">${doneCount} проведено ${openCount>0?'· '+openCount+' открыто':''}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectArchiveDateView(dateStr){
+  _archiveSelectedDate = dateStr;
+  _archiveViewLevel = 'dateItems';
+  renderManualAcceptHistory();
+}
+
+// ═══ УРОВЕНЬ: ТОВАРЫ ВСЕХ МАСТЕРОВ ЗА ВЫБРАННУЮ ДАТУ ═══
+function renderDateItems(c){
+  if(!_archiveSelectedDate){
+    _archiveViewLevel = 'dates';
+    renderManualAcceptHistory();
+    return;
+  }
+  
+  const accsForDate = _maHistory.filter(acc => acc.deliveredDate === _archiveSelectedDate);
+  
+  const [year, month, day] = _archiveSelectedDate.split('-');
+  const dateFormatted = `${day}/${month}/${year}`;
+  
+  const allItems = [];
+  accsForDate.forEach(acc => {
+    acc.positions.forEach(pos => {
+      allItems.push({
+        ...pos,
+        masterName: acc.masterName,
+        accId: acc.id,
+        accStatus: acc.status
+      });
+    });
+  });
+  
+  const totalPrice = allItems.reduce((sum, p) => sum + (p.price || 0), 0);
+  const totalZP = allItems.reduce((sum, p) => sum + (p.zp || 0), 0);
+  const acceptedCount = allItems.filter(p => p.status === 'accepted').length;
+  const defectCount = allItems.filter(p => p.status === 'defect').length;
+  
+  c.innerHTML = `<div class="li" onclick="archiveGoBack()" style="cursor:pointer;opacity:0.7;margin-bottom:8px">
+    <div class="li-ico">←</div>
+    <div class="li-info"><div class="li-name">Вернуться к датам</div></div>
+  </div>
+  <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:10px;font-size:12px">
+    <div class="at-row"><span class="at-lbl">Дата</span><span class="at-val">${dateFormatted}</span></div>
+    <div class="at-row"><span class="at-lbl">Приёмок</span><span class="at-val">${accsForDate.length}</span></div>
+    <div class="at-row"><span class="at-lbl">Товаров</span><span class="at-val">${allItems.length} шт</span></div>
+    <div class="at-row"><span class="at-lbl">Принято</span><span class="at-val" style="color:var(--inc)">${acceptedCount} ✅</span></div>
+    <div class="at-row"><span class="at-lbl">Брак</span><span class="at-val" style="color:var(--exp)">${defectCount} ⚠️</span></div>
+    <div class="at-row"><span class="at-lbl">Сумма товаров</span><span class="at-val" style="color:var(--accent)">${fmt(totalPrice)} ₽</span></div>
+    <div class="at-row"><span class="at-lbl">Сумма ЗП</span><span class="at-val" style="color:var(--a5)">${fmt(totalZP)} ₽</span></div>
+  </div>` +
+  allItems.map((item, i) => `
+    <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid var(--border);font-size:12px">
+      <div style="font-size:11px;color:var(--t2);margin-bottom:6px">
+        <span style="font-weight:700">${item.masterName}</span> · 
+        <span style="${item.accStatus==='done'?'color:var(--inc)':'color:var(--a4)'}">${item.accStatus==='done'?'✅ Проведена':'⏳ Открыта'}</span>
+      </div>
+      <div style="font-weight:700;margin-bottom:4px">${item.name}${item.artikul?' · '+item.artikul:''}</div>
+      <div style="color:var(--t2);font-size:11px;line-height:1.5">
+        <div>🌳 ${item.wood||'—'}</div>
+        <div style="color:${item.status==='accepted'?'var(--inc)':'var(--exp)'};margin-top:3px">
+          ${item.status==='accepted'?'✅ Принято':'⚠️ Брак'}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+          <div><span style="color:var(--text);font-weight:600">💰</span> ${fmt(item.price)} ₽</div>
+          <div><span style="color:var(--text);font-weight:600">📊</span> ${fmt(item.zp)} ₽</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
 function renderArchiveMasters(c){
   if(!_archiveSelectedPeriod){
     _archiveViewLevel = 'periods';
@@ -9048,12 +9207,13 @@ function renderArchiveMasters(c){
 
 function selectArchiveMaster(masterId){
   _archiveSelectedMaster = masterId;
+  _archiveSelectedViewMode = 'masters';
   _archiveViewLevel = 'dates';
   renderManualAcceptHistory();
 }
 
 // ═══ УРОВЕНЬ 3: ДАТЫ ПРИЁМОК МАСТЕРА ═══
-function renderArchiveDates(c){
+function renderArchiveMasterDates(c){
   if(!_archiveSelectedPeriod || !_archiveSelectedMaster){
     _archiveViewLevel = 'masters';
     renderManualAcceptHistory();
@@ -9082,10 +9242,12 @@ function renderArchiveDates(c){
     const statusLabel = acc.status==='done'
       ? `<span style="color:var(--inc)">✅ Проведена</span>`
       : `<span style="color:var(--a4)">⏳ Открыта · ${pending} не размечено</span>`;
+    const [year, month, day] = acc.deliveredDate.split('-');
+    const dateFormatted = `${day}/${month}/${year}`;
     return `<div class="li" onclick="selectArchiveDate('${acc.id}')">
       <div class="li-ico" style="background:#1a1e2a">📦</div>
       <div class="li-info">
-        <div class="li-name">${acc.deliveredDate} · ${total} шт</div>
+        <div class="li-name">${dateFormatted} · ${total} шт</div>
         <div class="li-sub">Принял: ${acc.createdBy}</div>
         <div class="li-sub">${statusLabel}</div>
       </div>
@@ -9168,14 +9330,17 @@ function renderArchiveItems(c){
 }
 
 function archiveGoBack(){
-  if(_archiveViewLevel === 'masters'){
+  if(_archiveViewLevel === 'mode'){
     _archiveViewLevel = 'periods';
     _archiveSelectedPeriod = null;
-  } else if(_archiveViewLevel === 'dates'){
-    _archiveViewLevel = 'masters';
+  } else if(_archiveViewLevel === 'dates' || _archiveViewLevel === 'masters'){
+    _archiveViewLevel = 'mode';
     _archiveSelectedMaster = null;
-  } else if(_archiveViewLevel === 'items'){
+  } else if(_archiveViewLevel === 'dateItems'){
     _archiveViewLevel = 'dates';
+    _archiveSelectedDate = null;
+  } else if(_archiveViewLevel === 'items'){
+    _archiveViewLevel = 'masters';
     _archiveSelectedDate = null;
   }
   renderManualAcceptHistory();
