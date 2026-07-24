@@ -9160,7 +9160,64 @@ function renderArchiveMode(c){
 
 function selectArchiveViewMode(mode){
   _archiveSelectedViewMode = mode;
-  _archiveViewLevel = mode;
+  _archiveViewLevel = 'dates'; // Всегда устанавливаем 'dates', логика выбора в renderManualAcceptHistory
+  renderManualAcceptHistory();
+}
+
+// ═══ УРОВЕНЬ 2: МАСТЕРА В ПЕРИОДЕ ═══
+function renderArchiveMasters(c){
+  if(!_archiveSelectedPeriod){
+    _archiveViewLevel = 'periods';
+    renderManualAcceptHistory();
+    return;
+  }
+  
+  const [year, month] = _archiveSelectedPeriod.split('-');
+  const accsInPeriod = _maHistory.filter(acc => {
+    const date = new Date(acc.deliveredDate);
+    return date.getFullYear() === parseInt(year) && date.getMonth()+1 === parseInt(month);
+  });
+  
+  // Группировать по мастерам
+  const byMaster = {};
+  accsInPeriod.forEach(acc => {
+    if(!byMaster[acc.masterId]) {
+      byMaster[acc.masterId] = {
+        name: acc.masterName,
+        accs: []
+      };
+    }
+    byMaster[acc.masterId].accs.push(acc);
+  });
+  
+  let html = '<div class="li" onclick="archiveGoBack()" style="cursor:pointer;opacity:0.7;margin-bottom:12px">';
+  html += '<div class="li-ico">←</div>';
+  html += '<div class="li-info"><div class="li-name">Вернуться к режимам</div></div>';
+  html += '</div>';
+  
+  if(!Object.keys(byMaster).length){
+    c.innerHTML = html + '<div class="empty" style="padding:20px 0"><div class="ei">👤</div>Мастеров нет</div>';
+    return;
+  }
+  
+  html += Object.entries(byMaster).map(([masterId, {name, accs}]) => {
+    const totalItems = accs.reduce((sum, a) => sum + a.positions.length, 0);
+    return `<div class="li" onclick="selectArchiveMaster('${masterId}','${name.replace(/'/g,"\\'")}')" style="cursor:pointer">
+      <div class="li-ico" style="background:#1a1e2a">👤</div>
+      <div class="li-info">
+        <div class="li-name">${name}</div>
+        <div class="li-sub">${accs.length} приёмок · ${totalItems} товаров</div>
+      </div>
+    </div>`;
+  }).join('');
+  
+  c.innerHTML = html;
+}
+
+function selectArchiveMaster(masterId, masterName){
+  _archiveSelectedMaster = masterId;
+  _archiveViewLevel = 'dates';
+  _archiveSelectedViewMode = 'masters';
   renderManualAcceptHistory();
 }
 
