@@ -1295,6 +1295,24 @@ function showUpdateBanner(){
 
 <!-- ═══ MODALS ═══ -->
 
+<!-- ВЫБОР РЕЖИМА ПРИЁМКИ -->
+<div class="mo" id="maAcceptanceModeSelectMo">
+  <div class="md"><div class="mh"></div><div class="mt">Выберите тип приёмки товаров</div>
+    <div id="maAcceptanceModeContent" style="padding:20px;display:flex;flex-direction:column;gap:12px">
+      <button onclick="selectMaMode('with_articles')" style="padding:16px;background:var(--s2);border:2px solid var(--border);border-radius:12px;cursor:pointer;font-size:14px;font-weight:700;text-align:center;transition:all 0.2s">
+        <div style="font-size:24px;margin-bottom:6px">📦</div>
+        <div>С артикулами</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:3px;font-weight:400">Каждый товар отдельно</div>
+      </button>
+      <button onclick="selectMaMode('without_articles')" style="padding:16px;background:var(--s2);border:2px solid var(--border);border-radius:12px;cursor:pointer;font-size:14px;font-weight:700;text-align:center;transition:all 0.2s">
+        <div style="font-size:24px;margin-bottom:6px">📚</div>
+        <div>Без артикулов (группы)</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:3px;font-weight:400">Одинаковые товары группой</div>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ADMIN SETUP -->
 <div class="mo" id="adminSetupMo">
   <div class="md"><div class="mh"></div><div class="mt">⚙️ Сотрудники</div>
@@ -8504,18 +8522,40 @@ function setPendSubTab(tab){
 }
 
 let _maDraftId = null;
+let _maModeSelect = null; // 'with_articles' или 'without_articles'
+
 function openManualAcceptMo(){
+  // Сначала показываем выбор режима
+  showMaAcceptanceModeSelect();
+}
+
+function showMaAcceptanceModeSelect(){
+  const c = document.getElementById('maAcceptanceModeContent');
+  if(!c) return;
+  openMo('maAcceptanceModeSelectMo');
+}
+
+function selectMaMode(mode){
+  _maModeSelect = mode;
+  closeMo('maAcceptanceModeSelectMo');
+  
+  // Теперь открываем форму приёмки
   const sel = document.getElementById('maMaster');
   if(sel) sel.innerHTML = '<option value="">— Выберите мастера —</option>' + getEmployees().filter(e=>e.role==='мастер').map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
   document.getElementById('maDate').value = new Date().toISOString().slice(0,10);
   _maItems = [];
   _maToggled = new Set();
   _maDraftId = uid();
+  logAction('manual_acceptance_started', {draftId: _maDraftId, mode: _maModeSelect});
+  addMaItemRow();
+  renderMaItemsList();
+  openMo('manualAcceptMo');
+}
+  _maDraftId = uid();
   logAction('manual_acceptance_started', {draftId: _maDraftId}); // момент, когда кладовщик начал вносить эту приёмку
   addMaItemRow(); // одна строка по умолчанию
   renderMaItemsList();
   openMo('manualAcceptMo');
-}
 
 // Следующий сквозной номер артикула по базе товаров мастерской (древесина)
 // ════════ ПРОВЕРКА ДУБЛЕЙ ПО АРТИКУЛУ ════════
@@ -8637,33 +8677,82 @@ function renderMaItemsList(){
   const c = document.getElementById('maItemsList'); if(!c) return;
   c.innerHTML = _maItems.map((it,i)=>{
     const isLast = i === _maItems.length-1;
-    let collapsed = !isLast; // по умолчанию: все, кроме последней (текущей), свёрнуты
-    if(_maToggled.has(it.rid)) collapsed = !collapsed; // ручное переключение
+    let collapsed = !isLast;
+    if(_maToggled.has(it.rid)) collapsed = !collapsed;
 
     if(collapsed){
       const statusIcon = it.status==='defect' ? '⚠️' : '✅';
+      const displayQty = _maModeSelect === 'without_articles' && it.qty ? ` · ${it.qty}шт` : '';
       return `<div onclick="toggleMaItemCollapse('${it.rid}')" style="background:var(--s2);border-radius:12px;padding:10px 12px;margin-bottom:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;cursor:pointer">
         <div style="display:flex;align-items:center;gap:8px;min-width:0">
           <span style="font-size:14px">${statusIcon}</span>
           <div style="min-width:0">
-            <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${it.name||'Позиция '+(i+1)}${it.artikul?' · '+it.artikul:''}</div>
-            <div style="font-size:11px;color:var(--t2)">${it.wood||'—'} · ₽${fmt(it.price||0)}</div>
+            <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${it.name||'Позиция '+(i+1)}${it.artikul && _maModeSelect !== 'without_articles'?' · '+it.artikul:''}${displayQty}</div>
+            <div style="font-size:11px;color:var(--t2)">${it.wood||'—'} · ₽${fmt((it.price||0)*(parseInt(it.qty,10)||1))}</div>
           </div>
         </div>
         <span style="font-size:14px;color:var(--t2);flex-shrink:0">✏️</span>
       </div>`;
     }
 
-    return `
+    let html = `
     <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:10px;border:1px solid var(--border)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <span style="font-size:11px;color:var(--t2);font-weight:700">Позиция ${i+1}</span>
         <div style="display:flex;gap:6px">
           ${!isLast?`<button onclick="toggleMaItemCollapse('${it.rid}')" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px" title="Свернуть">︿</button>`:''}
-          <button onclick="copyMaItemRow('${it.rid}')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:16px" title="Копировать (наименование и древесина)">📋</button>
+          <button onclick="copyMaItemRow('${it.rid}')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:16px" title="Копировать">📋</button>
           ${_maItems.length>1?`<button onclick="removeMaItemRow('${it.rid}')" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>`:''}
         </div>
+      </div>`;
+
+    if(_maModeSelect === 'without_articles'){
+      // РЕЖИМ БЕЗ АРТИКУЛОВ: Количество, Название, Порода, Цена за 1 шт, ЗП за 1 шт, ИТОГО
+      html += `
+      <div class="fg" style="margin-bottom:8px;background:rgba(192,255,96,0.1);border:2px solid var(--accent);border-radius:10px;padding:10px">
+        <label class="fl" style="color:var(--accent);font-weight:700">📦 Количество изделий</label>
+        <input class="fi" type="number" min="1" value="${it.qty||1}" oninput="updateMaItem('${it.rid}','qty',this.value);renderMaItemsList()" 
+          autocomplete="off" style="font-size:16px;font-weight:700;color:var(--accent)">
       </div>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;position:relative">
+            <input class="fi" id="maName_${it.rid}" value="${(it.name||'').replace(/"/g,'&quot;')}" placeholder="Начните вводить..." autocomplete="off"
+              oninput="updateMaItem('${it.rid}','name',this.value);acSuggest('maName_${it.rid}','acPickMaName','${it.rid}')"
+              onclick="acFieldTap('maName_${it.rid}','acPickMaName','${it.rid}')">
+            <div id="maName_${it.rid}_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
+          </div>
+          <button onclick="_maPendingNameTarget='${it.rid}';${it.goodsType==='dr'?'openAddItemNameDrMo':'openAddItemNameMo'}()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+        </div>
+      </div>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">${goodsTypeWoodLabel(it.goodsType||'derevo')}</label>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;position:relative">
+            <input class="fi" id="maWood_${it.rid}" value="${(it.wood||'').replace(/"/g,'&quot;')}" placeholder="${goodsTypeWoodPlaceholder(it.goodsType||'derevo')}" autocomplete="off"
+              oninput="updateMaItem('${it.rid}','wood',this.value);acSuggest('maWood_${it.rid}','acPickMaWood','${it.rid}')"
+              onclick="acFieldTap('maWood_${it.rid}','acPickMaWood','${it.rid}')">
+            <div id="maWood_${it.rid}_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
+          </div>
+          <button onclick="_maPendingWoodTarget='${it.rid}';${it.goodsType==='dr'?'openAddFlavorMo':'openAddWoodMo'}()" style="background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:0 12px;color:var(--t2);cursor:pointer;font-size:14px">＋</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div class="fg"><label class="fl">Цена за 1 шт (₽)</label>
+          <input class="fi" type="number" value="${it.price||''}" oninput="updateMaItem('${it.rid}','price',this.value);renderMaItemsList()" placeholder="0" autocomplete="off">
+        </div>
+        <div class="fg"><label class="fl">ЗП за 1 шт (₽)</label>
+          <input class="fi" type="number" value="${it.zp||''}" oninput="updateMaItem('${it.rid}','zp',this.value);renderMaItemsList()" placeholder="0" autocomplete="off">
+        </div>
+      </div>
+      <div style="background:var(--s1);border:2px solid var(--a5);border-radius:10px;padding:12px;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--t2);margin-bottom:8px;font-weight:700">📊 ИТОГО ПО ПОЗИЦИИ:</div>
+        <div class="at-row"><span class="at-lbl">Кол-во</span><span class="at-val" style="color:var(--accent);font-weight:700">${parseInt(it.qty,10)||1} шт</span></div>
+        <div class="at-row"><span class="at-lbl">Сумма товаров</span><span class="at-val" style="color:var(--accent);font-weight:700">₽${fmt((it.price||0)*(parseInt(it.qty,10)||1))}</span></div>
+        <div class="at-row"><span class="at-lbl">Сумма ЗП</span><span class="at-val" style="color:var(--a5);font-weight:700">₽${fmt((it.zp||0)*(parseInt(it.qty,10)||1))}</span></div>
+      </div>`;
+    } else {
+      // РЕЖИМ С АРТИКУЛАМИ: как было
+      html += `
       <div class="fg" style="margin-bottom:8px;background:rgba(192,255,96,0.1);border:2px solid var(--accent);border-radius:10px;padding:10px">
         <label class="fl" style="color:var(--accent);font-weight:700">📦 Количество одинаковых изделий</label>
         <input class="fi" type="number" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" onblur="finalizeMaQty()" placeholder="1"
@@ -8684,7 +8773,6 @@ function renderMaItemsList(){
           placeholder="${it.artikulMode==='none'?'—':'Номер артикула'}"
           style="${it.artikulMode==='none'?'opacity:0.6':''}"
           autocomplete="off">
-        <!-- НОВОЕ! ПОЛЕ С ПОСЛЕДНИМ НОМЕРОМ ДЛЯ АВТО РЕЖИМА -->
         ${it.artikulMode==='auto'?`
           <div style="background:var(--s1);border-radius:10px;padding:10px;margin-top:8px;border:1px solid var(--accent)">
             <div style="font-size:11px;color:var(--t2);margin-bottom:4px">📍 Начать отсчёт с номера:</div>
@@ -8696,7 +8784,7 @@ function renderMaItemsList(){
               autocomplete="off"
               style="font-weight:700;color:var(--accent)">
           </div>
-        `:``}
+        `:''}
         ${(parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto' ? `<div style="font-size:11px;color:var(--accent);margin-top:5px;background:rgba(192,255,96,0.1);padding:8px;border-radius:8px">✓ Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}</div>` : ''}
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Категория товара</label>
@@ -8733,7 +8821,10 @@ function renderMaItemsList(){
           <input class="fi" type="number" value="${it.price||''}" oninput="updateMaItem('${it.rid}','price',this.value)" placeholder="0"
             autocomplete="off">
         </div>
-      </div>
+      </div>`;
+    }
+
+    html += `
       <div style="display:flex;gap:8px;margin-top:8px">
         <button onclick="setMaItemStatus('${it.rid}','accepted')"
           style="flex:1;padding:9px;border-radius:8px;border:1px solid ${it.status==='accepted'?'var(--inc)':'var(--border)'};background:${it.status==='accepted'?'rgba(80,255,150,0.15)':'var(--s1)'};color:${it.status==='accepted'?'var(--inc)':'var(--t2)'};font-size:12px;font-weight:700;cursor:pointer">
@@ -8745,8 +8836,10 @@ function renderMaItemsList(){
         </button>
       </div>
     </div>`;
+    return html;
   }).join('');
 }
+
 
 function setMaItemStatus(rid, status){
   const it = _maItems.find(x=>x.rid===rid); if(!it) return;
@@ -8877,18 +8970,42 @@ async function saveManualAccept(){
   const batchId = uid();
 
   const positions = [];
-  _maItems.forEach(it=>{
-    const qty = parseInt(it.qty,10)||1;
-    const baseArtikul = parseInt(it.artikul,10);
-    for(let i=0;i<qty;i++){
-      let artikul = it.artikul||'';
-      if(it.artikulMode==='auto' && !isNaN(baseArtikul)) artikul = String(baseArtikul+i);
+  
+  if(_maModeSelect === 'without_articles'){
+    // Режим БЕЗ артикулов: один товар = одна позиция с qty
+    _maItems.forEach(it=>{
       positions.push({
-        rid: qty>1 ? uid() : it.rid, artikul, name: it.name, wood: it.wood, goodsType: it.goodsType||'derevo',
-        zp: it.zp||0, price: it.price||0, status: it.status || 'accepted' // сразу принято/брак, выбрано кладовщиком в момент внесения
+        rid: it.rid, 
+        name: it.name, 
+        wood: it.wood, 
+        goodsType: it.goodsType||'derevo',
+        qty: parseInt(it.qty,10)||1, // КОЛИЧЕСТВО СОХРАНЯЕТСЯ
+        zp: parseFloat(it.zp)||0, // ЗП ЗА 1 ШТ
+        price: parseFloat(it.price)||0, // ЦЕНА ЗА 1 ШТ
+        status: it.status || 'accepted'
       });
-    }
-  });
+    });
+  } else {
+    // Режим С артикулами: как было - каждый qty создаёт отдельные позиции
+    _maItems.forEach(it=>{
+      const qty = parseInt(it.qty,10)||1;
+      const baseArtikul = parseInt(it.artikul,10);
+      for(let i=0;i<qty;i++){
+        let artikul = it.artikul||'';
+        if(it.artikulMode==='auto' && !isNaN(baseArtikul)) artikul = String(baseArtikul+i);
+        positions.push({
+          rid: qty>1 ? uid() : it.rid, 
+          artikul, 
+          name: it.name, 
+          wood: it.wood, 
+          goodsType: it.goodsType||'derevo',
+          zp: parseFloat(it.zp)||0, // ЦЕНА ОБЩАЯ (как было)
+          price: parseFloat(it.price)||0, // ЗП ОБЩАЯ (как было)
+          status: it.status || 'accepted'
+        });
+      }
+    });
+  }
 
   beginSave('maAccept');
   try{
@@ -8898,6 +9015,7 @@ async function saveManualAccept(){
       createdBy: session.name, createdById: session.id,
       createdAt: now(),
       status: 'open', // open → done (после "Провести")
+      mode: _maModeSelect || 'with_articles', // режим приёмки
       positions
     });
     // Логирование в аудит
