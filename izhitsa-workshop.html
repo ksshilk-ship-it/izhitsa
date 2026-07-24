@@ -755,8 +755,6 @@ function showUpdateBanner(){
     </div>
   </div>
 
-  </div>
-
   <!-- ИНВЕНТАРИЗАЦИЯ (кладовщик) -->
   <div class="page" id="pg-inventory">
     <div id="hubBack_inventory" style="display:none;margin-bottom:8px"><span onclick="showPg('goods',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Товар</span></div>
@@ -9146,18 +9144,14 @@ function renderDateItems(c){
   }
   
   const accsForDate = _maHistory.filter(acc => acc.deliveredDate === _archiveSelectedDate);
-  
   const [year, month, day] = _archiveSelectedDate.split('-');
-  const dateFormatted = `${day}/${month}/${year}`;
+  const dateFormatted = day + '/' + month + '/' + year;
   
   // Сгруппировать приёмки по мастерам
   const byMaster = {};
   accsForDate.forEach(acc => {
     if(!byMaster[acc.masterId]) {
-      byMaster[acc.masterId] = {
-        name: acc.masterName,
-        accs: []
-      };
+      byMaster[acc.masterId] = { name: acc.masterName, accs: [] };
     }
     byMaster[acc.masterId].accs.push(acc);
   });
@@ -9175,59 +9169,73 @@ function renderDateItems(c){
   const acceptedCount = allItems.filter(p => p.status === 'accepted').length;
   const defectCount = allItems.filter(p => p.status === 'defect').length;
   
-  c.innerHTML = `<div class="li" onclick="archiveGoBack()" style="cursor:pointer;opacity:0.7;margin-bottom:12px">
-    <div class="li-ico">←</div>
-    <div class="li-info"><div class="li-name">Вернуться к датам</div></div>
-  </div>
-  <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:12px;font-size:12px">
-    <div class="at-row"><span class="at-lbl">Дата</span><span class="at-val">${dateFormatted}</span></div>
-    <div class="at-row"><span class="at-lbl">Приёмок</span><span class="at-val">${accsForDate.length}</span></div>
-    <div class="at-row"><span class="at-lbl">Товаров</span><span class="at-val">${allItems.length} шт</span></div>
-    <div class="at-row"><span class="at-lbl">Принято</span><span class="at-val" style="color:var(--inc)">${acceptedCount} ✅</span></div>
-    <div class="at-row"><span class="at-lbl">Брак</span><span class="at-val" style="color:var(--exp)">${defectCount} ⚠️</span></div>
-    <div class="at-row"><span class="at-lbl">Сумма товаров</span><span class="at-val" style="color:var(--accent)">${fmt(totalPrice)} ₽</span></div>
-    <div class="at-row"><span class="at-lbl">Сумма ЗП</span><span class="at-val" style="color:var(--a5)">${fmt(totalZP)} ₽</span></div>
-  </div>` +
+  let html = '<div class="li" onclick="archiveGoBack()" style="cursor:pointer;opacity:0.7;margin-bottom:12px">';
+  html += '<div class="li-ico">←</div>';
+  html += '<div class="li-info"><div class="li-name">Вернуться к датам</div></div>';
+  html += '</div>';
+  html += '<div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:12px;font-size:12px">';
+  html += '<div class="at-row"><span class="at-lbl">Дата</span><span class="at-val">' + dateFormatted + '</span></div>';
+  html += '<div class="at-row"><span class="at-lbl">Приёмок</span><span class="at-val">' + accsForDate.length + '</span></div>';
+  html += '<div class="at-row"><span class="at-lbl">Товаров</span><span class="at-val">' + allItems.length + ' шт</span></div>';
+  html += '<div class="at-row"><span class="at-lbl">Принято</span><span class="at-val" style="color:var(--inc)">' + acceptedCount + ' ✅</span></div>';
+  html += '<div class="at-row"><span class="at-lbl">Брак</span><span class="at-val" style="color:var(--exp)">' + defectCount + ' ⚠️</span></div>';
+  html += '<div class="at-row"><span class="at-lbl">Сумма товаров</span><span class="at-val" style="color:var(--accent)">' + fmt(totalPrice) + ' ₽</span></div>';
+  html += '<div class="at-row"><span class="at-lbl">Сумма ЗП</span><span class="at-val" style="color:var(--a5)">' + fmt(totalZP) + ' ₽</span></div>';
+  html += '</div>';
+  
   // Для каждого мастера
-  Object.entries(byMaster).map(([masterId, {name, accs}]) => {
+  Object.entries(byMaster).forEach(([masterId, {name, accs}]) => {
     const masterPrice = accs.reduce((sum, acc) => sum + acc.positions.reduce((s, p) => s + (p.price || 0), 0), 0);
     const masterZP = accs.reduce((sum, acc) => sum + acc.positions.reduce((s, p) => s + (p.zp || 0), 0), 0);
     const masterItemCount = accs.reduce((sum, acc) => sum + acc.positions.length, 0);
     
-    return `
-    <div style="background:var(--s1);border-radius:12px;padding:12px;margin-bottom:12px;border:1px solid var(--border)">
-      <div style="font-weight:700;font-size:13px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
-        <span>👤 ${name}</span>
-        <span style="font-size:11px;color:var(--t2);font-weight:400">${accs.length} приёмок · ${masterItemCount} шт</span>
-      </div>
-      <div style="background:var(--s2);border-radius:10px;padding:10px;margin-bottom:8px;font-size:11px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div><span style="color:var(--t2)">Сумма:</span> <span style="color:var(--accent);font-weight:700">${fmt(masterPrice)} ₽</span></div>
-        <div><span style="color:var(--t2)">ЗП:</span> <span style="color:var(--a5);font-weight:700">${fmt(masterZP)} ₽</span></div>
-      </div>
-      ${accs.map((acc, accIdx) => `
-        <div style="background:var(--s2);border-radius:10px;padding:10px;margin-bottom:8px;border:1px solid var(--border);font-size:11px">
-          <div style="font-weight:700;color:var(--t1);margin-bottom:6px">
-            Приёмка #${accIdx+1}
-            <span style="color:${acc.status==='done'?'var(--inc)':'var(--a4)'}"> · ${acc.status==='done'?'✅ Проведена':'⏳ Открыта'}</span>
-          </div>
-          ${acc.positions.map((pos, posIdx) => `
-            <div style="background:var(--s1);border-radius:8px;padding:8px;margin-bottom:${posIdx === acc.positions.length - 1 ? '0' : '6px'};border:1px solid var(--border)">
-              <div style="font-weight:700;margin-bottom:3px">${pos.name}${pos.artikul?' · '+pos.artikul:''}</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:10px;color:var(--t2)">
-                <div>🌳 ${pos.wood||'—'}</div>
-                <div style="color:${pos.status==='accepted'?'var(--inc)':'var(--exp)}'>${pos.status==='accepted'?'✅ Принято':'⚠️ Брак'}</div>
-              </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px">
-                <div><span style="color:var(--t2);font-size:10px">💰</span> <span style="font-weight:700">${fmt(pos.price)} ₽</span></div>
-                <div><span style="color:var(--t2);font-size:10px">📊</span> <span style="font-weight:700">${fmt(pos.zp)} ₽</span></div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      `).join('')}
-    </div>
-    `;
-  }).join('');
+    html += '<div style="background:var(--s1);border-radius:12px;padding:12px;margin-bottom:12px;border:1px solid var(--border)">';
+    html += '<div style="font-weight:700;font-size:13px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">';
+    html += '<span>👤 ' + name + '</span>';
+    html += '<span style="font-size:11px;color:var(--t2);font-weight:400">' + accs.length + ' приёмок · ' + masterItemCount + ' шт</span>';
+    html += '</div>';
+    html += '<div style="background:var(--s2);border-radius:10px;padding:10px;margin-bottom:8px;font-size:11px;display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+    html += '<div><span style="color:var(--t2)">Сумма:</span> <span style="color:var(--accent);font-weight:700">' + fmt(masterPrice) + ' ₽</span></div>';
+    html += '<div><span style="color:var(--t2)">ЗП:</span> <span style="color:var(--a5);font-weight:700">' + fmt(masterZP) + ' ₽</span></div>';
+    html += '</div>';
+    
+    accs.forEach((acc, accIdx) => {
+      const accStatus = acc.status === 'done' ? 'Проведена' : 'Открыта';
+      const accStatusEmoji = acc.status === 'done' ? '✅' : '⏳';
+      const accColor = acc.status === 'done' ? 'var(--inc)' : 'var(--a4)';
+      
+      html += '<div style="background:var(--s2);border-radius:10px;padding:10px;margin-bottom:8px;border:1px solid var(--border);font-size:11px">';
+      html += '<div style="font-weight:700;color:var(--t1);margin-bottom:6px">';
+      html += 'Приёмка #' + (accIdx+1) + ' <span style="color:' + accColor + '"> · ' + accStatusEmoji + ' ' + accStatus + '</span>';
+      html += '</div>';
+      
+      acc.positions.forEach((pos, posIdx) => {
+        const posStatus = pos.status === 'accepted' ? 'Принято' : 'Брак';
+        const posStatusEmoji = pos.status === 'accepted' ? '✅' : '⚠️';
+        const posStatusColor = pos.status === 'accepted' ? 'var(--inc)' : 'var(--exp)';
+        const posMargin = posIdx === acc.positions.length - 1 ? '0' : '6px';
+        const posArtikul = pos.artikul ? ' · ' + pos.artikul : '';
+        
+        html += '<div style="background:var(--s1);border-radius:8px;padding:8px;margin-bottom:' + posMargin + ';border:1px solid var(--border)">';
+        html += '<div style="font-weight:700;margin-bottom:3px">' + pos.name + posArtikul + '</div>';
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:10px;color:var(--t2)">';
+        html += '<div>🌳 ' + (pos.wood || '—') + '</div>';
+        html += '<div style="color:' + posStatusColor + '">' + posStatusEmoji + ' ' + posStatus + '</div>';
+        html += '</div>';
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px">';
+        html += '<div><span style="color:var(--t2);font-size:10px">💰</span> <span style="font-weight:700">' + fmt(pos.price) + ' ₽</span></div>';
+        html += '<div><span style="color:var(--t2);font-size:10px">📊</span> <span style="font-weight:700">' + fmt(pos.zp) + ' ₽</span></div>';
+        html += '</div>';
+        html += '</div>';
+      });
+      
+      html += '</div>';
+    });
+    
+    html += '</div>';
+  });
+  
+  c.innerHTML = html;
 }
 
 function renderArchiveMasters(c){
