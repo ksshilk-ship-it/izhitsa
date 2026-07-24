@@ -1295,24 +1295,6 @@ function showUpdateBanner(){
 
 <!-- ═══ MODALS ═══ -->
 
-<!-- ВЫБОР РЕЖИМА ПРИЁМКИ -->
-<div class="mo" id="maAcceptanceModeSelectMo">
-  <div class="md"><div class="mh"></div><div class="mt">Выберите тип приёмки товаров</div>
-    <div id="maAcceptanceModeContent" style="padding:20px;display:flex;flex-direction:column;gap:12px">
-      <button onclick="selectMaMode('with_articles')" style="padding:16px;background:var(--s2);border:2px solid var(--border);border-radius:12px;cursor:pointer;font-size:14px;font-weight:700;text-align:center;transition:all 0.2s">
-        <div style="font-size:24px;margin-bottom:6px">📦</div>
-        <div>С артикулами</div>
-        <div style="font-size:11px;color:var(--t2);margin-top:3px;font-weight:400">Каждый товар отдельно</div>
-      </button>
-      <button onclick="selectMaMode('without_articles')" style="padding:16px;background:var(--s2);border:2px solid var(--border);border-radius:12px;cursor:pointer;font-size:14px;font-weight:700;text-align:center;transition:all 0.2s">
-        <div style="font-size:24px;margin-bottom:6px">📚</div>
-        <div>Без артикулов (группы)</div>
-        <div style="font-size:11px;color:var(--t2);margin-top:3px;font-weight:400">Одинаковые товары группой</div>
-      </button>
-    </div>
-  </div>
-</div>
-
 <!-- ADMIN SETUP -->
 <div class="mo" id="adminSetupMo">
   <div class="md"><div class="mh"></div><div class="mt">⚙️ Сотрудники</div>
@@ -8522,40 +8504,19 @@ function setPendSubTab(tab){
 }
 
 let _maDraftId = null;
-let _maModeSelect = null; // 'with_articles' или 'without_articles'
-
 function openManualAcceptMo(){
-  // Сначала показываем выбор режима
-  showMaAcceptanceModeSelect();
-}
-
-function showMaAcceptanceModeSelect(){
-  const c = document.getElementById('maAcceptanceModeContent');
-  if(!c) return;
-  openMo('maAcceptanceModeSelectMo');
-}
-
-function selectMaMode(mode){
-  _maModeSelect = mode;
-  closeMo('maAcceptanceModeSelectMo');
-  
-  // Теперь открываем форму приёмки
   const sel = document.getElementById('maMaster');
   if(sel) sel.innerHTML = '<option value="">— Выберите мастера —</option>' + getEmployees().filter(e=>e.role==='мастер').map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
   document.getElementById('maDate').value = new Date().toISOString().slice(0,10);
   _maItems = [];
   _maToggled = new Set();
   _maDraftId = uid();
-  logAction('manual_acceptance_started', {draftId: _maDraftId, mode: _maModeSelect});
+  _maModeSelect = 'with_articles'; // по умолчанию режим с артикулами
+  logAction('manual_acceptance_started', {draftId: _maDraftId});
   addMaItemRow();
   renderMaItemsList();
   openMo('manualAcceptMo');
 }
-  _maDraftId = uid();
-  logAction('manual_acceptance_started', {draftId: _maDraftId}); // момент, когда кладовщик начал вносить эту приёмку
-  addMaItemRow(); // одна строка по умолчанию
-  renderMaItemsList();
-  openMo('manualAcceptMo');
 
 // Следующий сквозной номер артикула по базе товаров мастерской (древесина)
 // ════════ ПРОВЕРКА ДУБЛЕЙ ПО АРТИКУЛУ ════════
