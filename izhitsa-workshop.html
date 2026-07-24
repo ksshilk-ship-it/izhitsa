@@ -9017,6 +9017,65 @@ async function saveManualAccept(){
   finally{ endSave('maAccept'); }
 }
 
+// ════ ПРЕОБРАЗОВАНИЕ ПРИЁМКИ ИЗ РЕЖИМА "С АРТИКУЛАМИ" В "БЕЗ АРТИКУЛОВ" ════
+async function convertMaAcceptanceToNoArticlesMode(accId){
+  const acc = _maHistory.find(a=>a.id===accId);
+  if(!acc) return;
+  
+  if(!confirm(`Преобразовать приёмку от ${acc.masterName} в режим "без артикулов"?\n\nТовары будут сгруппированы по наименованию и цене.`)) return;
+  
+  if(isSaving('maConvert')) return;
+  beginSave('maConvert');
+  
+  try{
+    // Сгруппировать позиции
+    const grouped = {};
+    acc.positions.forEach(p => {
+      const key = `${p.name}|${p.price}|${p.zp}|${p.wood}`;
+      if(!grouped[key]) {
+        grouped[key] = {
+          name: p.name,
+          wood: p.wood,
+          goodsType: p.goodsType || 'derevo',
+          price: p.price,
+          zp: p.zp,
+          qty: 0,
+          status: p.status
+        };
+      }
+      grouped[key].qty += (p.qty || 1);
+    });
+    
+    const newPositions = Object.values(grouped).map(g => ({
+      rid: uid(),
+      name: g.name,
+      wood: g.wood,
+      goodsType: g.goodsType,
+      price: g.price,
+      zp: g.zp,
+      qty: g.qty,
+      status: g.status
+    }));
+    
+    await db.collection('ws_master_acceptances').doc(accId).update({
+      mode: 'without_articles',
+      positions: newPositions
+    });
+    
+    acc.mode = 'without_articles';
+    acc.positions = newPositions;
+    
+    logAction('acceptance_converted_to_no_articles', {accId, masterName: acc.masterName, newGroupsCount: newPositions.length});
+    showSavedBanner(`✅ Приёмка преобразована · ${newPositions.length} групп товаров`);
+    openMaDetail(accId);
+    renderManualAcceptHistory();
+  }catch(e){
+    showToast('❌ Ошибка: '+e.message);
+  }finally{
+    endSave('maConvert');
+  }
+}
+
 // ════ ПРОВЕДЕНИЕ ПРИЁМКИ: ЗАВЕРШАЕТ ПРОЦЕСС И ПЕРЕВОДИТ ТОВАР НА СКЛАД ════
 async function finalizeMaAcceptance(accId){
   const acc = _maHistory.find(a=>a.id===accId);
@@ -9581,7 +9640,12 @@ function openMaDetail(accId){
         </div>
         <div class="fg"><label class="fl">Дата сдачи</label>
           <input class="fi" type="date" value="${acc.deliveredDate||''}" onchange="updateMaAccDate('${acc.id}',this.value)">
-        </div>`;
+        </div>
+        ${session && session.role==='администратор' && acc.mode !== 'without_articles' ? `
+          <button onclick="convertMaAcceptanceToNoArticlesMode('${acc.id}')" style="width:100%;padding:10px;background:linear-gradient(135deg,var(--a2),#d4a574);border:none;border-radius:10px;color:#000;font-weight:700;font-size:12px;cursor:pointer;margin-top:8px">
+            📚 Преобразовать в режим "без артикулов"
+          </button>
+        ` : ''}`;
     } else {
       h.innerHTML = summaryHtml;
     }
