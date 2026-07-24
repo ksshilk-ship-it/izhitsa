@@ -1849,7 +1849,7 @@ let session = JSON.parse(sessionStorage.getItem('ws_session')||'null');
 let _adminViewingRole = null; // НОВОЕ! Роль которую администратор просматривает
 
 // ════ ВЕРСИОНИРОВАНИЕ ПРИЛОЖЕНИЯ ════
-const APP_VERSION = '1.2.0'; // Текущая версия приложения
+const APP_VERSION = '1.2.2'; // Текущая версия приложения
 let _remoteVersion = null; // Версия на сервере (Firebase)
 let _updateAvailable = false; // Есть ли обновление
 
@@ -9077,41 +9077,19 @@ async function convertMaAcceptanceToNoArticlesMode(accId){
 }
 
 // ════ ПРОВЕДЕНИЕ ПРИЁМКИ: ЗАВЕРШАЕТ ПРОЦЕСС И ПЕРЕВОДИТ ТОВАР НА СКЛАД ════
-async function finalizeMaAcceptance(accId){
-  const acc = _maHistory.find(a=>a.id===accId);
-  if(!acc){ showToast('Приёмка не найдена'); return; }
-  if(acc.status==='done'){ showToast('✅ Приёмка уже проведена'); return; }
-  
-  if(!confirm(`Провести приёмку от ${acc.masterName}?\n${acc.positions.length} изделий будут приняты на склад.`)) return;
-  
-  if(isSaving('maFinalize')) return;
-  beginSave('maFinalize');
-  
-  try{
-    // Обновляем статус приёмки на 'done' — это закрывает приёмку, товар переходит на склад
-    await db.collection('ws_master_acceptances').doc(accId).update({
-      status: 'done',
-      concludedAt: now(),
-      concludedBy: session.name
-    });
-    
-    // Логирование в аудит
-    logAction('acceptance_finalized', {accId, masterName: acc.masterName, count: acc.positions.length});
-    
-    showToast(`✅ Приёмка от ${acc.masterName} проведена · ${acc.positions.length} изделий на склад`);
-    renderManualAcceptHistory();
-  }catch(e){
-    showToast('❌ Ошибка при проведении: '+e.message);
-  }finally{
-    endSave('maFinalize');
-  }
-}
-
 // ════ ПРОВЕДЕНИЕ ПРИЁМКИ: ЗАВЕРШАЕТ ПРОЦЕСС И ПЕРЕВОДИТ ТОВАР НА СКЛАД ════
 async function finalizeMaAcceptance(accId){
   const acc = _maHistory.find(a=>a.id===accId);
   if(!acc){ showToast('Приёмка не найдена'); return; }
   if(acc.status==='done'){ showToast('✅ Приёмка уже проведена'); return; }
+  
+  // Сначала сохраняем все текущие изменения позиций (включая qty)
+  try {
+    await db.collection('ws_master_acceptances').doc(accId).update({positions: acc.positions});
+  } catch(e) {
+    showToast('❌ Ошибка при сохранении позиций: '+e.message);
+    return;
+  }
   
   if(!confirm(`Провести приёмку от ${acc.masterName}?\n${acc.positions.length} изделий будут приняты на склад.`)) return;
   
@@ -9127,9 +9105,11 @@ async function finalizeMaAcceptance(accId){
     });
     
     // Логирование
-    logAction('acceptance_finalized', {accId, masterName: acc.masterName, count: acc.positions.length});
+    const totalItems = acc.positions.reduce((s,p)=>s+(p.qty||1),0);
+    const totalPrice = acc.positions.reduce((s,p)=>s+((p.price||0)*(p.qty||1)),0);
+    logAction('acceptance_finalized', {accId, masterName: acc.masterName, positions: acc.positions.length, totalItems, totalPrice});
     
-    showToast(`✅ Приёмка от ${acc.masterName} проведена · ${acc.positions.length} изделий на склад`);
+    showToast(`✅ Приёмка от ${acc.masterName} проведена · ${totalItems} изделий на склад`);
     renderManualAcceptHistory();
   }catch(e){
     showToast('Ошибка при проведении: '+e.message);
