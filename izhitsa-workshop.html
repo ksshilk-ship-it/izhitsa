@@ -9261,6 +9261,12 @@ function selectArchiveDate(accId){
   renderManualAcceptHistory();
 }
 
+function selectArchiveDateFromDateView(dateStr){
+  _archiveSelectedDate = dateStr;
+  _archiveViewLevel = 'dateItems';
+  renderManualAcceptHistory();
+}
+
 // ═══ УРОВЕНЬ 4: ТОВАРЫ ПРИЁМКИ ═══
 function renderArchiveItems(c){
   if(!_archiveSelectedDate){
@@ -9333,14 +9339,17 @@ function archiveGoBack(){
   if(_archiveViewLevel === 'mode'){
     _archiveViewLevel = 'periods';
     _archiveSelectedPeriod = null;
-  } else if(_archiveViewLevel === 'dates' || _archiveViewLevel === 'masters'){
-    _archiveViewLevel = 'mode';
+  } else if(_archiveViewLevel === 'dates'){
+    // Вернуться от списка (мастера или даты) к режимам
     _archiveSelectedMaster = null;
+    _archiveViewLevel = 'mode';
   } else if(_archiveViewLevel === 'dateItems'){
+    // Вернуться от товаров за дату к датам
     _archiveViewLevel = 'dates';
     _archiveSelectedDate = null;
   } else if(_archiveViewLevel === 'items'){
-    _archiveViewLevel = 'masters';
+    // Вернуться от товаров за приёмку к датам мастера
+    _archiveViewLevel = 'dates';
     _archiveSelectedDate = null;
   }
   renderManualAcceptHistory();
