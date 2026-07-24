@@ -8628,6 +8628,13 @@ function renderMaItemsList(){
           ${_maItems.length>1?`<button onclick="removeMaItemRow('${it.rid}')" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>`:''}
         </div>
       </div>
+      <div class="fg" style="margin-bottom:8px;background:rgba(192,255,96,0.1);border:2px solid var(--accent);border-radius:10px;padding:10px">
+        <label class="fl" style="color:var(--accent);font-weight:700">📦 Количество одинаковых изделий</label>
+        <input class="fi" type="number" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" onblur="finalizeMaQty()" placeholder="1"
+          autocomplete="off" style="font-size:16px;font-weight:700;color:var(--accent)">
+        <div style="font-size:11px;color:var(--t2);margin-top:6px">💡 Заполните остальные поля один раз, укажите кол-во — получится целая пачка</div>
+        ${(parseInt(it.qty,10)||1)>1 ? `<div style="font-size:11px;color:var(--inc);margin-top:5px;background:rgba(80,255,150,0.1);padding:6px;border-radius:6px">✓ Будет добавлено: ${parseInt(it.qty,10)} шт одинаковых</div>` : ''}
+      </div>
       <div class="fg" style="margin-bottom:8px">
         <label class="fl">Артикул</label>
         <div style="display:flex;gap:6px;margin-bottom:6px">
@@ -8655,11 +8662,6 @@ function renderMaItemsList(){
           </div>
         `:``}
         ${(parseInt(it.qty,10)||1)>1 && it.artikulMode==='auto' ? `<div style="font-size:11px;color:var(--accent);margin-top:5px;background:rgba(192,255,96,0.1);padding:8px;border-radius:8px">✓ Будет присвоено: ${it.artikul}–${(parseInt(it.artikul,10)||0)+(parseInt(it.qty,10)||1)-1}</div>` : ''}
-      </div>
-      <div class="fg" style="margin-bottom:8px"><label class="fl">Количество одинаковых изделий</label>
-        <input class="fi" type="number" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" onblur="finalizeMaQty()" placeholder="1"
-          autocomplete="off">
-        <div style="font-size:11px;color:var(--t2);margin-top:4px">Если сдано несколько одинаковых изделий по одной цене — укажите количество, остальные поля заполните один раз</div>
       </div>
       <div class="fg" style="margin-bottom:8px"><label class="fl">Категория товара</label>
         ${goodsTypeToggleHtml(`setMaItemGoodsType('${it.rid}',`, it.goodsType||'derevo')}
@@ -9225,19 +9227,37 @@ function openMaDetail(accId){
 
   c.innerHTML = acc.positions.map((p,i)=>`
     <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--t2);font-weight:700;margin-bottom:8px">Позиция ${i+1}</div>
       ${isEditable ? `
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
-          <input class="fi" style="font-size:12px;padding:8px" value="${p.artikul||''}" placeholder="Артикул" inputmode="decimal" onchange="updateMaPosField('${acc.id}','${p.rid}','artikul',this.value)">
-          <input class="fi" style="font-size:12px;padding:8px" value="${p.name||''}" placeholder="Наименование" onchange="updateMaPosField('${acc.id}','${p.rid}','name',this.value)">
+        <div class="fg" style="margin-bottom:8px">
+          <label class="fl">Артикул</label>
+          <input class="fi" style="font-size:14px" value="${p.artikul||''}" placeholder="Номер артикула (опционально)" inputmode="decimal" onchange="updateMaPosField('${acc.id}','${p.rid}','artikul',this.value)">
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
-          <input class="fi" style="font-size:12px;padding:8px" value="${p.wood||''}" placeholder="${goodsTypeWoodLabel(p.goodsType||'derevo')}" onchange="updateMaPosField('${acc.id}','${p.rid}','wood',this.value)">
-          <input class="fi" style="font-size:12px;padding:8px" type="number" value="${p.price||0}" placeholder="Цена" onchange="updateMaPosField('${acc.id}','${p.rid}','price',this.value)">
-          <input class="fi" style="font-size:12px;padding:8px" type="number" value="${p.zp||0}" placeholder="ЗП" onchange="updateMaPosField('${acc.id}','${p.rid}','zp',this.value)">
+        <div class="fg" style="margin-bottom:8px">
+          <label class="fl">Наименование</label>
+          <input class="fi" style="font-size:14px" value="${p.name||''}" placeholder="Как называется изделие" onchange="updateMaPosField('${acc.id}','${p.rid}','name',this.value)">
+        </div>
+        <div class="fg" style="margin-bottom:8px">
+          <label class="fl">${goodsTypeWoodLabel(p.goodsType||'derevo')}</label>
+          <input class="fi" style="font-size:14px" value="${p.wood||''}" placeholder="${goodsTypeWoodPlaceholder(p.goodsType||'derevo')}" onchange="updateMaPosField('${acc.id}','${p.rid}','wood',this.value)">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div class="fg">
+            <label class="fl">Розничная цена (₽)</label>
+            <input class="fi" style="font-size:14px" type="number" value="${p.price||0}" placeholder="Цена товара" onchange="updateMaPosField('${acc.id}','${p.rid}','price',this.value)">
+          </div>
+          <div class="fg">
+            <label class="fl">ЗП мастеру (₽)</label>
+            <input class="fi" style="font-size:14px" type="number" value="${p.zp||0}" placeholder="Зарплата" onchange="updateMaPosField('${acc.id}','${p.rid}','zp',this.value)">
+          </div>
         </div>
       ` : `
-        <div style="font-size:13px;font-weight:700">${p.name}${p.artikul?' · '+p.artikul:''}</div>
-        <div style="font-size:11px;color:var(--t2);margin:3px 0">🌳 ${p.wood||'—'} · ЗП: ${fmt(p.zp)} · Цена: ${fmt(p.price)}</div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:6px">${p.name}${p.artikul?' · '+p.artikul:''}</div>
+        <div style="font-size:12px;color:var(--t2);margin:3px 0 6px 0;display:grid;gap:3px">
+          <div><span style="color:var(--t1);font-weight:600">🌳 ${goodsTypeWoodLabel(p.goodsType||'derevo')}:</span> ${p.wood||'—'}</div>
+          <div><span style="color:var(--t1);font-weight:600">💰 Цена:</span> ${fmt(p.price)} ₽</div>
+          <div><span style="color:var(--t1);font-weight:600">📊 ЗП мастеру:</span> ${fmt(p.zp)} ₽</div>
+        </div>
       `}
       <div style="display:flex;gap:8px;margin-top:8px">
         <button onclick="setMaPosStatus('${acc.id}','${p.rid}','accepted')"
