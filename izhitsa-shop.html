@@ -2037,7 +2037,7 @@ document.addEventListener('DOMContentLoaded', _renderConnStatus);
 <div class="toast" id="toast"></div>
 <!-- Firebase SDK загружается асинхронно через _loadFirebaseSDK() -->
 <script>
-var APP_BUILD_VERSION = '07.17.35';
+var APP_BUILD_VERSION = '07.17.36';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -9514,6 +9514,27 @@ function svManInvUpdateTotal(){
   var total = _svManInv.items.reduce(function(sum,it){ return sum+(it.price||0)*(it.qty||1); },0);
   totalEl.textContent = fmt(total);
 }
+function _addReceiveToShift(shift, items, goodsType, opts){
+  opts = opts || {};
+  var isDr = goodsType==='dr';
+  var totalAmt = items.reduce(function(sum,it){ return sum+(it.price||0)*(it.qty||1); },0);
+  var rcvEntry = {
+    id: uid(), type:'receive', ts: shift.date+'T'+(new Date().toTimeString().slice(0,8)), icon:'📥',
+    label: opts.invNum ? ('Приёмка '+opts.invNum+(isDr?' (ДР)':'')) : ('Приход'+(isDr?' (ДР)':'')),
+    sub: items.length+' изд.'+(opts.from?' · от '+opts.from:'')+(opts.subSuffix?(' · '+opts.subSuffix):''),
+    amount: totalAmt, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
+    goodsType: goodsType,
+    goodsEffect: isDr?0:totalAmt, goodsDrEffect: isDr?totalAmt:0,
+    items: items
+  };
+  if(opts.invId) rcvEntry.invId = opts.invId;
+  var jnl = shift.journal||[];
+  jnl.push(rcvEntry);
+  shift.journal = jnl;
+  _recordJournalEntryIndependently(rcvEntry, shift.shopName, 'receive');
+  try{ stockApplyReceive(shift.shopName, items.map(function(it){ return {num:it.article,name:it.name,price:it.price,qty:it.qty,species:it.species,goodsType:goodsType}; }), shift.date, goodsType); }catch(e){}
+  return rcvEntry;
+}
 function svSaveManualInvIntoShift(){
   if(!_svManInv || !_currentShiftView) return;
   var s = _svManInv;
@@ -9550,19 +9571,7 @@ function svSaveManualInvIntoShift(){
   });
   if(s.from) saveSupplier(s.from);
   items.forEach(function(it){ autoSaveToItemBase(it.name, it.article, it.price, isDr?'dr':'derevo'); });
-  var rcvEntry = {
-    id:uid(), type:'receive', ts:s.date+'T'+(new Date().toTimeString().slice(0,8)), icon:'📥',
-    label:'Приёмка '+s.num+(isDr?' (ДР)':''), sub:items.length+' изд.'+(s.from?' · от '+s.from:'')+' · внесено вручную',
-    amount:totalAmt, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
-    goodsType: s.goodsType,
-    goodsEffect: isDr?0:totalAmt, goodsDrEffect: isDr?totalAmt:0,
-    invId: inv.id
-  };
-  var jnl = _currentShiftView.journal||[];
-  jnl.push(rcvEntry);
-  _currentShiftView.journal = jnl;
-  _recordJournalEntryIndependently(rcvEntry, _currentShiftView.shopName, 'receive');
-  try{ stockApplyReceive(_currentShiftView.shopName, items.map(function(it){ return {num:it.article,name:it.name,price:it.price,qty:it.qty,species:it.species,goodsType:s.goodsType}; }), s.date, s.goodsType); }catch(e){}
+  _addReceiveToShift(_currentShiftView, items, s.goodsType, {invId: inv.id, invNum: s.num, from: s.from, subSuffix: 'внесено вручную'});
   svPersist();
   _svManInv = null;
   var box = document.getElementById('svManualInvForm'); if(box) box.style.display='none';
@@ -9633,18 +9642,8 @@ function svAcceptInvoiceIntoShift(invId){
   });
   var goodsTotal = accepted.reduce(function(s,a){ return s+(a.factPrice||a.price||0)*(a.qty||1); },0);
   var isDr = inv.goodsType==='dr';
-  var rcvEntry = {
-    id:uid(), type:'receive', ts:_currentShiftView.date+'T'+(new Date().toTimeString().slice(0,8)), icon:'📥',
-    label:'Приёмка '+(inv.num||''), sub:accepted.length+' изд. · принял: '+who,
-    amount:goodsTotal, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
-    goodsType: isDr?'dr':'derevo',
-    goodsEffect: isDr?0:goodsTotal, goodsDrEffect: isDr?goodsTotal:0
-  };
-  var jnl = _currentShiftView.journal||[];
-  jnl.push(rcvEntry);
-  _currentShiftView.journal = jnl;
-  _recordJournalEntryIndependently(rcvEntry, _currentShiftView.shopName, 'receive');
-  try{ stockApplyReceive(_currentShiftView.shopName, accepted, _currentShiftView.date, inv.goodsType); }catch(e){}
+  var acceptedForStock = accepted.map(function(a){ return {name:a.name, article:a.article, species:a.species, price:a.factPrice||a.price, qty:a.qty}; });
+  _addReceiveToShift(_currentShiftView, acceptedForStock, isDr?'dr':'derevo', {invId: invId, invNum: inv.num, subSuffix: 'принял: '+who});
   inv.status='accepted'; inv.acceptedBy=who; inv.acceptedDate=_currentShiftView.date; inv.acceptedItems=accepted;
   invArr[idx]=inv;
   if(isManual){ localStorage.setItem('iz_manual_invoices', JSON.stringify(manual)); try{ db.collection('iz_manual_invoices').doc(invId).set(inv,{merge:true}); }catch(e){} }
@@ -10124,15 +10123,8 @@ function svAddRcv(type){
   if(row.art) autoSaveToItemBase(row.name, row.art, row.price, isWood?'derevo':'dr');
   if(row.species) saveSpecies(row.species);
   var from = isWood ? _svVal('svAdd_rcvWood_from') : '';
-  if(isWood){
-    var arr = _currentShiftView.goodsReceives||[];
-    arr.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, from:from});
-    _currentShiftView.goodsReceives = arr;
-  } else {
-    var arr2 = _currentShiftView.drGoodsReceives||[];
-    arr2.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt});
-    _currentShiftView.drGoodsReceives = arr2;
-  }
+  var item = {name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty};
+  _addReceiveToShift(_currentShiftView, [item], isWood?'derevo':'dr', {from: from});
   svPersist(); _svOpenAccs['acc_rcv']=true; _renderShiftView();
   showToast('✅ Приход добавлен');
 }
