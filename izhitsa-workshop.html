@@ -1849,7 +1849,7 @@ let session = JSON.parse(sessionStorage.getItem('ws_session')||'null');
 let _adminViewingRole = null; // НОВОЕ! Роль которую администратор просматривает
 
 // ════ ВЕРСИОНИРОВАНИЕ ПРИЛОЖЕНИЯ ════
-const APP_VERSION = '1.2.2'; // Текущая версия приложения
+const APP_VERSION = '1.3.0'; // Текущая версия приложения
 let _remoteVersion = null; // Версия на сервере (Firebase)
 let _updateAvailable = false; // Есть ли обновление
 
@@ -9650,7 +9650,10 @@ function openMaDetail(accId){
 
   c.innerHTML = acc.positions.map((p,i)=>`
     <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid var(--border)">
-      <div style="font-size:11px;color:var(--t2);font-weight:700;margin-bottom:8px">Позиция ${i+1}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--t2);font-weight:700">Позиция ${i+1}</div>
+        ${isEditable ? `<button onclick="if(confirm('Удалить позицию ${i+1}?')) deleteMaPosition('${acc.id}','${p.rid}')" style="background:none;border:none;color:var(--exp);font-size:16px;cursor:pointer;padding:0;width:24px;height:24px;display:flex;align-items:center;justify-content:center">❌</button>` : ''}
+      </div>
       ${isEditable ? `
         <div class="fg" style="margin-bottom:8px">
           <label class="fl">Артикул</label>
@@ -9707,7 +9710,13 @@ function openMaDetail(accId){
         </button>
         ${isEditable ? `<button onclick="deleteMaPosition('${acc.id}','${p.rid}')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--exp);background:rgba(255,90,90,0.1);color:var(--exp);font-size:12px;font-weight:700;cursor:pointer">🗑 Удалить</button>` : ''}
       </div>
-    </div>`).join('');
+    </div>`).join('') + (isEditable ? `
+    <div style="display:grid;gap:8px;margin-bottom:8px">
+      <button onclick="addMaPositionToExisting('${acc.id}')" style="width:100%;padding:12px;background:linear-gradient(135deg,var(--a2),#d4a574);border:none;border-radius:10px;color:#000;font-weight:700;font-size:13px;cursor:pointer">
+        ➕ Добавить позицию
+      </button>
+    </div>
+    ` : '');
 
   document.getElementById('maProvedBtn').style.display = acc.status==='done' ? 'none' : 'block';
   document.getElementById('maProvedBtn').setAttribute('data-acc-id', acc.id);
@@ -9781,6 +9790,38 @@ function setMaPosStatus(accId, rid, status){
   // Обновляем в Firebase сразу (чтобы не потерять при закрытии)
   db.collection('ws_master_acceptances').doc(accId).update({positions: acc.positions}).catch(console.error);
   openMaDetail(accId); // перерисовать
+}
+
+// ════ ДОБАВЛЕНИЕ НОВОЙ ПОЗИЦИИ К СУЩЕСТВУЮЩЕЙ ПРИЁМКЕ ════
+function addMaPositionToExisting(accId){
+  const acc = _maHistory.find(a=>a.id===accId);
+  if(!acc) return;
+  
+  if(!isMaEditAllowed(acc)){ showToast('🔒 Редактирование доступно только в день внесения приёмки'); return; }
+  
+  // Создать новую позицию
+  const newPos = {
+    rid: uid(),
+    artikul: '',
+    name: '',
+    wood: '',
+    goodsType: 'derevo',
+    qty: 1,
+    price: 0,
+    zp: 0,
+    status: 'accepted'
+  };
+  
+  // Добавить в локальный массив
+  acc.positions.push(newPos);
+  
+  // Сохранить в Firebase
+  db.collection('ws_master_acceptances').doc(accId).update({positions: acc.positions})
+    .then(() => {
+      logAction('acceptance_position_added', {accId, masterName: acc.masterName, totalCount: acc.positions.length});
+      openMaDetail(accId); // перерисовать с новой позицией
+    })
+    .catch(e => showToast('❌ Ошибка: ' + e.message));
 }
 
 // ════ УДАЛЕНИЕ ПОЗИЦИИ ИЗ ПРИЁМКИ ════
