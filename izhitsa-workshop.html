@@ -1857,7 +1857,7 @@ let session = JSON.parse(sessionStorage.getItem('ws_session')||'null');
 let _adminViewingRole = null; // НОВОЕ! Роль которую администратор просматривает
 
 // ════ ВЕРСИОНИРОВАНИЕ ПРИЛОЖЕНИЯ ════
-const APP_VERSION = '1.3.0'; // Текущая версия приложения
+const APP_VERSION = '1.3.2'; // Текущая версия приложения
 let _remoteVersion = null; // Версия на сервере (Firebase)
 let _updateAvailable = false; // Есть ли обновление
 
@@ -2662,7 +2662,14 @@ function doLogin(){
     } else {
       role=staffEntry.roles?(staffEntry.roles.find(function(r){return wsRoles.indexOf(r)>=0;})||'мастер'):'мастер';
     }
-    session={id:staffEntry.id,name:staffEntry.name,role:role,rate:staffEntry.wsRate||0};
+    session={
+      id:staffEntry.id,
+      name:staffEntry.name,
+      role:role,
+      rate:staffEntry.wsRate||0,
+      canEditPastMaAcceptances: staffEntry.canEditPastMaAcceptances||false,
+      canEditPastShipments: staffEntry.canEditPastShipments||false
+    };
     sessionStorage.setItem('ws_session',JSON.stringify(session));
     startApp();return;
   }
@@ -9766,7 +9773,10 @@ function isMaEditAllowed(acc){
   if(session && session.role==='администратор') return true;
   const entryDay = (acc.createdAt || '').split('T')[0];
   const todayStr = new Date().toISOString().split('T')[0];
-  return entryDay === todayStr;
+  if(entryDay === todayStr) return true;
+  // Проверить флаг: может ли кладовщик редактировать приёмки за прошлые дни
+  if(session && session.role==='кладовщик' && session.canEditPastMaAcceptances === true) return true;
+  return false;
 }
 
 // Изменить мастера у уже сохранённой приёмки — доступно только в день внесения (админу — всегда)
