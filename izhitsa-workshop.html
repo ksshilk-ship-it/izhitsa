@@ -1339,6 +1339,14 @@ function showUpdateBanner(){
     <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px"><input type="checkbox" id="eeRoleMaster" style="width:18px;height:18px">Мастер</label>
     <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px"><input type="checkbox" id="eeRoleZagot" style="width:18px;height:18px">Заготовщик</label>
     <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px"><input type="checkbox" id="eeRoleKlad" style="width:18px;height:18px">Кладовщик</label>
+    
+    <!-- Доступы для кладовщика (показываются только если кладовщик выбран) -->
+    <div id="eeKladovskiPermissions" style="display:none;background:var(--s1);border-radius:8px;padding:10px;margin:8px 0;border-left:4px solid var(--a2)">
+      <div style="font-size:10px;color:var(--t2);font-weight:700;margin-bottom:6px">🔓 Доступы кладовщика:</div>
+      <label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px"><input type="checkbox" id="eeCanEditPastMaAccept" style="width:16px;height:16px">Исправлять приёмки от мастеров (прошлые дни)</label>
+      <label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px"><input type="checkbox" id="eeCanEditPastShipments" style="width:16px;height:16px">Исправлять накладные/отгрузку (прошлые дни)</label>
+    </div>
+    
     <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px"><input type="checkbox" id="eeRoleUpr" style="width:18px;height:18px">Управляющий мастерской</label>
 
     <div class="fg" style="margin-top:8px"><label class="fl">ЗП ставка мастерской (₽/изделие)</label>
@@ -2459,6 +2467,12 @@ function openEmpEditMo(staffId){
   ['eeRoleAdmin','eeRoleOwner','eeRoleMaster','eeRoleZagot','eeRoleKlad','eeRoleUpr'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.checked=false;
   });
+  // Сбросить доступы кладовщика
+  const canEditPastMaEl = document.getElementById('eeCanEditPastMaAccept');
+  const canEditPastShipEl = document.getElementById('eeCanEditPastShipments');
+  if(canEditPastMaEl) canEditPastMaEl.checked = false;
+  if(canEditPastShipEl) canEditPastShipEl.checked = false;
+  
   document.getElementById('eeName').value='';
   document.getElementById('eePass').value='';
   document.getElementById('eeRate').value='';
@@ -2478,10 +2492,25 @@ function openEmpEditMo(staffId){
     setChecked('eeRoleZagot','заготовщик');
     setChecked('eeRoleKlad','кладовщик');
     setChecked('eeRoleUpr','управляющий');
+    // Загрузить доступы кладовщика
+    if(canEditPastMaEl) canEditPastMaEl.checked = s.canEditPastMaAcceptances === true;
+    if(canEditPastShipEl) canEditPastShipEl.checked = s.canEditPastShipments === true;
     setEeStatus(s.wsStatus||'active');
   } else {
     titleEl.textContent = '➕ Новый сотрудник';
   }
+  
+  // Показать/скрыть блок доступов при выборе/отключении Кладовщика
+  const kladCheckbox = document.getElementById('eeRoleKlad');
+  const permissionsDiv = document.getElementById('eeKladovskiPermissions');
+  if(kladCheckbox && permissionsDiv) {
+    const updatePermissionsVisibility = () => {
+      permissionsDiv.style.display = kladCheckbox.checked ? 'block' : 'none';
+    };
+    kladCheckbox.onchange = updatePermissionsVisibility;
+    updatePermissionsVisibility(); // Установить начальное состояние
+  }
+  
   openMo('empEditMo');
 }
 
@@ -2502,6 +2531,10 @@ async function saveEmpEdit(){
 
   if(!roles.length){ showToast('Выберите хотя бы одну роль'); return; }
 
+  // Новые доступы кладовщика
+  const canEditPastMaAcceptances = document.getElementById('eeCanEditPastMaAccept')?.checked === true;
+  const canEditPastShipments = document.getElementById('eeCanEditPastShipments')?.checked === true;
+
   const staff = getStaff();
 
   if(_eeEditId){
@@ -2510,6 +2543,7 @@ async function saveEmpEdit(){
     staff[idx] = {
       ...staff[idx],
       name, pass, roles, wsRate: rate, wsStatus: _eeStatus,
+      canEditPastMaAcceptances, canEditPastShipments,
       blocked: _eeStatus==='fired' ? true : staff[idx].blocked,
       updatedAt: now()
     };
@@ -2517,6 +2551,7 @@ async function saveEmpEdit(){
     if(staff.some(s=>s.name.toLowerCase()===name.toLowerCase())){ showToast('Сотрудник с таким именем уже есть'); return; }
     staff.push({
       id: uid(), name, pass, roles, wsRate: rate, wsStatus: _eeStatus,
+      canEditPastMaAcceptances, canEditPastShipments,
       blocked: _eeStatus==='fired',
       createdAt: now(), updatedAt: now(), createdBy: session.name
     });
