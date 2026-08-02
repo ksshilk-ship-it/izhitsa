@@ -128,6 +128,7 @@ function renderStatusBar(){
     '<div style="display:flex;justify-content:space-between;align-items:center;background:#1a1a22;border-radius:9px;padding:7px 10px;margin-bottom:6px;font-size:11px;color:#8888aa">'+
       '<span>📅 '+dateStr+'</span><span>👤 '+(session.sellerName||'')+'</span><span>🕐 открыта '+timeStr+'</span>'+
     '</div>'+
+    '<button onpointerdown="event.preventDefault();openFixMorningEntryMo()" style="width:100%;padding:8px;background:#1a1a2e;border:1px dashed #f0c060;border-radius:9px;font-weight:700;font-size:11.5px;color:#f0c060;cursor:pointer;margin-bottom:10px">✏️ Ошиблась при открытии смены? Исправить остатки на утро</button>'+
     '<div style="background:#1c1f12;border:1px solid #4B5320;border-radius:12px;padding:10px;margin-bottom:10px;box-shadow:0 2px 6px rgba(0,0,0,.3)">'+
     '<div style="background:linear-gradient(135deg,#3a3f1a,#2a2e14);border:1px solid #4B5320;border-radius:10px;padding:10px 12px;margin-bottom:10px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center">'+
@@ -229,6 +230,44 @@ function renderZpCard(){
       '<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding-top:4px;border-top:2px solid #2e2e3e"><span>Разница итого</span><span style="color:'+diffColor+'">'+(z.diff>0?'+':'')+fmt2(z.diff)+'</span></div>'+
     '</div>'+
   '</div>';
+}
+function openFixMorningEntryMo(){
+  if(!session) return;
+  var setV=function(id,val){ var el=document.getElementById(id); if(el) el.value = (val!=null?val:''); };
+  setV('fmeCashMorn', session.cashMorning||0);
+  setV('fmeCashDrMorn', session.cashDrMorning||0);
+  setV('fmeCashStaffMorn', session.cashStaffMorning||0);
+  setV('fmeGoodsMorn', session.goodsMorning||0);
+  setV('fmeGoodsDrMorn', session.goodsDrMorning||0);
+  setV('fmeReason', '');
+  var err = document.getElementById('fmeError'); if(err) err.style.display='none';
+  openMo('fixMorningEntryMo');
+}
+function saveFixMorningEntry(){
+  var errEl = document.getElementById('fmeError');
+  var reason = ((document.getElementById('fmeReason')||{}).value||'').trim();
+  if(!reason){
+    if(errEl){ errEl.style.display='block'; errEl.textContent='⛔ Укажите причину правки'; }
+    return;
+  }
+  var g=function(id){ var el=document.getElementById(id); var v=el?parseFloat(el.value):NaN; return isNaN(v)?0:v; };
+  var before = {
+    cashMorning:session.cashMorning, cashDrMorning:session.cashDrMorning, cashStaffMorning:session.cashStaffMorning,
+    goodsMorning:session.goodsMorning, goodsDrMorning:session.goodsDrMorning
+  };
+  session.cashMorning = g('fmeCashMorn');
+  session.cashDrMorning = g('fmeCashDrMorn');
+  session.cashStaffMorning = g('fmeCashStaffMorn');
+  session.goodsMorning = g('fmeGoodsMorn');
+  session.goodsDrMorning = g('fmeGoodsDrMorn');
+  session.morningEditedBy = session.sellerName||session.name||'';
+  session.morningEditedAt = new Date().toISOString();
+  session.morningEditReason = reason;
+  try{ logAction('MORNING_ENTRY_SELF_FIX', {before:before, after:{cashMorning:session.cashMorning,cashDrMorning:session.cashDrMorning,cashStaffMorning:session.cashStaffMorning,goodsMorning:session.goodsMorning,goodsDrMorning:session.goodsDrMorning}, reason:reason}); }catch(e){}
+  saveS();
+  closeMo('fixMorningEntryMo');
+  renderAll();
+  showToast('✅ Утренние остатки исправлены');
 }
 function renderAll(){ renderStatusBar(); renderJournal(); renderWriteoffs(); updateInvBadge(); renderPendingAlert(); renderMorningCashDiffBanner(); syncLiveShift(); }
 function calcShiftZpStandalone(shopName, report){
