@@ -28,7 +28,7 @@ function autoDetectGoodsTypeByName(name){
 function siAutoDetectAndSetType(name){
   var detected = autoDetectGoodsTypeByName(name);
   if(detected && detected !== _siItemGoodsType){
-    setSiItemType(detected);
+    setSiItemType(detected, true);
   }
 }
 function getSiSpeciesList(){
@@ -48,7 +48,7 @@ function siAddToSpecies(inputId){
     else showToast('Уже есть в породах дерева');
   }
 }
-function setSiItemType(type){
+function setSiItemType(type, preserveName){
   _siItemGoodsType = type;
   var lbl = document.getElementById('siSpeciesLabel');
   var inp = document.getElementById('siSpecies');
@@ -61,8 +61,8 @@ function setSiItemType(type){
   if(inpM){ inpM.placeholder = isDr ? 'Вкус/Состав' : 'Порода'; inpM.value=''; }
   var nameEl = document.getElementById('siName');
   var nameMEl = document.getElementById('siNameM');
-  if(nameEl){ nameEl.value=''; psjSuggest('siName',getItemNames(type),'siPickName'); }
-  if(nameMEl){ nameMEl.value=''; }
+  if(nameEl){ if(!preserveName) nameEl.value=''; psjSuggest('siName',getItemNames(type),'siPickName'); }
+  if(nameMEl){ if(!preserveName) nameMEl.value=''; }
   ['','M'].forEach(function(suf){
     var db=document.getElementById('siTypeDerevo'+suf), dr=document.getElementById('siTypeDr'+suf);
     if(type==='derevo'){
