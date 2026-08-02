@@ -3135,11 +3135,12 @@ function _renderShiftView(){
   var jRcvWoodTotal = receives.filter(function(r){return r.goodsType!=='dr';}).reduce(function(s,r){return s+(r.goodsEffect!=null?r.goodsEffect:(r.amount||0));},0);
   var jRcvDrTotal = receives.filter(function(r){return r.goodsType==='dr';}).reduce(function(s,r){return s+(r.goodsDrEffect!=null?r.goodsDrEffect:(r.goodsEffect||r.amount||0));},0);
   var jRcvTotal = jRcvWoodTotal + jRcvDrTotal;
-  var jWoTotal = writeoffs.reduce(function(s,w){return s+(w.amount||0);},0);
+  var jWoWoodTotal = writeoffs.filter(function(w){return w.goodsType!=='dr';}).reduce(function(s,w){return s+(w.amount||0);},0);
+  var jWoDrTotal = writeoffs.filter(function(w){return w.goodsType==='dr';}).reduce(function(s,w){return s+(w.amount||0);},0);
   var woodRcvTotal = woodRcv.reduce(function(s,r){return s+(r.amount||r.amt||0);},0) + jRcvWoodTotal;
   var drRcvTotal = drRcv.reduce(function(s,r){return s+(r.amount||r.amt||0);},0) + jRcvDrTotal;
-  var woodWoTotal = woodWo.reduce(function(s,w){return s+(w.amount||0);},0) + jWoTotal;
-  var drWoTotal = drWo.reduce(function(s,w){return s+(w.amount||0);},0);
+  var woodWoTotal = woodWo.reduce(function(s,w){return s+(w.amt!=null?w.amt:(w.amount||0));},0) + jWoWoodTotal;
+  var drWoTotal = drWo.reduce(function(s,w){return s+(w.amt!=null?w.amt:(w.amount||0));},0) + jWoDrTotal;
   var woodSaleQty = sales.reduce(function(s,e){ return s+(e.items||[]).filter(function(it){return it.goodsType!=='dr';}).reduce(function(a,it){return a+(it.qty||1);},0); },0);
   var drSaleQty = sales.reduce(function(s,e){ return s+(e.items||[]).filter(function(it){return it.goodsType==='dr';}).reduce(function(a,it){return a+(it.qty||1);},0); },0);
   var expWoodTotal = expenses.filter(function(e){return e.goodsType!=='dr' && e.goodsType!=='staff';}).reduce(function(s,e){return s+(e.amount||0);},0);
@@ -3984,6 +3985,34 @@ function _addReceiveToShift(shift, items, goodsType, opts){
   try{ stockApplyReceive(shift.shopName, items.map(function(it){ return {num:it.article,name:it.name,price:it.price,qty:it.qty,species:it.species,goodsType:goodsType}; }), shift.date, goodsType); }catch(e){}
   return rcvEntry;
 }
+function _addWriteoffToShift(shift, items, goodsType, opts){
+  opts = opts || {};
+  var isDr = goodsType==='dr';
+  var totalAmt = items.reduce(function(sum,it){ return sum+(it.amt!=null?it.amt:(it.price||0)*(it.qty||1)); },0);
+  var namesPreview = items.map(function(it){ return it.name; }).join(', ');
+  var sub = items.length===1
+    ? ((items[0].article?'№'+items[0].article+' ':'')+items[0].name+(items[0].species?' · '+items[0].species:'')+(items[0].qty&&items[0].qty!==1?' × '+items[0].qty:'')+(opts.reason?' · '+opts.reason:''))
+    : (items.length+' позиций: '+namesPreview+(opts.reason?' · '+opts.reason:''));
+  var woEntry = {
+    id: uid(), type:'writeoff', ts: shift.date+'T'+(new Date().toTimeString().slice(0,8)), icon:'🗑️',
+    label:'Списание'+(isDr?' (ДР)':''),
+    sub: sub, reason: opts.reason||'',
+    amount: totalAmt, amtCls:'exp', amtSign:'−', cashEffect:0, cardEffect:0, staffEffect:0,
+    goodsType: goodsType,
+    goodsEffect: isDr?0:-totalAmt, goodsDrEffect: isDr?-totalAmt:0,
+    items: items.map(function(it){ return Object.assign({}, it, {reason: opts.reason||''}); })
+  };
+  var jnl = shift.journal||[];
+  jnl.push(woEntry);
+  shift.journal = jnl;
+  _recordJournalEntryIndependently(woEntry, shift.shopName, 'writeoff');
+  try{
+    items.forEach(function(it){
+      if(it.article) stockUpdateQty(shift.shopName, it.article, it.name, it.price, it.species, goodsType, '', -(it.qty||1), null);
+    });
+  }catch(e){}
+  return woEntry;
+}
 function svSaveManualInvIntoShift(){
   if(!_svManInv || !_currentShiftView) return;
   var s = _svManInv;
@@ -4584,15 +4613,8 @@ function svAddWo(type){
   if(!row.name){showToast('Укажите наименование');return;}
   if(row.species) saveSpecies(row.species);
   var reason = _svVal('svAdd_'+id+'_reason');
-  if(isWood){
-    var arr = _currentShiftView.goodsWriteoffs||[];
-    arr.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, reason:reason});
-    _currentShiftView.goodsWriteoffs = arr;
-  } else {
-    var arr2 = _currentShiftView.drGoodsWriteoffs||[];
-    arr2.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, reason:reason});
-    _currentShiftView.drGoodsWriteoffs = arr2;
-  }
+  var item = {name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt};
+  _addWriteoffToShift(_currentShiftView, [item], isWood?'derevo':'dr', {reason: reason});
   svPersist(); _svOpenAccs['acc_wo']=true; _renderShiftView();
   showToast('✅ Списание добавлено');
 }
