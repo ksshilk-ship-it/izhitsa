@@ -738,7 +738,7 @@ function loadAndCleanJournal(){
 function saveS(){ localStorage.setItem(restoreMode?KEY.restoreSession:KEY.session,JSON.stringify(session)); }
 function getAuditLog(){ try { return JSON.parse(localStorage.getItem('iz_audit_log_shop')||'[]'); } catch(e) { return []; } }
 function saveAuditLog(data){ localStorage.setItem('iz_audit_log_shop',JSON.stringify(data)); }
-function logAction(action, details) {
+function logAction(action, details, shiftIdOverride) {
   if(!session) return;
   var log = getAuditLog();
   var entry = {
@@ -746,7 +746,7 @@ function logAction(action, details) {
     timestamp: new Date().toISOString(),
     user: session.name||session.sellerName,
     shopName: session.shopName,
-    shiftId: session.shiftId||null,
+    shiftId: shiftIdOverride || session.shiftId || null,
     action: action,
     details: details || {}
   };
@@ -760,21 +760,21 @@ function logWriteoff(reason, amount, shop){ logAction('WRITEOFF', {reason:reason
 function logReceive(type, amount, shop){ logAction('RECEIVE', {type:type, amount:amount, shop:shop}); }
 function logExpense(category, amount, desc){ logAction('EXPENSE', {category:category, amount:amount, desc:desc}); }
 function logShiftOpen(shop, cashAmount){ logAction('SHIFT_OPEN', {shop:shop, cashAmount:cashAmount}); }
-function logEntryEdit(before, after){
+function logEntryEdit(before, after, shiftIdOverride){
   logAction('JOURNAL_ENTRY_EDIT', {
     entryType: before.type, entryId: before.id,
     before: {label:before.label, sub:before.sub, amount:before.amount, discount:before.discount,
       payMethod:before.payMethod, cashPart:before.cashPart, cardPart:before.cardPart, items:before.items, comment:before.comment},
     after: {label:after.label, sub:after.sub, amount:after.amount, discount:after.discount,
       payMethod:after.payMethod, cashPart:after.cashPart, cardPart:after.cardPart, items:after.items, comment:after.comment}
-  });
+  }, shiftIdOverride);
 }
-function logEntryDelete(entry){
+function logEntryDelete(entry, shiftIdOverride){
   logAction('JOURNAL_ENTRY_DELETE', {
     entryType: entry.type, entryId: entry.id,
     snapshot: {label:entry.label, sub:entry.sub, amount:entry.amount, discount:entry.discount,
       payMethod:entry.payMethod, cashPart:entry.cashPart, cardPart:entry.cardPart, items:entry.items, comment:entry.comment, ts:entry.ts}
-  });
+  }, shiftIdOverride);
 }
 function fmt(n){ return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+'₽'; }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }

@@ -949,7 +949,8 @@ function _acceptInvoiceProceed(inv, who){
   const idx=invs.findIndex(i=>(i.id||i._id)===currentInvId); invs[idx]=inv2; saveInvoices(invs);
   const goodsTotal=accepted.reduce((s,a)=>s+a.factPrice,0);
   var _rcvEntry = {id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',label:'Приёмка '+inv2.num,
-    sub:inv2.items.length+' изд. · принял: '+who,amount:goodsTotal,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:goodsTotal};
+    sub:inv2.items.length+' изд. · принял: '+who,amount:goodsTotal,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:goodsTotal,
+    invId:inv2.id||inv2._id};
   journal.push(_rcvEntry);
   _recordJournalEntryIndependently(_rcvEntry, session&&session.shopName, 'receive');
   _backupCheckPassed = false;
@@ -2118,7 +2119,7 @@ function adminMoveReceiptDate(entryId, sourceShiftId){
   tgtShift.journal = (tgtShift.journal||[]).concat([movedEntry])
     .sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
   saveShifts(shifts);
-  try{ logAction('RECEIPT_DATE_MOVED', {entryId:entryId, from:srcShift.date, to:newDate, shopName:srcShift.shopName}); }catch(e){}
+  try{ logAction('RECEIPT_DATE_MOVED', {entryId:entryId, from:srcShift.date, to:newDate, shopName:srcShift.shopName}, srcShift.id||srcShift._id); }catch(e){}
   _pushShiftWithRetry(srcShift.id||srcShift._id, srcShift);
   _pushShiftWithRetry(tgtShift.id||tgtShift._id, tgtShift);
   showToast('✅ Приход перенесён на '+newDate);

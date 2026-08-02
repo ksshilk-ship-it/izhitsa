@@ -16,6 +16,11 @@ function siCalcFromAmtM(){
   var priceEl=document.getElementById('siPriceM'); if(priceEl && qty>0) priceEl.value = (amt/qty)||'';
 }
 var _siItemGoodsType = 'derevo';
+var _siTypeManualOverride = false;
+function siManualSetType(type){
+  _siTypeManualOverride = true;
+  setSiItemType(type);
+}
 function autoDetectGoodsTypeByName(name){
   if(!name) return null;
   var n = name.toLowerCase().trim();
@@ -26,6 +31,7 @@ function autoDetectGoodsTypeByName(name){
   return null; // unknown
 }
 function siAutoDetectAndSetType(name){
+  if(_siTypeManualOverride) return; // don't fight the user's explicit type choice
   var detected = autoDetectGoodsTypeByName(name);
   if(detected && detected !== _siItemGoodsType){
     setSiItemType(detected, true);
@@ -200,6 +206,7 @@ function resetSaleForm(){
   var tb=document.getElementById('transferCardBlock'); if(tb)tb.style.display='none';
   var rb=document.getElementById('rsAccountBlock'); if(rb)rb.style.display='none';
   saleItems=[];
+  _siTypeManualOverride = false;
   setSiItemType('derevo');
   setDiscCategory('derevo');
   renderSaleItems(); calcSaleTotal();
@@ -290,6 +297,7 @@ function _siCopyItem(i){
 function siEditItem(i){
   var it = saleItems[i]; if(!it) return;
   saleItems.splice(i,1); renderSaleItems(); calcSaleTotal();
+  _siTypeManualOverride = true;
   setSiItemType(it.goodsType==='dr'?'dr':'derevo');
   var numEl=document.getElementById('siNum');
   if(numEl){ numEl.value = it.num||''; }
@@ -483,7 +491,7 @@ function saveSale(){
     _currentShiftView.journal = jnlArch2;
     _recordSaleIndependently(newArchEntry, _currentShiftView.shopName);
     try{ stockApplySale(_currentShiftView.shopName, saleItems); }catch(e){}
-    try{ logAction('JOURNAL_ENTRY_ADD_MISSED', {entryType:'sale', shopName:_currentShiftView.shopName, snapshot:newArchEntry}); }catch(e){}
+    try{ logAction('JOURNAL_ENTRY_ADD_MISSED', {entryType:'sale', shopName:_currentShiftView.shopName, snapshot:newArchEntry}, _currentShiftView.id||_currentShiftView._id); }catch(e){}
     svPersist();
     _svArchiveAddMode = false;
     resetSaleForm(); closeMo('saleMo'); _renderShiftView();
@@ -498,7 +506,7 @@ function saveSale(){
     var afterArch = Object.assign({}, jnlArch[idxArch], newEntryData, {type:'sale', id:jnlArch[idxArch].id, ts:jnlArch[idxArch].ts, editedAt:new Date().toISOString()});
     jnlArch[idxArch] = afterArch;
     _currentShiftView.journal = jnlArch;
-    try{ logEntryEdit(beforeArch, afterArch); }catch(e){}
+    try{ logEntryEdit(beforeArch, afterArch, _currentShiftView.id||_currentShiftView._id); }catch(e){}
     svPersist();
     _svArchiveEditId = null;
     resetSaleForm(); closeMo('saleMo'); _renderShiftView();

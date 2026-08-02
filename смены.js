@@ -3077,6 +3077,122 @@ function openShiftView(id){
     }).catch(function(){});
   }catch(e){}
 }
+var _AUDIT_ACTION_LABELS = {
+  SALE:'💰 Продажа', WRITEOFF:'🗑 Списание', RECEIVE:'📥 Приход', EXPENSE:'💸 Расход',
+  SHIFT_OPEN:'🔓 Открытие смены', JOURNAL_ENTRY_EDIT:'✏️ Редактирование записи',
+  JOURNAL_ENTRY_DELETE:'🗑 Удаление записи', JOURNAL_ENTRY_ADD_MISSED:'➕ Добавлена пропущенная запись',
+  RECEIPT_DATE_MOVED:'📅 Перенос даты прихода', STALE_OPEN_SHIFT_AUTOFIXED:'🤖 Автозакрытие зависшей смены (без проверки кассы)'
+};
+function _auditFmtAmt(n){ return n==null ? '—' : Math.round(n).toLocaleString('ru-RU')+'₽'; }
+function _auditFmtTime(iso){
+  if(!iso) return '—';
+  var d = new Date(iso);
+  return d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function _renderAuditEntry(e){
+  var label = _AUDIT_ACTION_LABELS[e.action] || ('📄 '+(e.action||'Событие'));
+  var details = e.details||{};
+  var extra = '';
+  if(e.action==='JOURNAL_ENTRY_EDIT'){
+    var b=details.before||{}, a=details.after||{};
+    var diffs=[];
+    if((b.amount||0)!==(a.amount||0)) diffs.push('Сумма: '+_auditFmtAmt(b.amount)+' → '+_auditFmtAmt(a.amount));
+    if((b.label||'')!==(a.label||'')) diffs.push('Название: «'+(b.label||'—')+'» → «'+(a.label||'—')+'»');
+    if((b.discount||0)!==(a.discount||0)) diffs.push('Скидка: '+_auditFmtAmt(b.discount)+' → '+_auditFmtAmt(a.discount));
+    if((b.payMethod||'')!==(a.payMethod||'')) diffs.push('Оплата: '+(b.payMethod||'—')+' → '+(a.payMethod||'—'));
+    extra = diffs.length ? diffs.map(function(d){return '<div style="font-size:11px;color:#f0c060">'+d+'</div>';}).join('') : '<div style="font-size:11px;color:#8888aa">Изменение без разницы в сумме/названии</div>';
+  } else if(e.action==='JOURNAL_ENTRY_DELETE'){
+    var s=details.snapshot||{};
+    extra = '<div style="font-size:11px;color:#f06060">Удалено: '+(s.label||details.entryType||'запись')+(s.amount?' · '+_auditFmtAmt(s.amount):'')+'</div>';
+  } else if(e.action==='STALE_OPEN_SHIFT_AUTOFIXED'){
+    extra = '<div style="font-size:11px;color:#f0c060">Смена была оставлена открытой и автоматически закрыта системой при следующем входе продавца — без проверки совпадения кассы.</div>';
+  } else {
+    var flat = Object.keys(details).filter(function(k){ return details[k]!=null && typeof details[k]!=='object'; })
+      .map(function(k){ return k+': '+details[k]; }).join(' · ');
+    if(flat) extra = '<div style="font-size:11px;color:#8888aa">'+flat+'</div>';
+  }
+  return '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:9px;padding:9px 10px;margin-bottom:6px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;gap:8px">'+
+      '<span style="font-size:12px;font-weight:700;color:#f0f0f8">'+label+'</span>'+
+      '<span style="font-size:10px;color:#8888aa;flex-shrink:0">'+_auditFmtTime(e.timestamp)+'</span>'+
+    '</div>'+
+    '<div style="font-size:11px;color:#60c8f0;margin-bottom:2px">👤 '+(e.user||'—')+'</div>'+
+    extra+
+  '</div>';
+}
+function loadShiftAuditLog(shiftId, btnEl){
+  var body = document.getElementById('shiftAuditBody');
+  if(!body) return;
+  if(btnEl){ btnEl.disabled=true; btnEl.textContent='⏳ Загружаю...'; }
+  body.innerHTML = '<div style="font-size:12px;color:#8888aa;text-align:center;padding:8px">⏳ Загружаю историю действий...</div>';
+  if(typeof db==='undefined' || !db){
+    body.innerHTML = '<div style="font-size:12px;color:#f06060;text-align:center;padding:8px">❌ Нет подключения к базе</div>';
+    if(btnEl){ btnEl.disabled=false; btnEl.textContent='🔍 Загрузить историю действий'; }
+    return;
+  }
+  db.collection('iz_audit_log').where('shiftId','==',shiftId).get().then(function(snap){
+    var entries=[];
+    snap.forEach(function(doc){ entries.push(doc.data()); });
+    entries.sort(function(a,b){ return (a.timestamp||'').localeCompare(b.timestamp||''); });
+    if(btnEl){ btnEl.style.display='none'; }
+    if(!entries.length){
+      body.innerHTML = '<div style="background:#1a2e1e;border:1px solid #60f090;border-radius:9px;padding:10px;font-size:12px;color:#60f090;text-align:center">✅ Записей аудита для этой смены нет — никто не редактировал и не удалял операции журнала, и системных автозакрытий тоже не было.</div>';
+      return;
+    }
+    body.innerHTML = entries.map(_renderAuditEntry).join('');
+  }).catch(function(err){
+    body.innerHTML = '<div style="font-size:12px;color:#f06060;text-align:center;padding:8px">❌ Ошибка загрузки: '+(err&&err.message||err)+'</div>';
+    if(btnEl){ btnEl.disabled=false; btnEl.textContent='🔍 Загрузить историю действий'; }
+  });
+}
+function scanCrossShiftDuplicateReceives(currentShiftId, shopName, btnEl){
+  var body = document.getElementById('crossShiftDupResult');
+  if(!body) return;
+  if(btnEl){ btnEl.disabled=true; btnEl.textContent='⏳ Проверяю...'; }
+  body.innerHTML = '<div style="font-size:12px;color:#8888aa;text-align:center;padding:8px">⏳ Проверяю все закрытые смены '+(shopName||'')+'...</div>';
+  if(typeof db==='undefined' || !db){
+    body.innerHTML = '<div style="font-size:12px;color:#f06060;text-align:center;padding:8px">❌ Нет подключения к базе</div>';
+    if(btnEl){ btnEl.disabled=false; btnEl.textContent='🔍 Проверить задвоения приходов между сменами'; }
+    return;
+  }
+  db.collection('iz_shifts').where('shopName','==',shopName).get().then(function(snap){
+    var shifts=[];
+    snap.forEach(function(doc){ var d=doc.data(); d.id=d.id||doc.id; shifts.push(d); });
+    var byInv = {}; // invId -> [{shiftId, date, amount, label}]
+    shifts.forEach(function(s){
+      (s.journal||[]).forEach(function(e){
+        if(e.type!=='receive' || !e.invId) return;
+        if(!byInv[e.invId]) byInv[e.invId]=[];
+        byInv[e.invId].push({shiftId:s.id||s._id, date:s.date, amount:e.amount, label:e.label});
+      });
+    });
+    var dupGroups = Object.keys(byInv).map(function(invId){ return {invId:invId, entries:byInv[invId]}; })
+      .filter(function(g){ return g.entries.length>1; });
+    if(btnEl){ btnEl.disabled=false; btnEl.textContent='🔍 Проверить задвоения приходов между сменами'; }
+    if(!dupGroups.length){
+      body.innerHTML = '<div style="background:#1a2e1e;border:1px solid #60f090;border-radius:9px;padding:10px;font-size:12px;color:#60f090;text-align:center">✅ Задвоений приходов между сменами не найдено (проверено накладных с ID: '+Object.keys(byInv).length+').</div>'+
+        '<div style="font-size:10px;color:#8888aa;margin-top:6px;text-align:center">Учтите: накладные, принятые до обновления приложения, могли быть без ID и не проверяются этим инструментом.</div>';
+      return;
+    }
+    var totalDup = dupGroups.reduce(function(s,g){ return s+(g.entries.length-1)*(g.entries[0].amount||0); },0);
+    body.innerHTML = '<div style="background:#2e1a1a;border:1px solid #f06060;border-radius:9px;padding:10px;font-size:12px;color:#f06060;font-weight:700;text-align:center;margin-bottom:8px">⚠️ Найдено '+dupGroups.length+' задвоенных накладных, примерно на '+Math.round(totalDup).toLocaleString('ru-RU')+'₽ лишнего прихода</div>'+
+      dupGroups.map(function(g){
+        return '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:9px;padding:9px 10px;margin-bottom:6px">'+
+          '<div style="font-size:12px;font-weight:700;color:#f0f0f8;margin-bottom:4px">'+(g.entries[0].label||'Приёмка')+' — встречается в '+g.entries.length+' сменах</div>'+
+          g.entries.map(function(e){
+            var isCurrent = e.shiftId===currentShiftId;
+            return '<div style="font-size:11px;color:'+(isCurrent?'#f0c060':'#8888aa')+';padding:2px 0">'+
+              '📅 '+(e.date||'?')+' · '+Math.round(e.amount||0).toLocaleString('ru-RU')+'₽'+(isCurrent?' · эта смена':'')+
+            '</div>';
+          }).join('')+
+        '</div>';
+      }).join('')+
+      '<div style="font-size:10px;color:#8888aa;margin-top:6px">Оставьте запись в той смене, где накладная реально была принята, а лишние удалите через ❌ у соответствующей записи прихода в разделе «Приходы» этой смены.</div>';
+  }).catch(function(err){
+    if(btnEl){ btnEl.disabled=false; btnEl.textContent='🔍 Проверить задвоения приходов между сменами'; }
+    body.innerHTML = '<div style="font-size:12px;color:#f06060;text-align:center;padding:8px">❌ Ошибка: '+(err&&err.message||err)+'</div>';
+  });
+}
 function _renderShiftView(){
   var sh = _currentShiftView; if(!sh) return;
   document.getElementById('editShiftTitle').textContent = sh.shopName + ' · ' + sh.date;
@@ -3135,12 +3251,11 @@ function _renderShiftView(){
   var jRcvWoodTotal = receives.filter(function(r){return r.goodsType!=='dr';}).reduce(function(s,r){return s+(r.goodsEffect!=null?r.goodsEffect:(r.amount||0));},0);
   var jRcvDrTotal = receives.filter(function(r){return r.goodsType==='dr';}).reduce(function(s,r){return s+(r.goodsDrEffect!=null?r.goodsDrEffect:(r.goodsEffect||r.amount||0));},0);
   var jRcvTotal = jRcvWoodTotal + jRcvDrTotal;
-  var jWoWoodTotal = writeoffs.filter(function(w){return w.goodsType!=='dr';}).reduce(function(s,w){return s+(w.amount||0);},0);
-  var jWoDrTotal = writeoffs.filter(function(w){return w.goodsType==='dr';}).reduce(function(s,w){return s+(w.amount||0);},0);
+  var jWoTotal = writeoffs.reduce(function(s,w){return s+(w.amount||0);},0);
   var woodRcvTotal = woodRcv.reduce(function(s,r){return s+(r.amount||r.amt||0);},0) + jRcvWoodTotal;
   var drRcvTotal = drRcv.reduce(function(s,r){return s+(r.amount||r.amt||0);},0) + jRcvDrTotal;
-  var woodWoTotal = woodWo.reduce(function(s,w){return s+(w.amt!=null?w.amt:(w.amount||0));},0) + jWoWoodTotal;
-  var drWoTotal = drWo.reduce(function(s,w){return s+(w.amt!=null?w.amt:(w.amount||0));},0) + jWoDrTotal;
+  var woodWoTotal = woodWo.reduce(function(s,w){return s+(w.amount||0);},0) + jWoTotal;
+  var drWoTotal = drWo.reduce(function(s,w){return s+(w.amount||0);},0);
   var woodSaleQty = sales.reduce(function(s,e){ return s+(e.items||[]).filter(function(it){return it.goodsType!=='dr';}).reduce(function(a,it){return a+(it.qty||1);},0); },0);
   var drSaleQty = sales.reduce(function(s,e){ return s+(e.items||[]).filter(function(it){return it.goodsType==='dr';}).reduce(function(a,it){return a+(it.qty||1);},0); },0);
   var expWoodTotal = expenses.filter(function(e){return e.goodsType!=='dr' && e.goodsType!=='staff';}).reduce(function(s,e){return s+(e.amount||0);},0);
@@ -3730,6 +3845,10 @@ function _renderShiftView(){
     '<div id="svInvoicePicker" style="display:none;background:#0c1a20;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-top:8px"></div>'+
     addFormBtn('#f0c060','svOpenManualInvForm()','Внести накладную вручную')+
     '<div id="svManualInvForm" style="display:none;background:#1a1a0c;border:1px solid #f0c060;border-radius:10px;padding:10px;margin-top:8px"></div>'+
+    '<div style="border-top:1px solid #2e2e3e;margin-top:10px;padding-top:10px">'+
+      '<button onpointerdown="event.preventDefault();scanCrossShiftDuplicateReceives(\''+(sh.id||sh._id||'')+'\',\''+(sh.shopName||'')+'\',this)" style="width:100%;padding:9px;background:none;border:1px solid #f0a060;border-radius:9px;font-weight:700;font-size:12px;color:#f0a060;cursor:pointer">🔍 Проверить задвоения приходов между сменами</button>'+
+      '<div id="crossShiftDupResult" style="margin-top:8px"></div>'+
+    '</div>'+
   '</div>';
   woBody += '<div style="border-top:1px solid #2e2e3e;margin-top:8px;padding-top:8px">'+
     addFormBtn('#f06060','showAddForm(\'woWood\')','Добавить списание Дерево')+
@@ -3776,6 +3895,9 @@ function _renderShiftView(){
       '<button onclick="svForceCloseShift()" style="width:100%;padding:9px;background:#2e2a14;border:1px solid #f0c060;border-radius:9px;font-weight:700;font-size:12px;color:#f0c060;cursor:pointer;margin-bottom:10px">🔐 Принудительно закрыть смену</button>'
       :'');
   var sid2=sh.id||sh._id||'';
+  var auditBody = '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">Показывает все правки, удаления и системные события по этой смене (кто, что и когда сделал).</div>'+
+    '<button id="shiftAuditLoadBtn" onpointerdown="event.preventDefault();loadShiftAuditLog(\''+sid2+'\',this)" style="width:100%;padding:9px;background:none;border:1px solid #60c8f0;border-radius:9px;font-weight:700;font-size:12px;color:#60c8f0;cursor:pointer;margin-bottom:8px">🔍 Загрузить историю действий</button>'+
+    '<div id="shiftAuditBody"></div>';
   var repairExpHtml=(sh.backfilled||sh.isArchive||sh.source==='psj')?'<button onpointerdown="event.preventDefault();svRepairExpenses(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a1a2e;border:1px solid #a060f0;border-radius:9px;font-weight:700;font-size:12px;color:#a060f0;cursor:pointer;margin-bottom:8px">🔧 Пересчитать расходы (ЗП/проезд/прочие)</button>':'';
   var promoteHtml=(sh.isRestoreShift||sh.backfilled||sh.source==='psj')?'<button onpointerdown="event.preventDefault();svPromoteToNormal(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a1a2e;border:1px solid #60c8f0;border-radius:9px;font-weight:700;font-size:12px;color:#60c8f0;cursor:pointer;margin-bottom:8px">🔄 Сделать обычной сменой (включить в сверку)</button>':'';
   var pushFirestoreHtml='<button onpointerdown="event.preventDefault();svPushToFirestore(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a2a1e;border:1px solid #60f090;border-radius:9px;font-weight:700;font-size:12px;color:#60f090;cursor:pointer;margin-bottom:8px">☁️ Синхронизировать смену в Firestore</button>';
@@ -3792,6 +3914,7 @@ function _renderShiftView(){
     acc('wo', '🗑', 'Списания', '#f06060', woAllLen||null, woBody) +
     acc('exp', '💸', 'Расходы', '#f0a060', (expenses.length||(zp||inkass||otherExp||drInkass||drSupplier?1:0))||null, expBody) +
     acc('staff', '🛒', 'Покупки сотрудников', '#a060f0', staffArr.length||null, staffBody) +
+    acc('audit', '🔍', 'Аудит смены', '#60c8f0', null, auditBody) +
     pushFirestoreHtml +
     recoverSalesHtml +
     repairExpHtml +
@@ -3984,34 +4107,6 @@ function _addReceiveToShift(shift, items, goodsType, opts){
   _recordJournalEntryIndependently(rcvEntry, shift.shopName, 'receive');
   try{ stockApplyReceive(shift.shopName, items.map(function(it){ return {num:it.article,name:it.name,price:it.price,qty:it.qty,species:it.species,goodsType:goodsType}; }), shift.date, goodsType); }catch(e){}
   return rcvEntry;
-}
-function _addWriteoffToShift(shift, items, goodsType, opts){
-  opts = opts || {};
-  var isDr = goodsType==='dr';
-  var totalAmt = items.reduce(function(sum,it){ return sum+(it.amt!=null?it.amt:(it.price||0)*(it.qty||1)); },0);
-  var namesPreview = items.map(function(it){ return it.name; }).join(', ');
-  var sub = items.length===1
-    ? ((items[0].article?'№'+items[0].article+' ':'')+items[0].name+(items[0].species?' · '+items[0].species:'')+(items[0].qty&&items[0].qty!==1?' × '+items[0].qty:'')+(opts.reason?' · '+opts.reason:''))
-    : (items.length+' позиций: '+namesPreview+(opts.reason?' · '+opts.reason:''));
-  var woEntry = {
-    id: uid(), type:'writeoff', ts: shift.date+'T'+(new Date().toTimeString().slice(0,8)), icon:'🗑️',
-    label:'Списание'+(isDr?' (ДР)':''),
-    sub: sub, reason: opts.reason||'',
-    amount: totalAmt, amtCls:'exp', amtSign:'−', cashEffect:0, cardEffect:0, staffEffect:0,
-    goodsType: goodsType,
-    goodsEffect: isDr?0:-totalAmt, goodsDrEffect: isDr?-totalAmt:0,
-    items: items.map(function(it){ return Object.assign({}, it, {reason: opts.reason||''}); })
-  };
-  var jnl = shift.journal||[];
-  jnl.push(woEntry);
-  shift.journal = jnl;
-  _recordJournalEntryIndependently(woEntry, shift.shopName, 'writeoff');
-  try{
-    items.forEach(function(it){
-      if(it.article) stockUpdateQty(shift.shopName, it.article, it.name, it.price, it.species, goodsType, '', -(it.qty||1), null);
-    });
-  }catch(e){}
-  return woEntry;
 }
 function svSaveManualInvIntoShift(){
   if(!_svManInv || !_currentShiftView) return;
@@ -4241,7 +4336,7 @@ function svSaveJEntrySimple(type, idx){
   target.editedBy=(session&&(session.name||session.sellerName))||'admin';
   target.editedAt=new Date().toISOString();
   target.editReason=reason;
-  try{ logEntryEdit(before, target); }catch(e){}
+  try{ logEntryEdit(before, target, (_currentShiftView&&(_currentShiftView.id||_currentShiftView._id))); }catch(e){}
   _svEditTarget = null;
   svPersist(); _renderShiftView();
   showToast('✅ Запись обновлена');
@@ -4262,7 +4357,7 @@ function svSaveArrItemEdit(arrKey, idx, formId){
   target.editedAt=new Date().toISOString();
   target.editReason=d.reason;
   _currentShiftView[arrKey]=arr;
-  try{ logEntryEdit(before, target); }catch(e){}
+  try{ logEntryEdit(before, target, (_currentShiftView&&(_currentShiftView.id||_currentShiftView._id))); }catch(e){}
   _svEditTarget = null;
   svPersist(); _renderShiftView();
   showToast('✅ Запись обновлена');
@@ -4294,7 +4389,7 @@ function svSaveStaffEdit(idx, formId){
   target.editedBy=(session&&(session.name||session.sellerName))||'admin';
   target.editedAt=new Date().toISOString();
   target.editReason=d.reason;
-  try{ logEntryEdit(before, target); }catch(e){}
+  try{ logEntryEdit(before, target, (_currentShiftView&&(_currentShiftView.id||_currentShiftView._id))); }catch(e){}
   _svEditTarget = null;
   svPersist(); _renderShiftView();
   showToast('✅ Запись обновлена');
@@ -4444,7 +4539,7 @@ function svSaveInvoiceFromArchive(id, isManual){
       invId:id,
       editedAt:new Date().toISOString()
     });
-    try{ logEntryEdit(before, jnl[jIdx]); }catch(e){}
+    try{ logEntryEdit(before, jnl[jIdx], (_currentShiftView&&(_currentShiftView.id||_currentShiftView._id))); }catch(e){}
   }
   _currentShiftView.journal = jnl;
   if(isManual) delete window._manInvEdit[id]; else delete window._shInvEdit[id];
@@ -4613,8 +4708,15 @@ function svAddWo(type){
   if(!row.name){showToast('Укажите наименование');return;}
   if(row.species) saveSpecies(row.species);
   var reason = _svVal('svAdd_'+id+'_reason');
-  var item = {name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt};
-  _addWriteoffToShift(_currentShiftView, [item], isWood?'derevo':'dr', {reason: reason});
+  if(isWood){
+    var arr = _currentShiftView.goodsWriteoffs||[];
+    arr.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, reason:reason});
+    _currentShiftView.goodsWriteoffs = arr;
+  } else {
+    var arr2 = _currentShiftView.drGoodsWriteoffs||[];
+    arr2.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, reason:reason});
+    _currentShiftView.drGoodsWriteoffs = arr2;
+  }
   svPersist(); _svOpenAccs['acc_wo']=true; _renderShiftView();
   showToast('✅ Списание добавлено');
 }
