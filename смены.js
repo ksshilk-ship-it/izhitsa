@@ -1686,6 +1686,35 @@ function svPromoteToNormal(shiftId){
     _currentShiftView=sh;_renderShiftView();
   }
 }
+function svBuildExpenseJournalFromLegacy(shiftId){
+  var shifts=getShifts();
+  var idx=shifts.findIndex(function(s){return (s.id||s._id)===shiftId;});
+  if(idx<0){showToast('Смена не найдена');return;}
+  var sh=shifts[idx];
+  var already = (sh.journal||[]).some(function(e){return e.type==='expense';});
+  if(already){ showToast('В журнале уже есть записи расходов — ничего не меняю'); return; }
+  if(!confirm('Добавить в журнал этой смены записи расходов на основе сохранённых сумм ЗП/Инкассация/Прочее/ДР? Это исправит расчётный остаток кассы. Действие можно отменить только вручную (удалив добавленные записи).')) return;
+  var jnl = sh.journal||[];
+  function pushExp(amt, expType, goodsType, cashField){
+    if(!amt) return;
+    var e = {id:uid(), type:'expense', ts:(sh.date||'')+'T20:00:00.000Z', icon:'💸', expType:expType, goodsType:goodsType, amount:amt,
+      cashEffect:0, cashDrEffect:0, cardEffect:0, staffEffect:0, goodsEffect:0, restoredFromLegacy:true};
+    e[cashField] = -amt;
+    jnl.push(e);
+  }
+  pushExp(sh.zp, 'zp', 'derevo', 'cashEffect');
+  pushExp(sh.inkass, 'inkass', 'derevo', 'cashEffect');
+  pushExp(sh.otherExp, 'other', 'derevo', 'cashEffect');
+  pushExp(sh.drInkass, 'inkass', 'dr', 'cashDrEffect');
+  pushExp(sh.drSupplierAmt, 'supplier', 'dr', 'cashDrEffect');
+  sh.journal = jnl;
+  shifts[idx]=sh;
+  saveShifts(shifts);
+  _shiftSetSafe(shiftId, sh, '✅ Записи расходов добавлены в журнал — касса пересчитана');
+  if(_currentShiftView&&(_currentShiftView.id===shiftId||_currentShiftView._id===shiftId)){
+    _currentShiftView=sh;_renderShiftView();
+  }
+}
 function svRepairExpenses(shiftId){
   var shifts=getShifts();
   var idx=shifts.findIndex(function(s){return (s.id||s._id)===shiftId;});
@@ -3899,6 +3928,8 @@ function _renderShiftView(){
     '<button id="shiftAuditLoadBtn" onpointerdown="event.preventDefault();loadShiftAuditLog(\''+sid2+'\',this)" style="width:100%;padding:9px;background:none;border:1px solid #60c8f0;border-radius:9px;font-weight:700;font-size:12px;color:#60c8f0;cursor:pointer;margin-bottom:8px">🔍 Загрузить историю действий</button>'+
     '<div id="shiftAuditBody"></div>';
   var repairExpHtml=(sh.backfilled||sh.isArchive||sh.source==='psj')?'<button onpointerdown="event.preventDefault();svRepairExpenses(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a1a2e;border:1px solid #a060f0;border-radius:9px;font-weight:700;font-size:12px;color:#a060f0;cursor:pointer;margin-bottom:8px">🔧 Пересчитать расходы (ЗП/проезд/прочие)</button>':'';
+  var _hasLegacyExpNoJournal = (sh.backfilled) && ((sh.zp||sh.inkass||sh.otherExp||sh.drInkass||sh.drSupplierAmt)) && !(sh.journal||[]).some(function(e){return e.type==='expense';});
+  var repairLegacyExpHtml = _hasLegacyExpNoJournal ? '<button onpointerdown="event.preventDefault();svBuildExpenseJournalFromLegacy(\''+sid2+'\')" style="width:100%;padding:9px;background:#2e1a1a;border:1px solid #f0a060;border-radius:9px;font-weight:700;font-size:12px;color:#f0a060;cursor:pointer;margin-bottom:8px">⚠️ Записи ЗП/расходов не попали в журнал — исправить кассу</button>' : '';
   var promoteHtml=(sh.isRestoreShift||sh.backfilled||sh.source==='psj')?'<button onpointerdown="event.preventDefault();svPromoteToNormal(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a1a2e;border:1px solid #60c8f0;border-radius:9px;font-weight:700;font-size:12px;color:#60c8f0;cursor:pointer;margin-bottom:8px">🔄 Сделать обычной сменой (включить в сверку)</button>':'';
   var pushFirestoreHtml='<button onpointerdown="event.preventDefault();svPushToFirestore(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a2a1e;border:1px solid #60f090;border-radius:9px;font-weight:700;font-size:12px;color:#60f090;cursor:pointer;margin-bottom:8px">☁️ Синхронизировать смену в Firestore</button>';
   var recoverSalesHtml='<button onpointerdown="event.preventDefault();svRecoverSalesFromBackup(\''+sid2+'\')" style="width:100%;padding:9px;background:#1a1a2e;border:1px solid #f0c060;border-radius:9px;font-weight:700;font-size:12px;color:#f0c060;cursor:pointer;margin-bottom:8px">🛟 Сверить с подстраховкой (продажи/расходы/приходы/списания)</button>';
@@ -3918,6 +3949,7 @@ function _renderShiftView(){
     pushFirestoreHtml +
     recoverSalesHtml +
     repairExpHtml +
+    repairLegacyExpHtml +
     promoteHtml +
     deleteShiftHtml;
 }
@@ -4802,6 +4834,19 @@ function savePastShift(){
   var staffTotalOpt=psStaffs.reduce((s,x)=>s+(x.opt||0),0);
   var woodEve=n('psWoodMorn')+n('psWoodIn')-(n('psCashRev')+n('psTerminal')+n('psTransfer')+n('psQR'))-n('psWoodOff');
   var drEve=n('psDrMorn')+n('psDrIn')-(n('psDrCashRev')+n('psDrTerminal')+n('psDrTransfer')+n('psDrQR'))-n('psDrOff');
+  var _psExpJournal = [];
+  function _psPushExp(amt, expType, goodsType, cashField){
+    if(!amt) return;
+    var e = {id:uid(), type:'expense', ts:date+'T20:00:00.000Z', icon:'💸', expType:expType, goodsType:goodsType, amount:amt,
+      cashEffect:0, cashDrEffect:0, cardEffect:0, staffEffect:0, goodsEffect:0, backfilled:true};
+    e[cashField] = -amt;
+    _psExpJournal.push(e);
+  }
+  _psPushExp(n('psZP'), 'zp', 'derevo', 'cashEffect');
+  _psPushExp(n('psInkass'), 'inkass', 'derevo', 'cashEffect');
+  _psPushExp(n('psOtherExp'), 'other', 'derevo', 'cashEffect');
+  _psPushExp(n('psDrInkass'), 'inkass', 'dr', 'cashDrEffect');
+  _psPushExp(n('psDrSupplierAmt'), 'supplier', 'dr', 'cashDrEffect');
   const shift={id:uid(),source:'shop',isArchive:true,shopName:shop,sellerName:gv('psSeller')||'—',date,
     openedAt:date+'T09:00:00.000Z',closedAt:date+'T21:00:00.000Z',
     cashMorning:n('psCashMorn'),cashEvening:n('psCashEve'),
@@ -4822,7 +4867,7 @@ function savePastShift(){
     drGoodsMorning:n('psDrMorn'),drGoodsEvening:drEve,
     drGoodsReceives:[...psDrReceives],drGoodsWriteoffs:[...psDrWriteoffs],
     staffPurchases:[...psStaffs],staffCashTotal:staffTotalOpt,
-    comment:gv('psComment'),backfilled:true,backfilledBy:session.name,backfilledAt:new Date().toISOString(),journal:[]};
+    comment:gv('psComment'),backfilled:true,backfilledBy:session.name,backfilledAt:new Date().toISOString(),journal:_psExpJournal};
   const shifts=getShifts();
   shifts.unshift(shift); saveShifts(shifts);
   try{ db.collection('iz_shifts').add(shift); }catch(e){}
