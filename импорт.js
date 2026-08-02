@@ -2117,41 +2117,50 @@ var _rcvWordFixes = [
   {from:'шкатулка', to:'Шкатулка'},
   {from:'шпатель', to:'Шпатель'}
 ];
+function ghOnFileSelected(input){
+  var nameEl = document.getElementById('ghFileName');
+  var pathEl = document.getElementById('ghPathInput');
+  var file = input.files && input.files[0];
+  if(nameEl) nameEl.textContent = file ? file.name : 'Выбрать файл (.html, .js, .css...)';
+  if(pathEl && file && !pathEl.value.trim()) pathEl.value = file.name;
+}
 function uploadToGitHub(){
   var tokenEl = document.getElementById('ghTokenInput');
   var statusEl = document.getElementById('ghUploadStatus');
+  var pathEl = document.getElementById('ghPathInput');
   var token = (tokenEl && tokenEl.value.trim()) || localStorage.getItem('iz_gh_token') || '';
   if(!token){ if(statusEl) statusEl.innerHTML='<span style="color:#f06060">❌ Введите токен</span>'; return; }
+  var fileInput = document.getElementById('ghFileInput');
+  var selectedFile = fileInput && fileInput.files && fileInput.files[0];
+  var path = (pathEl && pathEl.value.trim()) || (selectedFile && selectedFile.name) || 'izhitsa-shop.html';
   localStorage.setItem('iz_gh_token', token);
-  if(statusEl) statusEl.innerHTML='⏳ Читаю текущий файл с GitHub...';
+  if(statusEl) statusEl.innerHTML='⏳ Читаю текущий файл с GitHub ('+path+')...';
   var owner = 'ksshilk-ship-it';
   var repo = 'izhitsa';
-  var path = 'izhitsa-shop.html';
   var apiBase = 'https://api.github.com/repos/'+owner+'/'+repo+'/contents/'+path;
   fetch(apiBase, {
     headers: {'Authorization': 'token '+token, 'Accept': 'application/vnd.github.v3+json'}
   }).then(function(r){
-    if(!r.ok){ throw new Error('GitHub API: HTTP '+r.status+' ('+r.statusText+')'); }
+    if(!r.ok){ throw new Error('GitHub API: HTTP '+r.status+' ('+r.statusText+') — проверьте путь "'+path+'"'); }
     return r.json();
   }).then(function(meta){
     var sha = meta.sha;
     if(!sha){ throw new Error('Нет SHA: '+(meta.message||JSON.stringify(meta))); }
-    if(statusEl) statusEl.innerHTML='⏳ Читаю приложение...';
-    var fileInput = document.getElementById('ghFileInput');
+    if(statusEl) statusEl.innerHTML='⏳ Читаю файл...';
     var filePromise;
-    if(fileInput && fileInput.files && fileInput.files[0]){
+    if(selectedFile){
       filePromise = new Promise(function(resolve, reject){
         var reader = new FileReader();
         reader.onload = function(e){ resolve(e.target.result); };
         reader.onerror = function(){ reject(new Error('Ошибка чтения файла')); };
-        reader.readAsText(fileInput.files[0]);
+        reader.readAsText(selectedFile);
       });
     } else {
       filePromise = fetch(window.location.href).then(function(r){ return r.text(); });
     }
-    return filePromise.then(function(html){
-      var b64 = btoa(unescape(encodeURIComponent(html)));
-      if(statusEl) statusEl.innerHTML='⏳ Загружаю на GitHub ('+Math.round(b64.length/1024)+' КБ)...';
+    return filePromise.then(function(content){
+      var b64 = btoa(unescape(encodeURIComponent(content)));
+      if(statusEl) statusEl.innerHTML='⏳ Загружаю на GitHub ('+path+', '+Math.round(b64.length/1024)+' КБ)...';
       return fetch(apiBase, {
         method: 'PUT',
         headers: {
@@ -2160,7 +2169,7 @@ function uploadToGitHub(){
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          message: 'Update izhitsa-shop.html via in-app upload',
+          message: 'Update '+path+' via in-app upload',
           content: b64,
           sha: sha,
           branch: 'main'
@@ -2170,7 +2179,7 @@ function uploadToGitHub(){
   }).then(function(res){
     var result=res.body; var httpStatus=res.status;
     if(result.content && result.content.sha){
-      if(statusEl) statusEl.innerHTML='<span style="color:#60f090">✅ Загружено! GitHub Pages обновится через 1-2 минуты.</span>';
+      if(statusEl) statusEl.innerHTML='<span style="color:#60f090">✅ '+path+' загружен! GitHub Pages обновится через 1-2 минуты.</span>';
       if(tokenEl) tokenEl.value='';
     } else {
       if(statusEl) statusEl.innerHTML='<span style="color:#f06060">❌ HTTP '+httpStatus+': '+(result.message||JSON.stringify(result))+'</span>';
