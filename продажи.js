@@ -46,7 +46,10 @@ function siAddToSpecies(inputId){
   if(_siItemGoodsType==='dr'){
     var drSp = getRefBook('iz_dr_species');
     if(drSp.some(function(g){return (g.name||g)===val;})){ showToast('Уже есть'); return; }
-    drSp.push({id:uid(),name:val}); saveRefBookShop('iz_dr_species',drSp);
+    var newSp = {id:uid(),name:val};
+    drSp.push(newSp);
+    localStorage.setItem('iz_dr_species', JSON.stringify(drSp));
+    syncArrayAdd('iz_dr_species', newSp);
     showToast('✅ Добавлено в Вкус/Состав: '+val);
   } else {
     var before=getSpecies().length; saveSpecies(val);
@@ -99,12 +102,16 @@ function siAddToGoods(inputId){
   var goods = getRefBook(key);
   var exists = goods.some(function(g){ return ((g&&g.name)||g)===val; });
   if(!exists){
-    goods.push({id:uid(), name:val});
-    saveRefBookShop(key, goods);
+    var newItem = {id:uid(), name:val};
+    goods.push(newItem);
+    localStorage.setItem(key, JSON.stringify(goods));
+    syncArrayAdd(key, newItem);
     var allGoods = getRefBook('iz_goods');
     if(!allGoods.some(function(g){return ((g&&g.name)||g)===val;})){
-      allGoods.push({id:uid(), name:val});
-      saveRefBookShop('iz_goods', allGoods);
+      var newItem2 = {id:uid(), name:val};
+      allGoods.push(newItem2);
+      localStorage.setItem('iz_goods', JSON.stringify(allGoods));
+      syncArrayAdd('iz_goods', newItem2);
     }
     showToast('✅ Добавлено в базу товаров: '+val);
   } else {

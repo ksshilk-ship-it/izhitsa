@@ -1867,8 +1867,11 @@ function saveSpecies(name) {
   var matTombs = JSON.parse(localStorage.getItem('iz_materials_deleted')||'[]');
   var wasDeleted = matTombs.indexOf(name.toLowerCase())>=0;
   if(!exists && !wasDeleted){
-    materials.push({id:uid(), name:name});
-    saveRefBookShop('iz_materials', materials);
+    var newMat = {id:uid(), name:name};
+    materials.push(newMat);
+    localStorage.setItem('iz_materials', JSON.stringify(materials));
+    syncArrayAdd('iz_materials', newMat);
+    try{ renderRefbookItemsShop('materials','iz_materials'); updateRefbookCountShop('materials','iz_materials'); }catch(e){}
   }
 }
 function getSuppliers() {

@@ -515,6 +515,25 @@ function syncSave(lsKey, data) {
     showToast('⚠️ Не удалось сохранить в облако — сохранится автоматически, когда появится связь');
   });
 }
+function syncArrayAdd(lsKey, newItem){
+  var m = SYNC_SETTINGS[lsKey];
+  _syncSaveGuard[lsKey] = Date.now(); // mark as just saved locally
+  if(!m) return;
+  if(typeof firebase==='undefined' || !firebase.firestore || !firebase.firestore.FieldValue){
+    var full = {}; full[m.field] = JSON.parse(localStorage.getItem(lsKey)||'[]'); full.updatedAt = new Date().toISOString();
+    _queuePendingRefbookSave(lsKey, full);
+    return;
+  }
+  var upd = {}; upd[m.field] = firebase.firestore.FieldValue.arrayUnion(newItem); upd.updatedAt = new Date().toISOString();
+  db.collection('iz_settings').doc(m.doc).set(upd, {merge:true}).then(function(){
+    _clearPendingRefbookSave(lsKey);
+  }).catch(function(e){
+    console.log('syncArrayAdd err', lsKey, e.code||e);
+    var full = {}; full[m.field] = JSON.parse(localStorage.getItem(lsKey)||'[]'); full.updatedAt = new Date().toISOString();
+    _queuePendingRefbookSave(lsKey, full);
+    showToast('⚠️ Не удалось сохранить в облако — сохранится автоматически, когда появится связь');
+  });
+}
 function _queuePendingRefbookSave(lsKey, obj){
   try{
     var pending = JSON.parse(localStorage.getItem('iz_pending_refbook_saves')||'{}');
