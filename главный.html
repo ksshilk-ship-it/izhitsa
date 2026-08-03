@@ -927,9 +927,11 @@
       <div style="font-size:10px;color:#8888aa;margin-bottom:4px">Выберите новый файл от Клода:</div>
       <div onclick="document.getElementById('ghFileInput').click()" style="border:2px dashed #c8f060;border-radius:10px;padding:12px;text-align:center;cursor:pointer;margin-bottom:8px">
         <div style="font-size:20px;margin-bottom:3px">📄</div>
-        <div style="font-size:12px;font-weight:700;color:#c8f060" id="ghFileName">Выбрать файл izhitsa-shop.html</div>
-        <input type="file" id="ghFileInput" accept=".html" style="display:none" onchange="document.getElementById('ghFileName').textContent=this.files[0]?this.files[0].name:'Выбрать файл'">
+        <div style="font-size:12px;font-weight:700;color:#c8f060" id="ghFileName">Выбрать файл (.html, .js, .css...)</div>
+        <input type="file" id="ghFileInput" accept=".html,.js,.css,.json,.txt" style="display:none" onchange="ghOnFileSelected(this)">
       </div>
+      <div style="font-size:10px;color:#8888aa;margin-bottom:4px">Путь в репозитории (проверьте перед загрузкой):</div>
+      <input class="fi" id="ghPathInput" placeholder="например, продажи.js" autocomplete="off" style="margin-bottom:8px;font-family:monospace;font-size:12px">
       <button type="button" onpointerdown="event.preventDefault();uploadToGitHub()" style="width:100%;padding:10px;border-radius:10px;border:none;background:#c8f060;color:#0f0f13;font-size:13px;font-weight:700;cursor:pointer">⬆️ Загрузить на GitHub Pages</button>
       <div id="ghUploadStatus" style="margin-top:8px;font-size:11px;color:#8888aa"></div>
     </div>
@@ -1143,9 +1145,9 @@
         <div class="fg" style="margin-top:8px;margin-bottom:6px">
           <label class="fl">Тип товара</label>
           <div class="u-flex-g6">
-            <button type="button" id="siTypeDerevo" onclick="setSiItemType('derevo')"
+            <button type="button" id="siTypeDerevo" onclick="siManualSetType('derevo')"
               style="flex:1;padding:7px;border-radius:8px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">🌳 Дерево</button>
-            <button type="button" id="siTypeDr" onclick="setSiItemType('dr')"
+            <button type="button" id="siTypeDr" onclick="siManualSetType('dr')"
               style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
           </div>
         </div>
@@ -1172,9 +1174,9 @@
         <div class="fg" style="margin-top:8px;margin-bottom:6px">
           <label class="fl">Тип товара</label>
           <div class="u-flex-g6">
-            <button type="button" id="siTypeDerevoM" onclick="setSiItemType('derevo')"
+            <button type="button" id="siTypeDerevoM" onclick="siManualSetType('derevo')"
               style="flex:1;padding:7px;border-radius:8px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">🌳 Дерево</button>
-            <button type="button" id="siTypeDrM" onclick="setSiItemType('dr')"
+            <button type="button" id="siTypeDrM" onclick="siManualSetType('dr')"
               style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
           </div>
         </div>
@@ -1378,6 +1380,23 @@
     <div id="fixMorningCashFields"></div>
     <button class="btn" style="background:#f06060;color:#1a0808" onclick="saveFixMorningCash()">💾 Сохранить верную сумму</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('fixMorningCashMo')">Отмена</button>
+  </div>
+</div>
+<div class="mo" id="fixMorningEntryMo">
+  <div class="md"><div class="mh"></div><div class="mt">✏️ Исправить остатки на утро</div>
+    <div style="font-size:11.5px;color:#8888aa;margin-bottom:12px">Если при открытии смены вы ошиблись с цифрами — исправьте их здесь, пока смена ещё не закрыта. Изменится только сегодняшняя смена.</div>
+    <div style="font-size:10px;color:#c8f060;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">💵 Нал утро</div>
+    <div style="margin-bottom:8px"><div style="font-size:11px;color:#8888aa;margin-bottom:4px">🌳 Дерево</div><input class="fi" type="text" id="fmeCashMorn" inputmode="numeric" style="margin:0"></div>
+    <div style="margin-bottom:8px"><div style="font-size:11px;color:#8888aa;margin-bottom:4px">🛍 ДР Товар</div><input class="fi" type="text" id="fmeCashDrMorn" inputmode="numeric" style="margin:0"></div>
+    <div style="margin-bottom:12px"><div style="font-size:11px;color:#8888aa;margin-bottom:4px">🛒 Покупки сотрудников</div><input class="fi" type="text" id="fmeCashStaffMorn" inputmode="numeric" style="margin:0"></div>
+    <div style="font-size:10px;color:#f0a060;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📦 Остаток товара утро</div>
+    <div style="margin-bottom:8px"><div style="font-size:11px;color:#8888aa;margin-bottom:4px">🌳 Дерево, ₽</div><input class="fi" type="text" id="fmeGoodsMorn" inputmode="numeric" style="margin:0"></div>
+    <div style="margin-bottom:12px"><div style="font-size:11px;color:#8888aa;margin-bottom:4px">🛍 ДР Товар, ₽</div><input class="fi" type="text" id="fmeGoodsDrMorn" inputmode="numeric" style="margin:0"></div>
+    <div style="font-size:11px;color:#8888aa;margin-bottom:4px">Причина правки (обязательно)</div>
+    <input class="fi" type="text" id="fmeReason" placeholder="например: опечаталась при вводе" style="margin-bottom:10px">
+    <div id="fmeError" style="display:none;color:#f06060;font-size:11.5px;margin-bottom:8px"></div>
+    <button class="btn" style="background:#c8f060;color:#0f0f13" onclick="saveFixMorningEntry()">💾 Сохранить исправление</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('fixMorningEntryMo')">Отмена</button>
   </div>
 </div>
 <div class="mo" id="receiveMo">
