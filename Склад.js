@@ -1267,7 +1267,7 @@ function generateManInvNum(forDate){
   var monthInvs = existing.filter(function(inv){
     if(!inv.num) return false;
     var invDate = inv.date||'';
-    return invDate.indexOf(monthKey)===0 && inv.shopName===shopName;
+    return invDate.indexOf(monthKey)===0 && inv.destName===shopName;
   });
   var n = String(monthInvs.length + 1).padStart(3,'0');
   return n+'/'+dd+'.'+mm+'.'+yyyy+'/'+(shopShort||'Магазин');
@@ -1985,6 +1985,71 @@ function findAndCleanDuplicateReceives(){
     _pushShiftWithRetry(s.id||s._id, s);
   });
   showToast('✅ Убрано дублей: '+toRemove.length);
+  try{ renderAdminRcvWo(); }catch(e){}
+}
+function renumberManualInvoices(){
+  var invoices = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var groups = {};
+  invoices.forEach(function(inv){
+    if(!inv.num || !inv.destName) return;
+    var d = (inv.date||inv.acceptedAt||'').slice(0,10);
+    var monthKey = d.slice(0,7);
+    if(monthKey.length!==7) return;
+    var gk = inv.destName+'|'+monthKey;
+    (groups[gk]=groups[gk]||[]).push(inv);
+  });
+  var plan = [];
+  Object.keys(groups).forEach(function(gk){
+    var arr = groups[gk];
+    arr.sort(function(a,b){ return (a.acceptedAt||a.date||'').localeCompare(b.acceptedAt||b.date||''); });
+    arr.forEach(function(inv, idx){
+      var d = new Date((inv.date||'').slice(0,10)+'T00:00:00');
+      if(isNaN(d.getTime())) d = new Date(inv.acceptedAt||Date.now());
+      var dd = String(d.getDate()).padStart(2,'0');
+      var mm = String(d.getMonth()+1).padStart(2,'0');
+      var yyyy = d.getFullYear();
+      var shopShort = shopAbbrev(inv.destName);
+      var n = String(idx+1).padStart(3,'0');
+      var newNum = n+'/'+dd+'.'+mm+'.'+yyyy+'/'+(shopShort||'Магазин');
+      if(newNum !== inv.num) plan.push({inv:inv, oldNum:inv.num, newNum:newNum});
+    });
+  });
+  if(!plan.length){ showToast('✅ Все номера накладных уже соответствуют правильному порядку'); return; }
+  var summary = plan.slice(0,15).map(function(p){
+    return '• '+p.inv.destName+': '+p.oldNum+' → '+p.newNum;
+  }).join('\n');
+  if(!confirm('Будет изменена нумерация '+plan.length+' накладных (только номер, суммы и товары не меняются):\n\n'+summary+(plan.length>15?'\n...и ещё '+(plan.length-15):'')+'\n\nПродолжить?')) return;
+  var shifts = getShifts();
+  var touchedShifts = {};
+  plan.forEach(function(p){
+    p.inv.num = p.newNum;
+    shifts.forEach(function(s, sIdx){
+      (s.journal||[]).forEach(function(e){
+        if(e.type==='receive' && e.invId===p.inv.id){
+          e.label = 'Приёмка '+p.newNum+(p.inv.goodsType==='dr'?' (ДР)':'');
+          touchedShifts[sIdx]=true;
+        }
+      });
+    });
+    if(typeof journal!=='undefined' && journal && journal.length){
+      journal.forEach(function(e){
+        if(e.type==='receive' && e.invId===p.inv.id){
+          e.label = 'Приёмка '+p.newNum+(p.inv.goodsType==='dr'?' (ДР)':'');
+        }
+      });
+      try{ saveJ(); }catch(e){}
+    }
+  });
+  localStorage.setItem('iz_manual_invoices', JSON.stringify(invoices));
+  plan.forEach(function(p){
+    try{ db.collection('iz_manual_invoices').doc(p.inv.id).set({num:p.newNum}, {merge:true}); }catch(e){}
+  });
+  saveShifts(shifts);
+  Object.keys(touchedShifts).forEach(function(idx){
+    var s = shifts[idx];
+    _pushShiftWithRetry(s.id||s._id, s);
+  });
+  showToast('✅ Перенумеровано накладных: '+plan.length);
   try{ renderAdminRcvWo(); }catch(e){}
 }
 function initAdminRcvWo(){
