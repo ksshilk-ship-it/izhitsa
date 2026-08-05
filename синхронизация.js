@@ -26,7 +26,7 @@ if ('serviceWorker' in navigator) {
 }
 function checkForNewVersion(){
   try{
-    fetch('./izhitsa-shop.html', {cache:'no-store'}).then(function(r){ return r.text(); }).then(function(html){
+    fetch('./синхронизация.js', {cache:'no-store'}).then(function(r){ return r.text(); }).then(function(html){
       var m = html.match(/APP_BUILD_VERSION\s*=\s*'([^']+)'/);
       if(m && m[1] && typeof APP_BUILD_VERSION!=='undefined' && m[1]!==APP_BUILD_VERSION){
         var banner = document.getElementById('updateBanner');
@@ -153,7 +153,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '07.17.36';
+var APP_BUILD_VERSION = '08.05.01';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;

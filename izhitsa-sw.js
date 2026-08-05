@@ -1,13 +1,25 @@
 // Ижица Service Worker — офлайн-режим для shop-модуля
 // Кэширует HTML-приложение и Firebase SDK, чтобы приложение запускалось без интернета.
 
-const CACHE_NAME = 'izhitsa-shop-v5';
+const CACHE_NAME = 'izhitsa-shop-v6';
 const CACHE_URLS = [
   './izhitsa-shop.html',
+  './главный.html',
+  './стили.css',
+  './смены.js',
+  './отчеты.js',
+  './продажи.js',
+  './Склад.js',
+  './прочее.js',
+  './импорт.js',
+  './синхронизация.js',
   './manifest-shop.json',
   'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js'
 ];
+// Файлы приложения (JS/CSS) — те же расширения, что и .html, должны
+// обновляться быстро (Network First), а не залипать в кэше навсегда.
+const APP_FILE_EXT = /\.(js|css)$/;
 
 // Установка — кэшируем критичные файлы сразу.
 // Каждый файл кэшируется независимо: сам izhitsa-shop.html — первым и
@@ -93,7 +105,7 @@ self.addEventListener('fetch', function(event) {
   // показаться мгновенно. Теперь сеть и тайм-аут (3 сек) идут наперегонки:
   // если сеть не успела — сразу отдаём то, что есть в кэше, а сеть
   // продолжает грузиться в фоне и обновит кэш к следующему разу.
-  if (event.request.mode === 'navigate' || url.indexOf('.html') >= 0 || url.indexOf('manifest') >= 0) {
+  if (event.request.mode === 'navigate' || url.indexOf('.html') >= 0 || url.indexOf('manifest') >= 0 || APP_FILE_EXT.test(url.split('?')[0])) {
     event.respondWith(
       (function() {
         var TIMEOUT_MS = 3000;
