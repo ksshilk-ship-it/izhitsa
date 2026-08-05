@@ -3754,9 +3754,10 @@ function _renderShiftView(){
       woodExpCount++;
     });
   } else {
-    if(zp){ expBody += expItem('💰 ЗП', zp, '#f0a060', null); woodExpCount++; }
-    if(inkass){ expBody += expItem('🏦 Инкассация', inkass, '#f0a060', null); woodExpCount++; }
-    if(otherExp){ expBody += expItem('📝 Прочее', otherExp, '#f0a060', null); woodExpCount++; }
+    if(zp){ expBody += expItem('💰 ЗП (план, не введено как факт)', zp, '#8888aa', null); woodExpCount++; }
+    if(inkass){ expBody += expItem('🏦 Инкассация (план, не введено как факт)', inkass, '#8888aa', null); woodExpCount++; }
+    if(otherExp){ expBody += expItem('📝 Прочее (план, не введено как факт)', otherExp, '#8888aa', null); woodExpCount++; }
+    if(woodExpCount) expBody += '<div style="font-size:10px;color:#f0a060;padding:4px 0 8px">⚠️ Это старая смена без отдельных записей по расходам — показаны только сохранённые плановые суммы. В карточке ЗП выше «Факт (взято)» не учитывает эти цифры, т.к. реальной записи о выдаче нет. Кнопка «Записи ЗП/расходов не попали в журнал» ниже добавит их как реальные записи, если нужно зафиксировать это как факт.</div>';
   }
   if(!woodExpCount) expBody += '<div style="font-size:11px;color:#555568;padding:6px 0 10px">Расходов не было</div>';
   expBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
@@ -3770,8 +3771,9 @@ function _renderShiftView(){
       drExpCount++;
     });
   } else {
-    if(drInkass){ expBody += expItem('🏦 Инкассация ДР', drInkass, '#a060f0', null); drExpCount++; }
-    if(drSupplier){ expBody += expItem('🏭 Поставщик ДР'+(sh.drSupplierName?' ('+sh.drSupplierName+')':''), drSupplier, '#a060f0', null); drExpCount++; }
+    if(drInkass){ expBody += expItem('🏦 Инкассация ДР (план, не введено как факт)', drInkass, '#8888aa', null); drExpCount++; }
+    if(drSupplier){ expBody += expItem('🏭 Поставщик ДР (план, не введено как факт)'+(sh.drSupplierName?' ('+sh.drSupplierName+')':''), drSupplier, '#8888aa', null); drExpCount++; }
+    if(drExpCount) expBody += '<div style="font-size:10px;color:#f0a060;padding:4px 0 8px">⚠️ Это старая смена без отдельных записей по расходам ДР — показаны только сохранённые плановые суммы, не факт.</div>';
   }
   if(!drExpCount) expBody += '<div style="font-size:11px;color:#555568;padding:6px 0">Расходов не было</div>';
   expBody += '<div style="font-size:10px;color:#60c8f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛒 ПОКУПКИ СОТРУДНИКОВ</div>';
