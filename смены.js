@@ -475,11 +475,29 @@ function mergeRemoteJournal(remote){
 var _manualSyncing = false;
 var _syncPressTimer = null;
 var _syncLongPressed = false;
+function forceSyncAllShiftsNow(){
+  if(typeof db==='undefined' || !db){ showToast('Нет подключения к базе'); return; }
+  var shifts = getShifts();
+  var mine = shifts.filter(function(s){ return s.shopName===(session&&session.shopName); });
+  if(!mine.length){ showToast('Нет сохранённых смен на этом устройстве'); return; }
+  showToast('⏳ Отправляю '+mine.length+' смен(ы) в облако...');
+  var done=0, total=mine.length, errors=0;
+  mine.forEach(function(s){
+    db.collection('iz_shifts').doc(String(s.id||s._id)).set(s,{merge:true}).then(function(){
+      done++;
+      if(done+errors===total) showToast(errors? ('⚠️ Отправлено: '+done+', ошибок: '+errors) : ('✅ Отправлено смен: '+done));
+    }).catch(function(e){
+      errors++;
+      if(done+errors===total) showToast(errors? ('⚠️ Отправлено: '+done+', ошибок: '+errors) : ('✅ Отправлено смен: '+done));
+    });
+  });
+}
 function _syncPressStart(){
   _syncLongPressed = false;
   _syncPressTimer = setTimeout(function(){
     _syncLongPressed = true;
-    if(confirm('Полностью обновить приложение? Это перезагрузит страницу и подгрузит последнюю версию.')) hardRefreshApp();
+    forceSyncAllShiftsNow();
+    if(confirm('Также полностью обновить приложение? Это перезагрузит страницу и подгрузит последнюю версию (данные смен не затрагивает).')) hardRefreshApp();
   }, 700);
 }
 function _syncPressEnd(){
