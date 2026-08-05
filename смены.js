@@ -348,13 +348,15 @@ _retryPendingSales();
 _retryPendingJournalEntries();
 _retryPendingRefbookSaves();
 _retryPendingInvoices();
+_retryPendingShiftBackups();
 _checkPendingCloseBanner();
 setInterval(_retryPendingShiftSyncs, 45000);
 setInterval(_retryPendingSales, 45000);
 setInterval(_retryPendingJournalEntries, 45000);
 setInterval(_retryPendingRefbookSaves, 45000);
 setInterval(_retryPendingInvoices, 45000);
-window.addEventListener('online', function(){ setTimeout(_retryPendingShiftSyncs, 1500); setTimeout(_retryPendingSales, 1500); setTimeout(_retryPendingJournalEntries, 1500); setTimeout(_retryPendingRefbookSaves, 1500); setTimeout(_retryPendingInvoices, 1500); });
+setInterval(_retryPendingShiftBackups, 45000);
+window.addEventListener('online', function(){ setTimeout(_retryPendingShiftSyncs, 1500); setTimeout(_retryPendingSales, 1500); setTimeout(_retryPendingJournalEntries, 1500); setTimeout(_retryPendingRefbookSaves, 1500); setTimeout(_retryPendingInvoices, 1500); setTimeout(_retryPendingShiftBackups, 1500); });
 var _liveShiftSyncTimer = null;
 function buildLiveShiftDoc(){
   var t = calcTotals();
@@ -2450,6 +2452,7 @@ function _closeShiftReal(){
       date:report.date,cashDiff,cashDiffReason:reason,morningDiff,prevCashEve:(prev&&prev.cashEvening),cashMorning:session.cashMorning});
   }
   report._pendingSync = true;
+  try{ _backupShiftIndependently(report); }catch(e){}
   const shifts=getShifts();
   var filteredShifts = shifts.filter(function(s){
     if(!restoreMode) return true;

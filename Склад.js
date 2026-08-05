@@ -2052,6 +2052,126 @@ function renumberManualInvoices(){
   showToast('✅ Перенумеровано накладных: '+plan.length);
   try{ renderAdminRcvWo(); }catch(e){}
 }
+function openLostDataMo(){
+  var sel = document.getElementById('lostDataShop');
+  if(sel){
+    var shops = getShopNames();
+    sel.innerHTML = shops.map(function(s){ return '<option value="'+s.replace(/"/g,'&quot;')+'">'+s+'</option>'; }).join('');
+  }
+  var today = new Date().toISOString().split('T')[0];
+  var fromEl = document.getElementById('lostDataFrom'), toEl = document.getElementById('lostDataTo');
+  if(fromEl && !fromEl.value) fromEl.value = today;
+  if(toEl && !toEl.value) toEl.value = today;
+  var resEl = document.getElementById('lostDataResult'); if(resEl) resEl.innerHTML = '';
+  openMo('lostDataMo');
+}
+window._lostShiftOrphans = {};
+function findLostShiftData(){
+  var shop = (document.getElementById('lostDataShop')||{}).value || '';
+  var from = (document.getElementById('lostDataFrom')||{}).value || '';
+  var to = (document.getElementById('lostDataTo')||{}).value || '';
+  var resEl = document.getElementById('lostDataResult');
+  if(!shop || !from || !to){ showToast('Укажите магазин и период'); return; }
+  if(typeof db==='undefined' || !db){ if(resEl) resEl.innerHTML='<div style="color:#f06060;font-size:12px">Нет подключения к базе</div>'; return; }
+  if(resEl) resEl.innerHTML = '<div style="font-size:12px;color:#8888aa">⏳ Ищу...</div>';
+  Promise.all([
+    db.collection('iz_sales').where('shopName','==',shop).get(),
+    db.collection('iz_journal_backup').where('shopName','==',shop).get(),
+    db.collection('iz_shifts').where('shopName','==',shop).get(),
+    db.collection('iz_shift_backup').where('shopName','==',shop).get().catch(function(){ return {docs:[]}; })
+  ]).then(function(results){
+    var inRange = function(d){ return d && d>=from && d<=to; };
+    var sales = results[0].docs.map(function(d){ return d.data(); }).filter(function(e){ return inRange(e.date); });
+    var jnl = results[1].docs.map(function(d){ return d.data(); }).filter(function(e){ return inRange(e.date); });
+    var existingShiftIds = {};
+    results[2].docs.forEach(function(d){ var s=d.data(); existingShiftIds[s.id||d.id]=true; });
+    var exactBackups = results[3].docs.map(function(d){ return d.data(); })
+      .filter(function(s){ return inRange(s.date) && !existingShiftIds[s.id]; });
+    window._lostShiftExactBackups = {}; exactBackups.forEach(function(s){ window._lostShiftExactBackups[s.id] = s; });
+    var backedUpIds = {}; exactBackups.forEach(function(s){ backedUpIds[s.id] = true; });
+    var allEntries = sales.concat(jnl).filter(function(e){ return !e.shiftId || !backedUpIds[e.shiftId]; });
+    var byShift = {};
+    allEntries.forEach(function(e){
+      var sid = e.shiftId || ('bez-id-'+e.date);
+      if(!byShift[sid]) byShift[sid] = {shiftId:e.shiftId||'', date:e.date, sellerName:e.sellerName, entries:[]};
+      byShift[sid].entries.push(e);
+    });
+    var orphans = Object.keys(byShift).filter(function(sid){ return !existingShiftIds[sid]; }).map(function(sid){ return byShift[sid]; });
+    window._lostShiftOrphans = {}; orphans.forEach(function(o){ window._lostShiftOrphans[o.shiftId||('bez-id-'+o.date)] = o; });
+    if(!resEl) return;
+    if(!orphans.length && !exactBackups.length){
+      resEl.innerHTML = '<div style="color:#60f090;font-size:12px">Осиротевших записей не найдено — либо данных за этот период нет вообще, либо все они уже привязаны к существующим сменам в архиве.</div>';
+      return;
+    }
+    var exactHtml = exactBackups.map(function(s){
+      return '<div style="background:#16241a;border:1px solid #60f090;border-radius:10px;padding:10px;margin-bottom:8px">'+
+        '<div style="font-weight:700;font-size:12px;color:#60f090">✅ Точная копия найдена</div>'+
+        '<div style="font-size:12px;margin-top:2px">'+(s.date||'—')+' · '+(s.shopName||'')+' · '+(s.sellerName||'—')+'</div>'+
+        '<div style="font-size:11px;color:#8888aa;margin:4px 0">Продаж: '+(s.salesCount||0)+' · Выручка: '+Math.round(s.totalRevenue||0).toLocaleString('ru-RU')+'₽</div>'+
+        '<button onclick="restoreExactShiftBackup(\''+s.id+'\')" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #60f090;background:#1e2a14;color:#60f090;font-size:11px;font-weight:700;cursor:pointer">✅ Восстановить точную копию</button>'+
+      '</div>';
+    }).join('');
+    var orphanHtml = orphans.map(function(o){
+      var total = o.entries.reduce(function(s,e){ return s+(e.type==='sale'?(e.totalPaid||e.amount||0):0); },0);
+      var salesCnt = o.entries.filter(function(e){return e.type==='sale';}).length;
+      var expCnt = o.entries.filter(function(e){return e.type==='expense';}).length;
+      var rcvCnt = o.entries.filter(function(e){return e.type==='receive';}).length;
+      var woCnt = o.entries.filter(function(e){return e.type==='writeoff';}).length;
+      var key = o.shiftId||('bez-id-'+o.date);
+      return '<div style="background:#1a1a22;border:1px solid #f0a060;border-radius:10px;padding:10px;margin-bottom:8px">'+
+        '<div style="font-weight:700;font-size:12px;color:#f0a060">'+(o.date||'дата неизвестна')+' · '+(o.sellerName||'—')+'</div>'+
+        '<div style="font-size:11px;color:#8888aa;margin:4px 0">Найдено: '+salesCnt+' продаж, '+expCnt+' расходов, '+rcvCnt+' приходов, '+woCnt+' списаний</div>'+
+        '<div style="font-size:13px;color:#c8f060;font-weight:700">Сумма продаж: '+Math.round(total).toLocaleString('ru-RU')+'₽</div>'+
+        '<button onclick="reconstructShiftFromOrphans(\''+key+'\',\''+shop.replace(/'/g,"\\'")+'\')" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #60f090;background:#16241a;color:#60f090;font-size:11px;font-weight:700;cursor:pointer">♻️ Собрать смену из этих данных (приблизительно)</button>'+
+      '</div>';
+    }).join('');
+    resEl.innerHTML = exactHtml + orphanHtml;
+  }).catch(function(e){
+    if(resEl) resEl.innerHTML = '<div style="color:#f06060;font-size:12px">Ошибка поиска: '+(e.message||e.code||e)+'</div>';
+  });
+}
+function restoreExactShiftBackup(id){
+  var s = window._lostShiftExactBackups && window._lostShiftExactBackups[id];
+  if(!s){ showToast('Данные не найдены, повторите поиск'); return; }
+  if(!confirm('Восстановить смену "'+s.shopName+' · '+s.date+'" из точной резервной копии? Это оригинальные данные смены, включая остатки кассы.')) return;
+  var shifts = getShifts();
+  shifts.unshift(s);
+  saveShifts(shifts);
+  try{ db.collection('iz_shifts').doc(id).set(s); }catch(e){}
+  showToast('✅ Смена восстановлена из резервной копии');
+  try{ renderShiftHistory(); }catch(e){}
+  findLostShiftData();
+}
+function reconstructShiftFromOrphans(key, shopName){
+  var o = window._lostShiftOrphans && window._lostShiftOrphans[key];
+  if(!o){ showToast('Данные не найдены, повторите поиск'); return; }
+  if(!confirm('Собрать смену "'+shopName+' · '+o.date+'" из '+o.entries.length+' найденных записей?\n\nВНИМАНИЕ: остатки кассы утро/вечер и точная сверка наличных при этом НЕ восстанавливаются (их не было в резервных записях) — их нужно будет проверить и поправить вручную после создания.')) return;
+  var entries = o.entries.slice().sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
+  var sales = entries.filter(function(e){return e.type==='sale';});
+  var cashRev=0, cardRev=0, disc=0;
+  sales.forEach(function(e){ cashRev+=(e.cashEffect||0)+(e.cashDrEffect||0); cardRev+=(e.cardEffect||0)+(e.cardDrEffect||0); disc+=e.discount||0; });
+  var newId = (o.shiftId && o.shiftId.indexOf('bez-id-')!==0) ? o.shiftId : uid();
+  var report = {
+    id:newId, status:'closed', source:'reconstructed', shopName:shopName,
+    sellerName:(o.sellerName||''), date:o.date,
+    openedAt: entries.length?entries[0].ts:null,
+    closedAt: new Date().toISOString(),
+    cashMorning:0, goodsMorning:0, cashEvening:null, goodsEvening:0,
+    salesCount:sales.length, totalRevenue:sales.reduce(function(s,e){return s+(e.totalPaid||e.amount||0);},0),
+    cashRevenue:cashRev, cardRevenue:cardRev, totalDiscount:disc,
+    expenses: entries.filter(function(e){return e.type==='expense';}),
+    journal: entries,
+    _reconstructed:true, _reconstructedAt:new Date().toISOString(),
+    _reconstructedNote:'Восстановлено из резервных записей продаж/расходов. Остатки кассы утро/вечер требуют ручной проверки.'
+  };
+  var shifts = getShifts();
+  shifts.unshift(report);
+  saveShifts(shifts);
+  try{ db.collection('iz_shifts').doc(newId).set(report); }catch(e){}
+  showToast('✅ Смена собрана и добавлена в архив — проверьте остатки кассы вручную');
+  try{ renderShiftHistory(); }catch(e){}
+  findLostShiftData();
+}
 function initAdminRcvWo(){
   var chips = document.getElementById('adminRcvShopChips');
   if(chips){

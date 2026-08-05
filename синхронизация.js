@@ -193,6 +193,23 @@ function _writeIndependentDoc(collectionName, queueKey, entry, extraFields, onCo
     try{ _queuePendingDoc(queueKey, Object.assign({}, entry, extraFields||{})); }catch(e2){}
   }
 }
+function _backupShiftIndependently(report){
+  try{
+    if(!report || !report.id) return;
+    var doc = Object.assign({}, report, {recordedAt: new Date().toISOString()});
+    if(typeof db==='undefined' || !db){ _queuePendingDoc('iz_pending_shift_backup', doc); return; }
+    db.collection('iz_shift_backup').doc(report.id).set(doc).then(function(){
+      _clearPendingDoc('iz_pending_shift_backup', report.id);
+    }).catch(function(){
+      _queuePendingDoc('iz_pending_shift_backup', doc);
+    });
+  }catch(e){
+    try{ _queuePendingDoc('iz_pending_shift_backup', report); }catch(e2){}
+  }
+}
+function _retryPendingShiftBackups(){
+  _retryPendingDocs('iz_pending_shift_backup', 'iz_shift_backup', null);
+}
 function _queuePendingDoc(queueKey, doc){
   try{
     var pending = JSON.parse(localStorage.getItem(queueKey)||'[]');
@@ -416,6 +433,7 @@ function _initFirebase(){
       try{if(typeof startStaffLiveSync==='function' && typeof _staffSyncUpdateCb==='function') startStaffLiveSync(_staffSyncUpdateCb);}catch(e){}
       try{if(typeof startStockSync==='function') startStockSync();}catch(e){}
       try{if(typeof _retryPendingShiftSyncs==='function') _retryPendingShiftSyncs();}catch(e){}
+      try{if(typeof _retryPendingShiftBackups==='function') _retryPendingShiftBackups();}catch(e){}
       try{
         if(typeof session!=='undefined' && session && session.role!=='shopadmin' && !session.isPreview && typeof startInvoiceLiveSync==='function'){
           startInvoiceLiveSync();
