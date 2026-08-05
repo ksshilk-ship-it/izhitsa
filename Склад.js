@@ -1701,6 +1701,51 @@ function _manInvEditAddSpecies(id,i){
   if(getSpecies().length>before) showToast('✅ Добавлено в породы дерева: '+val);
   else showToast('Уже есть в породах дерева');
 }
+function _recalcClosedShiftGoodsForInvoice(invoiceId){
+  var inv = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]').find(function(i){ return String(i.id)===String(invoiceId); });
+  if(!inv) return {touched:0};
+  var shifts = getShifts();
+  var target = null;
+  shifts.forEach(function(s){
+    if(target || s.status!=='closed') return;
+    var e = (s.journal||[]).find(function(je){ return je.type==='receive' && je.invId===invoiceId; });
+    if(e) target = s;
+  });
+  if(!target) return {touched:0};
+  var isDr = (inv.goodsType==='dr');
+  var entry = target.journal.find(function(je){ return je.type==='receive' && je.invId===invoiceId; });
+  entry.goodsType = inv.goodsType||'derevo';
+  entry.goodsEffect = isDr?0:(inv.totalAmt||0);
+  entry.goodsDrEffect = isDr?(inv.totalAmt||0):0;
+  entry.label = 'Приёмка '+inv.num+(isDr?' (ДР)':'');
+  function recalcOne(sh){
+    var g = sh.goodsMorning||0, gDr = sh.goodsDrMorning||0;
+    (sh.journal||[]).forEach(function(je){ g+=(je.goodsEffect||0); gDr+=(je.goodsDrEffect||0); });
+    sh.goodsEvening = Math.max(0,g);
+    sh.drGoodsEvening = Math.max(0,gDr);
+  }
+  recalcOne(target);
+  var touched = [target];
+  var chain = shifts.filter(function(s){ return s.shopName===target.shopName && s.status==='closed'; })
+    .sort(function(a,b){ return (a.openedAt||a.date||'').localeCompare(b.openedAt||b.date||''); });
+  var startIdx = chain.findIndex(function(s){ return (s.id||s._id)===(target.id||target._id); });
+  var prev = target;
+  for(var i=startIdx+1;i<chain.length;i++){
+    var sh = chain[i];
+    var changed = false;
+    if((sh.goodsMornSource||'auto')==='auto' && sh.goodsMorning!==prev.goodsEvening){ sh.goodsMorning=prev.goodsEvening; changed=true; }
+    if((sh.goodsDrMornSource||'auto')==='auto' && sh.goodsDrMorning!==prev.drGoodsEvening){ sh.goodsDrMorning=prev.drGoodsEvening; changed=true; }
+    var oldEve=sh.goodsEvening, oldDrEve=sh.drGoodsEvening;
+    recalcOne(sh);
+    if(sh.goodsEvening!==oldEve || sh.drGoodsEvening!==oldDrEve) changed=true;
+    if(changed) touched.push(sh);
+    prev = sh;
+    if((sh.goodsMornSource||'auto')==='manual' && (sh.goodsDrMornSource||'auto')==='manual') break;
+  }
+  saveShifts(shifts);
+  touched.forEach(function(s){ _pushShiftWithRetry(s.id||s._id, s); });
+  return {touched:touched.length};
+}
 function saveManualInvoiceEdit(id){
   var data = window._manInvEdit[id]; if(!data) return;
   var all = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
@@ -1756,7 +1801,14 @@ function saveManualInvoiceEdit(id){
   saveJ();
   delete window._manInvEdit[id];
   renderAll(); renderReceiveArchive();
-  showToast('✅ Накладная исправлена');
+  var _recalcResult = null;
+  try{ _recalcResult = _recalcClosedShiftGoodsForInvoice(id); }catch(e){ console.log('[saveManualInvoiceEdit] recalc err', e); }
+  if(_recalcResult && _recalcResult.touched){
+    showToast('✅ Накладная исправлена, пересчитано смен: '+_recalcResult.touched);
+    try{ renderShiftHistory(); }catch(e){}
+  } else {
+    showToast('✅ Накладная исправлена');
+  }
 }
 function deleteManualInvoice(id){
   if(!confirm('Удалить накладную? Это действие нельзя отменить.')) return;
