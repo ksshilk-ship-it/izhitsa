@@ -3749,7 +3749,7 @@ function _renderShiftView(){
   if(woodExp.length){
     var etypes={zp:'💰 ЗП',travel:'🚌 Проезд',inkass:'🏦 Инкассация',supplier:'🏭 Поставщик',other:'📝 Прочее'};
     woodExp.forEach(function(e, i){
-      var label=(etypes[e.expType]||e.expType||'Расход')+(e.comment?' · '+e.comment:'');
+      var label=(etypes[e.expType]||e.expType||'Расход')+(e.forSeller?' → '+e.forSeller:'')+(e.comment?' · '+e.comment:'');
       expBody += expItem(label, e.amount||0, '#f0a060', 'svDeleteJEntry(\'expense\','+i+')');
       woodExpCount++;
     });
@@ -3765,7 +3765,7 @@ function _renderShiftView(){
   if(drExp.length){
     var etypes2={zp:'💰 ЗП',travel:'🚌 Проезд',inkass:'🏦 Инкассация',supplier:'🏭 Поставщик',other:'📝 Прочее'};
     drExp.forEach(function(e, i){
-      var label=(etypes2[e.expType]||e.expType||'Расход ДР')+(e.comment?' · '+e.comment:'');
+      var label=(etypes2[e.expType]||e.expType||'Расход ДР')+(e.forSeller?' → '+e.forSeller:'')+(e.comment?' · '+e.comment:'');
       var realIdx = expenses.indexOf(e);
       expBody += expItem(label, e.amount||0, '#a060f0', 'svDeleteJEntry(\'expense\','+realIdx+')');
       drExpCount++;

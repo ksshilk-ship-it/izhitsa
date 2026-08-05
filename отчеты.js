@@ -177,8 +177,9 @@ function calcZpForCurrentShift(){
   var netDr = summary.dr.listPrice - summary.dr.discount;
   var totalNet = netWood + netDr;
   var totalGross = summary.wood.listPrice + summary.dr.listPrice;
-  var zpFact = expenses.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
-  var travelFact = expenses.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+e.amount;},0);
+  var _mySellerName = session.sellerName;
+  var zpFact = expenses.filter(function(e){return e.expType==='zp' && (!e.forSeller || e.forSeller===_mySellerName);}).reduce(function(a,e){return a+e.amount;},0);
+  var travelFact = expenses.filter(function(e){return e.expType==='travel' && (!e.forSeller || e.forSeller===_mySellerName);}).reduce(function(a,e){return a+e.amount;},0);
   var zpSettings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
   var s = zpSettings[session.shopName] || null;
   var base = s ? numDef(s.base, 1500) : 1500;
@@ -324,8 +325,9 @@ function calcShiftZpStandalone(shopName, report){
   var totalNet = netWood+netDr;
   var totalGross = grossWood+grossDr;
   var zpFact, travelFact;
-  var zpEntries = expenses.filter(function(e){return e.expType==='zp';});
-  var travelEntries = expenses.filter(function(e){return e.expType==='travel';});
+  var _shiftSellerName = report && report.sellerName;
+  var zpEntries = expenses.filter(function(e){return e.expType==='zp' && (!e.forSeller || e.forSeller===_shiftSellerName);});
+  var travelEntries = expenses.filter(function(e){return e.expType==='travel' && (!e.forSeller || e.forSeller===_shiftSellerName);});
   zpFact = zpEntries.reduce(function(a,e){return a+e.amount;},0);
   travelFact = travelEntries.reduce(function(a,e){return a+e.amount;},0);
   var zpSettings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
@@ -428,7 +430,19 @@ function renderPersonalTab(){
   var totalZpCalcWithTravel = rows.reduce(function(s,r){ return s+r.z.zpCalcWithTravel; },0);
   var avgZpNoTravel = shiftsCount ? totalZpCalcNoTravel/shiftsCount : 0;
   var avgZpWithTravel = shiftsCount ? totalZpCalcWithTravel/shiftsCount : 0;
-  var totalDiff = rows.reduce(function(s,r){ return s+r.z.diff; },0);
+  var extraPayouts = 0;
+  allShifts.forEach(function(sh){
+    if(sh.sellerName === session.sellerName) return; // свои смены уже учтены выше
+    if(sh.status && sh.status!=='closed') return;
+    if(fromStr && sh.date < fromStr) return;
+    if(toStr && sh.date > toStr) return;
+    (sh.journal||[]).forEach(function(e){
+      if(e.type==='expense' && (e.expType==='zp'||e.expType==='travel') && e.forSeller===session.sellerName){
+        extraPayouts += (e.amount||0);
+      }
+    });
+  });
+  var totalDiff = rows.reduce(function(s,r){ return s+r.z.diff; },0) - extraPayouts;
   var totalZpFact = totalZpCalcWithTravel - totalDiff;
   var fmt2 = function(n){ return Math.round(n).toLocaleString('ru-RU')+'₽'; };
   function sCell(label,val,color){
@@ -454,6 +468,7 @@ function renderPersonalTab(){
         '</div>'+
         '<div style="font-size:22px;font-weight:900;color:#c8f060">'+fmt2(totalZpFact)+'</div>'+
       '</div>'+
+      (extraPayouts ? '<div style="font-size:10px;color:#8888aa;margin-bottom:8px;padding:0 2px">из них получено в чужие смены: '+fmt2(extraPayouts)+'</div>' : '')+
       '<div style="display:flex;justify-content:space-between;align-items:center;background:#0f0f13;border-radius:8px;padding:10px 12px">'+
         '<span class="u-fs11-gray">Итог за период: расчётная ЗП минус фактически взятая</span>'+
         '<span style="font-size:15px;font-weight:800;color:'+diffColorTotal+'">'+(totalDiff>0?'+':'')+fmt2(totalDiff)+'</span>'+

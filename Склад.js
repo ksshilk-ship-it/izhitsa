@@ -993,10 +993,33 @@ function setExpType(type, el){
   if(supBlock) supBlock.style.display = (type==='supplier') ? 'block' : 'none';
   var payBlock = document.getElementById('expPayMethodBlock');
   if(payBlock) payBlock.style.display = (type==='zp'||type==='travel') ? 'block' : 'none';
+  var forSellerBlock = document.getElementById('expForSellerBlock');
+  if(forSellerBlock) forSellerBlock.style.display = (type==='zp'||type==='travel') ? 'block' : 'none';
   if(type!=='zp'&&type!=='travel'){
     _expPayMethod='cash';
     document.querySelectorAll('#expPayMethodChips .pc').forEach(function(p,i){ p.classList.toggle('active', i===0); });
+    var toggleEl = document.getElementById('expForSellerToggle');
+    if(toggleEl){ toggleEl.checked=false; toggleExpForSeller(false); }
   }
+}
+function openExpenseMo(){
+  var toggleEl = document.getElementById('expForSellerToggle');
+  if(toggleEl) toggleEl.checked=false;
+  toggleExpForSeller(false);
+  var sel = document.getElementById('expForSellerSelect');
+  if(sel){
+    var sellers = getSellers().filter(function(s){
+      return !s.shops || !s.shops.length || s.shops.indexOf(session&&session.shopName)>=0;
+    }).filter(function(s){ return s.name!==(session&&session.sellerName); });
+    sel.innerHTML = sellers.map(function(s){ return '<option value="'+s.name.replace(/"/g,'&quot;')+'">'+s.name+'</option>'; }).join('');
+  }
+  openMo('expMo');
+}
+function toggleExpForSeller(checked){
+  var sel = document.getElementById('expForSellerSelect');
+  var hint = document.getElementById('expForSellerHint');
+  if(sel) sel.style.display = checked ? 'block' : 'none';
+  if(hint) hint.style.display = checked ? 'block' : 'none';
 }
 function saveExpense(){
   var amt = parseFloat((document.getElementById('expAmt')||{}).value)||0;
@@ -1010,11 +1033,14 @@ function saveExpense(){
   var isZpOrTravel = (expType==='zp'||expType==='travel');
   var payMethod = isZpOrTravel ? _expPayMethod : 'cash';
   var payMethodLabels = {cash:'💵 наличными',transfer:'🏦 переводом',other:'📝 иначе'};
+  var forSellerToggle = document.getElementById('expForSellerToggle');
+  var forSellerSel = document.getElementById('expForSellerSelect');
+  var forSeller = (isZpOrTravel && forSellerToggle && forSellerToggle.checked && forSellerSel) ? (forSellerSel.value||'') : '';
   var _expEntry = {
     id:uid(), type:'expense', ts:_workingNowISO(),
-    icon:'💸', label:'Расход: '+label,
-    sub:fmt(amt)+(isZpOrTravel?' · '+payMethodLabels[payMethod]:'')+(supplier?' · '+supplier:'')+(comment?' · '+comment:''),
-    expType, goodsType:expGoodsType, amount:amt, comment, supplier, payMethod,
+    icon:'💸', label:'Расход: '+label+(forSeller?' → '+forSeller:''),
+    sub:fmt(amt)+(isZpOrTravel?' · '+payMethodLabels[payMethod]:'')+(forSeller?' · выдано: '+forSeller:'')+(supplier?' · '+supplier:'')+(comment?' · '+comment:''),
+    expType, goodsType:expGoodsType, amount:amt, comment, supplier, payMethod, forSeller:(forSeller||null),
     amtCls:'exp', amtSign:'−',
     cashEffect: (isDr || isStaff || (isZpOrTravel && payMethod!=='cash'))?0:-amt,
     cashDrEffect: (isDr && !(isZpOrTravel && payMethod!=='cash'))?-amt:0,
@@ -1030,9 +1056,10 @@ function saveExpense(){
   if(document.getElementById('expSupplierName')) document.getElementById('expSupplierName').value='';
   expGoodsType='derevo'; setExpGoods('derevo', document.getElementById('expGoodsDerevo'));
   _expPayMethod='cash';
+  if(forSellerToggle){ forSellerToggle.checked=false; toggleExpForSeller(false); }
   closeMo('expMo');
   renderAll();
-  showToast('💸 Расход '+fmt(amt)+' записан');
+  showToast(forSeller ? ('💸 Расход '+fmt(amt)+' записан — зачтётся продавцу '+forSeller) : ('💸 Расход '+fmt(amt)+' записан'));
 }
 var _manInvItems = [];
 var _manInvCounter = 1;
