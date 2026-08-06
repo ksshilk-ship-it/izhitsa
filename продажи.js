@@ -416,6 +416,15 @@ function saveSale(){
   if(!saleItems.length){showToast('Добавьте товары');return;}
   _savingSale = true;
   setTimeout(function(){ _savingSale = false; }, 1200);
+  try{
+    _saveSaleInner();
+  }catch(e){
+    _savingSale = false;
+    console.log('[saveSale] ошибка:', e);
+    showToast('⛔ Ошибка при сохранении продажи: '+(e&&e.message?e.message:e)+'. Попробуйте ещё раз.');
+  }
+}
+function _saveSaleInner(){
   const total=saleItems.reduce((s,it)=>s+(it.amt!=null?it.amt:it.price*(it.qty||1)),0), disc=parseFloat(gv('saleDiscount'))||0, paid=Math.max(0,total-disc);
   let cashPart=0,cardPart=0;
   if(payMethod==='cash')cashPart=paid; else if(payMethod==='mixed'){cashPart=parseFloat(gv('mixCash'))||0;cardPart=parseFloat(gv('mixCard'))||0;} else cardPart=paid;
