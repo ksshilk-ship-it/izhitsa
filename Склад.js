@@ -1752,25 +1752,59 @@ function _recalcClosedShiftGoodsForInvoice(invoiceId){
     sh.drGoodsEvening = Math.max(0,gDr);
   }
   recalcOne(target);
-  var touched = [target];
+  saveShifts(shifts);
+  _pushShiftWithRetry(target.id||target._id, target);
+  var cascadeResult = _cascadeGoodsForward(target, shifts);
+  return {touched: 1 + cascadeResult.touched};
+}
+function _cascadeGoodsForward(target, shifts){
+  function recalcOne(sh){
+    var g = sh.goodsMorning||0, gDr = sh.goodsDrMorning||0;
+    (sh.journal||[]).forEach(function(je){ g+=(je.goodsEffect||0); gDr+=(je.goodsDrEffect||0); });
+    sh.goodsEvening = Math.max(0,g);
+    sh.drGoodsEvening = Math.max(0,gDr);
+  }
+  var touched = [];
   var chain = shifts.filter(function(s){ return s.shopName===target.shopName && s.status==='closed'; })
     .sort(function(a,b){ return (a.openedAt||a.date||'').localeCompare(b.openedAt||b.date||''); });
   var startIdx = chain.findIndex(function(s){ return (s.id||s._id)===(target.id||target._id); });
+  if(startIdx<0) return {touched:0};
   var prev = target;
-  for(var i=startIdx+1;i<chain.length;i++){
+  var stopWood = false, stopDr = false;
+  for(var i=startIdx+1; i<chain.length; i++){
     var sh = chain[i];
     var changed = false;
-    if((sh.goodsMornSource||'auto')==='auto' && sh.goodsMorning!==prev.goodsEvening){ sh.goodsMorning=prev.goodsEvening; changed=true; }
-    if((sh.goodsDrMornSource||'auto')==='auto' && sh.goodsDrMorning!==prev.drGoodsEvening){ sh.goodsDrMorning=prev.drGoodsEvening; changed=true; }
+    if(!stopWood){
+      var expMorn = prev.goodsEvening||0;
+      if((sh.goodsMornSource||'auto')==='auto'){
+        if(Math.round(sh.goodsMorning||0)!==Math.round(expMorn)){ sh.goodsMorning=expMorn; changed=true; }
+      } else if(Math.abs((sh.goodsMorning||0)-expMorn)>=1){
+        var ans = prompt('Смена «'+sh.shopName+' · '+sh.date+'» — остаток «Дерево» на утро введён вручную: '+Math.round(sh.goodsMorning||0)+'₽.\nПо расчёту с учётом правки должно быть: '+Math.round(expMorn)+'₽.\n\nВведите новое значение, если хотите поменять (Отмена — оставить как есть и не пересчитывать дальше по датам):', Math.round(expMorn));
+        if(ans===null){ stopWood=true; }
+        else{ var n=parseFloat(ans); if(!isNaN(n) && Math.round(n)!==Math.round(sh.goodsMorning||0)){ sh.goodsMorning=n; changed=true; } }
+      }
+    }
+    if(!stopDr){
+      var expDrMorn = prev.drGoodsEvening||0;
+      if((sh.goodsDrMornSource||'auto')==='auto'){
+        if(Math.round(sh.goodsDrMorning||0)!==Math.round(expDrMorn)){ sh.goodsDrMorning=expDrMorn; changed=true; }
+      } else if(Math.abs((sh.goodsDrMorning||0)-expDrMorn)>=1){
+        var ansDr = prompt('Смена «'+sh.shopName+' · '+sh.date+'» — остаток «ДР Товар» на утро введён вручную: '+Math.round(sh.goodsDrMorning||0)+'₽.\nПо расчёту с учётом правки должно быть: '+Math.round(expDrMorn)+'₽.\n\nВведите новое значение, если хотите поменять (Отмена — оставить как есть и не пересчитывать дальше по датам):', Math.round(expDrMorn));
+        if(ansDr===null){ stopDr=true; }
+        else{ var nDr=parseFloat(ansDr); if(!isNaN(nDr) && Math.round(nDr)!==Math.round(sh.goodsDrMorning||0)){ sh.goodsDrMorning=nDr; changed=true; } }
+      }
+    }
     var oldEve=sh.goodsEvening, oldDrEve=sh.drGoodsEvening;
     recalcOne(sh);
     if(sh.goodsEvening!==oldEve || sh.drGoodsEvening!==oldDrEve) changed=true;
     if(changed) touched.push(sh);
     prev = sh;
-    if((sh.goodsMornSource||'auto')==='manual' && (sh.goodsDrMornSource||'auto')==='manual') break;
+    if(stopWood && stopDr) break;
   }
-  saveShifts(shifts);
-  touched.forEach(function(s){ _pushShiftWithRetry(s.id||s._id, s); });
+  if(touched.length){
+    saveShifts(shifts);
+    touched.forEach(function(s){ _pushShiftWithRetry(s.id||s._id, s); });
+  }
   return {touched:touched.length};
 }
 function saveManualInvoiceEdit(id){

@@ -4361,7 +4361,11 @@ function svSaveTovar(){
   _currentShiftView.editedBy=(session&&(session.name||session.sellerName))||'admin';
   _currentShiftView.editedAt=new Date().toISOString();
   _currentShiftView.editReason=reason;
-  svPersist(true); _renderShiftView(); showToast('✅ Остатки товара обновлены');
+  svPersist(true);
+  var cascadeResult = null;
+  try{ cascadeResult = _cascadeGoodsForward(_currentShiftView, getShifts()); }catch(e){ console.log('[svSaveTovar] cascade err', e); }
+  _renderShiftView();
+  showToast(cascadeResult && cascadeResult.touched ? ('✅ Остатки товара обновлены, пересчитано смен дальше по датам: '+cascadeResult.touched) : '✅ Остатки товара обновлены');
 }
 function svSaveJEntrySimple(type, idx){
   var jnl = _currentShiftView.journal||[];
