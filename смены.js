@@ -2571,13 +2571,17 @@ function setHistPeriod(period, el){
   } else { // all
     _histPeriodFrom = ''; _histPeriodTo = '';
   }
-  renderShiftHistory();
+  if(period==='quarter' || period==='all'){
+    try{ _ensureShiftsLoadedForRange(_histPeriodFrom).then(renderShiftHistory); }catch(e){ renderShiftHistory(); }
+  } else {
+    renderShiftHistory();
+  }
 }
 function applyHistCustomRange(){
   var fromEl = document.getElementById('histDateFrom'), toEl = document.getElementById('histDateTo');
   _histPeriodFrom = fromEl ? fromEl.value : '';
   _histPeriodTo = toEl ? toEl.value : '';
-  renderShiftHistory();
+  try{ _ensureShiftsLoadedForRange(_histPeriodFrom).then(renderShiftHistory); }catch(e){ renderShiftHistory(); }
 }
 var _currentShiftView = null;
 var _svEditTarget = null;
@@ -3609,6 +3613,7 @@ function _renderShiftView(){
     '</div>'+
     '<input class="fi" id="sv_tovarReason" placeholder="Причина правки (обязательно)..." style="margin:0;padding:8px;margin-bottom:8px">'+
     '<button onclick="svSaveTovar()" style="width:100%;padding:9px;background:#c8f060;border:none;border-radius:9px;font-weight:700;font-size:12px;color:#0f0f13;cursor:pointer">💾 Сохранить остатки</button>'+
+    '<button onclick="svCascadeGoodsOnly()" style="width:100%;margin-top:6px;padding:9px;background:#22222e;border:1px solid #60c8f0;border-radius:9px;font-weight:700;font-size:12px;color:#60c8f0;cursor:pointer">➡️ Пересчитать смены дальше по датам (без изменения этой)</button>'+
   '</div>';
   var rcvAllLen = receives.length + woodRcv.length + drRcv.length;
   var woodRcvItems = receives.concat(woodRcv); // journal receives + manual wood receives
@@ -4366,6 +4371,13 @@ function svSaveTovar(){
   try{ cascadeResult = _cascadeGoodsForward(_currentShiftView, getShifts()); }catch(e){ console.log('[svSaveTovar] cascade err', e); }
   _renderShiftView();
   showToast(cascadeResult && cascadeResult.touched ? ('✅ Остатки товара обновлены, пересчитано смен дальше по датам: '+cascadeResult.touched) : '✅ Остатки товара обновлены');
+}
+function svCascadeGoodsOnly(){
+  if(!confirm('Пересчитать все последующие смены этого магазина (по датам вперёд), опираясь на текущие остатки этой смены? Саму эту смену это не изменит.')) return;
+  var cascadeResult = null;
+  try{ cascadeResult = _cascadeGoodsForward(_currentShiftView, getShifts()); }catch(e){ console.log('[svCascadeGoodsOnly] cascade err', e); }
+  _renderShiftView();
+  showToast(cascadeResult && cascadeResult.touched ? ('✅ Пересчитано смен дальше по датам: '+cascadeResult.touched) : 'ℹ️ Все последующие смены уже соответствуют — пересчитывать нечего');
 }
 function svSaveJEntrySimple(type, idx){
   var jnl = _currentShiftView.journal||[];
