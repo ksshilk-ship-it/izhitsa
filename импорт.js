@@ -276,6 +276,7 @@ function exitRestoreMode(opts){
   }
   restoreMode = false;
   restoreMeta = null;
+  try{ syncRestoreUIChrome(); }catch(e){}
   var liveS = JSON.parse(localStorage.getItem(KEY.liveSessionBackup)||'null');
   var liveJ = JSON.parse(localStorage.getItem(KEY.liveJournalBackup)||'[]');
   document.getElementById('mainTabs').style.display='none';
