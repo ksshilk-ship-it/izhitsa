@@ -77,6 +77,24 @@ function hardRefreshApp() {
 function checkForAppUpdate() {
   if(_swReg && _swReg.update) { try{ _swReg.update(); }catch(e){} }
 }
+function forceUpdateNow() {
+  showToast('⏳ Обновляю приложение...');
+  var reload = function(){ window.location.href = window.location.pathname + '?v=' + Date.now(); };
+  var clearCachesThenReload = function(){
+    if('caches' in window){
+      caches.keys().then(function(names){
+        Promise.all(names.map(function(n){ return caches.delete(n); })).finally(reload);
+      }).catch(reload);
+    } else { reload(); }
+  };
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      Promise.all(regs.map(function(r){ return r.unregister(); })).finally(clearCachesThenReload);
+    }).catch(clearCachesThenReload);
+  } else {
+    clearCachesThenReload();
+  }
+}
 function _renderConnStatus(){
   var el = document.getElementById('connStatusBanner');
   if(!el) return;
@@ -580,9 +598,35 @@ function _retryPendingRefbookSaves(){
     });
   }catch(e){}
 }
-function syncListenCollection(lsKey, colName) {
+var SHIFTS_LIVE_SYNC_DAYS = 35;
+function _shiftsLiveSyncCutoff(){
+  var d = new Date(Date.now() - SHIFTS_LIVE_SYNC_DAYS*86400000);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function _ensureShiftsLoadedForRange(fromDate){
+  if(typeof db==='undefined' || !db) return Promise.resolve();
+  var cutoff = _shiftsLiveSyncCutoff();
+  if(fromDate && fromDate >= cutoff) return Promise.resolve(); // уже покрыто живой синхронизацией
+  var q = db.collection('iz_shifts').where('date','<',cutoff);
+  if(fromDate) q = q.where('date','>=',fromDate);
+  return q.get().then(function(snap){
+    var extra = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
+    if(!extra.length) return;
+    var tomb = {}; getShiftTombstones().forEach(function(id){ tomb[id]=true; });
+    var local = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+    var localIds = {}; local.forEach(function(s){ localIds[s.id||s._id]=true; });
+    extra.forEach(function(s){
+      var sid = s.id||s._id;
+      if(sid && !localIds[sid] && !tomb[sid]) local.push(s);
+    });
+    local.sort(function(a,b){ return (b.date||b.closedAt||b.createdAt||'').localeCompare(a.date||a.closedAt||a.createdAt||''); });
+    localStorage.setItem('iz_shifts', JSON.stringify(local));
+  }).catch(function(e){ console.log('[_ensureShiftsLoadedForRange] err', e); });
+}
+function syncListenCollection(lsKey, colName, queryFn) {
   if(_syncUnsubs[lsKey]) return;
-  _syncUnsubs[lsKey] = db.collection(colName).onSnapshot(function(snap){
+  var ref = queryFn ? queryFn(db.collection(colName)) : db.collection(colName);
+  _syncUnsubs[lsKey] = ref.onSnapshot(function(snap){
     var docs = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
     docs.sort(function(a,b){ return (b.date||b.closedAt||b.createdAt||'').localeCompare(a.date||a.closedAt||a.createdAt||''); });
     if(lsKey === 'iz_shifts'){
@@ -625,7 +669,7 @@ function startSyncListeners() {
   });
   Object.keys(SYNC_SETTINGS).forEach(syncListen);
   try{ pullShiftTombstonesFromCloud(); }catch(e){}
-  syncListenCollection('iz_shifts', 'iz_shifts');
+  syncListenCollection('iz_shifts', 'iz_shifts', function(ref){ return ref.where('date','>=',_shiftsLiveSyncCutoff()); });
   syncListenCollection('iz_invoices', 'iz_invoices');
   syncListenCollection('iz_manual_invoices', 'iz_manual_invoices');
   syncListenCollection('iz_psj', 'iz_psj');

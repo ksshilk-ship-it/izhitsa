@@ -67,13 +67,15 @@
     </button>
   </div>
   <div style="text-align:center;font-size:10px;color:#4a4a5a;margin-top:14px" id="loginVersionTag"></div>
+  <button type="button" onclick="forceUpdateNow()" style="display:block;margin:10px auto 0;padding:8px 16px;background:#22222e;border:1px solid #60c8f0;border-radius:20px;color:#60c8f0;font-size:11px;font-weight:700;cursor:pointer">🔄 Обновить до последней версии</button>
 </div>
 <div id="appScreen" style="display:none">
   <div class="hdr">
     <div class="hdr-logo">Ижица <span style="font-size:9px;color:#c8f060;font-weight:700;background:#1e2a14;padding:2px 6px;border-radius:5px;vertical-align:middle">МАГАЗИН</span></div>
     <div style="display:flex;align-items:center;gap:8px">
       <div><div class="hdr-shop" id="hdrShop"></div><div class="hdr-seller" id="hdrSeller"></div><div style="font-size:9px;color:#4a4a5a" id="hdrVersionTag"></div></div>
-      <button class="exit-btn" id="syncBtn" onclick="manualSync()" ontouchstart="_syncPressStart()" ontouchend="_syncPressEnd()" title="Обновить данные (зажмите для полного обновления приложения)" style="padding:8px 10px">🔄</button>
+      <button class="exit-btn" onclick="forceUpdateNow()" title="Принудительно обновить приложение до последней версии" style="padding:8px 10px;border-color:#60c8f0;color:#60c8f0">⬆️</button>
+      <button class="exit-btn" id="syncBtn" onclick="manualSync()" ontouchstart="_syncPressStart()" ontouchend="_syncPressEnd()" title="Обновить данные (зажмите для отправки всех локальных смен в облако)" style="padding:8px 10px">🔄</button>
       <button class="exit-btn" onclick="exitShift()">Выйти</button>
     </div>
   </div>
@@ -463,8 +465,8 @@
       <div onclick="setAdminRcvPeriod('custom',this)" style="padding:6px 14px;border-radius:20px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">📅 Период</div>
     </div>
     <div id="adminRcvCustomRange" style="display:none;display:flex;gap:6px;margin-bottom:8px">
-      <input class="fi" type="date" id="adminRcvFrom" style="-webkit-appearance:none;color-scheme:dark;margin:0;flex:1" oninput="renderAdminRcvWo()">
-      <input class="fi" type="date" id="adminRcvTo" style="-webkit-appearance:none;color-scheme:dark;margin:0;flex:1" oninput="renderAdminRcvWo()">
+      <input class="fi" type="date" id="adminRcvFrom" style="-webkit-appearance:none;color-scheme:dark;margin:0;flex:1" oninput="adminRcvCustomRangeChanged()">
+      <input class="fi" type="date" id="adminRcvTo" style="-webkit-appearance:none;color-scheme:dark;margin:0;flex:1" oninput="adminRcvCustomRangeChanged()">
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" id="adminRcvShopChips"></div>
     <button type="button" onclick="findAndCleanDuplicateReceives()" style="width:100%;margin-bottom:10px;padding:8px;border-radius:10px;border:1px solid #f06060;background:#22161a;color:#f06060;font-size:12px;font-weight:700;cursor:pointer">🧹 Найти и убрать дубли приходов</button>
@@ -859,8 +861,8 @@
         <button id="ss_p_c" onpointerdown="event.preventDefault();setSsPeriod('custom')" style="flex:1;min-width:60px;padding:6px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:700;cursor:pointer">Период</button>
       </div>
       <div id="ss_custom_dates" style="display:none;gap:6px;margin-bottom:8px">
-        <input type="date" id="ss_date_from" style="flex:1;background:#22222e;border:1px solid #3e3e4e;border-radius:8px;padding:6px;color:#f0f0f8;font-size:12px;-webkit-appearance:none;color-scheme:dark" onchange="renderSellerStats()">
-        <input type="date" id="ss_date_to" style="flex:1;background:#22222e;border:1px solid #3e3e4e;border-radius:8px;padding:6px;color:#f0f0f8;font-size:12px;-webkit-appearance:none;color-scheme:dark" onchange="renderSellerStats()">
+        <input type="date" id="ss_date_from" style="flex:1;background:#22222e;border:1px solid #3e3e4e;border-radius:8px;padding:6px;color:#f0f0f8;font-size:12px;-webkit-appearance:none;color-scheme:dark" onchange="ssCustomRangeChanged()">
+        <input type="date" id="ss_date_to" style="flex:1;background:#22222e;border:1px solid #3e3e4e;border-radius:8px;padding:6px;color:#f0f0f8;font-size:12px;-webkit-appearance:none;color-scheme:dark" onchange="ssCustomRangeChanged()">
       </div>
       <div style="font-size:10px;color:#8888aa;margin-bottom:4px">Магазин</div>
       <div id="ss_shop_chips" style="display:flex;gap:5px;flex-wrap:wrap"></div>
