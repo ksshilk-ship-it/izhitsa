@@ -2975,7 +2975,14 @@ function toggleDateCheckCalendar(){
   _dateCheckShown = !_dateCheckShown;
   var c = document.getElementById('dateCheckCalendar');
   if(c) c.style.display = _dateCheckShown ? 'block' : 'none';
-  if(_dateCheckShown) renderDateCheckCalendar();
+  if(_dateCheckShown){
+    var from = _histPeriodFrom;
+    if(!from){
+      var now = new Date();
+      from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    }
+    try{ _ensureShiftsLoadedForRange(from).then(renderDateCheckCalendar); }catch(e){ renderDateCheckCalendar(); }
+  }
 }
 function renderDateCheckCalendar(){
   var c = document.getElementById('dateCheckCalendar'); if(!c || !_dateCheckShown) return;

@@ -2303,7 +2303,16 @@ function setAdminRcvPeriod(p, el){
   if(el){ el.style.borderColor='#c8f060'; el.style.background='#1e2a14'; el.style.color='#c8f060'; el.style.borderWidth='2px'; }
   var cr = document.getElementById('adminRcvCustomRange');
   if(cr) cr.style.display = p==='custom' ? 'flex' : 'none';
-  renderAdminRcvWo();
+  if(p==='year' || p==='custom'){
+    var range = _adminRcvDateRange();
+    try{ _ensureShiftsLoadedForRange(range.from).then(renderAdminRcvWo); }catch(e){ renderAdminRcvWo(); }
+  } else {
+    renderAdminRcvWo();
+  }
+}
+function adminRcvCustomRangeChanged(){
+  var range = _adminRcvDateRange();
+  try{ _ensureShiftsLoadedForRange(range.from).then(renderAdminRcvWo); }catch(e){ renderAdminRcvWo(); }
 }
 function adminRcvSetShop(shop, el){
   _adminRcvShop = shop;

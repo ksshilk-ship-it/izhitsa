@@ -388,7 +388,12 @@ function setPersonalPeriod(period, el){
       c.style.background='#1a1a22'; c.style.color='#8888aa'; c.style.borderWidth='1px'; c.style.borderColor='#2e2e3e';
     });
   }
-  renderPersonalTab();
+  if(period==='90' || period==='all' || period==='custom'){
+    var _fromForFetch = (document.getElementById('personalDateFrom')||{}).value || '';
+    try{ _ensureShiftsLoadedForRange(_fromForFetch).then(renderPersonalTab); }catch(e){ renderPersonalTab(); }
+  } else {
+    renderPersonalTab();
+  }
 }
 function renderPersonalTab(){
   if(!session) return;
@@ -512,10 +517,22 @@ function setSsPeriod(p){
   });
   var cd=document.getElementById('ss_custom_dates');
   if(cd) cd.style.display=p==='custom'?'flex':'none';
-  renderSellerStats();
+  if(p==='quarter' || p==='year' || p==='custom'){
+    var _ssRange = _ssDateRange();
+    try{ _ensureShiftsLoadedForRange(_ssRange.from).then(renderSellerStats); }catch(e){ renderSellerStats(); }
+  } else {
+    renderSellerStats();
+  }
+}
+function ssCustomRangeChanged(){
+  var range = _ssDateRange();
+  try{ _ensureShiftsLoadedForRange(range.from).then(renderSellerStats); }catch(e){ renderSellerStats(); }
 }
 function recalcAllShiftsZp(){
   if(!confirm('Пересчитать начисленную ЗП и проезд для ВСЕХ закрытых смен по правильной формуле? Фактически выданные суммы (взято) не изменятся. Это может занять несколько секунд.')) return;
+  try{ _ensureShiftsLoadedForRange('').then(_recalcAllShiftsZpReal); }catch(e){ _recalcAllShiftsZpReal(); }
+}
+function _recalcAllShiftsZpReal(){
   var shifts = getShifts();
   var updated = 0;
   shifts.forEach(function(s){
