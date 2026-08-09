@@ -665,7 +665,7 @@ function renderSellerStats(){
     sel.revenue+=rev;
     var sc=s.salesCount||0; sel.sales+=sc;
     if(sc>0) sel.checks.push(rev/sc);
-    sel.zp+=s.zp||0; sel.zpFact+=(s.zpFact!=null?s.zpFact:0); sel.travel+=s.travel||0; sel.travelAccrued+=s.travel||0;
+    sel.zp+=s.zp||0; sel.travel+=s.travel||0; sel.travelAccrued+=s.travel||0;
     sel.disc+=s.totalDiscount||0;
     (s.journal||[]).forEach(function(e){
       if(e.type==='expense' && (e.expType==='zp'||e.expType==='travel') && (!e.forSeller || e.forSeller===name)){
@@ -822,6 +822,7 @@ function renderSellerStats(){
         calHtml+='</div>';
       }
     }
+    sel.zpFact = sel.zpCash+sel.zpTransfer+sel.zpOther;
     var zpDebt=sel.zp-sel.zpFact;
     var discKey='ss_disc_'+sel.name.replace(/\s/g,'_');
     var zpKey='ss_zp_'+sel.name.replace(/\s/g,'_');
