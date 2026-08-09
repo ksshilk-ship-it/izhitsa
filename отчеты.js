@@ -594,10 +594,10 @@ function _findShiftAnomaliesReal(){
     var zpEntries = byType.zp||[];
     var z;
     try{ z = calcShiftZpStandalone(sh.shopName, sh); }catch(e){ z = null; }
-    if(travelRate>0){
-      zpEntries.forEach(function(e){
-        if(Math.abs((e.amount||0)-travelRate)<1){
-          reasons.push('Запись «ЗП» на '+Math.round(e.amount)+'₽ совпадает с тарифом проезда этого магазина ('+Math.round(travelRate)+'₽) — похоже, проезд занесли как ЗП');
+    if(travelRate>0 && z && z.travelFact===0){
+      exp.forEach(function(e){
+        if((e.expType||'other')!=='travel' && Math.abs((e.amount||0)-travelRate)<1){
+          reasons.push('Проезд не взят, но есть запись «'+(typeLabels[e.expType||'other']||e.expType)+'» на '+Math.round(e.amount)+'₽, совпадающая с тарифом проезда этого магазина ('+Math.round(travelRate)+'₽) — похоже, проезд занесли не в ту категорию');
         }
       });
     }
