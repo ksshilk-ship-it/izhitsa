@@ -668,7 +668,7 @@ function renderSellerStats(){
     sel.zp+=s.zp||0; sel.zpFact+=(s.zpFact!=null?s.zpFact:0); sel.travel+=s.travel||0; sel.travelAccrued+=s.travel||0;
     sel.disc+=s.totalDiscount||0;
     (s.journal||[]).forEach(function(e){
-      if(e.type==='expense' && (e.expType==='zp'||e.expType==='travel')){
+      if(e.type==='expense' && (e.expType==='zp'||e.expType==='travel') && (!e.forSeller || e.forSeller===name)){
         var pm = e.payMethod||'cash';
         var bucket = e.expType==='zp' ? 'zp' : 'travel';
         if(pm==='cash') sel[bucket+'Cash']+=(e.amount||0);
