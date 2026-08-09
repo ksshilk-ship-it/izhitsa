@@ -665,7 +665,8 @@ function renderSellerStats(){
   shifts.forEach(function(s){
     var name=(s.sellerName||'—').replace(/^Восст. /,'');
     if(!sellers[name])sellers[name]={name:name,shifts:0,revenue:0,sales:0,checks:[],zp:0,zpFact:0,travel:0,hasCashDiff:0,shops:{},disc:0,discCash:0,discSales:0,
-      zpCash:0,zpTransfer:0,zpOther:0,travelCash:0,travelTransfer:0,travelOther:0,travelAccrued:0};
+      zpCash:0,zpTransfer:0,zpOther:0,travelCash:0,travelTransfer:0,travelOther:0,travelAccrued:0,
+      zpDiffShifts:[],travelDiffShifts:[],cashDiffShifts:[]};
     var sel=sellers[name];
     sel.shifts++;
     var rev=(s.cashRevenue||0)+(s.cardRevenue||0)+(s.totalDiscount||0);
@@ -674,6 +675,7 @@ function renderSellerStats(){
     if(sc>0) sel.checks.push(rev/sc);
     sel.zp+=s.zp||0; sel.travel+=s.travel||0; sel.travelAccrued+=s.travel||0;
     sel.disc+=s.totalDiscount||0;
+    var shiftZpPaid=0, shiftTravelPaid=0;
     (s.journal||[]).forEach(function(e){
       if(e.type==='expense' && (e.expType==='zp'||e.expType==='travel') && (!e.forSeller || e.forSeller===name)){
         var pm = e.payMethod||'cash';
@@ -681,15 +683,20 @@ function renderSellerStats(){
         if(pm==='cash') sel[bucket+'Cash']+=(e.amount||0);
         else if(pm==='transfer') sel[bucket+'Transfer']+=(e.amount||0);
         else sel[bucket+'Other']+=(e.amount||0);
+        if(bucket==='zp') shiftZpPaid+=(e.amount||0); else shiftTravelPaid+=(e.amount||0);
       }
     });
+    var shiftZpDiff=(s.zp||0)-shiftZpPaid;
+    if(Math.abs(shiftZpDiff)>=1) sel.zpDiffShifts.push({date:s.date,shopName:s.shopName,diff:shiftZpDiff});
+    var shiftTravelDiff=(s.travel||0)-shiftTravelPaid;
+    if(Math.abs(shiftTravelDiff)>=1) sel.travelDiffShifts.push({date:s.date,shopName:s.shopName,diff:shiftTravelDiff});
     (s.journal||[]).forEach(function(e){
       if(e.type==='sale'&&(e.discount||0)>0){
         sel.discSales++;
         if((e.cashPart||e.cashEffect||0)>0) sel.discCash+=(e.discount||0);
       }
     });
-    if(s.hasCashDiff) sel.hasCashDiff++;
+    if(s.hasCashDiff){ sel.hasCashDiff++; sel.cashDiffShifts.push({date:s.date,shopName:s.shopName}); }
     if(s.shopName) sel.shops[s.shopName]=(sel.shops[s.shopName]||0)+1;
   });
   var selArr=Object.values(sellers).sort(function(a,b){return b.revenue-a.revenue;});
@@ -848,6 +855,19 @@ function renderSellerStats(){
         '<span style="color:#8888aa;font-size:11px">'+(open?'▾':'▸')+'</span>'+
       '</div>';
     }
+    function diffListRow(label,items,key,isCash){
+      if(!items||!items.length) return '';
+      var open=!!(window._ssDiffOpen&&window._ssDiffOpen[key]);
+      var toggle='event.preventDefault();if(!window._ssDiffOpen)window._ssDiffOpen={};window._ssDiffOpen[\''+key+'\']='+(open?'false':'true')+';renderSellerStats()';
+      var list=items.slice().sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}).map(function(it){
+        var valStr=isCash?'':(' — '+(it.diff>0?'+':'')+Math.round(it.diff)+'₽ '+(it.diff>0?'долг':'переплата'));
+        return '<div style="display:flex;justify-content:space-between;padding:3px 0 3px 10px;font-size:11px;color:#8888aa"><span>'+(it.date||'')+' · '+(it.shopName||'')+'</span><span>'+valStr+'</span></div>';
+      }).join('');
+      return '<div onpointerdown="'+toggle+'" style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;cursor:pointer">'+
+        '<span style="font-size:11px;color:#60c8f0">📋 Смены с расхождением ('+items.length+')</span>'+
+        '<span style="color:#8888aa;font-size:11px">'+(open?'▾':'▸')+'</span>'+
+      '</div>'+(open?list:'');
+    }
     return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">'+
       '<div onpointerdown="'+secToggle(cardKey,cardOpen)+'" style="display:flex;justify-content:space-between;align-items:center;'+(cardOpen?'margin-bottom:8px':'')+';cursor:pointer">'+
         '<div style="font-size:14px;font-weight:700">'+sel.name+'</div>'+
@@ -889,6 +909,7 @@ function renderSellerStats(){
         row('  · переводом',fmt(sel.zpTransfer)+'₽','#8888aa')+
         (sel.zpOther?row('  · иначе',fmt(sel.zpOther)+'₽','#8888aa'):'')+
         row('Долг/Переплата',fmt(Math.abs(zpDebt))+'₽ '+(zpDebt>0?'← долг':zpDebt<0?'→ переплата':'✔ оплачено'),zpDebt>0?'#f06060':zpDebt<0?'#a060f0':'#60f090')+
+        diffListRow('',sel.zpDiffShifts,'zp_'+sel.name.replace(/\s/g,'_'),false)+
         row('Ср. ЗП / смену',fmt(avgZp)+'₽','#60f090')+
         row('Ср. ЗП / месяц',fmt(sel.zp/_ssMonthsInRange(range))+'₽','#60f090')
       ):'')+
@@ -902,10 +923,11 @@ function renderSellerStats(){
           row('  · наличными',fmt(sel.travelCash)+'₽','#8888aa')+
           row('  · переводом',fmt(sel.travelTransfer)+'₽','#8888aa')+
           (sel.travelOther?row('  · иначе',fmt(sel.travelOther)+'₽','#8888aa'):'')+
-          row('Долг/Переплата (проезд)',fmt(Math.abs(travelDebt))+'₽ '+(travelDebt>0?'← долг':travelDebt<0?'→ переплата':'✔ оплачено'),travelDebt>0?'#f06060':travelDebt<0?'#a060f0':'#60f090')
+          row('Долг/Переплата (проезд)',fmt(Math.abs(travelDebt))+'₽ '+(travelDebt>0?'← долг':travelDebt<0?'→ переплата':'✔ оплачено'),travelDebt>0?'#f06060':travelDebt<0?'#a060f0':'#60f090')+
+          diffListRow('',sel.travelDiffShifts,'travel_'+sel.name.replace(/\s/g,'_'),false)
         ):'');
       })()+
-      (sel.hasCashDiff>0?row('Расхождения кассы',sel.hasCashDiff+' смен','#f06060'):'')+
+      (sel.hasCashDiff>0?(row('Расхождения кассы',sel.hasCashDiff+' смен','#f06060')+diffListRow('',sel.cashDiffShifts,'cash_'+sel.name.replace(/\s/g,'_'),true)):'')+
       '<div onpointerdown="event.preventDefault();if(!window._ssCalOpen)window._ssCalOpen={};window._ssCalOpen[\''+calKey+'\']='+(calOpen?'false':'true')+';renderSellerStats()" '+
         'style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;margin-top:4px;cursor:pointer;border-top:1px solid #2e2e3e">'+
         '<span class="u-fs11-gray">📅 Календарь смен ('+Object.keys(calByDate).length+')</span>'+
