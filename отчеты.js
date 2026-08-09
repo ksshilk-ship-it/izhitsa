@@ -559,7 +559,14 @@ function findShiftAnomalies(){
   var resEl = document.getElementById('ss_anomaly_result');
   if(resEl) resEl.innerHTML = '<div style="font-size:12px;color:#8888aa;padding:10px">⏳ Проверяю...</div>';
   var range = _ssDateRange();
-  try{ _ensureShiftsLoadedForRange(range.from).then(_findShiftAnomaliesReal); }catch(e){ _findShiftAnomaliesReal(); }
+  var run = function(){
+    try{ _findShiftAnomaliesReal(); }
+    catch(e){
+      console.log('[findShiftAnomalies] err', e);
+      if(resEl) resEl.innerHTML = '<div style="color:#f06060;font-size:12px;padding:10px">⛔ Ошибка проверки: '+(e&&e.message?e.message:e)+'</div>';
+    }
+  };
+  try{ _ensureShiftsLoadedForRange(range.from).then(run).catch(run); }catch(e){ run(); }
 }
 function _findShiftAnomaliesReal(){
   var range = _ssDateRange();
