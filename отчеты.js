@@ -555,6 +555,76 @@ function _recalcAllShiftsZpReal(){
   showToast('✅ Пересчитано смен: '+updated);
   renderSellerStats();
 }
+function findShiftAnomalies(){
+  var resEl = document.getElementById('ss_anomaly_result');
+  if(resEl) resEl.innerHTML = '<div style="font-size:12px;color:#8888aa;padding:10px">⏳ Проверяю...</div>';
+  var range = _ssDateRange();
+  try{ _ensureShiftsLoadedForRange(range.from).then(_findShiftAnomaliesReal); }catch(e){ _findShiftAnomaliesReal(); }
+}
+function _findShiftAnomaliesReal(){
+  var range = _ssDateRange();
+  var zpSettings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+  var allShifts = getShifts().filter(function(s){
+    if(s.status!=='closed') return false;
+    if(_ssShop!=='all' && s.shopName!==_ssShop) return false;
+    if(s.date < range.from || s.date > range.to) return false;
+    return true;
+  });
+  var typeLabels = {zp:'ЗП', travel:'Проезд', inkass:'Инкассация', other:'Прочее', supplier:'Поставщику'};
+  var flagged = [];
+  allShifts.forEach(function(sh){
+    var reasons = [];
+    var exp = (sh.journal||[]).filter(function(e){ return e.type==='expense'; });
+    var byType = {};
+    exp.forEach(function(e){ var t=e.expType||'other'; (byType[t]=byType[t]||[]).push(e); });
+    ['zp','travel','inkass'].forEach(function(t){
+      if(byType[t] && byType[t].length>1){
+        var sum = byType[t].reduce(function(s,e){return s+(e.amount||0);},0);
+        reasons.push('Несколько записей «'+typeLabels[t]+'» за смену ('+byType[t].length+' шт, всего '+Math.round(sum)+'₽) — проверить, не задвоено ли');
+      }
+    });
+    var travelRate = (zpSettings[sh.shopName] && numDef(zpSettings[sh.shopName].travel, 0)) || 0;
+    var zpEntries = byType.zp||[];
+    var z;
+    try{ z = calcShiftZpStandalone(sh.shopName, sh); }catch(e){ z = null; }
+    if(travelRate>0){
+      zpEntries.forEach(function(e){
+        if(Math.abs((e.amount||0)-travelRate)<1){
+          reasons.push('Запись «ЗП» на '+Math.round(e.amount)+'₽ совпадает с тарифом проезда этого магазина ('+Math.round(travelRate)+'₽) — похоже, проезд занесли как ЗП');
+        }
+      });
+    }
+    if(z){
+      if(travelRate>0 && z.travelFact===0 && zpEntries.length===1){
+        var onlyZp = zpEntries[0].amount||0;
+        if(Math.abs(onlyZp-(z.zpCalcTotal+travelRate))<1 && Math.abs(z.zpCalcTotal-onlyZp)>=1){
+          reasons.push('Проезд факт = 0, но единственная запись «ЗП» ('+Math.round(onlyZp)+'₽) похожа на сумму расчётной ЗП и проезда вместе — возможно, их занесли одной записью');
+        }
+      }
+      if(travelRate===0 && z.travelFact>0){
+        reasons.push('Взят проезд ('+Math.round(z.travelFact)+'₽), хотя для этого магазина тариф проезда сейчас не задан (0₽)');
+      }
+      if(Math.abs(z.diff)>=500){
+        reasons.push('Большое расхождение план/факт ЗП+проезд: '+(z.diff>0?'+':'')+Math.round(z.diff)+'₽');
+      }
+    }
+    if(reasons.length) flagged.push({shift:sh, reasons:reasons});
+  });
+  var resEl = document.getElementById('ss_anomaly_result');
+  if(!resEl) return;
+  if(!flagged.length){
+    resEl.innerHTML = '<div style="color:#60f090;font-size:12px;padding:10px;background:#16241a;border-radius:10px;margin-bottom:10px">✅ За выбранный период и магазин подозрительных расхождений не найдено</div>';
+    return;
+  }
+  resEl.innerHTML = '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">⚠️ Найдено смен с подозрениями: '+flagged.length+'</div>'+
+    flagged.map(function(f){
+      var sh=f.shift;
+      return '<div style="background:#221a16;border:1px solid #f0a060;border-radius:10px;padding:10px;margin-bottom:8px;cursor:pointer" onclick="openShiftView(\''+(sh.id||sh._id)+'\')">'+
+        '<div style="font-weight:700;font-size:12px;color:#f0a060">'+(sh.shopName||'')+' · '+(sh.date||'')+' · '+(sh.sellerName||'')+'</div>'+
+        f.reasons.map(function(r){ return '<div style="font-size:11px;color:#f0c0a0;margin-top:4px">⚠️ '+r+'</div>'; }).join('')+
+      '</div>';
+    }).join('');
+}
 function _ssMonthsInRange(range){
   var from=new Date(range.from), to=new Date(range.to);
   var months=(to.getFullYear()-from.getFullYear())*12+(to.getMonth()-from.getMonth())+1;
