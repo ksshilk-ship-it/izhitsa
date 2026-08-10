@@ -4178,11 +4178,18 @@ function _addReceiveToShift(shift, items, goodsType, opts){
   return rcvEntry;
 }
 function svSaveManualInvIntoShift(){
-  if(!_svManInv || !_currentShiftView) return;
+  try{ _svSaveManualInvIntoShiftReal(); }
+  catch(e){
+    console.log('[svSaveManualInvIntoShift] ошибка:', e);
+    alert('⛔ Ошибка при сохранении накладной: '+(e&&e.message?e.message:e)+'\n\nВведённые позиции НЕ потеряны на экране — попробуйте нажать «Сохранить накладную» ещё раз, либо сообщите об ошибке.');
+  }
+}
+function _svSaveManualInvIntoShiftReal(){
+  if(!_svManInv || !_currentShiftView){ alert('⛔ Форма накладной не найдена — откройте смену заново и внесите позиции ещё раз.'); return; }
   var s = _svManInv;
   var items = s.items.filter(function(it){ return (it.name||'').trim() && (it.price||0)>0; });
-  if(!items.length){ showToast('Добавьте хотя бы одну позицию с названием и ценой'); return; }
-  if(!s.num){ showToast('Укажите номер накладной'); return; }
+  if(!items.length){ alert('⛔ Не сохранено! Добавьте хотя бы одну позицию с названием и ценой.'); return; }
+  if(!s.num){ alert('⛔ Не сохранено! Укажите номер накладной — поле выше в этой же форме.'); return; }
   var who = (session&&(session.name||session.sellerName))||'Администратор';
   var totalAmt = items.reduce(function(sum,it){ return sum+(it.price||0)*(it.qty||1); },0);
   var cutoffDate = new Date(Date.now()-5*86400000).toISOString().split('T')[0];
