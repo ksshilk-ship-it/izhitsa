@@ -225,8 +225,25 @@ function _backupShiftIndependently(report){
     try{ _queuePendingDoc('iz_pending_shift_backup', report); }catch(e2){}
   }
 }
+function _backupInvoiceIndependently(inv){
+  try{
+    if(!inv || !inv.id) return;
+    var doc = Object.assign({}, inv, {recordedAt: new Date().toISOString()});
+    if(typeof db==='undefined' || !db){ _queuePendingDoc('iz_pending_invoice_backup', doc); return; }
+    db.collection('iz_invoice_backup').doc(inv.id).set(doc).then(function(){
+      _clearPendingDoc('iz_pending_invoice_backup', inv.id);
+    }).catch(function(){
+      _queuePendingDoc('iz_pending_invoice_backup', doc);
+    });
+  }catch(e){
+    try{ _queuePendingDoc('iz_pending_invoice_backup', inv); }catch(e2){}
+  }
+}
 function _retryPendingShiftBackups(){
   _retryPendingDocs('iz_pending_shift_backup', 'iz_shift_backup', null);
+}
+function _retryPendingInvoiceBackups(){
+  _retryPendingDocs('iz_pending_invoice_backup', 'iz_invoice_backup', null);
 }
 function _queuePendingDoc(queueKey, doc){
   try{
@@ -452,6 +469,7 @@ function _initFirebase(){
       try{if(typeof startStockSync==='function') startStockSync();}catch(e){}
       try{if(typeof _retryPendingShiftSyncs==='function') _retryPendingShiftSyncs();}catch(e){}
       try{if(typeof _retryPendingShiftBackups==='function') _retryPendingShiftBackups();}catch(e){}
+      try{if(typeof _retryPendingInvoiceBackups==='function') _retryPendingInvoiceBackups();}catch(e){}
       try{
         if(typeof session!=='undefined' && session && session.role!=='shopadmin' && !session.isPreview && typeof startInvoiceLiveSync==='function'){
           startInvoiceLiveSync();

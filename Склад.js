@@ -1525,6 +1525,7 @@ function saveManualInvoice() {
     _queuePendingInvoice('iz_manual_invoices', inv);
     showToast('⚠️ Накладная сохранена только на телефоне — досошлётся автоматически, когда появится связь');
   });
+  try{ _backupInvoiceIndependently(inv); }catch(e){}
   var _gt4save = _manInvGoodsType || 'derevo';
   _manInvItems.forEach(function(item){
     autoSaveToItemBase(item.name, item.article, item.price, _gt4save);
@@ -1828,6 +1829,7 @@ function saveManualInvoiceEdit(id){
     _queuePendingInvoice('iz_manual_invoices', data);
     showToast('⚠️ Правка накладной сохранена только на телефоне — досошлётся автоматически');
   });
+  try{ _backupInvoiceIndependently(Object.assign({}, data, {id:id})); }catch(e){}
   var oldEntry = journal.find(function(e){
     if(e.type!=='receive') return false;
     if(e.invId) return e.invId===id;
