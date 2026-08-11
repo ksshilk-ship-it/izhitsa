@@ -1336,6 +1336,7 @@ function clearTestSession(){
 }
 function startAdminApp(){
   try{ _reportAppVersion(); }catch(e){}
+  try{ if(typeof _hideLiveSyncFailBanner==='function') _hideLiveSyncFailBanner(); }catch(e){}
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appScreen').style.display='block';
   document.getElementById('hdrShop').textContent='🔐 Администратор';

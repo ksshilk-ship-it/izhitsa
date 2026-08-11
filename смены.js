@@ -403,6 +403,7 @@ function _onLiveSyncFailed(){
 }
 function syncLiveShift(){
   if(!session || session.isPreview) return;
+  if(session.role==='shopadmin') return; // админ-сессия не ведёт свою смену — не должна пытаться её "живо" синхронизировать
   if(_shiftForceClosedRemotely) return;
   if(restoreMode) return;
   if(!journal || journal.length<=1) return; // length 1 = just the "Смена открыта" entry, nothing real yet
