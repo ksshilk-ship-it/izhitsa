@@ -271,6 +271,118 @@ function getCheckpointReport(accountId){
 }
 
 
+// ---------- CLOUD SYNC ----------
+const CLOUD_PROJECT = 'izhitsa-6327c';
+const CLOUD_API_KEY = 'AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw';
+const CLOUD_DOC_PATH = 'iz_settings/kosmetika_finance';
+let cloudSyncEnabled = localStorage.getItem('izhitsa-kosmetika-sync')==='on';
+let fbDb = null, fbUnsub = null, cloudPushTimer = null, lastSyncedJSON = null, cloudStatus = 'off';
+
+function loadFirebaseSdk(cb){
+  if(typeof firebase!=='undefined'){ cb(); return; }
+  const s1 = document.createElement('script');
+  s1.src = 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js';
+  s1.onload = ()=>{
+    const s2 = document.createElement('script');
+    s2.src = 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js';
+    s2.onload = cb;
+    s2.onerror = ()=>{ cloudStatus='error'; render(); };
+    document.head.appendChild(s2);
+  };
+  s1.onerror = ()=>{ cloudStatus='error'; render(); };
+  document.head.appendChild(s1);
+}
+function ensureFirebase(cb){
+  if(fbDb){ cb(); return; }
+  loadFirebaseSdk(()=>{
+    try{
+      if(!firebase.apps.length){
+        firebase.initializeApp({
+          apiKey: CLOUD_API_KEY,
+          authDomain: CLOUD_PROJECT+'.firebaseapp.com',
+          projectId: CLOUD_PROJECT,
+          storageBucket: CLOUD_PROJECT+'.firebasestorage.app',
+          messagingSenderId: '1025102190040',
+          appId: '1:1025102190040:web:bb3b8e5e61f0b1fa038ead'
+        });
+      }
+      fbDb = firebase.firestore();
+      try{ fbDb.enablePersistence({synchronizeTabs:true}).catch(()=>{}); }catch(e){}
+      cb();
+    }catch(e){ cloudStatus='error'; render(); }
+  });
+}
+function cloudDocRef(){
+  const [col, id] = CLOUD_DOC_PATH.split('/');
+  return fbDb.collection(col).doc(id);
+}
+function startCloudListening(){
+  if(fbUnsub) return;
+  cloudStatus = 'connecting';
+  fbUnsub = cloudDocRef().onSnapshot(snap=>{
+    cloudStatus = 'on';
+    if(!snap.exists || !snap.data() || !snap.data().state) { render(); return; }
+    const remoteJSON = snap.data().state;
+    if(remoteJSON === lastSyncedJSON){ render(); return; }
+    lastSyncedJSON = remoteJSON;
+    try{ state = JSON.parse(remoteJSON); }catch(e){ return; }
+    saveState(true);
+    render();
+  }, err=>{ console.error('Ошибка синхронизации', err); cloudStatus='error'; render(); });
+}
+function stopCloudListening(){
+  if(fbUnsub){ fbUnsub(); fbUnsub = null; }
+  cloudStatus = 'off';
+}
+function pushStateToCloud(){
+  if(!fbDb) return;
+  const json = JSON.stringify(state);
+  if(json === lastSyncedJSON) return;
+  lastSyncedJSON = json;
+  cloudDocRef().set({state: json, updatedAt: Date.now()}, {merge:true}).catch(e=>{ console.error('Ошибка отправки в облако', e); });
+}
+function enableCloudSync(){
+  cloudStatus = 'connecting'; render();
+  ensureFirebase(()=>{
+    cloudDocRef().get().then(snap=>{
+      const hasRemote = snap.exists && snap.data() && snap.data().state;
+      if(hasRemote){
+        const updatedAt = snap.data().updatedAt;
+        const when = updatedAt ? new Date(updatedAt).toLocaleString('ru-RU') : 'неизвестно когда';
+        const pull = confirm(
+          `В облаке уже есть сохранённые данные (обновлены: ${when}).\n\n`+
+          `ОК — загрузить их на это устройство (текущие локальные данные будут заменены).\n`+
+          `Отмена — отправить данные этого устройства в облако (заменит то, что там сейчас).`
+        );
+        if(pull){
+          lastSyncedJSON = snap.data().state;
+          try{ state = JSON.parse(lastSyncedJSON); }catch(e){}
+          saveState(true);
+        } else {
+          lastSyncedJSON = null;
+          pushStateToCloud();
+        }
+      } else {
+        lastSyncedJSON = null;
+        pushStateToCloud();
+      }
+      cloudSyncEnabled = true;
+      localStorage.setItem('izhitsa-kosmetika-sync','on');
+      startCloudListening();
+      render();
+    }).catch(e=>{
+      alert('Не удалось подключиться к облаку: '+e.message);
+      cloudStatus = 'error'; render();
+    });
+  });
+}
+function disableCloudSync(){
+  stopCloudListening();
+  cloudSyncEnabled = false;
+  localStorage.setItem('izhitsa-kosmetika-sync','off');
+  render();
+}
+
 // ---------- LOAD / SAVE ----------
 async function loadState(){
   try{
@@ -332,10 +444,17 @@ async function loadState(){
   loaded = true;
   saveState();
   render();
+  if(cloudSyncEnabled){
+    ensureFirebase(()=>{ startCloudListening(); });
+  }
 }
-async function saveState(){
+async function saveState(skipCloud){
   try{ localStorage.setItem('izhitsa-finance-data', JSON.stringify(state)); }
   catch(e){ console.error('Ошибка сохранения', e); }
+  if(!skipCloud && cloudSyncEnabled && fbDb){
+    clearTimeout(cloudPushTimer);
+    cloudPushTimer = setTimeout(pushStateToCloud, 600);
+  }
 }
 
 // ---------- NAV / RENDER ----------
@@ -1710,8 +1829,20 @@ function renderSettings(main){
     </div>
 
     <div class="card">
+      <h2>Облачная синхронизация</h2>
+      ${cloudSyncEnabled ? `
+        <div class="row"><span class="label">Статус</span><span class="num ${cloudStatus==='on'?'pos':cloudStatus==='error'?'neg':''}">${cloudStatus==='on'?'Подключено ✓':cloudStatus==='connecting'?'Подключение…':cloudStatus==='error'?'Ошибка':'Отключено'}</span></div>
+        <div class="note">Данные автоматически передаются между всеми устройствами, где открыто это же приложение (тот же файл). Работает при наличии интернета; изменения, сделанные офлайн, подтянутся при следующем подключении.</div>
+        <button class="btn secondary small" id="b-sync-off">Отключить синхронизацию</button>
+      ` : `
+        <div class="note">Позволяет видеть одни и те же данные на телефоне, компьютере и других устройствах. При первом включении нужно будет выбрать, какие данные использовать — с этого устройства или уже сохранённые в облаке.</div>
+        <button class="btn small" id="b-sync-on">Включить синхронизацию</button>
+      `}
+    </div>
+
+    <div class="card">
       <h2>Данные приложения</h2>
-      <div class="note">Все данные хранятся локально в этом приложении и доступны только с того устройства и браузера, где вы их вносите — между устройствами они не синхронизируются автоматически.</div>
+      <div class="note">Все данные хранятся локально в этом приложении и доступны только с того устройства и браузера, где вы их вносите — между устройствами они не синхронизируются автоматически, если не включена облачная синхронизация выше.</div>
 
       <label class="field">Перенос на другое устройство</label>
       <div class="note">Скачайте копию здесь, затем на другом устройстве откройте это же приложение → Настройки → «Загрузить копию» и выберите скачанный файл.</div>
@@ -1725,6 +1856,11 @@ function renderSettings(main){
       <button class="btn danger" id="b-reset">Очистить все данные</button>
     </div>
   `;
+
+  if(document.getElementById('b-sync-on')) document.getElementById('b-sync-on').onclick = enableCloudSync;
+  if(document.getElementById('b-sync-off')) document.getElementById('b-sync-off').onclick = ()=>{
+    if(confirm('Отключить синхронизацию? Данные на этом устройстве останутся, но перестанут обновляться из облака.')) disableCloudSync();
+  };
 
   document.getElementById('b-export').onclick = ()=>{
     const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
@@ -1752,6 +1888,10 @@ function renderSettings(main){
       try{
         const parsed = JSON.parse(ev.target.result);
         localStorage.setItem('izhitsa-finance-data', JSON.stringify(parsed));
+        if(cloudSyncEnabled && fbDb){
+          lastSyncedJSON = null;
+          cloudDocRef().set({state: JSON.stringify(parsed), updatedAt: Date.now()}, {merge:true}).catch(()=>{});
+        }
         box.innerHTML = '<div class="note">Готово, данные загружены. Обновляю…</div>';
         setTimeout(()=>location.reload(), 500);
       }catch(err){
@@ -1823,6 +1963,9 @@ function renderSettings(main){
   document.getElementById('b-reset').onclick = ()=>{
     if(!confirm('Удалить все данные без возможности восстановления?')) return;
     localStorage.removeItem('izhitsa-finance-data');
+    if(cloudSyncEnabled){
+      localStorage.setItem('izhitsa-kosmetika-sync','off');
+    }
     location.reload();
   };
 }
