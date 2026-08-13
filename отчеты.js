@@ -940,14 +940,86 @@ function renderSellerStats(){
   cont.innerHTML=html;
 }
 function setProfView(mode){
-  var simpleBtn=document.getElementById('profView_simple'), detailBtn=document.getElementById('profView_detail');
-  var simpleView=document.getElementById('profSimpleView'), detailView=document.getElementById('profDetailView');
-  var isSimple = mode==='simple';
-  if(simpleBtn) simpleBtn.style.cssText = 'flex:1;padding:8px;border-radius:10px;font-size:12px;cursor:pointer;border:'+(isSimple?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(isSimple?'#1e2a14':'#22222e')+';color:'+(isSimple?'#c8f060':'#8888aa')+';font-weight:'+(isSimple?'700':'600');
-  if(detailBtn) detailBtn.style.cssText = 'flex:1;padding:8px;border-radius:10px;font-size:12px;cursor:pointer;border:'+(!isSimple?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(!isSimple?'#1e2a14':'#22222e')+';color:'+(!isSimple?'#c8f060':'#8888aa')+';font-weight:'+(!isSimple?'700':'600');
-  if(simpleView) simpleView.style.display = isSimple ? 'block':'none';
-  if(detailView) detailView.style.display = isSimple ? 'none':'block';
-  if(isSimple) generateProfitabilityReport(); else generatePeriodReport();
+  var btns={simple:document.getElementById('profView_simple'),detail:document.getElementById('profView_detail'),items:document.getElementById('profView_items')};
+  var views={simple:document.getElementById('profSimpleView'),detail:document.getElementById('profDetailView'),items:document.getElementById('profItemsView')};
+  Object.keys(btns).forEach(function(k){
+    var active = k===mode;
+    if(btns[k]) btns[k].style.cssText = 'flex:1;padding:8px;border-radius:10px;font-size:12px;cursor:pointer;border:'+(active?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(active?'#1e2a14':'#22222e')+';color:'+(active?'#c8f060':'#8888aa')+';font-weight:'+(active?'700':'600');
+    if(views[k]) views[k].style.display = active ? 'block':'none';
+  });
+  if(mode==='simple') generateProfitabilityReport();
+  else if(mode==='detail') generatePeriodReport();
+  else if(mode==='items'){
+    var shopSel=document.getElementById('piShopFilter');
+    if(shopSel && shopSel.options.length<=1){ shopSel.innerHTML = '<option value="">Все магазины</option>'+getShopNames().map(function(s){return '<option>'+s+'</option>';}).join(''); }
+    if(!document.getElementById('piDateFrom').value){
+      var d=new Date(); var y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0');
+      document.getElementById('piDateFrom').value=y+'-'+m+'-01';
+      document.getElementById('piDateTo').value=d.toISOString().split('T')[0];
+    }
+    generateItemSalesReport();
+  }
+}
+var _piSort = 'sum';
+function setPiSort(sort){
+  _piSort = sort;
+  ['sum','qty','name'].forEach(function(s){
+    var btn=document.getElementById('piSort_'+s); if(!btn) return;
+    var active = s===sort;
+    btn.style.border=(active?'2px solid #c8f060':'1px solid #2e2e3e'); btn.style.background=(active?'#1e2a14':'#22222e'); btn.style.color=(active?'#c8f060':'#8888aa'); btn.style.fontWeight=(active?'700':'400');
+  });
+  generateItemSalesReport();
+}
+function setPiPeriod(type,el){
+  document.querySelectorAll('#profItemsView > div:nth-child(1) button').forEach(function(b){
+    b.style.background='#22222e'; b.style.color='#8888aa'; b.style.borderColor='#2e2e3e'; b.style.fontWeight='';
+  });
+  el.style.background='#1e2a14'; el.style.color='#c8f060'; el.style.borderColor='#c8f060'; el.style.fontWeight='700';
+  var now=new Date(), today=now.toISOString().split('T')[0], from;
+  if(type==='week'){var d=new Date();d.setDate(d.getDate()-6);from=d.toISOString().split('T')[0];}
+  else if(type==='month'){var y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');from=y+'-'+m+'-01';}
+  else if(type==='quarter'){var q=Math.floor(now.getMonth()/3),qm=String(q*3+1).padStart(2,'0');from=now.getFullYear()+'-'+qm+'-01';}
+  else {generateItemSalesReport();return;}
+  document.getElementById('piDateFrom').value=from;
+  document.getElementById('piDateTo').value=today;
+  generateItemSalesReport();
+}
+function generateItemSalesReport(){
+  var from=(document.getElementById('piDateFrom')||{}).value||'';
+  var to=(document.getElementById('piDateTo')||{}).value||'';
+  var shopF=(document.getElementById('piShopFilter')||{}).value||'';
+  var c=document.getElementById('itemSalesReportBody');
+  if(!from||!to||!c) return;
+  var shifts=getShifts().filter(function(s){return s.date>=from&&s.date<=to&&(!shopF||s.shopName===shopF);});
+  var byName={};
+  shifts.forEach(function(s){
+    (s.journal||[]).forEach(function(e){
+      if(e.type!=='sale') return;
+      (e.items||[]).forEach(function(it){
+        var name=(it.name||'').trim(); if(!name) return;
+        var amt = it.amt!=null ? it.amt : (it.price||0)*(it.qty||1);
+        if(!byName[name]) byName[name]={name:name,qty:0,sum:0};
+        byName[name].qty += (it.qty||1);
+        byName[name].sum += amt;
+      });
+    });
+  });
+  var list = Object.keys(byName).map(function(k){return byName[k];});
+  if(_piSort==='sum') list.sort(function(a,b){return b.sum-a.sum;});
+  else if(_piSort==='qty') list.sort(function(a,b){return b.qty-a.qty;});
+  else list.sort(function(a,b){return a.name.localeCompare(b.name,'ru');});
+  var f2=function(n){return Math.round(n||0).toLocaleString('ru-RU')+'₽';};
+  var totSum = list.reduce(function(s,x){return s+x.sum;},0);
+  var totQty = list.reduce(function(s,x){return s+x.qty;},0);
+  if(!list.length){c.innerHTML='<div class="empty"><div class="ei">📦</div>Нет продаж за период</div>';return;}
+  var html='<div style="font-size:11px;color:#8888aa;margin-bottom:8px">📅 '+from+' — '+to+(shopF?' · '+shopF:'')+' · '+list.length+' наименований · '+totQty+' шт. · '+f2(totSum)+'</div>';
+  html += list.map(function(it,i){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 2px;border-bottom:1px solid #2e2e3e;font-size:13px">'+
+      '<div style="flex:1;padding-right:8px"><span style="color:#555568;font-size:11px;margin-right:6px">'+(i+1)+'.</span>'+it.name+'</div>'+
+      '<div style="text-align:right;flex-shrink:0"><div style="font-weight:700;color:#c8f060">'+f2(it.sum)+'</div><div style="font-size:11px;color:#8888aa">'+it.qty+' шт.</div></div>'+
+    '</div>';
+  }).join('');
+  c.innerHTML=html;
 }
 function setPrPeriod(type,el){
   document.querySelectorAll('#profDetailView > div:nth-child(2) button').forEach(function(b){
