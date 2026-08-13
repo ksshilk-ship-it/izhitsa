@@ -50,6 +50,7 @@ function siAddToSpecies(inputId){
     drSp.push(newSp);
     localStorage.setItem('iz_dr_species', JSON.stringify(drSp));
     syncArrayAdd('iz_dr_species', newSp);
+    if(typeof _clearRefbookTombstone==='function') _clearRefbookTombstone('iz_dr_species', val);
     showToast('✅ Добавлено в Вкус/Состав: '+val);
   } else {
     var before=getSpecies().length; saveSpecies(val);
@@ -106,6 +107,7 @@ function siAddToGoods(inputId){
     goods.push(newItem);
     localStorage.setItem(key, JSON.stringify(goods));
     syncArrayAdd(key, newItem);
+    if(typeof _clearRefbookTombstone==='function') _clearRefbookTombstone(key, val);
     var allGoods = getRefBook('iz_goods');
     if(!allGoods.some(function(g){return ((g&&g.name)||g)===val;})){
       var newItem2 = {id:uid(), name:val};

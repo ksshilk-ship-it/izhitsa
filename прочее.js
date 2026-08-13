@@ -319,6 +319,18 @@ function renderRefbookItemsShop(bookId, key){
     '</div>';
   }).join('');
 }
+function _clearRefbookTombstone(key, name){
+  var norm = (name||'').toLowerCase().trim();
+  if(!norm) return;
+  var tombKey = key+'_deleted';
+  var tombs = JSON.parse(localStorage.getItem(tombKey)||'[]');
+  var idx = tombs.indexOf(norm);
+  if(idx<0) return;
+  tombs.splice(idx,1);
+  localStorage.setItem(tombKey, JSON.stringify(tombs));
+  var tombDocKey = key==='iz_goods_derevo'?'goods_derevo_deleted':(key==='iz_goods_dr'?'goods_dr_deleted':'refbook_deleted_'+key);
+  try{ db.collection('iz_settings').doc(tombDocKey).set({deleted:tombs,updatedAt:new Date().toISOString()},{merge:true}); }catch(e){}
+}
 function addRefbookItemShop(bookId, key){
   var input = document.getElementById('rbNew_'+bookId);
   var value = (input.value||'').trim();
@@ -339,6 +351,7 @@ function addRefbookItemShop(bookId, key){
         items2.push({id:uid(),name:value});
         items2.sort(function(a,b){return (a.name||a).toLowerCase().localeCompare((b.name||b).toLowerCase(),'ru');});
         saveRefBookShop(key,items2);
+        _clearRefbookTombstone(key,value);
         renderRefbookItemsShop(bookId,key);
         updateRefbookCountShop(bookId,key);
         showToast('✅ Сохранено');
@@ -351,6 +364,7 @@ function addRefbookItemShop(bookId, key){
   items.push({id:uid(), name:value});
   items.sort(function(a,b){ return (a.name||a).toLowerCase().localeCompare((b.name||b).toLowerCase(),'ru'); });
   saveRefBookShop(key, items);
+  _clearRefbookTombstone(key, value);
   input.value='';
   renderRefbookItemsShop(bookId, key);
   updateRefbookCountShop(bookId, key);
