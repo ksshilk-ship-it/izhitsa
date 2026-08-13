@@ -963,6 +963,7 @@ function setPrPeriod(type,el){
   document.getElementById('prDateTo').value=today;
   generatePeriodReport();
 }
+var _prLastFiltered = [], _prLastFrom = '', _prLastTo = '', _prLastShop = '';
 var prMode = 'live';
 function setPrMode(mode, el) {
   prMode = mode;
@@ -1029,11 +1030,13 @@ function generatePeriodReport(){
   });
   var prPct=function(n){return totRev>0?' <span style="color:#555568;font-size:11px">('+Math.round(n/totRev*100)+'%)</span>':'';};
   var Rp=function(lbl,val,col,sp){return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span style="color:#8888aa">'+lbl+'</span><span style="color:'+(col||'#f0f0f8')+';font-weight:700">'+f2(val)+(sp?prPct(val):'')+'</span></div>';};
+  var RpClick=function(lbl,val,col,sp,field){return '<div onclick="showPrDailyBreakdown(\''+field+'\',\''+lbl.replace(/'/g,"")+'\',\''+col+'\')" style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px;cursor:pointer" onpointerdown="this.style.background=\'#22222e\'" onpointerup="this.style.background=\'\'"><span style="color:#8888aa">'+lbl+' <span style="color:#555568;font-size:10px">▸ по дням</span></span><span style="color:'+(col||'#f0f0f8')+';font-weight:700">'+f2(val)+(sp?prPct(val):'')+'</span></div>';};
+  _prLastFiltered = filtered; _prLastFrom = from; _prLastTo = to; _prLastShop = shopF;
   var html='<div style="background:#1e2a14;border:1px solid #c8f060;border-radius:12px;padding:12px;margin-bottom:10px">'+
     '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">📅 '+from+' — '+to+' · '+filtered.length+' смен'+(shopF?' · '+shopF:'')+'</div>'+
-    Rp('💵 Нал',totCash,'#60f090',true)+
-    Rp('💳 Безнал',totCard,'#60c8f0',true)+
-    (totDisc?Rp('🎁 Скидка',totDisc,'#8888aa',true):'')+
+    RpClick('💵 Нал',totCash,'#60f090',true,'cash')+
+    RpClick('💳 Безнал',totCard,'#60c8f0',true,'card')+
+    (totDisc?RpClick('🎁 Скидка',totDisc,'#8888aa',true,'disc'):'')+
     '<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:15px;font-weight:700;border-top:1px solid #2e2e3e;margin-top:2px"><span>Итого выручка</span><span style="color:#c8f060">'+f2(totRev)+'</span></div>'+
     (totExp?'<div style="border-top:1px solid #2e2e3e;padding-top:8px;margin-top:4px">'+
       '<div style="font-size:11px;color:#f06060;font-weight:700;margin-bottom:6px">💸 РАСХОДЫ: '+f2(totExp)+prPct(totExp)+'</div>'+
@@ -1187,6 +1190,41 @@ function generatePeriodReport(){
   });
   html+='</div>';
   c.innerHTML=html;
+}
+function showPrDailyBreakdown(field, label, color){
+  var byDate = {};
+  _prLastFiltered.forEach(function(s){
+    var v = field==='cash' ? (s.cashRevenue||0) : field==='card' ? (s.cardRevenue||0) : (s.totalDiscount||0);
+    byDate[s.date] = (byDate[s.date]||0) + v;
+  });
+  var dates = Object.keys(byDate).sort().reverse();
+  var f2=function(n){return Math.round(n||0).toLocaleString('ru-RU')+'₽';};
+  var total = dates.reduce(function(s,d){return s+byDate[d];},0);
+  var rows = dates.map(function(d){
+    return '<div style="display:flex;justify-content:space-between;padding:8px 2px;border-bottom:1px solid #2e2e3e;font-size:13px">'+
+      '<span>'+d+'</span><span style="font-weight:700;color:'+color+'">'+f2(byDate[d])+'</span></div>';
+  }).join('');
+  var overlay = document.getElementById('prDailyOverlay');
+  if(!overlay){
+    overlay = document.createElement('div');
+    overlay.id = 'prDailyOverlay';
+    overlay.className = 'mo';
+    overlay.onclick = function(e){ if(e.target===overlay) closePrDailyBreakdown(); };
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = '<div class="md">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'+
+      '<div style="font-size:16px;font-weight:700">'+label+' по дням</div>'+
+      '<button onclick="closePrDailyBreakdown()" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer">✕</button>'+
+    '</div>'+
+    '<div style="font-size:11px;color:#8888aa;margin-bottom:10px">📅 '+_prLastFrom+' — '+_prLastTo+(_prLastShop?' · '+_prLastShop:'')+' · Итого: '+f2(total)+'</div>'+
+    (rows||'<div class="empty"><div class="ei">📅</div>Нет данных</div>')+
+  '</div>';
+  overlay.classList.add('open');
+}
+function closePrDailyBreakdown(){
+  var overlay = document.getElementById('prDailyOverlay');
+  if(overlay) overlay.classList.remove('open');
 }
 var profPeriodType = 'month';
 var PROF_MONTH_NAMES = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
