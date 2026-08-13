@@ -2541,7 +2541,7 @@ function _closeShiftReal(){
 var _histPeriod = 'week'; // 'today' | 'week' | 'month' | 'all' | 'custom'
 function setHistPeriod(period, el){
   _histPeriod = period;
-  ['today','week','month','all','custom'].forEach(function(p){
+  ['today','week','month','quarter','all','custom'].forEach(function(p){
     var btn = document.getElementById('histPeriod_'+p);
     if(!btn) return;
     var active = p === period;
@@ -2552,11 +2552,21 @@ function setHistPeriod(period, el){
     btn.style.fontWeight = active ? '700' : '400';
   });
   var rangeEl = document.getElementById('histCustomRange');
+  var qSelEl = document.getElementById('histQuarterSelect');
   if(period === 'custom'){
     if(rangeEl) rangeEl.style.display = 'flex';
+    if(qSelEl) qSelEl.style.display = 'none';
     return;
   }
   if(rangeEl) rangeEl.style.display = 'none';
+  if(period === 'quarter'){
+    if(qSelEl) qSelEl.style.display = 'block';
+    _populateHistQuarterPicker();
+    var picker = document.getElementById('histQuarterPicker');
+    applyHistQuarter(picker ? picker.value : _histQuarterKey(new Date()));
+    return;
+  }
+  if(qSelEl) qSelEl.style.display = 'none';
   var today = new Date();
   var todayStr = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
   if(period === 'week'){
@@ -2567,18 +2577,41 @@ function setHistPeriod(period, el){
     var monthAgo = new Date(today.getTime() - 29*86400000);
     _histPeriodFrom = monthAgo.getFullYear()+'-'+String(monthAgo.getMonth()+1).padStart(2,'0')+'-'+String(monthAgo.getDate()).padStart(2,'0');
     _histPeriodTo = todayStr;
-  } else if(period === 'quarter'){
-    var quarterAgo = new Date(today.getTime() - 89*86400000);
-    _histPeriodFrom = quarterAgo.getFullYear()+'-'+String(quarterAgo.getMonth()+1).padStart(2,'0')+'-'+String(quarterAgo.getDate()).padStart(2,'0');
-    _histPeriodTo = todayStr;
   } else { // all
     _histPeriodFrom = ''; _histPeriodTo = '';
   }
-  if(period==='quarter' || period==='all'){
-    try{ _ensureShiftsLoadedForRange(_histPeriodFrom).then(renderShiftHistory); }catch(e){ renderShiftHistory(); }
-  } else {
-    renderShiftHistory();
+  renderShiftHistory();
+  if(period==='all'){
+    try{ _ensureShiftsLoadedForRange(_histPeriodFrom).then(renderShiftHistory); }catch(e){}
   }
+}
+function _histQuarterKey(d){
+  return d.getFullYear()+'-'+(Math.floor(d.getMonth()/3)+1);
+}
+function _populateHistQuarterPicker(){
+  var sel = document.getElementById('histQuarterPicker');
+  if(!sel || sel.options.length) return; // already populated
+  var today = new Date();
+  var curY = today.getFullYear(), curQ = Math.floor(today.getMonth()/3)+1;
+  var opts = '';
+  for(var i=0;i<8;i++){
+    var q = curQ - i, y = curY;
+    while(q<1){ q+=4; y--; }
+    opts += '<option value="'+y+'-'+q+'">'+q+' кв. '+y+'</option>';
+  }
+  sel.innerHTML = opts;
+}
+function applyHistQuarter(value){
+  var parts = (value||'').split('-');
+  var y = parseInt(parts[0],10), q = parseInt(parts[1],10);
+  if(!y || !q) return;
+  var startMonth = (q-1)*3;
+  var from = new Date(y, startMonth, 1);
+  var to = new Date(y, startMonth+3, 0);
+  _histPeriodFrom = from.getFullYear()+'-'+String(from.getMonth()+1).padStart(2,'0')+'-'+String(from.getDate()).padStart(2,'0');
+  _histPeriodTo = to.getFullYear()+'-'+String(to.getMonth()+1).padStart(2,'0')+'-'+String(to.getDate()).padStart(2,'0');
+  renderShiftHistory();
+  try{ _ensureShiftsLoadedForRange(_histPeriodFrom).then(renderShiftHistory); }catch(e){}
 }
 function applyHistCustomRange(){
   var fromEl = document.getElementById('histDateFrom'), toEl = document.getElementById('histDateTo');
