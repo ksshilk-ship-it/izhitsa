@@ -171,7 +171,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '08.13.02';
+var APP_BUILD_VERSION = '08.13.03';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -364,7 +364,7 @@ function pick(role) {
     if(lb){ lb.textContent='Войти →'; lb.style.background='#a060f0'; lb.style.color='#fff'; }
     var rb = document.getElementById('restoreLoginBtn'); if(rb) rb.style.display='none';
     var admins = JSON.parse(localStorage.getItem('iz_shop_admins')||'[]');
-    if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; saveShopAdmins(admins); }
+    if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; localStorage.setItem('iz_shop_admins', JSON.stringify(admins)); }
     if(selEl) selEl.innerHTML = admins.map(function(a){ return '<option value="'+a.id+'">'+a.name+'</option>'; }).join('');
     var prevBtn = document.getElementById('previewModeBtn');
     if(prevBtn) prevBtn.style.display='block';
@@ -1421,7 +1421,7 @@ function init(){
   startStaffLiveSync(_staffSyncUpdateCb);
   renderLoginShopSelect();
   var admins=JSON.parse(localStorage.getItem('iz_shop_admins')||'[]');
-  if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; saveShopAdmins(admins); }
+  if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; localStorage.setItem('iz_shop_admins', JSON.stringify(admins)); }
   pick('seller');
   const saved=JSON.parse(localStorage.getItem(KEY.session)||'null');
   if(saved){ session=saved; journal=loadAndCleanJournal(); if(session.role==='shopadmin' && !session.sellerRestoreMode)startAdminApp(); else if(session.sellerRestoreMode){ startSellerRestoreApp(); } else { startApp(); syncLiveShift(); } }
