@@ -19,7 +19,7 @@ var _siItemGoodsType = 'derevo';
 var _siTypeManualOverride = false;
 function siManualSetType(type){
   _siTypeManualOverride = true;
-  setSiItemType(type);
+  setSiItemType(type, true);
 }
 function autoDetectGoodsTypeByName(name){
   if(!name) return null;
@@ -65,9 +65,9 @@ function setSiItemType(type, preserveName){
   var lblM = document.getElementById('siSpeciesLabelM');
   var isDr = type==='dr';
   if(lbl) lbl.textContent = isDr ? 'Вкус / Состав' : 'Порода дерева';
-  if(inp){ inp.placeholder = isDr ? 'Вкус/Состав' : 'Порода'; inp.value=''; }
+  if(inp){ inp.placeholder = isDr ? 'Вкус/Состав' : 'Порода'; if(!preserveName) inp.value=''; }
   if(lblM) lblM.textContent = isDr ? 'Вкус / Состав' : 'Порода дерева';
-  if(inpM){ inpM.placeholder = isDr ? 'Вкус/Состав' : 'Порода'; inpM.value=''; }
+  if(inpM){ inpM.placeholder = isDr ? 'Вкус/Состав' : 'Порода'; if(!preserveName) inpM.value=''; }
   var nameEl = document.getElementById('siName');
   var nameMEl = document.getElementById('siNameM');
   if(nameEl){ if(!preserveName) nameEl.value=''; psjSuggest('siName',getItemNames(type),'siPickName'); }
