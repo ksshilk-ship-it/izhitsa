@@ -484,15 +484,23 @@ function forceSyncAllShiftsNow(){
   var mine = shifts.filter(function(s){ return s.shopName===(session&&session.shopName); });
   if(!mine.length){ showToast('Нет сохранённых смен на этом устройстве'); return; }
   showToast('⏳ Отправляю '+mine.length+' смен(ы) в облако...');
-  var done=0, total=mine.length, errors=0;
+  var done=0, total=mine.length, errors=0, skipped=0;
+  var _settle = function(){ if(done+errors+skipped===total) showToast((errors||skipped)? ('⚠️ Отправлено: '+done+', пропущено (уже закрыты в облаке): '+skipped+', ошибок: '+errors) : ('✅ Отправлено смен: '+done)); };
   mine.forEach(function(s){
-    db.collection('iz_shifts').doc(String(s.id||s._id)).set(s,{merge:true}).then(function(){
-      done++;
-      if(done+errors===total) showToast(errors? ('⚠️ Отправлено: '+done+', ошибок: '+errors) : ('✅ Отправлено смен: '+done));
-    }).catch(function(e){
-      errors++;
-      if(done+errors===total) showToast(errors? ('⚠️ Отправлено: '+done+', ошибок: '+errors) : ('✅ Отправлено смен: '+done));
-    });
+    var id = String(s.id||s._id);
+    var push = function(){
+      db.collection('iz_shifts').doc(id).set(s,{merge:true}).then(function(){ done++; _settle(); }).catch(function(){ errors++; _settle(); });
+    };
+    if(s.status!=='closed'){
+      // локальная копия ещё "открыта" — сверяем с облаком, чтобы случайно не затереть уже закрытую там смену устаревшими данными
+      db.collection('iz_shifts').doc(id).get({source:'server'}).then(function(snap){
+        if(snap.exists && snap.data().status==='closed'){
+          var idx=shifts.findIndex(function(x){ return (x.id||x._id)===id; });
+          if(idx>=0){ var d=snap.data(); d.id=id; shifts[idx]=d; saveShifts(shifts); }
+          skipped++; _settle();
+        } else { push(); }
+      }).catch(function(){ push(); });
+    } else { push(); }
   });
 }
 function _syncPressStart(){
@@ -1613,6 +1621,14 @@ function _shiftSetSafe(shiftId, sh, successMsg, errPrefix){
       var dataToSend = sh;
       if(snap.exists){
         var remote = snap.data();
+        if(remote.status==='closed' && sh.status!=='closed'){
+          var shifts3 = getShifts();
+          var idx3 = shifts3.findIndex(function(s){ return (s.id||s._id)===shiftId; });
+          if(idx3>=0){ var d3=Object.assign({},remote,{id:shiftId}); shifts3[idx3]=d3; saveShifts(shifts3); if(_currentShiftView && (_currentShiftView.id===shiftId||_currentShiftView._id===shiftId)) _currentShiftView = d3; }
+          showToast('ℹ️ Эта смена уже закрыта в облаке — локальная (открытая) версия устарела, подтянула актуальную');
+          try{ _renderShiftView(); }catch(e){}
+          return;
+        }
         var remoteJnl = remote.journal||[];
         var localJnl = sh.journal||[];
         var localIds = {}; localJnl.forEach(function(e){ if(e.id) localIds[e.id]=true; });
