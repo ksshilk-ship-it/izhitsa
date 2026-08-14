@@ -469,15 +469,65 @@ function searchItemNameOccurrences(){
     var inCatalog = m.refs.some(function(r){ return r.kind==='catalog'; });
     var word = usageRefs.length===1?'запись':(usageRefs.length>=2&&usageRefs.length<=4?'записи':'записей');
     var usageLine = usageRefs.length ? (usageRefs.length+' '+word+' · '+m.qty+' шт.') : 'только в справочнике, не используется';
-    var addBtn = (!inCatalog && usageRefs.length) ? '<button onclick="addNameToCatalog(this)" data-name="'+n.replace(/"/g,'&quot;')+'" style="background:none;border:1px solid #60c8f0;border-radius:8px;padding:5px 10px;color:#60c8f0;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">➕ В справочник</button>' : '';
+    var esc = n.replace(/"/g,'&quot;');
+    var addBtn = (!inCatalog && usageRefs.length) ? '<button onclick="addNameToCatalog(this)" data-name="'+esc+'" style="background:none;border:1px solid #60c8f0;border-radius:8px;padding:5px 10px;color:#60c8f0;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">➕ В справочник</button>' : '';
+    var whoBtn = usageRefs.length ? '<button onclick="showNameSellerBreakdown(this)" data-name="'+esc+'" title="Кто вносил" style="background:none;border:1px solid #a060f0;border-radius:8px;padding:5px 8px;color:#a060f0;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">👤</button>' : '';
     return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px">'+
       '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;word-break:break-word">'+n+(inCatalog?' <span style="font-size:10px;color:#60c8f0;font-weight:600">📚 в справочнике</span>':'')+'</div>'+
       '<div style="font-size:11px;color:#8888aa">'+usageLine+'</div></div>'+
-      '<div style="display:flex;gap:6px;flex-shrink:0">'+addBtn+
-      '<button onclick="startRenameItemName(this)" data-name="'+n.replace(/"/g,'&quot;')+'" style="background:none;border:1px solid #c8f060;border-radius:8px;padding:5px 10px;color:#c8f060;font-size:11px;cursor:pointer;white-space:nowrap">✏️ Заменить</button>'+
+      '<div style="display:flex;gap:6px;flex-shrink:0">'+whoBtn+addBtn+
+      '<button onclick="startRenameItemName(this)" data-name="'+esc+'" style="background:none;border:1px solid #c8f060;border-radius:8px;padding:5px 10px;color:#c8f060;font-size:11px;cursor:pointer;white-space:nowrap">✏️ Заменить</button>'+
       '</div>'+
     '</div>';
   }).join('');
+}
+function showNameSellerBreakdown(btn){
+  var name = btn.getAttribute('data-name');
+  var matches = _nfCollectMatches(function(n){ return n===name; });
+  var m = matches[name];
+  var bySeller = {};
+  if(m){
+    var shifts = getShifts();
+    var manInv = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+    var inv = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+    m.refs.forEach(function(r){
+      if(r.kind==='catalog') return;
+      var who = null;
+      if(r.kind==='shift' || r.kind==='shift-staff'){
+        var sh = shifts.find(function(s){ return (s.id||s._id)===r.shiftId; });
+        who = sh && sh.sellerName;
+      } else if(r.kind==='manual_invoice'){
+        var iv = manInv.find(function(i){ return (i.id||i._id)===r.invId; });
+        who = iv && (iv.createdBy||iv.acceptedBy);
+      } else if(r.kind==='invoice'){
+        var iv2 = inv.find(function(i){ return (i.id||i._id)===r.invId; });
+        who = iv2 && (iv2.acceptedBy||iv2.createdBy);
+      }
+      who = (who||'').trim() || 'Неизвестно';
+      bySeller[who] = (bySeller[who]||0)+1;
+    });
+  }
+  var sellers = Object.keys(bySeller).sort(function(a,b){ return bySeller[b]-bySeller[a]; });
+  var rows = sellers.map(function(s){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 2px;border-bottom:1px solid #2e2e3e;font-size:13px">'+
+      '<span>👤 '+s+'</span><span style="font-weight:700;color:#c8f060">'+bySeller[s]+' зап.</span></div>';
+  }).join('');
+  var overlay = document.getElementById('nfSellerOverlay');
+  if(!overlay){
+    overlay = document.createElement('div');
+    overlay.id = 'nfSellerOverlay';
+    overlay.className = 'mo';
+    overlay.onclick = function(e){ if(e.target===overlay) overlay.classList.remove('open'); };
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = '<div class="md">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+      '<div style="font-size:15px;font-weight:700;word-break:break-word;padding-right:10px">Кто вносил: «'+name+'»</div>'+
+      '<button onclick="document.getElementById(\'nfSellerOverlay\').classList.remove(\'open\')" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer;flex-shrink:0">✕</button>'+
+    '</div>'+
+    (rows || '<div style="font-size:12px;color:#8888aa">Нет данных</div>')+
+  '</div>';
+  overlay.classList.add('open');
 }
 function _nfInferGoodsType(name){
   var found = null;
