@@ -387,6 +387,145 @@ function deleteRefbookItemShop(bookId, idx, key){
   updateRefbookCountShop(bookId, key);
   showToast('✅ Удалено и сохранено');
 }
+function _nfCollectMatches(predicate){
+  var matches = {};
+  function addMatch(name, qty, ref){
+    if(!name || !predicate(name)) return;
+    if(!matches[name]) matches[name] = {name:name, count:0, qty:0, refs:[]};
+    matches[name].count++;
+    matches[name].qty += (qty||0);
+    matches[name].refs.push(ref);
+  }
+  getShifts().forEach(function(sh){
+    (sh.journal||[]).forEach(function(e){
+      if(e.type==='sale' || e.type==='writeoff'){
+        (e.items||[]).forEach(function(it, idx){
+          addMatch(it.name, it.qty||1, {kind:'shift', shiftId:(sh.id||sh._id), entryId:e.id, itemIdx:idx});
+        });
+      } else if(e.type==='staff' && e.item){
+        addMatch(e.item, e.qty||1, {kind:'shift-staff', shiftId:(sh.id||sh._id), entryId:e.id});
+      }
+    });
+  });
+  JSON.parse(localStorage.getItem('iz_invoices')||'[]').forEach(function(inv){
+    (inv.items||[]).forEach(function(it, idx){
+      addMatch(it.name, it.qty||1, {kind:'invoice', invId:(inv.id||inv._id), itemIdx:idx});
+    });
+  });
+  JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]').forEach(function(inv){
+    (inv.items||[]).forEach(function(it, idx){
+      addMatch(it.name, it.qty||1, {kind:'manual_invoice', invId:(inv.id||inv._id), itemIdx:idx});
+    });
+  });
+  return matches;
+}
+function searchItemNameOccurrences(){
+  var input = document.getElementById('nfSearchInput');
+  var c = document.getElementById('nfResults');
+  if(!input || !c) return;
+  var q = (input.value||'').trim().toLowerCase();
+  if(!q){ c.innerHTML=''; return; }
+  var matches = _nfCollectMatches(function(name){ return name.toLowerCase().indexOf(q)>=0; });
+  var names = Object.keys(matches);
+  if(!names.length){ c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:8px 0">Ничего не найдено</div>'; return; }
+  names.sort(function(a,b){ return matches[b].count-matches[a].count; });
+  c.innerHTML = names.map(function(n){
+    var m = matches[n];
+    var word = m.count===1?'запись':(m.count>=2&&m.count<=4?'записи':'записей');
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px">'+
+      '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;word-break:break-word">'+n+'</div>'+
+      '<div style="font-size:11px;color:#8888aa">'+m.count+' '+word+' · '+m.qty+' шт.</div></div>'+
+      '<button onclick="startRenameItemName(this)" data-name="'+n.replace(/"/g,'&quot;')+'" style="background:none;border:1px solid #c8f060;border-radius:8px;padding:5px 10px;color:#c8f060;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">✏️ Заменить</button>'+
+    '</div>';
+  }).join('');
+}
+function startRenameItemName(btn){
+  var oldName = btn.getAttribute('data-name');
+  var newName = prompt('Заменить «'+oldName+'» на:', oldName);
+  if(newName==null) return;
+  newName = newName.trim();
+  if(!newName || newName===oldName) return;
+  var matches = _nfCollectMatches(function(name){ return name===oldName; });
+  var m = matches[oldName];
+  if(!m || !m.count){ showToast('Не найдено записей для замены'); return; }
+  var word = m.count===1?'записи':(m.count>=2&&m.count<=4?'записях':'записях');
+  if(!confirm('Заменить «'+oldName+'» → «'+newName+'» в '+m.count+' '+word+' ('+m.qty+' шт.)?\n\nИзменятся продажи/списания/накладные и локально, и в облаке. Отменить массово будет нельзя.')) return;
+  _nfExecuteRename(m.refs, oldName, newName);
+}
+function _nfExecuteRename(refs, oldName, newName){
+  showToast('⏳ Заменяю...');
+  var shiftIds = {}, invIds = {}, manInvIds = {};
+  refs.forEach(function(r){
+    if(r.kind==='shift' || r.kind==='shift-staff') shiftIds[r.shiftId]=true;
+    else if(r.kind==='invoice') invIds[r.invId]=true;
+    else if(r.kind==='manual_invoice') manInvIds[r.invId]=true;
+  });
+  var shifts = getShifts();
+  var touchedShifts = [];
+  Object.keys(shiftIds).forEach(function(id){
+    var sh = shifts.find(function(s){ return (s.id||s._id)===id; });
+    if(!sh) return;
+    (sh.journal||[]).forEach(function(e){
+      if(e.type==='sale' || e.type==='writeoff'){
+        (e.items||[]).forEach(function(it){ if(it.name===oldName) it.name=newName; });
+      } else if(e.type==='staff' && e.item===oldName){
+        e.item = newName;
+      }
+    });
+    touchedShifts.push(sh);
+  });
+  saveShifts(shifts);
+  touchedShifts.forEach(function(sh){
+    var id = sh.id||sh._id;
+    try{ db.collection('iz_shifts').doc(id).set({journal: sh.journal}, {merge:true}); }catch(e){}
+  });
+  var invoices = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  var touchedInv = [];
+  Object.keys(invIds).forEach(function(id){
+    var inv = invoices.find(function(i){ return (i.id||i._id)===id; });
+    if(!inv) return;
+    (inv.items||[]).forEach(function(it){ if(it.name===oldName) it.name=newName; });
+    touchedInv.push(inv);
+  });
+  if(touchedInv.length){
+    localStorage.setItem('iz_invoices', JSON.stringify(invoices));
+    touchedInv.forEach(function(inv){
+      var id = inv.id||inv._id;
+      try{ db.collection('iz_invoices').doc(id).set(inv,{merge:true}); }catch(e){}
+    });
+  }
+  var manInvoices = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var touchedManInv = [];
+  Object.keys(manInvIds).forEach(function(id){
+    var inv = manInvoices.find(function(i){ return (i.id||i._id)===id; });
+    if(!inv) return;
+    (inv.items||[]).forEach(function(it){ if(it.name===oldName) it.name=newName; });
+    touchedManInv.push(inv);
+  });
+  if(touchedManInv.length){
+    localStorage.setItem('iz_manual_invoices', JSON.stringify(manInvoices));
+    touchedManInv.forEach(function(inv){
+      var id = inv.id||inv._id;
+      try{ db.collection('iz_manual_invoices').doc(id).set(inv,{merge:true}); }catch(e){}
+    });
+  }
+  var catalogsTouched = 0;
+  ['iz_goods_derevo','iz_goods_dr','iz_goods'].forEach(function(key){
+    var list = getRefBook(key);
+    var changed = false;
+    list.forEach(function(it){ if((it.name||it)===oldName){ it.name=newName; changed=true; } });
+    if(changed){ saveRefBookShop(key, list); catalogsTouched++; }
+  });
+  var itemsBase = JSON.parse(localStorage.getItem('iz_items')||'[]');
+  var itemsBaseChanged = false;
+  itemsBase.forEach(function(it){ if(it.name===oldName){ it.name=newName; itemsBaseChanged=true; } });
+  if(itemsBaseChanged){
+    localStorage.setItem('iz_items', JSON.stringify(itemsBase));
+    try{ syncSave('iz_items', itemsBase); }catch(e){}
+  }
+  searchItemNameOccurrences();
+  showToast('✅ Заменено: смен — '+touchedShifts.length+', накладных — '+(touchedInv.length+touchedManInv.length)+(catalogsTouched?', справочник обновлён':''));
+}
 function updateRefbookCountShop(bookId, key){
   var items = getRefBook(key);
   var el = document.getElementById('rbCount_'+bookId);
