@@ -963,6 +963,11 @@ var _adminActiveShifts=[], _adminShiftUnsub=null, _adminAlertUnsub=null, _adminA
 function startAdminShiftListener(){
   if(_adminShiftUnsub){try{_adminShiftUnsub();}catch(e){}}
   var today=new Date().toISOString().split('T')[0];
+  db.collection('iz_shifts').where('date','==',today).get({source:'server'}).then(function(snap){
+    if(_adminActiveShifts.length) return;
+    var fresh=[]; snap.forEach(function(doc){ var d=doc.data(); d.id=doc.id; fresh.push(d); });
+    if(fresh.length){ _adminActiveShifts=fresh; renderTodayShift(); }
+  }).catch(function(){});
   _adminShiftUnsub=db.collection('iz_shifts').where('date','==',today)
     .onSnapshot(function(snap){
       _adminActiveShifts=[];
@@ -988,7 +993,7 @@ function startAdminShiftListener(){
 }
 setInterval(function(){
   try{
-    if(!session || session.role!=='admin' || !navigator.onLine || typeof db==='undefined' || !db) return;
+    if(!session || session.role!=='shopadmin' || !navigator.onLine || typeof db==='undefined' || !db) return;
     var today=new Date().toISOString().split('T')[0];
     db.collection('iz_shifts').where('date','==',today).get({source:'server'}).then(function(snap){
       var fresh=[];
