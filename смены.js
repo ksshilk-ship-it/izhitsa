@@ -2381,10 +2381,19 @@ function closeShift(){
   showToast('🛟 Финальная проверка перед закрытием...');
   if(typeof db==='undefined' || !db || !session.shiftId){ _closeShiftReal(); return; }
   var _deletedIdsForClose = {}; getTombstones().forEach(function(id){ _deletedIdsForClose[id]=true; });
+  var _preCloseCheckDone = false;
+  var _preCloseTimeout = setTimeout(function(){
+    if(_preCloseCheckDone) return;
+    _preCloseCheckDone = true;
+    showToast('⚠️ Проверка резервных копий не отвечает — закрываю без неё');
+    _closeShiftReal();
+  }, 8000);
   Promise.all([
     db.collection('iz_sales').where('shiftId','==',session.shiftId).get().catch(function(){ return null; }),
     db.collection('iz_journal_backup').where('shiftId','==',session.shiftId).get().catch(function(){ return null; })
   ]).then(function(results){
+    if(_preCloseCheckDone) return;
+    _preCloseCheckDone = true; clearTimeout(_preCloseTimeout);
     var localIds = {}; journal.forEach(function(e){ if(e.id) localIds[e.id]=true; });
     var recovered = 0;
     results.forEach(function(snap){
@@ -2403,7 +2412,11 @@ function closeShift(){
       return;
     }
     _closeShiftReal();
-  }).catch(function(){ _closeShiftReal(); });
+  }).catch(function(){
+    if(_preCloseCheckDone) return;
+    _preCloseCheckDone = true; clearTimeout(_preCloseTimeout);
+    _closeShiftReal();
+  });
 function _closeShiftReal(){
   const morningChkReal = getMorningCashDiff();
   if(morningChkReal.hasDiff){
