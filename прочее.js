@@ -424,6 +424,35 @@ function _nfCollectMatches(predicate){
   });
   return matches;
 }
+function nfSyncFromServer(){
+  var btn = document.getElementById('nfSyncBtn');
+  var status = document.getElementById('nfSyncStatus');
+  if(typeof db==='undefined' || !db){ showToast('Нет подключения к базе'); return; }
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Обновляю...'; }
+  if(status){ status.style.display='block'; status.textContent='⏳ Загружаю смены, накладные и справочники с сервера...'; }
+  var tasks = [];
+  tasks.push(new Promise(function(resolve){
+    try{ if(typeof syncShiftsFromFirestore==='function'){ syncShiftsFromFirestore(); }
+    }catch(e){}
+    setTimeout(resolve, 1500);
+  }));
+  ['iz_invoices','iz_manual_invoices'].forEach(function(col){
+    tasks.push(db.collection(col).get({source:'server'}).then(function(snap){
+      var arr = snap.docs.map(function(d){ var v=d.data(); v.id=d.id; return v; });
+      localStorage.setItem(col, JSON.stringify(arr));
+    }).catch(function(){}));
+  });
+  [['iz_goods_derevo','goods_derevo'],['iz_goods_dr','goods_dr'],['iz_goods','goods']].forEach(function(pair){
+    tasks.push(db.collection('iz_settings').doc(pair[1]).get({source:'server'}).then(function(snap){
+      if(snap.exists && snap.data().data) localStorage.setItem(pair[0], JSON.stringify(snap.data().data));
+    }).catch(function(){}));
+  });
+  Promise.all(tasks).then(function(){
+    if(btn){ btn.disabled=false; btn.textContent='🔄 Обновить данные с сервера перед поиском'; }
+    if(status){ status.textContent='✅ Данные обновлены с сервера'; }
+    searchItemNameOccurrences();
+  });
+}
 function searchItemNameOccurrences(){
   var input = document.getElementById('nfSearchInput');
   var c = document.getElementById('nfResults');
