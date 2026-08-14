@@ -1058,6 +1058,16 @@ function deletePeriodReportShift(id){
   generatePeriodReport();
   showToast('✅ Смена удалена');
 }
+function _shiftCashCardDisc(s){
+  var cash=0, card=0, disc=0;
+  (s.journal||[]).forEach(function(e){
+    if(e.type!=='sale') return;
+    cash += (e.cashEffect||0)+(e.cashDrEffect||0);
+    card += (e.cardEffect||0)+(e.cardDrEffect||0);
+    disc += e.discount||0;
+  });
+  return {cash:cash, card:card, disc:disc};
+}
 function generatePeriodReport(){
   var from=(document.getElementById('prDateFrom')||{}).value||'';
   var to=(document.getElementById('prDateTo')||{}).value||'';
@@ -1072,7 +1082,8 @@ function generatePeriodReport(){
   if(!filtered.length){c.innerHTML='<div class="empty"><div class="ei">📊</div>Нет данных ('+modeLabel+')</div>';return;}
   var totCash=0,totCard=0,totDisc=0,totZp=0,totTravel=0,totInkass=0,totOther=0,totSupplier=0,totDrInkass=0,totDrSupplier=0,totDrOther=0;
   filtered.forEach(function(s){
-    totCash+=s.cashRevenue||0;totCard+=s.cardRevenue||0;totDisc+=s.totalDiscount||0;
+    var ccd=_shiftCashCardDisc(s);
+    totCash+=ccd.cash;totCard+=ccd.card;totDisc+=ccd.disc;
     var exps=s.expenses||[];
     if(exps.length){
       totZp+=exps.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
@@ -1093,12 +1104,13 @@ function generatePeriodReport(){
   var f2=function(n){return Math.round(n||0).toLocaleString('ru-RU')+'₽';};
   var R=function(lbl,val,col){return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span style="color:#8888aa">'+lbl+'</span><span style="color:'+(col||'#f0f0f8')+';font-weight:700">'+f2(val)+'</span></div>';};
   var byShop={};
-  filtered.forEach(function(s){if(!byShop[s.shopName])byShop[s.shopName]={n:0,cash:0,card:0,disc:0};var sh=byShop[s.shopName];sh.n++;sh.cash+=s.cashRevenue||0;sh.card+=s.cardRevenue||0;sh.disc+=s.totalDiscount||0;});
+  filtered.forEach(function(s){if(!byShop[s.shopName])byShop[s.shopName]={n:0,cash:0,card:0,disc:0};var sh=byShop[s.shopName];sh.n++;var ccd2=_shiftCashCardDisc(s);sh.cash+=ccd2.cash;sh.card+=ccd2.card;sh.disc+=ccd2.disc;});
   var bySeller={};
   filtered.forEach(function(s){
     var k=(s.sellerName||'—').replace(/^Восст. /,'');
     if(!bySeller[k])bySeller[k]={n:0,rev:0};
-    bySeller[k].n++; bySeller[k].rev+=(s.cashRevenue||0)+(s.cardRevenue||0)+(s.totalDiscount||0);
+    var ccd3=_shiftCashCardDisc(s);
+    bySeller[k].n++; bySeller[k].rev+=ccd3.cash+ccd3.card+ccd3.disc;
   });
   var prPct=function(n){return totRev>0?' <span style="color:#555568;font-size:11px">('+Math.round(n/totRev*100)+'%)</span>':'';};
   var Rp=function(lbl,val,col,sp){return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span style="color:#8888aa">'+lbl+'</span><span style="color:'+(col||'#f0f0f8')+';font-weight:700">'+f2(val)+(sp?prPct(val):'')+'</span></div>';};
@@ -1216,7 +1228,7 @@ function generatePeriodReport(){
     var shopKey='pr_'+shop;
     var shopOpen=window._prOpen[shopKey]!==false;
     var shopTotal=0,shopN=0;
-    Object.values(byShopMonth[shop]).forEach(function(arr){arr.forEach(function(s){shopTotal+=(s.cashRevenue||0)+(s.cardRevenue||0)+(s.totalDiscount||0);shopN++;});});
+    Object.values(byShopMonth[shop]).forEach(function(arr){arr.forEach(function(s){var ccd4=_shiftCashCardDisc(s);shopTotal+=ccd4.cash+ccd4.card+ccd4.disc;shopN++;});});
     html+='<div style="margin-bottom:8px">'+
       '<div onpointerdown="event.preventDefault();window._prOpen[\''+shopKey+'\']='+(shopOpen?'false':'true')+';generatePeriodReport()" '+
         'style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#22222e;border-radius:10px;cursor:pointer;margin-bottom:'+(shopOpen?'4px':'0')+'">'+
@@ -1229,7 +1241,7 @@ function generatePeriodReport(){
         var arr=byShopMonth[shop][mk];
         var mkKey='pr_'+shop+'_'+mk;
         var mkOpen=window._prOpen[mkKey]!==false;
-        var mkTotal=arr.reduce(function(s,x){return s+(x.cashRevenue||0)+(x.cardRevenue||0)+(x.totalDiscount||0);},0);
+        var mkTotal=arr.reduce(function(s,x){var ccd5=_shiftCashCardDisc(x);return s+ccd5.cash+ccd5.card+ccd5.disc;},0);
         html+='<div style="margin-bottom:4px;margin-left:8px">'+
           '<div onpointerdown="event.preventDefault();window._prOpen[\''+mkKey+'\']='+(mkOpen?'false':'true')+';generatePeriodReport()" '+
             'style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;cursor:pointer;margin-bottom:'+(mkOpen?'4px':'0')+'">'+
@@ -1243,7 +1255,8 @@ function generatePeriodReport(){
         if(mkOpen){
           html+='<div>';
           arr.forEach(function(s){
-            var rev=(s.cashRevenue||0)+(s.cardRevenue||0)+(s.totalDiscount||0);
+            var ccd6=_shiftCashCardDisc(s);
+            var rev=ccd6.cash+ccd6.card+ccd6.disc;
             var sid=s.id||s._id||'';
             html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #2e2e3e;font-size:12px">'+
               '<div style="flex:1"><div style="font-weight:700">'+s.date+'</div>'+
@@ -1266,7 +1279,8 @@ function generatePeriodReport(){
 function showPrDailyBreakdown(field, label, color){
   var byDate = {};
   _prLastFiltered.forEach(function(s){
-    var v = field==='cash' ? (s.cashRevenue||0) : field==='card' ? (s.cardRevenue||0) : (s.totalDiscount||0);
+    var ccd = _shiftCashCardDisc(s);
+    var v = field==='cash' ? ccd.cash : field==='card' ? ccd.card : ccd.disc;
     byDate[s.date] = (byDate[s.date]||0) + v;
   });
   var dates = Object.keys(byDate).sort().reverse();
@@ -1414,9 +1428,16 @@ function generateProfitabilityReport(){
     c.innerHTML = '<div class="empty"><div class="ei">📈</div>Нет данных за '+periodLabel+(shopF?' по магазину '+shopF:'')+'</div>';
     return;
   }
-  var totCash=0, totCard=0, totDisc=0, totZp=0, totTravel=0, totOper=0;
+  var totZp=0, totTravel=0, totOper=0;
+  var typeTotals = {derevo:{cash:0,card:0,disc:0}, dr:{cash:0,card:0,disc:0}};
   filtered.forEach(function(s){
-    totCash += s.cashRevenue||0; totCard += s.cardRevenue||0; totDisc += s.totalDiscount||0;
+    (s.journal||[]).forEach(function(e){
+      if(e.type!=='sale') return;
+      var cashW=e.cashEffect||0, cardW=e.cardEffect||0, goodsW=-(e.goodsEffect||0);
+      var cashD=e.cashDrEffect||0, cardD=e.cardDrEffect||0, goodsD=-(e.goodsDrEffect||0);
+      typeTotals.derevo.cash+=cashW; typeTotals.derevo.card+=cardW; typeTotals.derevo.disc+=(goodsW-cashW-cardW);
+      typeTotals.dr.cash+=cashD; typeTotals.dr.card+=cardD; typeTotals.dr.disc+=(goodsD-cashD-cardD);
+    });
     var exps = s.expenses||[];
     if(exps.length){
       totZp += exps.filter(function(e){ return e.expType==='zp'; }).reduce(function(a,e){ return a+(e.amount||0); },0);
@@ -1437,6 +1458,9 @@ function generateProfitabilityReport(){
       totRent += _computeRentForShop(shop, from, to, shiftsForRentCalc, rentSettings[shop]);
     });
   }
+  var totCash = typeTotals.derevo.cash + typeTotals.dr.cash;
+  var totCard = typeTotals.derevo.card + typeTotals.dr.card;
+  var totDisc = typeTotals.derevo.disc + typeTotals.dr.disc;
   var oborot = totCash + totCard + totDisc;
   var daysInPeriod = Math.round((new Date(to)-new Date(from))/86400000)+1;
   var dohod = totCash + totCard;
@@ -1469,6 +1493,18 @@ function generateProfitabilityReport(){
   html += Row('Средняя выручка/день (с учётом скидки)', avgOborotPerDay, '#8888aa');
   html += Row('Средняя выручка/день (без скидки)', avgDohodPerDay, '#8888aa');
   if(to > todayStr) html += '<div style="font-size:10px;color:#8888aa;margin:-4px 0 4px">за '+avgDivisorDays+' прошедших дн. из '+daysInPeriod+'</div>';
+  var typeBlock = function(title, t, color){
+    var itogo = t.cash+t.card+t.disc;
+    return '<div style="margin-top:10px;background:#16161d;border:1px solid #2e2e3e;border-radius:10px;padding:10px 12px">'+
+      '<div style="font-size:11px;color:'+color+';font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">'+title+'</div>'+
+      Row('💵 Нал', t.cash, '#60f090')+
+      Row('💳 Безнал', t.card, '#60c8f0')+
+      Row('🎁 Скидка', t.disc, '#8888aa')+
+      Row('Итого', itogo, color, null, true)+
+    '</div>';
+  };
+  html += typeBlock('🌳 Дерево', typeTotals.derevo, '#c8f060');
+  html += typeBlock('🎁 ДР Товар', typeTotals.dr, '#a060f0');
   html += '<div style="font-size:10px;color:#f06060;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 4px">Расходы</div>';
   html += Row('💰 ФОТ (оклад/%+проезд)', fot, '#f0a060', pct(fot));
   html += Row('📝 Расходы операционные', totOper, '#f0a060', pct(totOper));
@@ -1484,7 +1520,13 @@ function generateProfitabilityReport(){
     var byShop = {};
     filtered.forEach(function(s){
       if(!byShop[s.shopName]) byShop[s.shopName] = {n:0, cash:0, card:0, disc:0};
-      var b = byShop[s.shopName]; b.n++; b.cash+=s.cashRevenue||0; b.card+=s.cardRevenue||0; b.disc+=s.totalDiscount||0;
+      var b = byShop[s.shopName]; b.n++;
+      (s.journal||[]).forEach(function(e){
+        if(e.type!=='sale') return;
+        b.cash += (e.cashEffect||0)+(e.cashDrEffect||0);
+        b.card += (e.cardEffect||0)+(e.cardDrEffect||0);
+        b.disc += e.discount||0;
+      });
     });
     html += '<div style="margin-top:10px;font-size:11px;color:#8888aa;font-weight:700;text-transform:uppercase;letter-spacing:.5px">По магазинам</div>';
     Object.keys(byShop).forEach(function(shop){
