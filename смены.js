@@ -103,15 +103,22 @@ function getShifts(){
 }
 function saveShifts(shifts){
   try{
-    if(typeof _shiftsLiveSyncCutoff==='function'){
-      var cutoff = _shiftsLiveSyncCutoff();
-      var pruned = shifts.filter(function(s){
+    localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+  }catch(e){
+    // хранилище браузера переполнено — обрезаем до недавних/открытых/несинхронизированных и пробуем ещё раз.
+    // Обрезка нарочно НЕ делается заранее на каждый вызов: иначе она бы тут же выметала старые
+    // смены, только что подтянутые вручную (Синх / открытие старого периода), при любом несвязанном сохранении.
+    try{
+      var cutoff = typeof _shiftsLiveSyncCutoff==='function' ? _shiftsLiveSyncCutoff() : '';
+      var pruned = cutoff ? shifts.filter(function(s){
         return (s.date||'')>=cutoff || s.status==='open' || s._pendingSync;
-      });
-      if(pruned.length < shifts.length){ shifts = pruned; }
+      }) : shifts;
+      localStorage.setItem(KEY.shifts, JSON.stringify(pruned));
+    }catch(e2){
+      console.log('[saveShifts] не удалось сохранить даже после обрезки:', e2);
+      showToast('⚠️ Не хватает места в памяти браузера — освободите место в Настройках');
     }
-  }catch(e){}
-  localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+  }
 }
 var TRASH_RETENTION_DAYS = 7;
 function getShiftTombstones(){
