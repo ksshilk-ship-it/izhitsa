@@ -458,23 +458,56 @@ function searchItemNameOccurrences(){
   var c = document.getElementById('nfResults');
   if(!input || !c) return;
   var q = (input.value||'').trim().toLowerCase();
-  if(!q){ c.innerHTML=''; return; }
-  var matches = _nfCollectMatches(function(name){ return name.toLowerCase().indexOf(q)>=0; });
+  var matches = _nfCollectMatches(function(name){ return !q || name.toLowerCase().indexOf(q)>=0; });
   var names = Object.keys(matches);
   if(!names.length){ c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:8px 0">Ничего не найдено</div>'; return; }
   names.sort(function(a,b){ return matches[b].count-matches[a].count; });
-  c.innerHTML = names.map(function(n){
+  var header = !q ? '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">Все наименования, встречающиеся в продажах, списаниях и накладных ('+names.length+')</div>' : '';
+  c.innerHTML = header + names.map(function(n){
     var m = matches[n];
     var usageRefs = m.refs.filter(function(r){ return r.kind!=='catalog'; });
     var inCatalog = m.refs.some(function(r){ return r.kind==='catalog'; });
     var word = usageRefs.length===1?'запись':(usageRefs.length>=2&&usageRefs.length<=4?'записи':'записей');
     var usageLine = usageRefs.length ? (usageRefs.length+' '+word+' · '+m.qty+' шт.') : 'только в справочнике, не используется';
+    var addBtn = (!inCatalog && usageRefs.length) ? '<button onclick="addNameToCatalog(this)" data-name="'+n.replace(/"/g,'&quot;')+'" style="background:none;border:1px solid #60c8f0;border-radius:8px;padding:5px 10px;color:#60c8f0;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">➕ В справочник</button>' : '';
     return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px">'+
       '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;word-break:break-word">'+n+(inCatalog?' <span style="font-size:10px;color:#60c8f0;font-weight:600">📚 в справочнике</span>':'')+'</div>'+
       '<div style="font-size:11px;color:#8888aa">'+usageLine+'</div></div>'+
-      '<button onclick="startRenameItemName(this)" data-name="'+n.replace(/"/g,'&quot;')+'" style="background:none;border:1px solid #c8f060;border-radius:8px;padding:5px 10px;color:#c8f060;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">✏️ Заменить</button>'+
+      '<div style="display:flex;gap:6px;flex-shrink:0">'+addBtn+
+      '<button onclick="startRenameItemName(this)" data-name="'+n.replace(/"/g,'&quot;')+'" style="background:none;border:1px solid #c8f060;border-radius:8px;padding:5px 10px;color:#c8f060;font-size:11px;cursor:pointer;white-space:nowrap">✏️ Заменить</button>'+
+      '</div>'+
     '</div>';
   }).join('');
+}
+function _nfInferGoodsType(name){
+  var found = null;
+  getShifts().some(function(sh){
+    return (sh.journal||[]).some(function(e){
+      if(e.type!=='sale' && e.type!=='writeoff') return false;
+      return (e.items||[]).some(function(it){ if(it.name===name){ found=it.goodsType; return true; } return false; });
+    });
+  });
+  if(found) return found;
+  ['iz_invoices','iz_manual_invoices'].some(function(col){
+    return JSON.parse(localStorage.getItem(col)||'[]').some(function(inv){
+      return (inv.items||[]).some(function(it){ if(it.name===name){ found=it.goodsType||inv.goodsType; return true; } return false; });
+    });
+  });
+  return found||'derevo';
+}
+function addNameToCatalog(btn){
+  var name = btn.getAttribute('data-name');
+  var gt = _nfInferGoodsType(name);
+  var key = gt==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
+  var list = getRefBook(key);
+  if(list.some(function(it){ return (it.name||it).toLowerCase().trim()===name.toLowerCase().trim(); })){
+    showToast('Уже есть в справочнике'); searchItemNameOccurrences(); return;
+  }
+  list.push({id:uid(), name:name});
+  saveRefBookShop(key, list);
+  _clearRefbookTombstone(key, name);
+  showToast('✅ Добавлено в справочник ('+(gt==='dr'?'ДР Товар':'Дерево')+'): '+name);
+  searchItemNameOccurrences();
 }
 function startRenameItemName(btn){
   var oldName = btn.getAttribute('data-name');
