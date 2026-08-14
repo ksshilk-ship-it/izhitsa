@@ -102,6 +102,15 @@ function getShifts(){
   try{ return JSON.parse(localStorage.getItem(KEY.shifts)||'[]'); }catch(e){ return []; }
 }
 function saveShifts(shifts){
+  try{
+    if(typeof _shiftsLiveSyncCutoff==='function'){
+      var cutoff = _shiftsLiveSyncCutoff();
+      var pruned = shifts.filter(function(s){
+        return (s.date||'')>=cutoff || s.status==='open' || s._pendingSync;
+      });
+      if(pruned.length < shifts.length){ shifts = pruned; }
+    }
+  }catch(e){}
   localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
 }
 var TRASH_RETENTION_DAYS = 7;
