@@ -171,7 +171,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '08.13.11';
+var APP_BUILD_VERSION = '08.13.12';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -368,6 +368,17 @@ function pick(role) {
     if(selEl) selEl.innerHTML = admins.map(function(a){ return '<option value="'+a.id+'">'+a.name+'</option>'; }).join('');
     var prevBtn = document.getElementById('previewModeBtn');
     if(prevBtn) prevBtn.style.display='block';
+    if(admins.length<=1 && typeof db!=='undefined' && db){
+      db.collection('iz_settings').doc('staff').get({source:'server'}).then(function(snap){
+        if(!snap.exists || !snap.data().staff || !snap.data().staff.length) return;
+        localStorage.setItem('iz_staff', JSON.stringify(snap.data().staff));
+        if(typeof syncDerivedFromStaff==='function') syncDerivedFromStaff(snap.data().staff);
+        if(loginRole!=='shopadmin') return;
+        var freshAdmins = JSON.parse(localStorage.getItem('iz_shop_admins')||'[]');
+        var sel2 = document.getElementById('loginSeller');
+        if(sel2 && freshAdmins.length) sel2.innerHTML = freshAdmins.map(function(a){ return '<option value="'+a.id+'">'+a.name+'</option>'; }).join('');
+      }).catch(function(){});
+    }
   } else {
     if(bs){ bs.style.background='#1e2a14'; bs.style.borderColor='#c8f060'; }
     if(ba){ ba.style.background='#22222e'; ba.style.borderColor='#2e2e3e'; }
