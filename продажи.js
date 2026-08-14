@@ -256,10 +256,31 @@ function addSaleItem(){
     }
   } else { showToast('Введите артикул'); return; }
   if(qty<=0) qty=1;
+  var key = _siItemGoodsType==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
+  var existingGoods = getRefBook(key);
+  var normName = name.toLowerCase().trim();
+  var exactGoods = existingGoods.find(function(g){ return (g.name||g).toLowerCase().trim()===normName; });
+  if(!exactGoods){
+    var closeGoods=null, bestScoreGoods=0;
+    existingGoods.forEach(function(g){
+      var sc=nameSimilarity(normName,(g.name||g).toLowerCase().trim());
+      if(sc>bestScoreGoods){ bestScoreGoods=sc; closeGoods=g; }
+    });
+    if(bestScoreGoods>=0.65 && closeGoods){
+      showDupWarning(name, closeGoods.name||closeGoods, function(useExisting){
+        _finalizeAddSaleItem(num, useExisting?(closeGoods.name||closeGoods):name, price, species, qty, hasDiff, diffNote);
+      });
+      return;
+    }
+  }
+  _finalizeAddSaleItem(num, name, price, species, qty, hasDiff, diffNote);
+}
+function _finalizeAddSaleItem(num, name, price, species, qty, hasDiff, diffNote){
   var amt=Math.round(price*qty*100)/100;
   saleItems.push({id:uid(),num,name,price,qty,amt,species,goodsType:_siItemGoodsType,hasDiff,diffNote});
   ['siNum','siName','siPrice','siQty','siAmt','siSpecies','siNameM','siPriceM','siQtyM','siAmtM','siSpeciesM'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  lr.style.display='none'; mb.style.display='none'; currentLookupItem=null;
+  var lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
+  if(lr) lr.style.display='none'; if(mb) mb.style.display='none'; currentLookupItem=null;
   document.getElementById('siDiffWarn').style.display='none';
   setSiItemType('derevo');
   _siNoArticleMode = false;
