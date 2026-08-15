@@ -308,6 +308,7 @@ function updateSettingsSectionCount(id, count){
   if(el) el.textContent = count+' записей';
 }
 function renderRefbookItemsShop(bookId, key){
+  if(key==='iz_goods_derevo' || key==='iz_goods_dr'){ renderGoodsCatalogGrouped(bookId, key); return; }
   var c = document.getElementById('rbItems_'+bookId); if(!c) return;
   var items = getRefBook(key);
   if(!items.length){ c.innerHTML='<div style="font-size:11px;color:#555568;padding:6px 0">Нет записей</div>'; return; }
@@ -324,6 +325,47 @@ function renderRefbookItemsShop(bookId, key){
       '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+realIdx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer;padding:4px">✕</button>'+
     '</div>';
   }).join('');
+}
+function renderGoodsCatalogGrouped(bookId, key){
+  var c = document.getElementById('rbItems_'+bookId); if(!c) return;
+  var items = getRefBook(key);
+  if(!items.length){ c.innerHTML='<div style="font-size:11px;color:#555568;padding:6px 0">Нет записей</div>'; return; }
+  var groups = {};
+  items.forEach(function(it){
+    var cat = (it.category||'').trim() || 'Без категории';
+    if(!groups[cat]) groups[cat] = [];
+    groups[cat].push(it);
+  });
+  var catNames = Object.keys(groups).sort(function(a,b){
+    if(a==='Без категории') return 1;
+    if(b==='Без категории') return -1;
+    return a.localeCompare(b,'ru');
+  });
+  var allCatsForList = catNames.filter(function(c){ return c!=='Без категории'; });
+  var datalistId = 'rbCatList_'+bookId;
+  var html = '<datalist id="'+datalistId+'">'+allCatsForList.map(function(c){ return '<option value="'+c.replace(/"/g,'&quot;')+'">'; }).join('')+'</datalist>';
+  catNames.forEach(function(cat){
+    var list = groups[cat].slice().sort(function(a,b){ return (a.name||a).toLowerCase().localeCompare((b.name||b).toLowerCase(),'ru'); });
+    html += '<div style="font-size:11px;color:'+(cat==='Без категории'?'#8888aa':'#c8f060')+';font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:10px 0 6px">'+cat+' ('+list.length+')</div>';
+    list.forEach(function(item){
+      var realIdx = items.indexOf(item);
+      var name = item.name||item;
+      html += '<div style="display:flex;align-items:center;gap:6px;padding:8px;background:#13131a;border-radius:8px;margin-bottom:6px">'+
+        '<div style="flex:1;font-size:12px;min-width:0;word-break:break-word">'+name+'</div>'+
+        '<input type="text" list="'+datalistId+'" value="'+(item.category||'').replace(/"/g,'&quot;')+'" placeholder="Категория" onchange="setRefbookItemCategory(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:110px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px;flex-shrink:0">'+
+        '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+realIdx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer;padding:4px;flex-shrink:0">✕</button>'+
+      '</div>';
+    });
+  });
+  c.innerHTML = html;
+}
+function setRefbookItemCategory(bookId, idx, key, value){
+  var items = getRefBook(key);
+  var it = items[idx]; if(!it) return;
+  value = (value||'').trim();
+  if(value) it.category = value; else delete it.category;
+  saveRefBookShop(key, items);
+  showToast(value?'✅ Категория: '+value:'✅ Категория снята');
 }
 function _clearRefbookTombstone(key, name){
   var norm = (name||'').toLowerCase().trim();
