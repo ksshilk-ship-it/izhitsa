@@ -171,7 +171,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '08.13.34';
+var APP_BUILD_VERSION = '08.13.35';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -650,18 +650,18 @@ function _ensureShiftsLoadedForRange(fromDate){
   var fetchP = q.get().then(function(snap){
     if(settled) return;
     settled = true;
-    var extra = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
+    var extra = snap.docs.map(function(d){ return Object.assign({_id:d.id, _archiveOnly:true}, d.data()); });
     if(!extra.length) return;
+    // Старые смены (за пределами живого 35-дневного окна) держим только в памяти —
+    // localStorage у сайта ограничен браузером до нескольких МБ независимо от диска устройства,
+    // и постоянное сохранение сюда истории архива рано или поздно упирается в этот лимит.
     var tomb = {}; getShiftTombstones().forEach(function(id){ tomb[id]=true; });
-    var local = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
-    var localIds = {}; local.forEach(function(s){ localIds[s.id||s._id]=true; });
+    var localIds = {}; JSON.parse(localStorage.getItem('iz_shifts')||'[]').forEach(function(s){ localIds[s.id||s._id]=true; });
+    var existingIds = {}; window._extraArchiveShifts.forEach(function(s){ existingIds[s.id||s._id]=true; });
     extra.forEach(function(s){
       var sid = s.id||s._id;
-      if(sid && !localIds[sid] && !tomb[sid]) local.push(s);
+      if(sid && !localIds[sid] && !existingIds[sid] && !tomb[sid]) window._extraArchiveShifts.push(s);
     });
-    local.sort(function(a,b){ return (b.date||b.closedAt||b.createdAt||'').localeCompare(a.date||a.closedAt||a.createdAt||''); });
-    var pruned = saveShifts(local);
-    if(pruned) showToast('⚠️ На устройстве не хватает места — часть старых смен не сохранилась локально. Освободите память в Настройках.');
   }).catch(function(e){
     if(settled) return;
     settled = true;

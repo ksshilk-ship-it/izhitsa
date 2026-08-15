@@ -98,10 +98,17 @@ let currentInvId = null, invCheckState = [];
 let currentLookupItem = null;
 let currentEditShiftId = null;
 let blockSellerAction = null;
+window._extraArchiveShifts = window._extraArchiveShifts || []; // старые смены, подтянутые для просмотра архива — только в памяти, никогда не пишутся в localStorage
 function getShifts(){
-  try{ return JSON.parse(localStorage.getItem(KEY.shifts)||'[]'); }catch(e){ return []; }
+  var local;
+  try{ local = JSON.parse(localStorage.getItem(KEY.shifts)||'[]'); }catch(e){ local = []; }
+  var extra = window._extraArchiveShifts;
+  if(!extra || !extra.length) return local;
+  var localIds = {}; local.forEach(function(s){ localIds[s.id||s._id]=true; });
+  return local.concat(extra.filter(function(s){ return !localIds[s.id||s._id]; }));
 }
 function saveShifts(shifts){
+  shifts = shifts.filter(function(s){ return !s._archiveOnly; }); // никогда не персистим временный архивный кэш
   try{
     localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
     return false; // ничего не обрезано
@@ -3049,21 +3056,35 @@ function syncShiftsFromFirestore(){
     db.collection('iz_shifts').get({source:'server'}).then(function(snap){
       if(_syncDone) return;
       _syncDone = true; clearTimeout(_syncTimeout);
-      var local=getShifts();
+      var cutoff = typeof _shiftsLiveSyncCutoff==='function' ? _shiftsLiveSyncCutoff() : '';
+      // Живое окно (последние 35 дней + открытые/несинхронизированные) идёт в localStorage как обычно.
+      // Всё, что старше — только в window._extraArchiveShifts (в памяти): localStorage у сайта
+      // ограничен браузером до нескольких МБ независимо от диска устройства, и полная история
+      // смен туда не помещается.
+      var local = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
       local = local.filter(function(s){ return !tset[s.id||s._id]; });
       var lmap={};local.forEach(function(s){lmap[s.id||s._id]=true;});
+      var extraIds={}; window._extraArchiveShifts.forEach(function(s){ extraIds[s.id||s._id]=true; });
       var added=0, skipped=0;
       snap.forEach(function(doc){
         if(tset[doc.id]){ skipped++; return; } // смена удалена админом — не воскрешаем
         var data=doc.data();data.id=doc.id;
-        if(!lmap[doc.id]){local.push(data);added++;}
-        else{var idx=local.findIndex(function(s){return (s.id||s._id)===doc.id;});if(idx>=0)local[idx]=Object.assign(local[idx],data);}
+        var isRecent = (data.date||'')>=cutoff || data.status==='open' || data._pendingSync;
+        if(isRecent){
+          if(!lmap[doc.id]){local.push(data);added++;}
+          else{var idx=local.findIndex(function(s){return (s.id||s._id)===doc.id;});if(idx>=0)local[idx]=Object.assign(local[idx],data);}
+        } else if(!lmap[doc.id] && !extraIds[doc.id]){
+          data._archiveOnly=true;
+          window._extraArchiveShifts.push(data);
+          extraIds[doc.id]=true;
+          added++;
+        }
       });
       var wasPruned = saveShifts(local);
       if(btn){btn.disabled=false;btn.textContent='☁️ Синх';}
       if(status){
         status.textContent = wasPruned
-          ? '⚠️ Подтянуто '+snap.size+' смен, но на устройстве не хватило места — часть старых смен не сохранилась локально. Освободите память в Настройках и повторите.'
+          ? '⚠️ Подтянуто '+snap.size+' смен, но на устройстве не хватило места для недавних смен — часть данных не сохранилась локально. Освободите память в Настройках и повторите.'
           : '✅ Подтянуто '+snap.size+' смен (новых: '+added+(skipped?', пропущено удалённых: '+skipped:'')+')';
       }
       renderShiftHistory();

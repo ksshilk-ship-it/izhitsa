@@ -2468,7 +2468,7 @@ function _showFallbackInvoiceView(invId){
 }
 function renderAdminRcvWo(){
   var range = _adminRcvDateRange();
-  var allShifts = JSON.parse(localStorage.getItem('iz_shifts')||'[]');
+  var allShifts = getShifts();
   var type = _adminRcvType;
   var manInvAll = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   var wsInvAll = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
