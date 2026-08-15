@@ -244,6 +244,7 @@ var SHOP_REFBOOKS = [
   {id:'suppliers',   icon:'🚚', name:'База поставщиков',         key:'iz_suppliers'},
   {id:'goods',       icon:'🌳', name:'База товаров — Дерево',    key:'iz_goods_derevo'},
   {id:'goods_dr',    icon:'🛍', name:'База товаров — ДР Товар',  key:'iz_goods_dr'},
+  {id:'goods_all',   icon:'📇', name:'Общий индекс наименований', key:'iz_goods'},
   {id:'materials',   icon:'💎', name:'Породы дерева',            key:'iz_materials'},
   {id:'dr_species',  icon:'🍬', name:'Вкус / Состав (ДР Товар)', key:'iz_dr_species'},
   {id:'schedules',   icon:'⏰', name:'Графики работы',           key:'iz_work_schedules'}
