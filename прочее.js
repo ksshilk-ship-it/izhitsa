@@ -275,10 +275,20 @@ function renderRefbookSections(){
       '</div>'+
       '<div id="rbBody_'+book.id+'" style="display:none;padding:10px;border-top:1px solid #2e2e3e">'+
         '<div id="rbItems_'+book.id+'"></div>'+
-        '<div style="display:flex;gap:8px;margin-top:8px">'+
-          '<input class="fi" id="rbNew_'+book.id+'" placeholder="Новая запись" autocomplete="off" style="flex:1;margin:0">'+
-          '<button onclick="addRefbookItemShop(\''+book.id+'\',\''+book.key+'\')" style="flex-shrink:0;padding:0 16px;background:#c8f060;border:none;border-radius:8px;color:#0f0f13;font-weight:700;font-size:16px;cursor:pointer">＋</button>'+
-        '</div>'+
+        (book.key==='iz_goods_dr'
+          ? '<div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;padding:8px;background:#13131a;border-radius:8px">'+
+              '<div style="font-size:10px;color:#8888aa">Новая позиция (наименование + цена + артикул — так у одинаковых названий с разной ценой будет отдельный номер)</div>'+
+              '<input class="fi" id="rbDrName_'+book.id+'" placeholder="Наименование" autocomplete="off" style="margin:0">'+
+              '<div style="display:flex;gap:8px">'+
+                '<input class="fi" id="rbDrPrice_'+book.id+'" type="number" placeholder="Цена" style="flex:1;margin:0">'+
+                '<input class="fi" id="rbDrArticle_'+book.id+'" placeholder="Артикул" autocomplete="off" style="flex:1;margin:0">'+
+              '</div>'+
+              '<button onclick="addDrGoodsVariant(\''+book.id+'\',\''+book.key+'\')" style="padding:9px;background:#c8f060;border:none;border-radius:8px;color:#0f0f13;font-weight:700;font-size:13px;cursor:pointer">＋ Добавить позицию</button>'+
+            '</div>'
+          : '<div style="display:flex;gap:8px;margin-top:8px">'+
+              '<input class="fi" id="rbNew_'+book.id+'" placeholder="Новая запись" autocomplete="off" style="flex:1;margin:0">'+
+              '<button onclick="addRefbookItemShop(\''+book.id+'\',\''+book.key+'\')" style="flex-shrink:0;padding:0 16px;background:#c8f060;border:none;border-radius:8px;color:#0f0f13;font-weight:700;font-size:16px;cursor:pointer">＋</button>'+
+            '</div>')+
       '</div>'+
     '</div>';
   }).join('');
@@ -345,8 +355,13 @@ function renderGoodsCatalogGrouped(bookId, key){
   var datalistId = 'rbCatList_'+bookId;
   window._rbCatOpen = window._rbCatOpen || {};
   var html = '<datalist id="'+datalistId+'">'+allCatsForList.map(function(c){ return '<option value="'+c.replace(/"/g,'&quot;')+'">'; }).join('')+'</datalist>';
+  var isDr = key==='iz_goods_dr';
   catNames.forEach(function(cat){
-    var list = groups[cat].slice().sort(function(a,b){ return (a.name||a).toLowerCase().localeCompare((b.name||b).toLowerCase(),'ru'); });
+    var list = groups[cat].slice().sort(function(a,b){
+      var na=(a.name||a).toLowerCase(), nb=(b.name||b).toLowerCase();
+      if(na!==nb) return na.localeCompare(nb,'ru');
+      return (a.price||0)-(b.price||0);
+    });
     var gid = bookId+'__'+cat;
     var open = window._rbCatOpen[gid]===true;
     html += '<div onclick="toggleGoodsCategoryGroup(this)" data-book="'+bookId+'" data-key="'+key+'" data-cat="'+cat.replace(/"/g,'&quot;')+'" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 6px;margin:10px 0 4px;background:#1a1a22;border-radius:8px">'+
@@ -357,15 +372,104 @@ function renderGoodsCatalogGrouped(bookId, key){
       list.forEach(function(item){
         var realIdx = items.indexOf(item);
         var name = item.name||item;
-        html += '<div style="display:flex;align-items:center;gap:6px;padding:8px;background:#13131a;border-radius:8px;margin-bottom:6px">'+
-          '<div style="flex:1;font-size:12px;min-width:0;word-break:break-word">'+name+'</div>'+
-          '<input type="text" list="'+datalistId+'" value="'+(item.category||'').replace(/"/g,'&quot;')+'" placeholder="Категория" onchange="setRefbookItemCategory(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:110px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px;flex-shrink:0">'+
-          '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+realIdx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer;padding:4px;flex-shrink:0">✕</button>'+
-        '</div>';
+        if(isDr){
+          html += '<div style="padding:8px;background:#13131a;border-radius:8px;margin-bottom:6px">'+
+            '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'+
+              '<div style="flex:1;font-size:12px;min-width:0;word-break:break-word">'+name+'</div>'+
+              '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+realIdx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer;padding:4px;flex-shrink:0">✕</button>'+
+            '</div>'+
+            '<div style="display:flex;gap:6px">'+
+              '<input type="number" value="'+(item.price!=null?item.price:'')+'" placeholder="Цена" onchange="setRefbookItemPrice(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:80px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px;flex-shrink:0">'+
+              '<input type="text" value="'+(item.article||'').replace(/"/g,'&quot;')+'" placeholder="Артикул" onchange="setRefbookItemArticle(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:90px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px;flex-shrink:0">'+
+              '<input type="text" list="'+datalistId+'" value="'+(item.category||'').replace(/"/g,'&quot;')+'" placeholder="Категория" onchange="setRefbookItemCategory(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="flex:1;min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px">'+
+            '</div>'+
+          '</div>';
+        } else {
+          html += '<div style="display:flex;align-items:center;gap:6px;padding:8px;background:#13131a;border-radius:8px;margin-bottom:6px">'+
+            '<div style="flex:1;font-size:12px;min-width:0;word-break:break-word">'+name+'</div>'+
+            '<input type="text" list="'+datalistId+'" value="'+(item.category||'').replace(/"/g,'&quot;')+'" placeholder="Категория" onchange="setRefbookItemCategory(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:110px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px;flex-shrink:0">'+
+            '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+realIdx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer;padding:4px;flex-shrink:0">✕</button>'+
+          '</div>';
+        }
       });
     }
   });
   c.innerHTML = html;
+}
+function _drArticleTaken(key, article, excludeIdx){
+  var norm = (article||'').trim().toLowerCase();
+  if(!norm) return null;
+  var items = getRefBook(key);
+  for(var i=0;i<items.length;i++){
+    if(i===excludeIdx) continue;
+    if((items[i].article||'').trim().toLowerCase()===norm) return items[i];
+  }
+  return null;
+}
+function setRefbookItemPrice(bookId, idx, key, value){
+  var items = getRefBook(key);
+  var it = items[idx]; if(!it) return;
+  var price = parseFloat(value);
+  it.price = isNaN(price) ? 0 : price;
+  saveRefBookShop(key, items);
+  showToast('✅ Цена обновлена');
+}
+function setRefbookItemArticle(bookId, idx, key, value){
+  var items = getRefBook(key);
+  var it = items[idx]; if(!it) return;
+  value = (value||'').trim();
+  if(value){
+    var taken = _drArticleTaken(key, value, idx);
+    if(taken){ showToast('⚠️ Артикул «'+value+'» уже занят: «'+taken.name+'» ('+(taken.price||0)+'₽)'); renderRefbookItemsShop(bookId,key); return; }
+  }
+  it.article = value;
+  saveRefBookShop(key, items);
+  showToast(value?'✅ Артикул: '+value:'✅ Артикул снят');
+}
+function addDrGoodsVariant(bookId, key){
+  var nameEl = document.getElementById('rbDrName_'+bookId);
+  var priceEl = document.getElementById('rbDrPrice_'+bookId);
+  var artEl = document.getElementById('rbDrArticle_'+bookId);
+  var name = (nameEl&&nameEl.value||'').trim();
+  var price = parseFloat(priceEl&&priceEl.value);
+  var article = (artEl&&artEl.value||'').trim();
+  if(!name){ showToast('Введите наименование'); return; }
+  if(!price || price<=0){ showToast('Введите цену'); return; }
+  if(!article){ showToast('Введите артикул'); return; }
+  var taken = _drArticleTaken(key, article, -1);
+  if(taken){ showToast('⚠️ Артикул «'+article+'» уже занят: «'+taken.name+'» ('+(taken.price||0)+'₽)'); return; }
+  var existing = getRefBook(key);
+  var norm = name.toLowerCase();
+  var exactSamePrice = existing.find(function(c){ return (c.name||'').toLowerCase().trim()===norm && (c.price||0)===price; });
+  if(exactSamePrice){ showToast('Уже есть «'+name+'» по цене '+price+'₽ (артикул '+(exactSamePrice.article||'—')+')'); return; }
+  var hasExactName = existing.some(function(c){ return (c.name||'').toLowerCase().trim()===norm; });
+  function doAdd(finalName){
+    var items2 = getRefBook(key);
+    items2.push({id:uid(), name:finalName, price:price, article:article});
+    items2.sort(function(a,b){ return (a.name||'').toLowerCase().localeCompare((b.name||'').toLowerCase(),'ru'); });
+    saveRefBookShop(key, items2);
+    _clearRefbookTombstone(key, finalName);
+    if(nameEl) nameEl.value='';
+    if(priceEl) priceEl.value='';
+    if(artEl) artEl.value='';
+    renderRefbookItemsShop(bookId,key);
+    updateRefbookCountShop(bookId,key);
+    showToast('✅ Добавлено: '+finalName+' · '+price+'₽ · арт. '+article);
+  }
+  if(!hasExactName){
+    var closeMatch=null, bestScore=0;
+    existing.forEach(function(c){
+      var sc=nameSimilarity(norm,(c.name||'').toLowerCase().trim());
+      if(sc>bestScore){ bestScore=sc; closeMatch=c; }
+    });
+    if(bestScore>=0.65 && closeMatch){
+      showDupWarning(name, closeMatch.name, function(useExisting){
+        doAdd(useExisting ? closeMatch.name : name);
+      });
+      return;
+    }
+  }
+  doAdd(name);
 }
 function toggleGoodsCategoryGroup(headerEl){
   var bookId = headerEl.getAttribute('data-book');
