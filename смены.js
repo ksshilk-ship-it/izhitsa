@@ -104,6 +104,7 @@ function getShifts(){
 function saveShifts(shifts){
   try{
     localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
+    return false; // ничего не обрезано
   }catch(e){
     // хранилище браузера переполнено — обрезаем до недавних/открытых/несинхронизированных и пробуем ещё раз.
     // Обрезка нарочно НЕ делается заранее на каждый вызов: иначе она бы тут же выметала старые
@@ -114,9 +115,11 @@ function saveShifts(shifts){
         return (s.date||'')>=cutoff || s.status==='open' || s._pendingSync;
       }) : shifts;
       localStorage.setItem(KEY.shifts, JSON.stringify(pruned));
+      return pruned.length < shifts.length;
     }catch(e2){
       console.log('[saveShifts] не удалось сохранить даже после обрезки:', e2);
       showToast('⚠️ Не хватает места в памяти браузера — освободите место в Настройках');
+      return true;
     }
   }
 }
@@ -3056,9 +3059,13 @@ function syncShiftsFromFirestore(){
         if(!lmap[doc.id]){local.push(data);added++;}
         else{var idx=local.findIndex(function(s){return (s.id||s._id)===doc.id;});if(idx>=0)local[idx]=Object.assign(local[idx],data);}
       });
-      saveShifts(local);
+      var wasPruned = saveShifts(local);
       if(btn){btn.disabled=false;btn.textContent='☁️ Синх';}
-      if(status){status.textContent='✅ Подтянуто '+snap.size+' смен (новых: '+added+(skipped?', пропущено удалённых: '+skipped:'')+')';}
+      if(status){
+        status.textContent = wasPruned
+          ? '⚠️ Подтянуто '+snap.size+' смен, но на устройстве не хватило места — часть старых смен не сохранилась локально. Освободите память в Настройках и повторите.'
+          : '✅ Подтянуто '+snap.size+' смен (новых: '+added+(skipped?', пропущено удалённых: '+skipped:'')+')';
+      }
       renderShiftHistory();
     }).catch(function(e){
       if(_syncDone) return;

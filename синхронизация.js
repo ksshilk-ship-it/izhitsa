@@ -171,7 +171,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '08.13.33';
+var APP_BUILD_VERSION = '08.13.34';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -638,7 +638,18 @@ function _ensureShiftsLoadedForRange(fromDate){
   if(fromDate && fromDate >= cutoff) return Promise.resolve(); // уже покрыто живой синхронизацией
   var q = db.collection('iz_shifts').where('date','<',cutoff);
   if(fromDate) q = q.where('date','>=',fromDate);
-  return q.get().then(function(snap){
+  var settled = false;
+  var timeoutP = new Promise(function(resolve){
+    setTimeout(function(){
+      if(settled) return;
+      settled = true;
+      showToast('⚠️ Не удалось подтянуть старые смены — сервер не отвечает. Попробуйте ещё раз.');
+      resolve();
+    }, 15000);
+  });
+  var fetchP = q.get().then(function(snap){
+    if(settled) return;
+    settled = true;
     var extra = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
     if(!extra.length) return;
     var tomb = {}; getShiftTombstones().forEach(function(id){ tomb[id]=true; });
@@ -649,8 +660,14 @@ function _ensureShiftsLoadedForRange(fromDate){
       if(sid && !localIds[sid] && !tomb[sid]) local.push(s);
     });
     local.sort(function(a,b){ return (b.date||b.closedAt||b.createdAt||'').localeCompare(a.date||a.closedAt||a.createdAt||''); });
-    localStorage.setItem('iz_shifts', JSON.stringify(local));
-  }).catch(function(e){ console.log('[_ensureShiftsLoadedForRange] err', e); });
+    var pruned = saveShifts(local);
+    if(pruned) showToast('⚠️ На устройстве не хватает места — часть старых смен не сохранилась локально. Освободите память в Настройках.');
+  }).catch(function(e){
+    if(settled) return;
+    settled = true;
+    console.log('[_ensureShiftsLoadedForRange] err', e);
+  });
+  return Promise.race([fetchP, timeoutP]);
 }
 function syncListenCollection(lsKey, colName, queryFn) {
   if(_syncUnsubs[lsKey]) return;
