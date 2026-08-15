@@ -571,6 +571,36 @@ function closeNfSellerOverlay(){
   var overlay = document.getElementById('nfSellerOverlay');
   if(overlay) overlay.classList.remove('open');
 }
+function showNfInvoiceDetail(invId, isManual){
+  var key = isManual ? 'iz_manual_invoices' : 'iz_invoices';
+  var list = JSON.parse(localStorage.getItem(key)||'[]');
+  var inv = list.find(function(i){ return (i.id||i._id)===invId; });
+  var overlay = document.getElementById('nfSellerOverlay');
+  if(!overlay) return;
+  if(!inv){
+    overlay.innerHTML = '<div class="md"><div style="display:flex;justify-content:space-between;align-items:center">'+
+      '<div style="font-size:15px;font-weight:700">Накладная не найдена</div>'+
+      '<button onclick="document.getElementById(\'nfSellerOverlay\').classList.remove(\'open\')" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer">✕</button>'+
+    '</div></div>';
+    overlay.classList.add('open');
+    return;
+  }
+  var f2 = function(n){ return Math.round(n||0).toLocaleString('ru-RU')+'₽'; };
+  var items = (inv.items||[]).map(function(it){
+    var amt = it.amt!=null ? it.amt : (it.price||0)*(it.qty||1);
+    return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #2e2e3e;font-size:12px">'+
+      '<span>'+(it.name||'')+(it.qty&&it.qty!==1?' × '+it.qty:'')+'</span><span style="font-weight:700;color:#c8f060">'+f2(amt)+'</span></div>';
+  }).join('');
+  overlay.innerHTML = '<div class="md">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+      '<div style="font-size:15px;font-weight:700">Накладная '+(inv.num||'')+'</div>'+
+      '<button onclick="document.getElementById(\'nfSellerOverlay\').classList.remove(\'open\')" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer;flex-shrink:0">✕</button>'+
+    '</div>'+
+    '<div style="font-size:11px;color:#8888aa;margin-bottom:10px">'+(inv.date||inv.acceptedDate||'—')+' · '+(inv.shopName||inv.destName||'—')+(inv.from?' · от '+inv.from:'')+'</div>'+
+    (items || '<div style="font-size:12px;color:#8888aa">Нет позиций</div>')+
+  '</div>';
+  overlay.classList.add('open');
+}
 function showNameSellerBreakdown(btn){
   var name = btn.getAttribute('data-name');
   window._nfSellerCurrentName = name;
@@ -599,7 +629,7 @@ function showNameSellerBreakdown(btn){
           date: (iv&&(iv.date||iv.acceptedDate))||'',
           shop: (iv&&iv.shopName)||'',
           type: 'Накладная'+(iv&&iv.num?' '+iv.num:''),
-          openFn: iv ? "closeNfSellerOverlay();openInvoice('"+r.invId+"')" : null
+          openFn: iv ? "showNfInvoiceDetail('"+r.invId+"',true)" : null
         });
       } else if(r.kind==='invoice'){
         var iv2 = inv.find(function(i){ return (i.id||i._id)===r.invId; });
@@ -608,7 +638,7 @@ function showNameSellerBreakdown(btn){
           date: (iv2&&(iv2.date||iv2.acceptedDate))||'',
           shop: (iv2&&iv2.shopName)||'',
           type: 'Накладная'+(iv2&&iv2.num?' '+iv2.num:''),
-          openFn: iv2 ? "closeNfSellerOverlay();openInvoice('"+r.invId+"')" : null
+          openFn: iv2 ? "showNfInvoiceDetail('"+r.invId+"',false)" : null
         });
       }
     });
