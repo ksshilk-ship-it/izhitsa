@@ -450,6 +450,7 @@ function nfSyncFromServer(){
   Promise.all(tasks).then(function(){
     if(btn){ btn.disabled=false; btn.textContent='🔄 Обновить данные с сервера перед поиском'; }
     if(status){ status.textContent='✅ Данные обновлены с сервера'; }
+    try{ renderRefbookSections(); }catch(e){} // иначе видимый список "Наименование товаров" остаётся со старой картиной
     searchItemNameOccurrences();
   });
 }
