@@ -290,12 +290,17 @@ function toggleRefbookShop(id){
   body.style.display = open?'none':'block';
   if(arr) arr.style.transform = open?'':'rotate(90deg)';
 }
+var _nfAutoSyncedOnce = false;
 function toggleSettingsSection(id){
   var body=document.getElementById('ssBody_'+id), arr=document.getElementById('ssArr_'+id);
   if(!body) return;
   var open = body.style.display!=='none';
   body.style.display = open?'none':'block';
   if(arr) arr.style.transform = open?'':'rotate(90deg)';
+  if(id==='namefix' && !open && !_nfAutoSyncedOnce){
+    _nfAutoSyncedOnce = true;
+    try{ nfSyncFromServer(); }catch(e){}
+  }
 }
 function updateSettingsSectionCount(id, count){
   var el=document.getElementById('ssCount_'+id);
