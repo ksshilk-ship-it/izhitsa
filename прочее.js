@@ -561,36 +561,76 @@ function searchItemNameOccurrences(){
 function _nfCatalogLabel(key){
   return key==='iz_goods_derevo' ? 'Дерево' : key==='iz_goods_dr' ? 'ДР Товар' : 'общий индекс';
 }
+function toggleNfSellerGroup(headerEl){
+  var s = headerEl.getAttribute('data-seller');
+  window._nfSellerOpen = window._nfSellerOpen || {};
+  window._nfSellerOpen[s] = !(window._nfSellerOpen[s]===true);
+  showNameSellerBreakdown({getAttribute:function(){ return window._nfSellerCurrentName; }});
+}
+function closeNfSellerOverlay(){
+  var overlay = document.getElementById('nfSellerOverlay');
+  if(overlay) overlay.classList.remove('open');
+}
 function showNameSellerBreakdown(btn){
   var name = btn.getAttribute('data-name');
+  window._nfSellerCurrentName = name;
   var matches = _nfCollectMatches(function(n){ return n===name; });
   var m = matches[name];
-  var bySeller = {};
+  var records = [];
   if(m){
     var shifts = getShifts();
     var manInv = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
     var inv = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
     m.refs.forEach(function(r){
       if(r.kind==='catalog') return;
-      var who = null;
       if(r.kind==='shift' || r.kind==='shift-staff'){
         var sh = shifts.find(function(s){ return (s.id||s._id)===r.shiftId; });
-        who = sh && sh.sellerName;
+        records.push({
+          who: ((sh&&sh.sellerName)||'').trim()||'Неизвестно',
+          date: (sh&&sh.date)||'',
+          shop: (sh&&sh.shopName)||'',
+          type: r.kind==='shift-staff' ? 'Покупка сотрудника (смена)' : 'Продажа/списание (смена)',
+          openFn: sh ? "closeNfSellerOverlay();openShiftView('"+r.shiftId+"')" : null
+        });
       } else if(r.kind==='manual_invoice'){
         var iv = manInv.find(function(i){ return (i.id||i._id)===r.invId; });
-        who = iv && (iv.createdBy||iv.acceptedBy);
+        records.push({
+          who: ((iv&&(iv.createdBy||iv.acceptedBy))||'').trim()||'Неизвестно',
+          date: (iv&&(iv.date||iv.acceptedDate))||'',
+          shop: (iv&&iv.shopName)||'',
+          type: 'Накладная'+(iv&&iv.num?' '+iv.num:''),
+          openFn: iv ? "closeNfSellerOverlay();openInvoice('"+r.invId+"')" : null
+        });
       } else if(r.kind==='invoice'){
         var iv2 = inv.find(function(i){ return (i.id||i._id)===r.invId; });
-        who = iv2 && (iv2.acceptedBy||iv2.createdBy);
+        records.push({
+          who: ((iv2&&(iv2.acceptedBy||iv2.createdBy))||'').trim()||'Неизвестно',
+          date: (iv2&&(iv2.date||iv2.acceptedDate))||'',
+          shop: (iv2&&iv2.shopName)||'',
+          type: 'Накладная'+(iv2&&iv2.num?' '+iv2.num:''),
+          openFn: iv2 ? "closeNfSellerOverlay();openInvoice('"+r.invId+"')" : null
+        });
       }
-      who = (who||'').trim() || 'Неизвестно';
-      bySeller[who] = (bySeller[who]||0)+1;
     });
   }
-  var sellers = Object.keys(bySeller).sort(function(a,b){ return bySeller[b]-bySeller[a]; });
+  var bySeller = {};
+  records.forEach(function(rec){ if(!bySeller[rec.who]) bySeller[rec.who]=[]; bySeller[rec.who].push(rec); });
+  var sellers = Object.keys(bySeller).sort(function(a,b){ return bySeller[b].length-bySeller[a].length; });
+  window._nfSellerOpen = window._nfSellerOpen || {};
   var rows = sellers.map(function(s){
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 2px;border-bottom:1px solid #2e2e3e;font-size:13px">'+
-      '<span>👤 '+s+'</span><span style="font-weight:700;color:#c8f060">'+bySeller[s]+' зап.</span></div>';
+    var recs = bySeller[s].slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    var open = window._nfSellerOpen[s]===true;
+    var html = '<div onclick="toggleNfSellerGroup(this)" data-seller="'+s.replace(/"/g,'&quot;')+'" style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid #2e2e3e;font-size:13px;cursor:pointer">'+
+      '<span>👤 '+s+'</span><span style="display:flex;align-items:center;gap:6px"><span style="font-weight:700;color:#c8f060">'+recs.length+' зап.</span><span style="color:#8888aa;font-size:11px">'+(open?'▾':'▸')+'</span></span></div>';
+    if(open){
+      html += recs.map(function(rec){
+        return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 8px;margin:4px 0 4px 10px;background:#1a1a22;border-radius:8px;font-size:12px">'+
+          '<div style="min-width:0"><div>'+(rec.date||'—')+' · '+(rec.shop||'—')+'</div><div style="color:#8888aa;font-size:11px">'+rec.type+'</div></div>'+
+          (rec.openFn ? '<button onclick="'+rec.openFn+'" style="background:none;border:1px solid #60c8f0;border-radius:6px;padding:4px 8px;color:#60c8f0;font-size:11px;cursor:pointer;flex-shrink:0;white-space:nowrap">Открыть →</button>' : '')+
+        '</div>';
+      }).join('');
+    }
+    return html;
   }).join('');
   var overlay = document.getElementById('nfSellerOverlay');
   if(!overlay){
@@ -601,10 +641,11 @@ function showNameSellerBreakdown(btn){
     document.body.appendChild(overlay);
   }
   overlay.innerHTML = '<div class="md">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
       '<div style="font-size:15px;font-weight:700;word-break:break-word;padding-right:10px">Кто вносил: «'+name+'»</div>'+
       '<button onclick="document.getElementById(\'nfSellerOverlay\').classList.remove(\'open\')" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer;flex-shrink:0">✕</button>'+
     '</div>'+
+    '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">Нажмите на продавца, чтобы увидеть записи и открыть их</div>'+
     (rows || '<div style="font-size:12px;color:#8888aa">Нет данных</div>')+
   '</div>';
   overlay.classList.add('open');
