@@ -734,7 +734,13 @@ function psjSuggest(inputId, list, onPick){
   var val = (document.getElementById(inputId)||{}).value||'';
   val = val.trim().toLowerCase();
   if(!val){ box.style.display='none'; box.innerHTML=''; return; }
-  var matches = list.filter(function(s){ return s.toLowerCase().indexOf(val)===0; }).slice(0,8);
+  var matches = list.filter(function(s){ return s.toLowerCase().indexOf(val)!==-1; });
+  matches.sort(function(a,b){
+    var ai = a.toLowerCase().indexOf(val), bi = b.toLowerCase().indexOf(val);
+    if(ai!==bi) return ai-bi;
+    return a.length-b.length;
+  });
+  matches = matches.slice(0,8);
   if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
   box.innerHTML = matches.map(function(m){
     return '<div onpointerdown="event.preventDefault();'+onPick+'(\''+m.replace(/'/g,"\\'")+'\')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m+'</div>';
