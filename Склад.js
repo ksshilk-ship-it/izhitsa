@@ -2610,7 +2610,7 @@ function saveStock(stock){
   localStorage.setItem('iz_stock',JSON.stringify(stock));
   var shops=Object.keys(stock);
   shops.forEach(function(sn){
-    try{ db.collection('iz_settings').doc('stock_'+sn.replace(/\s+/g,'_')).set({items:stock[sn],updatedAt:new Date().toISOString()},{merge:true}); }catch(e){}
+    try{ db.collection('iz_settings').doc('stock_'+sn.replace(/\s+/g,'_')).set({items:stock[sn],updatedAt:new Date().toISOString()}); }catch(e){}
   });
 }
 function stockGetByNum(shopName,num){
