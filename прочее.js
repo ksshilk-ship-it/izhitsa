@@ -512,9 +512,10 @@ function nfSyncFromServer(){
       if(snap.exists && snap.data().data) localStorage.setItem(pair[0], JSON.stringify(snap.data().data));
     }).catch(function(){}));
   });
-  Promise.all(tasks).then(function(){
+  var _nfSyncTimeout = new Promise(function(resolve){ setTimeout(function(){ resolve('timeout'); }, 15000); });
+  Promise.race([Promise.all(tasks), _nfSyncTimeout]).then(function(result){
     if(btn){ btn.disabled=false; btn.textContent='🔄 Обновить данные с сервера перед поиском'; }
-    if(status){ status.textContent='✅ Данные обновлены с сервера'; }
+    if(status){ status.textContent = result==='timeout' ? '⚠️ Сервер отвечает слишком долго — часть данных могла не обновиться, попробуйте ещё раз' : '✅ Данные обновлены с сервера'; }
     try{ renderRefbookSections(); }catch(e){} // иначе видимый список "Наименование товаров" остаётся со старой картиной
     searchItemNameOccurrences();
   });
@@ -532,20 +533,33 @@ function searchItemNameOccurrences(){
   c.innerHTML = header + names.map(function(n){
     var m = matches[n];
     var usageRefs = m.refs.filter(function(r){ return r.kind!=='catalog'; });
-    var inCatalog = m.refs.some(function(r){ return r.kind==='catalog'; });
+    var catalogRefs = m.refs.filter(function(r){ return r.kind==='catalog'; });
+    var catalogKeysFound = catalogRefs.reduce(function(acc,r){ if(acc.indexOf(r.bookKey)<0) acc.push(r.bookKey); return acc; },[]);
+    var inSellerCatalog = catalogKeysFound.indexOf('iz_goods_derevo')>=0 || catalogKeysFound.indexOf('iz_goods_dr')>=0;
+    var inGeneralIndexOnly = !inSellerCatalog && catalogKeysFound.indexOf('iz_goods')>=0;
     var word = usageRefs.length===1?'запись':(usageRefs.length>=2&&usageRefs.length<=4?'записи':'записей');
-    var usageLine = usageRefs.length ? (usageRefs.length+' '+word+' · '+m.qty+' шт.') : 'только в справочнике, не используется';
+    var usageLine = usageRefs.length ? (usageRefs.length+' '+word+' · '+m.qty+' шт.') : 'нигде не используется';
+    var catalogTag = '';
+    if(inSellerCatalog){
+      var lbls = catalogKeysFound.map(_nfCatalogLabel).join(', ');
+      catalogTag = ' <span style="font-size:10px;color:#60c8f0;font-weight:600">📚 в справочнике ('+lbls+')</span>';
+    } else if(inGeneralIndexOnly){
+      catalogTag = ' <span style="font-size:10px;color:#f0a060;font-weight:600">📇 только в общем индексе — нет в справочнике товаров</span>';
+    }
     var esc = n.replace(/"/g,'&quot;');
-    var addBtn = (!inCatalog && usageRefs.length) ? '<button onclick="addNameToCatalog(this)" data-name="'+esc+'" style="background:none;border:1px solid #60c8f0;border-radius:8px;padding:5px 10px;color:#60c8f0;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">➕ В справочник</button>' : '';
+    var addBtn = !inSellerCatalog ? '<button onclick="addNameToCatalog(this)" data-name="'+esc+'" style="background:none;border:1px solid #60c8f0;border-radius:8px;padding:5px 10px;color:#60c8f0;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">➕ В справочник</button>' : '';
     var whoBtn = usageRefs.length ? '<button onclick="showNameSellerBreakdown(this)" data-name="'+esc+'" title="Кто вносил" style="background:none;border:1px solid #a060f0;border-radius:8px;padding:5px 8px;color:#a060f0;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">👤</button>' : '';
     return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px">'+
-      '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;word-break:break-word">'+n+(inCatalog?' <span style="font-size:10px;color:#60c8f0;font-weight:600">📚 в справочнике</span>':'')+'</div>'+
+      '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;word-break:break-word">'+n+catalogTag+'</div>'+
       '<div style="font-size:11px;color:#8888aa">'+usageLine+'</div></div>'+
       '<div style="display:flex;gap:6px;flex-shrink:0">'+whoBtn+addBtn+
       '<button onclick="startRenameItemName(this)" data-name="'+esc+'" style="background:none;border:1px solid #c8f060;border-radius:8px;padding:5px 10px;color:#c8f060;font-size:11px;cursor:pointer;white-space:nowrap">✏️ Заменить</button>'+
       '</div>'+
     '</div>';
   }).join('');
+}
+function _nfCatalogLabel(key){
+  return key==='iz_goods_derevo' ? 'Дерево' : key==='iz_goods_dr' ? 'ДР Товар' : 'общий индекс';
 }
 function showNameSellerBreakdown(btn){
   var name = btn.getAttribute('data-name');

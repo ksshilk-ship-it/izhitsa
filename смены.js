@@ -3033,9 +3033,19 @@ function syncShiftsFromFirestore(){
   var status=document.getElementById('histSyncStatus');
   if(btn){btn.disabled=true;btn.textContent='⏳...';}
   if(status){status.style.display='block';status.textContent='⏳ Подтягиваю...';}
+  var _syncDone = false;
+  var _syncTimeout = setTimeout(function(){
+    if(_syncDone) return;
+    _syncDone = true;
+    if(btn){btn.disabled=false;btn.textContent='☁️ Синх';}
+    if(status){status.textContent='⚠️ Сервер не отвечает — проверьте связь и попробуйте ещё раз';}
+  }, 15000);
   pullShiftTombstonesFromCloud(function(tombstoned){
+    if(_syncDone) return;
     var tset={}; (tombstoned||[]).forEach(function(id){ tset[id]=true; });
     db.collection('iz_shifts').get({source:'server'}).then(function(snap){
+      if(_syncDone) return;
+      _syncDone = true; clearTimeout(_syncTimeout);
       var local=getShifts();
       local = local.filter(function(s){ return !tset[s.id||s._id]; });
       var lmap={};local.forEach(function(s){lmap[s.id||s._id]=true;});
@@ -3051,6 +3061,8 @@ function syncShiftsFromFirestore(){
       if(status){status.textContent='✅ Подтянуто '+snap.size+' смен (новых: '+added+(skipped?', пропущено удалённых: '+skipped:'')+')';}
       renderShiftHistory();
     }).catch(function(e){
+      if(_syncDone) return;
+      _syncDone = true; clearTimeout(_syncTimeout);
       if(btn){btn.disabled=false;btn.textContent='☁️ Синх';}
       if(status){status.textContent='❌ '+e.message;}
     });
