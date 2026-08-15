@@ -343,21 +343,38 @@ function renderGoodsCatalogGrouped(bookId, key){
   });
   var allCatsForList = catNames.filter(function(c){ return c!=='Без категории'; });
   var datalistId = 'rbCatList_'+bookId;
+  window._rbCatOpen = window._rbCatOpen || {};
   var html = '<datalist id="'+datalistId+'">'+allCatsForList.map(function(c){ return '<option value="'+c.replace(/"/g,'&quot;')+'">'; }).join('')+'</datalist>';
   catNames.forEach(function(cat){
     var list = groups[cat].slice().sort(function(a,b){ return (a.name||a).toLowerCase().localeCompare((b.name||b).toLowerCase(),'ru'); });
-    html += '<div style="font-size:11px;color:'+(cat==='Без категории'?'#8888aa':'#c8f060')+';font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:10px 0 6px">'+cat+' ('+list.length+')</div>';
-    list.forEach(function(item){
-      var realIdx = items.indexOf(item);
-      var name = item.name||item;
-      html += '<div style="display:flex;align-items:center;gap:6px;padding:8px;background:#13131a;border-radius:8px;margin-bottom:6px">'+
-        '<div style="flex:1;font-size:12px;min-width:0;word-break:break-word">'+name+'</div>'+
-        '<input type="text" list="'+datalistId+'" value="'+(item.category||'').replace(/"/g,'&quot;')+'" placeholder="Категория" onchange="setRefbookItemCategory(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:110px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px;flex-shrink:0">'+
-        '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+realIdx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer;padding:4px;flex-shrink:0">✕</button>'+
-      '</div>';
-    });
+    var gid = bookId+'__'+cat;
+    var open = window._rbCatOpen[gid]===true;
+    html += '<div onclick="toggleGoodsCategoryGroup(this)" data-book="'+bookId+'" data-key="'+key+'" data-cat="'+cat.replace(/"/g,'&quot;')+'" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 6px;margin:10px 0 4px;background:#1a1a22;border-radius:8px">'+
+      '<span style="font-size:11px;color:'+(cat==='Без категории'?'#8888aa':'#c8f060')+';font-weight:700;text-transform:uppercase;letter-spacing:.5px">'+cat+' ('+list.length+')</span>'+
+      '<span style="color:#8888aa;font-size:11px">'+(open?'▾':'▸')+'</span>'+
+    '</div>';
+    if(open){
+      list.forEach(function(item){
+        var realIdx = items.indexOf(item);
+        var name = item.name||item;
+        html += '<div style="display:flex;align-items:center;gap:6px;padding:8px;background:#13131a;border-radius:8px;margin-bottom:6px">'+
+          '<div style="flex:1;font-size:12px;min-width:0;word-break:break-word">'+name+'</div>'+
+          '<input type="text" list="'+datalistId+'" value="'+(item.category||'').replace(/"/g,'&quot;')+'" placeholder="Категория" onchange="setRefbookItemCategory(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:110px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px;flex-shrink:0">'+
+          '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+realIdx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer;padding:4px;flex-shrink:0">✕</button>'+
+        '</div>';
+      });
+    }
   });
   c.innerHTML = html;
+}
+function toggleGoodsCategoryGroup(headerEl){
+  var bookId = headerEl.getAttribute('data-book');
+  var key = headerEl.getAttribute('data-key');
+  var cat = headerEl.getAttribute('data-cat');
+  var gid = bookId+'__'+cat;
+  window._rbCatOpen = window._rbCatOpen || {};
+  window._rbCatOpen[gid] = !(window._rbCatOpen[gid]===true);
+  renderGoodsCatalogGrouped(bookId, key);
 }
 function setRefbookItemCategory(bookId, idx, key, value){
   var items = getRefBook(key);
