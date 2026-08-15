@@ -60,6 +60,7 @@ function siAddToSpecies(inputId){
 }
 function setSiItemType(type, preserveName){
   _siItemGoodsType = type;
+  if(!preserveName){ _siSelectedArticleM=''; var vp=document.getElementById('siVariantPicker'); if(vp) vp.style.display='none'; }
   var lbl = document.getElementById('siSpeciesLabel');
   var inp = document.getElementById('siSpecies');
   var inpM = document.getElementById('siSpeciesM');
@@ -93,7 +94,33 @@ function getItemNames(goodsType){
   return Object.keys(names);
 }
 function siPickName(val){ var el=document.getElementById('siName'); if(el){el.value=val;checkItemDiff();} var box=document.getElementById('siName_sugg'); if(box) box.style.display='none'; }
-function siPickNameM(val){ var el=document.getElementById('siNameM'); if(el) el.value=val; var box=document.getElementById('siNameM_sugg'); if(box) box.style.display='none'; }
+function siPickNameM(val){ var el=document.getElementById('siNameM'); if(el) el.value=val; var box=document.getElementById('siNameM_sugg'); if(box) box.style.display='none'; _siCheckVariantsM(val); }
+var _siSelectedArticleM = '';
+function _siGetDrVariants(name){
+  var norm = (name||'').toLowerCase().trim();
+  if(!norm) return [];
+  return getRefBook('iz_goods_dr').filter(function(g){ return (g.name||'').toLowerCase().trim()===norm && g.article; });
+}
+function _siCheckVariantsM(name){
+  _siSelectedArticleM = '';
+  var box = document.getElementById('siVariantPicker');
+  var list = document.getElementById('siVariantPickerList');
+  if(!box || !list) return;
+  if(_siItemGoodsType!=='dr'){ box.style.display='none'; return; }
+  var variants = _siGetDrVariants(name);
+  if(variants.length<2){ box.style.display='none'; return; }
+  list.innerHTML = variants.map(function(v){
+    return '<button type="button" onpointerdown="event.preventDefault();siPickVariantM('+v.price+',\''+(v.article||'').replace(/'/g,"\\'")+'\')" '+
+      'style="text-align:left;padding:8px 10px;background:#22222e;border:1px solid #f0c060;border-radius:8px;color:#f0f0f8;font-size:12px;cursor:pointer">'+
+      '№'+(v.article||'—')+' · '+Math.round(v.price).toLocaleString('ru-RU')+'₽</button>';
+  }).join('');
+  box.style.display='block';
+}
+function siPickVariantM(price, article){
+  _siSelectedArticleM = article;
+  var priceEl = document.getElementById('siPriceM'); if(priceEl){ priceEl.value = price; siCalcAmtM(); }
+  var box = document.getElementById('siVariantPicker'); if(box) box.style.display='none';
+}
 function siPickSpecies(val){ var el=document.getElementById('siSpecies'); if(el) el.value=val; var box=document.getElementById('siSpecies_sugg'); if(box) box.style.display='none'; }
 function siPickSpeciesM(val){ var el=document.getElementById('siSpeciesM'); if(el) el.value=val; var box=document.getElementById('siSpeciesM_sugg'); if(box) box.style.display='none'; }
 function siAddToGoods(inputId){
@@ -241,7 +268,7 @@ function resetSaleForm(){
   var delBtn = document.querySelector('#saleMo .sale-edit-del-btn'); if(delBtn) delBtn.remove();
 }
 function addSaleItem(){
-  const num=(gv('siNum')||'').trim(); let name,price,species,qty=1,hasDiff=false,diffNote='';
+  let num=(gv('siNum')||'').trim(); let name,price,species,qty=1,hasDiff=false,diffNote='';
   const lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
   if(lr&&lr.style.display!=='none'){
     name=(gv('siName')||'').trim(); price=parseFloat(gv('siPrice'))||0; species=(gv('siSpecies')||'').trim(); qty=parseFloat(gv('siQty'))||1;
@@ -255,6 +282,20 @@ function addSaleItem(){
       hasDiff=true; diffNote='⚠️ артикул не найден в базе';
     }
   } else { showToast('Введите артикул'); return; }
+  if(_siItemGoodsType==='dr' && mb && mb.style.display!=='none'){
+    var drVariants = _siGetDrVariants(name);
+    if(drVariants.length>=2){
+      var matched = drVariants.find(function(v){ return Math.round(v.price)===Math.round(price); });
+      if(matched){ num = matched.article; }
+      else {
+        _siCheckVariantsM(name);
+        showToast('⚠️ У «'+name+'» несколько вариантов с разными артикулами — выберите нужный вариант выше, не вводите цену вручную');
+        return;
+      }
+    } else if(drVariants.length===1){
+      num = drVariants[0].article;
+    }
+  }
   if(qty<=0) qty=1;
   var key = _siItemGoodsType==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
   var existingGoods = getRefBook(key);
@@ -284,6 +325,8 @@ function _finalizeAddSaleItem(num, name, price, species, qty, hasDiff, diffNote)
   document.getElementById('siDiffWarn').style.display='none';
   setSiItemType('derevo');
   _siNoArticleMode = false;
+  _siSelectedArticleM = '';
+  var vp = document.getElementById('siVariantPicker'); if(vp) vp.style.display='none';
   renderSaleItems(); calcSaleTotal();
 }
 function renderSaleItems(){
