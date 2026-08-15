@@ -1005,11 +1005,14 @@ function runArticleAudit(){
     var occurrences = _artCollectOccurrences();
     var autoCount = 0;
     var ambiguousByKey = {}; // "name||price" -> {name,price,qty,count,refs:[],variants:[]}
-    var noCatalogByName = {}; // name -> count
+    var noCatalogByName = {}; // name -> {count, prices:{price:count}}
     occurrences.forEach(function(o){
       var variants = _siGetDrVariants(o.name);
       if(!variants.length){
-        noCatalogByName[o.name] = (noCatalogByName[o.name]||0)+1;
+        if(!noCatalogByName[o.name]) noCatalogByName[o.name] = {count:0, prices:{}};
+        noCatalogByName[o.name].count++;
+        var pr = Math.round(o.price);
+        noCatalogByName[o.name].prices[pr] = (noCatalogByName[o.name].prices[pr]||0)+1;
         return;
       }
       var article = null;
@@ -1030,8 +1033,12 @@ function runArticleAudit(){
     });
     _artReviewGroups = Object.keys(ambiguousByKey).map(function(k){ return ambiguousByKey[k]; })
       .sort(function(a,b){ return b.count-a.count; });
-    _artNoCatalog = Object.keys(noCatalogByName).map(function(n){ return {name:n, count:noCatalogByName[n]}; })
-      .sort(function(a,b){ return b.count-a.count; });
+    _artNoCatalog = Object.keys(noCatalogByName).map(function(n){
+      var entry = noCatalogByName[n];
+      var priceList = Object.keys(entry.prices).map(function(p){ return {price:parseFloat(p), count:entry.prices[p]}; })
+        .sort(function(a,b){ return b.count-a.count; });
+      return {name:n, count:entry.count, prices:priceList};
+    }).sort(function(a,b){ return b.count-a.count; });
     if(btn){ btn.disabled=false; btn.textContent='🔎 Запустить проверку'; }
     if(status){ status.style.display='none'; }
     showToast('✅ Проверено: '+occurrences.length+' записей · присвоено автоматически: '+autoCount+' · на проверку: '+_artReviewGroups.length+' групп');
@@ -1059,8 +1066,10 @@ function _renderArticleAuditResults(){
   if(_artNoCatalog.length){
     html += '<div style="font-size:11px;color:#8888aa;font-weight:700;margin:10px 0 6px">НЕТ В СПРАВОЧНИКЕ ('+_artNoCatalog.length+') — сначала добавьте позицию с ценой и артикулом в «База товаров — ДР Товар»</div>';
     html += _artNoCatalog.map(function(n){
-      return '<div style="display:flex;justify-content:space-between;padding:7px 9px;background:#13131a;border-radius:8px;margin-bottom:5px;font-size:12px">'+
-        '<span>'+n.name+'</span><span style="color:#8888aa">'+n.count+' раз</span>'+
+      var priceStr = n.prices.map(function(p){ return Math.round(p.price).toLocaleString('ru-RU')+'₽ ('+p.count+')'; }).join(', ');
+      return '<div style="padding:7px 9px;background:#13131a;border-radius:8px;margin-bottom:5px;font-size:12px">'+
+        '<div style="display:flex;justify-content:space-between"><span>'+n.name+'</span><span style="color:#8888aa">'+n.count+' раз</span></div>'+
+        '<div style="font-size:11px;color:#f0c060;margin-top:2px">цены: '+priceStr+'</div>'+
       '</div>';
     }).join('');
   }
