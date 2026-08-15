@@ -375,7 +375,7 @@ function renderGoodsCatalogGrouped(bookId, key){
         if(isDr){
           html += '<div style="padding:8px;background:#13131a;border-radius:8px;margin-bottom:6px">'+
             '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'+
-              '<div style="flex:1;font-size:12px;min-width:0;word-break:break-word">'+name+'</div>'+
+              '<input type="text" value="'+name.replace(/"/g,'&quot;')+'" placeholder="Наименование" onchange="setRefbookItemName(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="flex:1;min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:12px;padding:6px 7px">'+
               '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+realIdx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer;padding:4px;flex-shrink:0">✕</button>'+
             '</div>'+
             '<div style="display:flex;gap:6px">'+
@@ -405,6 +405,16 @@ function _drArticleTaken(key, article, excludeIdx){
     if((items[i].article||'').trim().toLowerCase()===norm) return items[i];
   }
   return null;
+}
+function setRefbookItemName(bookId, idx, key, value){
+  var items = getRefBook(key);
+  var it = items[idx]; if(!it) return;
+  value = (value||'').trim();
+  if(!value){ showToast('Наименование не может быть пустым'); renderRefbookItemsShop(bookId,key); return; }
+  it.name = value;
+  saveRefBookShop(key, items);
+  _clearRefbookTombstone(key, value);
+  showToast('✅ Наименование: '+value);
 }
 function setRefbookItemPrice(bookId, idx, key, value){
   var items = getRefBook(key);
