@@ -1005,14 +1005,16 @@ function runArticleAudit(){
     var occurrences = _artCollectOccurrences();
     var autoCount = 0;
     var ambiguousByKey = {}; // "name||price" -> {name,price,qty,count,refs:[],variants:[]}
-    var noCatalogByName = {}; // name -> {count, prices:{price:count}}
+    var noCatalogByName = {}; // name -> {count, prices:{price:{count,refs:[]}}}
     occurrences.forEach(function(o){
       var variants = _siGetDrVariants(o.name);
       if(!variants.length){
         if(!noCatalogByName[o.name]) noCatalogByName[o.name] = {count:0, prices:{}};
         noCatalogByName[o.name].count++;
         var pr = Math.round(o.price);
-        noCatalogByName[o.name].prices[pr] = (noCatalogByName[o.name].prices[pr]||0)+1;
+        if(!noCatalogByName[o.name].prices[pr]) noCatalogByName[o.name].prices[pr] = {count:0, refs:[]};
+        noCatalogByName[o.name].prices[pr].count++;
+        noCatalogByName[o.name].prices[pr].refs.push(o.ref);
         return;
       }
       var article = null;
@@ -1035,8 +1037,9 @@ function runArticleAudit(){
       .sort(function(a,b){ return b.count-a.count; });
     _artNoCatalog = Object.keys(noCatalogByName).map(function(n){
       var entry = noCatalogByName[n];
-      var priceList = Object.keys(entry.prices).map(function(p){ return {price:parseFloat(p), count:entry.prices[p]}; })
-        .sort(function(a,b){ return b.count-a.count; });
+      var priceList = Object.keys(entry.prices).map(function(p){
+        return {price:parseFloat(p), count:entry.prices[p].count, refs:entry.prices[p].refs};
+      }).sort(function(a,b){ return b.count-a.count; });
       return {name:n, count:entry.count, prices:priceList};
     }).sort(function(a,b){ return b.count-a.count; });
     if(btn){ btn.disabled=false; btn.textContent='🔎 Запустить проверку'; }
@@ -1064,16 +1067,42 @@ function _renderArticleAuditResults(){
     }).join('');
   }
   if(_artNoCatalog.length){
-    html += '<div style="font-size:11px;color:#8888aa;font-weight:700;margin:10px 0 6px">НЕТ В СПРАВОЧНИКЕ ('+_artNoCatalog.length+') — сначала добавьте позицию с ценой и артикулом в «База товаров — ДР Товар»</div>';
-    html += _artNoCatalog.map(function(n){
-      var priceStr = n.prices.map(function(p){ return Math.round(p.price).toLocaleString('ru-RU')+'₽ ('+p.count+')'; }).join(', ');
-      return '<div style="padding:7px 9px;background:#13131a;border-radius:8px;margin-bottom:5px;font-size:12px">'+
-        '<div style="display:flex;justify-content:space-between"><span>'+n.name+'</span><span style="color:#8888aa">'+n.count+' раз</span></div>'+
-        '<div style="font-size:11px;color:#f0c060;margin-top:2px">цены: '+priceStr+'</div>'+
+    html += '<div style="font-size:11px;color:#8888aa;font-weight:700;margin:10px 0 6px">НЕТ В СПРАВОЧНИКЕ ('+_artNoCatalog.length+') — впишите артикул для каждой цены и нажмите «Присвоить»: позиция создастся в справочнике и применится ко всем таким записям</div>';
+    html += _artNoCatalog.map(function(n, ni){
+      return '<div style="padding:9px;background:#13131a;border-radius:8px;margin-bottom:6px">'+
+        '<div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:12px;font-weight:700">'+n.name+'</span><span style="color:#8888aa;font-size:11px">'+n.count+' раз всего</span></div>'+
+        '<div style="display:flex;flex-direction:column;gap:5px">'+
+          n.prices.map(function(p, pi){
+            return '<div style="display:flex;gap:6px;align-items:center">'+
+              '<span style="font-size:11px;color:#f0c060;flex-shrink:0">'+Math.round(p.price).toLocaleString('ru-RU')+'₽ ('+p.count+')</span>'+
+              '<input type="text" id="artNcArt_'+ni+'_'+pi+'" placeholder="Артикул" style="flex:1;min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px">'+
+              '<button type="button" onclick="_artAssignNoCatalog('+ni+','+pi+')" style="flex-shrink:0;padding:5px 9px;background:#1e2a14;border:1px solid #c8f060;border-radius:6px;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">Присвоить</button>'+
+            '</div>';
+          }).join('')+
+        '</div>'+
       '</div>';
     }).join('');
   }
   c.innerHTML = html;
+}
+function _artAssignNoCatalog(ni, pi){
+  var n = _artNoCatalog[ni]; if(!n) return;
+  var p = n.prices[pi]; if(!p) return;
+  var input = document.getElementById('artNcArt_'+ni+'_'+pi);
+  var article = (input&&input.value||'').trim();
+  if(!article){ showToast('Введите артикул'); return; }
+  var taken = _drArticleTaken('iz_goods_dr', article, -1);
+  if(taken){ showToast('⚠️ Артикул «'+article+'» уже занят: «'+taken.name+'» ('+(taken.price||0)+'₽)'); return; }
+  var catalog = getRefBook('iz_goods_dr');
+  catalog.push({id:uid(), name:n.name, price:p.price, article:article});
+  saveRefBookShop('iz_goods_dr', catalog);
+  _clearRefbookTombstone('iz_goods_dr', n.name);
+  var applied = 0;
+  p.refs.forEach(function(ref){ if(_artApplyArticle(ref, article)) applied++; });
+  n.prices.splice(pi,1);
+  if(!n.prices.length) _artNoCatalog.splice(ni,1);
+  showToast('✅ Добавлено в справочник и присвоено №'+article+' — '+applied+' записей');
+  _renderArticleAuditResults();
 }
 function _artAssignGroup(gi, article){
   var g = _artReviewGroups[gi]; if(!g || !article) return;
