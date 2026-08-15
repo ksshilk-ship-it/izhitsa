@@ -1100,16 +1100,29 @@ function _artAssignNoCatalog(ni, pi){
   var article = (artInput&&artInput.value||'').trim();
   if(!article){ showToast('Введите артикул'); return; }
   var taken = _drArticleTaken('iz_goods_dr', article, -1);
-  if(taken){ showToast('⚠️ Артикул «'+article+'» уже занят: «'+taken.name+'» ('+(taken.price||0)+'₽)'); return; }
-  var catalog = getRefBook('iz_goods_dr');
-  catalog.push({id:uid(), name:finalName, price:p.price, article:article});
-  saveRefBookShop('iz_goods_dr', catalog);
-  _clearRefbookTombstone('iz_goods_dr', finalName);
+  if(taken && Math.round(taken.price||0)!==Math.round(p.price)){
+    showToast('⚠️ Артикул «'+article+'» уже занят: «'+taken.name+'» ('+(taken.price||0)+'₽)');
+    return;
+  }
+  if(taken){
+    // артикул уже зарегистрирован именно на эту цену — значит позиция в справочнике уже есть,
+    // просто раньше не применилась к самим записям. Используем её, а не создаём дубль.
+    finalName = taken.name;
+    renamed = finalName!==n.name;
+  } else {
+    var catalog = getRefBook('iz_goods_dr');
+    catalog.push({id:uid(), name:finalName, price:p.price, article:article});
+    saveRefBookShop('iz_goods_dr', catalog);
+    _clearRefbookTombstone('iz_goods_dr', finalName);
+  }
   var applied = 0;
   p.refs.forEach(function(ref){ if(_artApplyArticle(ref, article, renamed?finalName:null)) applied++; });
   n.prices.splice(pi,1);
   if(!n.prices.length) _artNoCatalog.splice(ni,1);
-  showToast('✅ '+(renamed?'Переименовано в «'+finalName+'» и д':'Д')+'обавлено в справочник, присвоено №'+article+' — '+applied+' записей');
+  var msg = taken
+    ? '✅ Применена существующая позиция «'+finalName+'» №'+article+' — '+applied+' записей'
+    : '✅ '+(renamed?'Переименовано в «'+finalName+'» и д':'Д')+'обавлено в справочник, присвоено №'+article+' — '+applied+' записей';
+  showToast(msg);
   _renderArticleAuditResults();
 }
 function _artAssignGroup(gi, article){
