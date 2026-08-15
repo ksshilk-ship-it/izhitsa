@@ -286,14 +286,14 @@ function addSaleItem(){
     var drVariants = _siGetDrVariants(name);
     if(drVariants.length>=2){
       var matched = drVariants.find(function(v){ return Math.round(v.price)===Math.round(price); });
-      if(matched){ num = matched.article; }
+      if(matched){ num = matched.article; hasDiff=false; diffNote=''; }
       else {
         _siCheckVariantsM(name);
         showToast('⚠️ У «'+name+'» несколько вариантов с разными артикулами — выберите нужный вариант выше, не вводите цену вручную');
         return;
       }
     } else if(drVariants.length===1){
-      num = drVariants[0].article;
+      num = drVariants[0].article; hasDiff=false; diffNote='';
     }
   }
   if(qty<=0) qty=1;
