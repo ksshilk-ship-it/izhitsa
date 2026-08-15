@@ -921,6 +921,149 @@ function _nfExecuteRename(refs, oldName, newName){
   searchItemNameOccurrences();
   showToast('✅ Заменено: смен — '+touchedShifts.length+', накладных — '+(touchedInv.length+touchedManInv.length)+(catalogsTouched?', справочник обновлён':''));
 }
+function _artCollectOccurrences(){
+  var occ = [];
+  getShifts().forEach(function(sh){
+    var shiftId = sh.id||sh._id;
+    (sh.journal||[]).forEach(function(e){
+      if(e.type!=='sale' && e.type!=='writeoff' && e.type!=='receive') return;
+      var entryGt = e.goodsType;
+      (e.items||[]).forEach(function(it, idx){
+        var gt = it.goodsType||entryGt;
+        if(gt!=='dr') return;
+        if(it.article||it.num) return;
+        if(!it.name || !it.price) return;
+        occ.push({
+          source: e.type==='sale'?'Продажа':(e.type==='writeoff'?'Списание':'Приход (в смене)'),
+          name: it.name, price: it.price, qty: it.qty||1,
+          date: sh.date||'', shop: sh.shopName||'', who: sh.sellerName||'',
+          ref: {kind:'shift', shiftId:shiftId, entryId:e.id, itemIdx:idx}
+        });
+      });
+    });
+  });
+  ['iz_manual_invoices','iz_invoices'].forEach(function(col){
+    var kind = col==='iz_manual_invoices' ? 'manual_invoice' : 'invoice';
+    JSON.parse(localStorage.getItem(col)||'[]').forEach(function(inv){
+      var invId = inv.id||inv._id;
+      var invGt = inv.goodsType || (inv.category==='dr'?'dr':'derevo');
+      (inv.items||[]).forEach(function(it, idx){
+        var gt = it.goodsType||invGt;
+        if(gt!=='dr') return;
+        if(it.article||it.num) return;
+        if(!it.name || !it.price) return;
+        occ.push({
+          source: 'Приход',
+          name: it.name, price: it.price, qty: it.qty||1,
+          date: inv.date||inv.acceptedDate||'', shop: inv.destName||inv.shopName||'', who: inv.createdBy||inv.acceptedBy||'',
+          ref: {kind:kind, invId:invId, itemIdx:idx}
+        });
+      });
+    });
+  });
+  return occ;
+}
+function _artApplyArticle(ref, article){
+  if(ref.kind==='shift'){
+    var shifts = getShifts();
+    var sh = shifts.find(function(s){ return (s.id||s._id)===ref.shiftId; });
+    if(!sh) return false;
+    var e = (sh.journal||[]).find(function(je){ return je.id===ref.entryId; });
+    if(!e || !e.items || !e.items[ref.itemIdx]) return false;
+    e.items[ref.itemIdx].num = article;
+    saveShifts(shifts);
+    try{ db.collection('iz_shifts').doc(ref.shiftId).set({journal: sh.journal}, {merge:true}); }catch(err){}
+    return true;
+  }
+  var col = ref.kind==='manual_invoice' ? 'iz_manual_invoices' : 'iz_invoices';
+  var invoices = JSON.parse(localStorage.getItem(col)||'[]');
+  var inv = invoices.find(function(i){ return (i.id||i._id)===ref.invId; });
+  if(!inv || !inv.items || !inv.items[ref.itemIdx]) return false;
+  inv.items[ref.itemIdx].article = article;
+  localStorage.setItem(col, JSON.stringify(invoices));
+  try{ db.collection(col).doc(ref.invId).set(inv,{merge:true}); }catch(err){}
+  return true;
+}
+var _artReviewGroups = []; // ambiguous groups awaiting manual pick
+var _artNoCatalog = [];    // names with zero catalog variants
+function runArticleAudit(){
+  var btn = document.getElementById('artAuditScanBtn');
+  var status = document.getElementById('artAuditStatus');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Проверяю...'; }
+  if(status){ status.style.display='block'; status.textContent='⏳ Сканирую продажи, приходы и списания...'; }
+  setTimeout(function(){
+    var occurrences = _artCollectOccurrences();
+    var autoCount = 0;
+    var ambiguousByKey = {}; // "name||price" -> {name,price,qty,count,refs:[],variants:[]}
+    var noCatalogByName = {}; // name -> count
+    occurrences.forEach(function(o){
+      var variants = _siGetDrVariants(o.name);
+      if(!variants.length){
+        noCatalogByName[o.name] = (noCatalogByName[o.name]||0)+1;
+        return;
+      }
+      var article = null;
+      if(variants.length===1){
+        article = variants[0].article;
+      } else {
+        var matched = variants.find(function(v){ return Math.round(v.price)===Math.round(o.price); });
+        if(matched) article = matched.article;
+      }
+      if(article){
+        if(_artApplyArticle(o.ref, article)) autoCount++;
+        return;
+      }
+      var key = o.name+'||'+Math.round(o.price);
+      if(!ambiguousByKey[key]) ambiguousByKey[key] = {name:o.name, price:o.price, count:0, refs:[], variants:variants};
+      ambiguousByKey[key].count++;
+      ambiguousByKey[key].refs.push(o.ref);
+    });
+    _artReviewGroups = Object.keys(ambiguousByKey).map(function(k){ return ambiguousByKey[k]; })
+      .sort(function(a,b){ return b.count-a.count; });
+    _artNoCatalog = Object.keys(noCatalogByName).map(function(n){ return {name:n, count:noCatalogByName[n]}; })
+      .sort(function(a,b){ return b.count-a.count; });
+    if(btn){ btn.disabled=false; btn.textContent='🔎 Запустить проверку'; }
+    if(status){ status.style.display='none'; }
+    showToast('✅ Проверено: '+occurrences.length+' записей · присвоено автоматически: '+autoCount+' · на проверку: '+_artReviewGroups.length+' групп');
+    _renderArticleAuditResults();
+  }, 30);
+}
+function _renderArticleAuditResults(){
+  var c = document.getElementById('artAuditResults'); if(!c) return;
+  if(!_artReviewGroups.length && !_artNoCatalog.length){ c.innerHTML=''; return; }
+  var html = '';
+  if(_artReviewGroups.length){
+    html += '<div style="font-size:11px;color:#f0c060;font-weight:700;margin:6px 0">НА ПРОВЕРКУ ('+_artReviewGroups.length+') — цена не совпала ни с одним вариантом</div>';
+    html += _artReviewGroups.map(function(g, gi){
+      return '<div style="padding:9px;background:#13131a;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:6px">'+
+        '<div style="font-size:12px;font-weight:700">'+g.name+'</div>'+
+        '<div style="font-size:11px;color:#8888aa;margin-bottom:6px">введённая цена: '+Math.round(g.price).toLocaleString('ru-RU')+'₽ · встречается '+g.count+' раз</div>'+
+        '<div style="display:flex;flex-direction:column;gap:4px">'+
+          g.variants.map(function(v){
+            return '<button type="button" onclick="_artAssignGroup('+gi+',\''+(v.article||'').replace(/'/g,"\\'")+'\')" style="text-align:left;padding:7px 9px;background:#22222e;border:1px solid #f0c060;border-radius:6px;color:#f0f0f8;font-size:11px;cursor:pointer">Это №'+(v.article||'—')+' · '+Math.round(v.price).toLocaleString('ru-RU')+'₽</button>';
+          }).join('')+
+        '</div>'+
+      '</div>';
+    }).join('');
+  }
+  if(_artNoCatalog.length){
+    html += '<div style="font-size:11px;color:#8888aa;font-weight:700;margin:10px 0 6px">НЕТ В СПРАВОЧНИКЕ ('+_artNoCatalog.length+') — сначала добавьте позицию с ценой и артикулом в «База товаров — ДР Товар»</div>';
+    html += _artNoCatalog.map(function(n){
+      return '<div style="display:flex;justify-content:space-between;padding:7px 9px;background:#13131a;border-radius:8px;margin-bottom:5px;font-size:12px">'+
+        '<span>'+n.name+'</span><span style="color:#8888aa">'+n.count+' раз</span>'+
+      '</div>';
+    }).join('');
+  }
+  c.innerHTML = html;
+}
+function _artAssignGroup(gi, article){
+  var g = _artReviewGroups[gi]; if(!g || !article) return;
+  var applied = 0;
+  g.refs.forEach(function(ref){ if(_artApplyArticle(ref, article)) applied++; });
+  _artReviewGroups.splice(gi,1);
+  showToast('✅ Присвоено №'+article+' — '+applied+' записей');
+  _renderArticleAuditResults();
+}
 function updateRefbookCountShop(bookId, key){
   var items = getRefBook(key);
   var el = document.getElementById('rbCount_'+bookId);
