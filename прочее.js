@@ -973,7 +973,7 @@ function _artCollectOccurrences(){
   });
   return occ;
 }
-function _artApplyArticle(ref, article){
+function _artApplyArticle(ref, article, newName){
   if(ref.kind==='shift'){
     var shifts = getShifts();
     var sh = shifts.find(function(s){ return (s.id||s._id)===ref.shiftId; });
@@ -981,6 +981,7 @@ function _artApplyArticle(ref, article){
     var e = (sh.journal||[]).find(function(je){ return je.id===ref.entryId; });
     if(!e || !e.items || !e.items[ref.itemIdx]) return false;
     e.items[ref.itemIdx].num = article;
+    if(newName) e.items[ref.itemIdx].name = newName;
     saveShifts(shifts);
     try{ db.collection('iz_shifts').doc(ref.shiftId).set({journal: sh.journal}, {merge:true}); }catch(err){}
     return true;
@@ -990,6 +991,7 @@ function _artApplyArticle(ref, article){
   var inv = invoices.find(function(i){ return (i.id||i._id)===ref.invId; });
   if(!inv || !inv.items || !inv.items[ref.itemIdx]) return false;
   inv.items[ref.itemIdx].article = article;
+  if(newName) inv.items[ref.itemIdx].name = newName;
   localStorage.setItem(col, JSON.stringify(invoices));
   try{ db.collection(col).doc(ref.invId).set(inv,{merge:true}); }catch(err){}
   return true;
@@ -1067,16 +1069,19 @@ function _renderArticleAuditResults(){
     }).join('');
   }
   if(_artNoCatalog.length){
-    html += '<div style="font-size:11px;color:#8888aa;font-weight:700;margin:10px 0 6px">НЕТ В СПРАВОЧНИКЕ ('+_artNoCatalog.length+') — впишите артикул для каждой цены и нажмите «Присвоить»: позиция создастся в справочнике и применится ко всем таким записям</div>';
+    html += '<div style="font-size:11px;color:#8888aa;font-weight:700;margin:10px 0 6px">НЕТ В СПРАВОЧНИКЕ ('+_artNoCatalog.length+') — если разные цены это на самом деле разные товары под одним названием, исправьте наименование прямо здесь; затем впишите артикул и нажмите «Присвоить»: применится ко всем таким записям</div>';
     html += _artNoCatalog.map(function(n, ni){
       return '<div style="padding:9px;background:#13131a;border-radius:8px;margin-bottom:6px">'+
         '<div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:12px;font-weight:700">'+n.name+'</span><span style="color:#8888aa;font-size:11px">'+n.count+' раз всего</span></div>'+
-        '<div style="display:flex;flex-direction:column;gap:5px">'+
+        '<div style="display:flex;flex-direction:column;gap:8px">'+
           n.prices.map(function(p, pi){
-            return '<div style="display:flex;gap:6px;align-items:center">'+
-              '<span style="font-size:11px;color:#f0c060;flex-shrink:0">'+Math.round(p.price).toLocaleString('ru-RU')+'₽ ('+p.count+')</span>'+
-              '<input type="text" id="artNcArt_'+ni+'_'+pi+'" placeholder="Артикул" style="flex:1;min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px">'+
-              '<button type="button" onclick="_artAssignNoCatalog('+ni+','+pi+')" style="flex-shrink:0;padding:5px 9px;background:#1e2a14;border:1px solid #c8f060;border-radius:6px;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">Присвоить</button>'+
+            return '<div style="padding:6px;background:#1a1a22;border-radius:6px">'+
+              '<div style="font-size:11px;color:#f0c060;margin-bottom:4px">'+Math.round(p.price).toLocaleString('ru-RU')+'₽ ('+p.count+' раз)</div>'+
+              '<input type="text" id="artNcName_'+ni+'_'+pi+'" value="'+n.name.replace(/"/g,'&quot;')+'" placeholder="Наименование" style="width:100%;box-sizing:border-box;margin-bottom:5px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px">'+
+              '<div style="display:flex;gap:6px">'+
+                '<input type="text" id="artNcArt_'+ni+'_'+pi+'" placeholder="Артикул" style="flex:1;min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px">'+
+                '<button type="button" onclick="_artAssignNoCatalog('+ni+','+pi+')" style="flex-shrink:0;padding:5px 9px;background:#1e2a14;border:1px solid #c8f060;border-radius:6px;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">Присвоить</button>'+
+              '</div>'+
             '</div>';
           }).join('')+
         '</div>'+
@@ -1088,20 +1093,23 @@ function _renderArticleAuditResults(){
 function _artAssignNoCatalog(ni, pi){
   var n = _artNoCatalog[ni]; if(!n) return;
   var p = n.prices[pi]; if(!p) return;
-  var input = document.getElementById('artNcArt_'+ni+'_'+pi);
-  var article = (input&&input.value||'').trim();
+  var nameInput = document.getElementById('artNcName_'+ni+'_'+pi);
+  var finalName = (nameInput&&nameInput.value||'').trim() || n.name;
+  var renamed = finalName!==n.name;
+  var artInput = document.getElementById('artNcArt_'+ni+'_'+pi);
+  var article = (artInput&&artInput.value||'').trim();
   if(!article){ showToast('Введите артикул'); return; }
   var taken = _drArticleTaken('iz_goods_dr', article, -1);
   if(taken){ showToast('⚠️ Артикул «'+article+'» уже занят: «'+taken.name+'» ('+(taken.price||0)+'₽)'); return; }
   var catalog = getRefBook('iz_goods_dr');
-  catalog.push({id:uid(), name:n.name, price:p.price, article:article});
+  catalog.push({id:uid(), name:finalName, price:p.price, article:article});
   saveRefBookShop('iz_goods_dr', catalog);
-  _clearRefbookTombstone('iz_goods_dr', n.name);
+  _clearRefbookTombstone('iz_goods_dr', finalName);
   var applied = 0;
-  p.refs.forEach(function(ref){ if(_artApplyArticle(ref, article)) applied++; });
+  p.refs.forEach(function(ref){ if(_artApplyArticle(ref, article, renamed?finalName:null)) applied++; });
   n.prices.splice(pi,1);
   if(!n.prices.length) _artNoCatalog.splice(ni,1);
-  showToast('✅ Добавлено в справочник и присвоено №'+article+' — '+applied+' записей');
+  showToast('✅ '+(renamed?'Переименовано в «'+finalName+'» и д':'Д')+'обавлено в справочник, присвоено №'+article+' — '+applied+' записей');
   _renderArticleAuditResults();
 }
 function _artAssignGroup(gi, article){
