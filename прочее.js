@@ -634,6 +634,11 @@ function nfSyncFromServer(){
     searchItemNameOccurrences();
   });
 }
+var _nfSearchDebounceTimer = null;
+function _nfSearchDebounced(){
+  clearTimeout(_nfSearchDebounceTimer);
+  _nfSearchDebounceTimer = setTimeout(searchItemNameOccurrences, 350);
+}
 function searchItemNameOccurrences(){
   var input = document.getElementById('nfSearchInput');
   var c = document.getElementById('nfResults');
