@@ -1,3 +1,42 @@
+// Простое key-value хранилище поверх IndexedDB — для данных, которые не помещаются
+// в localStorage (там жёсткий лимит браузера на пару МБ на весь сайт, независимо
+// от диска устройства). IndexedDB хранится на диске и переживает перезапуск вкладки.
+var _idbPromise = null;
+function _idbOpen(){
+  if(_idbPromise) return _idbPromise;
+  _idbPromise = new Promise(function(resolve, reject){
+    if(typeof indexedDB==='undefined'){ reject(new Error('no indexedDB')); return; }
+    var req = indexedDB.open('izhitsa_cache', 1);
+    req.onupgradeneeded = function(){ req.result.createObjectStore('kv'); };
+    req.onsuccess = function(){ resolve(req.result); };
+    req.onerror = function(){ reject(req.error); };
+  });
+  return _idbPromise;
+}
+function idbGet(key){
+  return _idbOpen().then(function(db){
+    return new Promise(function(resolve){
+      try{
+        var tx = db.transaction('kv','readonly');
+        var req = tx.objectStore('kv').get(key);
+        req.onsuccess = function(){ resolve(req.result); };
+        req.onerror = function(){ resolve(undefined); };
+      }catch(e){ resolve(undefined); }
+    });
+  }).catch(function(){ return undefined; });
+}
+function idbSet(key, value){
+  return _idbOpen().then(function(db){
+    return new Promise(function(resolve){
+      try{
+        var tx = db.transaction('kv','readwrite');
+        tx.objectStore('kv').put(value, key);
+        tx.oncomplete = function(){ resolve(true); };
+        tx.onerror = function(){ resolve(false); };
+      }catch(e){ resolve(false); }
+    });
+  }).catch(function(){ return false; });
+}
 var _swReg = null;
 var _newSW = null;
 if ('serviceWorker' in navigator) {
@@ -171,7 +210,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '08.13.45';
+var APP_BUILD_VERSION = '08.13.46';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -658,10 +697,12 @@ function _ensureShiftsLoadedForRange(fromDate){
     var tomb = {}; getShiftTombstones().forEach(function(id){ tomb[id]=true; });
     var localIds = {}; JSON.parse(localStorage.getItem('iz_shifts')||'[]').forEach(function(s){ localIds[s.id||s._id]=true; });
     var existingIds = {}; window._extraArchiveShifts.forEach(function(s){ existingIds[s.id||s._id]=true; });
+    var addedAny = false;
     extra.forEach(function(s){
       var sid = s.id||s._id;
-      if(sid && !localIds[sid] && !existingIds[sid] && !tomb[sid]) window._extraArchiveShifts.push(s);
+      if(sid && !localIds[sid] && !existingIds[sid] && !tomb[sid]){ window._extraArchiveShifts.push(s); addedAny=true; }
     });
+    if(addedAny && typeof _persistExtraArchiveShifts==='function') _persistExtraArchiveShifts();
   }).catch(function(e){
     if(settled) return;
     settled = true;
@@ -1444,6 +1485,7 @@ function _staffSyncUpdateCb(){
   try{ if(document.getElementById('sellersAdminList')) renderSellersAdmin(); }catch(e){}
 }
 function init(){
+  try{ if(typeof _hydrateExtraArchiveShiftsFromIdb==='function') _hydrateExtraArchiveShiftsFromIdb(); }catch(e){}
   startSyncListeners();
   try{ startStockSync(); }catch(e){}
   startStaffLiveSync(_staffSyncUpdateCb);

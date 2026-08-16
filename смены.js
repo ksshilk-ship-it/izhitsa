@@ -98,7 +98,26 @@ let currentInvId = null, invCheckState = [];
 let currentLookupItem = null;
 let currentEditShiftId = null;
 let blockSellerAction = null;
-window._extraArchiveShifts = window._extraArchiveShifts || []; // старые смены, подтянутые для просмотра архива — только в памяти, никогда не пишутся в localStorage
+window._extraArchiveShifts = window._extraArchiveShifts || []; // старые смены за пределами живого 35-дневного окна — не в localStorage (мал лимит), а в памяти + IndexedDB (переживает перезапуск вкладки)
+var _extraArchiveHydrated = false;
+function _hydrateExtraArchiveShiftsFromIdb(){
+  if(typeof idbGet!=='function') return Promise.resolve();
+  return idbGet('extraArchiveShifts').then(function(saved){
+    _extraArchiveHydrated = true;
+    if(!saved || !saved.length) return;
+    var existingIds = {}; window._extraArchiveShifts.forEach(function(s){ existingIds[s.id||s._id]=true; });
+    saved.forEach(function(s){ if(!existingIds[s.id||s._id]) window._extraArchiveShifts.push(s); });
+    try{ if(typeof renderShiftHistory==='function') renderShiftHistory(); }catch(e){}
+    try{ if(typeof renderAdminRcvWo==='function') renderAdminRcvWo(); }catch(e){}
+  }).catch(function(){ _extraArchiveHydrated = true; });
+}
+var _persistExtraArchiveTimer = null;
+function _persistExtraArchiveShifts(){
+  clearTimeout(_persistExtraArchiveTimer);
+  _persistExtraArchiveTimer = setTimeout(function(){
+    if(typeof idbSet==='function') idbSet('extraArchiveShifts', window._extraArchiveShifts);
+  }, 500);
+}
 function getShifts(){
   var local;
   try{ local = JSON.parse(localStorage.getItem(KEY.shifts)||'[]'); }catch(e){ local = []; }
@@ -3081,6 +3100,7 @@ function syncShiftsFromFirestore(){
         }
       });
       var wasPruned = saveShifts(local);
+      _persistExtraArchiveShifts();
       if(btn){btn.disabled=false;btn.textContent='☁️ Синх';}
       if(status){
         status.textContent = wasPruned
