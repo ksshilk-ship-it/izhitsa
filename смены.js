@@ -128,6 +128,11 @@ function getShifts(){
 }
 function saveShifts(shifts){
   shifts = shifts.filter(function(s){ return !s._archiveOnly; }); // никогда не персистим временный архивный кэш
+  // Смены из архива (_extraArchiveShifts) правятся по ссылке на тот же объект, что лежит в getShifts() —
+  // если такую смену редактировали (например «Сохранить остатки» в просмотре старой смены) и она уже
+  // изменилась в памяти, эту правку нужно закрепить в IndexedDB, иначе при следующей перезагрузке
+  // страница подтянет из IndexedDB старую, ещё не исправленную версию и правка «слетит обратно».
+  try{ if(typeof _persistExtraArchiveShifts==='function') _persistExtraArchiveShifts(); }catch(e){}
   try{
     localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
     return false; // ничего не обрезано
