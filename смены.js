@@ -4531,9 +4531,19 @@ function svSaveTovar(){
   _currentShiftView.editedBy=(session&&(session.name||session.sellerName))||'admin';
   _currentShiftView.editedAt=new Date().toISOString();
   _currentShiftView.editReason=reason;
+  try{
+    logAction('GOODS_MORNING_EDIT', {
+      shopName: _currentShiftView.shopName, shiftDate: _currentShiftView.date, reason: reason,
+      before: {goodsMorning:oldMorn, goodsEvening:oldEve, goodsDrMorning:oldDrMorn, drGoodsEvening:oldDrEve},
+      after: {goodsMorning:newMorn, goodsEvening:goodsEve, goodsDrMorning:newDrMorn, drGoodsEvening:goodsDrEve}
+    }, _currentShiftView.id||_currentShiftView._id);
+  }catch(e){}
   svPersist(true);
   var cascadeResult = null;
   try{ cascadeResult = _cascadeGoodsForward(_currentShiftView, getShifts()); }catch(e){ console.log('[svSaveTovar] cascade err', e); }
+  if(cascadeResult && cascadeResult.touched){
+    try{ logAction('GOODS_CASCADE_RECALC', {shopName: _currentShiftView.shopName, fromDate: _currentShiftView.date, shiftsTouched: cascadeResult.touched}, _currentShiftView.id||_currentShiftView._id); }catch(e){}
+  }
   _renderShiftView();
   showToast(cascadeResult && cascadeResult.touched ? ('✅ Остатки товара обновлены, пересчитано смен дальше по датам: '+cascadeResult.touched) : '✅ Остатки товара обновлены');
 }
@@ -4541,6 +4551,9 @@ function svCascadeGoodsOnly(){
   if(!confirm('Пересчитать все последующие смены этого магазина (по датам вперёд), опираясь на текущие остатки этой смены? Саму эту смену это не изменит.')) return;
   var cascadeResult = null;
   try{ cascadeResult = _cascadeGoodsForward(_currentShiftView, getShifts()); }catch(e){ console.log('[svCascadeGoodsOnly] cascade err', e); }
+  if(cascadeResult && cascadeResult.touched){
+    try{ logAction('GOODS_CASCADE_RECALC', {shopName: _currentShiftView.shopName, fromDate: _currentShiftView.date, shiftsTouched: cascadeResult.touched, manual:true}, _currentShiftView.id||_currentShiftView._id); }catch(e){}
+  }
   _renderShiftView();
   showToast(cascadeResult && cascadeResult.touched ? ('✅ Пересчитано смен дальше по датам: '+cascadeResult.touched) : 'ℹ️ Все последующие смены уже соответствуют — пересчитывать нечего');
 }

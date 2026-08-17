@@ -236,6 +236,16 @@ function renderRestoreShiftState(){
   updateRstMainBlockVisibility();
 }
 function enterRestoreMode(meta){
+  try{
+    db.collection('iz_shifts').where('shopName','==',meta.shop).where('date','==',meta.date).get({source:'server'}).then(function(snap){
+      if(!snap.empty){
+        var existing = snap.docs.map(function(d){ return d.data(); });
+        var closedOne = existing.find(function(s){ return s.status==='closed'; });
+        showToast('⚠️ На сервере уже есть смена «'+meta.shop+'» за '+meta.date+' ('+(closedOne?'закрыта':'открыта')+') — возможно, данные не потеряны, а просто не синхронизировались на этом устройстве. Проверьте архив перед восстановлением вручную, чтобы не задвоить смену.');
+        try{ logAction('RESTORE_MODE_DUPLICATE_WARNING', {shopName:meta.shop, date:meta.date, existingCount:existing.length}); }catch(e){}
+      }
+    }).catch(function(){});
+  }catch(e){}
   if(session && !restoreMode){
     localStorage.setItem(KEY.liveSessionBackup, JSON.stringify(session));
     localStorage.setItem(KEY.liveJournalBackup, JSON.stringify(journal));

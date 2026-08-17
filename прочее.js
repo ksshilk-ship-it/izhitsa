@@ -312,6 +312,9 @@ function toggleSettingsSection(id){
     _nfAutoSyncedOnce = true;
     try{ nfSyncFromServer(); }catch(e){}
   }
+  if(id==='actionlog' && !open && !_alRawLog.length){
+    try{ setAlPeriod('week', document.getElementById('alPeriod_week')); }catch(e){}
+  }
 }
 function updateSettingsSectionCount(id, count){
   var el=document.getElementById('ssCount_'+id);
@@ -1137,6 +1140,128 @@ function _artAssignGroup(gi, article){
   _artReviewGroups.splice(gi,1);
   showToast('✅ Присвоено №'+article+' — '+applied+' записей');
   _renderArticleAuditResults();
+}
+var _alPeriod = 'week';
+var _alFrom = '', _alTo = '';
+var _alShop = '';
+var _alRawLog = [];
+var _AL_LABELS = {
+  SALE: '🛒 Продажа', WRITEOFF: '🗑 Списание', RECEIVE: '📥 Приход', EXPENSE: '💸 Расход', SHIFT_OPEN: '📋 Открытие смены',
+  JOURNAL_ENTRY_EDIT: '✏️ Правка записи', JOURNAL_ENTRY_DELETE: '❌ Удаление записи', JOURNAL_ENTRY_ADD_MISSED: '➕ Добавлена пропущенная запись',
+  RECEIPT_DATE_MOVED: '📅 Перенос даты прихода', MORNING_ENTRY_SELF_FIX: '🔧 Продавец сам исправил остаток утра',
+  GOODS_MORNING_EDIT: '📦 Админ поправил остаток товара', GOODS_CASCADE_RECALC: '🔄 Пересчёт остатков вперёд по датам',
+  RESTORE_MODE_DUPLICATE_WARNING: '⚠️ Восстановление при уже существующей смене'
+};
+var _AL_ROUTINE = {SALE:1, WRITEOFF:1, RECEIVE:1, EXPENSE:1, SHIFT_OPEN:1};
+function setAlPeriod(period, el){
+  _alPeriod = period;
+  ['week','month','custom'].forEach(function(p){
+    var btn = document.getElementById('alPeriod_'+p);
+    if(!btn) return;
+    var active = p===period;
+    btn.style.borderWidth = active?'2px':'1px';
+    btn.style.background = active?'#1e2a14':'#22222e';
+    btn.style.color = active?'#c8f060':'#8888aa';
+    btn.style.borderColor = active?'#c8f060':'#2e2e3e';
+  });
+  var cr = document.getElementById('alCustomRange');
+  if(period==='custom'){ if(cr) cr.style.display='flex'; return; }
+  if(cr) cr.style.display='none';
+  var now = new Date();
+  var todayStr = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  var d = new Date(now);
+  d.setDate(d.getDate() - (period==='month'?29:6));
+  _alFrom = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  _alTo = todayStr;
+  loadActionLog();
+}
+function _renderAlShopChips(){
+  var c = document.getElementById('alShopChips'); if(!c) return;
+  var shops = getShopNames();
+  var allActive = !_alShop;
+  c.innerHTML = '<div onclick="_alSetShop(\'\')" style="padding:5px 12px;border-radius:20px;border:'+(allActive?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(allActive?'#1e2a14':'#22222e')+';color:'+(allActive?'#c8f060':'#8888aa')+';font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Все магазины</div>'+
+    shops.map(function(s){
+      var active = _alShop===s;
+      return '<div onclick="_alSetShop(\''+s.replace(/'/g,"\\'")+'\')" style="padding:5px 12px;border-radius:20px;border:'+(active?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(active?'#1e2a14':'#22222e')+';color:'+(active?'#c8f060':'#8888aa')+';font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">'+s+'</div>';
+    }).join('');
+}
+function _alSetShop(shop){
+  _alShop = shop;
+  _renderAlShopChips();
+  renderActionLog();
+}
+function loadActionLog(){
+  if(_alPeriod==='custom'){
+    _alFrom = (document.getElementById('alDateFrom')||{}).value || _alFrom;
+    _alTo = (document.getElementById('alDateTo')||{}).value || _alTo;
+  }
+  if(!_alFrom || !_alTo){ showToast('Выберите период'); return; }
+  var status = document.getElementById('alStatus');
+  if(status){ status.style.display='block'; status.textContent='⏳ Загружаю журнал действий...'; }
+  var fromIso = _alFrom+'T00:00:00.000Z';
+  var toIso = _alTo+'T23:59:59.999Z';
+  var settled = false;
+  var timeoutP = new Promise(function(resolve){ setTimeout(function(){ if(!settled){ settled=true; resolve('timeout'); } }, 15000); });
+  var fetchP = db.collection('iz_audit_log').where('timestamp','>=',fromIso).where('timestamp','<=',toIso).get({source:'server'}).then(function(snap){
+    if(settled) return 'ok';
+    settled = true;
+    _alRawLog = snap.docs.map(function(d){ return d.data(); });
+    return 'ok';
+  }).catch(function(){ if(!settled){ settled=true; } return 'error'; });
+  Promise.race([fetchP, timeoutP]).then(function(result){
+    if(status){
+      status.style.display = result==='ok' ? 'none' : 'block';
+      if(result==='timeout') status.textContent = '⚠️ Сервер не отвечает — попробуйте ещё раз';
+      else if(result==='error') status.textContent = '❌ Не удалось загрузить журнал';
+    }
+    _renderAlShopChips();
+    renderActionLog();
+  });
+}
+function _alFmtVal(v){
+  if(v==null) return '—';
+  if(typeof v==='number') return Math.round(v).toLocaleString('ru-RU');
+  if(Array.isArray(v)) return v.length+' поз.';
+  if(typeof v==='object') return JSON.stringify(v);
+  return String(v);
+}
+function _alDetailsHtml(entry){
+  var d = entry.details||{};
+  if(d.before && d.after && typeof d.before==='object' && typeof d.after==='object'){
+    var keys = Object.keys(d.after);
+    var rows = keys.filter(function(k){ return JSON.stringify(d.before[k])!==JSON.stringify(d.after[k]); })
+      .map(function(k){ return '<div>'+k+': '+_alFmtVal(d.before[k])+' → <b>'+_alFmtVal(d.after[k])+'</b></div>'; }).join('');
+    return rows || '<div style="color:#8888aa">без изменений значений</div>';
+  }
+  var otherKeys = Object.keys(d).filter(function(k){ return k!=='before' && k!=='after'; });
+  if(!otherKeys.length) return '';
+  return otherKeys.map(function(k){ return '<div>'+k+': '+_alFmtVal(d[k])+'</div>'; }).join('');
+}
+function renderActionLog(){
+  var c = document.getElementById('alResults'); if(!c) return;
+  var showRoutine = (document.getElementById('alShowRoutine')||{}).checked;
+  var rows = _alRawLog.filter(function(e){
+    if(_alShop && e.shopName!==_alShop) return false;
+    if(!showRoutine && _AL_ROUTINE[e.action]) return false;
+    return true;
+  }).sort(function(a,b){ return (b.timestamp||'').localeCompare(a.timestamp||''); });
+  if(!rows.length){ c.innerHTML='<div class="empty"><div class="ei">🕵️</div>Ничего не найдено за период'+(showRoutine?'':'<br><small>Попробуйте включить обычные продажи/приходы</small>')+'</div>'; return; }
+  c.innerHTML = '<div class="u-fs11-gray" style="margin-bottom:8px">'+rows.length+' записей</div>'+
+    rows.map(function(e){
+      var isRoutine = !!_AL_ROUTINE[e.action];
+      var label = _AL_LABELS[e.action] || e.action;
+      var dt = e.timestamp ? new Date(e.timestamp) : null;
+      var dtStr = dt ? dt.toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+      var details = _alDetailsHtml(e);
+      return '<div style="padding:9px;background:'+(isRoutine?'#13131a':'#1a1610')+';border:1px solid '+(isRoutine?'#2e2e3e':'#f0c06055')+';border-radius:8px;margin-bottom:6px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:3px">'+
+          '<div style="font-size:12px;font-weight:700">'+label+'</div>'+
+          '<div style="font-size:10px;color:#8888aa;white-space:nowrap">'+dtStr+'</div>'+
+        '</div>'+
+        '<div style="font-size:11px;color:#8888aa;margin-bottom:4px">'+(e.user||'—')+' · '+(e.shopName||'—')+(e.details&&e.details.shiftDate?' · смена '+e.details.shiftDate:'')+(e.details&&e.details.fromDate?' · с '+e.details.fromDate:'')+'</div>'+
+        (details?'<div style="font-size:11px;color:#f0f0f8">'+details+'</div>':'')+
+      '</div>';
+    }).join('');
 }
 function updateRefbookCountShop(bookId, key){
   var items = getRefBook(key);
