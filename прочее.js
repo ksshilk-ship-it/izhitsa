@@ -633,6 +633,15 @@ function nfSyncFromServer(){
       if(snap.exists && snap.data().data) localStorage.setItem(pair[0], JSON.stringify(snap.data().data));
     }).catch(function(){}));
   });
+  tasks.push(db.collection('iz_settings').doc('nf_reviewed_names').get({source:'server'}).then(function(snap){
+    if(snap.exists && snap.data().names){
+      var remote = snap.data().names;
+      var local = getNfReviewedNames();
+      var merged = local.slice();
+      remote.forEach(function(n){ if(merged.indexOf(n)<0) merged.push(n); });
+      localStorage.setItem('iz_nf_reviewed_names', JSON.stringify(merged));
+    }
+  }).catch(function(){}));
   var _nfSyncTimeout = new Promise(function(resolve){ setTimeout(function(){ resolve('timeout'); }, 15000); });
   Promise.race([Promise.all(tasks), _nfSyncTimeout]).then(function(result){
     if(btn){ btn.disabled=false; btn.textContent='🔄 Обновить данные с сервера перед поиском'; }
@@ -646,16 +655,59 @@ function _nfSearchDebounced(){
   clearTimeout(_nfSearchDebounceTimer);
   _nfSearchDebounceTimer = setTimeout(searchItemNameOccurrences, 350);
 }
+var _nfSort = 'count';
+function _nfSetSort(mode){
+  _nfSort = mode;
+  ['count','alpha'].forEach(function(m){
+    var btn = document.getElementById('nfSort_'+m);
+    if(!btn) return;
+    var active = m===mode;
+    btn.style.borderWidth = active?'2px':'1px';
+    btn.style.background = active?'#1e2a14':'#22222e';
+    btn.style.color = active?'#c8f060':'#8888aa';
+    btn.style.borderColor = active?'#c8f060':'#2e2e3e';
+    btn.style.fontWeight = active?'700':'400';
+  });
+  searchItemNameOccurrences();
+}
+function getNfReviewedNames(){
+  try{ return JSON.parse(localStorage.getItem('iz_nf_reviewed_names')||'[]'); }catch(e){ return []; }
+}
+function markNameReviewed(btn){
+  var name = btn.getAttribute('data-name');
+  var norm = name.toLowerCase().trim();
+  var list = getNfReviewedNames();
+  if(list.indexOf(norm)<0){
+    list.push(norm);
+    localStorage.setItem('iz_nf_reviewed_names', JSON.stringify(list));
+    try{ db.collection('iz_settings').doc('nf_reviewed_names').set({names:list,updatedAt:new Date().toISOString()}); }catch(e){}
+  }
+  showToast('✅ Отмечено проверенным: '+name);
+  searchItemNameOccurrences();
+}
+function unmarkNameReviewed(btn){
+  var name = btn.getAttribute('data-name');
+  var norm = name.toLowerCase().trim();
+  var list = getNfReviewedNames().filter(function(n){ return n!==norm; });
+  localStorage.setItem('iz_nf_reviewed_names', JSON.stringify(list));
+  try{ db.collection('iz_settings').doc('nf_reviewed_names').set({names:list,updatedAt:new Date().toISOString()}); }catch(e){}
+  searchItemNameOccurrences();
+}
 function searchItemNameOccurrences(){
   var input = document.getElementById('nfSearchInput');
   var c = document.getElementById('nfResults');
   if(!input || !c) return;
   var q = (input.value||'').trim().toLowerCase();
   var matches = _nfCollectMatches(function(name){ return !q || name.toLowerCase().indexOf(q)>=0; });
-  var names = Object.keys(matches);
-  if(!names.length){ c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:8px 0">Ничего не найдено</div>'; return; }
-  names.sort(function(a,b){ return matches[b].count-matches[a].count; });
-  var header = !q ? '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">Все наименования, встречающиеся в продажах, списаниях и накладных ('+names.length+')</div>' : '';
+  var showReviewed = (document.getElementById('nfShowReviewed')||{}).checked;
+  var reviewed = getNfReviewedNames();
+  var allNames = Object.keys(matches);
+  var names = showReviewed ? allNames : allNames.filter(function(n){ return reviewed.indexOf(n.toLowerCase().trim())<0; });
+  var hiddenCount = allNames.length - names.length;
+  if(!names.length){ c.innerHTML='<div style="font-size:12px;color:#8888aa;padding:8px 0">'+(hiddenCount?'Все найденные названия уже проверены':'Ничего не найдено')+'</div>'; return; }
+  if(_nfSort==='alpha') names.sort(function(a,b){ return a.toLowerCase().localeCompare(b.toLowerCase(),'ru'); });
+  else names.sort(function(a,b){ return matches[b].count-matches[a].count; });
+  var header = !q ? '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">Все наименования, встречающиеся в продажах, списаниях и накладных ('+names.length+(hiddenCount?', проверено и скрыто: '+hiddenCount:'')+')</div>' : '';
   c.innerHTML = header + names.map(function(n){
     var m = matches[n];
     var usageRefs = m.refs.filter(function(r){ return r.kind!=='catalog'; });
@@ -675,10 +727,14 @@ function searchItemNameOccurrences(){
     var esc = n.replace(/"/g,'&quot;');
     var addBtn = !inSellerCatalog ? '<button onclick="addNameToCatalog(this)" data-name="'+esc+'" style="background:none;border:1px solid #60c8f0;border-radius:8px;padding:5px 10px;color:#60c8f0;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">➕ В справочник</button>' : '';
     var whoBtn = usageRefs.length ? '<button onclick="showNameSellerBreakdown(this)" data-name="'+esc+'" title="Кто вносил" style="background:none;border:1px solid #a060f0;border-radius:8px;padding:5px 8px;color:#a060f0;font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">👤</button>' : '';
-    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px">'+
+    var isReviewed = reviewed.indexOf(n.toLowerCase().trim())>=0;
+    var reviewBtn = isReviewed
+      ? '<button onclick="unmarkNameReviewed(this)" data-name="'+esc+'" style="background:none;border:1px solid #8888aa;border-radius:8px;padding:5px 10px;color:#8888aa;font-size:11px;cursor:pointer;white-space:nowrap">↩️ Вернуть в список</button>'
+      : '<button onclick="markNameReviewed(this)" data-name="'+esc+'" style="background:none;border:1px solid #60f090;border-radius:8px;padding:5px 10px;color:#60f090;font-size:11px;cursor:pointer;white-space:nowrap">✅ Верно</button>';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:6px;flex-wrap:wrap">'+
       '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;word-break:break-word">'+n+catalogTag+'</div>'+
       '<div style="font-size:11px;color:#8888aa">'+usageLine+'</div></div>'+
-      '<div style="display:flex;gap:6px;flex-shrink:0">'+whoBtn+addBtn+
+      '<div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">'+whoBtn+addBtn+reviewBtn+
       '<button onclick="startRenameItemName(this)" data-name="'+esc+'" style="background:none;border:1px solid #c8f060;border-radius:8px;padding:5px 10px;color:#c8f060;font-size:11px;cursor:pointer;white-space:nowrap">✏️ Заменить</button>'+
       '</div>'+
     '</div>';
