@@ -210,7 +210,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '08.13.57';
+var APP_BUILD_VERSION = '08.13.58';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -558,51 +558,60 @@ var SYNC_SETTINGS = {
   'iz_work_schedules':   {doc:'work_schedules', field:'data'},
   'iz_employee_statuses': {doc:'employee_statuses', field:'data'},
 };
-function syncListen(lsKey) {
-  var m = SYNC_SETTINGS[lsKey]; if(!m || _syncUnsubs[lsKey]) return;
-  _syncUnsubs[lsKey] = db.collection('iz_settings').doc(m.doc).onSnapshot(function(snap){
-    if(!snap.exists) return;
-    var val = snap.data()[m.field];
-    if(val !== undefined) {
-      var lastSave = _syncSaveGuard[lsKey]||0;
-      var justSaved = (Date.now() - lastSave) < 300000; // 5 min guard
-      if(!justSaved){
-        var shopRefbookKeys2 = ['iz_payment_methods','iz_suppliers','iz_goods','iz_goods_derevo','iz_goods_dr','iz_materials','iz_dr_species','iz_work_schedules'];
-        var valToWrite = val;
-        if(shopRefbookKeys2.indexOf(lsKey)>=0 && Array.isArray(val)){
-          var tombKey2 = lsKey+'_deleted';
-          var tombs2 = JSON.parse(localStorage.getItem(tombKey2)||'[]');
-          if(tombs2.length){
-            valToWrite = val.filter(function(item){
-              return tombs2.indexOf((item.name||item||'').toLowerCase().trim())<0;
-            });
-          }
-        }
-        localStorage.setItem(lsKey, JSON.stringify(valToWrite));
-      }
-      if(lsKey === 'iz_admin_shops' || lsKey === 'iz_sellers') { try { pick(loginRole); } catch(e){} }
-      if(lsKey === 'iz_admin_shops'){
-        try{ if(typeof renderLoginShopSelect==='function') renderLoginShopSelect(); }catch(e){}
-        try{ renderShopsManage(); }catch(e){}
-        try{ renderShopSettings(); }catch(e){}
-        try{ if(typeof renderTodayShift==='function' && document.getElementById('todayShiftContent')) renderTodayShift(); }catch(e){}
-        try{ if(typeof renderStatusBar==='function' && document.getElementById('mainStatusBar')) renderStatusBar(); }catch(e){}
-      }
-      if(lsKey === 'iz_accounts'){
-        try{ renderAccountsList(); }catch(e){}
-      }
-      if(lsKey === 'iz_shop_zp_settings'){
-        try{ renderShopSettings(); }catch(e){}
-        try{ if(session && document.getElementById('mainStatusBar')) renderStatusBar(); }catch(e){}
-      }
-      var shopRefbookKeys = ['iz_payment_methods','iz_suppliers','iz_goods','iz_goods_derevo','iz_goods_dr','iz_materials','iz_dr_species','iz_work_schedules'];
-      if(shopRefbookKeys.indexOf(lsKey)>=0){
-        var book = SHOP_REFBOOKS.find(function(b){ return b.key===lsKey; });
-        if(book){
-          try{ renderRefbookItemsShop(book.id, book.key); updateRefbookCountShop(book.id, book.key); }catch(e){}
-        }
+function _syncApplyRemoteValue(lsKey, val){
+  if(val === undefined) return;
+  var lastSave = _syncSaveGuard[lsKey]||0;
+  var justSaved = (Date.now() - lastSave) < 300000; // 5 min guard
+  if(!justSaved){
+    var shopRefbookKeys2 = ['iz_payment_methods','iz_suppliers','iz_goods','iz_goods_derevo','iz_goods_dr','iz_materials','iz_dr_species','iz_work_schedules'];
+    var valToWrite = val;
+    if(shopRefbookKeys2.indexOf(lsKey)>=0 && Array.isArray(val)){
+      var tombKey2 = lsKey+'_deleted';
+      var tombs2 = JSON.parse(localStorage.getItem(tombKey2)||'[]');
+      if(tombs2.length){
+        valToWrite = val.filter(function(item){
+          return tombs2.indexOf((item.name||item||'').toLowerCase().trim())<0;
+        });
       }
     }
+    localStorage.setItem(lsKey, JSON.stringify(valToWrite));
+  }
+  if(lsKey === 'iz_admin_shops' || lsKey === 'iz_sellers') { try { pick(loginRole); } catch(e){} }
+  if(lsKey === 'iz_admin_shops'){
+    try{ if(typeof renderLoginShopSelect==='function') renderLoginShopSelect(); }catch(e){}
+    try{ renderShopsManage(); }catch(e){}
+    try{ renderShopSettings(); }catch(e){}
+    try{ if(typeof renderTodayShift==='function' && document.getElementById('todayShiftContent')) renderTodayShift(); }catch(e){}
+    try{ if(typeof renderStatusBar==='function' && document.getElementById('mainStatusBar')) renderStatusBar(); }catch(e){}
+  }
+  if(lsKey === 'iz_accounts'){
+    try{ renderAccountsList(); }catch(e){}
+  }
+  if(lsKey === 'iz_shop_zp_settings'){
+    try{ renderShopSettings(); }catch(e){}
+    try{ if(session && document.getElementById('mainStatusBar')) renderStatusBar(); }catch(e){}
+  }
+  var shopRefbookKeys = ['iz_payment_methods','iz_suppliers','iz_goods','iz_goods_derevo','iz_goods_dr','iz_materials','iz_dr_species','iz_work_schedules'];
+  if(shopRefbookKeys.indexOf(lsKey)>=0){
+    var book = SHOP_REFBOOKS.find(function(b){ return b.key===lsKey; });
+    if(book){
+      try{ renderRefbookItemsShop(book.id, book.key); updateRefbookCountShop(book.id, book.key); }catch(e){}
+    }
+  }
+}
+function syncListen(lsKey) {
+  var m = SYNC_SETTINGS[lsKey]; if(!m || _syncUnsubs[lsKey]) return;
+  // Живой onSnapshot иногда не успевает подключиться или молчит на нестабильной сети —
+  // разовый прямой запрос сразу при старте гарантирует, что каталог не застрянет в
+  // устаревшем виде на конкретном устройстве до следующего изменения на сервере.
+  try{
+    db.collection('iz_settings').doc(m.doc).get({source:'server'}).then(function(snap){
+      if(snap.exists) _syncApplyRemoteValue(lsKey, snap.data()[m.field]);
+    }).catch(function(){});
+  }catch(e){}
+  _syncUnsubs[lsKey] = db.collection('iz_settings').doc(m.doc).onSnapshot(function(snap){
+    if(!snap.exists) return;
+    _syncApplyRemoteValue(lsKey, snap.data()[m.field]);
   }, function(e){ console.log('syncListen err', lsKey, e.code||e); });
 }
 var _syncSaveGuard = {}; // lsKey -> timestamp of last local save
