@@ -1374,11 +1374,12 @@ function renderManInvItems() {
             '<input class="fi" id="manInvName_'+i+'" value="'+item.name+'" placeholder="Название" autocomplete="off" '+
               'oninput="_manInvName('+i+',this.value);siAutoDetectAndSetType(this.value);psjSuggest(\'manInvName_'+i+'\',_manInvNameOptions(),\'_manInvPickName_'+i+'\')" '+
               'onfocus="psjSuggest(\'manInvName_'+i+'\',_manInvNameOptions(),\'_manInvPickName_'+i+'\')" '+
-              'onblur="psjHideSugg(\'manInvName_'+i+'\')" style="margin:0;padding:8px;flex:1">'+
+              'onblur="psjHideSugg(\'manInvName_'+i+'\');_manInvCheckNameDup('+i+')" style="margin:0;padding:8px;flex:1">'+
             '<div id="manInvName_'+i+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:25;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:180px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'+
-            '<button type="button" onclick="openAddItemModal(\'manInvName_'+i+'\',\'\',\'\')" '+
-              'style="background:#c8f060;border:none;border-radius:8px;padding:6px 9px;font-weight:700;color:#0f0f13;cursor:pointer;font-size:14px;flex-shrink:0">＋</button>'+
+            '<button type="button" onclick="openManInvCatalogPicker('+i+')" title="Список из справочника" '+
+              'style="background:#60c8f0;border:none;border-radius:8px;padding:6px 9px;font-weight:700;color:#0f0f13;cursor:pointer;font-size:13px;flex-shrink:0">📚</button>'+
           '</div>'+
+          '<div id="manInvNameWarn_'+i+'" style="display:none;margin-top:5px;padding:7px 9px;background:#2e1a1a;border:1px solid #f06060;border-radius:8px;font-size:11px;color:#f06060"></div>'+
         '</div>'+
       '</div>'+
       '<div class="fg" style="margin-bottom:6px;position:relative">'+
@@ -1413,6 +1414,129 @@ function renderManInvItems() {
   updateManInvTotal();
 }
 function _manInvName(i, val) { _manInvItems[i].name = val; updateManInvTotal(); saveManInvDraft(); }
+function _manInvCheckNameDup(i){
+  var warnEl = document.getElementById('manInvNameWarn_'+i);
+  if(!warnEl || _manInvItems[i]==null) return;
+  var name = (_manInvItems[i].name||'').trim();
+  if(!name){ warnEl.style.display='none'; return; }
+  var key = _manInvGoodsType==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
+  var existing = getRefBook(key);
+  var norm = name.toLowerCase().trim();
+  var exact = existing.some(function(g){ return ((g&&g.name)||g).toLowerCase().trim()===norm; });
+  if(exact){ warnEl.style.display='none'; return; }
+  var closeMatch=null, bestScore=0;
+  existing.forEach(function(g){
+    var gn=(g&&g.name)||g;
+    var sc=nameSimilarity(norm, gn.toLowerCase().trim());
+    if(sc>bestScore){ bestScore=sc; closeMatch=gn; }
+  });
+  warnEl.style.display='block';
+  if(bestScore>=0.65 && closeMatch){
+    warnEl.innerHTML = '⚠️ Похоже на существующее «'+closeMatch+'» — точно новое название? '+
+      '<button type="button" onpointerdown="event.preventDefault();_manInvUseExistingName('+i+',\''+closeMatch.replace(/'/g,"\\'")+'\')" style="margin-left:4px;background:#f06060;border:none;border-radius:6px;padding:3px 8px;color:#1a0e0e;font-weight:700;font-size:10px;cursor:pointer">Использовать «'+closeMatch+'»</button>';
+  } else {
+    warnEl.innerHTML = '⚠️ Такого названия нет в справочнике «'+(_manInvGoodsType==='dr'?'ДР Товар':'Дерево')+'». Если это не опечатка — добавьте через 📚, чтобы оно попало в базу.';
+  }
+}
+function _manInvUseExistingName(i, name){
+  if(_manInvItems[i]==null) return;
+  _manInvItems[i].name = name;
+  var el = document.getElementById('manInvName_'+i); if(el) el.value = name;
+  var warnEl = document.getElementById('manInvNameWarn_'+i); if(warnEl) warnEl.style.display='none';
+  updateManInvTotal(); saveManInvDraft();
+}
+function openManInvCatalogPicker(i){
+  var isDr = _manInvGoodsType==='dr';
+  var key = isDr ? 'iz_goods_dr' : 'iz_goods_derevo';
+  var items = getRefBook(key);
+  var overlay = document.getElementById('manInvCatalogOverlay');
+  if(!overlay){
+    overlay = document.createElement('div');
+    overlay.id = 'manInvCatalogOverlay';
+    overlay.className = 'mo';
+    overlay.onclick = function(e){ if(e.target===overlay) overlay.classList.remove('open'); };
+    document.body.appendChild(overlay);
+  }
+  window._micAllItems = items;
+  window._micQuery = '';
+  window._micCatOpen = {};
+  window._micTargetIdx = i;
+  _renderManInvCatalogPicker();
+  overlay.classList.add('open');
+  setTimeout(function(){ var inp=document.getElementById('micSearch'); if(inp) inp.focus(); }, 50);
+}
+function _micFilterInput(val){
+  window._micQuery = (val||'').toLowerCase().trim();
+  _renderManInvCatalogPicker();
+}
+function _micToggleCat(cat){
+  window._micCatOpen = window._micCatOpen || {};
+  window._micCatOpen[cat] = !(window._micCatOpen[cat]===true);
+  _renderManInvCatalogPicker();
+}
+function _renderManInvCatalogPicker(){
+  var overlay = document.getElementById('manInvCatalogOverlay'); if(!overlay) return;
+  var isDr = _manInvGoodsType==='dr';
+  var items = window._micAllItems||[];
+  var q = window._micQuery||'';
+  if(q) items = items.filter(function(it){ return (it.name||'').toLowerCase().indexOf(q)>=0; });
+  var groups = {};
+  items.forEach(function(it){
+    var cat = (it.category||'').trim() || 'Без категории';
+    if(!groups[cat]) groups[cat] = [];
+    groups[cat].push(it);
+  });
+  var catNames = Object.keys(groups).sort(function(a,b){
+    if(a==='Без категории') return 1;
+    if(b==='Без категории') return -1;
+    return a.localeCompare(b,'ru');
+  });
+  window._micCatOpen = window._micCatOpen || {};
+  var targetIdx = window._micTargetIdx;
+  var body = !catNames.length ? '<div style="font-size:12px;color:#8888aa;padding:10px 0">Ничего не найдено</div>' :
+    catNames.map(function(cat){
+      var list = groups[cat].slice().sort(function(a,b){
+        if(isDr){
+          var pa=a.price||0, pb=b.price||0;
+          if(pa!==pb) return pa-pb;
+          return (a.name||'').toLowerCase().localeCompare((b.name||'').toLowerCase(),'ru');
+        }
+        var na=(a.name||'').toLowerCase(), nb=(b.name||'').toLowerCase();
+        if(na!==nb) return na.localeCompare(nb,'ru');
+        return (a.price||0)-(b.price||0);
+      });
+      var open = !!q || window._micCatOpen[cat]===true;
+      var header = '<div onclick="_micToggleCat(\''+cat.replace(/'/g,"\\'")+'\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:9px 10px;margin:8px 0 4px;background:#1a1a22;border-radius:8px">'+
+        '<span style="font-size:11px;color:#c8f060;font-weight:700;text-transform:uppercase;letter-spacing:.5px">'+cat+' ('+list.length+')</span>'+
+        '<span style="color:#8888aa;font-size:11px">'+(open?'▾':'▸')+'</span>'+
+      '</div>';
+      if(!open) return header;
+      return header + list.map(function(it){
+          var priceStr = isDr ? (' · '+Math.round(it.price||0).toLocaleString('ru-RU')+'₽'+(it.article?' · №'+it.article:'')) : '';
+          return '<div onclick="_micPick('+targetIdx+',\''+(it.name||'').replace(/'/g,"\\'")+'\','+(it.price||0)+',\''+(it.article||'').replace(/'/g,"\\'")+'\')" '+
+            'style="padding:9px 10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:5px;cursor:pointer;font-size:13px">'+
+            (it.name||'')+'<span style="color:#8888aa;font-size:12px">'+priceStr+'</span>'+
+          '</div>';
+        }).join('');
+    }).join('');
+  overlay.innerHTML = '<div class="md">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
+      '<div style="font-size:15px;font-weight:700">'+(isDr?'🛍 ДР Товар':'🌳 Дерево')+' — список</div>'+
+      '<button onclick="document.getElementById(\'manInvCatalogOverlay\').classList.remove(\'open\')" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer">✕</button>'+
+    '</div>'+
+    '<input id="micSearch" class="fi" placeholder="Поиск по названию..." autocomplete="off" oninput="_micFilterInput(this.value)" style="margin-bottom:8px" value="'+(q||'').replace(/"/g,'&quot;')+'">'+
+    '<div style="max-height:60vh;overflow-y:auto">'+body+'</div>'+
+  '</div>';
+}
+function _micPick(i, name, price, article){
+  if(_manInvItems[i]==null) return;
+  _manInvItems[i].name = name;
+  if(price) _manInvItems[i].price = price;
+  if(article) _manInvItems[i].article = article;
+  var overlay = document.getElementById('manInvCatalogOverlay'); if(overlay) overlay.classList.remove('open');
+  updateManInvTotal(); saveManInvDraft();
+  renderManInvItems();
+}
 function _manInvPickNameAt(i,val){
   if(_manInvItems[i]!=null){ _manInvItems[i].name=val; siAutoDetectAndSetType(val); }
   var el=document.getElementById('manInvName_'+i); if(el) el.value=val;
@@ -1605,7 +1729,12 @@ function setSellerInvType(id, type){
     : 'flex:1;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer';
 }
 var _manInvEditActive = {id:null, i:null};
-function _manInvNameOptions(){ return getItemsBase().map(function(it){ return it.name; }).filter(Boolean); }
+function _manInvNameOptions(goodsType){
+  var key = (goodsType||_manInvGoodsType)==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
+  var names = getRefBook(key).map(function(it){ return (it&&it.name)||it; }).filter(Boolean);
+  var uniq = {};
+  return names.filter(function(n){ var k=n.toLowerCase(); if(uniq[k]) return false; uniq[k]=true; return true; });
+}
 window._manInvEditExpanded = {}; // id -> expanded index
 function _manInvEditToggle(id, i){
   window._manInvEditExpanded[id] = (window._manInvEditExpanded[id]===i) ? -1 : i;
@@ -1646,8 +1775,8 @@ function renderManInvEditItems(id){
         '<input class="fi" value="'+artNum+'" placeholder="Арт." style="flex:0 0 70px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditArt(\''+id+'\','+i+',this.value)">'+
         '<div style="flex:2;position:relative">'+
           '<input class="fi" id="'+nameId+'" value="'+(item.name||'')+'" placeholder="Наименование" autocomplete="off" style="margin:0;padding:6px;font-size:12px" '+
-            'oninput="_manInvEditActive={id:\''+id+'\',i:'+i+'};_manInvEditName(\''+id+'\','+i+',this.value);psjSuggest(\''+nameId+'\',_manInvNameOptions(),\'_manInvEditPickNameIdx\')" '+
-            'onfocus="_manInvEditActive={id:\''+id+'\',i:'+i+'};psjSuggest(\''+nameId+'\',_manInvNameOptions(),\'_manInvEditPickNameIdx\')" '+
+            'oninput="_manInvEditActive={id:\''+id+'\',i:'+i+'};_manInvEditName(\''+id+'\','+i+',this.value);psjSuggest(\''+nameId+'\',_manInvNameOptions(\''+(data.goodsType||'derevo')+'\'),\'_manInvEditPickNameIdx\')" '+
+            'onfocus="_manInvEditActive={id:\''+id+'\',i:'+i+'};psjSuggest(\''+nameId+'\',_manInvNameOptions(\''+(data.goodsType||'derevo')+'\'),\'_manInvEditPickNameIdx\')" '+
             'onblur="psjHideSugg(\''+nameId+'\')">'+
           '<div id="'+nameId+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'+
         '</div>'+
