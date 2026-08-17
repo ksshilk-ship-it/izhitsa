@@ -361,6 +361,11 @@ function renderGoodsCatalogGrouped(bookId, key){
   var isDr = key==='iz_goods_dr';
   catNames.forEach(function(cat){
     var list = groups[cat].slice().sort(function(a,b){
+      if(isDr){
+        var pa=a.price||0, pb=b.price||0;
+        if(pa!==pb) return pa-pb;
+        return (a.name||a).toLowerCase().localeCompare((b.name||b).toLowerCase(),'ru');
+      }
       var na=(a.name||a).toLowerCase(), nb=(b.name||b).toLowerCase();
       if(na!==nb) return na.localeCompare(nb,'ru');
       return (a.price||0)-(b.price||0);
