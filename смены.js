@@ -4069,9 +4069,9 @@ function _renderShiftView(){
   '</div>';
   woBody += '<div style="border-top:1px solid #2e2e3e;margin-top:8px;padding-top:8px">'+
     addFormBtn('#f06060','showAddForm(\'woWood\')','Добавить списание Дерево')+
-    itemForm('woWood','#f06060',{goodsType:'derevo',extra:{id:'reason',label:'Причина',placeholder:'необязательно'},saveFn:'svAddWo(\'wood\')'})+
+    itemForm('woWood','#f06060',{goodsType:'derevo',extra:{id:'reason',label:'Причина (обязательно)',placeholder:'например: брак, бой, недостача'},saveFn:'svAddWo(\'wood\')'})+
     addFormBtn('#c060a0','showAddForm(\'woDr\')','Добавить списание ДР')+
-    itemForm('woDr','#c060a0',{goodsType:'dr',extra:{id:'reason',label:'Причина',placeholder:'необязательно'},saveFn:'svAddWo(\'dr\')'})+
+    itemForm('woDr','#c060a0',{goodsType:'dr',extra:{id:'reason',label:'Причина (обязательно)',placeholder:'например: брак, бой, недостача'},saveFn:'svAddWo(\'dr\')'})+
   '</div>';
   expBody += '<div style="border-top:1px solid #2e2e3e;margin-top:8px;padding-top:8px">'+
     addFormBtn('#f0a060','showAddForm(\'expWood\')','Добавить расход Дерево')+
@@ -4488,16 +4488,24 @@ function svItemLookup(id){
   var artEl=document.getElementById('svAdd_'+id+'_art');
   var nameEl=document.getElementById('svAdd_'+id+'_name');
   var priceEl=document.getElementById('svAdd_'+id+'_price');
+  var speciesEl=document.getElementById('svAdd_'+id+'_species');
   var hintEl=document.getElementById('svAddHint_'+id);
   if(!artEl) return;
   var num=artEl.value.trim();
   if(!num){ if(hintEl) hintEl.style.display='none'; return; }
-  var items=getItemsBase();
-  var found=items.find(function(it){ return String(it.num)===num; });
+  var shopNm = (_currentShiftView&&_currentShiftView.shopName) || (session&&session.shopName);
+  var stockEntry = typeof stockGetByNum==='function' ? stockGetByNum(shopNm, num) : null;
+  var found = stockEntry
+    ? {name:stockEntry.name, price:stockEntry.price, species:stockEntry.species, qty:stockEntry.qty, fromStock:true}
+    : getItemsBase().find(function(it){ return String(it.num)===num; });
   if(found){
     if(nameEl) nameEl.value=found.name||'';
     if(priceEl && !priceEl.value) priceEl.value=found.price||'';
-    if(hintEl){ hintEl.style.display='block'; hintEl.style.color='#60f090'; hintEl.textContent='✓ '+(found.name||''); }
+    if(speciesEl && !speciesEl.value && found.species) speciesEl.value=found.species;
+    if(hintEl){
+      hintEl.style.display='block'; hintEl.style.color='#60f090';
+      hintEl.textContent='✓ '+(found.name||'')+(found.fromStock&&found.qty!=null?' · в наличии: '+found.qty+' шт.':'');
+    }
     svItemCalc(id);
   } else {
     if(hintEl){ hintEl.style.display='block'; hintEl.style.color='#f06060'; hintEl.textContent='⚠ Артикул не найден — заполните вручную'; }
@@ -4988,8 +4996,9 @@ function svAddWo(type){
   var id = isWood?'woWood':'woDr';
   var row = _svItemRow(id);
   if(!row.name){showToast('Укажите наименование');return;}
+  var reason = _svVal('svAdd_'+id+'_reason').trim();
+  if(!reason){showToast('Укажите причину списания — у любого списания должна быть причина');return;}
   if(row.species) saveSpecies(row.species);
-  var reason = _svVal('svAdd_'+id+'_reason');
   if(isWood){
     var arr = _currentShiftView.goodsWriteoffs||[];
     arr.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, reason:reason});
