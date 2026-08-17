@@ -170,6 +170,11 @@ function _renderSaleCatalogPicker(){
   var body = !catNames.length ? '<div style="font-size:12px;color:#8888aa;padding:10px 0">Ничего не найдено</div>' :
     catNames.map(function(cat){
       var list = groups[cat].slice().sort(function(a,b){
+        if(isDr){
+          var pa=a.price||0, pb=b.price||0;
+          if(pa!==pb) return pa-pb;
+          return (a.name||'').toLowerCase().localeCompare((b.name||'').toLowerCase(),'ru');
+        }
         var na=(a.name||'').toLowerCase(), nb=(b.name||'').toLowerCase();
         if(na!==nb) return na.localeCompare(nb,'ru');
         return (a.price||0)-(b.price||0);
