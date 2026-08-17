@@ -135,12 +135,18 @@ function openSaleCatalogPicker(){
   }
   window._scpAllItems = items;
   window._scpQuery = '';
+  window._scpCatOpen = {};
   _renderSaleCatalogPicker();
   overlay.classList.add('open');
   setTimeout(function(){ var inp=document.getElementById('scpSearch'); if(inp) inp.focus(); }, 50);
 }
 function _scpFilterInput(val){
   window._scpQuery = (val||'').toLowerCase().trim();
+  _renderSaleCatalogPicker();
+}
+function _scpToggleCat(cat){
+  window._scpCatOpen = window._scpCatOpen || {};
+  window._scpCatOpen[cat] = !(window._scpCatOpen[cat]===true);
   _renderSaleCatalogPicker();
 }
 function _renderSaleCatalogPicker(){
@@ -160,6 +166,7 @@ function _renderSaleCatalogPicker(){
     if(b==='Без категории') return -1;
     return a.localeCompare(b,'ru');
   });
+  window._scpCatOpen = window._scpCatOpen || {};
   var body = !catNames.length ? '<div style="font-size:12px;color:#8888aa;padding:10px 0">Ничего не найдено</div>' :
     catNames.map(function(cat){
       var list = groups[cat].slice().sort(function(a,b){
@@ -167,8 +174,13 @@ function _renderSaleCatalogPicker(){
         if(na!==nb) return na.localeCompare(nb,'ru');
         return (a.price||0)-(b.price||0);
       });
-      return '<div style="font-size:11px;color:#c8f060;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:10px 0 4px">'+cat+'</div>'+
-        list.map(function(it){
+      var open = !!q || window._scpCatOpen[cat]===true;
+      var header = '<div onclick="_scpToggleCat(\''+cat.replace(/'/g,"\\'")+'\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:9px 10px;margin:8px 0 4px;background:#1a1a22;border-radius:8px">'+
+        '<span style="font-size:11px;color:#c8f060;font-weight:700;text-transform:uppercase;letter-spacing:.5px">'+cat+' ('+list.length+')</span>'+
+        '<span style="color:#8888aa;font-size:11px">'+(open?'▾':'▸')+'</span>'+
+      '</div>';
+      if(!open) return header;
+      return header + list.map(function(it){
           var priceStr = isDr ? (' · '+Math.round(it.price||0).toLocaleString('ru-RU')+'₽'+(it.article?' · №'+it.article:'')) : '';
           return '<div onclick="_scpPick(\''+(it.name||'').replace(/'/g,"\\'")+'\','+(it.price||0)+',\''+(it.article||'').replace(/'/g,"\\'")+'\')" '+
             'style="padding:9px 10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:5px;cursor:pointer;font-size:13px">'+
