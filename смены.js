@@ -26,7 +26,7 @@ function editJournalSale(id){
     var di=document.getElementById('discInput'); if(di) di.value=entry.discount;
     var sd=document.getElementById('saleDiscount'); if(sd) sd.value=entry.discount;
   }
-  setDiscCategory(entry.discCategory||'derevo');
+  setDiscCategory(entry.discCategory||'derevo', true);
   var pmEl = document.querySelector('#saleMo .pc[onclick*="\''+(entry.payMethod||'cash')+'\'"]');
   setPayM(entry.payMethod||'cash', pmEl||document.querySelector('#saleMo .pc'));
   if(entry.payMethod==='mixed'){
@@ -72,7 +72,7 @@ function svEditSale(idx){
     var di=document.getElementById('discInput'); if(di) di.value=entry.discount;
     var sd=document.getElementById('saleDiscount'); if(sd) sd.value=entry.discount;
   }
-  setDiscCategory(entry.discCategory||'derevo');
+  setDiscCategory(entry.discCategory||'derevo', true);
   var pmEl = document.querySelector('#saleMo .pc[onclick*="\''+(entry.payMethod||'cash')+'\'"]');
   setPayM(entry.payMethod||'cash', pmEl||document.querySelector('#saleMo .pc'));
   if(entry.payMethod==='mixed'){

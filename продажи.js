@@ -1,4 +1,5 @@
 let saleItems = [], payMethod = 'cash', staffPayMethod = 'cash', discType = 'pct', discCategory = 'derevo';
+var _discCategoryChosen = false;
 function siCalcAmt(){
   var price=parseFloat(gv('siPrice'))||0, qty=parseFloat(gv('siQty'))||1;
   var amtEl=document.getElementById('siAmt'); if(amtEl) amtEl.value = (price*qty)||'';
@@ -493,8 +494,9 @@ function siEditItem(i){
   }
   showToast('✏️ Исправьте поля и нажмите ＋');
 }
-function setDiscCategory(cat){
+function setDiscCategory(cat, explicit){
   discCategory = cat;
+  if(explicit) _discCategoryChosen = true;
   ['derevo','dr'].forEach(function(c){
     var btn = document.getElementById('discCat_'+c);
     if(!btn) return;
@@ -505,13 +507,42 @@ function setDiscCategory(cat){
     btn.style.borderColor = active ? '#c8f060' : '#2e2e3e';
     btn.style.fontWeight = active ? '700' : '600';
   });
+  _siDiscMismatchCheck();
 }
 function updateDiscCategoryVisibility(){
   var block = document.getElementById('discCategoryBlock'); if(!block) return;
   var hasWood = saleItems.some(function(it){ return it.goodsType!=='dr'; });
   var hasDr = saleItems.some(function(it){ return it.goodsType==='dr'; });
-  block.style.display = (hasWood && hasDr) ? 'block' : 'none';
-  if(!(hasWood && hasDr)) setDiscCategory('derevo');
+  var ambiguous = hasWood && hasDr;
+  var wasVisible = block.style.display==='block';
+  block.style.display = ambiguous ? 'block' : 'none';
+  if(!ambiguous){
+    setDiscCategory(hasDr?'dr':'derevo', true);
+  } else if(!wasVisible){
+    _discCategoryChosen = false;
+    setDiscCategory(null);
+  }
+  _siDiscMismatchCheck();
+}
+function _siDiscMismatchCheck(){
+  var hintEl = document.getElementById('discCatMismatch');
+  if(!hintEl) return;
+  var block = document.getElementById('discCategoryBlock');
+  if(!block || block.style.display==='none'){ hintEl.style.display='none'; return; }
+  var disc = parseFloat(gv('saleDiscount'))||0;
+  if(!disc){ hintEl.style.display='none'; return; }
+  var otherCat = discCategory==='dr' ? 'derevo' : 'dr';
+  var match = saleItems.find(function(it){
+    var amt = it.amt!=null?it.amt:it.price*(it.qty||1);
+    return (it.goodsType==='dr'?'dr':'derevo')===otherCat && Math.abs(amt-disc)<0.5;
+  });
+  if(match && discCategory){
+    var catLabel = otherCat==='dr' ? 'ДР Товар' : 'Дерево';
+    hintEl.style.display='block';
+    hintEl.textContent = '⚠️ Скидка '+fmt(disc)+' совпадает с ценой позиции «'+match.name+'» ('+catLabel+') — возможно, скидку нужно отнести на '+catLabel+'?';
+  } else {
+    hintEl.style.display='none';
+  }
 }
 function setDiscType(type){
   discType=type;
@@ -530,6 +561,7 @@ function calcDiscountFromInput(){
 function calcSaleTotal(){
   const total=saleItems.reduce((s,it)=>s+(it.amt!=null?it.amt:it.price*(it.qty||1)),0), disc=parseFloat(gv('saleDiscount'))||0;
   const el=document.getElementById('saleFinal'); if(el)el.textContent=fmt(Math.max(0,total-disc));
+  _siDiscMismatchCheck();
 }
 var _orderChannel = 'Telegram';
 function setPayM(m,el){
@@ -585,6 +617,14 @@ function saveSale(){
   }
 }
 function _saveSaleInner(){
+  const _discCheckAmt=parseFloat(gv('saleDiscount'))||0;
+  const _hasWoodChk=saleItems.some(function(it){ return it.goodsType!=='dr'; });
+  const _hasDrChk=saleItems.some(function(it){ return it.goodsType==='dr'; });
+  if(_hasWoodChk && _hasDrChk && _discCheckAmt>0 && !_discCategoryChosen){
+    _savingSale=false;
+    showToast('⚠️ Укажите, к какой категории относится скидка — Дерево или ДР Товар');
+    return;
+  }
   const total=saleItems.reduce((s,it)=>s+(it.amt!=null?it.amt:it.price*(it.qty||1)),0), disc=parseFloat(gv('saleDiscount'))||0, paid=Math.max(0,total-disc);
   let cashPart=0,cardPart=0;
   if(payMethod==='cash')cashPart=paid; else if(payMethod==='mixed'){cashPart=parseFloat(gv('mixCash'))||0;cardPart=parseFloat(gv('mixCard'))||0;} else cardPart=paid;
