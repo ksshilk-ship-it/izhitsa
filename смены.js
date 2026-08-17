@@ -3798,7 +3798,8 @@ function _renderShiftView(){
     if(r.goodsType === 'dr') return; // will show in ДР section
     var invFn = r.invId ? 'svOpenInvoiceFromReceive(\''+r.invId+'\')' : null;
     var amt = r.goodsEffect!=null ? r.goodsEffect : (r.amount||0);
-    rcvBody += rcvItem(r.sub||r.label||'Приход', r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#555568', amt, '#60f090', 'svDeleteJEntry(\'receive\','+i+')', 'svToggleEdit(\'jrcv\','+i+')', invFn);
+    var revBadge = r.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'';
+    rcvBody += rcvItem(revBadge+(r.sub||r.label||'Приход'), r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#555568', amt, '#60f090', 'svDeleteJEntry(\'receive\','+i+')', 'svToggleEdit(\'jrcv\','+i+')', invFn);
     if(_svEditTarget && _svEditTarget.kind==='jrcv' && _svEditTarget.idx===i){
       rcvBody += simpleEditForm('jrcv'+i, '#60f090', {kind:'jrcv', idx:i, saveFn:'svSaveJEntrySimple(\'receive\','+i+')', prefill:{sub:r.sub||r.label||'', amt:amt, goodsType:r.goodsType}});
     }
@@ -3819,7 +3820,8 @@ function _renderShiftView(){
     if(r.goodsType !== 'dr') return;
     var invFn = r.invId ? 'svOpenInvoiceFromReceive(\''+r.invId+'\')' : null;
     var amt = r.goodsDrEffect!=null ? r.goodsDrEffect : (r.goodsEffect||r.amount||0);
-    rcvBody += rcvItem(r.sub||r.label||'Приход ДР', r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#a060f0', amt, '#a060f0', 'svDeleteJEntry(\'receive\','+i+')', 'svToggleEdit(\'jrcv\','+i+')', invFn);
+    var revBadgeDr = r.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'';
+    rcvBody += rcvItem(revBadgeDr+(r.sub||r.label||'Приход ДР'), r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#a060f0', amt, '#a060f0', 'svDeleteJEntry(\'receive\','+i+')', 'svToggleEdit(\'jrcv\','+i+')', invFn);
     if(_svEditTarget && _svEditTarget.kind==='jrcv' && _svEditTarget.idx===i){
       rcvBody += simpleEditForm('jrcv'+i, '#a060f0', {kind:'jrcv', idx:i, saveFn:'svSaveJEntrySimple(\'receive\','+i+')', prefill:{sub:r.sub||r.label||'', amt:amt, goodsType:r.goodsType}});
     }
@@ -3870,7 +3872,7 @@ function _renderShiftView(){
     woodWoCount++;
   });
   woodWo.forEach(function(w, i){
-    var lbl = (w.article?'№'+w.article+' ':'')+(w.name||'Списание')+(w.species?' · '+w.species:'')+(w.qty?' × '+w.qty:'');
+    var lbl = (w.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'')+(w.article?'№'+w.article+' ':'')+(w.name||'Списание')+(w.species?' · '+w.species:'')+(w.qty?' × '+w.qty:'');
     var sub = '🌳 Дерево'+(w.price?' · '+f(w.price)+'/шт':'')+(w.reason?' · '+w.reason:'');
     woBody += woItem(lbl, sub, '#555568', w.amt||0, 'svDeleteWoodWo('+i+')', 'svToggleEdit(\'woWoodArr\','+i+')');
     if(_svEditTarget && _svEditTarget.kind==='woWoodArr' && _svEditTarget.idx===i){
@@ -3882,7 +3884,7 @@ function _renderShiftView(){
   woBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
   var drWoCount = 0;
   drWo.forEach(function(w, i){
-    var lbl = (w.article?'№'+w.article+' ':'')+(w.name||'Списание ДР')+(w.species?' · '+w.species:'')+(w.qty?' × '+w.qty:'');
+    var lbl = (w.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'')+(w.article?'№'+w.article+' ':'')+(w.name||'Списание ДР')+(w.species?' · '+w.species:'')+(w.qty?' × '+w.qty:'');
     var sub = '🛍 ДР Товар'+(w.price?' · '+f(w.price)+'/шт':'')+(w.reason?' · '+w.reason:'');
     woBody += woItem(lbl, sub, '#a060f0', w.amt||0, 'svDeleteDrWo('+i+')', 'svToggleEdit(\'woDrArr\','+i+')');
     if(_svEditTarget && _svEditTarget.kind==='woDrArr' && _svEditTarget.idx===i){
