@@ -4023,6 +4023,10 @@ function _renderShiftView(){
     if(opts.extra){
       html += '<div style="margin-bottom:6px"><div class="u-fs10-gray-mb3">'+opts.extra.label+'</div>'+
         '<input class="fi u-inp-compact" id="svAdd_'+id+'_'+opts.extra.id+'" placeholder="'+opts.extra.placeholder+'"></div>';
+      html += '<label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer">'+
+        '<input type="checkbox" id="svAdd_'+id+'_reval" style="width:16px;height:16px;flex-shrink:0">'+
+        '<span style="font-size:11px;color:#f0a060;font-weight:700">🔄 Это переоценка — легко найти в истории</span>'+
+      '</label>';
     }
     html += '<div id="svAddHint_'+id+'" style="font-size:10px;color:#8888aa;margin-bottom:6px;display:none"></div>';
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px">'+
@@ -4057,7 +4061,7 @@ function _renderShiftView(){
     addFormBtn('#60f090','showAddForm(\'rcvWood\')','Добавить приход Дерево (1 позиция)')+
     itemForm('rcvWood','#60f090',{goodsType:'derevo',extra:{id:'from',label:'Откуда / поставщик',placeholder:'необязательно'},saveFn:'svAddRcv(\'wood\')'})+
     addFormBtn('#a060f0','showAddForm(\'rcvDr\')','Добавить приход ДР (1 позиция)')+
-    itemForm('rcvDr','#a060f0',{goodsType:'dr',saveFn:'svAddRcv(\'dr\')'})+
+    itemForm('rcvDr','#a060f0',{goodsType:'dr',extra:{id:'from',label:'Откуда / поставщик',placeholder:'необязательно'},saveFn:'svAddRcv(\'dr\')'})+
     addFormBtn('#60c8f0','svShowInvoicePicker()','Принять накладную целиком')+
     '<div id="svInvoicePicker" style="display:none;background:#0c1a20;border:1px solid #60c8f0;border-radius:10px;padding:10px;margin-top:8px"></div>'+
     addFormBtn('#f0c060','svOpenManualInvForm()','Внести накладную вручную')+
@@ -4313,12 +4317,12 @@ function _addReceiveToShift(shift, items, goodsType, opts){
   var totalAmt = items.reduce(function(sum,it){ return sum+(it.price||0)*(it.qty||1); },0);
   var rcvEntry = {
     id: uid(), type:'receive', ts: shift.date+'T'+(new Date().toTimeString().slice(0,8)), icon:'📥',
-    label: opts.invNum ? ('Приёмка '+opts.invNum+(isDr?' (ДР)':'')) : ('Приход'+(isDr?' (ДР)':'')),
+    label: (opts.isRevaluation?'🔄 ПЕРЕОЦЕНКА · ':'')+(opts.invNum ? ('Приёмка '+opts.invNum+(isDr?' (ДР)':'')) : ('Приход'+(isDr?' (ДР)':''))),
     sub: items.length+' изд.'+(opts.from?' · от '+opts.from:'')+(opts.subSuffix?(' · '+opts.subSuffix):''),
     amount: totalAmt, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
     goodsType: goodsType,
     goodsEffect: isDr?0:totalAmt, goodsDrEffect: isDr?totalAmt:0,
-    items: items
+    items: items, isRevaluation: !!opts.isRevaluation
   };
   if(opts.invId) rcvEntry.invId = opts.invId;
   var jnl = shift.journal||[];
@@ -4985,11 +4989,17 @@ function svAddRcv(type){
   if(!row.name){showToast('Укажите наименование');return;}
   if(row.art) autoSaveToItemBase(row.name, row.art, row.price, isWood?'derevo':'dr');
   if(row.species) saveSpecies(row.species);
-  var from = isWood ? _svVal('svAdd_rcvWood_from') : '';
+  var from = _svVal('svAdd_'+id+'_from');
+  var isReval = !!(document.getElementById('svAdd_'+id+'_reval')||{}).checked;
   var item = {name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty};
-  _addReceiveToShift(_currentShiftView, [item], isWood?'derevo':'dr', {from: from});
+  _addReceiveToShift(_currentShiftView, [item], isWood?'derevo':'dr', {from: from, isRevaluation: isReval});
+  if(isReval){
+    logAction('REVALUATION', {direction:'receive', goodsType:isWood?'derevo':'dr', name:row.name, article:row.art,
+      price:row.price, qty:row.qty, amount:(row.amt||row.price*row.qty||0), from:from,
+      shop:_currentShiftView.shopName, date:_currentShiftView.date});
+  }
   svPersist(); _svOpenAccs['acc_rcv']=true; _renderShiftView();
-  showToast('✅ Приход добавлен');
+  showToast('✅ Приход добавлен'+(isReval?' (переоценка)':''));
 }
 function svAddWo(type){
   var isWood = type==='wood';
@@ -4998,18 +5008,26 @@ function svAddWo(type){
   if(!row.name){showToast('Укажите наименование');return;}
   var reason = _svVal('svAdd_'+id+'_reason').trim();
   if(!reason){showToast('Укажите причину списания — у любого списания должна быть причина');return;}
+  var isReval = !!(document.getElementById('svAdd_'+id+'_reval')||{}).checked;
   if(row.species) saveSpecies(row.species);
+  var amt = row.amt || (row.price*row.qty) || 0;
   if(isWood){
     var arr = _currentShiftView.goodsWriteoffs||[];
-    arr.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, reason:reason});
+    arr.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, reason:reason, isRevaluation:isReval});
     _currentShiftView.goodsWriteoffs = arr;
   } else {
     var arr2 = _currentShiftView.drGoodsWriteoffs||[];
-    arr2.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, reason:reason});
+    arr2.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, reason:reason, isRevaluation:isReval});
     _currentShiftView.drGoodsWriteoffs = arr2;
   }
+  logWriteoff(reason, amt, _currentShiftView.shopName);
+  if(isReval){
+    logAction('REVALUATION', {direction:'writeoff', goodsType:isWood?'derevo':'dr', name:row.name, article:row.art,
+      price:row.price, qty:row.qty, amount:amt, reason:reason,
+      shop:_currentShiftView.shopName, date:_currentShiftView.date});
+  }
   svPersist(); _svOpenAccs['acc_wo']=true; _renderShiftView();
-  showToast('✅ Списание добавлено');
+  showToast('✅ Списание добавлено'+(isReval?' (переоценка)':''));
 }
 function svAddExp(type){
   var isWood = type==='wood';

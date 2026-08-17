@@ -2617,11 +2617,15 @@ function renderAdminRcvWo(){
         var found = allInvCache.find(function(i){ return (i.id||i._id)===e.invId; });
         if(found&&found.num) invNum = found.num;
       }
-      rows.push({shop:sn, date:shDate, ts:e.ts||shDate, label:invNum?'Приёмка '+invNum:(e.label||e.sub||''), sub:e.sub||'', amount:amt, goodsType:e.goodsType||'derevo', invId:e.invId||null, entryId:e.id||null, shiftId:sh.id||sh._id||null, items:e.items||[], reason:e.reason||''});
+      rows.push({shop:sn, date:shDate, ts:e.ts||shDate, label:invNum?'Приёмка '+invNum:(e.label||e.sub||''), sub:e.sub||'', amount:amt, goodsType:e.goodsType||'derevo', invId:e.invId||null, entryId:e.id||null, shiftId:sh.id||sh._id||null, items:e.items||[], reason:e.reason||'', isRevaluation:!!e.isRevaluation});
     });
     if(type==='receive'){
-      (sh.goodsReceives||[]).forEach(function(r){ rows.push({shop:sn,date:shDate,ts:shDate,label:'Приход Дерево',sub:r.name||'',amount:r.amt||r.amount||0,goodsType:'derevo',items:[]}); });
-      (sh.drGoodsReceives||[]).forEach(function(r){ rows.push({shop:sn,date:shDate,ts:shDate,label:'Приход ДР',sub:r.name||'',amount:r.amt||r.amount||0,goodsType:'dr',items:[]}); });
+      (sh.goodsReceives||[]).forEach(function(r){ rows.push({shop:sn,date:shDate,ts:shDate,label:'Приход Дерево',sub:r.name||'',amount:r.amt||r.amount||0,goodsType:'derevo',items:[],isRevaluation:!!r.isRevaluation}); });
+      (sh.drGoodsReceives||[]).forEach(function(r){ rows.push({shop:sn,date:shDate,ts:shDate,label:'Приход ДР',sub:r.name||'',amount:r.amt||r.amount||0,goodsType:'dr',items:[],isRevaluation:!!r.isRevaluation}); });
+    }
+    if(type==='writeoff'){
+      (sh.goodsWriteoffs||[]).forEach(function(r){ rows.push({shop:sn,date:shDate,ts:shDate,label:'Списание Дерево',sub:r.name||'',amount:r.amt||(r.price*r.qty)||0,goodsType:'derevo',items:[],reason:r.reason||'',isRevaluation:!!r.isRevaluation}); });
+      (sh.drGoodsWriteoffs||[]).forEach(function(r){ rows.push({shop:sn,date:shDate,ts:shDate,label:'Списание ДР',sub:r.name||'',amount:r.amt||(r.price*r.qty)||0,goodsType:'dr',items:[],reason:r.reason||'',isRevaluation:!!r.isRevaluation}); });
     }
   });
   rows.sort(function(a,b){ return (b.ts||b.date).localeCompare(a.ts||a.date); });
@@ -2651,13 +2655,14 @@ function renderAdminRcvWo(){
     var gtColor=r.goodsType==='dr'?'#a060f0':'#60f090';
     var gtLabel=r.goodsType==='dr'?'🛍 ДР':'🌳';
     var timeStr=r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'';
-    return '<div style="background:#13131a;border:1px solid #2a2a3a;border-radius:10px;padding:10px 12px;margin-bottom:6px">'+
+    return '<div style="background:#13131a;border:1px solid '+(r.isRevaluation?'#f0a060':'#2a2a3a')+';border-radius:10px;padding:10px 12px;margin-bottom:6px">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
         '<div style="flex:1">'+
           '<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px">'+
             '<span style="font-size:10px;font-weight:700;color:'+gtColor+'">'+gtLabel+'</span>'+
             '<span class="u-fs10-gray">'+r.shop+'</span>'+
             (timeStr?'<span style="font-size:10px;color:#606080">· '+timeStr+'</span>':'')+
+            (r.isRevaluation?'<span style="font-size:10px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:6px;padding:1px 6px">🔄 ПЕРЕОЦЕНКА</span>':'')+
           '</div>'+
           '<div class="u-fs13-bold">'+r.label+'</div>'+
           (r.sub&&r.sub!==r.label?'<div class="u-fs11-gray">'+r.sub+'</div>':'')+
