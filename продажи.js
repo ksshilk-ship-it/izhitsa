@@ -38,7 +38,10 @@ function siAutoDetectAndSetType(name){
   }
 }
 function getSiSpeciesList(){
-  return _siItemGoodsType==='dr' ? getRefBook('iz_dr_species').map(function(g){return g.name||g;}) : getSpecies();
+  if(_siItemGoodsType!=='dr') return getSpecies();
+  var names = getRefBook('iz_dr_species').map(function(g){return g.name||g;}).filter(Boolean);
+  names.sort(function(a,b){ return a.toLowerCase().localeCompare(b.toLowerCase(),'ru'); });
+  return names;
 }
 function siAddToSpecies(inputId){
   var el=document.getElementById(inputId); var val=(el&&el.value||'').trim();

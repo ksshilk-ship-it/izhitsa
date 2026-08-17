@@ -2101,6 +2101,7 @@ function getSpecies() {
   var names = materials.map(function(m){ return (m && m.name) || (typeof m==='string' ? m : ''); }).filter(Boolean);
   var legacy = JSON.parse(localStorage.getItem('iz_species')||'[]');
   legacy.forEach(function(s){ if(s && names.indexOf(s)<0) names.push(s); });
+  names.sort(function(a,b){ return a.toLowerCase().localeCompare(b.toLowerCase(),'ru'); });
   return names;
 }
 function saveSpecies(name) {
