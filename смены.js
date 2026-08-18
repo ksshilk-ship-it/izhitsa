@@ -4013,10 +4013,7 @@ function _renderShiftView(){
   function itemForm(id, color, opts){
     opts = opts || {};
     var goodsType = opts.goodsType || 'derevo';
-    var species = getSpecies();
-    var dlSpecies = 'dl_species_'+id;
     var html = '<div id="svAddForm_'+id+'" style="display:none;background:#13131a;border:1px solid '+color+';border-radius:10px;padding:10px;margin-top:8px">';
-    html += '<datalist id="'+dlSpecies+'">'+species.slice(0,80).map(function(sp){ return '<option value="'+sp+'">'; }).join('')+'</datalist>';
     if(opts.who){
       html += '<div style="margin-bottom:6px"><div class="u-fs10-gray-mb3">Сотрудник</div>'+
         '<input class="fi u-inp-compact" id="svAdd_'+id+'_who" placeholder="Имя"></div>';
@@ -4029,8 +4026,11 @@ function _renderShiftView(){
           'oninput="svItemNameSuggest(\''+id+'\',\''+goodsType+'\')" onfocus="svItemNameSuggest(\''+id+'\',\''+goodsType+'\')" onblur="svItemNameHideSugg(\''+id+'\')">'+
         '<div id="svAdd_'+id+'_name_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'+
       '</div>'+
-      '<div style="flex:0 0 90px"><div class="u-fs10-gray-mb3">Порода</div>'+
-        '<input class="fi u-inp-compact" id="svAdd_'+id+'_species" list="'+dlSpecies+'" placeholder="Порода"></div>'+
+      '<div style="flex:0 0 90px;position:relative"><div class="u-fs10-gray-mb3">Порода</div>'+
+        '<input class="fi u-inp-compact" id="svAdd_'+id+'_species" placeholder="Порода" autocomplete="off" '+
+          'oninput="svSpeciesSuggest(\''+id+'\')" onfocus="svSpeciesSuggest(\''+id+'\')" onblur="psjHideSugg(\'svAdd_'+id+'_species\')">'+
+        '<div id="svAdd_'+id+'_species_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'+
+      '</div>'+
     '</div>';
     html += '<div style="display:flex;gap:5px;margin-bottom:6px">'+
       '<div style="flex:1"><div class="u-fs10-gray-mb3">Цена за ед.</div>'+
@@ -4527,6 +4527,31 @@ function svItemNamePick(id, val){
 }
 function svItemNameHideSugg(id){
   setTimeout(function(){ var box=document.getElementById('svAdd_'+id+'_name_sugg'); if(box) box.style.display='none'; }, 150);
+}
+function svSpeciesSuggest(id){
+  var input = document.getElementById('svAdd_'+id+'_species');
+  var box = document.getElementById('svAdd_'+id+'_species_sugg');
+  if(!input || !box) return;
+  var val = (input.value||'').trim().toLowerCase();
+  if(!val){ box.style.display='none'; box.innerHTML=''; return; }
+  var matches = getSpecies().filter(function(s){ return s.toLowerCase().indexOf(val)>=0; });
+  matches.sort(function(a,b){
+    var ai=a.toLowerCase().indexOf(val), bi=b.toLowerCase().indexOf(val);
+    if(ai!==bi) return ai-bi;
+    return a.length-b.length;
+  });
+  matches = matches.slice(0,8);
+  if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.innerHTML = matches.map(function(m){
+    return '<div onpointerdown="event.preventDefault();svSpeciesPick(\''+id+'\',\''+m.replace(/'/g,"\\'")+'\')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m+'</div>';
+  }).join('');
+  box.style.display='block';
+}
+function svSpeciesPick(id, val){
+  var el = document.getElementById('svAdd_'+id+'_species');
+  if(el) el.value = val;
+  var box = document.getElementById('svAdd_'+id+'_species_sugg');
+  if(box) box.style.display='none';
 }
 function svItemLookup(id){
   var artEl=document.getElementById('svAdd_'+id+'_art');
