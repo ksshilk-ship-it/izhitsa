@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><title>Ижица — Магазин</title>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="стили.css?v=08.13.70">
+<link rel="stylesheet" href="стили.css?v=08.13.71">
   <link rel="manifest" href="manifest-shop.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -99,6 +99,7 @@
     </div>
     <div id="journalBtns1" style="display:flex;gap:7px;margin-bottom:8px">
       <button class="btn" style="margin:0;flex:1;font-size:13px" onclick="openMo('saleMo');resetSaleForm()">＋ Продажа</button>
+      <button class="btn sec" style="margin:0;flex:0 0 auto;font-size:13px;padding:12px 14px;border-color:#60c8f0;color:#60c8f0" onclick="openReturnMo()">↩️ Возврат</button>
     </div>
     <div id="journalBtns2" style="display:flex;gap:7px;margin-bottom:10px">
       <button id="btnExpense" class="btn" style="margin:0;flex:1;font-size:12px;padding:12px 4px;background:#2a1e14;border:1px solid #f0a060;color:#f0a060" onclick="openExpenseMo()">💸 Расходы</button>
@@ -1451,6 +1452,62 @@
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('woMo')">Отмена</button>
   </div>
 </div>
+<div class="mo" id="retMo">
+  <div class="md"><div class="mh"></div><div class="mt">↩️ Возврат</div>
+    <div class="fg"><label class="fl">Причина возврата (для всех позиций ниже)</label><input class="fi" id="retReason" placeholder="Например: не подошёл размер, брак"></div>
+    <div class="ctitle">Возвращаемые позиции</div>
+    <div id="retItemsDisplay" style="margin-bottom:10px"></div>
+    <div style="background:#0f0f13;border-radius:12px;padding:10px;margin-bottom:12px">
+      <div class="fg"><label class="fl">Артикул</label><input class="fi" id="retNum" placeholder="001" oninput="lookupReturnItem(this.value)"></div>
+      <div class="fg" style="margin-bottom:8px;position:relative">
+        <label class="fl">Наименование</label>
+        <input class="fi" id="retName" placeholder="Изделие..." autocomplete="off"
+          oninput="psjSuggest('retName',getItemNames(),'retPickName')"
+          onfocus="psjSuggest('retName',getItemNames(),'retPickName')"
+          onblur="psjHideSugg('retName')">
+        <div id="retName_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>
+      </div>
+      <div class="fg" style="margin-bottom:8px;position:relative">
+        <label class="fl">Порода дерева</label>
+        <input class="fi" id="retSpecies" placeholder="Порода" autocomplete="off"
+          oninput="psjSuggest('retSpecies',getSpecies(),'retPickSpecies')"
+          onfocus="psjSuggest('retSpecies',getSpecies(),'retPickSpecies')"
+          onblur="psjHideSugg('retSpecies')">
+        <div id="retSpecies_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>
+      </div>
+      <div class="fg" style="margin-bottom:0">
+        <label class="fl">Тип товара</label>
+        <div class="u-flex-g6">
+          <button type="button" id="retTypeDerevo" onclick="setReturnItemType('derevo')"
+            style="flex:1;padding:7px;border-radius:8px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-size:11px;font-weight:700;cursor:pointer">🌳 Дерево</button>
+          <button type="button" id="retTypeDr" onclick="setReturnItemType('dr')"
+            style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:11px;font-weight:600;cursor:pointer">🛍 ДР Товар</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <div class="fg" style="margin:0;flex:1"><label class="fl">Цена (₽)</label><input class="fi" type="text" id="retPrice" placeholder="0" inputmode="numeric" oninput="retCalcAmt()"></div>
+        <div class="fg" style="margin:0;width:80px"><label class="fl">Кол-во</label><input class="fi" type="text" id="retQty" placeholder="1" inputmode="numeric" oninput="retCalcAmt()"></div>
+      </div>
+      <div class="fg" style="margin:6px 0 0"><label class="fl">Сумма (₽)</label><input class="fi" type="text" id="retAmt" placeholder="0" inputmode="numeric" oninput="retCalcFromAmt()" style="border-color:#60c8f0;color:#60c8f0;font-weight:700"></div>
+      <button type="button" onclick="addReturnItem()" class="btn sec" style="font-size:12px;margin:8px 0 0;border-color:#60c8f0;color:#60c8f0">＋ Добавить позицию в возврат</button>
+    </div>
+    <div id="retTotalDisplay" style="display:none;justify-content:space-between;align-items:center;background:#0c1a20;border:1px solid #60c8f0;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-weight:700">
+      <span style="color:#8888aa;font-size:13px">Итого к возврату</span>
+      <span id="retTotalAmt" style="color:#60c8f0;font-size:16px"></span>
+    </div>
+    <div class="fg">
+      <label class="fl">Способ возврата денег</label>
+      <div class="u-flex-g6" style="flex-wrap:wrap">
+        <div class="pc active" id="retPcCash" onclick="setReturnRefundMethod('cash',this)">💵 Нал</div>
+        <div class="pc" onclick="setReturnRefundMethod('terminal',this)">💳 Терминал</div>
+        <div class="pc" onclick="setReturnRefundMethod('sbp',this)">📱 СБП</div>
+        <div class="pc" onclick="setReturnRefundMethod('transfer',this)">🏦 Перевод</div>
+      </div>
+    </div>
+    <button class="btn" style="background:#60c8f0;margin-top:10px" onclick="saveReturn()">Оформить возврат</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('retMo')">Отмена</button>
+  </div>
+</div>
 <div class="mo" id="woEditMo">
   <div class="md"><div class="mh"></div><div class="mt">Исправить списание</div>
     <div class="fg"><label class="fl">Причина</label><input class="fi" id="woEditReason" placeholder="Причина списания"></div>
@@ -1957,13 +2014,13 @@
 </div>
 <div class="toast" id="toast"></div>
 <!-- Firebase SDK загружается асинхронно через _loadFirebaseSDK() -->
-<script src="синхронизация.js?v=08.13.70"></script>
-<script src="смены.js?v=08.13.70"></script>
-<script src="отчеты.js?v=08.13.70"></script>
-<script src="продажи.js?v=08.13.70"></script>
-<script src="Склад.js?v=08.13.70"></script>
-<script src="прочее.js?v=08.13.70"></script>
-<script src="импорт.js?v=08.13.70"></script>
+<script src="синхронизация.js?v=08.13.71"></script>
+<script src="смены.js?v=08.13.71"></script>
+<script src="отчеты.js?v=08.13.71"></script>
+<script src="продажи.js?v=08.13.71"></script>
+<script src="Склад.js?v=08.13.71"></script>
+<script src="прочее.js?v=08.13.71"></script>
+<script src="импорт.js?v=08.13.71"></script>
 <script>
 _initFirebase(); // Firebase загружается асинхронно, не блокируя UI
 init();

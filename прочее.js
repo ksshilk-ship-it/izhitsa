@@ -1206,14 +1206,14 @@ var _alFrom = '', _alTo = '';
 var _alShop = '';
 var _alRawLog = [];
 var _AL_LABELS = {
-  SALE: '🛒 Продажа', WRITEOFF: '🗑 Списание', RECEIVE: '📥 Приход', EXPENSE: '💸 Расход', SHIFT_OPEN: '📋 Открытие смены',
+  SALE: '🛒 Продажа', WRITEOFF: '🗑 Списание', RECEIVE: '📥 Приход', RETURN: '↩️ Возврат', EXPENSE: '💸 Расход', SHIFT_OPEN: '📋 Открытие смены',
   JOURNAL_ENTRY_EDIT: '✏️ Правка записи', JOURNAL_ENTRY_DELETE: '❌ Удаление записи', JOURNAL_ENTRY_ADD_MISSED: '➕ Добавлена пропущенная запись',
   RECEIPT_DATE_MOVED: '📅 Перенос даты прихода', MORNING_ENTRY_SELF_FIX: '🔧 Продавец сам исправил остаток утра',
   GOODS_MORNING_EDIT: '📦 Админ поправил остаток товара', GOODS_CASCADE_RECALC: '🔄 Пересчёт остатков вперёд по датам',
   RESTORE_MODE_DUPLICATE_WARNING: '⚠️ Восстановление при уже существующей смене',
   REVALUATION: '🔄 ПЕРЕОЦЕНКА'
 };
-var _AL_ROUTINE = {SALE:1, WRITEOFF:1, RECEIVE:1, EXPENSE:1, SHIFT_OPEN:1};
+var _AL_ROUTINE = {SALE:1, WRITEOFF:1, RECEIVE:1, RETURN:1, EXPENSE:1, SHIFT_OPEN:1};
 function setAlPeriod(period, el){
   _alPeriod = period;
   ['week','month','custom'].forEach(function(p){

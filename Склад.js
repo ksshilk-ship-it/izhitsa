@@ -418,6 +418,157 @@ function saveWriteoff(){
   closeMo('woMo'); renderAll();
   showToast('🗑️ Списано '+count+(count===1?' позиция':' позиций')+' на '+fmt(total));
 }
+var _retItemGoodsType = 'derevo';
+var returnItems = [];
+var _returnRefundMethod = 'cash';
+function setReturnItemType(type){
+  _retItemGoodsType = type;
+  var bD=document.getElementById('retTypeDerevo'), bDr=document.getElementById('retTypeDr');
+  if(!bD||!bDr) return;
+  if(type==='derevo'){
+    bD.style.border='2px solid #c8f060'; bD.style.background='#1e2a14'; bD.style.color='#c8f060'; bD.style.fontWeight='700';
+    bDr.style.border='1px solid #2e2e3e'; bDr.style.background='#22222e'; bDr.style.color='#8888aa'; bDr.style.fontWeight='600';
+  } else {
+    bDr.style.border='2px solid #a060f0'; bDr.style.background='#1e1a2e'; bDr.style.color='#a060f0'; bDr.style.fontWeight='700';
+    bD.style.border='1px solid #2e2e3e'; bD.style.background='#22222e'; bD.style.color='#8888aa'; bD.style.fontWeight='600';
+  }
+}
+function retPickName(val){ var el=document.getElementById('retName'); if(el) el.value=val; var box=document.getElementById('retName_sugg'); if(box) box.style.display='none'; }
+function retPickSpecies(val){ var el=document.getElementById('retSpecies'); if(el) el.value=val; var box=document.getElementById('retSpecies_sugg'); if(box) box.style.display='none'; }
+function lookupReturnItem(num){
+  if(!num.trim()) return;
+  var items = JSON.parse(localStorage.getItem('iz_items')||'[]');
+  var found = items.find(function(i){ return String(i.num)===num.trim(); });
+  if(found){
+    var nameEl=document.getElementById('retName'), priceEl=document.getElementById('retPrice'), spEl=document.getElementById('retSpecies');
+    if(nameEl) nameEl.value = found.name||'';
+    if(priceEl) priceEl.value = found.price||'';
+    if(spEl) spEl.value = found.species||'';
+    if(found.category==='dr') setReturnItemType('dr'); else setReturnItemType('derevo');
+    retCalcAmt();
+  }
+}
+function retCalcAmt(){
+  var price=parseFloat(gv('retPrice'))||0, qty=parseFloat(gv('retQty'))||1;
+  var amtEl=document.getElementById('retAmt'); if(amtEl) amtEl.value = (price*qty)||'';
+}
+function retCalcFromAmt(){
+  var amt=parseFloat(gv('retAmt'))||0, qty=parseFloat(gv('retQty'))||1;
+  var priceEl=document.getElementById('retPrice'); if(priceEl && qty>0) priceEl.value = (amt/qty)||'';
+}
+function addReturnItem(){
+  const name=(gv('retName')||'').trim();
+  const amt=parseFloat(gv('retAmt'))||0;
+  if(!name){ showToast('Введите наименование'); return; }
+  if(!amt){ showToast('Введите сумму'); return; }
+  const isDr = _retItemGoodsType==='dr';
+  const species=(gv('retSpecies')||'').trim();
+  const price=parseFloat(gv('retPrice'))||0;
+  const qty=parseFloat(gv('retQty'))||1;
+  const num=(gv('retNum')||'').trim();
+  returnItems.push({id:uid(), num, name, species, price, qty, amt, goodsType: isDr?'dr':'derevo'});
+  ['retNum','retName','retSpecies','retAmt'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  var qtyEl=document.getElementById('retQty'); if(qtyEl) qtyEl.value='';
+  var priceEl=document.getElementById('retPrice'); if(priceEl) priceEl.value='';
+  setReturnItemType('derevo');
+  renderReturnItems();
+}
+function removeReturnItem(i){
+  returnItems.splice(i,1);
+  renderReturnItems();
+}
+function renderReturnItems(){
+  var c=document.getElementById('retItemsDisplay');
+  var totalEl=document.getElementById('retTotalDisplay'), totalAmtEl=document.getElementById('retTotalAmt');
+  if(!c) return;
+  if(!returnItems.length){
+    c.innerHTML='';
+    if(totalEl) totalEl.style.display='none';
+    return;
+  }
+  c.innerHTML=returnItems.map(function(it,i){
+    var typeBadge = it.goodsType==='dr'
+      ? '<span style="font-size:10px;padding:1px 6px;border-radius:6px;background:#1e1a2e;color:#a060f0">🛍 ДР</span>'
+      : '<span style="font-size:10px;padding:1px 6px;border-radius:6px;background:#1e2a14;color:#c8f060">🌳 Дерево</span>';
+    var priceLine = (it.qty&&it.qty!==1) ? (fmt(it.price)+' × '+it.qty+' = '+fmt(it.amt)) : fmt(it.amt);
+    return '<div class="sir" style="border-color:#60c8f0;background:#22222e">'+
+      '<div class="sir-num" style="color:#8888aa">'+(it.num||'—')+'</div>'+
+      '<div class="sir-info"><div class="sir-name">'+it.name+(it.species?' <span style="color:#f0c060;font-size:11px">· '+it.species+'</span>':'')+' '+typeBadge+'</div>'+
+        '<div class="sir-price" style="color:#60c8f0">'+priceLine+'</div>'+
+      '</div>'+
+      '<div style="display:flex;gap:4px;flex-shrink:0">'+
+        '<button class="sir-del" onclick="removeReturnItem('+i+')">✕</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  var total = returnItems.reduce(function(s,it){ return s+(it.amt||0); },0);
+  if(totalEl){ totalEl.style.display='flex'; }
+  if(totalAmtEl) totalAmtEl.textContent = fmt(total);
+}
+function setReturnRefundMethod(m, el){
+  _returnRefundMethod = m;
+  document.querySelectorAll('#retMo .pc').forEach(function(p){ p.classList.remove('active'); });
+  if(el) el.classList.add('active');
+}
+function resetReturnForm(){
+  returnItems=[];
+  ['retNum','retName','retSpecies','retAmt','retReason'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  var qtyEl=document.getElementById('retQty'); if(qtyEl) qtyEl.value='';
+  var priceEl=document.getElementById('retPrice'); if(priceEl) priceEl.value='';
+  setReturnItemType('derevo');
+  _returnRefundMethod='cash';
+  document.querySelectorAll('#retMo .pc').forEach(function(p){ p.classList.remove('active'); });
+  var cashChip=document.getElementById('retPcCash'); if(cashChip) cashChip.classList.add('active');
+  renderReturnItems();
+}
+function openReturnMo(){
+  resetReturnForm();
+  openMo('retMo');
+}
+function stockApplyReturn(shopName, items){
+  if(!shopName) return;
+  items.forEach(function(it){
+    var artNum = it.num || it.article;
+    if(!artNum) artNum = _noArticleStockKey(it.name, it.price, it.species, it.goodsType);
+    if(!artNum) return;
+    stockUpdateQty(shopName, artNum, it.name, it.price, it.species, it.goodsType, it.size||'', (it.qty||1), null);
+  });
+}
+function saveReturn(){
+  var hasPendingFields = (gv('retName')||'').trim() || (gv('retAmt')||'').trim();
+  if(hasPendingFields){
+    addReturnItem();
+    if(!returnItems.length) return;
+  }
+  if(!returnItems.length){ showToast('Добавьте хотя бы одну позицию'); return; }
+  var reason = (gv('retReason')||'').trim();
+  if(!reason){ showToast('Укажите причину возврата'); return; }
+  var totalWood = returnItems.filter(function(it){ return it.goodsType!=='dr'; }).reduce(function(s,it){ return s+(it.amt||0); },0);
+  var totalDr = returnItems.filter(function(it){ return it.goodsType==='dr'; }).reduce(function(s,it){ return s+(it.amt||0); },0);
+  var total = totalWood+totalDr;
+  var isCash = _returnRefundMethod==='cash';
+  var namesPreview = returnItems.map(function(it){ return it.name; }).join(', ');
+  var sub = returnItems.length===1
+    ? ((returnItems[0].num?'№'+returnItems[0].num+' ':'')+returnItems[0].name+(returnItems[0].species?' · '+returnItems[0].species:'')+(returnItems[0].qty&&returnItems[0].qty!==1?' × '+returnItems[0].qty:'')+' · '+reason)
+    : (returnItems.length+' позиций: '+namesPreview+' · '+reason);
+  var payLabels = {cash:'💵 Нал',terminal:'💳 Терминал',sbp:'📱 СБП',transfer:'🏦 Перевод'};
+  var entry = {id:uid(), type:'return', ts:_workingNowISO(), icon:'↩️', label:'Возврат',
+    sub:sub+' · возврат '+(payLabels[_returnRefundMethod]||_returnRefundMethod),
+    items: returnItems, reason: reason, refundMethod: _returnRefundMethod,
+    goodsType: (totalWood&&totalDr)?'mixed':(totalDr?'dr':'derevo'),
+    amount: total, amtCls:'exp', amtSign:'−', staffEffect:0,
+    cashEffect: isCash?-totalWood:0, cardEffect: isCash?0:-totalWood,
+    cashDrEffect: isCash?-totalDr:0, cardDrEffect: isCash?0:-totalDr,
+    goodsEffect: totalWood, goodsDrEffect: totalDr};
+  journal.push(entry);
+  try{ _recordJournalEntryIndependently(entry, session&&session.shopName, 'return'); }catch(e){}
+  _backupCheckPassed = false;
+  try{ stockApplyReturn(session&&session.shopName, returnItems); }catch(e){}
+  logAction('RETURN', {reason:reason, amount:total, refundMethod:_returnRefundMethod, itemCount:returnItems.length, shop:session&&session.shopName});
+  saveJ(); resetReturnForm();
+  closeMo('retMo'); renderAll();
+  showToast('↩️ Возврат оформлен на '+fmt(total));
+}
 var _rcvGoodsType = 'derevo';
 function setRcvGoodsType(type, el){
   _rcvGoodsType = type;

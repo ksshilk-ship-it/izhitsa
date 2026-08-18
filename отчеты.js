@@ -9,6 +9,7 @@ function calcTotals(){
     goods+=(e.goodsEffect||0);
     cashDr+=(e.cashDrEffect||0); goodsDr+=(e.goodsDrEffect||0);
     if(e.type==='sale'){ revenue+=(e.amount||0); discount+=(e.discount||0); }
+    else if(e.type==='return'){ revenue-=(e.amount||0); }
   });
   return {cash,card,staff,goods,cashDr,goodsDr,revenue,discount};
 }
