@@ -4040,12 +4040,14 @@ function _renderShiftView(){
   function addFormBtn(color, onclick, label){
     return '<button onclick="'+onclick+'" style="width:100%;padding:8px;background:none;border:1px dashed '+color+';border-radius:9px;color:'+color+';font-size:12px;font-weight:700;cursor:pointer;margin-top:8px">+ '+label+'</button>';
   }
-  function addForm(id, color, fields, saveFn){
+  function addForm(id, color, fields, saveFn, opts){
+    opts = opts || {};
     var html = '<div id="svAddForm_'+id+'" style="display:none;background:#13131a;border:1px solid '+color+';border-radius:10px;padding:10px;margin-top:8px">';
     fields.forEach(function(fld){
       if(fld.type === 'select'){
+        var onchangeAttr = (opts.sellerAttrib && fld.id===(id+'Type')) ? ' onchange="_svExpTypeVis(\''+id+'\')"' : '';
         html += '<div style="margin-bottom:6px"><div class="u-fs10-gray-mb3">'+fld.label+'</div>'+
-          '<select id="svAdd_'+fld.id+'" class="fs" style="width:100%;margin:0;padding:8px;border-radius:8px;background:#1a1a22;border:1px solid #2e2e3e;color:#f0f0f8;font-size:12px">'+
+          '<select id="svAdd_'+fld.id+'" class="fs"'+onchangeAttr+' style="width:100%;margin:0;padding:8px;border-radius:8px;background:#1a1a22;border:1px solid #2e2e3e;color:#f0f0f8;font-size:12px">'+
           fld.options.map(function(o){ return '<option value="'+o.v+'">'+o.l+'</option>'; }).join('')+
           '</select></div>';
       } else {
@@ -4053,6 +4055,16 @@ function _renderShiftView(){
           '<input class="fi u-inp-compact" id="svAdd_'+fld.id+'" type="'+(fld.type||'text')+'" placeholder="'+(fld.placeholder||'')+'" '+(fld.inputmode?'inputmode="'+fld.inputmode+'"':'')+'></div>';
       }
     });
+    if(opts.sellerAttrib){
+      html += '<div id="svAdd_'+id+'_saBlock" style="display:none;margin-bottom:6px">'+
+        '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:6px">'+
+          '<input type="checkbox" id="svAdd_'+id+'_saToggle" onchange="_svToggleExpForSeller(\''+id+'\')" style="width:16px;height:16px;flex-shrink:0">'+
+          '<span style="font-size:11px;color:#60c8f0;font-weight:700">👤 Выдано другому продавцу</span>'+
+        '</label>'+
+        '<select id="svAdd_'+id+'_saSelect" class="fs" style="display:none;width:100%;margin:0 0 6px;padding:8px;border-radius:8px;background:#1a1a22;border:1px solid #2e2e3e;color:#f0f0f8;font-size:12px"></select>'+
+        '<div id="svAdd_'+id+'_saHint" style="display:none;font-size:10px;color:#8888aa;margin-bottom:6px">Сумма зачтётся в ЗП выбранного продавца, а не текущей смены</div>'+
+      '</div>';
+    }
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px">'+
       '<button onclick="document.getElementById(\'svAddForm_'+id+'\').style.display=\'none\'" style="padding:8px;background:none;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>'+
       '<button onclick="'+saveFn+'" style="padding:8px;background:'+color+';border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
@@ -4087,7 +4099,7 @@ function _renderShiftView(){
       ]},
       {id:'expWoodAmt',label:'Сумма, ₽',type:'number',inputmode:'numeric',placeholder:'0'},
       {id:'expWoodComment',label:'Комментарий',placeholder:'необязательно'}
-    ],'svAddExp(\'wood\')')+
+    ],'svAddExp(\'wood\')',{sellerAttrib:true})+
     addFormBtn('#a060f0','showAddForm(\'expDr\')','Добавить расход ДР')+
     addForm('expDr','#a060f0',[
       {id:'expDrType',label:'Тип',type:'select',options:[
@@ -5031,6 +5043,34 @@ function svAddWo(type){
   svPersist(); _svOpenAccs['acc_wo']=true; _renderShiftView();
   showToast('✅ Списание добавлено'+(isReval?' (переоценка)':''));
 }
+function _svExpTypeVis(id){
+  var typeEl = document.getElementById('svAdd_'+id+'Type');
+  var block = document.getElementById('svAdd_'+id+'_saBlock');
+  if(!typeEl || !block) return;
+  var show = typeEl.value==='zp' || typeEl.value==='travel';
+  block.style.display = show ? 'block' : 'none';
+  if(!show){
+    var toggle=document.getElementById('svAdd_'+id+'_saToggle'); if(toggle) toggle.checked=false;
+    _svToggleExpForSeller(id);
+  }
+}
+function _svToggleExpForSeller(id){
+  var toggle = document.getElementById('svAdd_'+id+'_saToggle');
+  var sel = document.getElementById('svAdd_'+id+'_saSelect');
+  var hint = document.getElementById('svAdd_'+id+'_saHint');
+  if(!toggle || !sel) return;
+  var checked = toggle.checked;
+  sel.style.display = checked ? 'block' : 'none';
+  if(hint) hint.style.display = checked ? 'block' : 'none';
+  if(checked){
+    var shopName = _currentShiftView && _currentShiftView.shopName;
+    var meName = _currentShiftView && (_currentShiftView.sellerName||_currentShiftView.seller);
+    var sellers = getSellers().filter(function(s){
+      return !s.shops || !s.shops.length || s.shops.indexOf(shopName)>=0;
+    }).filter(function(s){ return s.name!==meName; });
+    sel.innerHTML = sellers.map(function(s){ return '<option value="'+s.name.replace(/"/g,'&quot;')+'">'+s.name+'</option>'; }).join('');
+  }
+}
 function svAddExp(type){
   var isWood = type==='wood';
   var isStaff = type==='staff';
@@ -5039,15 +5079,19 @@ function svAddExp(type){
   var amt     = _svNum(fieldPrefix+'Amt');
   var comment = _svVal(fieldPrefix+'Comment');
   if(!amt){showToast('Укажите сумму');return;}
+  var isZpOrTravel = (expType==='zp'||expType==='travel');
+  var saToggle = document.getElementById(fieldPrefix+'_saToggle');
+  var saSelect = document.getElementById(fieldPrefix+'_saSelect');
+  var forSeller = (isZpOrTravel && saToggle && saToggle.checked && saSelect) ? (saSelect.value||'') : '';
   var jnl = _currentShiftView.journal||[];
   var gType = isStaff?'staff':(isWood?'wood':'dr');
-  var _expEntryAdm = {id:uid(),type:'expense',expType:expType,amount:amt,comment:comment,goodsType:gType,ts:_workingNowISO(),
+  var _expEntryAdm = {id:uid(),type:'expense',expType:expType,amount:amt,comment:comment,goodsType:gType,forSeller:(forSeller||null),ts:_workingNowISO(),
     cashEffect: (isWood&&!isStaff)?-amt:0, cashDrEffect: (!isWood&&!isStaff)?-amt:0, cardEffect:0, staffEffect: isStaff?-amt:0, goodsEffect:0};
   jnl.push(_expEntryAdm);
   _recordJournalEntryIndependently(_expEntryAdm, _currentShiftView.shopName, 'expense');
   _currentShiftView.journal = jnl;
   svPersist(); _svOpenAccs['acc_exp']=true; _renderShiftView();
-  showToast('✅ Расход добавлен');
+  showToast('✅ Расход добавлен'+(forSeller?' — зачтётся продавцу '+forSeller:''));
 }
 function svAddStaff(type){
   var isWood = type==='wood';
