@@ -1721,6 +1721,17 @@ function svRecoverSalesFromBackup(shiftId){
   var idx=shifts.findIndex(function(s){return (s.id||s._id)===shiftId;});
   if(idx<0){showToast('Смена не найдена');return;}
   var sh=shifts[idx];
+  showToast('🔍 Проверяю смену...');
+  db.collection('iz_shifts').where('shopName','==',sh.shopName).where('date','==',sh.date).get({source:'server'}).then(function(dupSnap){
+    var dupCount = 0;
+    dupSnap.forEach(function(d){ if(d.id!==shiftId) dupCount++; });
+    if(dupCount>0 && !confirm('⚠️ На '+sh.date+' в магазине «'+sh.shopName+'» есть ещё '+dupCount+' смен(а/ы) с той же датой. Подстраховка ищет записи по магазину и дате, а не по конкретной смене — восстановление может задвоиться между сменами. Сначала разберитесь с дублями смен, либо продолжайте на свой риск. Продолжить?')) return;
+    _svRecoverSalesFromBackupReal(shiftId, sh, shifts, idx);
+  }).catch(function(){
+    _svRecoverSalesFromBackupReal(shiftId, sh, shifts, idx);
+  });
+}
+function _svRecoverSalesFromBackupReal(shiftId, sh, shifts, idx){
   showToast('🔍 Сверяю с подстраховкой...');
   Promise.all([
     db.collection('iz_sales').where('shopName','==',sh.shopName).where('date','==',sh.date).get({source:'server'}),
