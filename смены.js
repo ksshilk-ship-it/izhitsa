@@ -3858,10 +3858,14 @@ function _renderShiftView(){
   writeoffs.forEach(function(w, i){
     var wItems = w.items||[];
     if(wItems.length > 0){
-      wItems.forEach(function(it){
+      wItems.forEach(function(it, wi){
         var lbl = (it.article||it.num?'№'+(it.article||it.num)+' ':'')+(it.name||'Списание')+(it.species?' · '+it.species:'')+(it.qty&&it.qty>1?' × '+it.qty:'');
-        var sub = '🌳'+(it.price?' · '+f(it.price)+'/шт':'')+(w.reason?' · '+w.reason:'');
-        woBody += woItem(lbl, sub, '#555568', (it.price||0)*(it.qty||1), 'svDeleteJEntry(\'writeoff\','+i+')', null);
+        var sub = '🌳'+(it.price?' · '+f(it.price)+'/шт':'')+((it.reason||w.reason)?' · '+(it.reason||w.reason):'');
+        var jwoKey = i+'_'+wi;
+        woBody += woItem(lbl, sub, '#555568', (it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwoItem\',\''+jwoKey+'\')');
+        if(_svEditTarget && _svEditTarget.kind==='jwoItem' && _svEditTarget.idx===jwoKey){
+          woBody += editItemForm('eJwo'+jwoKey, '#f06060', {kind:'jwoItem', idx:jwoKey, extra:{id:'wreason',valueKey:'reason',label:'Причина списания',placeholder:'например: брак, бой, недостача'}, saveFn:'svSaveJwoItemEdit('+i+','+wi+',\'eJwo'+jwoKey+'\')', prefill:{art:it.num||it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, amt:(it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), reason:it.reason||w.reason||''}});
+        }
       });
     } else {
       woBody += woItem(w.sub||w.label||'Списание', w.reason||'', '#555568', w.amount||0, 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwo\','+i+')');
@@ -4666,6 +4670,40 @@ function svSaveArrItemEdit(arrKey, idx, formId){
   target.editReason=d.reason;
   _currentShiftView[arrKey]=arr;
   try{ logEntryEdit(before, target, (_currentShiftView&&(_currentShiftView.id||_currentShiftView._id))); }catch(e){}
+  _svEditTarget = null;
+  svPersist(); _renderShiftView();
+  showToast('✅ Запись обновлена');
+}
+function svSaveJwoItemEdit(entryIdx, itemIdx, formId){
+  var d = _svEditItemRow(formId, 'wreason');
+  if(!d.name){ showToast('Укажите наименование'); return; }
+  if(!d.reason){ showToast('Укажите причину правки'); return; }
+  var jnl = _currentShiftView.journal||[];
+  var woEntries = jnl.filter(function(e){ return e.type==='writeoff'; });
+  var entry = woEntries[entryIdx]; if(!entry){ showToast('Запись не найдена'); return; }
+  var item = (entry.items||[])[itemIdx]; if(!item){ showToast('Позиция не найдена'); return; }
+  var before = Object.assign({}, item);
+  item.num = d.art; item.name = d.name; item.species = d.species;
+  item.price = d.price; item.qty = d.qty; item.amt = d.amt;
+  item.reason = d.extra;
+  var isDr = entry.goodsType==='dr';
+  var newTotal = (entry.items||[]).reduce(function(s,it){ return s+(it.amt!=null?it.amt:(it.price||0)*(it.qty||1)); },0);
+  var totalQty = (entry.items||[]).reduce(function(s,it){ return s+(it.qty||1); },0);
+  entry.amount = newTotal;
+  entry.goodsEffect = isDr?0:-newTotal;
+  entry.goodsDrEffect = isDr?-newTotal:0;
+  if((entry.items||[]).length===1){
+    var only=entry.items[0];
+    entry.sub = (only.num?'№'+only.num+' ':'')+only.name+(only.species?' · '+only.species:'')+(only.qty&&only.qty!==1?' × '+only.qty:'')+(only.reason?' · '+only.reason:'');
+  } else {
+    var namesPreview = (entry.items||[]).map(function(it){ return it.name; }).join(', ');
+    entry.sub = (entry.items||[]).length+' позиций ('+totalQty+' шт.): '+namesPreview;
+  }
+  entry.editedBy=(session&&(session.name||session.sellerName))||'admin';
+  entry.editedAt=new Date().toISOString();
+  entry.editReason=d.reason;
+  _currentShiftView.journal = jnl;
+  try{ logEntryEdit(before, item, (_currentShiftView&&(_currentShiftView.id||_currentShiftView._id))); }catch(e){}
   _svEditTarget = null;
   svPersist(); _renderShiftView();
   showToast('✅ Запись обновлена');
