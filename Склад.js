@@ -519,6 +519,7 @@ function resetReturnForm(){
   _returnRefundMethod='cash';
   document.querySelectorAll('#retMo .pc').forEach(function(p){ p.classList.remove('active'); });
   var cashChip=document.getElementById('retPcCash'); if(cashChip) cashChip.classList.add('active');
+  var otherShiftEl=document.getElementById('retOtherShift'); if(otherShiftEl) otherShiftEl.checked=false;
   renderReturnItems();
 }
 function openReturnMo(){
@@ -552,9 +553,10 @@ function saveReturn(){
     ? ((returnItems[0].num?'№'+returnItems[0].num+' ':'')+returnItems[0].name+(returnItems[0].species?' · '+returnItems[0].species:'')+(returnItems[0].qty&&returnItems[0].qty!==1?' × '+returnItems[0].qty:'')+' · '+reason)
     : (returnItems.length+' позиций: '+namesPreview+' · '+reason);
   var payLabels = {cash:'💵 Нал',terminal:'💳 Терминал',sbp:'📱 СБП',transfer:'🏦 Перевод'};
+  var isOtherShift = !!(document.getElementById('retOtherShift')||{}).checked;
   var entry = {id:uid(), type:'return', ts:_workingNowISO(), icon:'↩️', label:'Возврат',
-    sub:sub+' · возврат '+(payLabels[_returnRefundMethod]||_returnRefundMethod),
-    items: returnItems, reason: reason, refundMethod: _returnRefundMethod,
+    sub:sub+' · возврат '+(payLabels[_returnRefundMethod]||_returnRefundMethod)+(isOtherShift?' · продажа из другой смены':''),
+    items: returnItems, reason: reason, refundMethod: _returnRefundMethod, excludeFromRevenue: isOtherShift,
     goodsType: (totalWood&&totalDr)?'mixed':(totalDr?'dr':'derevo'),
     amount: total, amtCls:'exp', amtSign:'−', staffEffect:0,
     cashEffect: isCash?-totalWood:0, cardEffect: isCash?0:-totalWood,
@@ -564,7 +566,7 @@ function saveReturn(){
   try{ _recordJournalEntryIndependently(entry, session&&session.shopName, 'return'); }catch(e){}
   _backupCheckPassed = false;
   try{ stockApplyReturn(session&&session.shopName, returnItems); }catch(e){}
-  logAction('RETURN', {reason:reason, amount:total, refundMethod:_returnRefundMethod, itemCount:returnItems.length, shop:session&&session.shopName});
+  logAction('RETURN', {reason:reason, amount:total, refundMethod:_returnRefundMethod, itemCount:returnItems.length, excludeFromRevenue:isOtherShift, shop:session&&session.shopName});
   saveJ(); resetReturnForm();
   closeMo('retMo'); renderAll();
   showToast('↩️ Возврат оформлен на '+fmt(total));
