@@ -577,10 +577,17 @@ function manualSync(){
   docRef.get()
     .then(function(snap){
       var remote = snap.exists ? snap.data() : null;
+      if(remote && remote.status==='closed'){
+        _shiftForceClosedRemotely = true;
+        try{ stopLiveShiftListener(); }catch(e){}
+        showToast('🔐 Эта смена уже закрыта — откройте новую смену через "Выйти".');
+        return null;
+      }
       var added = remote ? mergeRemoteJournal(remote) : 0;
       return docRef.set(buildLiveShiftDoc()).then(function(){ return added; });
     })
     .then(function(added){
+      if(added==null) return; // already-closed branch above already showed its own toast
       renderAll();
       if(added>0) showToast('🔄 Обновлено: добавлено '+added+' записей');
       else showToast('🔄 Данные актуальны');
