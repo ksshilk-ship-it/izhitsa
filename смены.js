@@ -3466,8 +3466,8 @@ function _renderShiftView(){
   var jWoTotal = writeoffs.reduce(function(s,w){return s+(w.amount||0);},0);
   var woodRcvTotal = woodRcv.reduce(function(s,r){return s+(r.amount||r.amt||0);},0) + jRcvWoodTotal;
   var drRcvTotal = drRcv.reduce(function(s,r){return s+(r.amount||r.amt||0);},0) + jRcvDrTotal;
-  var woodWoTotal = woodWo.reduce(function(s,w){return s+(w.amount||0);},0) + jWoTotal;
-  var drWoTotal = drWo.reduce(function(s,w){return s+(w.amount||0);},0);
+  var woodWoTotal = woodWo.reduce(function(s,w){return s+(w.amount||w.amt||0);},0) + jWoTotal;
+  var drWoTotal = drWo.reduce(function(s,w){return s+(w.amount||w.amt||0);},0);
   var woodSaleQty = sales.reduce(function(s,e){ return s+(e.items||[]).filter(function(it){return it.goodsType!=='dr';}).reduce(function(a,it){return a+(it.qty||1);},0); },0);
   var drSaleQty = sales.reduce(function(s,e){ return s+(e.items||[]).filter(function(it){return it.goodsType==='dr';}).reduce(function(a,it){return a+(it.qty||1);},0); },0);
   var expWoodTotal = expenses.filter(function(e){return e.goodsType!=='dr' && e.goodsType!=='staff';}).reduce(function(s,e){return s+(e.amount||0);},0);
