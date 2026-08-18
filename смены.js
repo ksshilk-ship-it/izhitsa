@@ -4044,6 +4044,10 @@ function _renderShiftView(){
       html += '<div style="margin-bottom:6px"><div class="u-fs10-gray-mb3">Цена розница, ₽</div>'+
         '<input class="fi u-inp-compact" id="svAdd_'+id+'_retail" type="text" inputmode="numeric" placeholder="0"></div>';
     }
+    if(opts.batchable){
+      html += '<div id="svWoBatchList_'+id+'" style="display:none;margin-bottom:6px"></div>';
+      html += '<button type="button" onclick="svWoAddToBatch(\''+id+'\')" style="width:100%;padding:7px;background:none;border:1px dashed '+color+';border-radius:8px;color:'+color+';font-size:11.5px;font-weight:700;cursor:pointer;margin-bottom:6px">➕ Добавить ещё позицию в этот список</button>';
+    }
     if(opts.extra){
       html += '<div style="margin-bottom:6px"><div class="u-fs10-gray-mb3">'+opts.extra.label+'</div>'+
         '<input class="fi u-inp-compact" id="svAdd_'+id+'_'+opts.extra.id+'" placeholder="'+opts.extra.placeholder+'"></div>';
@@ -4055,7 +4059,7 @@ function _renderShiftView(){
     html += '<div id="svAddHint_'+id+'" style="font-size:10px;color:#8888aa;margin-bottom:6px;display:none"></div>';
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px">'+
       '<button onclick="document.getElementById(\'svAddForm_'+id+'\').style.display=\'none\'" style="padding:8px;background:none;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>'+
-      '<button onclick="'+opts.saveFn+'" style="padding:8px;background:'+color+';border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
+      '<button onclick="'+opts.saveFn+'" style="padding:8px;background:'+color+';border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить'+(opts.batchable?' всё':'')+'</button>'+
     '</div></div>';
     return html;
   }
@@ -4109,9 +4113,9 @@ function _renderShiftView(){
   '</div>';
   woBody += '<div style="border-top:1px solid #2e2e3e;margin-top:8px;padding-top:8px">'+
     addFormBtn('#f06060','showAddForm(\'woWood\')','Добавить списание Дерево')+
-    itemForm('woWood','#f06060',{goodsType:'derevo',extra:{id:'reason',label:'Причина (обязательно)',placeholder:'например: брак, бой, недостача'},saveFn:'svAddWo(\'wood\')'})+
+    itemForm('woWood','#f06060',{goodsType:'derevo',batchable:true,extra:{id:'reason',label:'Причина (обязательно)',placeholder:'например: брак, бой, недостача'},saveFn:'svAddWo(\'wood\')'})+
     addFormBtn('#c060a0','showAddForm(\'woDr\')','Добавить списание ДР')+
-    itemForm('woDr','#c060a0',{goodsType:'dr',extra:{id:'reason',label:'Причина (обязательно)',placeholder:'например: брак, бой, недостача'},saveFn:'svAddWo(\'dr\')'})+
+    itemForm('woDr','#c060a0',{goodsType:'dr',batchable:true,extra:{id:'reason',label:'Причина (обязательно)',placeholder:'например: брак, бой, недостача'},saveFn:'svAddWo(\'dr\')'})+
   '</div>';
   expBody += '<div style="border-top:1px solid #2e2e3e;margin-top:8px;padding-top:8px">'+
     addFormBtn('#f0a060','showAddForm(\'expWood\')','Добавить расход Дерево')+
@@ -5071,33 +5075,79 @@ function svAddRcv(type){
   svPersist(); _svOpenAccs['acc_rcv']=true; _renderShiftView();
   showToast('✅ Приход добавлен'+(isReval?' (переоценка)':''));
 }
+var _svWoBatch = {};
+function svWoAddToBatch(id){
+  var row = _svItemRow(id);
+  if(!row.name){ showToast('Укажите наименование'); return; }
+  if(row.species) saveSpecies(row.species);
+  if(!_svWoBatch[id]) _svWoBatch[id] = [];
+  _svWoBatch[id].push({num:row.art, name:row.name, species:row.species, price:row.price, qty:row.qty, amt:(row.amt||(row.price*row.qty)||0)});
+  ['art','name','species','price','amt'].forEach(function(f){ var el=document.getElementById('svAdd_'+id+'_'+f); if(el) el.value=''; });
+  var qtyEl=document.getElementById('svAdd_'+id+'_qty'); if(qtyEl) qtyEl.value='1';
+  _renderWoBatchList(id);
+  showToast('➕ В списке: '+_svWoBatch[id].length);
+}
+function svWoRemoveFromBatch(id, idx){
+  if(!_svWoBatch[id]) return;
+  _svWoBatch[id].splice(idx,1);
+  _renderWoBatchList(id);
+}
+function _renderWoBatchList(id){
+  var el = document.getElementById('svWoBatchList_'+id);
+  if(!el) return;
+  var items = _svWoBatch[id]||[];
+  if(!items.length){ el.innerHTML=''; el.style.display='none'; return; }
+  el.style.display='block';
+  el.innerHTML = '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">В списке на списание ('+items.length+'):</div>'+
+    items.map(function(it,i){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #2e2e3e;font-size:11.5px">'+
+        '<span>'+(it.num?'№'+it.num+' ':'')+it.name+(it.qty>1?' × '+it.qty:'')+'</span>'+
+        '<span style="display:flex;align-items:center;gap:6px"><b>'+Math.round(it.amt||0).toLocaleString('ru-RU')+'₽</b>'+
+        '<button type="button" onclick="svWoRemoveFromBatch(\''+id+'\','+i+')" style="background:none;border:none;color:#f06060;cursor:pointer;font-size:14px;padding:0 2px">✕</button></span>'+
+      '</div>';
+    }).join('');
+}
 function svAddWo(type){
   var isWood = type==='wood';
   var id = isWood?'woWood':'woDr';
-  var row = _svItemRow(id);
-  if(!row.name){showToast('Укажите наименование');return;}
   var reason = _svVal('svAdd_'+id+'_reason').trim();
   if(!reason){showToast('Укажите причину списания — у любого списания должна быть причина');return;}
   var isReval = !!(document.getElementById('svAdd_'+id+'_reval')||{}).checked;
-  if(row.species) saveSpecies(row.species);
-  var amt = row.amt || (row.price*row.qty) || 0;
-  if(isWood){
-    var arr = _currentShiftView.goodsWriteoffs||[];
-    arr.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, reason:reason, isRevaluation:isReval});
-    _currentShiftView.goodsWriteoffs = arr;
-  } else {
-    var arr2 = _currentShiftView.drGoodsWriteoffs||[];
-    arr2.push({name:row.name, article:row.art, species:row.species, price:row.price, qty:row.qty, amt:row.amt, reason:reason, isRevaluation:isReval});
-    _currentShiftView.drGoodsWriteoffs = arr2;
+  var items = (_svWoBatch[id]||[]).slice();
+  var row = _svItemRow(id);
+  if(row.name){
+    if(row.species) saveSpecies(row.species);
+    items.push({num:row.art, name:row.name, species:row.species, price:row.price, qty:row.qty, amt:(row.amt||(row.price*row.qty)||0)});
   }
-  logWriteoff(reason, amt, _currentShiftView.shopName);
+  if(!items.length){ showToast('Добавьте хотя бы одну позицию'); return; }
+  items.forEach(function(it){ it.reason=reason; it.isRevaluation=isReval; });
+  var totalAmt = items.reduce(function(s,it){ return s+(it.amt||0); },0);
+  var totalQty = items.reduce(function(s,it){ return s+(it.qty||1); },0);
+  var namesPreview = items.map(function(it){ return it.name; }).join(', ');
+  var sub = items.length===1
+    ? ((items[0].num?'№'+items[0].num+' ':'')+items[0].name+(items[0].species?' · '+items[0].species:'')+(items[0].qty&&items[0].qty!==1?' × '+items[0].qty:'')+' · '+reason)
+    : (items.length+' позиций ('+totalQty+' шт.): '+namesPreview+' · '+reason);
+  var entry = {
+    id:uid(), type:'writeoff', ts:_workingNowISO(), icon:'🗑️',
+    label:(isReval?'🔄 ПЕРЕОЦЕНКА · ':'')+'Списание'+(isWood?'':' (ДР)'),
+    sub: sub, goodsType: isWood?'derevo':'dr',
+    amount: totalAmt, amtCls:'exp', amtSign:'−', cashEffect:0, cardEffect:0, staffEffect:0,
+    goodsEffect: isWood?-totalAmt:0, goodsDrEffect: isWood?0:-totalAmt,
+    items: items, isRevaluation: isReval
+  };
+  var jnl = _currentShiftView.journal||[];
+  jnl.push(entry);
+  _currentShiftView.journal = jnl;
+  try{ _recordJournalEntryIndependently(entry, _currentShiftView.shopName, 'writeoff'); }catch(e){}
+  items.forEach(function(it){ logWriteoff(it.reason, it.amt, _currentShiftView.shopName); });
   if(isReval){
-    logAction('REVALUATION', {direction:'writeoff', goodsType:isWood?'derevo':'dr', name:row.name, article:row.art,
-      price:row.price, qty:row.qty, amount:amt, reason:reason,
+    logAction('REVALUATION', {direction:'writeoff', goodsType:isWood?'derevo':'dr', itemCount:items.length,
+      names:namesPreview, amount:totalAmt, reason:reason,
       shop:_currentShiftView.shopName, date:_currentShiftView.date});
   }
+  _svWoBatch[id] = [];
   svPersist(); _svOpenAccs['acc_wo']=true; _renderShiftView();
-  showToast('✅ Списание добавлено'+(isReval?' (переоценка)':''));
+  showToast('✅ Списание добавлено ('+items.length+(items.length===1?' поз.)':' поз.)')+(isReval?' — переоценка':''));
 }
 function _svExpTypeVis(id){
   var typeEl = document.getElementById('svAdd_'+id+'Type');
