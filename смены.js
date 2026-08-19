@@ -4616,8 +4616,19 @@ function svSaveCassa(){
   svPersist(); _renderShiftView(); showToast('✅ Касса обновлена');
 }
 function svSaveTovar(){
-  var reason=((document.getElementById('sv_tovarReason')||{}).value||'').trim();
-  if(!reason){showToast('Укажите причину правки');return;}
+  var reasonEl = document.getElementById('sv_tovarReason');
+  var reason=((reasonEl||{}).value||'').trim();
+  if(!reason){
+    showToast('⛔ Не сохранено! Укажите причину правки — поле подсвечено красным ниже');
+    if(reasonEl){
+      reasonEl.style.borderColor='#f06060';
+      reasonEl.style.background='#2e1a1a';
+      reasonEl.focus();
+      reasonEl.scrollIntoView({behavior:'smooth', block:'center'});
+    }
+    return;
+  }
+  if(reasonEl){ reasonEl.style.borderColor=''; reasonEl.style.background=''; }
   var oldMorn = _currentShiftView.goodsMorning||0;
   var oldEve = _currentShiftView.goodsEvening||0;
   var oldDrMorn = _currentShiftView.goodsDrMorning||0;
