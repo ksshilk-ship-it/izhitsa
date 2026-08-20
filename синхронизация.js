@@ -210,7 +210,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '08.13.74';
+var APP_BUILD_VERSION = '08.13.75';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -956,6 +956,20 @@ function logEntryDelete(entry, shiftIdOverride){
 function fmt(n){ return Math.abs(Math.round(n||0)).toLocaleString('ru-RU')+'₽'; }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function gv(id){ return (document.getElementById(id)||{}).value||''; }
+var _fsCorruptionPromptShown = false;
+function _isFsCorruptionMsg(msg){ return /INTERNAL ASSERTION FAILED/i.test(msg||''); }
+function _recoverFsCorruption(){
+  if(!confirm('Внутренняя ошибка кэша синхронизации (это баг самого Firestore, не потеря данных). Почистить локальный кэш на этом устройстве и перезагрузить страницу? Данные в облаке не затронутся.')) return;
+  try{
+    if(indexedDB.databases){
+      indexedDB.databases().then(function(dbs){
+        var dels = (dbs||[]).filter(function(d){ return d.name && /firestore/i.test(d.name); })
+          .map(function(d){ return new Promise(function(res){ var req=indexedDB.deleteDatabase(d.name); req.onsuccess=req.onerror=req.onblocked=function(){res();}; }); });
+        Promise.all(dels).finally(function(){ location.reload(); });
+      }).catch(function(){ location.reload(); });
+    } else { location.reload(); }
+  }catch(e){ location.reload(); }
+}
 function showToast(msg){
   const t=document.getElementById('toast'); t.textContent=msg;
   var isWarn = /⚠️|❌|Ошибка|не удал|не найден/i.test(msg);
@@ -966,6 +980,10 @@ function showToast(msg){
   clearTimeout(window._toastHideTimer);
   var duration = Math.min(9000, Math.max(2600, msg.length*45));
   window._toastHideTimer = setTimeout(()=>t.classList.remove('show'),duration);
+  if(_isFsCorruptionMsg(msg) && !_fsCorruptionPromptShown){
+    _fsCorruptionPromptShown = true;
+    setTimeout(function(){ _fsCorruptionPromptShown=false; _recoverFsCorruption(); }, 300);
+  }
 }
 function _queuePendingInvoice(colName, inv){
   try{
