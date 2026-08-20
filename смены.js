@@ -4666,7 +4666,13 @@ function svSaveTovar(){
     try{ logAction('GOODS_CASCADE_RECALC', {shopName: _currentShiftView.shopName, fromDate: _currentShiftView.date, shiftsTouched: cascadeResult.touched}, _currentShiftView.id||_currentShiftView._id); }catch(e){}
   }
   _renderShiftView();
-  showToast(cascadeResult && cascadeResult.touched ? ('✅ Остатки товара обновлены, пересчитано смен дальше по датам: '+cascadeResult.touched) : '✅ Остатки товара обновлены');
+  showToast((cascadeResult && cascadeResult.touched ? ('✅ Остатки товара обновлены, пересчитано смен дальше по датам: '+cascadeResult.touched) : '✅ Остатки товара обновлены') + _cascadeReviewMsg(cascadeResult));
+}
+function _cascadeReviewMsg(cascadeResult){
+  var list = cascadeResult && cascadeResult.needsReview;
+  if(!list || !list.length) return '';
+  return ' ⚠️ Дальше есть смены с расхождением из-за ручного ввода остатка — пересчёт там остановлен, проверьте вручную: '+
+    list.map(function(r){ return r.shopName+' · '+r.date+' ('+r.field+': введено '+r.entered.toLocaleString('ru-RU')+'₽, по расчёту '+r.expected.toLocaleString('ru-RU')+'₽)'; }).join('; ');
 }
 function svCascadeGoodsOnly(){
   if(!confirm('Пересчитать все последующие смены этого магазина (по датам вперёд), опираясь на текущие остатки этой смены? Саму эту смену это не изменит.')) return;
@@ -4676,7 +4682,7 @@ function svCascadeGoodsOnly(){
     try{ logAction('GOODS_CASCADE_RECALC', {shopName: _currentShiftView.shopName, fromDate: _currentShiftView.date, shiftsTouched: cascadeResult.touched, manual:true}, _currentShiftView.id||_currentShiftView._id); }catch(e){}
   }
   _renderShiftView();
-  showToast(cascadeResult && cascadeResult.touched ? ('✅ Пересчитано смен дальше по датам: '+cascadeResult.touched) : 'ℹ️ Все последующие смены уже соответствуют — пересчитывать нечего');
+  showToast((cascadeResult && cascadeResult.touched ? ('✅ Пересчитано смен дальше по датам: '+cascadeResult.touched) : 'ℹ️ Все последующие смены уже соответствуют — пересчитывать нечего') + _cascadeReviewMsg(cascadeResult));
 }
 function svSaveJEntrySimple(type, idx){
   var jnl = _currentShiftView.journal||[];

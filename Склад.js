@@ -2048,10 +2048,11 @@ function _cascadeGoodsForward(target, shifts){
     sh.drGoodsEvening = Math.max(0,gDr);
   }
   var touched = [];
+  var needsReview = [];
   var chain = shifts.filter(function(s){ return s.shopName===target.shopName && s.status==='closed'; })
     .sort(function(a,b){ return (a.openedAt||a.date||'').localeCompare(b.openedAt||b.date||''); });
   var startIdx = chain.findIndex(function(s){ return (s.id||s._id)===(target.id||target._id); });
-  if(startIdx<0) return {touched:0};
+  if(startIdx<0) return {touched:0, needsReview:[]};
   var prev = target;
   var stopWood = false, stopDr = false;
   for(var i=startIdx+1; i<chain.length; i++){
@@ -2062,9 +2063,8 @@ function _cascadeGoodsForward(target, shifts){
       if((sh.goodsMornSource||'auto')==='auto'){
         if(Math.round(sh.goodsMorning||0)!==Math.round(expMorn)){ sh.goodsMorning=expMorn; changed=true; }
       } else if(Math.abs((sh.goodsMorning||0)-expMorn)>=1){
-        var ans = prompt('Смена «'+sh.shopName+' · '+sh.date+'» — остаток «Дерево» на утро введён вручную: '+Math.round(sh.goodsMorning||0)+'₽.\nПо расчёту с учётом правки должно быть: '+Math.round(expMorn)+'₽.\n\nВведите новое значение, если хотите поменять (Отмена — оставить как есть и не пересчитывать дальше по датам):', Math.round(expMorn));
-        if(ans===null){ stopWood=true; }
-        else{ var n=parseFloat(ans); if(!isNaN(n) && Math.round(n)!==Math.round(sh.goodsMorning||0)){ sh.goodsMorning=n; changed=true; } }
+        stopWood=true;
+        needsReview.push({shopName:sh.shopName, date:sh.date, id:sh.id||sh._id, field:'Дерево', entered:Math.round(sh.goodsMorning||0), expected:Math.round(expMorn)});
       }
     }
     if(!stopDr){
@@ -2072,9 +2072,8 @@ function _cascadeGoodsForward(target, shifts){
       if((sh.goodsDrMornSource||'auto')==='auto'){
         if(Math.round(sh.goodsDrMorning||0)!==Math.round(expDrMorn)){ sh.goodsDrMorning=expDrMorn; changed=true; }
       } else if(Math.abs((sh.goodsDrMorning||0)-expDrMorn)>=1){
-        var ansDr = prompt('Смена «'+sh.shopName+' · '+sh.date+'» — остаток «ДР Товар» на утро введён вручную: '+Math.round(sh.goodsDrMorning||0)+'₽.\nПо расчёту с учётом правки должно быть: '+Math.round(expDrMorn)+'₽.\n\nВведите новое значение, если хотите поменять (Отмена — оставить как есть и не пересчитывать дальше по датам):', Math.round(expDrMorn));
-        if(ansDr===null){ stopDr=true; }
-        else{ var nDr=parseFloat(ansDr); if(!isNaN(nDr) && Math.round(nDr)!==Math.round(sh.goodsDrMorning||0)){ sh.goodsDrMorning=nDr; changed=true; } }
+        stopDr=true;
+        needsReview.push({shopName:sh.shopName, date:sh.date, id:sh.id||sh._id, field:'ДР Товар', entered:Math.round(sh.goodsDrMorning||0), expected:Math.round(expDrMorn)});
       }
     }
     var oldEve=sh.goodsEvening, oldDrEve=sh.drGoodsEvening;
@@ -2088,7 +2087,7 @@ function _cascadeGoodsForward(target, shifts){
     saveShifts(shifts);
     touched.forEach(function(s){ _pushShiftWithRetry(s.id||s._id, s); });
   }
-  return {touched:touched.length};
+  return {touched:touched.length, needsReview:needsReview};
 }
 function saveManualInvoiceEdit(id){
   var data = window._manInvEdit[id]; if(!data) return;

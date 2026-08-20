@@ -210,7 +210,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '08.13.73';
+var APP_BUILD_VERSION = '08.13.74';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -964,7 +964,8 @@ function showToast(msg){
   t.style.color = isWarn ? '#f06060' : '#60f090';
   t.classList.add('show');
   clearTimeout(window._toastHideTimer);
-  window._toastHideTimer = setTimeout(()=>t.classList.remove('show'),2600);
+  var duration = Math.min(9000, Math.max(2600, msg.length*45));
+  window._toastHideTimer = setTimeout(()=>t.classList.remove('show'),duration);
 }
 function _queuePendingInvoice(colName, inv){
   try{
