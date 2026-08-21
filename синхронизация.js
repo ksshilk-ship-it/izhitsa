@@ -210,7 +210,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '08.13.76';
+var APP_BUILD_VERSION = '08.13.77';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -959,7 +959,9 @@ function gv(id){ return (document.getElementById(id)||{}).value||''; }
 var _fsCorruptionPromptShown = false;
 function _isFsCorruptionMsg(msg){ return /INTERNAL ASSERTION FAILED/i.test(msg||''); }
 function _recoverFsCorruption(){
-  if(!confirm('Внутренняя ошибка кэша синхронизации (это баг самого Firestore, не потеря данных). Почистить локальный кэш на этом устройстве и перезагрузить страницу? Данные в облаке не затронутся.')) return;
+  if(_fsCorruptionPromptShown) return;
+  _fsCorruptionPromptShown = true;
+  showToast('🔄 Обнаружена внутренняя ошибка кэша синхронизации — чиню и перезагружаю (данные не пострадают)...');
   try{
     if(indexedDB.databases){
       indexedDB.databases().then(function(dbs){
@@ -980,10 +982,7 @@ function showToast(msg){
   clearTimeout(window._toastHideTimer);
   var duration = Math.min(9000, Math.max(2600, msg.length*45));
   window._toastHideTimer = setTimeout(()=>t.classList.remove('show'),duration);
-  if(_isFsCorruptionMsg(msg) && !_fsCorruptionPromptShown){
-    _fsCorruptionPromptShown = true;
-    setTimeout(function(){ _fsCorruptionPromptShown=false; _recoverFsCorruption(); }, 300);
-  }
+  if(_isFsCorruptionMsg(msg)) setTimeout(_recoverFsCorruption, 300);
 }
 function _queuePendingInvoice(colName, inv){
   try{

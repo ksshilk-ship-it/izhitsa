@@ -1678,6 +1678,18 @@ function renderShiftsCalendar(){
   body.innerHTML=html;
 }
 function _shiftSetSafe(shiftId, sh, successMsg, errPrefix){
+  sh._pendingSync = true;
+  try{
+    var _shifts0 = getShifts();
+    var _idx0 = _shifts0.findIndex(function(s){ return (s.id||s._id)===shiftId; });
+    if(_idx0>=0){ _shifts0[_idx0] = sh; saveShifts(_shifts0); }
+  }catch(e){}
+  var onFail = function(err){
+    console.log('[_shiftSetSafe] не долетело до Firestore, останется в очереди на автоповтор:', shiftId, err);
+    if(_isFsCorruptionMsg(err&&err.message)){ _recoverFsCorruption(); return; }
+    showToast('⚠️ Сохранено на устройстве, отправка в облако повторится автоматически');
+  };
+  var onOk = function(){ try{ _clearShiftPendingFlag(shiftId); }catch(e){} if(successMsg) showToast(successMsg); };
   try{
     db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
       var dataToSend = sh;
@@ -1707,20 +1719,12 @@ function _shiftSetSafe(shiftId, sh, successMsg, errPrefix){
           showToast('ℹ️ В облаке нашлись записи, которых не было локально — объединила, ничего не потеряно');
         }
       }
-      db.collection('iz_shifts').doc(shiftId).set(dataToSend).then(function(){
-        if(successMsg) showToast(successMsg);
-      }).catch(function(err){
-        showToast((errPrefix||'❌ Ошибка: ')+(err&&err.message||err));
-      });
+      db.collection('iz_shifts').doc(shiftId).set(dataToSend).then(onOk).catch(onFail);
     }).catch(function(){
-      db.collection('iz_shifts').doc(shiftId).set(sh).then(function(){
-        if(successMsg) showToast(successMsg);
-      }).catch(function(err2){
-        showToast((errPrefix||'❌ Ошибка: ')+(err2&&err2.message||err2));
-      });
+      db.collection('iz_shifts').doc(shiftId).set(sh).then(onOk).catch(onFail);
     });
   }catch(e){
-    showToast((errPrefix||'❌ Ошибка: ')+(e&&e.message||e));
+    onFail(e);
   }
 }
 function svRecoverSalesFromBackup(shiftId){
@@ -5053,12 +5057,19 @@ function svRecalcGoodsEvening(){
 }
 function svPersist(skipGoodsRecalc){
   if(!skipGoodsRecalc) svRecalcGoodsEvening();
+  _currentShiftView._pendingSync = true;
   var shifts=getShifts();
   var idx=shifts.findIndex(function(s){return (s.id||s._id)===_currentShiftView.id;}); if(idx<0) return;
   shifts[idx]=_currentShiftView;
   saveShifts(shifts);
   var shiftId = _currentShiftView.id;
   var toSave = _currentShiftView;
+  var onSaveFail = function(err){
+    console.log('[svPersist] не долетело до Firestore, останется в очереди на автоповтор:', err);
+    if(_isFsCorruptionMsg(err&&err.message)){ _recoverFsCorruption(); return; }
+    showToast('⚠️ Сохранено на устройстве, отправка в облако повторится автоматически');
+  };
+  var onSaveOk = function(){ try{ _clearShiftPendingFlag(shiftId); }catch(e){} };
   try{
     db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
       var dataToSend = toSave;
@@ -5080,18 +5091,12 @@ function svPersist(skipGoodsRecalc){
           showToast('ℹ️ В облаке нашлись записи, которых не было локально — объединила, ничего не потеряно');
         }
       }
-      db.collection('iz_shifts').doc(shiftId).set(dataToSend).catch(function(err){
-        showToast('⚠️ Сохранено только локально! Ошибка облака: '+(err&&err.message||err));
-        console.log('[svPersist] ошибка сохранения в Firestore:', err);
-      });
-    }).catch(function(err){
-      db.collection('iz_shifts').doc(shiftId).set(toSave).catch(function(err2){
-        showToast('⚠️ Сохранено только локально! Ошибка облака: '+(err2&&err2.message||err2));
-        console.log('[svPersist] ошибка сохранения в Firestore:', err2);
-      });
+      db.collection('iz_shifts').doc(shiftId).set(dataToSend).then(onSaveOk).catch(onSaveFail);
+    }).catch(function(){
+      db.collection('iz_shifts').doc(shiftId).set(toSave).then(onSaveOk).catch(onSaveFail);
     });
   }catch(e){
-    showToast('⚠️ Сохранено только локально! Ошибка: '+(e&&e.message||e));
+    onSaveFail(e);
   }
   renderShiftHistory();
 }
