@@ -1684,12 +1684,18 @@ function _shiftSetSafe(shiftId, sh, successMsg, errPrefix){
     var _idx0 = _shifts0.findIndex(function(s){ return (s.id||s._id)===shiftId; });
     if(_idx0>=0){ _shifts0[_idx0] = sh; saveShifts(_shifts0); }
   }catch(e){}
+  var settled = false;
   var onFail = function(err){
+    if(settled) return; settled = true;
     console.log('[_shiftSetSafe] не долетело до Firestore, останется в очереди на автоповтор:', shiftId, err);
     if(_isFsCorruptionMsg(err&&err.message)){ _recoverFsCorruption(); return; }
     showToast('⚠️ Сохранено на устройстве, отправка в облако повторится автоматически');
   };
-  var onOk = function(){ try{ _clearShiftPendingFlag(shiftId); }catch(e){} if(successMsg) showToast(successMsg); };
+  var onOk = function(){
+    if(settled) return; settled = true;
+    try{ _clearShiftPendingFlag(shiftId); }catch(e){} if(successMsg) showToast(successMsg);
+  };
+  setTimeout(function(){ onFail(new Error('timeout: Firestore не ответил за 10с')); }, 10000);
   try{
     db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
       var dataToSend = sh;
@@ -5064,12 +5070,18 @@ function svPersist(skipGoodsRecalc){
   saveShifts(shifts);
   var shiftId = _currentShiftView.id;
   var toSave = _currentShiftView;
+  var _persistSettled = false;
   var onSaveFail = function(err){
+    if(_persistSettled) return; _persistSettled = true;
     console.log('[svPersist] не долетело до Firestore, останется в очереди на автоповтор:', err);
     if(_isFsCorruptionMsg(err&&err.message)){ _recoverFsCorruption(); return; }
     showToast('⚠️ Сохранено на устройстве, отправка в облако повторится автоматически');
   };
-  var onSaveOk = function(){ try{ _clearShiftPendingFlag(shiftId); }catch(e){} };
+  var onSaveOk = function(){
+    if(_persistSettled) return; _persistSettled = true;
+    try{ _clearShiftPendingFlag(shiftId); }catch(e){}
+  };
+  setTimeout(function(){ onSaveFail(new Error('timeout: Firestore не ответил за 10с')); }, 10000);
   try{
     db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
       var dataToSend = toSave;
