@@ -1241,7 +1241,7 @@ function renderTodayShift(){
     shopNames.map(function(name){
       var shift = _adminActiveShifts.find(function(s){ return s.shopName===name && s.status==='open'; });
       var active = name===_todayActiveShop;
-      var hasDiff = shift && (shift.hasCashDiff || (shift.journal||[]).some(function(e){return e.hasCashDiff;}));
+      var hasDiff = shift && typeof _computeMorningCashDiffParts==='function' && _computeMorningCashDiffParts(shift).length>0;
       var dot = shift ? '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+(hasDiff?'#f06060':'#60f090')+';margin-right:5px"></span>' : '';
       var border = active ? '#c8f060' : (shift ? '#60f090' : '#2e2e3e');
       var bg = active ? '#1e2a14' : (shift ? '#142a1e' : '#1a1a22');
@@ -1406,9 +1406,12 @@ function renderShiftDetail(shift){
   var woQty = writeoffs.length;
   var rcvTotal = receives.reduce(function(s,e){return s+(e.amount||0);},0);
   var rcvQty = receives.length;
-  var hasDiff = shift.hasCashDiff || journal.some(function(e){return e.hasCashDiff;});
-  var diffEntry = journal.find(function(e){ return e.hasCashDiff && e.cashDiffParts && e.cashDiffParts.length; });
-  var diffParts = diffEntry ? diffEntry.cashDiffParts : [];
+  // Пересчитываем расхождение утреннего нала заново по текущим shift.cashMorning/cashDrMorning/
+  // cashStaffMorning, а не читаем замороженный флаг с самой первой записи журнала ('open') —
+  // тот флаг фиксируется один раз при открытии смены и не обновляется, когда продавец сам
+  // исправляет опечатку через «Исправить нал утро» (тот путь правит только сами суммы).
+  var diffParts = typeof _computeMorningCashDiffParts==='function' ? _computeMorningCashDiffParts(shift) : [];
+  var hasDiff = diffParts.length>0;
   var lastUpd = shift.updatedAt?new Date(shift.updatedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'—';
   var _blockIdx = 0;
   function block(title, rows, startOpen){
@@ -1932,6 +1935,20 @@ function saveFixMorningCash(){
   if(w) session.cashMorning = parseFloat(w.value)||0;
   if(d) session.cashDrMorning = parseFloat(d.value)||0;
   if(s) session.cashStaffMorning = parseFloat(s.value)||0;
+  // Расхождение и его детали "замораживаются" в первой записи журнала ('open') в момент открытия
+  // смены — правка суммы наличных здесь исправляет session.cash*Morning на будущее, но без этого
+  // пересчёта запись открытия так и осталась бы навсегда показывать старое, уже неактуальное
+  // расхождение в админской истории смены, даже когда продавец сам всё исправил.
+  var newParts = _computeMorningCashDiffParts(session);
+  var newHasDiff = newParts.length>0;
+  var openEntry = journal.find(function(e){ return e.type==='open'; });
+  if(openEntry){
+    openEntry.hasCashDiff = newHasDiff;
+    openEntry.cashDiffParts = newParts;
+    openEntry.icon = newHasDiff?'⚠️':'🔓';
+    openEntry.label = 'Смена открыта'+(newHasDiff?' ⚠️ Расхождение нала':'');
+    saveJ();
+  }
   saveS(); syncLiveShift();
   closeMo('fixMorningCashMo');
   renderMorningCashDiffBanner();
