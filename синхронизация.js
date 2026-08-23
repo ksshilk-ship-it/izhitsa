@@ -210,7 +210,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '08.23.2';
+var APP_BUILD_VERSION = '08.23.3';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -681,7 +681,11 @@ function _retryPendingRefbookSaves(){
     });
   }catch(e){}
 }
-var SHIFTS_LIVE_SYNC_DAYS = 35;
+var SHIFTS_LIVE_SYNC_DAYS = 14; // shrunk from 35 on 2026-08-23: localStorage has a hard ~5-10MB
+// browser quota (unrelated to actual device disk space) — a 35-day window across all shops'
+// journals routinely overflowed it on a full "☁️ Синх" pull. Shifts older than this window
+// already live in the higher-capacity IndexedDB archive cache (_extraArchiveShifts), so
+// shrinking this just moves more days into storage that was built to hold them.
 function _shiftsLiveSyncCutoff(){
   var d = new Date(Date.now() - SHIFTS_LIVE_SYNC_DAYS*86400000);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
