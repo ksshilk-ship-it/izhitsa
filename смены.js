@@ -127,11 +127,21 @@ function getShifts(){
   return local.concat(extra.filter(function(s){ return !localIds[s.id||s._id]; }));
 }
 function saveShifts(shifts){
+  var archiveEdits = shifts.filter(function(s){ return s._archiveOnly; });
   shifts = shifts.filter(function(s){ return !s._archiveOnly; }); // никогда не персистим временный архивный кэш
-  // Смены из архива (_extraArchiveShifts) правятся по ссылке на тот же объект, что лежит в getShifts() —
-  // если такую смену редактировали (например «Сохранить остатки» в просмотре старой смены) и она уже
-  // изменилась в памяти, эту правку нужно закрепить в IndexedDB, иначе при следующей перезагрузке
-  // страница подтянет из IndexedDB старую, ещё не исправленную версию и правка «слетит обратно».
+  // Смены из архива (_extraArchiveShifts) НЕ всегда правятся по ссылке на тот же объект — некоторые
+  // пути (например открытие смены через JSON.parse(JSON.stringify(...))) кладут в _currentShiftView
+  // отдельный клон. Если такой клон потом подставили в переданный сюда массив shifts, нужно явно
+  // перенести правку обратно в настоящий window._extraArchiveShifts по id — иначе _persistExtraArchiveShifts()
+  // ниже просто пересохранит старую, нетронутую версию, и правка «слетит обратно» при следующем
+  // открытии списка смен, даже если открытая карточка какое-то время показывала верные данные.
+  if(archiveEdits.length && window._extraArchiveShifts){
+    archiveEdits.forEach(function(updated){
+      var uid = updated.id||updated._id;
+      var idx = window._extraArchiveShifts.findIndex(function(s){ return (s.id||s._id)===uid; });
+      if(idx>=0) window._extraArchiveShifts[idx] = updated;
+    });
+  }
   try{ if(typeof _persistExtraArchiveShifts==='function') _persistExtraArchiveShifts(); }catch(e){}
   try{
     localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
@@ -3287,6 +3297,12 @@ function filterHistShop(shop, el){
   el.style.background='#c8f060'; el.style.color='#0f0f13'; el.style.borderWidth='2px'; el.style.borderColor='#c8f060';
   renderShiftHistory();
 }
+function _isArchiveShift(sh){
+  if(!sh) return false;
+  var cutoff = typeof _shiftsLiveSyncCutoff==='function' ? _shiftsLiveSyncCutoff() : '';
+  var isRecent = (sh.date||'')>=cutoff || sh.status==='open' || sh._pendingSync;
+  return !isRecent;
+}
 function openShiftView(id){
   currentEditShiftId = id;
   migrateLegacyShiftRevenue();
@@ -3294,6 +3310,11 @@ function openShiftView(id){
   var sh = shifts.find(function(s){ return (s.id||s._id)===id; }); if(!sh) return;
   _currentShiftView = JSON.parse(JSON.stringify(sh));
   if(!_currentShiftView.id) _currentShiftView.id = _currentShiftView._id;
+  // _archiveOnly drives which store (localStorage vs window._extraArchiveShifts) an edit gets
+  // persisted into (see saveShifts()) — derive it from the shift's own date rather than trusting
+  // it survived whatever copy/clone/refresh produced this object, since a raw Firestore doc.data()
+  // (used below when refreshing from the cloud) never carries this client-only flag at all.
+  _currentShiftView._archiveOnly = _isArchiveShift(_currentShiftView);
   _svOpenAccs = {};
   _renderShiftView();
   openMo('editShiftMo');
@@ -3302,6 +3323,7 @@ function openShiftView(id){
       if(!snap.exists) return;
       if(currentEditShiftId !== id) return; // администратор уже открыл другую смену
       var remote = snap.data(); remote.id = id;
+      remote._archiveOnly = _isArchiveShift(remote); // raw Firestore data never carries this client-only flag
       var localJnlLen = (_currentShiftView.journal||[]).length;
       var remoteJnlLen = (remote.journal||[]).length;
       var localUpd = _currentShiftView.updatedAt || _currentShiftView.closedAt || '';
