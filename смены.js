@@ -3385,7 +3385,7 @@ function _auditFmtTime(iso){
   return d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
 function _renderAuditEntry(e){
-  var label = _AUDIT_ACTION_LABELS[e.action] || ('📄 '+(e.action||'Событие'));
+  var label = _AUDIT_ACTION_LABELS[e.action] || (typeof _AL_LABELS!=='undefined' && _AL_LABELS[e.action]) || ('📄 '+(e.action||'Событие'));
   var details = e.details||{};
   var extra = '';
   if(e.action==='JOURNAL_ENTRY_EDIT'){

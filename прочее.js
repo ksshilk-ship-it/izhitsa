@@ -314,6 +314,9 @@ function toggleSettingsSection(id){
   if(id==='actionlog' && !open && !_alRawLog.length){
     try{ setAlPeriod('week', document.getElementById('alPeriod_week')); }catch(e){}
   }
+  if(id==='tovaraudit' && !open){
+    try{ _renderTaShopChips(); }catch(e){}
+  }
 }
 function updateSettingsSectionCount(id, count){
   var el=document.getElementById('ssCount_'+id);
@@ -1323,6 +1326,120 @@ function renderActionLog(){
         (details?'<div style="font-size:11px;color:#f0f0f8">'+details+'</div>':'')+
       '</div>';
     }).join('');
+}
+var _taShop = '';
+var _taMetric = 'goods_wood';
+var _taRows = [];
+var _taAuditByShift = {};
+var _taExpanded = {};
+var _TA_METRICS = {
+  goods_wood: {label:'📦 Остаток товара — Дерево', morn:'goodsMorning', eve:'goodsEvening', mornAlt:null, eveAlt:null, unit:''},
+  goods_dr:   {label:'📦 Остаток товара — ДР Товар', morn:'goodsDrMorning', eve:'drGoodsEvening', mornAlt:'drGoodsMorning', eveAlt:'goodsDrEvening', unit:''},
+  cash_wood:  {label:'💵 Касса — Дерево', morn:'cashMorning', eve:'cashEvening', mornAlt:null, eveAlt:null, unit:'₽'},
+  cash_dr:    {label:'💵 Касса — ДР Товар', morn:'cashDrMorning', eve:'drCashEvening', mornAlt:'drCashMorning', eveAlt:'cashDrEvening', unit:'₽'}
+};
+function _taVal(sh, field, alt){
+  var v = sh[field];
+  if(v==null && alt) v = sh[alt];
+  return v;
+}
+function _renderTaShopChips(){
+  var c = document.getElementById('taShopChips'); if(!c) return;
+  var shops = getShopNames();
+  c.innerHTML = shops.map(function(s){
+    var active = _taShop===s;
+    return '<div onclick="_taSetShop(\''+s.replace(/'/g,"\\'")+'\')" style="padding:5px 12px;border-radius:20px;border:'+(active?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(active?'#1e2a14':'#22222e')+';color:'+(active?'#c8f060':'#8888aa')+';font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">'+s+'</div>';
+  }).join('');
+}
+function _taSetShop(shop){
+  _taShop = shop;
+  _renderTaShopChips();
+}
+function setTaMetric(metric, el){
+  _taMetric = metric;
+  Object.keys(_TA_METRICS).forEach(function(m){
+    var btn = document.getElementById('taMetric_'+m);
+    if(!btn) return;
+    var active = m===metric;
+    btn.style.borderWidth = active?'2px':'1px';
+    btn.style.background = active?'#1e2a14':'#22222e';
+    btn.style.color = active?'#c8f060':'#8888aa';
+    btn.style.borderColor = active?'#c8f060':'#2e2e3e';
+  });
+  if(_taRows.length) renderTovarAudit();
+}
+function loadTovarAudit(){
+  if(!_taShop){ showToast('Выберите магазин'); return; }
+  var status = document.getElementById('taStatus');
+  var results = document.getElementById('taResults');
+  if(status){ status.style.display='block'; status.textContent='⏳ Загружаю смены и журнал аудита...'; }
+  if(results) results.innerHTML='';
+  var settled = false;
+  var timeoutP = new Promise(function(resolve){ setTimeout(function(){ if(!settled){ settled=true; resolve('timeout'); } }, 15000); });
+  var fetchP = Promise.all([
+    db.collection('iz_shifts').where('shopName','==',_taShop).get({source:'server'}),
+    db.collection('iz_audit_log').where('shopName','==',_taShop).get({source:'server'})
+  ]).then(function(res){
+    if(settled) return 'ok';
+    settled = true;
+    var shiftDocs = res[0].docs.map(function(d){ var x=d.data(); if(!x.id) x.id=d.id; return x; });
+    var auditDocs = res[1].docs.map(function(d){ return d.data(); });
+    _taRows = shiftDocs.filter(function(s){ return s.status==='closed' || s.status==='open'; })
+      .sort(function(a,b){ return (a.openedAt||a.date||'').localeCompare(b.openedAt||b.date||''); });
+    _taAuditByShift = {};
+    auditDocs.forEach(function(e){
+      var sid = e.shiftId; if(!sid) return;
+      (_taAuditByShift[sid] = _taAuditByShift[sid]||[]).push(e);
+    });
+    Object.keys(_taAuditByShift).forEach(function(sid){
+      _taAuditByShift[sid].sort(function(a,b){ return (a.timestamp||'').localeCompare(b.timestamp||''); });
+    });
+    return 'ok';
+  }).catch(function(){ if(!settled){ settled=true; } return 'error'; });
+  Promise.race([fetchP, timeoutP]).then(function(result){
+    if(status){
+      status.style.display = result==='ok' ? 'none' : 'block';
+      if(result==='timeout') status.textContent = '⚠️ Сервер не отвечает — попробуйте ещё раз';
+      else if(result==='error') status.textContent = '❌ Не удалось загрузить данные';
+    }
+    _taExpanded = {};
+    renderTovarAudit();
+  });
+}
+function _taToggle(sid){
+  _taExpanded[sid] = !_taExpanded[sid];
+  renderTovarAudit();
+}
+function renderTovarAudit(){
+  var c = document.getElementById('taResults'); if(!c) return;
+  if(!_taRows.length){ c.innerHTML = '<div class="empty"><div class="ei">📊</div>Нет данных — выберите магазин и нажмите «Показать историю»</div>'; return; }
+  var cfg = _TA_METRICS[_taMetric];
+  var rowsHtml = _taRows.map(function(sh, i){
+    var morn = _taVal(sh, cfg.morn, cfg.mornAlt);
+    var eve = _taVal(sh, cfg.eve, cfg.eveAlt);
+    var prev = i>0 ? _taRows[i-1] : null;
+    var prevEve = prev ? _taVal(prev, cfg.eve, cfg.eveAlt) : null;
+    var mismatch = !!(prev && morn!=null && prevEve!=null && Math.round(morn)!==Math.round(prevEve));
+    var delta = mismatch ? Math.round(morn - prevEve) : 0;
+    var sid = sh.id || sh._id;
+    var auditEntries = _taAuditByShift[sid] || [];
+    var expanded = !!_taExpanded[sid];
+    var dateStr = sh.date || (sh.openedAt ? sh.openedAt.slice(0,10) : '—');
+    return '<div style="background:'+(mismatch?'#2e1414':'#13131a')+';border:1px solid '+(mismatch?'#f0606055':'#2e2e3e')+';border-radius:9px;padding:9px 10px;margin-bottom:6px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">'+
+        '<div style="font-size:12px;font-weight:700">'+dateStr+(sh.status==='open'?' · открыта':'')+'</div>'+
+        '<div style="font-size:10px;color:#8888aa">'+(sh.sellerName||sh.userName||'—')+'</div>'+
+      '</div>'+
+      '<div style="display:flex;gap:14px;font-size:12px;margin-bottom:4px">'+
+        '<div>Утро: <b>'+(morn!=null?Math.round(morn).toLocaleString('ru-RU'):'—')+cfg.unit+'</b></div>'+
+        '<div>Вечер: <b>'+(eve!=null?Math.round(eve).toLocaleString('ru-RU'):'—')+cfg.unit+'</b></div>'+
+      '</div>'+
+      (mismatch ? '<div style="font-size:11px;color:#f06060;font-weight:700;margin-bottom:4px">⚠️ Не совпадает с вечером предыдущей смены (Δ '+(delta>0?'+':'')+delta.toLocaleString('ru-RU')+cfg.unit+')</div>' : (prev?'<div style="font-size:11px;color:#60f090;margin-bottom:4px">✅ Совпадает с вечером предыдущей смены</div>':''))+
+      (auditEntries.length ? '<div onclick="_taToggle(\''+sid+'\')" style="font-size:11px;color:#60c8f0;cursor:pointer;font-weight:700">'+(expanded?'▼':'▶')+' 📜 Журнал действий по этой смене ('+auditEntries.length+')</div>' : '<div style="font-size:11px;color:#8888aa">Нет записей аудита по этой смене</div>')+
+      (expanded ? '<div style="margin-top:6px">'+auditEntries.map(_renderAuditEntry).join('')+'</div>' : '')+
+    '</div>';
+  }).join('');
+  c.innerHTML = '<div class="u-fs11-gray" style="margin-bottom:8px">'+_taRows.length+' смен · '+cfg.label+'</div>'+rowsHtml;
 }
 function updateRefbookCountShop(bookId, key){
   var items = getRefBook(key);
