@@ -4085,7 +4085,7 @@ function _renderShiftView(){
     }
     html += '<div style="display:flex;gap:5px;margin-bottom:6px">'+
       '<div style="flex:0 0 64px"><div class="u-fs10-gray-mb3">Артикул</div>'+
-        '<input class="fi u-inp-compact" id="svAdd_'+id+'_art" placeholder="№" oninput="svItemLookup(\''+id+'\')"></div>'+
+        '<input class="fi u-inp-compact" id="svAdd_'+id+'_art" placeholder="№" oninput="svItemLookup(\''+id+'\',\''+goodsType+'\')"></div>'+
       '<div style="flex:1;position:relative"><div class="u-fs10-gray-mb3">Наименование</div>'+
         '<input class="fi u-inp-compact" id="svAdd_'+id+'_name" placeholder="Товар" autocomplete="off" '+
           'oninput="svItemNameSuggest(\''+id+'\',\''+goodsType+'\')" onfocus="svItemNameSuggest(\''+id+'\',\''+goodsType+'\')" onblur="svItemNameHideSugg(\''+id+'\')">'+
@@ -4562,31 +4562,52 @@ function svAcceptInvoiceIntoShift(invId){
   _svOpenAccs['acc_rcv']=true; _renderShiftView();
   showToast('✅ Накладная принята целиком: '+accepted.length+' изд. на '+fmt(goodsTotal));
 }
+var _svItemSuggMatches = {};
 function svItemNameSuggest(id, goodsType){
   var input = document.getElementById('svAdd_'+id+'_name');
   var box = document.getElementById('svAdd_'+id+'_name_sugg');
   if(!input || !box) return;
   var val = (input.value||'').trim().toLowerCase();
-  if(!val){ box.style.display='none'; box.innerHTML=''; return; }
+  if(!val){ box.style.display='none'; box.innerHTML=''; _svItemSuggMatches[id]=[]; return; }
   var key = goodsType==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
-  var names = getRefBook(key).map(function(g){ return (g&&g.name)||g; }).filter(Boolean);
-  var uniq = {}; names = names.filter(function(n){ var k=n.toLowerCase(); if(uniq[k]) return false; uniq[k]=true; return true; });
-  var matches = names.filter(function(n){ return n.toLowerCase().indexOf(val)>=0; });
+  var raw = getRefBook(key).filter(function(g){ return g && g.name; });
+  var seen = {};
+  var items = raw.filter(function(g){
+    var k = g.name.toLowerCase()+'|'+(g.price||'')+'|'+(g.article||'');
+    if(seen[k]) return false;
+    seen[k]=true;
+    return true;
+  });
+  var matches = items.filter(function(g){ return g.name.toLowerCase().indexOf(val)>=0; });
   matches.sort(function(a,b){
-    var ai=a.toLowerCase().indexOf(val), bi=b.toLowerCase().indexOf(val);
+    var ai=a.name.toLowerCase().indexOf(val), bi=b.name.toLowerCase().indexOf(val);
     if(ai!==bi) return ai-bi;
-    return a.length-b.length;
+    if(a.name.length!==b.name.length) return a.name.length-b.name.length;
+    return (a.price||0)-(b.price||0);
   });
   matches = matches.slice(0,8);
+  _svItemSuggMatches[id] = matches;
   if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
-  box.innerHTML = matches.map(function(m){
-    return '<div onpointerdown="event.preventDefault();svItemNamePick(\''+id+'\',\''+m.replace(/'/g,"\\'")+'\')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m+'</div>';
+  box.innerHTML = matches.map(function(m, i){
+    var extra = [];
+    if(m.article) extra.push('№'+m.article);
+    if(m.price) extra.push(Math.round(m.price)+'₽');
+    var extraHtml = extra.length ? ' <span style="color:#8888aa">· '+extra.join(' · ')+'</span>' : '';
+    return '<div onpointerdown="event.preventDefault();svItemNamePick(\''+id+'\','+i+')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m.name+extraHtml+'</div>';
   }).join('');
   box.style.display='block';
 }
-function svItemNamePick(id, val){
+function svItemNamePick(id, idx){
+  var m = (_svItemSuggMatches[id]||[])[idx];
   var el = document.getElementById('svAdd_'+id+'_name');
-  if(el) el.value = val;
+  if(el) el.value = m ? m.name : '';
+  if(m){
+    var artEl = document.getElementById('svAdd_'+id+'_art');
+    var priceEl = document.getElementById('svAdd_'+id+'_price');
+    if(artEl && m.article) artEl.value = m.article;
+    if(priceEl && m.price) priceEl.value = m.price;
+    svItemCalc(id);
+  }
   var box = document.getElementById('svAdd_'+id+'_name_sugg');
   if(box) box.style.display='none';
 }
@@ -4618,7 +4639,7 @@ function svSpeciesPick(id, val){
   var box = document.getElementById('svAdd_'+id+'_species_sugg');
   if(box) box.style.display='none';
 }
-function svItemLookup(id){
+function svItemLookup(id, goodsType){
   var artEl=document.getElementById('svAdd_'+id+'_art');
   var nameEl=document.getElementById('svAdd_'+id+'_name');
   var priceEl=document.getElementById('svAdd_'+id+'_price');
@@ -4631,7 +4652,12 @@ function svItemLookup(id){
   var stockEntry = typeof stockGetByNum==='function' ? stockGetByNum(shopNm, num) : null;
   var found = stockEntry
     ? {name:stockEntry.name, price:stockEntry.price, species:stockEntry.species, qty:stockEntry.qty, fromStock:true}
-    : getItemsBase().find(function(it){ return String(it.num)===num; });
+    : null;
+  if(!found && goodsType==='dr'){
+    var catEntry = getRefBook('iz_goods_dr').find(function(g){ return g && g.article && String(g.article).toLowerCase()===num.toLowerCase(); });
+    if(catEntry) found = {name:catEntry.name, price:catEntry.price};
+  }
+  if(!found) found = getItemsBase().find(function(it){ return String(it.num)===num; });
   if(found){
     if(nameEl) nameEl.value=found.name||'';
     if(priceEl && !priceEl.value) priceEl.value=found.price||'';
