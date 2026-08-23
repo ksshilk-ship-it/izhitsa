@@ -5161,6 +5161,14 @@ function svDeleteShift(){
   var shifts=getShifts();
   shifts=shifts.filter(function(s){return (s.id||s._id)!==id;});
   saveShifts(shifts);
+  // getShifts() unconditionally re-merges window._extraArchiveShifts on every call — shifts with
+  // a historical date (restore-mode "Восст." shifts, or anything older than the live-sync window)
+  // live only there, not in localStorage, so saveShifts() alone never removes them and the very
+  // next render pulls the "deleted" shift straight back in from this stale in-memory cache.
+  if(window._extraArchiveShifts && window._extraArchiveShifts.length){
+    window._extraArchiveShifts = window._extraArchiveShifts.filter(function(s){ return (s.id||s._id)!==id; });
+    try{ if(typeof _persistExtraArchiveShifts==='function') _persistExtraArchiveShifts(); }catch(e){}
+  }
   try{
     db.collection('iz_shifts').doc(id).delete().catch(function(err){
       showToast('⚠️ Удалено локально, но облако не подтвердило удаление: '+(err&&err.message||err));
