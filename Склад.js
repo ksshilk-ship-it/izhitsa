@@ -378,7 +378,11 @@ function openWoModal(){
   else renderWoItems();
   openMo('woMo');
 }
+var _savingWriteoff = false;
 function saveWriteoff(){
+  if(_savingWriteoff) return; // guards against double-tap / double-submit creating duplicate записи
+  _savingWriteoff = true;
+  setTimeout(function(){ _savingWriteoff = false; }, 1500);
   var hasPendingFields = (gv('woName')||'').trim() || (gv('woAmt')||'').trim();
   if(hasPendingFields){
     addWoItem();
@@ -535,7 +539,11 @@ function stockApplyReturn(shopName, items){
     stockUpdateQty(shopName, artNum, it.name, it.price, it.species, it.goodsType, it.size||'', (it.qty||1), null);
   });
 }
+var _savingReturn = false;
 function saveReturn(){
+  if(_savingReturn) return; // guards against double-tap / double-submit creating duplicate записи
+  _savingReturn = true;
+  setTimeout(function(){ _savingReturn = false; }, 1500);
   var hasPendingFields = (gv('retName')||'').trim() || (gv('retAmt')||'').trim();
   if(hasPendingFields){
     addReturnItem();
@@ -596,9 +604,13 @@ function lookupReceiveItem(num){
     if(hint){ hint.style.display='block'; hint.innerHTML='<span style="color:#8888aa">Артикул не найден — заполните вручную</span>'; }
   }
 }
+var _savingReceive = false;
 function saveReceive(){
   var name=gv('rcvName'),price=parseFloat(gv('rcvPrice'))||0;
   if(!name){showToast('Введите наименование');return;} if(!price){showToast('Введите цену');return;}
+  if(_savingReceive) return; // guards against double-tap / double-submit creating duplicate записи
+  _savingReceive = true;
+  setTimeout(function(){ _savingReceive = false; }, 1500);
   var article=gv('rcvArticle');
   var rcvQtyNum=parseFloat(gv('rcvQty'))||1;
   var isDr = _rcvGoodsType === 'dr';
@@ -1174,9 +1186,13 @@ function toggleExpForSeller(checked){
   if(sel) sel.style.display = checked ? 'block' : 'none';
   if(hint) hint.style.display = checked ? 'block' : 'none';
 }
+var _savingExpense = false;
 function saveExpense(){
   var amt = parseFloat((document.getElementById('expAmt')||{}).value)||0;
   if(!amt){showToast('Введите сумму');return;}
+  if(_savingExpense) return; // guards against double-tap / double-submit creating duplicate записи
+  _savingExpense = true;
+  setTimeout(function(){ _savingExpense = false; }, 1500);
   var comment = (document.getElementById('expComment')||{}).value||'';
   var supplier = (document.getElementById('expSupplierName')||{}).value||'';
   var labels = {zp:'💰 ЗП',travel:'🚌 Проезд',inkass:'🏦 Инкассация',other:'📝 Прочее',supplier:'🏭 Поставщику'};
