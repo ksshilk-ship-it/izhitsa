@@ -3939,6 +3939,7 @@ function _renderShiftView(){
   woBody += '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
   var woodWoCount = 0;
   writeoffs.forEach(function(w, i){
+    if(w.goodsType==='dr') return;
     var wItems = w.items||[];
     if(wItems.length > 0){
       wItems.forEach(function(it, wi){
@@ -3970,6 +3971,27 @@ function _renderShiftView(){
   if(!woodWoCount) woBody += '<div style="font-size:11px;color:#555568;padding:6px 0 10px">Списаний не было</div>';
   woBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
   var drWoCount = 0;
+  writeoffs.forEach(function(w, i){
+    if(w.goodsType!=='dr') return;
+    var wItems = w.items||[];
+    if(wItems.length > 0){
+      wItems.forEach(function(it, wi){
+        var lbl = (it.article||it.num?'№'+(it.article||it.num)+' ':'')+(it.name||'Списание')+(it.species?' · '+it.species:'')+(it.qty&&it.qty>1?' × '+it.qty:'');
+        var sub = '🛍'+(it.price?' · '+f(it.price)+'/шт':'')+((it.reason||w.reason)?' · '+(it.reason||w.reason):'');
+        var jwoKey = i+'_'+wi;
+        woBody += woItem(lbl, sub, '#a060f0', (it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwoItem\',\''+jwoKey+'\')');
+        if(_svEditTarget && _svEditTarget.kind==='jwoItem' && _svEditTarget.idx===jwoKey){
+          woBody += editItemForm('eJwo'+jwoKey, '#a060f0', {kind:'jwoItem', idx:jwoKey, extra:{id:'wreason',valueKey:'reason',label:'Причина списания',placeholder:'например: брак, бой, недостача'}, saveFn:'svSaveJwoItemEdit('+i+','+wi+',\'eJwo'+jwoKey+'\')', prefill:{art:it.num||it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, amt:(it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), reason:it.reason||w.reason||''}});
+        }
+      });
+    } else {
+      woBody += woItem(w.sub||w.label||'Списание', w.reason||'', '#a060f0', w.amount||0, 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwo\','+i+')');
+      if(_svEditTarget && _svEditTarget.kind==='jwo' && _svEditTarget.idx===i){
+        woBody += simpleEditForm('jwo'+i, '#a060f0', {kind:'jwo', idx:i, saveFn:'svSaveJEntrySimple(\'writeoff\','+i+')', prefill:{sub:w.sub||w.label||'', amt:w.amount||0, goodsType:w.goodsType}});
+      }
+    }
+    drWoCount++;
+  });
   drWo.forEach(function(w, i){
     var lbl = (w.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'')+(w.article?'№'+w.article+' ':'')+(w.name||'Списание ДР')+(w.species?' · '+w.species:'')+(w.qty?' × '+w.qty:'');
     var sub = '🛍 ДР Товар'+(w.price?' · '+f(w.price)+'/шт':'')+(w.reason?' · '+w.reason:'');
