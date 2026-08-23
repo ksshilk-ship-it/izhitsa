@@ -2781,11 +2781,14 @@ function renderAdminRcvWo(){
       if(e.type !== type) return;
       var amt = type==='receive' ? (e.goodsDrEffect && e.goodsType==='dr' ? e.goodsDrEffect : (e.goodsEffect||e.amount||0)) : (e.amount||0);
       var invNum = '';
+      var invItemsFallback = null;
       if(e.invId){
         var found = allInvCache.find(function(i){ return (i.id||i._id)===e.invId; });
         if(found&&found.num) invNum = found.num;
+        if(found) invItemsFallback = found.acceptedItems||found.items||null;
       }
-      rows.push({shop:sn, date:shDate, ts:e.ts||shDate, label:invNum?'Приёмка '+invNum:(e.label||e.sub||''), sub:e.sub||'', amount:amt, goodsType:e.goodsType||'derevo', invId:e.invId||null, entryId:e.id||null, shiftId:sh.id||sh._id||null, items:e.items||[], reason:e.reason||'', isRevaluation:!!e.isRevaluation});
+      var rowItems = (e.items&&e.items.length) ? e.items : (invItemsFallback||[]);
+      rows.push({shop:sn, date:shDate, ts:e.ts||shDate, label:invNum?'Приёмка '+invNum:(e.label||e.sub||''), sub:e.sub||'', amount:amt, goodsType:e.goodsType||'derevo', invId:e.invId||null, entryId:e.id||null, shiftId:sh.id||sh._id||null, items:rowItems, reason:e.reason||'', isRevaluation:!!e.isRevaluation});
     });
     if(type==='receive'){
       (sh.goodsReceives||[]).forEach(function(r){ rows.push({shop:sn,date:shDate,ts:shDate,label:'Приход Дерево',sub:r.name||'',amount:r.amt||r.amount||0,goodsType:'derevo',items:[],isRevaluation:!!r.isRevaluation}); });
@@ -2800,13 +2803,26 @@ function renderAdminRcvWo(){
   window._adminRcvRowsByInv = {};
   rows.forEach(function(r){ if(r.invId) window._adminRcvRowsByInv[r.invId] = r; });
   var totalWood=0, totalDr=0;
-  rows.forEach(function(r){ if(r.goodsType==='dr') totalDr+=r.amount; else totalWood+=r.amount; });
+  var qtyArtWood=0, qtyNoArtWood=0, qtyArtDr=0, qtyNoArtDr=0;
+  rows.forEach(function(r){
+    var qa=0, qn=0;
+    (r.items||[]).forEach(function(it){
+      var q = it.qty||1;
+      if(it.article||it.num) qa+=q; else qn+=q;
+    });
+    r.qtyArt=qa; r.qtyNoArt=qn;
+    if(r.goodsType==='dr'){ totalDr+=r.amount; qtyArtDr+=qa; qtyNoArtDr+=qn; }
+    else { totalWood+=r.amount; qtyArtWood+=qa; qtyNoArtWood+=qn; }
+  });
+  function _qtyLine(qa, qn){
+    return (qa+qn) ? '<div class="u-fs10-gray" style="margin-top:2px">'+(qa+qn)+' шт. ('+qa+' с арт. · '+qn+' без)</div>' : '';
+  }
   var sumEl=document.getElementById('adminRcvSummary');
   if(sumEl){
     sumEl.innerHTML='<div style="display:flex;gap:8px;margin-bottom:4px">'+
-      '<div style="background:#1a2e1e;border:1px solid #2e4e2e;border-radius:10px;padding:8px 12px;flex:1"><div class="u-fs10-gray">🌳 Дерево</div><div style="font-size:15px;font-weight:700;color:#c8f060">'+Math.round(totalWood).toLocaleString('ru-RU')+'₽</div></div>'+
-      '<div style="background:#1e1a2e;border:1px solid #3e2e4e;border-radius:10px;padding:8px 12px;flex:1"><div class="u-fs10-gray">🛍 ДР Товар</div><div style="font-size:15px;font-weight:700;color:#a060f0">'+Math.round(totalDr).toLocaleString('ru-RU')+'₽</div></div>'+
-      '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:8px 12px;flex:1"><div class="u-fs10-gray">Итого</div><div style="font-size:15px;font-weight:700;color:#f0f0f8">'+Math.round(totalWood+totalDr).toLocaleString('ru-RU')+'₽</div></div>'+
+      '<div style="background:#1a2e1e;border:1px solid #2e4e2e;border-radius:10px;padding:8px 12px;flex:1"><div class="u-fs10-gray">🌳 Дерево</div><div style="font-size:15px;font-weight:700;color:#c8f060">'+Math.round(totalWood).toLocaleString('ru-RU')+'₽</div>'+_qtyLine(qtyArtWood,qtyNoArtWood)+'</div>'+
+      '<div style="background:#1e1a2e;border:1px solid #3e2e4e;border-radius:10px;padding:8px 12px;flex:1"><div class="u-fs10-gray">🛍 ДР Товар</div><div style="font-size:15px;font-weight:700;color:#a060f0">'+Math.round(totalDr).toLocaleString('ru-RU')+'₽</div>'+_qtyLine(qtyArtDr,qtyNoArtDr)+'</div>'+
+      '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:8px 12px;flex:1"><div class="u-fs10-gray">Итого</div><div style="font-size:15px;font-weight:700;color:#f0f0f8">'+Math.round(totalWood+totalDr).toLocaleString('ru-RU')+'₽</div>'+_qtyLine(qtyArtWood+qtyArtDr,qtyNoArtWood+qtyNoArtDr)+'</div>'+
     '</div>'+
     '<div class="u-fs11-gray">'+rows.length+' записей · '+range.from+(range.from!==range.to?' — '+range.to:'')+'</div>';
   }
@@ -2835,6 +2851,7 @@ function renderAdminRcvWo(){
           '<div class="u-fs13-bold">'+r.label+'</div>'+
           (r.sub&&r.sub!==r.label?'<div class="u-fs11-gray">'+r.sub+'</div>':'')+
           (r.reason?'<div style="font-size:11px;color:#a060f0">'+r.reason+'</div>':'')+
+          ((r.qtyArt||r.qtyNoArt)?'<div style="font-size:11px;color:#8888aa;margin-top:2px">'+(r.qtyArt+r.qtyNoArt)+' шт. ('+r.qtyArt+' с арт. · '+r.qtyNoArt+' без)</div>':'')+
         '</div>'+
         '<div style="text-align:right;padding-left:10px;flex-shrink:0">'+
           '<div style="font-size:15px;font-weight:700;color:'+gtColor+'">'+Math.round(r.amount).toLocaleString('ru-RU')+'₽</div>'+
@@ -2844,13 +2861,14 @@ function renderAdminRcvWo(){
       (r.entryId&&r.shiftId?'<button type="button" onclick="adminToggleMoveDate(this,\''+r.entryId+'\',\''+r.shiftId+'\',\''+r.shop.replace(/'/g,"\\'")+'\')" style="font-size:11px;padding:3px 9px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0a060;cursor:pointer;margin-top:5px">📅 Изменить дату прихода</button>':'')+
     '</div>';
   }
-  function groupHeader(key, label, count, total, isOpen){
+  function groupHeader(key, label, count, total, isOpen, qtyArt, qtyNoArt){
     var totalStr = Math.round(total).toLocaleString('ru-RU')+'₽';
+    var qtyStr = ((qtyArt||qtyNoArt)) ? ' · '+((qtyArt||0)+(qtyNoArt||0))+' шт. ('+(qtyArt||0)+' с арт. / '+(qtyNoArt||0)+' без)' : '';
     return '<div onpointerdown="event.preventDefault();adminRcvToggle(\''+key+'\')" '+
       'style="background:#1a1a22;border:1px solid #3e3e4e;border-radius:12px;padding:10px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;cursor:pointer">'+
       '<div>'+
         '<div class="u-fs13-bold">'+label+'</div>'+
-        '<div class="u-fs11-gray">'+count+' накладных · '+totalStr+'</div>'+
+        '<div class="u-fs11-gray">'+count+' накладных · '+totalStr+qtyStr+'</div>'+
       '</div>'+
       '<div style="font-size:16px;color:#c8f060">'+(isOpen?'▲':'▼')+'</div>'+
     '</div>';
@@ -2860,8 +2878,8 @@ function renderAdminRcvWo(){
     var byMonth = {};
     rows.forEach(function(r){
       var mm = r.date.slice(0,7); // yyyy-mm
-      if(!byMonth[mm]) byMonth[mm]={rows:[],total:0,count:0};
-      byMonth[mm].rows.push(r); byMonth[mm].total+=r.amount; byMonth[mm].count++;
+      if(!byMonth[mm]) byMonth[mm]={rows:[],total:0,count:0,qtyArt:0,qtyNoArt:0};
+      byMonth[mm].rows.push(r); byMonth[mm].total+=r.amount; byMonth[mm].count++; byMonth[mm].qtyArt+=r.qtyArt; byMonth[mm].qtyNoArt+=r.qtyNoArt;
     });
     var months = Object.keys(byMonth).sort().reverse();
     months.forEach(function(mm){
@@ -2872,17 +2890,17 @@ function renderAdminRcvWo(){
         return mNames[parseInt(parts[1],10)-1]+' '+parts[0];
       })();
       var mOpen=!!_adminRcvOpen['m_'+mm];
-      html+=groupHeader('m_'+mm,mLabel,mData.count,mData.total,mOpen);
+      html+=groupHeader('m_'+mm,mLabel,mData.count,mData.total,mOpen,mData.qtyArt,mData.qtyNoArt);
       if(mOpen){
         var byDay={};
-        mData.rows.forEach(function(r){ var d=r.date; if(!byDay[d]) byDay[d]={rows:[],total:0,count:0}; byDay[d].rows.push(r); byDay[d].total+=r.amount; byDay[d].count++; });
+        mData.rows.forEach(function(r){ var d=r.date; if(!byDay[d]) byDay[d]={rows:[],total:0,count:0,qtyArt:0,qtyNoArt:0}; byDay[d].rows.push(r); byDay[d].total+=r.amount; byDay[d].count++; byDay[d].qtyArt+=r.qtyArt; byDay[d].qtyNoArt+=r.qtyNoArt; });
         var days=Object.keys(byDay).sort().reverse();
         days.forEach(function(d){
           var dData=byDay[d]; var parts=d.split('-');
           var dLabel=parts[2]+'.'+parts[1]+'.'+parts[0];
           var dKey='d_'+d; var dOpen=!!_adminRcvOpen[dKey];
           html+='<div style="margin-left:12px">';
-          html+=groupHeader(dKey,dLabel,dData.count,dData.total,dOpen);
+          html+=groupHeader(dKey,dLabel,dData.count,dData.total,dOpen,dData.qtyArt,dData.qtyNoArt);
           if(dOpen){ html+='<div style="margin-left:12px">'; dData.rows.forEach(function(r){ html+=rowCard(r); }); html+='</div>'; }
           html+='</div>';
         });
@@ -2890,7 +2908,7 @@ function renderAdminRcvWo(){
     });
   } else {
     var byDay2={};
-    rows.forEach(function(r){ var d=r.date; if(!byDay2[d]) byDay2[d]={rows:[],total:0,count:0}; byDay2[d].rows.push(r); byDay2[d].total+=r.amount; byDay2[d].count++; });
+    rows.forEach(function(r){ var d=r.date; if(!byDay2[d]) byDay2[d]={rows:[],total:0,count:0,qtyArt:0,qtyNoArt:0}; byDay2[d].rows.push(r); byDay2[d].total+=r.amount; byDay2[d].count++; byDay2[d].qtyArt+=r.qtyArt; byDay2[d].qtyNoArt+=r.qtyNoArt; });
     var days2=Object.keys(byDay2).sort().reverse();
     days2.forEach(function(d){
       var dData=byDay2[d]; var parts=d.split('-');
@@ -2899,7 +2917,7 @@ function renderAdminRcvWo(){
       if(days2.length===1 && _adminRcvPeriod==='today'){
         dData.rows.forEach(function(r){ html+=rowCard(r); });
       } else {
-        html+=groupHeader(dKey,dLabel,dData.count,dData.total,dOpen);
+        html+=groupHeader(dKey,dLabel,dData.count,dData.total,dOpen,dData.qtyArt,dData.qtyNoArt);
         if(dOpen){ html+='<div style="margin-left:12px">'; dData.rows.forEach(function(r){ html+=rowCard(r); }); html+='</div>'; }
       }
     });
