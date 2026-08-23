@@ -236,16 +236,6 @@ function renderRestoreShiftState(){
   updateRstMainBlockVisibility();
 }
 function enterRestoreMode(meta){
-  try{
-    db.collection('iz_shifts').where('shopName','==',meta.shop).where('date','==',meta.date).get({source:'server'}).then(function(snap){
-      if(!snap.empty){
-        var existing = snap.docs.map(function(d){ return d.data(); });
-        var closedOne = existing.find(function(s){ return s.status==='closed'; });
-        showToast('⚠️ На сервере уже есть смена «'+meta.shop+'» за '+meta.date+' ('+(closedOne?'закрыта':'открыта')+') — возможно, данные не потеряны, а просто не синхронизировались на этом устройстве. Проверьте архив перед восстановлением вручную, чтобы не задвоить смену.');
-        try{ logAction('RESTORE_MODE_DUPLICATE_WARNING', {shopName:meta.shop, date:meta.date, existingCount:existing.length}); }catch(e){}
-      }
-    }).catch(function(){});
-  }catch(e){}
   if(session && !restoreMode){
     localStorage.setItem(KEY.liveSessionBackup, JSON.stringify(session));
     localStorage.setItem(KEY.liveJournalBackup, JSON.stringify(journal));
@@ -331,7 +321,20 @@ function openRestoreShift(){
     if(session.restrictedShops && session.restrictedShops.indexOf(shop)<0){ showToast('⛔ Этот магазин недоступен'); return; }
   }
   if(date>=new Date().toISOString().split('T')[0]){ showToast('⛔ Можно восстановить только прошедший день'); return; }
-  enterRestoreMode({shop:shop, sellerId:sellerId, sellerName:sellerName, date:date});
+  var meta = {shop:shop, sellerId:sellerId, sellerName:sellerName, date:date};
+  showToast('⏳ Проверяю, нет ли уже смены за эту дату...');
+  try{
+    db.collection('iz_shifts').where('shopName','==',shop).where('date','==',date).get({source:'server'}).then(function(snap){
+      if(!snap.empty){
+        var existing = snap.docs.map(function(d){ return d.data(); });
+        var closedOne = existing.find(function(s){ return s.status==='closed'; });
+        try{ logAction('RESTORE_MODE_DUPLICATE_WARNING', {shopName:shop, date:date, existingCount:existing.length}); }catch(e){}
+        var proceed = confirm('⚠️ На сервере уже есть смена «'+shop+'» за '+date+' ('+(closedOne?'закрыта':'открыта')+').\n\nВозможно, данные не потеряны, а просто не синхронизировались на этом устройстве — проверьте архив, прежде чем восстанавливать вручную, чтобы не задвоить смену.\n\nВсё равно создать смену восстановления?');
+        if(!proceed) return;
+      }
+      enterRestoreMode(meta);
+    }).catch(function(){ enterRestoreMode(meta); }); // сеть недоступна — не блокируем восстановление
+  }catch(e){ enterRestoreMode(meta); }
 }
 function closeRestoreShift(){
   if(!confirm('Закрыть смену восстановления? Уже внесённые записи останутся сохранёнными.')) return;
