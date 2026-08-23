@@ -210,7 +210,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '08.23.1';
+var APP_BUILD_VERSION = '08.23.2';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -501,7 +501,13 @@ function _initFirebase(){
         });
       }
       var rdb=firebase.firestore();
-      rdb.enablePersistence({synchronizeTabs:true}).catch(function(e){console.log('Persist:',e.code);});
+      // Firestore's own IndexedDB persistence (enablePersistence) disabled 2026-08-23: its
+      // multi-tab-synchronized local cache kept corrupting into "INTERNAL ASSERTION FAILED:
+      // Unexpected state" with many sellers/devices open at once, hanging every read/write
+      // through it. The app already has its own independent offline/retry layer (localStorage,
+      // izhitsa_cache IndexedDB, _pendingSync + _pushShiftWithRetry) that doesn't touch this
+      // subsystem, so Firestore calls now always go straight to the network — slower offline,
+      // but no more silent corruption or hung promises.
       db=rdb;_offlineNoFirebase=false;_firebaseReady=true;
       if(_pendingWrites.length){
         console.log('[App] Флашим',_pendingWrites.length,'отложенных записей');
