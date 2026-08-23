@@ -484,10 +484,11 @@ function syncLiveShift(){
         try{ stopLiveShiftListener(); }catch(e){}
         return;
       }
-      if(snap.exists) mergeRemoteJournal(snap.data());
-      docRef.set(buildLiveShiftDoc()).then(function(){
-        _hideLiveSyncFailBanner();
-      }).catch(function(){ _onLiveSyncFailed(); });
+      _mergeRemoteJournalWithCloudTrash(snap.exists?snap.data():null, function(){
+        docRef.set(buildLiveShiftDoc()).then(function(){
+          _hideLiveSyncFailBanner();
+        }).catch(function(){ _onLiveSyncFailed(); });
+      });
     }).catch(function(){
       _onLiveSyncFailed();
     });
@@ -534,6 +535,23 @@ function mergeRemoteJournal(remote){
     saveJ();
   }
   return added;
+}
+var _lastTrashPullAt = 0;
+// mergeRemoteJournal only prunes tombstoned entries it already knows about (local trash +
+// remote.tombstones, which nothing currently writes). An admin deleting a duplicate journal
+// entry on a DIFFERENT device writes it to the shared iz_settings/shop_trash doc — but nothing
+// pulled that down during live sync, so an actively-open seller session would keep re-pushing
+// its own stale (still-duplicated) local copy over the admin's fix on every save. Throttled to
+// once/minute since this runs on every renderAll()-triggered sync, not just deletions.
+function _mergeRemoteJournalWithCloudTrash(remoteData, cb){
+  var now = Date.now();
+  function doMerge(){ cb(mergeRemoteJournal(remoteData)); }
+  if(now - _lastTrashPullAt > 60000){
+    _lastTrashPullAt = now;
+    pullTrashFromCloud(doMerge);
+  } else {
+    doMerge();
+  }
 }
 var _manualSyncing = false;
 var _syncPressTimer = null;
@@ -629,11 +647,12 @@ function startLiveShiftListener(){
           showToast('🔐 Эта смена была закрыта администратором. Откройте новую смену через "Выйти".');
           return;
         }
-        var added = mergeRemoteJournal(remote);
-        if(added>0){
-          renderAll();
-          showToast('🔄 Новые записи синхронизированы');
-        }
+        _mergeRemoteJournalWithCloudTrash(remote, function(added){
+          if(added>0){
+            renderAll();
+            showToast('🔄 Новые записи синхронизированы');
+          }
+        });
       }, function(){ /* offline / permission errors — ignore, manual sync still works */ });
   }catch(e){}
 }
