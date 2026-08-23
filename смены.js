@@ -887,20 +887,24 @@ function getPrevShiftByOpenOrder(shopName, beforeOpenedAt){
   });
   return candidates[0] || null;
 }
+function _computeMorningCashDiffParts(sh){
+  var prev = getPrevShiftByOpenOrder(sh.shopName, sh.openedAt);
+  if(!prev) return [];
+  var parts = [];
+  if(prev.cashEvening!=null && Math.abs((sh.cashMorning||0)-prev.cashEvening)>=1){
+    parts.push({label:'🌳 Дерево', morning:sh.cashMorning||0, prevEvening:prev.cashEvening, diff:Math.round((sh.cashMorning||0)-prev.cashEvening)});
+  }
+  if(prev.drCashEvening!=null && Math.abs((sh.cashDrMorning||0)-prev.drCashEvening)>=1){
+    parts.push({label:'🛍 ДР Товар', morning:sh.cashDrMorning||0, prevEvening:prev.drCashEvening, diff:Math.round((sh.cashDrMorning||0)-prev.drCashEvening)});
+  }
+  if(prev.cashStaffEvening!=null && Math.abs((sh.cashStaffMorning||0)-prev.cashStaffEvening)>=1){
+    parts.push({label:'🛒 Покупки сотрудников', morning:sh.cashStaffMorning||0, prevEvening:prev.cashStaffEvening, diff:Math.round((sh.cashStaffMorning||0)-prev.cashStaffEvening)});
+  }
+  return parts;
+}
 function getMorningCashDiff(){
   if(!session) return {hasDiff:false, parts:[]};
-  var prev = getPrevShiftByOpenOrder(session.shopName, session.openedAt);
-  if(!prev) return {hasDiff:false, parts:[]};
-  var parts = [];
-  if(prev.cashEvening!=null && Math.abs((session.cashMorning||0)-prev.cashEvening)>=1){
-    parts.push({label:'🌳 Дерево', morning:session.cashMorning||0, prevEvening:prev.cashEvening, diff:Math.round((session.cashMorning||0)-prev.cashEvening)});
-  }
-  if(prev.drCashEvening!=null && Math.abs((session.cashDrMorning||0)-prev.drCashEvening)>=1){
-    parts.push({label:'🛍 ДР Товар', morning:session.cashDrMorning||0, prevEvening:prev.drCashEvening, diff:Math.round((session.cashDrMorning||0)-prev.drCashEvening)});
-  }
-  if(prev.cashStaffEvening!=null && Math.abs((session.cashStaffMorning||0)-prev.cashStaffEvening)>=1){
-    parts.push({label:'🛒 Покупки сотрудников', morning:session.cashStaffMorning||0, prevEvening:prev.cashStaffEvening, diff:Math.round((session.cashStaffMorning||0)-prev.cashStaffEvening)});
-  }
+  var parts = _computeMorningCashDiffParts(session);
   return {hasDiff: parts.length>0, parts: parts};
 }
 function calcGoodsMorning(shopName){
@@ -3175,6 +3179,7 @@ function toggleDateCheckCalendar(){
     try{ _ensureShiftsLoadedForRange(from).then(renderDateCheckCalendar); }catch(e){ renderDateCheckCalendar(); }
   }
 }
+var _dateCheckLoadedRange = null;
 function renderDateCheckCalendar(){
   var c = document.getElementById('dateCheckCalendar'); if(!c || !_dateCheckShown) return;
   var allShifts = getShifts();
@@ -3184,6 +3189,15 @@ function renderDateCheckCalendar(){
     var now = new Date();
     from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
     to = new Date().toISOString().split('T')[0];
+  }
+  // Не все вызовы этой функции (например из renderShiftHistory при смене фильтра) идут через
+  // toggleDateCheckCalendar(), которая сама дожидается подгрузки старых архивных смен — из-за
+  // этого календарь мог на мгновение показать «Нет смены» там, где смена на самом деле есть,
+  // просто ещё не подтянута из облака. Подгружаем диапазон здесь же и перерисовываем один раз
+  // по готовности (флаг ниже не даёт зациклиться на одном и том же диапазоне).
+  if(_dateCheckLoadedRange !== from){
+    _dateCheckLoadedRange = from;
+    try{ _ensureShiftsLoadedForRange(from).then(function(){ if(_dateCheckShown) renderDateCheckCalendar(); }); }catch(e){}
   }
   var dates = [];
   var d = new Date(from+'T00:00:00'), end = new Date(to+'T00:00:00');
