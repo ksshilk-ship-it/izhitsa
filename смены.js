@@ -3148,7 +3148,6 @@ function syncShiftsFromFirestore(){
       var local = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
       local = local.filter(function(s){ return !tset[s.id||s._id]; });
       var lmap={};local.forEach(function(s){lmap[s.id||s._id]=true;});
-      var extraIds={}; window._extraArchiveShifts.forEach(function(s){ extraIds[s.id||s._id]=true; });
       var added=0, skipped=0;
       snap.forEach(function(doc){
         if(tset[doc.id]){ skipped++; return; } // смена удалена админом — не воскрешаем
@@ -3157,11 +3156,19 @@ function syncShiftsFromFirestore(){
         if(isRecent){
           if(!lmap[doc.id]){local.push(data);added++;}
           else{var idx=local.findIndex(function(s){return (s.id||s._id)===doc.id;});if(idx>=0)local[idx]=Object.assign(local[idx],data);}
-        } else if(!lmap[doc.id] && !extraIds[doc.id]){
-          data._archiveOnly=true;
-          window._extraArchiveShifts.push(data);
-          extraIds[doc.id]=true;
-          added++;
+        } else if(!lmap[doc.id]){
+          // Раньше архивные смены, уже закэшированные в этой сессии, никогда не обновлялись —
+          // только новые (пропущенные) добавлялись. Из-за этого «Синх» не подтягивал правки,
+          // внесённые на другом устройстве, для уже просмотренных старых смен.
+          var exIdx = window._extraArchiveShifts.findIndex(function(s){ return (s.id||s._id)===doc.id; });
+          if(exIdx<0){
+            data._archiveOnly=true;
+            window._extraArchiveShifts.push(data);
+            added++;
+          } else if(!window._extraArchiveShifts[exIdx]._pendingSync){
+            data._archiveOnly=true;
+            window._extraArchiveShifts[exIdx] = Object.assign(window._extraArchiveShifts[exIdx], data);
+          }
         }
       });
       var wasPruned = saveShifts(local);
@@ -3353,20 +3360,24 @@ function openShiftView(id){
     db.collection('iz_shifts').doc(id).get({source:'server'}).then(function(snap){
       if(!snap.exists) return;
       if(currentEditShiftId !== id) return; // администратор уже открыл другую смену
+      if(_currentShiftView._pendingSync) return; // свежая локальная правка ещё не подтверждена сервером — не затирать её
       var remote = snap.data(); remote.id = id;
       remote._archiveOnly = _isArchiveShift(remote); // raw Firestore data never carries this client-only flag
-      var localJnlLen = (_currentShiftView.journal||[]).length;
-      var remoteJnlLen = (remote.journal||[]).length;
-      var localUpd = _currentShiftView.updatedAt || _currentShiftView.closedAt || '';
-      var remoteUpd = remote.updatedAt || remote.closedAt || '';
-      if(remoteJnlLen > localJnlLen || remoteUpd > localUpd){
-        _currentShiftView = remote;
+      // Compare full payloads rather than trusting updatedAt/journal-length heuristics — closed-shift
+      // edits (e.g. svSaveTovar correcting остаток) only ever set editedAt, which this used to ignore,
+      // so a genuinely fresher server copy could get silently discarded and the device kept showing
+      // stale numbers forever with no error or toast.
+      var localCompare = Object.assign({}, _currentShiftView); delete localCompare._archiveOnly;
+      var remoteCompare = Object.assign({}, remote); delete remoteCompare._archiveOnly;
+      var changed = JSON.stringify(remoteCompare) !== JSON.stringify(localCompare);
+      _currentShiftView = remote;
+      var allShifts = getShifts();
+      var idx = allShifts.findIndex(function(s){ return (s.id||s._id)===id; });
+      if(idx>=0) allShifts[idx] = remote; else allShifts.push(remote);
+      saveShifts(allShifts);
+      if(changed){
         _svOpenAccs = {};
         _renderShiftView();
-        var allShifts = getShifts();
-        var idx = allShifts.findIndex(function(s){ return (s.id||s._id)===id; });
-        if(idx>=0) allShifts[idx] = remote; else allShifts.push(remote);
-        saveShifts(allShifts);
         showToast('🔄 Данные смены обновлены из облака');
       }
     }).catch(function(){});
