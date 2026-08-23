@@ -3100,7 +3100,8 @@ function syncShiftsFromFirestore(){
     if(_syncDone) return;
     _syncDone = true;
     if(btn){btn.disabled=false;btn.textContent='☁️ Синх';}
-    if(status){status.textContent='⚠️ Сервер не отвечает — проверьте связь и попробуйте ещё раз';}
+    if(status){status.textContent='⚠️ Сервер не отвечает — похоже на ту же ошибку кэша Firestore, чиню и перезагружаю...';}
+    _recoverFsCorruption();
   }, 15000);
   pullShiftTombstonesFromCloud(function(tombstoned){
     if(_syncDone) return;
@@ -3146,6 +3147,7 @@ function syncShiftsFromFirestore(){
       _syncDone = true; clearTimeout(_syncTimeout);
       if(btn){btn.disabled=false;btn.textContent='☁️ Синх';}
       if(status){status.textContent='❌ '+e.message;}
+      if(_isFsCorruptionMsg(e&&e.message)) _recoverFsCorruption();
     });
   });
 }
