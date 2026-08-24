@@ -4227,6 +4227,17 @@ function _renderShiftView(){
         '<div id="svAdd_'+id+'_saHint" style="display:none;font-size:10px;color:#8888aa;margin-bottom:6px">Сумма зачтётся в ЗП выбранного продавца, а не текущей смены</div>'+
       '</div>';
     }
+    if(opts.payMethod){
+      html += '<div id="svAdd_'+id+'_payMethodBlock" style="display:none;margin-bottom:6px">'+
+        '<div class="u-fs10-gray-mb3">Как выплачено</div>'+
+        '<div class="pay-chips" id="svAdd_'+id+'_payMethodChips">'+
+          '<div class="pc active" onclick="svSetExpPayMethod(\''+id+'\',\'cash\',this)">💵 Наличными из кассы</div>'+
+          '<div class="pc" onclick="svSetExpPayMethod(\''+id+'\',\'transfer\',this)">🏦 Переводом</div>'+
+          '<div class="pc" onclick="svSetExpPayMethod(\''+id+'\',\'other\',this)">📝 Иначе</div>'+
+        '</div>'+
+        '<div style="font-size:10px;color:#8888aa;margin-top:4px">Если не наличными — сумма не спишется с кассы, но зачтётся в счёт ЗП</div>'+
+      '</div>';
+    }
     html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px">'+
       '<button onclick="document.getElementById(\'svAddForm_'+id+'\').style.display=\'none\'" style="padding:8px;background:none;border:1px solid #2e2e3e;border-radius:8px;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>'+
       '<button onclick="'+saveFn+'" style="padding:8px;background:'+color+';border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
@@ -4261,7 +4272,7 @@ function _renderShiftView(){
       ]},
       {id:'expWoodAmt',label:'Сумма, ₽',type:'number',inputmode:'numeric',placeholder:'0'},
       {id:'expWoodComment',label:'Комментарий',placeholder:'необязательно'}
-    ],'svAddExp(\'wood\')',{sellerAttrib:true})+
+    ],'svAddExp(\'wood\')',{sellerAttrib:true, payMethod:true})+
     addFormBtn('#a060f0','showAddForm(\'expDr\')','Добавить расход ДР')+
     addForm('expDr','#a060f0',[
       {id:'expDrType',label:'Тип',type:'select',options:[
@@ -5399,16 +5410,37 @@ function svAddWo(type){
   svPersist(); _svOpenAccs['acc_wo']=true; _renderShiftView();
   showToast('✅ Списание добавлено ('+items.length+(items.length===1?' поз.)':' поз.)')+(isReval?' — переоценка':''));
 }
+var _svExpPayMethod = {};
 function _svExpTypeVis(id){
   var typeEl = document.getElementById('svAdd_'+id+'Type');
   var block = document.getElementById('svAdd_'+id+'_saBlock');
-  if(!typeEl || !block) return;
+  var payBlock = document.getElementById('svAdd_'+id+'_payMethodBlock');
+  if(!typeEl) return;
   var show = typeEl.value==='zp' || typeEl.value==='travel';
-  block.style.display = show ? 'block' : 'none';
-  if(!show){
-    var toggle=document.getElementById('svAdd_'+id+'_saToggle'); if(toggle) toggle.checked=false;
-    _svToggleExpForSeller(id);
+  if(block){
+    block.style.display = show ? 'block' : 'none';
+    if(!show){
+      var toggle=document.getElementById('svAdd_'+id+'_saToggle'); if(toggle) toggle.checked=false;
+      _svToggleExpForSeller(id);
+    }
   }
+  if(payBlock){
+    payBlock.style.display = show ? 'block' : 'none';
+    // Always reset to cash on any type change (not just when hiding) — otherwise a "Переводом"
+    // choice left over from a previous добавление could silently carry into a fresh entry that
+    // was never actually paid by transfer, understating what's due out of the till.
+    _svExpPayMethod[id] = 'cash';
+    var chipsWrap = document.getElementById('svAdd_'+id+'_payMethodChips');
+    if(chipsWrap){
+      chipsWrap.querySelectorAll('.pc').forEach(function(p,i){ p.classList.toggle('active', i===0); });
+    }
+  }
+}
+function svSetExpPayMethod(id, m, el){
+  _svExpPayMethod[id] = m;
+  var chipsWrap = document.getElementById('svAdd_'+id+'_payMethodChips');
+  if(chipsWrap) chipsWrap.querySelectorAll('.pc').forEach(function(p){ p.classList.remove('active'); });
+  if(el) el.classList.add('active');
 }
 function _svToggleExpForSeller(id){
   var toggle = document.getElementById('svAdd_'+id+'_saToggle');
@@ -5430,7 +5462,8 @@ function _svToggleExpForSeller(id){
 function svAddExp(type){
   var isWood = type==='wood';
   var isStaff = type==='staff';
-  var fieldPrefix = isStaff?'svAdd_expStaff':(isWood?'svAdd_expWood':'svAdd_expDr');
+  var id = isStaff?'expStaff':(isWood?'expWood':'expDr');
+  var fieldPrefix = 'svAdd_'+id;
   var expType = _svVal(fieldPrefix+'Type');
   var amt     = _svNum(fieldPrefix+'Amt');
   var comment = _svVal(fieldPrefix+'Comment');
@@ -5439,10 +5472,11 @@ function svAddExp(type){
   var saToggle = document.getElementById(fieldPrefix+'_saToggle');
   var saSelect = document.getElementById(fieldPrefix+'_saSelect');
   var forSeller = (isZpOrTravel && saToggle && saToggle.checked && saSelect) ? (saSelect.value||'') : '';
+  var payMethod = isZpOrTravel ? (_svExpPayMethod[id]||'cash') : 'cash';
   var jnl = _currentShiftView.journal||[];
   var gType = isStaff?'staff':(isWood?'wood':'dr');
-  var _expEntryAdm = {id:uid(),type:'expense',expType:expType,amount:amt,comment:comment,goodsType:gType,forSeller:(forSeller||null),ts:_workingNowISO(),
-    cashEffect: (isWood&&!isStaff)?-amt:0, cashDrEffect: (!isWood&&!isStaff)?-amt:0, cardEffect:0, staffEffect: isStaff?-amt:0, goodsEffect:0};
+  var _expEntryAdm = {id:uid(),type:'expense',expType:expType,amount:amt,comment:comment,goodsType:gType,forSeller:(forSeller||null),payMethod:payMethod,ts:_workingNowISO(),
+    cashEffect: (isWood&&!isStaff&&payMethod==='cash')?-amt:0, cashDrEffect: (!isWood&&!isStaff&&payMethod==='cash')?-amt:0, cardEffect:0, staffEffect: isStaff?-amt:0, goodsEffect:0};
   jnl.push(_expEntryAdm);
   _recordJournalEntryIndependently(_expEntryAdm, _currentShiftView.shopName, 'expense');
   _currentShiftView.journal = jnl;
