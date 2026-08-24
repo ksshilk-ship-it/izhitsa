@@ -1715,6 +1715,7 @@ function renderShiftsCalendar(){
 }
 function _shiftSetSafe(shiftId, sh, successMsg, errPrefix){
   sh._pendingSync = true;
+  _svEditedSinceOpen = true;
   try{
     var _shifts0 = getShifts();
     var _idx0 = _shifts0.findIndex(function(s){ return (s.id||s._id)===shiftId; });
@@ -3373,6 +3374,7 @@ function openShiftView(id){
   // (used below when refreshing from the cloud) never carries this client-only flag at all.
   _currentShiftView._archiveOnly = _isArchiveShift(_currentShiftView);
   _svOpenAccs = {};
+  _svEditedSinceOpen = false;
   _renderShiftView();
   openMo('editShiftMo');
   try{
@@ -3380,6 +3382,12 @@ function openShiftView(id){
       if(!snap.exists) return;
       if(currentEditShiftId !== id) return; // администратор уже открыл другую смену
       if(_currentShiftView._pendingSync) return; // свежая локальная правка ещё не подтверждена сервером — не затирать её
+      // Это разовый снимок, снятый в момент открытия смены — если админ успел что-то
+      // сохранить (даже несколько правок подряд) до того, как он пришёл, накатывать его
+      // уже нельзя: _pendingSync сбрасывается по одной правке за раз, а не по счётчику, и
+      // мог обнулиться после ПЕРВОЙ правки, пока ВТОРАЯ (например, эта самая продажа) ещё
+      // сохранялась — тогда этот устаревший снимок тихо затирал именно последнюю правку.
+      if(_svEditedSinceOpen) return;
       var remote = snap.data(); remote.id = id;
       remote._archiveOnly = _isArchiveShift(remote); // raw Firestore data never carries this client-only flag
       // Compare full payloads rather than trusting updatedAt/journal-length heuristics — closed-shift
@@ -3913,8 +3921,13 @@ function _renderShiftView(){
     var invFn = r.invId ? 'svOpenInvoiceFromReceive(\''+r.invId+'\')' : null;
     var amt = r.goodsEffect!=null ? r.goodsEffect : (r.amount||0);
     var revBadge = r.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'';
-    rcvBody += rcvItem(revBadge+(r.sub||r.label||'Приход'), r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#555568', amt, '#60f090', 'svDeleteJEntry(\'receive\','+i+')', 'svToggleEdit(\'jrcv\','+i+')', invFn);
-    if(_svEditTarget && _svEditTarget.kind==='jrcv' && _svEditTarget.idx===i){
+    rcvBody += rcvItem(revBadge+(r.sub||r.label||'Приход'), r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#555568', amt, '#60f090', 'svDeleteJEntry(\'receive\','+i+')', 'svToggleEdit(\''+(r.items&&r.items.length===1?'jrcvItem':'jrcv')+'\','+i+')', invFn);
+    if(r.items && r.items.length===1){
+      if(_svEditTarget && _svEditTarget.kind==='jrcvItem' && _svEditTarget.idx===i){
+        var rit=r.items[0];
+        rcvBody += editItemForm('eJrcv'+i, '#60f090', {kind:'jrcvItem', idx:i, extra:{id:'from',label:'Откуда / поставщик',placeholder:'необязательно'}, saveFn:'svSaveJrcvItemEdit('+i+',\'eJrcv'+i+'\')', prefill:{art:rit.article||rit.num, name:rit.name, species:rit.species, price:rit.price, qty:rit.qty, amt:amt}});
+      }
+    } else if(_svEditTarget && _svEditTarget.kind==='jrcv' && _svEditTarget.idx===i){
       rcvBody += simpleEditForm('jrcv'+i, '#60f090', {kind:'jrcv', idx:i, saveFn:'svSaveJEntrySimple(\'receive\','+i+')', prefill:{sub:r.sub||r.label||'', amt:amt, goodsType:r.goodsType}});
     }
     woodRcvCount++;
@@ -3935,8 +3948,13 @@ function _renderShiftView(){
     var invFn = r.invId ? 'svOpenInvoiceFromReceive(\''+r.invId+'\')' : null;
     var amt = r.goodsDrEffect!=null ? r.goodsDrEffect : (r.goodsEffect||r.amount||0);
     var revBadgeDr = r.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'';
-    rcvBody += rcvItem(revBadgeDr+(r.sub||r.label||'Приход ДР'), r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#a060f0', amt, '#a060f0', 'svDeleteJEntry(\'receive\','+i+')', 'svToggleEdit(\'jrcv\','+i+')', invFn);
-    if(_svEditTarget && _svEditTarget.kind==='jrcv' && _svEditTarget.idx===i){
+    rcvBody += rcvItem(revBadgeDr+(r.sub||r.label||'Приход ДР'), r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#a060f0', amt, '#a060f0', 'svDeleteJEntry(\'receive\','+i+')', 'svToggleEdit(\''+(r.items&&r.items.length===1?'jrcvItem':'jrcv')+'\','+i+')', invFn);
+    if(r.items && r.items.length===1){
+      if(_svEditTarget && _svEditTarget.kind==='jrcvItem' && _svEditTarget.idx===i){
+        var ritDr=r.items[0];
+        rcvBody += editItemForm('eJrcv'+i, '#a060f0', {kind:'jrcvItem', idx:i, extra:{id:'from',label:'Откуда / поставщик',placeholder:'необязательно'}, saveFn:'svSaveJrcvItemEdit('+i+',\'eJrcv'+i+'\')', prefill:{art:ritDr.article||ritDr.num, name:ritDr.name, species:ritDr.species, price:ritDr.price, qty:ritDr.qty, amt:amt}});
+      }
+    } else if(_svEditTarget && _svEditTarget.kind==='jrcv' && _svEditTarget.idx===i){
       rcvBody += simpleEditForm('jrcv'+i, '#a060f0', {kind:'jrcv', idx:i, saveFn:'svSaveJEntrySimple(\'receive\','+i+')', prefill:{sub:r.sub||r.label||'', amt:amt, goodsType:r.goodsType}});
     }
     drRcvCount++;
@@ -4473,10 +4491,13 @@ function _addReceiveToShift(shift, items, goodsType, opts){
   opts = opts || {};
   var isDr = goodsType==='dr';
   var totalAmt = items.reduce(function(sum,it){ return sum+(it.price||0)*(it.qty||1); },0);
+  var itemsPreview = items.length===1
+    ? ((items[0].article||items[0].num?'№'+(items[0].article||items[0].num)+' ':'')+(items[0].name||''))
+    : (items.length+' изд.: '+items.map(function(it){ return it.name; }).filter(Boolean).join(', '));
   var rcvEntry = {
     id: uid(), type:'receive', ts: shift.date+'T'+(new Date().toTimeString().slice(0,8)), icon:'📥',
     label: (opts.isRevaluation?'🔄 ПЕРЕОЦЕНКА · ':'')+(opts.invNum ? ('Приёмка '+opts.invNum+(isDr?' (ДР)':'')) : ('Приход'+(isDr?' (ДР)':''))),
-    sub: items.length+' изд.'+(opts.from?' · от '+opts.from:'')+(opts.subSuffix?(' · '+opts.subSuffix):''),
+    sub: itemsPreview+(opts.from?' · от '+opts.from:'')+(opts.subSuffix?(' · '+opts.subSuffix):''),
     amount: totalAmt, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
     goodsType: goodsType,
     goodsEffect: isDr?0:totalAmt, goodsDrEffect: isDr?totalAmt:0,
@@ -4916,6 +4937,32 @@ function svSaveJwoItemEdit(entryIdx, itemIdx, formId){
   svPersist(); _renderShiftView();
   showToast('✅ Запись обновлена');
 }
+function svSaveJrcvItemEdit(entryIdx, formId){
+  var d = _svEditItemRow(formId, 'from');
+  if(!d.name){ showToast('Укажите наименование'); return; }
+  if(!d.reason){ showToast('Укажите причину правки'); return; }
+  var jnl = _currentShiftView.journal||[];
+  var rcvEntries = jnl.filter(function(e){ return e.type==='receive'; });
+  var entry = rcvEntries[entryIdx]; if(!entry){ showToast('Запись не найдена'); return; }
+  var item = (entry.items||[])[0]; if(!item){ showToast('Позиция не найдена'); return; }
+  var before = Object.assign({}, item);
+  item.article = d.art; item.num = d.art; item.name = d.name; item.species = d.species;
+  item.price = d.price; item.qty = d.qty;
+  var isDr = entry.goodsType==='dr';
+  var newTotal = d.price*d.qty;
+  entry.amount = newTotal;
+  entry.goodsEffect = isDr?0:newTotal;
+  entry.goodsDrEffect = isDr?newTotal:0;
+  entry.sub = (item.article?'№'+item.article+' ':'')+item.name+(item.species?' · '+item.species:'')+(item.qty&&item.qty!==1?' × '+item.qty:'')+(d.extra?' · от '+d.extra:'');
+  entry.editedBy=(session&&(session.name||session.sellerName))||'admin';
+  entry.editedAt=new Date().toISOString();
+  entry.editReason=d.reason;
+  _currentShiftView.journal = jnl;
+  try{ logEntryEdit(before, item, (_currentShiftView&&(_currentShiftView.id||_currentShiftView._id))); }catch(e){}
+  _svEditTarget = null;
+  svPersist(); _renderShiftView();
+  showToast('✅ Запись обновлена');
+}
 function svSaveStaffEdit(idx, formId){
   var d = _svEditItemRow(formId);
   if(!d.reason){ showToast('Укажите причину правки'); return; }
@@ -5203,9 +5250,11 @@ function svRecalcGoodsEvening(){
   sh.goodsEvening = goods;
   sh.drGoodsEvening = goodsDr;
 }
+var _svEditedSinceOpen = false;
 function svPersist(skipGoodsRecalc){
   if(!skipGoodsRecalc) svRecalcGoodsEvening();
   _currentShiftView._pendingSync = true;
+  _svEditedSinceOpen = true;
   var shifts=getShifts();
   var idx=shifts.findIndex(function(s){return (s.id||s._id)===_currentShiftView.id;}); if(idx<0) return;
   shifts[idx]=_currentShiftView;

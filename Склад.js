@@ -3130,15 +3130,24 @@ function rebuildStock(showMsg){
         });
       } else if(e.type==='receive'){
         if(e.invId && countedInvIds[String(e.invId)]) return;
-        var rcvArt = e.article||(e.items&&e.items[0]&&(e.items[0].article||e.items[0].num));
+        var rcvItem = e.items && e.items[0];
+        var rcvArt = e.article||(rcvItem&&(rcvItem.article||rcvItem.num));
         var rcvGt = e.goodsType||'derevo';
-        if(!rcvArt && e.items && e.items[0]){
-          rcvArt = _noArticleStockKey(e.items[0].name||e.name, e.items[0].price||e.amount, e.items[0].species, rcvGt);
+        var rcvPrice = (rcvItem&&rcvItem.price!=null) ? rcvItem.price : (e.amount||0);
+        var rcvQty = (rcvItem&&rcvItem.qty) ? rcvItem.qty : 1;
+        if(!rcvArt && rcvItem){
+          rcvArt = _noArticleStockKey(rcvItem.name||e.name, rcvPrice, rcvItem.species, rcvGt);
         }
         if(rcvArt){
           var key=String(rcvArt);
-          if(!stock[sn][key]) stock[sn][key]={num:key,name:e.name||'',price:e.amount||0,species:'',goodsType:rcvGt,size:'',qty:0,lastReceived:''};
-          stock[sn][key].qty+=1;
+          if(!stock[sn][key]) stock[sn][key]={num:key,name:e.name||(rcvItem&&rcvItem.name)||'',price:rcvPrice,species:(rcvItem&&rcvItem.species)||'',goodsType:rcvGt,size:'',qty:0,lastReceived:''};
+          // Раньше цена обновлялась только при первом создании ключа (например, из исходной
+          // накладной) — последующие приходы того же артикула (в т.ч. переоценка) двигали qty,
+          // но никогда не обновляли price, так что rebuildStock() при каждом логине/пересчёте
+          // молча откатывал любую правку цены обратно к самой первой известной цене.
+          if(rcvPrice) stock[sn][key].price=rcvPrice;
+          if(rcvItem&&rcvItem.name) stock[sn][key].name=rcvItem.name;
+          stock[sn][key].qty+=rcvQty;
           stock[sn][key].goodsType=rcvGt;
           var d=e.ts?e.ts.split('T')[0]:'';
           if(d>(stock[sn][key].lastReceived||'')) stock[sn][key].lastReceived=d;
