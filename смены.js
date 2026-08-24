@@ -3122,7 +3122,7 @@ function evaluateShiftIssues(sh){
     });
     var prevG = candidatesG.sort(function(a,b){ return new Date(b.openedAt)-new Date(a.openedAt); })[0] || null;
     if(!prevG) return;
-    if(prevG.goodsEvening!=null && prevG.goodsEvening>0 && sh.goodsMorning!=null){
+    if(prevG.goodsEvening!=null && prevG.goodsEvening>=100 && sh.goodsMorning!=null){
       var diffW = Math.round((sh.goodsMorning||0) - prevG.goodsEvening);
       if(Math.abs(diffW)>=1){
         var srcNoteW = sh.goodsMornSource==='manual' ? ' [введено вручную продавцом]' : (sh.goodsMornSource==='auto' ? ' [взято системой автоматически]' : '');
@@ -3131,7 +3131,7 @@ function evaluateShiftIssues(sh){
     }
     var prevDrEve = prevG.drGoodsEvening!=null ? prevG.drGoodsEvening : prevG.goodsDrEvening;
     var curDrMorn = sh.goodsDrMorning!=null ? sh.goodsDrMorning : sh.drGoodsMorning;
-    if(prevDrEve!=null && prevDrEve>0 && curDrMorn!=null){
+    if(prevDrEve!=null && prevDrEve>=100 && curDrMorn!=null){
       var diffDr = Math.round((curDrMorn||0) - prevDrEve);
       if(Math.abs(diffDr)>=1){
         var srcNoteDr = sh.goodsDrMornSource==='manual' ? ' [введено вручную продавцом]' : (sh.goodsDrMornSource==='auto' ? ' [взято системой автоматически]' : '');
@@ -3620,19 +3620,22 @@ function _renderShiftView(){
   }
   var morningWoodMismatch = prevShiftForThis ? enteredMismatch(sh.cashMorning, prevShiftForThis.cashEvening) : false;
   var morningDrMismatch = prevShiftForThis ? enteredMismatch(sh.cashDrMorning, prevShiftForThis.drCashEvening) : false;
-  var morningGoodsMismatch = prevShiftForThis ? enteredMismatch(sh.goodsMorning, prevShiftForThis.goodsEvening) : false;
-  var morningDrGoodsMismatch = prevShiftForThis ? (function(){
-    var prevDrE = prevShiftForThis.drGoodsEvening!=null ? prevShiftForThis.drGoodsEvening : prevShiftForThis.goodsDrEvening;
-    var curDrM = sh.goodsDrMorning!=null ? sh.goodsDrMorning : sh.drGoodsMorning;
-    return enteredMismatch(curDrM, prevDrE);
-  })() : false;
+  // Раньше остаток-товара-утро-vs-вечер-пред.-смены пересчитывался тут заново, отдельно от
+  // evaluateShiftIssues() (который питает точно такой же значок в списке смен архива) — со
+  // своим порогом (точнее, без порога вовсе), тогда как список требует, чтобы вечер предыдущей
+  // смены был хотя бы 100₽, чтобы не дёргаться на нулевые/остаточные суммы. Из-за рассинхрона
+  // карточка смены могла показывать «⚠️ Есть несовпадения», хотя в списке та же смена — «✅ Всё
+  // сходится», без единой видимой причины. Теперь оба места читают один и тот же результат.
+  var _evalIssuesAll = evaluateShiftIssues(sh).issues;
+  var morningGoodsMismatch = _evalIssuesAll.some(function(i){ return i.code==='morn_goods_diff_t'; });
+  var morningDrGoodsMismatch = _evalIssuesAll.some(function(i){ return i.code==='morn_goods_diff_g'; });
   function diffChip(val, okLabel){
     if(val==null) return '<span style="font-size:10px;color:#555568">не введено</span>';
     if(Math.abs(val)<1) return '<span style="font-size:10px;color:#60f090;font-weight:700">✅ '+(okLabel||'сходится')+'</span>';
     return '<span style="font-size:10px;color:#f06060;font-weight:700">⚠️ '+(val>0?'+':'')+f(val)+'</span>';
   }
   var anyDiff = (cashDiffVal!=null && Math.abs(cashDiffVal)>=1) || (cashDrDiffVal!=null && Math.abs(cashDrDiffVal)>=1) || (cashStaffDiffVal!=null && Math.abs(cashStaffDiffVal)>=1) || !!sh.hasCashDiff || actCash==null || (sh.forceClosedBy && actCashDr==null) || morningWoodMismatch || morningDrMismatch;
-  var _goodsIssues = evaluateShiftIssues(sh).issues.filter(function(i){ return i.code.indexOf('wood')>=0 || i.code.indexOf('_dr_')>=0; });
+  var _goodsIssues = _evalIssuesAll.filter(function(i){ return i.code.indexOf('wood')>=0 || i.code.indexOf('_dr_')>=0; });
   if(_goodsIssues.length) anyDiff = true;
   if(morningGoodsMismatch || morningDrGoodsMismatch) anyDiff = true;
   function enteredVal(val, mismatch){
