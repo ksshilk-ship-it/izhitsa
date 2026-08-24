@@ -1378,13 +1378,19 @@ function loadTovarAudit(){
   var timeoutP = new Promise(function(resolve){ setTimeout(function(){ if(!settled){ settled=true; resolve('timeout'); } }, 15000); });
   var fetchP = Promise.all([
     db.collection('iz_shifts').where('shopName','==',_taShop).get({source:'server'}),
-    db.collection('iz_audit_log').where('shopName','==',_taShop).get({source:'server'})
+    db.collection('iz_audit_log').where('shopName','==',_taShop).get({source:'server'}),
+    db.collection('iz_shift_tombstones').get({source:'server'})
   ]).then(function(res){
     if(settled) return 'ok';
     settled = true;
     var shiftDocs = res[0].docs.map(function(d){ var x=d.data(); if(!x.id) x.id=d.id; return x; });
     var auditDocs = res[1].docs.map(function(d){ return d.data(); });
-    _taRows = shiftDocs.filter(function(s){ return s.status==='closed' || s.status==='open'; })
+    // Удаление смены не всегда успевает полностью убрать сам документ из iz_shifts (например,
+    // если серверная запись на удаление документа не подтвердилась) — но tombstone при этом
+    // пишется надёжно. Без этой проверки уже удалённая (администратором) смена продолжает
+    // фигурировать в цепочке остатков и ломает сверку с соседними сменами.
+    var tombstoned = {}; res[2].docs.forEach(function(d){ tombstoned[d.id]=true; });
+    _taRows = shiftDocs.filter(function(s){ return (s.status==='closed' || s.status==='open') && !tombstoned[s.id] && !s._deleted; })
       .sort(function(a,b){ return (a.openedAt||a.date||'').localeCompare(b.openedAt||b.date||''); });
     _taAuditByShift = {};
     auditDocs.forEach(function(e){

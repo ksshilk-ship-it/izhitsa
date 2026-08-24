@@ -5229,7 +5229,15 @@ function svDeleteShift(){
   }
   try{
     db.collection('iz_shifts').doc(id).delete().catch(function(err){
-      showToast('⚠️ Удалено локально, но облако не подтвердило удаление: '+(err&&err.message||err));
+      // Похоже, что серверные правила Firestore не разрешают удалять документы iz_shifts
+      // напрямую (delete() тихо не подтверждается, хотя update()/set() на тот же документ
+      // проходят) — из-за этого удалённые смены оставались призраками в облаке и продолжали
+      // подтягиваться туда, где данные читаются напрямую с сервера (например, в сквозном
+      // аудите остатков), даже когда tombstone был записан верно. Пробуем soft-delete как
+      // запасной путь, раз обычный delete недоступен.
+      db.collection('iz_shifts').doc(id).update({_deleted:true, _deletedAt:new Date().toISOString(), _deletedBy:(session&&(session.name||session.sellerName))||'admin'}).catch(function(err2){
+        showToast('⚠️ Удалено локально, но облако не подтвердило удаление: '+(err2&&err2.message||err2));
+      });
     });
   }catch(e){
     showToast('⚠️ Удалено локально, но облако не подтвердило удаление');
