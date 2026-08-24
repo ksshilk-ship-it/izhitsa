@@ -2456,40 +2456,60 @@ function runBackupCheck(){
   if(statusEl) statusEl.innerHTML = '<div style="font-size:12px;color:#f0c060;text-align:center;padding:4px">🛟 Проверяю, что все записи ('+totalCount+') сохранены...</div>';
   var unconfirmedSales = sales.filter(function(e){ return !_isSaleConfirmed(e.id); });
   var unconfirmedOthers = others.filter(function(e){ return !_isJournalEntryConfirmed(e.id); });
+  if(!unconfirmedSales.length && !unconfirmedOthers.length){
+    if(checkBtn){ checkBtn.disabled=false; checkBtn.style.opacity='1'; checkBtn.textContent='🛟 Подстраховка'; }
+    _renderBackupStatusList();
+    return;
+  }
   var shopName = (session&&session.shopName)||'';
-  var saleAttempts = unconfirmedSales.map(function(e){
-    return new Promise(function(resolve){
-      if(typeof db==='undefined' || !db){ resolve(); return; }
-      var saleDoc = Object.assign({}, e, {
-        shopName: shopName, sellerName:(session&&(session.sellerName||session.name))||'',
-        shiftId:(session&&session.shiftId)||'', date:(e.ts||'').split('T')[0], recordedAt:new Date().toISOString()
-      });
-      db.collection('iz_sales').doc(e.id).set(saleDoc).then(function(){
-        _clearPendingSale(e.id); _markSaleConfirmed(e.id); resolve();
-      }).catch(function(){ _queuePendingSale(saleDoc); resolve(); });
-    });
-  });
-  var otherAttempts = unconfirmedOthers.map(function(e){
-    return new Promise(function(resolve){
-      if(typeof db==='undefined' || !db){ resolve(); return; }
-      var doc = Object.assign({}, e, {
-        kind: e.type, shopName: shopName, sellerName:(session&&(session.sellerName||session.name))||'',
-        shiftId:(session&&session.shiftId)||'', date:(e.ts||'').split('T')[0], recordedAt:new Date().toISOString()
-      });
-      db.collection('iz_journal_backup').doc(e.id).set(doc).then(function(){
-        _clearPendingJournalEntry(e.id); _markJournalEntryConfirmed(e.id); resolve();
-      }).catch(function(){ _queuePendingJournalEntry(doc); resolve(); });
-    });
-  });
+  var sellerNm = (session&&(session.sellerName||session.name))||'';
+  var shiftIdNm = (session&&session.shiftId)||'';
+  if(typeof db==='undefined' || !db){
+    if(checkBtn){ checkBtn.disabled=false; checkBtn.style.opacity='1'; checkBtn.textContent='🛟 Подстраховка'; }
+    _renderBackupStatusList();
+    return;
+  }
+  // Раньше каждая запись отправлялась ОТДЕЛЬНЫМ запросом, все параллельно, а на весь пакет —
+  // независимо от того, 3 там записи или 80 — давался один жёсткий таймер на 15 сек. В
+  // загруженный день с десятками продаж это упиралось в таймаут почти гарантированно у ЛЮБОГО
+  // продавца на любой сети, потому что упор был не в скорость связи, а в число одновременных
+  // соединений. Пакетная запись (batch) отправляет весь набор одним запросом.
+  var items = unconfirmedSales.map(function(e){
+    return {col:'iz_sales', id:e.id, isSale:true, data: Object.assign({}, e, {
+      shopName: shopName, sellerName: sellerNm, shiftId: shiftIdNm, date:(e.ts||'').split('T')[0], recordedAt:new Date().toISOString()
+    })};
+  }).concat(unconfirmedOthers.map(function(e){
+    return {col:'iz_journal_backup', id:e.id, isSale:false, data: Object.assign({}, e, {
+      kind: e.type, shopName: shopName, sellerName: sellerNm, shiftId: shiftIdNm, date:(e.ts||'').split('T')[0], recordedAt:new Date().toISOString()
+    })};
+  }));
+  var chunks = [];
+  for(var ci=0; ci<items.length; ci+=450){ chunks.push(items.slice(ci, ci+450)); }
   var _backupCheckTimedOut = false;
   var backupTimeoutTimer = setTimeout(function(){
     _backupCheckTimedOut = true;
     if(checkBtn){ checkBtn.disabled=false; checkBtn.style.opacity='1'; checkBtn.textContent='🛟 Подстраховка'; }
     if(statusEl) statusEl.innerHTML = '<div style="font-size:12px;color:#f06060;text-align:center;padding:4px">⚠️ Проверка не завершилась — похоже, плохая связь. Закрыть смену пока нельзя. Попробуйте нажать «Подстраховка» ещё раз, когда связь появится.</div>';
-  }, 15000);
-  Promise.all(saleAttempts.concat(otherAttempts)).then(function(){
+  }, 20000);
+  var chunkPromises = chunks.map(function(chunk){
+    var batch = db.batch();
+    chunk.forEach(function(item){ batch.set(db.collection(item.col).doc(item.id), item.data); });
+    return batch.commit().then(function(){ return {ok:true, chunk:chunk}; }).catch(function(){ return {ok:false, chunk:chunk}; });
+  });
+  Promise.all(chunkPromises).then(function(results){
     clearTimeout(backupTimeoutTimer);
     if(_backupCheckTimedOut) return; // уже показали сообщение о тайм-ауте, не перетираем его
+    results.forEach(function(r){
+      r.chunk.forEach(function(item){
+        if(item.isSale){
+          if(r.ok){ _clearPendingSale(item.id); _markSaleConfirmed(item.id); }
+          else{ _queuePendingSale(item.data); }
+        } else {
+          if(r.ok){ _clearPendingJournalEntry(item.id); _markJournalEntryConfirmed(item.id); }
+          else{ _queuePendingJournalEntry(item.data); }
+        }
+      });
+    });
     if(checkBtn){ checkBtn.disabled=false; checkBtn.style.opacity='1'; checkBtn.textContent='🛟 Подстраховка'; }
     _renderBackupStatusList();
   });
@@ -2679,6 +2699,10 @@ function _closeShiftReal(){
       var cur = getShifts();
       var idx = cur.findIndex(function(s){ return (s.id||s._id)===report.id; });
       if(idx>=0){ delete cur[idx]._pendingSync; saveShifts(cur); }
+      // Предупреждение о сбоях живой синхронизации могло остаться висеть с ДО закрытия
+      // смены — ничто раньше его не убирало при успешном закрытии, и продавец видел
+      // старую тревогу поверх настоящего успеха.
+      try{ _hideLiveSyncFailBanner(); }catch(e){}
     }
     stopLiveShiftListener();
     localStorage.removeItem(KEY.session); localStorage.removeItem(KEY.journal); clearTombstones();
@@ -2698,7 +2722,12 @@ function _closeShiftReal(){
   try{
     db.collection('iz_shifts').doc(report.id).set(report).then(function(){ _closeSettle(true); }).catch(function(){ _closeSettle(false); });
   }catch(e){ _closeSettle(false); }
-  setTimeout(function(){ _closeSettle(false); }, 8000);
+  // Было 8с — для смены с длинным журналом (много продаж за день) документ мог легитимно
+  // сохраняться дольше на совершенно нормальной сети, и продавец видел пугающее "не
+  // сохранилось", хотя запись просто ещё не успела прийти. Данные всё равно не теряются
+  // в любом случае (localStorage + очередь автоповтора), это только влияет на то, насколько
+  // рано мы сдаёмся и показываем тревожное сообщение вместо настоящего успеха.
+  setTimeout(function(){ _closeSettle(false); }, 20000);
 }
 }
 var _histPeriod = 'week'; // 'today' | 'week' | 'month' | 'all' | 'custom'
