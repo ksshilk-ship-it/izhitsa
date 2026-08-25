@@ -8782,10 +8782,12 @@ function renderMaItemsList(){
       html += `
       <div class="fg" style="margin-bottom:8px;background:rgba(192,255,96,0.1);border:2px solid var(--accent);border-radius:10px;padding:10px">
         <label class="fl" style="color:var(--accent);font-weight:700">📦 Количество одинаковых изделий</label>
-        <input class="fi" type="number" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" onblur="finalizeMaQty()" placeholder="1"
-          autocomplete="off" style="font-size:16px;font-weight:700;color:var(--accent)">
+        <input class="fi" type="number" min="1" value="${it.artikulMode==='manual'?1:(it.qty||'')}" ${it.artikulMode==='manual'?'disabled':''} oninput="updateMaItem('${it.rid}','qty',this.value)" onblur="finalizeMaQty()" placeholder="1"
+          autocomplete="off" style="font-size:16px;font-weight:700;color:var(--accent);${it.artikulMode==='manual'?'opacity:0.5':''}">
+        ${it.artikulMode==='manual' ? `<div style="font-size:11px;color:var(--t2);margin-top:6px">🔒 Кол-во заблокировано на 1 — при вручную заданном артикуле нельзя добавить сразу несколько изделий (иначе у них будет один и тот же артикул)</div>` : `
         <div style="font-size:11px;color:var(--t2);margin-top:6px">💡 Заполните остальные поля один раз, укажите кол-во — получится целая пачка</div>
         ${(parseInt(it.qty,10)||1)>1 ? `<div style="font-size:11px;color:var(--inc);margin-top:5px;background:rgba(80,255,150,0.1);padding:6px;border-radius:6px">✓ Будет добавлено: ${parseInt(it.qty,10)} шт одинаковых</div>` : ''}
+        `}
       </div>
       <div class="fg" style="margin-bottom:8px">
         <label class="fl">Артикул</label>
@@ -8891,6 +8893,13 @@ function setMaArtikulMode(rid, mode){
   it.artikulMode = mode;
   it.artikulManual = false;
   if(mode==='none') it.artikul = '';
+  // Вручную введённый артикул — это номер ОДНОГО конкретного изделия.
+  // При кол-ве>1 все копии получили бы один и тот же артикул (задвоение
+  // на складе), поэтому кол-во сбрасывается на 1.
+  if(mode==='manual' && (parseInt(it.qty,10)||1) > 1){
+    it.qty = 1;
+    showToast('Кол-во сброшено до 1 — вручную заданный артикул нельзя ставить сразу на несколько изделий');
+  }
   recalcMaAutoArtikuls();
   renderMaItemsList();
 }
@@ -8919,7 +8928,9 @@ function setMaItemGoodsType(rid, type){
 function updateMaItem(rid, field, val){
   const it = _maItems.find(x=>x.rid===rid); if(!it) return;
   if(field==='qty'){
-    it.qty = Math.max(1, parseInt(val,10)||1);
+    // При вручную заданном артикуле кол-во всегда 1 — иначе все копии получат
+    // один и тот же артикул (см. setMaArtikulMode)
+    it.qty = it.artikulMode==='manual' ? 1 : Math.max(1, parseInt(val,10)||1);
     return; // перерисовка — по blur (см. finalizeMaQty), чтобы не терять фокус поля при вводе
   }
   it[field] = (field==='zp'||field==='price') ? (parseFloat(val)||0) : val;
