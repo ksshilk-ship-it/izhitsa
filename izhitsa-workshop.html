@@ -9708,30 +9708,30 @@ function openMaDetail(accId){
       ${isEditable ? `
         <div class="fg" style="margin-bottom:8px">
           <label class="fl">Артикул</label>
-          <input class="fi" style="font-size:14px" value="${p.artikul||''}" placeholder="Номер артикула (опционально)" inputmode="decimal" onchange="updateMaPosField('${acc.id}','${p.rid}','artikul',this.value)">
+          <input class="fi" style="font-size:14px" value="${p.artikul||''}" placeholder="Номер артикула (опционально)" inputmode="decimal" oninput="updateMaPosFieldLocal('${acc.id}','${p.rid}','artikul',this.value)" onchange="updateMaPosField('${acc.id}','${p.rid}','artikul',this.value)">
         </div>
         <div class="fg" style="margin-bottom:8px">
           <label class="fl">Наименование</label>
-          <input class="fi" style="font-size:14px" value="${p.name||''}" placeholder="Как называется изделие" onchange="updateMaPosField('${acc.id}','${p.rid}','name',this.value)">
+          <input class="fi" style="font-size:14px" value="${p.name||''}" placeholder="Как называется изделие" oninput="updateMaPosFieldLocal('${acc.id}','${p.rid}','name',this.value)" onchange="updateMaPosField('${acc.id}','${p.rid}','name',this.value)">
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <div class="fg">
             <label class="fl">Количество</label>
-            <input class="fi" style="font-size:14px" type="number" value="${p.qty||1}" placeholder="Кол-во шт" min="1" inputmode="numeric" onchange="updateMaPosField('${acc.id}','${p.rid}','qty',this.value)">
+            <input class="fi" style="font-size:14px" type="number" value="${p.qty||1}" placeholder="Кол-во шт" min="1" inputmode="numeric" oninput="updateMaPosFieldLocal('${acc.id}','${p.rid}','qty',this.value)" onchange="updateMaPosField('${acc.id}','${p.rid}','qty',this.value)">
           </div>
           <div class="fg">
             <label class="fl">${goodsTypeWoodLabel(p.goodsType||'derevo')}</label>
-            <input class="fi" style="font-size:14px" value="${p.wood||''}" placeholder="${goodsTypeWoodPlaceholder(p.goodsType||'derevo')}" onchange="updateMaPosField('${acc.id}','${p.rid}','wood',this.value)">
+            <input class="fi" style="font-size:14px" value="${p.wood||''}" placeholder="${goodsTypeWoodPlaceholder(p.goodsType||'derevo')}" oninput="updateMaPosFieldLocal('${acc.id}','${p.rid}','wood',this.value)" onchange="updateMaPosField('${acc.id}','${p.rid}','wood',this.value)">
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <div class="fg">
             <label class="fl">Розничная цена за 1 шт (₽)</label>
-            <input class="fi" style="font-size:14px" type="number" value="${p.price||0}" placeholder="Цена товара" onchange="updateMaPosField('${acc.id}','${p.rid}','price',this.value)">
+            <input class="fi" style="font-size:14px" type="number" value="${p.price||0}" placeholder="Цена товара" oninput="updateMaPosFieldLocal('${acc.id}','${p.rid}','price',this.value)" onchange="updateMaPosField('${acc.id}','${p.rid}','price',this.value)">
           </div>
           <div class="fg">
             <label class="fl">ЗП мастеру за 1 шт (₽)</label>
-            <input class="fi" style="font-size:14px" type="number" value="${p.zp||0}" placeholder="Зарплата" onchange="updateMaPosField('${acc.id}','${p.rid}','zp',this.value)">
+            <input class="fi" style="font-size:14px" type="number" value="${p.zp||0}" placeholder="Зарплата" oninput="updateMaPosFieldLocal('${acc.id}','${p.rid}','zp',this.value)" onchange="updateMaPosField('${acc.id}','${p.rid}','zp',this.value)">
           </div>
         </div>
         ${(p.qty && p.qty > 1) || acc.mode === 'without_articles' ? `
@@ -9812,6 +9812,25 @@ function updateMaAccDate(accId, date){
     showToast('✅ Дата изменена');
     openMaDetail(accId);
   }).catch(e=>showToast('Ошибка: '+e.message));
+}
+
+// Синхронизация поля позиции ТОЛЬКО в памяти (без записи в Firestore и без перерисовки) —
+// вызывается на каждое нажатие клавиши (oninput). Нужна из-за того, что другие действия в
+// этой же приёмке (добавить позицию, поставить статус, удалить позицию) шлют в Firestore
+// весь acc.positions и сразу перерисовывают форму через openMaDetail(). Без этой синхронизации
+// набранный, но ещё не потерявший фокус (не сработал onchange) текст в другом поле терялся —
+// перерисовка подставляла старое значение из acc.positions. Теперь acc.positions всегда
+// актуален посимвольно, так что случайная перерисовка ничего не стирает.
+function updateMaPosFieldLocal(accId, rid, field, value){
+  const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
+  const pos = acc.positions.find(p=>p.rid===rid); if(!pos) return;
+  if(field==='price' || field==='zp') {
+    pos[field] = parseFloat(value)||0;
+  } else if(field==='qty') {
+    pos[field] = parseInt(value,10)||1;
+  } else {
+    pos[field] = value;
+  }
 }
 
 // Обновление поля позиции внутри приёмки — доступно только в день внесения, админу — всегда (проверка на стороне openMaDetail через рендер полей)
