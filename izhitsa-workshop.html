@@ -8562,9 +8562,69 @@ function setPendSubTab(tab){
 let _maDraftId = null;
 let _maModeSelect = null; // 'with_articles' или 'without_articles'
 
+// ════ ЧЕРНОВИК ФОРМЫ «НОВАЯ ПРИЁМКА» ════
+// Пока приёмка не сохранена в Firestore кнопкой "Сохранить приёмку", всё, что
+// напечатал кладовщик, живёт только в переменной _maItems — если страница
+// перезагрузится (нет интернета, обновление приложения, разрядка, случайный
+// смах), всё введённое пропадёт и придётся вбивать заново. Поэтому параллельно
+// пишем черновик в localStorage — он не зависит от сети и переживёт перезагрузку.
+const MA_DRAFT_KEY = 'ws_ma_draft';
+function saveMaDraftToLocal(){
+  if(!_maModeSelect) return; // форма ещё не открыта — нечего сохранять
+  try{
+    localStorage.setItem(MA_DRAFT_KEY, JSON.stringify({
+      mode: _maModeSelect,
+      draftId: _maDraftId,
+      masterId: document.getElementById('maMaster')?.value || '',
+      date: document.getElementById('maDate')?.value || '',
+      items: _maItems,
+      savedAt: new Date().toISOString()
+    }));
+  }catch(e){ console.log('ma draft save err', e); }
+}
+function loadMaDraftFromLocal(){
+  try{
+    const raw = localStorage.getItem(MA_DRAFT_KEY);
+    if(!raw) return null;
+    const d = JSON.parse(raw);
+    if(!d || !Array.isArray(d.items) || !d.items.length) return null;
+    return d;
+  }catch(e){ return null; }
+}
+function clearMaDraftFromLocal(){
+  try{ localStorage.removeItem(MA_DRAFT_KEY); }catch(e){}
+}
+
 function openManualAcceptMo(){
-  // Показываем модаль выбора режима
+  const draft = loadMaDraftFromLocal();
+  if(draft){
+    // Есть несохранённый черновик с прошлого раза — открываем форму сразу с ним,
+    // без диалога выбора режима (режим уже был выбран тогда).
+    _maModeSelect = draft.mode || 'with_articles';
+    _maItems = draft.items;
+    _maToggled = new Set();
+    _maDraftId = draft.draftId || uid();
+    const sel = document.getElementById('maMaster');
+    if(sel) sel.innerHTML = '<option value="">— Выберите мастера —</option>' + getEmployees().filter(e=>e.role==='мастер').map(m=>`<option value="${m.id}" ${m.id===draft.masterId?'selected':''}>${m.name}</option>`).join('');
+    const dateEl = document.getElementById('maDate');
+    if(dateEl) dateEl.value = draft.date || new Date().toISOString().slice(0,10);
+    renderMaItemsList();
+    openMo('manualAcceptMo');
+    showToast('📝 Восстановлен несохранённый черновик приёмки (' + fmtDT(draft.savedAt) + ')');
+    return;
+  }
+  // Черновика нет — показываем диалог выбора режима как обычно
   openMo('maModeSelectMo');
+}
+
+// Явная отмена — в отличие от случайной потери страницы, здесь пользователь
+// осознанно отказывается от введённых данных, поэтому черновик удаляется.
+function cancelManualAccept(){
+  const hasContent = _maItems.some(it => (it.name||'').trim() || (it.artikul||'').trim() || (it.price||0) > 0);
+  if(hasContent && !confirm('Отменить приёмку? Введённые данные будут удалены (в том числе черновик).')) return;
+  clearMaDraftFromLocal();
+  _maDraftId = null;
+  closeMo('manualAcceptMo');
 }
 
 function selectMaAcceptanceMode(mode){
@@ -8867,6 +8927,7 @@ function renderMaItemsList(){
     </div>`;
     return html;
   }).join('');
+  saveMaDraftToLocal();
 }
 
 
@@ -8912,6 +8973,7 @@ function updateMaAutoArtikul(rid, val){
   const it = _maItems.find(x=>x.rid===rid); if(!it) return;
   it.artikul = val;
   it.artikulManual = true;
+  saveMaDraftToLocal();
 }
 function finalizeMaAutoArtikul(){
   // Вызывается по потере фокуса поля — теперь можно спокойно пересчитать и перерисовать
@@ -8931,9 +8993,11 @@ function updateMaItem(rid, field, val){
     // При вручную заданном артикуле кол-во всегда 1 — иначе все копии получат
     // один и тот же артикул (см. setMaArtikulMode)
     it.qty = it.artikulMode==='manual' ? 1 : Math.max(1, parseInt(val,10)||1);
+    saveMaDraftToLocal();
     return; // перерисовка — по blur (см. finalizeMaQty), чтобы не терять фокус поля при вводе
   }
   it[field] = (field==='zp'||field==='price') ? (parseFloat(val)||0) : val;
+  saveMaDraftToLocal();
 }
 function finalizeMaQty(){
   recalcMaAutoArtikuls();
@@ -9061,6 +9125,7 @@ async function saveManualAccept(){
     closeMo('manualAcceptMo');
     showSavedBanner(`✅ Приёмка от ${master?.name||''} сохранена · ${positions.length} позиций`);
     renderManualAcceptHistory();
+    clearMaDraftFromLocal();
     _maDraftId = null;
   }catch(e){ showToast('Ошибка: '+e.message); }
   finally{ endSave('maAccept'); }
@@ -10935,14 +11000,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
 <div class="mo" id="manualAcceptMo">
   <div class="md"><div class="mh"></div><div class="mt">➕ Приёмка от мастера</div>
 
-    <div class="fg"><label class="fl">Мастер</label><select class="fs" id="maMaster"></select></div>
-    <div class="fg"><label class="fl">Дата сдачи</label><input class="fi" type="date" id="maDate"></div>
+    <div class="fg"><label class="fl">Мастер</label><select class="fs" id="maMaster" onchange="saveMaDraftToLocal()"></select></div>
+    <div class="fg"><label class="fl">Дата сдачи</label><input class="fi" type="date" id="maDate" onchange="saveMaDraftToLocal()"></div>
 
     <div id="maItemsList" style="margin:14px 0"></div>
 
     <button class="btn" style="background:var(--a2);margin-bottom:10px" onclick="addMaItemRow()">➕ Добавить изделие</button>
     <button class="btn green" onclick="saveManualAccept()">💾 Сохранить приёмку</button>
-    <button class="btn sec" style="margin-top:8px" onclick="closeMo('manualAcceptMo')">Отмена</button>
+    <button class="btn sec" style="margin-top:8px" onclick="cancelManualAccept()">Отмена</button>
   </div>
 </div>
 
