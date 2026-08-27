@@ -1447,6 +1447,123 @@ function renderTovarAudit(){
   }).join('');
   c.innerHTML = '<div class="u-fs11-gray" style="margin-bottom:8px">'+_taRows.length+' смен · '+cfg.label+'</div>'+rowsHtml;
 }
+var _baRows = [];
+function loadBackupAudit(){
+  var status = document.getElementById('baStatus');
+  var results = document.getElementById('baResults');
+  var fromInput = document.getElementById('baDateFrom');
+  var fromDate = fromInput && fromInput.value;
+  if(!fromDate){
+    var d = new Date(); d.setDate(d.getDate()-30);
+    fromDate = d.toISOString().slice(0,10);
+    if(fromInput) fromInput.value = fromDate;
+  }
+  if(status){ status.style.display='block'; status.textContent='⏳ Сверяю все смены с подстраховкой...'; }
+  if(results) results.innerHTML='';
+  var settled = false;
+  var timeoutP = new Promise(function(resolve){ setTimeout(function(){ if(!settled){ settled=true; resolve('timeout'); } }, 20000); });
+  var fetchP = Promise.all([
+    db.collection('iz_shifts').where('date','>=',fromDate).get({source:'server'}),
+    db.collection('iz_sales').where('date','>=',fromDate).get({source:'server'}),
+    db.collection('iz_journal_backup').where('date','>=',fromDate).get({source:'server'}),
+    db.collection('iz_shift_tombstones').get({source:'server'}),
+    db.collection('iz_settings').doc('shop_trash').get()
+  ]).then(function(res){
+    if(settled) return 'ok';
+    settled = true;
+    var shiftDocs = res[0].docs.map(function(d){ var x=d.data(); if(!x.id) x.id=d.id; return x; });
+    var tombstoned = {}; res[3].docs.forEach(function(d){ tombstoned[d.id]=true; });
+    // Записи, удалённые вручную (корзина), синхронизируются в один общий документ на все
+    // устройства — без него уже удалённая продавцом/админом запись из подстраховки выглядела бы
+    // как "потерянная" и предлагалась бы к восстановлению повторно.
+    var deletedIds = {};
+    try{
+      var trashData = (res[4].exists && Array.isArray(res[4].data().data)) ? res[4].data().data : [];
+      trashData.forEach(function(t){ if(t.entry && t.entry.id) deletedIds[t.entry.id]=true; });
+    }catch(e){}
+    var backupByKey = {};
+    function addBackup(doc){
+      var b = doc.data();
+      var key = (b.shopName||'')+'|'+(b.date||'');
+      (backupByKey[key] = backupByKey[key]||[]).push(b);
+    }
+    res[1].docs.forEach(addBackup);
+    res[2].docs.forEach(addBackup);
+    var shiftsByKey = {};
+    shiftDocs.forEach(function(sh){
+      var sid = sh.id||sh._id; if(!sid) return;
+      var key = (sh.shopName||'')+'|'+(sh.date||'');
+      (shiftsByKey[key] = shiftsByKey[key]||[]).push(sid);
+    });
+    var kindLabels = {sale:'продаж', expense:'расходов', receive:'приходов', writeoff:'списаний'};
+    var rows = [];
+    shiftDocs.forEach(function(sh){
+      var sid = sh.id||sh._id;
+      if(!sid || tombstoned[sid] || sh._deleted) return;
+      if(sh.status!=='closed' && sh.status!=='open') return;
+      var key = (sh.shopName||'')+'|'+(sh.date||'');
+      var backupAll = backupByKey[key]||[];
+      if(!backupAll.length) return;
+      var jnl = sh.journal||[];
+      var jnlIds = {}; jnl.forEach(function(e){ if(e.id) jnlIds[e.id]=true; });
+      var missing = backupAll.filter(function(b){ return b.id && !jnlIds[b.id] && !deletedIds[b.id]; });
+      if(!missing.length) return;
+      var total = missing.reduce(function(s,m){ return s+(m.amount||0); },0);
+      var byKind = {}; missing.forEach(function(m){ byKind[m.type]=(byKind[m.type]||0)+1; });
+      var breakdown = Object.keys(byKind).map(function(k){ return byKind[k]+' '+(kindLabels[k]||k); }).join(', ');
+      var dupCount = (shiftsByKey[key]||[]).length - 1;
+      rows.push({sh:sh, sid:sid, missing:missing, total:total, breakdown:breakdown, dupCount:dupCount});
+    });
+    rows.sort(function(a,b){ return (b.sh.date||'').localeCompare(a.sh.date||''); });
+    _baRows = rows;
+    return 'ok';
+  }).catch(function(err){ if(!settled){ settled=true; } console.log('[loadBackupAudit] error', err); return 'error'; });
+  Promise.race([fetchP, timeoutP]).then(function(result){
+    if(status){
+      status.style.display = result==='ok' ? 'none' : 'block';
+      if(result==='timeout') status.textContent = '⚠️ Сервер не отвечает — попробуйте ещё раз';
+      else if(result==='error') status.textContent = '❌ Не удалось загрузить данные';
+    }
+    renderBackupAudit();
+  });
+}
+function renderBackupAudit(){
+  var c = document.getElementById('baResults'); if(!c) return;
+  if(!_baRows.length){ c.innerHTML = '<div class="empty"><div class="ei">🛟</div>Расхождений не найдено — если ждали смену не за последний месяц, расширьте период выше</div>'; return; }
+  var rowsHtml = _baRows.map(function(row){
+    var sh = row.sh;
+    return '<div style="background:#2e2414;border:1px solid #f0c06055;border-radius:9px;padding:9px 10px;margin-bottom:6px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">'+
+        '<div style="font-size:12px;font-weight:700">'+(sh.date||'—')+' · '+(sh.shopName||'—')+(sh.status==='open'?' · открыта':'')+'</div>'+
+        '<div style="font-size:10px;color:#8888aa">'+(sh.sellerName||sh.userName||'—')+'</div>'+
+      '</div>'+
+      '<div style="font-size:11px;color:#f0c060;font-weight:700;margin-bottom:6px">🛟 В подстраховке есть, а в смене нет: '+row.breakdown+' (на сумму '+fmt(row.total)+')</div>'+
+      (row.dupCount>0 ? '<div style="font-size:10px;color:#f06060;margin-bottom:6px">⚠️ На эту дату в этом магазине есть ещё '+row.dupCount+' смен(а/ы) — восстановление ищет по магазину и дате, а не по конкретной смене, проверьте перед подтверждением</div>' : '')+
+      '<button type="button" onclick="baRestoreRow(\''+row.sid+'\')" style="width:100%;padding:8px;background:#f0c060;border:none;border-radius:8px;color:#0f0f13;font-size:11px;font-weight:700;cursor:pointer">✅ Восстановить в смену</button>'+
+    '</div>';
+  }).join('');
+  c.innerHTML = '<div class="u-fs11-gray" style="margin-bottom:8px">Найдено смен с расхождением: '+_baRows.length+'</div>'+rowsHtml;
+}
+function baRestoreRow(sid){
+  var row = _baRows.find(function(r){ return r.sid===sid; });
+  if(!row){ showToast('Строка не найдена — обновите список'); return; }
+  var sh = row.sh;
+  if(!confirm('Добавить в смену от '+(sh.date||'—')+' ('+(sh.shopName||'—')+') записей: '+row.breakdown+' на сумму '+fmt(row.total)+'?')) return;
+  var jnl = sh.journal||[];
+  var merged = jnl.concat(row.missing.map(function(m){
+    var clean = Object.assign({}, m);
+    delete clean.shopName; delete clean.date; delete clean.shiftId; delete clean.recordedAt; delete clean.sellerName; delete clean.kind;
+    return clean;
+  }));
+  merged.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
+  sh.journal = merged;
+  _shiftSetSafe(sid, sh, '✅ Восстановлено записей: '+row.missing.length+' из подстраховки');
+  _baRows = _baRows.filter(function(r){ return r.sid!==sid; });
+  renderBackupAudit();
+  if(typeof _currentShiftView!=='undefined' && _currentShiftView && (_currentShiftView.id===sid||_currentShiftView._id===sid)){
+    _currentShiftView = sh; _renderShiftView();
+  }
+}
 function updateRefbookCountShop(bookId, key){
   var items = getRefBook(key);
   var el = document.getElementById('rbCount_'+bookId);
