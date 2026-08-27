@@ -4551,7 +4551,7 @@ function _addReceiveToShift(shift, items, goodsType, opts){
   jnl.push(rcvEntry);
   shift.journal = jnl;
   _recordJournalEntryIndependently(rcvEntry, shift.shopName, 'receive');
-  try{ stockApplyReceive(shift.shopName, items.map(function(it){ return {num:it.article,name:it.name,price:it.price,qty:it.qty,species:it.species,goodsType:goodsType}; }), shift.date, goodsType); }catch(e){}
+  try{ stockApplyReceive(shift.shopName, items.map(function(it){ return {num:it.article,name:it.name,price:it.price,qty:it.qty,species:it.species,goodsType:goodsType}; }), shift.date, goodsType, !!opts.isRevaluation); }catch(e){}
   return rcvEntry;
 }
 function svSaveManualInvIntoShift(){

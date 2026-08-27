@@ -3014,7 +3014,7 @@ function _findStockKeyByNamePrice(shopStock, name, price, goodsType, excludeKey)
   var noSpecies = candidates.find(function(k){ return !(shopStock[k].species||'').trim(); });
   return noSpecies || candidates[0];
 }
-function stockApplyReceive(shopName,items,date,invGoodsType){
+function stockApplyReceive(shopName,items,date,invGoodsType,isRevaluation){
   if(!shopName) return;
   items.forEach(function(it){
     var gt=it.goodsType||(it.category==='dr'?'dr':(invGoodsType||'derevo'));
@@ -3022,7 +3022,9 @@ function stockApplyReceive(shopName,items,date,invGoodsType){
     var pr=it.price||it.factPrice||0;
     if(!artNum) artNum=_noArticleStockKey(it.name,pr,it.species,gt);
     if(!artNum) return;
-    stockUpdateQty(shopName,artNum,it.name,pr,it.species,gt,it.size||'',(it.qty||1),date);
+    // Переоценка правит цену уже существующего изделия, а не добавляет новую единицу — раньше
+    // это не учитывалось, и переоценка одного товара молча плюсовала ему фантомную штуку в остаток.
+    stockUpdateQty(shopName,artNum,it.name,pr,it.species,gt,it.size||'',(isRevaluation?0:(it.qty||1)),date);
   });
 }
 function rebuildStock(showMsg){
@@ -3142,7 +3144,11 @@ function rebuildStock(showMsg){
         var rcvArt = e.article||(rcvItem&&(rcvItem.article||rcvItem.num));
         var rcvGt = e.goodsType||'derevo';
         var rcvPrice = (rcvItem&&rcvItem.price!=null) ? rcvItem.price : (e.amount||0);
-        var rcvQty = (rcvItem&&rcvItem.qty) ? rcvItem.qty : 1;
+        // Переоценка (isRevaluation) — это тот же самый физический товар, который уже стоит на
+        // складе, просто с новой ценой, а не новая поставка. Раньше qty прибавлялось всегда,
+        // независимо от этого флага, поэтому переоценка одного изделия молча плюсовала ему
+        // фантомную единицу — например, одна доска после переоценки начинала числиться как две.
+        var rcvQty = e.isRevaluation ? 0 : ((rcvItem&&rcvItem.qty) ? rcvItem.qty : 1);
         if(!rcvArt && rcvItem){
           rcvArt = _noArticleStockKey(rcvItem.name||e.name, rcvPrice, rcvItem.species, rcvGt);
         }
