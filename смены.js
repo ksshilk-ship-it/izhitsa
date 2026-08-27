@@ -4561,6 +4561,34 @@ function svSaveManualInvIntoShift(){
     alert('⛔ Ошибка при сохранении накладной: '+(e&&e.message?e.message:e)+'\n\nВведённые позиции НЕ потеряны на экране — попробуйте нажать «Сохранить накладную» ещё раз, либо сообщите об ошибке.');
   }
 }
+// Раньше эта проверка была вписана только тут, целиком дублируя логику дальше в Склад.js
+// (где её не было вовсе — вторая форма "Внести накладную вручную" сохраняла без проверки).
+// Именно так одна и та же поставка была 14.07 внесена дважды: продавец Наталья приняла
+// накладную №018 через эту форму в 17:05, а администратор через ЭТУ ЖЕ форму заново вбила
+// её вручную в 19:22 как №021 — потому что нигде не было видно, что накладная уже принята,
+// а само предупреждение появилось в коде только 17.07, тремя днями позже инцидента.
+function _findDuplicateInvoiceCandidate(shopName, items, totalAmt, dateStr){
+  var cutoffDate = new Date(new Date(dateStr||new Date().toISOString()).getTime()-5*86400000).toISOString().split('T')[0];
+  var allInv = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]').concat(JSON.parse(localStorage.getItem('iz_invoices')||'[]'));
+  return allInv.find(function(iv){
+    var ivShop = iv.destName||iv.shopName;
+    var ivItems = iv.acceptedItems||iv.items||[];
+    var ivTotal = ivItems.reduce(function(sum,it){ return sum+(it.factPrice!=null?it.factPrice:(it.price||0))*(it.qty||1); },0);
+    return ivShop===shopName && (iv.date||'')>=cutoffDate &&
+      Math.abs(ivTotal-totalAmt)<1 && ivItems.length===items.length;
+  }) || null;
+}
+function _confirmNotDuplicateInvoice(dup, totalAmt, itemCount){
+  if(!dup) return true;
+  var who = dup.createdBy || (dup.enteredManuallyByAdmin?'администратор':'—');
+  var when = dup.acceptedAt ? new Date(dup.acceptedAt).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : (dup.date||'—');
+  return confirm('⚠️ Похоже, эта накладная уже внесена!\n\n'+
+    'Найдена накладная №'+(dup.num||'—')+' от '+when+'\n'+
+    'Внёс(ла): '+who+'\n'+
+    'Сумма: '+fmt(totalAmt)+' · '+itemCount+' позиций'+(dup.status==='accepted'?' · уже принята':' · ещё не принята')+'\n\n'+
+    'Если это та же самая поставка — не сохраняйте повторно, приход задвоится в остатках.\n\n'+
+    'Всё равно сохранить как новую накладную?');
+}
 function _svSaveManualInvIntoShiftReal(){
   if(!_svManInv || !_currentShiftView){ alert('⛔ Форма накладной не найдена — откройте смену заново и внесите позиции ещё раз.'); return; }
   var s = _svManInv;
@@ -4569,16 +4597,8 @@ function _svSaveManualInvIntoShiftReal(){
   if(!s.num){ alert('⛔ Не сохранено! Укажите номер накладной — поле выше в этой же форме.'); return; }
   var who = (session&&(session.name||session.sellerName))||'Администратор';
   var totalAmt = items.reduce(function(sum,it){ return sum+(it.price||0)*(it.qty||1); },0);
-  var cutoffDate = new Date(Date.now()-5*86400000).toISOString().split('T')[0];
-  var allInv = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]').concat(JSON.parse(localStorage.getItem('iz_invoices')||'[]'));
-  var possibleDup = allInv.find(function(iv){
-    var ivShop = iv.destName||iv.shopName;
-    var ivItems = iv.acceptedItems||iv.items||[];
-    var ivTotal = ivItems.reduce(function(sum,it){ return sum+(it.factPrice!=null?it.factPrice:(it.price||0))*(it.qty||1); },0);
-    return ivShop===_currentShiftView.shopName && (iv.date||'')>=cutoffDate &&
-      Math.abs(ivTotal-totalAmt)<1 && ivItems.length===items.length;
-  });
-  if(possibleDup && !confirm('⚠️ Похоже, в системе уже есть накладная на ту же сумму ('+fmt(totalAmt)+') и то же число позиций ('+items.length+') для этого магазина за последние дни'+(possibleDup.status==='accepted'?' (уже принята)':' (ещё не принята)')+'.\n\nЭто может быть та же самая накладная, внесённая ещё раз — тогда приход задвоится.\n\nВсё равно продолжить?')) return;
+  var possibleDup = _findDuplicateInvoiceCandidate(_currentShiftView.shopName, items, totalAmt, s.date);
+  if(!_confirmNotDuplicateInvoice(possibleDup, totalAmt, items.length)) return;
   var isDr = s.goodsType==='dr';
   var inv = {
     id: uid(), num: s.num, date: s.date, docDate: s.date, from: s.from,

@@ -1795,6 +1795,14 @@ function saveManualInvoice() {
   var docDate = (document.getElementById('manInvDate')||{}).value || new Date().toISOString().split('T')[0];
   var from = (document.getElementById('manInvFrom')||{}).value || '';
   var totalAmt = _manInvItems.reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); }, 0);
+  // Эта форма — второй, независимый способ внести накладную вручную (Склад.js, вкладка
+  // Приход), и раньше здесь вообще не было проверки на дубли — только в форме смены (смены.js)
+  // такая проверка была. Именно через отсутствие проверки в одной из двух форм 14.07 была
+  // задвоена реальная поставка — используем ту же общую проверку в обеих формах.
+  if(typeof _findDuplicateInvoiceCandidate==='function'){
+    var possibleDupManInv = _findDuplicateInvoiceCandidate(session.shopName, _manInvItems, totalAmt, docDate);
+    if(!_confirmNotDuplicateInvoice(possibleDupManInv, totalAmt, _manInvItems.length)) return;
+  }
   if(from) saveSupplier(from);
   var now = new Date();
   var acceptedDateStr = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
