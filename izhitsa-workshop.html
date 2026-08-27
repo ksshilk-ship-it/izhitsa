@@ -8562,9 +8562,69 @@ function setPendSubTab(tab){
 let _maDraftId = null;
 let _maModeSelect = null; // 'with_articles' или 'without_articles'
 
+// ════ ЧЕРНОВИК ФОРМЫ «НОВАЯ ПРИЁМКА» ════
+// Пока приёмка не сохранена в Firestore кнопкой "Сохранить приёмку", всё, что
+// напечатал кладовщик, живёт только в переменной _maItems — если страница
+// перезагрузится (нет интернета, обновление приложения, разрядка, случайный
+// смах), всё введённое пропадёт и придётся вбивать заново. Поэтому параллельно
+// пишем черновик в localStorage — он не зависит от сети и переживёт перезагрузку.
+const MA_DRAFT_KEY = 'ws_ma_draft';
+function saveMaDraftToLocal(){
+  if(!_maModeSelect) return; // форма ещё не открыта — нечего сохранять
+  try{
+    localStorage.setItem(MA_DRAFT_KEY, JSON.stringify({
+      mode: _maModeSelect,
+      draftId: _maDraftId,
+      masterId: document.getElementById('maMaster')?.value || '',
+      date: document.getElementById('maDate')?.value || '',
+      items: _maItems,
+      savedAt: new Date().toISOString()
+    }));
+  }catch(e){ console.log('ma draft save err', e); }
+}
+function loadMaDraftFromLocal(){
+  try{
+    const raw = localStorage.getItem(MA_DRAFT_KEY);
+    if(!raw) return null;
+    const d = JSON.parse(raw);
+    if(!d || !Array.isArray(d.items) || !d.items.length) return null;
+    return d;
+  }catch(e){ return null; }
+}
+function clearMaDraftFromLocal(){
+  try{ localStorage.removeItem(MA_DRAFT_KEY); }catch(e){}
+}
+
 function openManualAcceptMo(){
-  // Показываем модаль выбора режима
+  const draft = loadMaDraftFromLocal();
+  if(draft){
+    // Есть несохранённый черновик с прошлого раза — открываем форму сразу с ним,
+    // без диалога выбора режима (режим уже был выбран тогда).
+    _maModeSelect = draft.mode || 'with_articles';
+    _maItems = draft.items;
+    _maToggled = new Set();
+    _maDraftId = draft.draftId || uid();
+    const sel = document.getElementById('maMaster');
+    if(sel) sel.innerHTML = '<option value="">— Выберите мастера —</option>' + getEmployees().filter(e=>e.role==='мастер').map(m=>`<option value="${m.id}" ${m.id===draft.masterId?'selected':''}>${m.name}</option>`).join('');
+    const dateEl = document.getElementById('maDate');
+    if(dateEl) dateEl.value = draft.date || new Date().toISOString().slice(0,10);
+    renderMaItemsList();
+    openMo('manualAcceptMo');
+    showToast('📝 Восстановлен несохранённый черновик приёмки (' + fmtDT(draft.savedAt) + ')');
+    return;
+  }
+  // Черновика нет — показываем диалог выбора режима как обычно
   openMo('maModeSelectMo');
+}
+
+// Явная отмена — в отличие от случайной потери страницы, здесь пользователь
+// осознанно отказывается от введённых данных, поэтому черновик удаляется.
+function cancelManualAccept(){
+  const hasContent = _maItems.some(it => (it.name||'').trim() || (it.artikul||'').trim() || (it.price||0) > 0);
+  if(hasContent && !confirm('Отменить приёмку? Введённые данные будут удалены (в том числе черновик).')) return;
+  clearMaDraftFromLocal();
+  _maDraftId = null;
+  closeMo('manualAcceptMo');
 }
 
 function selectMaAcceptanceMode(mode){
@@ -8782,10 +8842,12 @@ function renderMaItemsList(){
       html += `
       <div class="fg" style="margin-bottom:8px;background:rgba(192,255,96,0.1);border:2px solid var(--accent);border-radius:10px;padding:10px">
         <label class="fl" style="color:var(--accent);font-weight:700">📦 Количество одинаковых изделий</label>
-        <input class="fi" type="number" min="1" value="${it.qty||''}" oninput="updateMaItem('${it.rid}','qty',this.value)" onblur="finalizeMaQty()" placeholder="1"
-          autocomplete="off" style="font-size:16px;font-weight:700;color:var(--accent)">
+        <input class="fi" type="number" min="1" value="${it.artikulMode==='manual'?1:(it.qty||'')}" ${it.artikulMode==='manual'?'disabled':''} oninput="updateMaItem('${it.rid}','qty',this.value)" onblur="finalizeMaQty()" placeholder="1"
+          autocomplete="off" style="font-size:16px;font-weight:700;color:var(--accent);${it.artikulMode==='manual'?'opacity:0.5':''}">
+        ${it.artikulMode==='manual' ? `<div style="font-size:11px;color:var(--t2);margin-top:6px">🔒 Кол-во заблокировано на 1 — при вручную заданном артикуле нельзя добавить сразу несколько изделий (иначе у них будет один и тот же артикул)</div>` : `
         <div style="font-size:11px;color:var(--t2);margin-top:6px">💡 Заполните остальные поля один раз, укажите кол-во — получится целая пачка</div>
         ${(parseInt(it.qty,10)||1)>1 ? `<div style="font-size:11px;color:var(--inc);margin-top:5px;background:rgba(80,255,150,0.1);padding:6px;border-radius:6px">✓ Будет добавлено: ${parseInt(it.qty,10)} шт одинаковых</div>` : ''}
+        `}
       </div>
       <div class="fg" style="margin-bottom:8px">
         <label class="fl">Артикул</label>
@@ -8865,6 +8927,7 @@ function renderMaItemsList(){
     </div>`;
     return html;
   }).join('');
+  saveMaDraftToLocal();
 }
 
 
@@ -8891,6 +8954,13 @@ function setMaArtikulMode(rid, mode){
   it.artikulMode = mode;
   it.artikulManual = false;
   if(mode==='none') it.artikul = '';
+  // Вручную введённый артикул — это номер ОДНОГО конкретного изделия.
+  // При кол-ве>1 все копии получили бы один и тот же артикул (задвоение
+  // на складе), поэтому кол-во сбрасывается на 1.
+  if(mode==='manual' && (parseInt(it.qty,10)||1) > 1){
+    it.qty = 1;
+    showToast('Кол-во сброшено до 1 — вручную заданный артикул нельзя ставить сразу на несколько изделий');
+  }
   recalcMaAutoArtikuls();
   renderMaItemsList();
 }
@@ -8903,6 +8973,7 @@ function updateMaAutoArtikul(rid, val){
   const it = _maItems.find(x=>x.rid===rid); if(!it) return;
   it.artikul = val;
   it.artikulManual = true;
+  saveMaDraftToLocal();
 }
 function finalizeMaAutoArtikul(){
   // Вызывается по потере фокуса поля — теперь можно спокойно пересчитать и перерисовать
@@ -8919,10 +8990,14 @@ function setMaItemGoodsType(rid, type){
 function updateMaItem(rid, field, val){
   const it = _maItems.find(x=>x.rid===rid); if(!it) return;
   if(field==='qty'){
-    it.qty = Math.max(1, parseInt(val,10)||1);
+    // При вручную заданном артикуле кол-во всегда 1 — иначе все копии получат
+    // один и тот же артикул (см. setMaArtikulMode)
+    it.qty = it.artikulMode==='manual' ? 1 : Math.max(1, parseInt(val,10)||1);
+    saveMaDraftToLocal();
     return; // перерисовка — по blur (см. finalizeMaQty), чтобы не терять фокус поля при вводе
   }
   it[field] = (field==='zp'||field==='price') ? (parseFloat(val)||0) : val;
+  saveMaDraftToLocal();
 }
 function finalizeMaQty(){
   recalcMaAutoArtikuls();
@@ -9050,6 +9125,7 @@ async function saveManualAccept(){
     closeMo('manualAcceptMo');
     showSavedBanner(`✅ Приёмка от ${master?.name||''} сохранена · ${positions.length} позиций`);
     renderManualAcceptHistory();
+    clearMaDraftFromLocal();
     _maDraftId = null;
   }catch(e){ showToast('Ошибка: '+e.message); }
   finally{ endSave('maAccept'); }
@@ -9442,12 +9518,14 @@ function renderDateItems(c){
     html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">';
     html += '<div style="font-size:11px;color:' + accStatusColor + ';font-weight:700">' + accStatusIcon + ' ' + accStatus + '</div>';
     
-    if(canProve) {
+    if(canEdit || canProve) {
       html += '<div style="display:flex;gap:4px">';
       if(canEdit) {
         html += '<button onclick="event.stopPropagation();openMaDetail(\''+acc.id+'\')" style="padding:4px 8px;background:var(--s2);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;font-weight:700;font-size:10px">✏️</button>';
       }
-      html += '<button onclick="event.stopPropagation();finalizeMaAcceptance(\''+acc.id+'\')" style="padding:4px 8px;background:var(--accent);color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:10px">✅</button>';
+      if(canProve) {
+        html += '<button onclick="event.stopPropagation();finalizeMaAcceptance(\''+acc.id+'\')" style="padding:4px 8px;background:var(--accent);color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:10px">✅</button>';
+      }
       html += '</div>';
     }
     
@@ -9695,30 +9773,30 @@ function openMaDetail(accId){
       ${isEditable ? `
         <div class="fg" style="margin-bottom:8px">
           <label class="fl">Артикул</label>
-          <input class="fi" style="font-size:14px" value="${p.artikul||''}" placeholder="Номер артикула (опционально)" inputmode="decimal" onchange="updateMaPosField('${acc.id}','${p.rid}','artikul',this.value)">
+          <input class="fi" style="font-size:14px" value="${p.artikul||''}" placeholder="Номер артикула (опционально)" inputmode="decimal" oninput="updateMaPosFieldLocal('${acc.id}','${p.rid}','artikul',this.value)" onchange="updateMaPosField('${acc.id}','${p.rid}','artikul',this.value)">
         </div>
         <div class="fg" style="margin-bottom:8px">
           <label class="fl">Наименование</label>
-          <input class="fi" style="font-size:14px" value="${p.name||''}" placeholder="Как называется изделие" onchange="updateMaPosField('${acc.id}','${p.rid}','name',this.value)">
+          <input class="fi" style="font-size:14px" value="${p.name||''}" placeholder="Как называется изделие" oninput="updateMaPosFieldLocal('${acc.id}','${p.rid}','name',this.value)" onchange="updateMaPosField('${acc.id}','${p.rid}','name',this.value)">
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <div class="fg">
             <label class="fl">Количество</label>
-            <input class="fi" style="font-size:14px" type="number" value="${p.qty||1}" placeholder="Кол-во шт" min="1" inputmode="numeric" onchange="updateMaPosField('${acc.id}','${p.rid}','qty',this.value)">
+            <input class="fi" style="font-size:14px" type="number" value="${p.qty||1}" placeholder="Кол-во шт" min="1" inputmode="numeric" oninput="updateMaPosFieldLocal('${acc.id}','${p.rid}','qty',this.value)" onchange="updateMaPosField('${acc.id}','${p.rid}','qty',this.value)">
           </div>
           <div class="fg">
             <label class="fl">${goodsTypeWoodLabel(p.goodsType||'derevo')}</label>
-            <input class="fi" style="font-size:14px" value="${p.wood||''}" placeholder="${goodsTypeWoodPlaceholder(p.goodsType||'derevo')}" onchange="updateMaPosField('${acc.id}','${p.rid}','wood',this.value)">
+            <input class="fi" style="font-size:14px" value="${p.wood||''}" placeholder="${goodsTypeWoodPlaceholder(p.goodsType||'derevo')}" oninput="updateMaPosFieldLocal('${acc.id}','${p.rid}','wood',this.value)" onchange="updateMaPosField('${acc.id}','${p.rid}','wood',this.value)">
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <div class="fg">
             <label class="fl">Розничная цена за 1 шт (₽)</label>
-            <input class="fi" style="font-size:14px" type="number" value="${p.price||0}" placeholder="Цена товара" onchange="updateMaPosField('${acc.id}','${p.rid}','price',this.value)">
+            <input class="fi" style="font-size:14px" type="number" value="${p.price||0}" placeholder="Цена товара" oninput="updateMaPosFieldLocal('${acc.id}','${p.rid}','price',this.value)" onchange="updateMaPosField('${acc.id}','${p.rid}','price',this.value)">
           </div>
           <div class="fg">
             <label class="fl">ЗП мастеру за 1 шт (₽)</label>
-            <input class="fi" style="font-size:14px" type="number" value="${p.zp||0}" placeholder="Зарплата" onchange="updateMaPosField('${acc.id}','${p.rid}','zp',this.value)">
+            <input class="fi" style="font-size:14px" type="number" value="${p.zp||0}" placeholder="Зарплата" oninput="updateMaPosFieldLocal('${acc.id}','${p.rid}','zp',this.value)" onchange="updateMaPosField('${acc.id}','${p.rid}','zp',this.value)">
           </div>
         </div>
         ${(p.qty && p.qty > 1) || acc.mode === 'without_articles' ? `
@@ -9799,6 +9877,25 @@ function updateMaAccDate(accId, date){
     showToast('✅ Дата изменена');
     openMaDetail(accId);
   }).catch(e=>showToast('Ошибка: '+e.message));
+}
+
+// Синхронизация поля позиции ТОЛЬКО в памяти (без записи в Firestore и без перерисовки) —
+// вызывается на каждое нажатие клавиши (oninput). Нужна из-за того, что другие действия в
+// этой же приёмке (добавить позицию, поставить статус, удалить позицию) шлют в Firestore
+// весь acc.positions и сразу перерисовывают форму через openMaDetail(). Без этой синхронизации
+// набранный, но ещё не потерявший фокус (не сработал onchange) текст в другом поле терялся —
+// перерисовка подставляла старое значение из acc.positions. Теперь acc.positions всегда
+// актуален посимвольно, так что случайная перерисовка ничего не стирает.
+function updateMaPosFieldLocal(accId, rid, field, value){
+  const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
+  const pos = acc.positions.find(p=>p.rid===rid); if(!pos) return;
+  if(field==='price' || field==='zp') {
+    pos[field] = parseFloat(value)||0;
+  } else if(field==='qty') {
+    pos[field] = parseInt(value,10)||1;
+  } else {
+    pos[field] = value;
+  }
 }
 
 // Обновление поля позиции внутри приёмки — доступно только в день внесения, админу — всегда (проверка на стороне openMaDetail через рендер полей)
@@ -10903,14 +11000,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
 <div class="mo" id="manualAcceptMo">
   <div class="md"><div class="mh"></div><div class="mt">➕ Приёмка от мастера</div>
 
-    <div class="fg"><label class="fl">Мастер</label><select class="fs" id="maMaster"></select></div>
-    <div class="fg"><label class="fl">Дата сдачи</label><input class="fi" type="date" id="maDate"></div>
+    <div class="fg"><label class="fl">Мастер</label><select class="fs" id="maMaster" onchange="saveMaDraftToLocal()"></select></div>
+    <div class="fg"><label class="fl">Дата сдачи</label><input class="fi" type="date" id="maDate" onchange="saveMaDraftToLocal()"></div>
 
     <div id="maItemsList" style="margin:14px 0"></div>
 
     <button class="btn" style="background:var(--a2);margin-bottom:10px" onclick="addMaItemRow()">➕ Добавить изделие</button>
     <button class="btn green" onclick="saveManualAccept()">💾 Сохранить приёмку</button>
-    <button class="btn sec" style="margin-top:8px" onclick="closeMo('manualAcceptMo')">Отмена</button>
+    <button class="btn sec" style="margin-top:8px" onclick="cancelManualAccept()">Отмена</button>
   </div>
 </div>
 
