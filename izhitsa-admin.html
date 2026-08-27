@@ -100,6 +100,12 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 .mt{font-family:'Unbounded',sans-serif;font-size:14px;font-weight:700;margin-bottom:14px}
 .sep{height:1px;background:var(--border);margin:12px 0}
 
+/* Плавающая кнопка «Быстрый расход» — доступна с любого экрана и для любой
+   роли (в т.ч. Владельца, у которого нет обычного доступа к вкладке Финансы). */
+.qexp-fab-wrap{display:none;position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;height:0;z-index:150;pointer-events:none}
+.qexp-fab{position:absolute;right:16px;bottom:calc(var(--tabh) + env(safe-area-inset-bottom) + 18px);width:56px;height:56px;border-radius:50%;background:var(--exp);color:#fff;border:none;font-size:24px;box-shadow:0 6px 18px rgba(240,96,96,.5);cursor:pointer;display:flex;align-items:center;justify-content:center;pointer-events:auto;transition:transform .15s}
+.qexp-fab:active{transform:scale(.92)}
+
 .txtype{display:flex;gap:7px;margin-bottom:12px}
 .txt-btn{flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--s2);color:var(--t2);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s}
 .txt-btn.i{background:#1a2e1e;border-color:var(--inc);color:var(--inc)}
@@ -979,6 +985,57 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <div id="addWsMo" class="mo" style="display:none!important"></div>
 <div id="setupUsersMo" class="mo" style="display:none!important"></div>
 
+<!-- ⚡ БЫСТРЫЙ РАСХОД — плавающая кнопка поверх любого экрана (в т.ч. для
+     роли Владелец, у которой нет вкладки «Финансы»), чтобы вносить расход
+     в 2-3 тапа без поиска нужного раздела -->
+<div class="qexp-fab-wrap" id="qexpFabWrap"><button class="qexp-fab" onclick="openQuickExpense()" title="Быстрый расход">💸</button></div>
+
+<div id="quickExpMo" class="mo">
+  <div class="md">
+    <div class="mh"></div>
+    <div class="mt">⚡ Быстрый расход</div>
+
+    <div class="fg">
+      <input class="fi" type="number" id="qexpAmt" placeholder="Сумма, ₽" inputmode="decimal" style="font-size:22px;font-weight:700;text-align:center;padding:16px">
+    </div>
+
+    <div id="qexpRecentWrap" style="display:none;margin-bottom:4px">
+      <label class="fl">Недавние категории</label>
+      <div class="pchips" id="qexpRecentChips"></div>
+    </div>
+
+    <div class="fg"><label class="fl">Категория расхода</label>
+      <select class="fs" id="qexpGroup" onchange="onQexpGroupChange()">
+        <option value="">— выбрать группу —</option>
+      </select></div>
+    <div class="fg" id="qexpSubGroupFg" style="display:none"><label class="fl">Подгруппа</label>
+      <select class="fs" id="qexpSubGroup" onchange="onQexpSubGroupChange()">
+        <option value="">— подгруппа —</option>
+      </select></div>
+    <div class="fg" id="qexpItemFg" style="display:none"><label class="fl">Статья</label>
+      <select class="fs" id="qexpItem">
+        <option value="">— статья —</option>
+      </select></div>
+
+    <div class="fg">
+      <label class="fl">Каким видом денег</label>
+      <div class="pchips" id="qexpTypeChips"></div>
+    </div>
+
+    <div class="fg"><label class="fl">Откуда оплата — счёт / касса</label>
+      <select class="fs" id="qexpAccount"></select></div>
+
+    <div class="fg"><label class="fl">Описание</label>
+      <input class="fi" id="qexpDesc" placeholder="Заметка (необязательно)"></div>
+
+    <div class="fg"><label class="fl">Дата</label>
+      <input class="fi" type="date" id="qexpDate"></div>
+
+    <button class="btn" onpointerdown="event.preventDefault();saveQuickExpense()">💾 Сохранить расход</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('quickExpMo')">Отмена</button>
+  </div>
+</div>
+
 <!-- TABS BAR -->
 <div class="tabs" id="tabsBar">
   <button class="tab active" data-roles="admin,accountant" onclick="switchTab('dash',this)"><div class="ti">🏠</div>Главная</button>
@@ -1670,6 +1727,7 @@ function doLogin() {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('appScreen').style.display = 'block';
     document.getElementById('tabsBar').style.display = 'flex';
+    document.getElementById('qexpFabWrap').style.display = 'block';
     document.getElementById('hdrName').textContent = 'Администратор';
     document.getElementById('hdrRole').textContent = roleLabel('admin');
     populateSellers(); populateWsEmployees(); populateAdminUsers();
@@ -1717,6 +1775,7 @@ function doLogin() {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
   document.getElementById('tabsBar').style.display = 'flex';
+  document.getElementById('qexpFabWrap').style.display = 'block';
   document.getElementById('hdrName').textContent = user.name;
   document.getElementById('hdrRole').textContent = roleLabel(role);
   
@@ -1746,6 +1805,7 @@ function doLogout() {
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('appScreen').style.display = 'none';
   document.getElementById('tabsBar').style.display = 'none';
+  document.getElementById('qexpFabWrap').style.display = 'none';
   document.getElementById('loginPass').value = '';
   document.getElementById('loginErr').textContent = '';
 }
@@ -6153,6 +6213,202 @@ function saveExpenseTx() {
   showToast('✅ Расход '+amt.toLocaleString('ru-RU')+' ₽ сохранён'+(isRecurring?' (плановый)':'')+(isWorkshop?' 🏭':''));
 }
 
+// ════ БЫСТРЫЙ РАСХОД ════
+// Плавающая кнопка поверх приложения — доступна на любом экране и любой
+// роли (в т.ч. Владельцу, у которого нет вкладки «Финансы»). Пишет в тот
+// же iz_transactions, что и полная форма выше, поэтому попадает во все
+// отчёты/архив/P&L автоматически, без отдельной модели данных.
+var _qexpAllAccounts = [];
+var _qexpTypeFilter = '';
+var QEXP_TYPE_LABELS = {cash:'💵 Нал', card:'💳 Карта', bank:'🏦 Счёт', online:'🌐 Онлайн'};
+
+function openQuickExpense() {
+  populateQuickExpense();
+  renderQexpRecentChips();
+  var dateEl = document.getElementById('qexpDate');
+  if(dateEl) dateEl.value = new Date().toISOString().substring(0,10);
+  openMo('quickExpMo');
+  setTimeout(function(){ var a=document.getElementById('qexpAmt'); if(a) a.focus(); }, 250);
+}
+
+function populateQuickExpense() {
+  var items = [];
+  try { items = JSON.parse(localStorage.getItem('iz_expense_items')||'[]'); } catch(e){}
+  var grpSel = document.getElementById('qexpGroup');
+  if(grpSel) grpSel.innerHTML = '<option value="">— выбрать группу —</option>' +
+    items.map(function(g){ return '<option value="'+g.id+'">'+g.name+'</option>'; }).join('');
+  var subFg = document.getElementById('qexpSubGroupFg');
+  var itemFg = document.getElementById('qexpItemFg');
+  if(subFg) subFg.style.display = 'none';
+  if(itemFg) itemFg.style.display = 'none';
+
+  var accs = [];
+  try { accs = JSON.parse(localStorage.getItem('iz_accounts')||'[]'); } catch(e){}
+  _qexpAllAccounts = accs;
+  renderQexpTypeChips(accs);
+  renderQexpAccountOptions(accs);
+}
+
+function renderQexpTypeChips(accs) {
+  var wrap = document.getElementById('qexpTypeChips');
+  if(!wrap) return;
+  _qexpTypeFilter = '';
+  var types = [];
+  accs.forEach(function(a){ var t=(a&&typeof a==='object')?a.type:''; if(t && types.indexOf(t)<0) types.push(t); });
+  var html = '<div class="pc active" onclick="setQexpTypeFilter(\'\',this)">Все</div>';
+  types.forEach(function(t){
+    html += '<div class="pc" onclick="setQexpTypeFilter(\''+t+'\',this)">'+(QEXP_TYPE_LABELS[t]||t)+'</div>';
+  });
+  wrap.innerHTML = html;
+}
+
+function setQexpTypeFilter(type, btn) {
+  _qexpTypeFilter = type;
+  var wrap = document.getElementById('qexpTypeChips');
+  if(wrap) wrap.querySelectorAll('.pc').forEach(function(b){ b.classList.remove('active'); });
+  if(btn) btn.classList.add('active');
+  var filtered = type ? _qexpAllAccounts.filter(function(a){ return a && typeof a==='object' && a.type===type; }) : _qexpAllAccounts;
+  renderQexpAccountOptions(filtered);
+}
+
+function renderQexpAccountOptions(accs) {
+  var sel = document.getElementById('qexpAccount');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">— выбрать счёт/кассу —</option>' +
+    accs.map(function(a){ var n=typeof a==='string'?a:(a.name||''); return '<option value="'+n+'">'+n+'</option>'; }).join('');
+  if(accs.length===1) sel.value = (typeof accs[0]==='string'?accs[0]:accs[0].name);
+}
+
+function onQexpGroupChange() {
+  var grpId = (document.getElementById('qexpGroup')||{}).value||'';
+  var items = [];
+  try { items = JSON.parse(localStorage.getItem('iz_expense_items')||'[]'); } catch(e){}
+  var grp = items.find(function(g){ return g.id===grpId; });
+  var children = grp && grp.children ? grp.children : [];
+
+  var subFg = document.getElementById('qexpSubGroupFg');
+  var itemFg = document.getElementById('qexpItemFg');
+  var subSel = document.getElementById('qexpSubGroup');
+  var itemSel = document.getElementById('qexpItem');
+
+  if(children.length > 0) {
+    subSel.innerHTML = '<option value="">— подгруппа —</option>' +
+      children.map(function(c){ return '<option value="'+c.id+'">'+c.name+'</option>'; }).join('');
+    subFg.style.display = 'block';
+    itemFg.style.display = 'none';
+    itemSel.innerHTML = '<option value="">— статья —</option>';
+  } else {
+    subFg.style.display = 'none';
+    itemFg.style.display = 'none';
+  }
+}
+
+function onQexpSubGroupChange() {
+  var grpId = (document.getElementById('qexpGroup')||{}).value||'';
+  var subId = (document.getElementById('qexpSubGroup')||{}).value||'';
+  var items = [];
+  try { items = JSON.parse(localStorage.getItem('iz_expense_items')||'[]'); } catch(e){}
+  var grp = items.find(function(g){ return g.id===grpId; });
+  var sub = grp && grp.children ? grp.children.find(function(c){ return c.id===subId; }) : null;
+  var children = sub && sub.children ? sub.children : [];
+
+  var itemFg = document.getElementById('qexpItemFg');
+  var itemSel = document.getElementById('qexpItem');
+  if(children.length > 0) {
+    itemSel.innerHTML = '<option value="">— статья —</option>' +
+      children.map(function(c){ return '<option value="'+c.name+'">'+c.name+'</option>'; }).join('');
+    itemFg.style.display = 'block';
+  } else {
+    itemFg.style.display = 'none';
+  }
+}
+
+function _qexpCategoryLabel() {
+  var items = [];
+  try { items = JSON.parse(localStorage.getItem('iz_expense_items')||'[]'); } catch(e){}
+  var grpId = (document.getElementById('qexpGroup')||{}).value||'';
+  var subId = (document.getElementById('qexpSubGroup')||{}).value||'';
+  var itemVal = (document.getElementById('qexpItem')||{}).value||'';
+  var grp = items.find(function(g){ return g.id===grpId; });
+  if(!grp) return '';
+  var sub = grp.children ? grp.children.find(function(c){ return c.id===subId; }) : null;
+  var parts = [grp.name];
+  if(sub) parts.push(sub.name);
+  if(itemVal) parts.push(itemVal);
+  return parts.join(' / ');
+}
+
+// «Недавние категории» — последние группы расходов, внесённые через
+// быстрый ввод, чтобы повторный расход (например «Аренда») занимал 1 тап.
+function renderQexpRecentChips() {
+  var wrap = document.getElementById('qexpRecentWrap');
+  var chipsEl = document.getElementById('qexpRecentChips');
+  if(!wrap || !chipsEl) return;
+  var recent = [];
+  try { recent = JSON.parse(localStorage.getItem('iz_quick_exp_recent')||'[]'); } catch(e){}
+  if(!recent.length) { wrap.style.display='none'; return; }
+  wrap.style.display = 'block';
+  chipsEl.innerHTML = recent.map(function(r){
+    return '<div class="pc" onclick="pickQexpRecent(\''+r.groupId+'\')">'+r.groupName+'</div>';
+  }).join('');
+}
+
+function pickQexpRecent(groupId) {
+  var sel = document.getElementById('qexpGroup');
+  if(!sel) return;
+  sel.value = groupId;
+  onQexpGroupChange();
+}
+
+function _rememberQexpRecent(groupId, groupName) {
+  if(!groupId) return;
+  var recent = [];
+  try { recent = JSON.parse(localStorage.getItem('iz_quick_exp_recent')||'[]'); } catch(e){}
+  recent = recent.filter(function(r){ return r.groupId !== groupId; });
+  recent.unshift({groupId:groupId, groupName:groupName});
+  recent = recent.slice(0,6);
+  localStorage.setItem('iz_quick_exp_recent', JSON.stringify(recent));
+}
+
+function saveQuickExpense() {
+  var amt = parseFloat((document.getElementById('qexpAmt')||{}).value||'0');
+  var grpId = (document.getElementById('qexpGroup')||{}).value||'';
+  var cat = _qexpCategoryLabel();
+  var account = (document.getElementById('qexpAccount')||{}).value||'';
+  var desc = (document.getElementById('qexpDesc')||{}).value||'';
+  var date = (document.getElementById('qexpDate')||{}).value || new Date().toISOString().substring(0,10);
+
+  if(!amt||amt<=0){ showToast('❌ Введите сумму'); return; }
+  if(!cat){ showToast('❌ Выберите категорию расхода'); return; }
+  if(!account){ showToast('❌ Выберите счёт/кассу — откуда оплата'); return; }
+
+  var tx = {id:uid(), type:'expense', amount:amt, category:cat, account:account,
+    desc:desc, date:date+'T00:00:00', createdAt:now(), createdBy:session?session.name:''};
+
+  var txs = getTransactions();
+  txs.push(tx);
+  saveTransactions(txs);
+
+  var items = [];
+  try { items = JSON.parse(localStorage.getItem('iz_expense_items')||'[]'); } catch(e){}
+  var grp = items.find(function(g){ return g.id===grpId; });
+  if(grp) _rememberQexpRecent(grp.id, grp.name);
+
+  showToast('✅ Расход '+amt.toLocaleString('ru-RU')+' ₽ сохранён');
+  closeMo('quickExpMo');
+
+  document.getElementById('qexpAmt').value='';
+  document.getElementById('qexpDesc').value='';
+  document.getElementById('qexpGroup').value='';
+  onQexpGroupChange();
+  document.getElementById('qexpDate').value = new Date().toISOString().substring(0,10);
+
+  // Если открыты вкладки, которые показывают расходы — обновим их тоже,
+  // чтобы новая запись сразу была видна без перезахода.
+  try { if(typeof renderExpArchive === 'function') renderExpArchive(); } catch(e){}
+  try { if(typeof renderDashboard === 'function') renderDashboard(); } catch(e){}
+}
+
 function renderExpArchive() {
   var el = document.getElementById('expArchiveList');
   if(!el) return;
@@ -6468,6 +6724,7 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('appScreen').style.display = 'block';
       document.getElementById('tabsBar').style.display = 'flex';
+      document.getElementById('qexpFabWrap').style.display = 'block';
       document.getElementById('hdrName').textContent = session.name;
       document.getElementById('hdrRole').textContent = roleLabel(session.role);
       populateSellers();
