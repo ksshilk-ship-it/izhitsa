@@ -210,7 +210,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '08.27.08';
+var APP_BUILD_VERSION = '08.27.09';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -1505,6 +1505,7 @@ function startInventoryApp(){
   document.getElementById('hdrSeller').textContent=session.name;
   var home = document.getElementById('pg-inventory-home');
   if(home) home.classList.add('active');
+  try{ if(typeof loadInvHomeActive==='function') loadInvHomeActive(); }catch(e){}
 }
 function startAdminApp(){
   try{ _reportAppVersion(); }catch(e){}

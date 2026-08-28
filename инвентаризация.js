@@ -29,6 +29,48 @@ function openInventoryModal(){
     })
     .catch(function(){ _invActiveSessions=[]; _invRenderStart(); });
 }
+// Список незавершённых пересчётов виден сразу на домашнем экране роли «Инвентаризация» —
+// иначе узнать, что кто-то уже начал считать, можно было только открыв модалку.
+function loadInvHomeActive(){
+  var el = document.getElementById('invHomeActiveList');
+  if(!el || !session || !session.shopName) return;
+  el.innerHTML = '<div style="font-size:11px;color:#8888aa;padding:4px 0 8px">⏳ Проверяю незавершённые...</div>';
+  db.collection('iz_inventory_sessions').where('shopName','==',session.shopName).where('status','==','active').get()
+    .then(function(snap){
+      _invActiveSessions = snap.docs.map(function(d){ var x=d.data(); if(!x.id) x.id=d.id; return x; });
+      _invRenderHomeActiveList();
+    })
+    .catch(function(){ el.innerHTML = ''; });
+}
+function _invRenderHomeActiveList(){
+  var el = document.getElementById('invHomeActiveList'); if(!el) return;
+  if(!_invActiveSessions.length){ el.innerHTML=''; return; }
+  el.innerHTML = '<div style="font-size:12px;font-weight:700;color:#8888aa;margin-bottom:8px">Незавершённые пересчёты:</div>'+
+    _invActiveSessions.map(function(s){
+      return '<div style="background:#1a1f2e;border:1px solid #60c8f055;border-radius:10px;padding:11px;margin-bottom:8px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+          '<div style="font-size:13px;font-weight:700;color:#60c8f0">'+(s.goodsType==='dr'?'🛍 ДР Товар':'🌳 Дерево')+'</div>'+
+          '<div style="font-size:10px;color:#8888aa">'+(s.mode==='freeform'?'✍️ своб. ввод':'📋 по списку')+'</div>'+
+        '</div>'+
+        '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">начато '+(s.startedAt||'').slice(0,10)+' · '+(s.startedBy||'—')+'</div>'+
+        '<button type="button" onclick="invHomeResume(\''+s.id+'\')" style="width:100%;padding:9px;background:#60c8f0;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">▶ Продолжить</button>'+
+      '</div>';
+    }).join('');
+}
+function invHomeResume(id){
+  openMo('invStockMo');
+  _invShowStep('loading');
+  if(_invActiveSessions.some(function(s){ return s.id===id; })){
+    invResumeSession(id);
+    return;
+  }
+  db.collection('iz_inventory_sessions').doc(id).get().then(function(snap){
+    if(!snap.exists){ showToast('Сессия не найдена'); openInventoryModal(); return; }
+    var s = snap.data(); if(!s.id) s.id = id;
+    _invActiveSessions = [s];
+    invResumeSession(id);
+  }).catch(function(){ showToast('Не удалось открыть — попробуйте ещё раз'); _invShowStep('start'); });
+}
 function _invShowStep(step){
   ['loading','start','count','report'].forEach(function(s){
     var el = document.getElementById('invStep_'+s);
@@ -581,10 +623,12 @@ function invFinalizeSession(){
   closeMo('invStockMo');
   showToast('✅ Инвентаризация завершена');
   _invSession = null; _invCounts = {}; _invReportRows = {};
+  loadInvHomeActive();
 }
 function invCloseModal(){
   if(_invSession && _invSession.status==='active'){
     showToast('Пересчёт сохранён — можно продолжить позже через «Инвентаризация»');
   }
   closeMo('invStockMo');
+  loadInvHomeActive();
 }
