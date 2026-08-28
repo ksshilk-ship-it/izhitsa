@@ -6,12 +6,14 @@
 // затирая друг друга. Исправления (излишек/недостача) применяются как обычные записи в
 // журнал смены — списание/приход — а не прямой правкой остатка, иначе rebuildStock() при
 // следующем пересчёте всё равно откатит их к прежним цифрам.
-var _invSession = null;       // {id, shopName, goodsType, startedAt, startedBy, status, snapshot:{key:{...}}}
+var _invSession = null;       // {id, shopName, goodsType, startedAt, startedBy, status, mode, snapshot:{key:{...}}}
 var _invCounts = {};          // itemKey -> {sessionId,itemKey,num,name,price,species,size,goodsType,countedQty,countedBy,countedAt,isNew,applied}
 var _invActiveSessions = [];
 var _invSearch = '';
 var _invNewGoodsType = 'derevo';
 var _invReportRows = {};      // itemKey -> row shown in отчёт (используется кнопками "Применить")
+var _invPendingMode = 'checklist'; // 'checklist' | 'freeform' — выбор режима перед стартом нового пересчёта
+var _invFfMatches = [];       // текущие подсказки поиска в свободном режиме
 
 function openInventoryModal(){
   if(!session || !session.shopName || session.shopName==='Все магазины'){
@@ -41,10 +43,24 @@ function _invRenderStart(){
     return '<button type="button" onclick="invResumeSession(\''+s.id+'\')" style="width:100%;text-align:left;padding:11px;margin-bottom:8px;background:#1a1f2e;border:1px solid #60c8f055;border-radius:10px;color:#60c8f0;font-size:12px;font-weight:700;cursor:pointer">▶ Продолжить: '+(s.goodsType==='dr'?'🛍 ДР Товар':'🌳 Дерево')+'<div style="font-size:10px;color:#8888aa;font-weight:400;margin-top:2px">начато '+(s.startedAt||'').slice(0,10)+' · '+(s.startedBy||'—')+'</div></button>';
   }).join('');
   var newBtns = '';
+  if(!startedTypes.derevo || !startedTypes.dr){
+    newBtns += '<div style="font-size:11px;color:#8888aa;margin-bottom:6px">Как считать:</div>'+
+      '<div style="display:flex;gap:6px;margin-bottom:10px">'+
+        '<button type="button" onclick="invSetPendingMode(\'checklist\')" style="flex:1;padding:9px 6px;border-radius:9px;border:'+(_invPendingMode==='checklist'?'2px solid #60c8f0':'1px solid #2e2e3e')+';background:'+(_invPendingMode==='checklist'?'#0f1a22':'#1a1a22')+';color:'+(_invPendingMode==='checklist'?'#60c8f0':'#8888aa')+';font-size:11px;font-weight:700;cursor:pointer">📋 По списку системы</button>'+
+        '<button type="button" onclick="invSetPendingMode(\'freeform\')" style="flex:1;padding:9px 6px;border-radius:9px;border:'+(_invPendingMode==='freeform'?'2px solid #60c8f0':'1px solid #2e2e3e')+';background:'+(_invPendingMode==='freeform'?'#0f1a22':'#1a1a22')+';color:'+(_invPendingMode==='freeform'?'#60c8f0':'#8888aa')+';font-size:11px;font-weight:700;cursor:pointer">✍️ Свободный ввод</button>'+
+      '</div>'+
+      '<div style="font-size:10px;color:#8888aa;margin:-4px 0 10px">'+(_invPendingMode==='freeform'
+        ? 'Заносите то, что физически видите, по одному — без сверки на ходу. Сравнение с системой покажется целиком в отчёте, в конце.'
+        : 'Показывает весь текущий остаток списком — отмечаете найденное по каждой позиции.')+'</div>';
+  }
   if(!startedTypes.derevo) newBtns += '<button type="button" onclick="invStartSession(\'derevo\')" style="width:100%;padding:11px;margin-bottom:8px;background:#1e2a14;border:2px solid #c8f060;border-radius:10px;color:#c8f060;font-size:13px;font-weight:700;cursor:pointer">🌳 Начать — Дерево</button>';
   if(!startedTypes.dr) newBtns += '<button type="button" onclick="invStartSession(\'dr\')" style="width:100%;padding:11px;margin-bottom:8px;background:#1e1a2e;border:2px solid #a060f0;border-radius:10px;color:#a060f0;font-size:13px;font-weight:700;cursor:pointer">🛍 Начать — ДР Товар</button>';
   c.innerHTML = (resumeHtml ? '<div style="font-size:11px;color:#8888aa;margin-bottom:6px">Незавершённые пересчёты в этом магазине:</div>'+resumeHtml+'<div style="height:8px"></div>' : '') +
     (newBtns ? newBtns : '<div style="font-size:11px;color:#8888aa">Все виды товара уже считаются — продолжите один из пересчётов выше.</div>');
+}
+function invSetPendingMode(mode){
+  _invPendingMode = mode;
+  _invRenderStart();
 }
 function invStartSession(goodsType){
   var stock = getStock()[session.shopName] || {};
@@ -56,7 +72,7 @@ function invStartSession(goodsType){
     }
   });
   var id = uid();
-  _invSession = {id:id, shopName:session.shopName, goodsType:goodsType, startedAt:new Date().toISOString(), startedBy:(session.sellerName||session.name||'—'), status:'active', snapshot:snapshot};
+  _invSession = {id:id, shopName:session.shopName, goodsType:goodsType, startedAt:new Date().toISOString(), startedBy:(session.sellerName||session.name||'—'), status:'active', mode:_invPendingMode, snapshot:snapshot};
   _invCounts = {};
   try{ db.collection('iz_inventory_sessions').doc(id).set(_invSession); }catch(e){}
   _invEnterCount();
@@ -74,11 +90,24 @@ function invResumeSession(id){
 }
 function _invEnterCount(){
   _invSearch = '';
-  var se = document.getElementById('invSearch'); if(se) se.value = '';
+  var se = document.getElementById('invSearch');
+  if(se){
+    se.value = '';
+    se.placeholder = (_invSession.mode==='freeform') ? '🔍 Артикул или название — найти и занести' : '🔍 Поиск по названию/артикулу/породе';
+  }
   var af = document.getElementById('invAddForm'); if(af) af.style.display = 'none';
+  var sugg = document.getElementById('invFfSugg'); if(sugg){ sugg.style.display='none'; sugg.innerHTML=''; }
   _invShowStep('count');
   _invRenderCountHeader();
-  renderInvCountList();
+  _invRenderCountBody();
+}
+function _invRenderCountBody(){
+  if(_invSession && _invSession.mode==='freeform') _invRenderFreeformTally();
+  else renderInvCountList();
+}
+function invOnSearchInput(v){
+  if(_invSession && _invSession.mode==='freeform') _invFfSearchInput(v);
+  else invSearchInput(v);
 }
 function _invRenderCountHeader(){
   var el = document.getElementById('invCountHeader');
@@ -90,6 +119,112 @@ function _invRenderCountHeader(){
     '<div style="font-size:11px;color:#8888aa;margin-top:2px">Посчитано '+done+' из '+total+(newCount?' · +'+newCount+' новых (не было в системе)':'')+'</div>';
 }
 function invSearchInput(v){ _invSearch = (v||'').trim().toLowerCase(); renderInvCountList(); }
+// ===== Свободный ввод: сначала заносим всё найденное по одному, без сверки на ходу — сверка
+// с системой видна только в отчёте, в конце. =====
+function _invFfSearchInput(v){
+  var q = (v||'').trim().toLowerCase();
+  if(!q){ _invFfMatches=[]; _invRenderFfSuggestions(q); return; }
+  var snap = _invSession.snapshot;
+  var exact = Object.keys(snap).filter(function(k){ return String(snap[k].num||k).toLowerCase()===q; });
+  var partial = Object.keys(snap).filter(function(k){
+    if(exact.indexOf(k)>=0) return false;
+    var it = snap[k];
+    return (it.name||'').toLowerCase().indexOf(q)>=0 || String(it.num||k).toLowerCase().indexOf(q)>=0 || (it.species||'').toLowerCase().indexOf(q)>=0;
+  });
+  _invFfMatches = exact.concat(partial).slice(0,8);
+  _invRenderFfSuggestions(q);
+}
+function _invRenderFfSuggestions(q){
+  var el = document.getElementById('invFfSugg'); if(!el) return;
+  if(!_invFfMatches.length){
+    el.style.display = q ? 'block' : 'none';
+    el.innerHTML = q ? '<div style="padding:9px 10px;font-size:11px;color:#8888aa">Не найдено в системе — можно занести как новое кнопкой ниже ⤵</div>' : '';
+    return;
+  }
+  el.style.display = 'block';
+  el.innerHTML = _invFfMatches.map(function(k){
+    var it = _invSession.snapshot[k];
+    var already = _invCounts[k];
+    var safeKey = k.replace(/'/g,"\\'");
+    return '<div onclick="invFfPick(\''+safeKey+'\')" style="padding:9px 10px;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;gap:8px">'+
+      '<div style="font-size:12px">'+(it.num?'№'+it.num+' ':'')+(it.name||'—')+(it.species?' <span style="color:#f0c060">· '+it.species+'</span>':'')+'</div>'+
+      (already ? '<div style="font-size:11px;color:#60f090;flex-shrink:0;white-space:nowrap">учтено: '+already.countedQty+'</div>' : '')+
+    '</div>';
+  }).join('');
+}
+function invFfKeydown(e){
+  if(!e || e.key!=='Enter') return;
+  e.preventDefault();
+  var input = document.getElementById('invSearch');
+  var q = ((input&&input.value)||'').trim().toLowerCase();
+  if(!q) return;
+  var snap = _invSession.snapshot;
+  var exact = Object.keys(snap).find(function(k){ return String(snap[k].num||k).toLowerCase()===q; });
+  if(exact){ invFfPick(exact); return; }
+  if(_invFfMatches.length===1){ invFfPick(_invFfMatches[0]); return; }
+  showToast(_invFfMatches.length ? 'Есть несколько совпадений — выберите из списка' : 'Не найдено — занесите как новое кнопкой ниже');
+}
+function invFfPick(key){
+  var base = _invSession.snapshot[key];
+  if(!base){ showToast('Товар не найден'); return; }
+  var existing = _invCounts[key];
+  var newQty = (existing?existing.countedQty:0) + 1;
+  var rec = {
+    sessionId:_invSession.id, itemKey:key,
+    num:base.num||key, name:base.name, price:base.price||0, species:base.species||'', size:base.size||'', goodsType:_invSession.goodsType,
+    countedQty:newQty, countedBy:(session.sellerName||session.name||'—'), countedAt:new Date().toISOString(),
+    isNew:false
+  };
+  _invCounts[key] = rec;
+  try{
+    db.collection('iz_inventory_counts').doc(_invSession.id+'_'+key).set(rec)
+      .catch(function(){ showToast('⚠️ Сохранено на устройстве, но не отправилось в облако'); });
+  }catch(e){}
+  var input = document.getElementById('invSearch'); if(input){ input.value=''; input.focus(); }
+  _invFfMatches=[]; _invRenderFfSuggestions('');
+  _invRenderCountHeader();
+  _invRenderFreeformTally();
+  showToast('✅ '+base.name+' — теперь '+newQty+' шт.');
+}
+function _invRenderFreeformTally(){
+  var c = document.getElementById('invCountList'); if(!c || !_invSession) return;
+  var keys = Object.keys(_invCounts).sort(function(a,b){
+    return (_invCounts[b].countedAt||'').localeCompare(_invCounts[a].countedAt||''); // последние занесённые — сверху
+  });
+  if(!keys.length){ c.innerHTML = '<div class="empty"><div class="ei">✍️</div>Пока ничего не занесено — ищите товар в строке выше или добавляйте новый</div>'; return; }
+  c.innerHTML = keys.map(function(k){
+    var it = _invCounts[k];
+    var safeKey = k.replace(/'/g,"\\'");
+    return '<div style="border:1px solid #60f09055;background:#0f1a12;border-radius:10px;padding:9px 10px;margin-bottom:6px">'+
+      '<div style="font-size:12px;font-weight:700;margin-bottom:6px">'+(it.num?'№'+it.num+' ':'')+(it.name||'—')+(it.species?' <span style="color:#f0c060;font-weight:400">· '+it.species+'</span>':'')+(it.isNew?' <span style="color:#f0c060;font-size:10px">(нов.)</span>':'')+'</div>'+
+      '<div style="display:flex;gap:6px;align-items:center">'+
+        '<button type="button" onclick="invFfAdjustQty(\''+safeKey+'\',-1)" style="width:32px;height:32px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#f0f0f8;font-size:16px;font-weight:700;cursor:pointer">−</button>'+
+        '<div style="flex:1;text-align:center;font-size:14px;font-weight:700">'+it.countedQty+'</div>'+
+        '<button type="button" onclick="invFfAdjustQty(\''+safeKey+'\',1)" style="width:32px;height:32px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#f0f0f8;font-size:16px;font-weight:700;cursor:pointer">+</button>'+
+        '<button type="button" onclick="invFfRemoveCount(\''+safeKey+'\')" style="padding:8px 10px;border-radius:8px;border:1px solid #f0606055;background:transparent;color:#f06060;font-size:12px;cursor:pointer;flex-shrink:0">✕</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+function invFfAdjustQty(key, delta){
+  var it = _invCounts[key]; if(!it) return;
+  it.countedQty = Math.max(0, (it.countedQty||0)+delta);
+  it.countedAt = new Date().toISOString();
+  it.countedBy = session.sellerName||session.name||'—';
+  try{
+    db.collection('iz_inventory_counts').doc(_invSession.id+'_'+key).set(it)
+      .catch(function(){ showToast('⚠️ Не отправилось в облако'); });
+  }catch(e){}
+  _invRenderCountHeader();
+  _invRenderFreeformTally();
+}
+function invFfRemoveCount(key){
+  if(!confirm('Убрать эту позицию из пересчёта?')) return;
+  delete _invCounts[key];
+  try{ db.collection('iz_inventory_counts').doc(_invSession.id+'_'+key).delete(); }catch(e){}
+  _invRenderCountHeader();
+  _invRenderFreeformTally();
+}
 function renderInvCountList(){
   var c = document.getElementById('invCountList'); if(!c || !_invSession) return;
   var snap = _invSession.snapshot;
@@ -113,22 +248,107 @@ function renderInvCountList(){
   c.innerHTML = rowsHtml + (newKeys.length ? '<div style="font-size:11px;color:#f0c060;font-weight:700;margin:12px 0 6px">➕ Добавлено при пересчёте (не было в системе)</div>'+newHtml : '');
   if(!keys.length && !newKeys.length) c.innerHTML = '<div class="empty"><div class="ei">📦</div>Ничего не найдено</div>';
 }
+function _invEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function _invRenderRow(key, it, isNew){
   var counted = _invCounts[key];
   var borderColor = counted ? '#60f09055' : '#2e2e3e';
   var bg = counted ? '#0f1a12' : '#13131a';
   var safeKey = key.replace(/'/g,"\\'");
+  // Правка характеристик безопасна только для артикульных позиций (ключ = артикул, не
+  // меняется) и для ещё не применённых новых — у товара без артикула ключ сам складывается из
+  // названия+цены+породы, и правка породы задним числом создала бы вторую, отдельную позицию
+  // вместо исправления существующей.
+  var canEdit = isNew || !!it.num;
+  var editBtn = canEdit ? '<button type="button" onclick="invToggleEditChar(\''+safeKey+'\')" style="background:none;border:1px solid #2e2e3e;border-radius:7px;padding:4px 7px;color:#8888aa;font-size:11px;cursor:pointer;flex-shrink:0">✏️</button>' : '';
   return '<div style="border:1px solid '+borderColor+';background:'+bg+';border-radius:10px;padding:9px 10px;margin-bottom:6px">'+
-    '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px">'+
+    '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;align-items:flex-start">'+
       '<div style="font-size:12px;font-weight:700">'+(it.num?'№'+it.num+' ':'')+(it.name||'—')+(it.species?' <span style="color:#f0c060;font-weight:400">· '+it.species+'</span>':'')+'</div>'+
-      (counted ? '<div style="font-size:14px;flex-shrink:0">✅</div>' : '')+
+      '<div style="display:flex;gap:6px;align-items:center;flex-shrink:0">'+editBtn+(counted ? '<div style="font-size:14px">✅</div>' : '')+'</div>'+
     '</div>'+
+    (canEdit ? '<div id="invEditChar_'+safeKey+'" style="display:none;background:#0f0f13;border-radius:8px;padding:8px;margin-bottom:8px">'+
+      '<div class="fg" style="margin-bottom:6px"><label class="fl">Название</label><input class="fi" id="invEcName_'+safeKey+'" value="'+_invEsc(it.name)+'" style="margin:0;padding:7px"></div>'+
+      '<div class="fg" style="margin-bottom:6px"><label class="fl">Порода / характеристика</label><input class="fi" id="invEcSpecies_'+safeKey+'" value="'+_invEsc(it.species)+'" style="margin:0;padding:7px"></div>'+
+      '<div class="fg" style="margin-bottom:8px"><label class="fl">Цена ₽</label><input class="fi" type="text" inputmode="numeric" id="invEcPrice_'+safeKey+'" value="'+(it.price||0)+'" style="margin:0;padding:7px"></div>'+
+      '<button type="button" onclick="invSaveCharacteristics(\''+safeKey+'\','+(isNew?'true':'false')+')" style="width:100%;padding:8px;background:#60c8f0;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить характеристики</button>'+
+    '</div>' : '')+
     '<div style="display:flex;gap:6px;align-items:center">'+
       '<input class="fi" type="number" inputmode="decimal" id="invQty_'+safeKey+'" placeholder="Кол-во" value="'+(counted?counted.countedQty:'')+'" style="flex:1;margin:0;padding:8px" min="0">'+
       '<button type="button" onclick="invSaveCount(\''+safeKey+'\','+(isNew?'true':'false')+')" style="padding:8px 14px;background:#c8f060;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Сохранить</button>'+
     '</div>'+
     (counted ? '<div style="font-size:10px;color:#8888aa;margin-top:4px">'+(counted.countedBy||'—')+' · '+(counted.countedAt?counted.countedAt.slice(11,16):'')+'</div>' : '')+
   '</div>';
+}
+function invToggleEditChar(key){
+  var el = document.getElementById('invEditChar_'+key); if(!el) return;
+  el.style.display = el.style.display==='none' ? 'block' : 'none';
+}
+function invSaveCharacteristics(key, isNew){
+  var nameEl = document.getElementById('invEcName_'+key);
+  var speciesEl = document.getElementById('invEcSpecies_'+key);
+  var priceEl = document.getElementById('invEcPrice_'+key);
+  if(!nameEl) return;
+  var name = (nameEl.value||'').trim();
+  var species = (speciesEl.value||'').trim();
+  var price = parseFloat(priceEl.value)||0;
+  if(!name){ showToast('Название не может быть пустым'); return; }
+  if(isNew){
+    // Ещё не применённая новая позиция — правим то, что занесли, ничего в систему пока не уходит
+    if(_invCounts[key]){
+      _invCounts[key].name = name; _invCounts[key].species = species; _invCounts[key].price = price;
+      try{ db.collection('iz_inventory_counts').doc(_invSession.id+'_'+key).set(_invCounts[key], {merge:true}); }catch(e){}
+    }
+    var editEl0 = document.getElementById('invEditChar_'+key); if(editEl0) editEl0.style.display='none';
+    _invRenderCountBody();
+    showToast('✅ Характеристики обновлены');
+    return;
+  }
+  var base = _invSession.snapshot[key];
+  if(!base){ showToast('Товар не найден'); return; }
+  if(!base.num){ showToast('Для товара без артикула характеристики правьте через Склад'); return; }
+  _invQueueCharEdit(key, base.num, name, species, price);
+}
+// Правка характеристик пишется той же очередью, что и применение расхождений — обе операции
+// правят один и тот же документ открытой смены, и без общей очереди могли бы затереть друг друга.
+function _invQueueCharEdit(key, num, name, species, price){
+  _invApplyQueue = _invApplyQueue.then(function(){ return _invApplyCharEditReal(key, num, name, species, price); });
+}
+function _invApplyCharEditReal(key, num, name, species, price){
+  var isDr = _invSession.goodsType==='dr';
+  var reasonLabel = 'Исправление характеристик — инвентаризация от '+(_invSession.startedAt||'').slice(0,10);
+  var ts = new Date().toISOString();
+  var item = {id:uid(), num:num, name:name, species:species, price:price, qty:0, goodsType:_invSession.goodsType, reason:reasonLabel};
+  var entry = {id:uid(), type:'receive', ts:ts, icon:'🔄', label:'🔄 ПЕРЕОЦЕНКА · '+reasonLabel,
+    sub:'№'+num+' '+name+(species?' · '+species:''),
+    goodsType:_invSession.goodsType, items:[item], isRevaluation:true,
+    amount:0, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0, goodsEffect:0, goodsDrEffect:0,
+    inventorySessionId:_invSession.id};
+  return _invFindOpenShift(_invSession.shopName).then(function(shift){
+    if(!shift){
+      showToast('⚠️ В магазине «'+_invSession.shopName+'» сейчас нет открытой смены — характеристики не применены. Попробуйте, когда смена откроется.');
+      return;
+    }
+    try{ stockApplyReceive(_invSession.shopName, [{num:num, name:name, price:price, qty:0, species:species, goodsType:_invSession.goodsType}], ts.split('T')[0], _invSession.goodsType, true); }catch(e){}
+    var mergedJournal = (shift.journal||[]).concat([entry]);
+    return db.collection('iz_shifts').doc(shift.id).set({journal:mergedJournal, _pendingSync:false}, {merge:true}).then(function(){
+      try{ _recordJournalEntryIndependently(entry, _invSession.shopName, entry.type); }catch(e){}
+      if(_invSession.snapshot[key]){
+        _invSession.snapshot[key].name = name;
+        _invSession.snapshot[key].species = species;
+        _invSession.snapshot[key].price = price;
+      }
+      if(_invCounts[key]){
+        _invCounts[key].name = name; _invCounts[key].species = species; _invCounts[key].price = price;
+        try{ db.collection('iz_inventory_counts').doc(_invSession.id+'_'+key).set(_invCounts[key], {merge:true}); }catch(e){}
+      }
+      var editEl = document.getElementById('invEditChar_'+key); if(editEl) editEl.style.display='none';
+      _invRenderCountBody();
+      showToast('✅ Характеристики исправлены в системе');
+    }).catch(function(err){
+      showToast('❌ Не удалось применить: '+(err&&err.message||err));
+    });
+  }).catch(function(err){
+    showToast('❌ Не удалось найти открытую смену: '+(err&&err.message||err));
+  });
 }
 function invSaveCount(key, isNew){
   var input = document.getElementById('invQty_'+key);

@@ -3161,6 +3161,11 @@ function rebuildStock(showMsg){
           // молча откатывал любую правку цены обратно к самой первой известной цене.
           if(rcvPrice) stock[sn][key].price=rcvPrice;
           if(rcvItem&&rcvItem.name) stock[sn][key].name=rcvItem.name;
+          // Порода/размер, в отличие от цены и названия, раньше обновлялись только при первом
+          // создании ключа — правка породы (например, из инвентаризации) держалась только до
+          // следующего rebuildStock(), а потом молча откатывалась к самой первой известной породе.
+          if(rcvItem&&rcvItem.species) stock[sn][key].species=rcvItem.species;
+          if(rcvItem&&rcvItem.size) stock[sn][key].size=rcvItem.size;
           stock[sn][key].qty+=rcvQty;
           stock[sn][key].goodsType=rcvGt;
           var d=e.ts?e.ts.split('T')[0]:'';
