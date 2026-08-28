@@ -20,7 +20,7 @@ function openInventoryModal(){
     showToast('Откройте смену в конкретном магазине, чтобы провести инвентаризацию');
     return;
   }
-  openMo('invMo');
+  openMo('invStockMo');
   _invShowStep('loading');
   db.collection('iz_inventory_sessions').where('shopName','==',session.shopName).where('status','==','active').get()
     .then(function(snap){
@@ -578,7 +578,7 @@ function invFinalizeSession(){
   _invSession.completedAt = new Date().toISOString();
   _invSession.completedBy = session.sellerName||session.name||'—';
   try{ db.collection('iz_inventory_sessions').doc(_invSession.id).set(_invSession); }catch(e){}
-  closeMo('invMo');
+  closeMo('invStockMo');
   showToast('✅ Инвентаризация завершена');
   _invSession = null; _invCounts = {}; _invReportRows = {};
 }
@@ -586,5 +586,5 @@ function invCloseModal(){
   if(_invSession && _invSession.status==='active'){
     showToast('Пересчёт сохранён — можно продолжить позже через «Инвентаризация»');
   }
-  closeMo('invMo');
+  closeMo('invStockMo');
 }
