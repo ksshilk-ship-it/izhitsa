@@ -10,7 +10,6 @@ var _invSession = null;       // {id, shopName, goodsType, startedAt, startedBy,
 var _invCounts = {};          // itemKey -> {sessionId,itemKey,num,name,price,species,size,goodsType,countedQty,countedBy,countedAt,isNew,applied}
 var _invActiveSessions = [];
 var _invSearch = '';
-var _invNewGoodsType = 'derevo';
 var _invReportRows = {};      // itemKey -> row shown in отчёт (используется кнопками "Применить")
 var _invPendingMode = 'checklist'; // 'checklist' | 'freeform' — выбор режима перед стартом нового пересчёта
 var _invFfMatches = [];       // текущие подсказки поиска в свободном режиме
@@ -137,7 +136,8 @@ function _invEnterCount(){
     se.value = '';
     se.placeholder = (_invSession.mode==='freeform') ? '🔍 Артикул или название — найти и занести' : '🔍 Поиск по названию/артикулу/породе';
   }
-  var af = document.getElementById('invAddForm'); if(af) af.style.display = 'none';
+  ['invNewName','invNewSpecies','invNewPrice'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  var qtyEl = document.getElementById('invNewQty'); if(qtyEl) qtyEl.value='1';
   var sugg = document.getElementById('invFfSugg'); if(sugg){ sugg.style.display='none'; sugg.innerHTML=''; }
   _invShowStep('count');
   _invRenderCountHeader();
@@ -412,46 +412,32 @@ function invSaveCount(key, isNew){
   _invRenderCountHeader();
   renderInvCountList();
 }
-function invToggleAddForm(){
-  var f = document.getElementById('invAddForm');
-  if(!f) return;
-  var show = f.style.display==='none';
-  f.style.display = show ? 'block' : 'none';
-  if(show){
-    ['invNewNum','invNewName','invNewSpecies','invNewPrice','invNewQty'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
-    invSetNewGoodsType(_invSession?_invSession.goodsType:'derevo');
-  }
-}
-function invSetNewGoodsType(t){
-  _invNewGoodsType = t;
-  var bd=document.getElementById('invNewTypeDerevo'), br=document.getElementById('invNewTypeDr');
-  if(bd){ bd.style.borderColor=t==='derevo'?'#c8f060':'#2e2e3e'; bd.style.background=t==='derevo'?'#1e2a14':'#22222e'; bd.style.color=t==='derevo'?'#c8f060':'#8888aa'; }
-  if(br){ br.style.borderColor=t==='dr'?'#a060f0':'#2e2e3e'; br.style.background=t==='dr'?'#1e1a2e':'#22222e'; br.style.color=t==='dr'?'#a060f0':'#8888aa'; }
-}
+// Товар без артикула (частый случай для Дерева — авторские штучные изделия) заносится через
+// отдельные поля рядом с поиском по артикулу, а не как запасной вариант "не нашли — добавим" —
+// тип товара берётся из самого пересчёта, выбирать его тут не нужно и нечем перепутать.
 function invSaveNewItem(){
   var name = (gv('invNewName')||'').trim();
   if(!name){ showToast('Введите название'); return; }
-  var num = (gv('invNewNum')||'').trim();
   var price = parseFloat(gv('invNewPrice'))||0;
   var species = (gv('invNewSpecies')||'').trim();
-  var qty = parseFloat(gv('invNewQty'));
+  var qtyRaw = gv('invNewQty');
+  var qty = qtyRaw==='' ? 1 : parseFloat(qtyRaw);
   if(isNaN(qty) || qty<0){ showToast('Введите найденное количество'); return; }
-  if(_invSession.goodsType!==_invNewGoodsType){
-    showToast('Этот пересчёт — для '+(_invSession.goodsType==='dr'?'ДР Товара':'Дерева')+'. Товар другого типа добавьте в соответствующей инвентаризации.');
-    return;
-  }
-  var key = num || _noArticleStockKey(name, price, species, _invNewGoodsType) || ('new_'+uid());
+  var gt = _invSession.goodsType;
+  var key = _noArticleStockKey(name, price, species, gt) || ('new_'+uid());
   var collidesWithSnapshot = !!_invSession.snapshot[key];
   if(collidesWithSnapshot){
-    // Совпало с уже существующей позицией (по артикулу либо по имени+цене+породе) — это не
-    // новый товар, а обычный пересчёт существующей строки, иначе в отчёте она задвоится:
-    // один раз как расхождение с системой, второй раз как "излишек" на всё найденное количество.
-    showToast('Такая позиция уже есть в списке выше — записала количество туда');
+    // Совпало с уже существующей позицией (по имени+цене+породе) — это не новый товар, а
+    // обычный пересчёт существующей строки, иначе в отчёте она задвоится: один раз как
+    // расхождение с системой, второй раз как "излишек" на всё найденное количество.
+    showToast('Такая позиция уже есть в системе — записала количество туда');
   }
+  var existing = _invCounts[key];
+  var finalQty = existing ? existing.countedQty + qty : qty; // повтор той же безартикульной позиции (уже в снимке или уже занесённой ранее) — суммируем, а не перезаписываем
   var rec = {
     sessionId:_invSession.id, itemKey:key,
-    num:num||'', name:name, price:price, species:species, size:'', goodsType:_invNewGoodsType,
-    countedQty:qty, countedBy:(session.sellerName||session.name||'—'), countedAt:new Date().toISOString(),
+    num:'', name:name, price:price, species:species, size:'', goodsType:gt,
+    countedQty:finalQty, countedBy:(session.sellerName||session.name||'—'), countedAt:new Date().toISOString(),
     isNew: !collidesWithSnapshot
   };
   _invCounts[key] = rec;
@@ -459,9 +445,11 @@ function invSaveNewItem(){
     db.collection('iz_inventory_counts').doc(_invSession.id+'_'+key).set(rec)
       .catch(function(){ showToast('⚠️ Сохранено на устройстве, но не отправилось в облако'); });
   }catch(e){}
-  invToggleAddForm();
+  ['invNewName','invNewSpecies','invNewPrice'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  var qtyEl = document.getElementById('invNewQty'); if(qtyEl) qtyEl.value='1';
   _invRenderCountHeader();
-  renderInvCountList();
+  _invRenderCountBody();
+  showToast('✅ '+name+' — учтено '+finalQty+' шт.');
   showToast('✅ Добавлено: '+name);
 }
 function invGoToReport(){
