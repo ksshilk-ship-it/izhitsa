@@ -317,6 +317,9 @@ function toggleSettingsSection(id){
   if(id==='tovaraudit' && !open){
     try{ _renderTaShopChips(); }catch(e){}
   }
+  if(id==='invhistory' && !open){
+    try{ _renderIhShopChips(); }catch(e){}
+  }
 }
 function updateSettingsSectionCount(id, count){
   var el=document.getElementById('ssCount_'+id);
@@ -1563,6 +1566,107 @@ function baRestoreRow(sid){
   if(typeof _currentShiftView!=='undefined' && _currentShiftView && (_currentShiftView.id===sid||_currentShiftView._id===sid)){
     _currentShiftView = sh; _renderShiftView();
   }
+}
+var _ihShop = '';
+var _ihSessions = [];
+var _ihCountsCache = {}; // sessionId -> counts array
+var _ihExpanded = {};
+function _renderIhShopChips(){
+  var c = document.getElementById('ihShopChips'); if(!c) return;
+  var shops = getShopNames();
+  c.innerHTML = '<div onclick="_ihSetShop(\'\')" style="padding:5px 12px;border-radius:20px;border:'+(!_ihShop?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(!_ihShop?'#1e2a14':'#22222e')+';color:'+(!_ihShop?'#c8f060':'#8888aa')+';font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Все магазины</div>'+
+    shops.map(function(s){
+      var active = _ihShop===s;
+      return '<div onclick="_ihSetShop(\''+s.replace(/'/g,"\\'")+'\')" style="padding:5px 12px;border-radius:20px;border:'+(active?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(active?'#1e2a14':'#22222e')+';color:'+(active?'#c8f060':'#8888aa')+';font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">'+s+'</div>';
+    }).join('');
+}
+function _ihSetShop(shop){ _ihShop = shop; _renderIhShopChips(); }
+function loadInventoryHistory(){
+  var status = document.getElementById('ihStatus');
+  var results = document.getElementById('ihResults');
+  if(status){ status.style.display='block'; status.textContent='⏳ Загружаю...'; }
+  if(results) results.innerHTML='';
+  var settled = false;
+  var timeoutP = new Promise(function(resolve){ setTimeout(function(){ if(!settled){ settled=true; resolve('timeout'); } }, 15000); });
+  var q = db.collection('iz_inventory_sessions');
+  if(_ihShop) q = q.where('shopName','==',_ihShop);
+  var fetchP = q.get({source:'server'}).then(function(snap){
+    if(settled) return 'ok';
+    settled = true;
+    _ihSessions = snap.docs.map(function(d){ var x=d.data(); if(!x.id) x.id=d.id; return x; })
+      .sort(function(a,b){ return (b.startedAt||'').localeCompare(a.startedAt||''); });
+    _ihExpanded = {};
+    return 'ok';
+  }).catch(function(){ if(!settled){ settled=true; } return 'error'; });
+  Promise.race([fetchP, timeoutP]).then(function(result){
+    if(status){
+      status.style.display = result==='ok' ? 'none' : 'block';
+      if(result==='timeout') status.textContent = '⚠️ Сервер не отвечает — попробуйте ещё раз';
+      else if(result==='error') status.textContent = '❌ Не удалось загрузить данные';
+    }
+    renderInventoryHistory();
+  });
+}
+function renderInventoryHistory(){
+  var c = document.getElementById('ihResults'); if(!c) return;
+  if(!_ihSessions.length){ c.innerHTML = '<div class="empty"><div class="ei">📋</div>Пока ни одной инвентаризации не проводили</div>'; return; }
+  c.innerHTML = _ihSessions.map(function(s){
+    var sid = s.id;
+    var expanded = !!_ihExpanded[sid];
+    var statusLabel = s.status==='completed' ? '✅ завершена' : '⏳ идёт пересчёт';
+    return '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:9px;padding:9px 10px;margin-bottom:6px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">'+
+        '<div style="font-size:12px;font-weight:700">'+(s.shopName||'—')+' · '+(s.goodsType==='dr'?'🛍 ДР Товар':'🌳 Дерево')+'</div>'+
+        '<div style="font-size:10px;color:#8888aa">'+statusLabel+'</div>'+
+      '</div>'+
+      '<div style="font-size:11px;color:#8888aa;margin-bottom:6px">начато '+(s.startedAt||'').slice(0,16).replace('T',' ')+' · '+(s.startedBy||'—')+(s.completedAt?' · завершено '+(s.completedAt||'').slice(0,16).replace('T',' ')+' · '+(s.completedBy||'—'):'')+'</div>'+
+      '<div onclick="_ihToggle(\''+sid+'\')" style="font-size:11px;color:#60c8f0;cursor:pointer;font-weight:700">'+(expanded?'▼':'▶')+' Посмотреть итог</div>'+
+      (expanded ? '<div id="ihDetail_'+sid+'" style="margin-top:8px">⏳ Загружаю...</div>' : '')+
+    '</div>';
+  }).join('');
+  Object.keys(_ihExpanded).forEach(function(sid){ if(_ihExpanded[sid]) _ihLoadDetail(sid); });
+}
+function _ihToggle(sid){
+  _ihExpanded[sid] = !_ihExpanded[sid];
+  renderInventoryHistory();
+}
+function _ihLoadDetail(sid){
+  if(_ihCountsCache[sid]){ _ihRenderDetail(sid); return; }
+  db.collection('iz_inventory_counts').where('sessionId','==',sid).get({source:'server'}).then(function(snap){
+    _ihCountsCache[sid] = snap.docs.map(function(d){ return d.data(); });
+    _ihRenderDetail(sid);
+  }).catch(function(){
+    var el = document.getElementById('ihDetail_'+sid);
+    if(el) el.innerHTML = '<div style="font-size:11px;color:#f06060">Не удалось загрузить</div>';
+  });
+}
+function _ihRenderDetail(sid){
+  var el = document.getElementById('ihDetail_'+sid); if(!el) return;
+  var s = _ihSessions.find(function(x){ return x.id===sid; }); if(!s) return;
+  var counts = _ihCountsCache[sid]||[];
+  var snap = s.snapshot||{};
+  var shortages=[], surplus=[], matched=[];
+  var countedByKey = {}; counts.forEach(function(c){ countedByKey[c.itemKey]=c; });
+  Object.keys(snap).forEach(function(k){
+    var c = countedByKey[k]; if(!c || c.isNew) return;
+    var expected = snap[k].qty||0;
+    var diff = c.countedQty - expected;
+    var row = {name:snap[k].name, num:snap[k].num, expected:expected, counted:c.countedQty, diff:diff, applied:!!c.applied};
+    if(diff<0) shortages.push(row); else if(diff>0) surplus.push(row); else matched.push(row);
+  });
+  counts.filter(function(c){ return c.isNew; }).forEach(function(c){
+    surplus.push({name:c.name, num:c.num, expected:0, counted:c.countedQty, diff:c.countedQty, applied:!!c.applied, isNew:true});
+  });
+  var notCounted = Object.keys(snap).length - counts.filter(function(c){ return !c.isNew; }).length;
+  var line = function(r){
+    return '<div style="font-size:11px;padding:3px 0;display:flex;justify-content:space-between;gap:6px">'+
+      '<span>'+(r.num?'№'+r.num+' ':'')+(r.name||'—')+(r.isNew?' <span style="color:#f0c060">(нов.)</span>':'')+'</span>'+
+      '<span>'+(r.diff>0?'+':'')+r.diff+(r.applied?' ✅':'')+'</span></div>';
+  };
+  el.innerHTML = '<div style="font-size:11px;color:#8888aa;margin-bottom:6px">Посчитано '+counts.filter(function(c){return !c.isNew;}).length+' из '+Object.keys(snap).length+(notCounted>0?' (не досчитано '+notCounted+')':'')+'</div>'+
+    (shortages.length ? '<div style="font-size:11px;font-weight:700;color:#f06060;margin-bottom:2px">🔻 Недостача ('+shortages.length+')</div>'+shortages.map(line).join('') : '')+
+    (surplus.length ? '<div style="font-size:11px;font-weight:700;color:#f0c060;margin:6px 0 2px">🔺 Излишек/новое ('+surplus.length+')</div>'+surplus.map(line).join('') : '')+
+    (!shortages.length && !surplus.length ? '<div style="font-size:11px;color:#60f090">Расхождений нет</div>' : '');
 }
 function updateRefbookCountShop(bookId, key){
   var items = getRefBook(key);
