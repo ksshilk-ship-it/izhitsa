@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><title>Ижица — Магазин</title>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="стили.css?v=08.27.05">
+<link rel="stylesheet" href="стили.css?v=08.27.06">
   <link rel="manifest" href="manifest-shop.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -37,11 +37,18 @@
       <div style="font-family:Unbounded,sans-serif;font-size:11px;font-weight:700;color:#8888aa;pointer-events:none">Администратор</div>
       <div style="font-size:10px;color:#8888aa;margin-top:3px;pointer-events:none">Полный доступ</div>
     </div>
+    <div id="btnInventory"
+      style="flex:1;background:#22222e;border:2px solid #2e2e3e;border-radius:14px;padding:16px 8px;text-align:center;cursor:pointer"
+      onpointerdown="event.preventDefault();pick('inventory')">
+      <div style="font-size:26px;margin-bottom:6px;pointer-events:none">📋</div>
+      <div style="font-family:Unbounded,sans-serif;font-size:11px;font-weight:700;color:#8888aa;pointer-events:none">Инвентаризация</div>
+      <div style="font-size:10px;color:#8888aa;margin-top:3px;pointer-events:none">Пересчёт склада</div>
+    </div>
   </div>
   <div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:20px;padding:20px">
     <div style="margin-bottom:12px" id="loginShopFg">
       <label style="font-size:11px;color:#8888aa;font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;display:block">Магазин</label>
-      <select class="fs" id="loginShop" onchange="renderLoginSellers()"></select>
+      <select class="fs" id="loginShop" onchange="onLoginShopChange()"></select>
     </div>
     <div style="margin-bottom:12px">
       <label id="loginUserLabel" style="font-size:11px;color:#8888aa;font-weight:600;text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;display:block">Продавец</label>
@@ -88,6 +95,11 @@
     <button onclick="exitShift()" style="background:none;border:1px solid #f0a060;border-radius:8px;padding:6px 12px;color:#f0a060;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">← Выйти</button>
   </div>
 
+  <div class="page" id="pg-inventory-home">
+    <div class="stitle">Инвентаризация</div>
+    <div class="al-info" style="margin-bottom:14px">💡 Пересчёт ведётся отдельно по Дереву и по ДР Товару. Расхождения применяются в журнал текущей открытой смены магазина.</div>
+    <button class="btn" style="background:#60c8f0;color:#0f0f13;border:none" onclick="openInventoryModal()">📋 Начать / продолжить пересчёт</button>
+  </div>
   <div class="page" id="pg-home">
     <div id="pendingAlert"></div>
     <div id="morningCashDiffBanner"></div>
@@ -207,8 +219,7 @@
   </div>
   <div class="page" id="pg-writeoffs">
     <div class="stitle">Списание</div>
-    <button class="btn red" style="margin-bottom:8px" onclick="openWoModal()">🗑 Списать товар</button>
-    <button class="btn" style="margin-bottom:12px;background:#f0c060;color:#0f0f13;border:none" onclick="openInventoryModal()">📋 Инвентаризация</button>
+    <button class="btn red" style="margin-bottom:12px" onclick="openWoModal()">🗑 Списать товар</button>
     <div class="card"><div class="ctitle">🌳 Дерево</div><div id="writeoffsListWood"></div></div>
     <div class="card" style="margin-top:10px"><div class="ctitle">🛍 ДР Товар</div><div id="writeoffsListDr"></div></div>
   </div>
@@ -1819,6 +1830,11 @@
           <input type="checkbox" value="seller" style="width:16px;height:16px"> Продавец
         </label>
         <div id="staffShopsList2" style="padding-left:24px;display:flex;flex-direction:column;gap:4px"></div>
+        <div style="font-size:11px;color:#8888aa;font-weight:700;margin-top:8px">📋 Инвентаризация (выберите точки)</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" value="inventory" style="width:16px;height:16px"> Проводит инвентаризацию
+        </label>
+        <div id="staffShopsList2Inv" style="padding-left:24px;display:flex;flex-direction:column;gap:4px"></div>
         <div style="font-size:11px;color:#8888aa;font-weight:700;margin-top:8px">🏭 Мастерская</div>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
           <input type="checkbox" value="мастер" style="width:16px;height:16px"> Мастер
@@ -2129,14 +2145,14 @@
 </div>
 <div class="toast" id="toast"></div>
 <!-- Firebase SDK загружается асинхронно через _loadFirebaseSDK() -->
-<script src="синхронизация.js?v=08.27.05"></script>
-<script src="смены.js?v=08.27.05"></script>
-<script src="отчеты.js?v=08.27.05"></script>
-<script src="продажи.js?v=08.27.05"></script>
-<script src="Склад.js?v=08.27.05"></script>
-<script src="прочее.js?v=08.27.05"></script>
-<script src="импорт.js?v=08.27.05"></script>
-<script src="инвентаризация.js?v=08.27.05"></script>
+<script src="синхронизация.js?v=08.27.06"></script>
+<script src="смены.js?v=08.27.06"></script>
+<script src="отчеты.js?v=08.27.06"></script>
+<script src="продажи.js?v=08.27.06"></script>
+<script src="Склад.js?v=08.27.06"></script>
+<script src="прочее.js?v=08.27.06"></script>
+<script src="импорт.js?v=08.27.06"></script>
+<script src="инвентаризация.js?v=08.27.06"></script>
 <script>
 _initFirebase(); // Firebase загружается асинхронно, не блокируя UI
 init();

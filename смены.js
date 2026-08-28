@@ -680,10 +680,11 @@ function exitShift(){
     exitRestoreMode();
     return;
   }
-  const msg=(session&&session.role)==='shopadmin'?'Выйти из режима администратора?':'Выйти? Смена останется открытой.';
+  const isInventory=(session&&session.role)==='inventory';
+  const msg=(session&&session.role)==='shopadmin'?'Выйти из режима администратора?':(isInventory?'Выйти из инвентаризации? Уже посчитанное сохранено — можно продолжить с этого места позже.':'Выйти? Смена останется открытой.');
   if(confirm(msg)){
     stopLiveShiftListener();
-    if((session&&session.role)==='shopadmin'){ localStorage.removeItem(KEY.session); session=null; }
+    if((session&&session.role)==='shopadmin' || isInventory){ localStorage.removeItem(KEY.session); session=null; }
     document.getElementById('mainTabs').style.display='none';
     document.getElementById('appScreen').style.display='none';
     document.getElementById('loginScreen').style.display='flex';

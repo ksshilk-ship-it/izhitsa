@@ -264,7 +264,7 @@ function invApplyRow(key){
   if(row.diff===0){ showToast('Расхождения нет — применять нечего'); return; }
   var label = row.diff<0 ? 'списание' : 'приход';
   if(!confirm('Создать '+label+' по позиции «'+row.name+'»: '+(row.diff>0?'+':'')+row.diff+' шт. ('+fmt(Math.abs(row.diff*(row.price||0)))+')?')) return;
-  _invApplyRowReal(row);
+  _invQueueApplyRow(row);
 }
 function invApplyAll(kind){
   var rows = Object.keys(_invReportRows).map(function(k){ return _invReportRows[k]; }).filter(function(r){
@@ -275,9 +275,29 @@ function invApplyAll(kind){
   });
   if(!rows.length) return;
   if(!confirm('Применить '+rows.length+' исправлени'+(rows.length===1?'е':(rows.length<5?'я':'й'))+' одним действием?')) return;
-  rows.forEach(function(r){ _invApplyRowReal(r); });
+  rows.forEach(function(r){ _invQueueApplyRow(r); });
+}
+// Несколько применений подряд (особенно «Применить все») пишут в ОДНУ И ТУ ЖЕ открытую смену —
+// каждое читает её журнал, дописывает свою запись и сохраняет весь массив целиком. Если бы это
+// шло параллельно, вторая запись, начавшая читать до того как первая успела сохраниться, не
+// увидела бы её и при записи затёрла бы своим (более старым) снимком журнала — первая правка
+// потерялась бы молча. Поэтому все применения идут строго по очереди, одно за другим.
+var _invApplyQueue = Promise.resolve();
+function _invQueueApplyRow(row){
+  _invApplyQueue = _invApplyQueue.then(function(){ return _invApplyRowReal(row); });
+}
+function _invFindOpenShift(shopName){
+  return db.collection('iz_shifts').where('shopName','==',shopName).where('status','==','open').get()
+    .then(function(snap){
+      if(snap.empty) return null;
+      var doc = snap.docs[0];
+      var d = doc.data(); if(!d.id) d.id = doc.id;
+      return d;
+    });
 }
 function _invApplyRowReal(row){
+  if(row._applying || row.applied) return Promise.resolve();
+  row._applying = true;
   var isDr = _invSession.goodsType==='dr';
   var reasonLabel = 'Инвентаризация от '+(_invSession.startedAt||'').slice(0,10);
   var ts = new Date().toISOString();
@@ -297,20 +317,39 @@ function _invApplyRowReal(row){
       amount:item.price*item.qty, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
       goodsEffect: isDr?0:(item.price*item.qty), goodsDrEffect: isDr?(item.price*item.qty):0,
       inventorySessionId:_invSession.id};
-    try{ stockApplyReceive(session.shopName, [{num:item.num, name:item.name, price:item.price, qty:item.qty, species:item.species, goodsType:_invSession.goodsType}], ts.split('T')[0], _invSession.goodsType, false); }catch(e){}
   }
-  journal.push(entry);
-  try{ _recordJournalEntryIndependently(entry, session.shopName, entry.type); }catch(e){}
-  _backupCheckPassed = false;
-  saveJ(); renderAll();
-  row.applied = true;
-  var countKey = row.key;
-  if(_invCounts[countKey]){
-    _invCounts[countKey].applied = true;
-    try{ db.collection('iz_inventory_counts').doc(_invSession.id+'_'+countKey).set(_invCounts[countKey], {merge:true}); }catch(e){}
-  }
-  _invRenderReport();
-  showToast('✅ '+(row.diff<0?'Списание':'Приход')+' добавлен в смену');
+  // Инвентаризация — отдельная роль без своей открытой смены (не продавец), поэтому запись
+  // нельзя просто дописать в живой журнал текущей сессии — его тут попросту нет. Вместо этого
+  // ищем сейчас открытую смену этого магазина в облаке и дописываем запись прямо в неё.
+  return _invFindOpenShift(_invSession.shopName).then(function(shift){
+    if(!shift){
+      row._applying = false;
+      showToast('⚠️ В магазине «'+_invSession.shopName+'» сейчас нет открытой смены — применить некуда. Попробуйте, когда смена откроется.');
+      return;
+    }
+    if(entry.type==='receive'){
+      try{ stockApplyReceive(_invSession.shopName, [{num:item.num, name:item.name, price:item.price, qty:item.qty, species:item.species, goodsType:_invSession.goodsType}], ts.split('T')[0], _invSession.goodsType, false); }catch(e){}
+    }
+    var mergedJournal = (shift.journal||[]).concat([entry]);
+    db.collection('iz_shifts').doc(shift.id).set({journal:mergedJournal, _pendingSync:false}, {merge:true}).then(function(){
+      try{ _recordJournalEntryIndependently(entry, _invSession.shopName, entry.type); }catch(e){}
+      row.applied = true;
+      row._applying = false;
+      var countKey = row.key;
+      if(_invCounts[countKey]){
+        _invCounts[countKey].applied = true;
+        try{ db.collection('iz_inventory_counts').doc(_invSession.id+'_'+countKey).set(_invCounts[countKey], {merge:true}); }catch(e){}
+      }
+      _invRenderReport();
+      showToast('✅ '+(row.diff<0?'Списание':'Приход')+' добавлен в смену «'+(shift.sellerName||shift.userName||'—')+'»');
+    }).catch(function(err){
+      row._applying = false;
+      showToast('❌ Не удалось применить: '+(err&&err.message||err));
+    });
+  }).catch(function(err){
+    row._applying = false;
+    showToast('❌ Не удалось найти открытую смену: '+(err&&err.message||err));
+  });
 }
 function invFinalizeSession(){
   if(!_invSession) return;

@@ -210,7 +210,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '08.27.05';
+var APP_BUILD_VERSION = '08.27.06';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -391,12 +391,18 @@ function pick(role) {
   loginRole = role;
   var bs = document.getElementById('btnSeller');
   var ba = document.getElementById('btnAdmin');
+  var bi = document.getElementById('btnInventory');
   var shopFg = document.getElementById('loginShopFg');
   var selEl = document.getElementById('loginSeller');
   var lb = document.getElementById('loginBtn');
   var label = document.getElementById('loginUserLabel');
-  if(role === 'shopadmin') {
+  var _resetBtnStyles = function(){
     if(bs){ bs.style.background='#22222e'; bs.style.borderColor='#2e2e3e'; }
+    if(ba){ ba.style.background='#22222e'; ba.style.borderColor='#2e2e3e'; }
+    if(bi){ bi.style.background='#22222e'; bi.style.borderColor='#2e2e3e'; }
+  };
+  if(role === 'shopadmin') {
+    _resetBtnStyles();
     if(ba){ ba.style.background='#1e1a2e'; ba.style.borderColor='#a060f0'; }
     if(shopFg) shopFg.style.display='none';
     if(label) label.textContent='Администратор';
@@ -418,9 +424,19 @@ function pick(role) {
         if(sel2 && freshAdmins.length) sel2.innerHTML = freshAdmins.map(function(a){ return '<option value="'+a.id+'">'+a.name+'</option>'; }).join('');
       }).catch(function(){});
     }
+  } else if(role === 'inventory') {
+    _resetBtnStyles();
+    if(bi){ bi.style.background='#1a1f2e'; bi.style.borderColor='#60c8f0'; }
+    if(shopFg) shopFg.style.display='block';
+    if(label) label.textContent='Кто считает';
+    if(lb){ lb.textContent='Начать пересчёт →'; lb.style.background='#60c8f0'; lb.style.color='#0f0f13'; }
+    var prevBtn2 = document.getElementById('previewModeBtn');
+    if(prevBtn2) prevBtn2.style.display='none';
+    var rb2 = document.getElementById('restoreLoginBtn'); if(rb2) rb2.style.display='none';
+    renderLoginInventoryStaff();
   } else {
+    _resetBtnStyles();
     if(bs){ bs.style.background='#1e2a14'; bs.style.borderColor='#c8f060'; }
-    if(ba){ ba.style.background='#22222e'; ba.style.borderColor='#2e2e3e'; }
     if(shopFg) shopFg.style.display='block';
     if(label) label.textContent='Продавец';
     if(lb){ lb.textContent='Открыть смену →'; lb.style.background='#c8f060'; lb.style.color='#0f0f13'; }
@@ -429,6 +445,16 @@ function pick(role) {
     var rb = document.getElementById('restoreLoginBtn'); if(rb) rb.style.display='block';
     renderLoginSellers();
   }
+}
+function renderLoginInventoryStaff(){
+  const shop=gv('loginShop');
+  const staff=getInventoryStaff().filter(s=>!s.blocked && (!s.shops || !s.shops.length || s.shops.indexOf(shop)>=0));
+  const selEl=document.getElementById('loginSeller');
+  const prevSelected = selEl ? selEl.value : '';
+  selEl.innerHTML=staff.length
+    ?staff.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')
+    :'<option value="">— никто не назначен на этот магазин —</option>';
+  if(prevSelected && staff.some(function(s){return s.id===prevSelected;})){ selEl.value = prevSelected; }
 }
 var db;
 var _offlineNoFirebase = true;
@@ -819,6 +845,13 @@ function syncDerivedFromStaff(staff) {
     return {id:s.id, name:s.name, pass:s.pass, shops:s.shops||[], blocked:false, rate:s.wsRate||0};
   });
   localStorage.setItem('iz_sellers', JSON.stringify(sellers));
+  var invStaff = staff.filter(function(s){
+    if(s.blocked || s.archived===true) return false;
+    return s.roles && s.roles.indexOf('inventory')>=0;
+  }).map(function(s){
+    return {id:s.id, name:s.name, pass:s.pass, shops:s.shopsInv||[], blocked:false};
+  });
+  localStorage.setItem('iz_inventory_staff', JSON.stringify(invStaff));
   var wsRoles = ['мастер','заготовщик','кладовщик','управляющий'];
   var wsEmps = staff.filter(function(s){
     return s.roles && s.roles.some(function(r){ return wsRoles.indexOf(r)>=0; }) && !s.blocked;
@@ -870,6 +903,14 @@ function getSellers(){
       .map(function(s){ return {id:s.id, name:s.name, pass:s.pass, shops:s.shops||[], blocked:false}; });
   }
   return JSON.parse(localStorage.getItem('iz_sellers')||'[]');
+}
+function getInventoryStaff(){
+  var staff = getStaff();
+  if(staff.length) {
+    return staff.filter(function(s){ return s.roles && s.roles.indexOf('inventory')>=0 && !s.blocked; })
+      .map(function(s){ return {id:s.id, name:s.name, pass:s.pass, shops:s.shopsInv||[], blocked:false}; });
+  }
+  return JSON.parse(localStorage.getItem('iz_inventory_staff')||'[]');
 }
 function getShopAdmins(){
   var adminRoles=['admin','owner','accountant'];
@@ -1076,6 +1117,20 @@ function doLogin(){
     if(admin.pass!==pass){ err.style.display='block'; err.textContent='Неверный пароль'; return; }
     session={id:admin.id,name:admin.name,role:'shopadmin',shopName:'Все магазины'};
     saveS(); startAdminApp(); return;
+  }
+  if(loginRole==='inventory'){
+    const invShopName=gv('loginShop');
+    const invPerson=getInventoryStaff().find(s=>s.id===sellerId);
+    if(!invPerson){ err.style.display='block'; err.textContent='Никто не назначен — назначьте себя в Настройках → Сотрудники (роль «Инвентаризация»)'; return; }
+    if(invPerson.blocked){ err.style.display='block'; err.textContent='Аккаунт заблокирован'; return; }
+    if(invPerson.pass!==pass){ err.style.display='block'; err.textContent='Неверный пароль'; return; }
+    if(invPerson.shops && invPerson.shops.length && invPerson.shops.indexOf(invShopName)<0){
+      err.style.display='block';
+      err.textContent='Этот человек не назначен на магазин «'+invShopName+'»';
+      return;
+    }
+    session={id:invPerson.id,name:invPerson.name,sellerName:invPerson.name,role:'inventory',shopName:invShopName};
+    saveS(); startInventoryApp(); return;
   }
   const shopName=gv('loginShop');
   const seller=getSellers().find(s=>s.id===sellerId);
@@ -1440,6 +1495,17 @@ function clearTestSession(){
   saveShifts(local);
   showToast('🗑 Открытые смены сброшены');
 }
+function startInventoryApp(){
+  try{ _reportAppVersion(); }catch(e){}
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appScreen').style.display='block';
+  document.getElementById('mainTabs').style.display='none';
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  document.getElementById('hdrShop').textContent='📋 '+session.shopName;
+  document.getElementById('hdrSeller').textContent=session.name;
+  var home = document.getElementById('pg-inventory-home');
+  if(home) home.classList.add('active');
+}
 function startAdminApp(){
   try{ _reportAppVersion(); }catch(e){}
   try{ if(typeof _hideLiveSyncFailBanner==='function') _hideLiveSyncFailBanner(); }catch(e){}
@@ -1516,7 +1582,11 @@ function renderLoginShopSelect(){
   const prevSelected = shopSel.value;
   shopSel.innerHTML=shopNames.map(s=>`<option>${s}</option>`).join('');
   if(prevSelected && shopNames.indexOf(prevSelected)>=0){ shopSel.value = prevSelected; }
-  try{ if(typeof renderLoginSellers==='function') renderLoginSellers(); }catch(e){}
+  try{ onLoginShopChange(); }catch(e){}
+}
+function onLoginShopChange(){
+  if(loginRole==='inventory'){ renderLoginInventoryStaff(); }
+  else if(loginRole!=='shopadmin'){ renderLoginSellers(); }
 }
 function _staffSyncUpdateCb(){
   try{pick(loginRole);}catch(e){}
@@ -1532,5 +1602,5 @@ function init(){
   if(!admins.length){ admins=[{id:'admin_default',name:'Администратор',pass:'admin123'}]; localStorage.setItem('iz_shop_admins', JSON.stringify(admins)); }
   pick('seller');
   const saved=JSON.parse(localStorage.getItem(KEY.session)||'null');
-  if(saved){ session=saved; journal=loadAndCleanJournal(); if(session.role==='shopadmin' && !session.sellerRestoreMode)startAdminApp(); else if(session.sellerRestoreMode){ startSellerRestoreApp(); } else { startApp(); syncLiveShift(); } }
+  if(saved){ session=saved; if(session.role==='shopadmin' && !session.sellerRestoreMode)startAdminApp(); else if(session.role==='inventory'){ startInventoryApp(); } else if(session.sellerRestoreMode){ startSellerRestoreApp(); } else { journal=loadAndCleanJournal(); startApp(); syncLiveShift(); } }
 }

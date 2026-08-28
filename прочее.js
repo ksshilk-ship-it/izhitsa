@@ -1806,7 +1806,7 @@ function deleteSupplierAdmin(idx){
 }
 var STAFF_ROLE_LABELS = {
   admin:'🔐 Администратор', owner:'👑 Владелец', accountant:'📊 Бухгалтер',
-  seller:'🏪 Продавец', 'мастер':'🔨 Мастер', 'заготовщик':'🪚 Заготовщик',
+  seller:'🏪 Продавец', inventory:'📋 Инвентаризация', 'мастер':'🔨 Мастер', 'заготовщик':'🪚 Заготовщик',
   'кладовщик':'📦 Кладовщик', 'управляющий':'👑 Управляющий'
 };
 var STAFF_ADMIN_ROLES = ['admin','owner','accountant'];
@@ -1828,7 +1828,7 @@ function renderSellersAdmin(){
   }
   const sellers=staff.filter(function(s){
     if(s.archived===true) return false;
-    if(s.roles && s.roles.indexOf('seller')>=0) return true;
+    if(s.roles && (s.roles.indexOf('seller')>=0 || s.roles.indexOf('inventory')>=0)) return true;
     if(!s.roles || !s.roles.length) return true;
     return false;
   });
@@ -1862,6 +1862,7 @@ function renderSellersAdmin(){
     const idx=staff.indexOf(s);
     const roleStr=(s.roles||[]).map(function(r){return STAFF_ROLE_LABELS[r]||r;}).join(' · ');
     const shopStr=(s.shops||[]).length?(s.shops||[]).join(', '):'';
+    const shopInvStr=(s.shopsInv||[]).length?(s.shopsInv||[]).join(', '):'';
     return `
     <div style="background:${s.blocked?'#2e1a1a':'#1a1a22'};border:1px solid ${s.blocked?'#f06060':'#2e2e3e'};border-radius:12px;padding:10px;margin-bottom:8px">
       <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">
@@ -1870,6 +1871,7 @@ function renderSellersAdmin(){
           <div class="u-fs13-bold">${s.name}${s.blocked?' (заблокирован)':''}</div>
           <div style="font-size:11px;color:#8888aa;margin-top:2px">${roleStr}</div>
           ${shopStr?'<div style="font-size:11px;color:#60c8f0;margin-top:2px">📍 '+shopStr+'</div>':''}
+          ${shopInvStr?'<div style="font-size:11px;color:#f0c060;margin-top:2px">📋 '+shopInvStr+'</div>':''}
           ${s.status?'<div style="font-size:11px;color:#ffb060;margin-top:2px">👤 '+s.status+'</div>':''}
         </div>
       </div>
@@ -2020,6 +2022,14 @@ function openAddStaffModalShop(){
         '<input type="checkbox" value="'+name+'" data-shopcheck="1" style="width:14px;height:14px"> '+name+'</label>';
     }).join('');
   }
+  var containerInv=document.getElementById('staffShopsList2Inv');
+  if(containerInv){
+    containerInv.innerHTML=shops.map(function(sh){
+      var name=sh.name||sh;
+      return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">'+
+        '<input type="checkbox" value="'+name+'" data-shopcheckinv="1" style="width:14px;height:14px"> '+name+'</label>';
+    }).join('');
+  }
   _selectedStatus2='';
   renderStaffStatusChips2();
   ['staffName2','staffPass2','staffWsRate2'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
@@ -2043,12 +2053,24 @@ function editStaffShop(idx){
         '<input type="checkbox" value="'+name+'" data-shopcheck="1" '+checked+' style="width:14px;height:14px"> '+name+'</label>';
     }).join('');
   }
+  var containerInv=document.getElementById('staffShopsList2Inv');
+  if(containerInv){
+    containerInv.innerHTML=shops.map(function(sh){
+      var name=sh.name||sh;
+      var checked=s.shopsInv && s.shopsInv.indexOf(name)>=0?'checked':'';
+      return '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">'+
+        '<input type="checkbox" value="'+name+'" data-shopcheckinv="1" '+checked+' style="width:14px;height:14px"> '+name+'</label>';
+    }).join('');
+  }
   _selectedStatus2=s.status||'';
   renderStaffStatusChips2();
   document.getElementById('staffName2').value=s.name||'';
   document.getElementById('staffPass2').value=s.pass||'';
   document.getElementById('staffWsRate2').value=s.wsRate||'';
-  document.querySelectorAll('#staffRolesBlock2 input[type=checkbox]').forEach(function(cb){
+  // Магазинные чекбоксы (data-shopcheck/data-shopcheckinv) уже выставлены выше по shops/shopsInv —
+  // без исключения их здесь эта же петля тут же перезатёрла бы их состояние сверкой с roles,
+  // где названий магазинов быть не должно.
+  document.querySelectorAll('#staffRolesBlock2 input[type=checkbox]:not([data-shopcheck]):not([data-shopcheckinv])').forEach(function(cb){
     cb.checked = s.roles && s.roles.indexOf(cb.value)>=0;
   });
   document.getElementById('staffMo2Title').textContent='✏️ Редактировать сотрудника';
@@ -2059,10 +2081,16 @@ function saveUnifiedStaffShop(){
   var pass=gv('staffPass2').trim();
   if(!name||!pass){showToast('Введите имя и пароль');return;}
   var roles=[];
-  document.querySelectorAll('#staffRolesBlock2 input[type=checkbox]:checked').forEach(function(cb){ roles.push(cb.value); });
+  // Списки магазинов (staffShopsList2/staffShopsList2Inv) физически вложены внутрь этого же
+  // блока #staffRolesBlock2 — без исключения по data-shopcheck/data-shopcheckinv название
+  // отмеченного магазина само попадало бы в массив ролей.
+  document.querySelectorAll('#staffRolesBlock2 input[type=checkbox]:checked:not([data-shopcheck]):not([data-shopcheckinv])').forEach(function(cb){ roles.push(cb.value); });
   var shops2=[];
   document.querySelectorAll('#staffShopsList2 input[type=checkbox]:checked').forEach(function(cb){ shops2.push(cb.value); });
   if(shops2.length && roles.indexOf('seller')<0){ roles.push('seller'); }
+  var shopsInv=[];
+  document.querySelectorAll('#staffShopsList2Inv input[type=checkbox]:checked').forEach(function(cb){ shopsInv.push(cb.value); });
+  if(shopsInv.length && roles.indexOf('inventory')<0){ roles.push('inventory'); }
   if(!roles.length){showToast('Выберите хотя бы одну роль');return;}
   var shops=[];
   document.querySelectorAll('#staffShopsList2 input[type=checkbox]:checked').forEach(function(cb){ shops.push(cb.value); });
@@ -2088,7 +2116,7 @@ function saveUnifiedStaffShop(){
     blocked=false; blockedByStatus=false;
   }
   var entry=Object.assign({}, entryBase, {
-    id: entryBase.id||uid(), name:name, pass:pass, roles:roles, shops:shops, wsRate:wsRate, status:status,
+    id: entryBase.id||uid(), name:name, pass:pass, roles:roles, shops:shops, shopsInv:shopsInv, wsRate:wsRate, status:status,
     blocked:blocked, blockedByStatus:blockedByStatus,
     updatedAt:new Date().toISOString()
   });
