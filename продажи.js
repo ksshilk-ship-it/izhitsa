@@ -343,7 +343,7 @@ function resetSaleForm(){
   renderSaleItems(); calcSaleTotal();
   ['siNum','siName','siPrice','siQty','siAmt','siSpecies','siNameM','siPriceM','siQtyM','siAmtM','siSpeciesM','saleComment','mixCash','mixCard','discInput','saleDiscount','ordCustName','ordRecipPhone','ordOrdererPhone','ordDeliveryAddr','ordComment'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   var ordChk = document.getElementById('ordDiffOrderer'); if(ordChk){ ordChk.checked=false; toggleOrdererPhone(false); }
-  setOrderChannel('Telegram');
+  setOrderChannel('ТГ канал');
   document.getElementById('siLookupResult').style.display='none';
   document.getElementById('siManualBlock').style.display='none';
   document.getElementById('siDiffWarn').style.display='none';
@@ -563,7 +563,7 @@ function calcSaleTotal(){
   const el=document.getElementById('saleFinal'); if(el)el.textContent=fmt(Math.max(0,total-disc));
   _siDiscMismatchCheck();
 }
-var _orderChannel = 'Telegram';
+var _orderChannel = 'ТГ канал';
 function setPayM(m,el){
   payMethod=m;
   document.querySelectorAll('#saleMo .pc').forEach(p=>p.classList.remove('active'));

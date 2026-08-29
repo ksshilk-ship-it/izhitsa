@@ -210,7 +210,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '08.29.02';
+var APP_BUILD_VERSION = '08.29.03';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -1451,7 +1451,7 @@ function setOrderChannel(ch){
   var tgBtn=document.getElementById('chOrderTg'), instaBtn=document.getElementById('chOrderInsta');
   var onStyle='flex:1;padding:8px;border-radius:9px;border:2px solid #60c8f0;background:#0c1a20;color:#60c8f0;font-size:12px;font-weight:700;cursor:pointer';
   var offStyle='flex:1;padding:8px;border-radius:9px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:600;cursor:pointer';
-  if(tgBtn) tgBtn.style.cssText = ch==='Telegram' ? onStyle : offStyle;
+  if(tgBtn) tgBtn.style.cssText = ch==='ТГ канал' ? onStyle : offStyle;
   if(instaBtn) instaBtn.style.cssText = ch==='Instagram' ? onStyle : offStyle;
 }
 function toggleOrdererPhone(checked){
