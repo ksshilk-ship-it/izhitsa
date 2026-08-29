@@ -1142,34 +1142,30 @@ function generatePeriodReport(){
   var Rp=function(lbl,val,col,sp){return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span style="color:#8888aa">'+lbl+'</span><span style="color:'+(col||'#f0f0f8')+';font-weight:700">'+f2(val)+(sp?prPct(val):'')+'</span></div>';};
   var RpClick=function(lbl,val,col,sp,field){return '<div onclick="showPrDailyBreakdown(\''+field+'\',\''+lbl.replace(/'/g,"")+'\',\''+col+'\')" style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px;cursor:pointer" onpointerdown="this.style.background=\'#22222e\'" onpointerup="this.style.background=\'\'"><span style="color:#8888aa">'+lbl+' <span style="color:#555568;font-size:10px">▸ по дням</span></span><span style="color:'+(col||'#f0f0f8')+';font-weight:700">'+f2(val)+(sp?prPct(val):'')+'</span></div>';};
   _prLastFiltered = filtered; _prLastFrom = from; _prLastTo = to; _prLastShop = shopF;
+  // Инкассация — не расход (просто наличные уехали из кассы, а не потрачены), поэтому не
+  // входит в totExpNoInkass и показывается отдельным блоком ниже, а не в разделе «Расходы».
+  var totExpNoInkass = totZp+totTravel+totOther+totSupplier+totDrSupplier+totDrOther;
+  var totInkassCombined = totInkass+totDrInkass;
+  var RpClickBold=function(lbl,val,col,field){
+    return '<div onclick="showPrDailyBreakdown(\''+field+'\',\''+lbl.replace(/'/g,"")+'\',\''+col+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:15px;font-weight:700;border-top:1px solid #2e2e3e;margin-top:2px;cursor:pointer">'+
+      '<span>'+lbl+' <span style="font-size:10px;color:#555568;font-weight:400">▸ по дням</span></span><span style="color:'+col+'">'+f2(val)+'</span></div>';
+  };
   var html='<div style="background:#1e2a14;border:1px solid #c8f060;border-radius:12px;padding:12px;margin-bottom:10px">'+
-    '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">📅 '+from+' — '+to+' · '+filtered.length+' смен'+(shopF?' · '+shopF:'')+'</div>'+
+    '<div style="font-size:13px;color:#c8f060;font-weight:700;margin-bottom:8px">📅 '+from+' — '+to+' · '+filtered.length+' смен'+(shopF?' · '+shopF:'')+'</div>'+
     RpClick('💵 Нал',totCash,'#60f090',true,'cash')+
     RpClick('💳 Безнал',totCard,'#60c8f0',true,'card')+
     (totDisc?RpClick('🎁 Скидка',totDisc,'#8888aa',true,'disc'):'')+
-    '<div style="display:flex;justify-content:space-between;padding:7px 0;font-size:15px;font-weight:700;border-top:1px solid #2e2e3e;margin-top:2px"><span>Итого выручка</span><span style="color:#c8f060">'+f2(totRev)+'</span></div>'+
-    (totExp?'<div style="border-top:1px solid #2e2e3e;padding-top:8px;margin-top:4px">'+
-      '<div style="font-size:11px;color:#f06060;font-weight:700;margin-bottom:6px">💸 РАСХОДЫ: '+f2(totExp)+prPct(totExp)+'</div>'+
-      (totZp?Rp('💰 ФОТ (ЗП)',totZp,'#f06060',true):'')+
-      (totTravel?Rp('🚕 Проезд',totTravel,'#f0a060',true):'')+
+    RpClickBold('Итого оборот',totRev,'#c8f060','total')+
+    (totExpNoInkass?'<div style="border-top:1px solid #2e2e3e;padding-top:8px;margin-top:4px">'+
+      '<div style="font-size:13px;color:#f06060;font-weight:700;margin-bottom:6px">💸 РАСХОДЫ</div>'+
+      (totZp?RpClick('💰 ФОТ (ЗП)',totZp,'#f06060',false,'zp'):'')+
+      (totTravel?RpClick('🚕 Проезд',totTravel,'#f0a060',false,'travel'):'')+
       (function(){
-        if(!totInkass && !totSupplier && !totOther && !totDrInkass && !totDrSupplier && !totDrOther) return '';
-        var inkRows=[], supRows=[], othRows=[], drInkRows=[], drSupRows=[], drOthRows=[];
+        if(!totSupplier && !totOther && !totDrSupplier && !totDrOther) return '';
+        var supRows=[], othRows=[], drSupRows=[], drOthRows=[];
         filtered.forEach(function(s){
-          var exps = s.expenses||[];
-          if(exps.length){
-            exps.filter(function(e){return e.expType==='inkass'&&e.goodsType!=='dr';}).forEach(function(e){
-              inkRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||e.sub||''});
-            });
-          } else if(s.inkass){
-            inkRows.push({date:s.date,shop:s.shopName,amt:s.inkass,note:s.inkassComment||''});
-          }
-          exps.filter(function(e){return e.expType==='inkass'&&e.goodsType==='dr';}).forEach(function(e){
-            drInkRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||e.sub||''});
-          });
-          if((s.drInkass||0)>0&&!exps.some(function(e){return e.expType==='inkass'&&e.goodsType==='dr';})){
-            drInkRows.push({date:s.date,shop:s.shopName,amt:s.drInkass,note:''});
-          }
+          var jExps=(s.journal||[]).filter(function(e){return e.type==='expense';});
+          var exps=jExps.length?jExps:(s.expenses||[]);
           if(exps.length){
             exps.filter(function(e){return e.expType==='supplier'&&e.goodsType!=='dr';}).forEach(function(e){
               supRows.push({date:s.date,shop:s.shopName,amt:e.amount,note:e.supplier||e.comment||''});
@@ -1193,7 +1189,6 @@ function generatePeriodReport(){
             othRows.push({date:s.date,shop:s.shopName,amt:s.otherExp,note:s.expComment||''});
           }
         });
-        inkRows.sort(function(a,b){return b.date.localeCompare(a.date);});
         supRows.sort(function(a,b){return b.date.localeCompare(a.date);});
         othRows.sort(function(a,b){return b.date.localeCompare(a.date);});
         function detailRows(rows){
@@ -1216,14 +1211,20 @@ function generatePeriodReport(){
             (open?'<div style="background:#111118;border-radius:8px;margin:4px 0 6px;overflow:hidden">'+detailRows(rows)+'</div>':'')+
           '</div>';
         }
-        return collapsible('inkass','🏦 Инкассация',totInkass,inkRows,'#f0a060',false)+
-               collapsible('supplier','📦 Оплата поставщикам',totSupplier,supRows,'#f0a060',false)+
+        return collapsible('supplier','📦 Оплата поставщикам',totSupplier,supRows,'#f0a060',false)+
                collapsible('other','📋 Прочие',totOther,othRows,'#8888aa',false)+
-               (drInkRows.length?collapsible('drinkass','🏦 Инкассация ДР',drInkRows.reduce(function(s,r){return s+r.amt;},0),drInkRows,'#a060f0',false):'')+
                (drSupRows.length?collapsible('drsupplier','📦 Поставщик ДР',drSupRows.reduce(function(s,r){return s+r.amt;},0),drSupRows,'#a060f0',false):'')+
                (drOthRows.length||totDrOther?collapsible('drother','📋 Прочие ДР',Math.max(drOthRows.reduce(function(s,r){return s+r.amt;},0),totDrOther),drOthRows,'#a060f0',false):'');
       })()+
-    '</div>':'')+'</div>';
+      RpClickBold('Итого расходы',totExpNoInkass,'#f06060','expenses')+
+    '</div>':'')+'</div>'+
+    (totInkassCombined ? '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">'+
+      '<div onclick="showPrDailyBreakdown(\'inkass\',\'🏦 Инкассация\',\'#f0a060\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">'+
+        '<span style="font-size:14px;font-weight:700;color:#f0f0f8">🏦 Инкассация <span style="font-size:10px;color:#555568;font-weight:400">▸ по дням</span></span>'+
+        '<span style="font-size:15px;font-weight:700;color:#f0a060">'+f2(totInkassCombined)+'</span>'+
+      '</div>'+
+      '<div style="font-size:10px;color:#8888aa;margin-top:4px">Не расход — наличные переместились из кассы, а не потрачены</div>'+
+    '</div>' : '');
   if(Object.keys(byShop).length>1){
     html+='<div class="card" style="margin-bottom:10px"><div class="ctitle">По магазинам</div>'+
       Object.entries(byShop).map(function(e){var sh=e[1],rev=sh.cash+sh.card+sh.disc;
@@ -1335,12 +1336,36 @@ function _buildPrCalendarMonth(year, monthIdx, byDate, color){
     '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">'+cells.join('')+'</div>'+
   '</div>';
 }
+// Общий источник значения на день для любой раскрываемой строки в «Подробно» — не только
+// Нал/Безнал/Скидка (из журнала продаж), но и ФОТ/Проезд/Инкассация/Итого расходов (из
+// журнала расходов той же смены), чтобы календарь работал одинаково для всех строк.
+function _prDailyValue(s, field){
+  if(field==='cash'||field==='card'||field==='disc'||field==='total'){
+    var ccd = _shiftCashCardDisc(s);
+    if(field==='cash') return ccd.cash;
+    if(field==='card') return ccd.card;
+    if(field==='disc') return ccd.disc;
+    return ccd.cash+ccd.card+ccd.disc;
+  }
+  var jExps=(s.journal||[]).filter(function(e){return e.type==='expense';});
+  var exps=jExps.length?jExps:(s.expenses||[]);
+  if(field==='zp') return exps.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+(e.amount||0);},0);
+  if(field==='travel') return exps.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+(e.amount||0);},0);
+  if(field==='inkass') return exps.filter(function(e){return e.expType==='inkass';}).reduce(function(a,e){return a+(e.amount||0);},0);
+  if(field==='inkassWood') return exps.filter(function(e){return e.expType==='inkass'&&e.goodsType!=='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
+  if(field==='inkassDr') return exps.filter(function(e){return e.expType==='inkass'&&e.goodsType==='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
+  if(field==='expenses') return exps.filter(function(e){return e.expType!=='inkass';}).reduce(function(a,e){return a+(e.amount||0);},0);
+  return 0;
+}
 function showPrDailyBreakdown(field, label, color){
   var byDate = {};
+  var byDateWood = {}, byDateDr = {};
   _prLastFiltered.forEach(function(s){
-    var ccd = _shiftCashCardDisc(s);
-    var v = field==='cash' ? ccd.cash : field==='card' ? ccd.card : ccd.disc;
-    byDate[s.date] = (byDate[s.date]||0) + v;
+    byDate[s.date] = (byDate[s.date]||0) + _prDailyValue(s, field);
+    if(field==='inkass'){
+      byDateWood[s.date] = (byDateWood[s.date]||0) + _prDailyValue(s, 'inkassWood');
+      byDateDr[s.date] = (byDateDr[s.date]||0) + _prDailyValue(s, 'inkassDr');
+    }
   });
   var f2=function(n){return Math.round(n||0).toLocaleString('ru-RU')+'₽';};
   var total = Object.keys(byDate).reduce(function(s,d){return s+byDate[d];},0);
@@ -1377,10 +1402,20 @@ function showPrDailyBreakdown(field, label, color){
       '<button onclick="closePrDailyBreakdown()" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer">✕</button>'+
     '</div>'+
     '<div style="font-size:11px;color:#8888aa;margin-bottom:4px">📅 '+_prLastFrom+' — '+_prLastTo+(_prLastShop?' · '+_prLastShop:'')+'</div>'+
-    '<div style="display:flex;gap:14px;margin-bottom:14px">'+
+    '<div style="display:flex;gap:14px;margin-bottom:'+(field==='inkass'?'8px':'14px')+'">'+
       '<div><span style="font-size:11px;color:#8888aa">Итого: </span><span style="font-size:13px;font-weight:700;color:'+color+'">'+f2(total)+'</span></div>'+
       '<div><span style="font-size:11px;color:#8888aa">В среднем/день: </span><span style="font-size:13px;font-weight:700;color:'+color+'">'+f2(avgPerDay)+'</span></div>'+
     '</div>'+
+    (field==='inkass' ? '<div style="display:flex;gap:8px;margin-bottom:14px">'+
+      '<div style="flex:1;background:#16210c;border:1px solid #c8f06055;border-radius:9px;padding:8px;text-align:center">'+
+        '<div style="font-size:10px;color:#c8f060;font-weight:700">🌳 ДЕРЕВО</div>'+
+        '<div style="font-size:14px;font-weight:700;color:#c8f060;margin-top:2px">'+f2(Object.keys(byDateWood).reduce(function(s,d){return s+byDateWood[d];},0))+'</div>'+
+      '</div>'+
+      '<div style="flex:1;background:#1a0f1a;border:1px solid #a060f055;border-radius:9px;padding:8px;text-align:center">'+
+        '<div style="font-size:10px;color:#a060f0;font-weight:700">🎁 ДР ТОВАР</div>'+
+        '<div style="font-size:14px;font-weight:700;color:#a060f0;margin-top:2px">'+f2(Object.keys(byDateDr).reduce(function(s,d){return s+byDateDr[d];},0))+'</div>'+
+      '</div>'+
+    '</div>' : '')+
     (calHtml||'<div class="empty"><div class="ei">📅</div>Нет данных</div>')+
   '</div>';
   overlay.classList.add('open');
