@@ -1106,7 +1106,11 @@ function generatePeriodReport(){
   filtered.forEach(function(s){
     var ccd=_shiftCashCardDisc(s);
     totCash+=ccd.cash;totCard+=ccd.card;totDisc+=ccd.disc;
-    var exps=s.expenses||[];
+    // Тот же источник, что и в «Кратко»: журнал смены (не отдельное поле shift.expenses,
+    // которое заполняется не для всех смен — подтверждено на реальных данных), иначе
+    // «Подробно» и «Кратко» считали ФОТ/Проезд по-разному и расходились в цифрах.
+    var jExps=(s.journal||[]).filter(function(e){return e.type==='expense';});
+    var exps=jExps.length?jExps:(s.expenses||[]);
     if(exps.length){
       totZp+=exps.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+e.amount;},0);
       totTravel+=exps.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+e.amount;},0);
