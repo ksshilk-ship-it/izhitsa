@@ -1596,37 +1596,44 @@ function generateProfitabilityReport(){
     '</div>'+
     '<div id="'+id+'" style="display:none;padding:2px 0 6px 14px">'+breakdownHtml+'</div>';
   };
-  var html = '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:14px">';
-  html += '<div style="font-size:11px;color:#8888aa;margin-bottom:10px">📅 '+periodLabel+' · '+filtered.length+' смен'+(shopF?' · '+shopF:' · все магазины')+(daysInPeriod?' · '+daysInPeriod+' дн.':'')+'</div>';
-  html += '<div style="font-size:10px;color:#60c8f0;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Оборот</div>';
-  var woodOborot = typeTotals.derevo.cash+typeTotals.derevo.card+typeTotals.derevo.disc;
-  var drOborot = typeTotals.dr.cash+typeTotals.dr.card+typeTotals.dr.disc;
-  var woodDohod = typeTotals.derevo.cash+typeTotals.derevo.card;
-  var drDohod = typeTotals.dr.cash+typeTotals.dr.card;
-  html += ExpRow('💵 Нал', totCash, '#60f090', null, false, 'profExp_cash',
-    TypeSplit(typeTotals.derevo.cash, typeTotals.dr.cash));
-  html += ExpRow('💳 Безнал', totCard, '#60c8f0', null, false, 'profExp_card',
-    TypeSplit(typeTotals.derevo.card, typeTotals.dr.card));
-  html += ExpRow('🎁 Скидка', totDisc, '#8888aa', pct(totDisc), false, 'profExp_disc',
-    TypeSplit(typeTotals.derevo.disc, typeTotals.dr.disc));
-  html += ExpRow('Итого оборот', oborot, '#c8f060', 100, true, 'profExp_oborot', TypeSplit(woodOborot, drOborot));
-  html += ExpRow('Итого доход (нал+безнал)', dohod, '#c8f060', pct(dohod), true, 'profExp_dohod', TypeSplit(woodDohod, drDohod));
+  // Оборот и Расходы — два явно обособленных цветных блока (рамка+лёгкая заливка+крупный
+  // заголовок), а не просто мелкие подписи подряд, которые визуально сливались в один список.
+  var SectionBox = function(title, titleColor, innerHtml){
+    return '<div style="border:1px solid '+titleColor+'40;background:'+titleColor+'0f;border-radius:12px;padding:12px;margin-bottom:12px">'+
+      '<div style="font-size:14px;font-weight:700;color:'+titleColor+';margin-bottom:6px">'+title+'</div>'+
+      innerHtml+
+    '</div>';
+  };
   var todayStr = new Date().toISOString().split('T')[0];
   var avgDivisorDays = daysInPeriod;
   if(to > todayStr){
     var effectiveTo = todayStr < from ? from : todayStr;
     avgDivisorDays = Math.max(1, Math.round((new Date(effectiveTo)-new Date(from))/86400000)+1);
   }
+  var woodOborot = typeTotals.derevo.cash+typeTotals.derevo.card+typeTotals.derevo.disc;
+  var drOborot = typeTotals.dr.cash+typeTotals.dr.card+typeTotals.dr.disc;
+  var woodDohod = typeTotals.derevo.cash+typeTotals.derevo.card;
+  var drDohod = typeTotals.dr.cash+typeTotals.dr.card;
   var avgOborotPerDay = avgDivisorDays>0 ? oborot/avgDivisorDays : 0;
   var avgDohodPerDay = avgDivisorDays>0 ? dohod/avgDivisorDays : 0;
-  html += ExpRow('Средняя выручка/день (с учётом скидки)', avgOborotPerDay, '#8888aa', null, false, 'profExp_avgOborot',
-    TypeSplit(avgDivisorDays>0?woodOborot/avgDivisorDays:0, avgDivisorDays>0?drOborot/avgDivisorDays:0));
-  html += ExpRow('Средняя выручка/день (без скидки)', avgDohodPerDay, '#8888aa', null, false, 'profExp_avgDohod',
-    TypeSplit(avgDivisorDays>0?woodDohod/avgDivisorDays:0, avgDivisorDays>0?drDohod/avgDivisorDays:0));
-  if(to > todayStr) html += '<div style="font-size:10px;color:#8888aa;margin:-4px 0 4px">за '+avgDivisorDays+' прошедших дн. из '+daysInPeriod+'</div>';
-  html += '<div style="font-size:10px;color:#f06060;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 4px">Расходы</div>';
-  html += ExpRow('💰 ФОТ (оклад/%+проезд)', fot, '#f0a060', pct(fot), false, 'profExp_fot',
-    SubRow('💼 ЗП', totZp, '#f0a060')+SubRow('🚗 Проезд', totTravel, '#f0a060'));
+  // Всё считается от Оборота — он и есть заглавная цифра блока, а «Итого доход» (нал+безнал,
+  // т.е. оборот за вычетом скидки) — это уже детализация, видна только по клику на «Оборот».
+  var oborotBody =
+    ExpRow('💵 Нал', totCash, '#60f090', pct(totCash), false, 'profExp_cash', TypeSplit(typeTotals.derevo.cash, typeTotals.dr.cash)) +
+    ExpRow('💳 Безнал', totCard, '#60c8f0', pct(totCard), false, 'profExp_card', TypeSplit(typeTotals.derevo.card, typeTotals.dr.card)) +
+    ExpRow('🎁 Скидка', totDisc, '#8888aa', pct(totDisc), false, 'profExp_disc', TypeSplit(typeTotals.derevo.disc, typeTotals.dr.disc)) +
+    ExpRow('Оборот', oborot, '#c8f060', 100, true, 'profExp_oborot',
+      TypeSplit(woodOborot, drOborot) +
+      '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #2e2e3e">'+
+        SubRow('Итого доход (нал+безнал, оборот − скидка)', dohod, '#c8f060') +
+      '</div>') +
+    ExpRow('Средняя выручка/день (с учётом скидки)', avgOborotPerDay, '#8888aa', null, false, 'profExp_avgOborot',
+      TypeSplit(avgDivisorDays>0?woodOborot/avgDivisorDays:0, avgDivisorDays>0?drOborot/avgDivisorDays:0)) +
+    ExpRow('Средняя выручка/день (без скидки)', avgDohodPerDay, '#8888aa', null, false, 'profExp_avgDohod',
+      TypeSplit(avgDivisorDays>0?woodDohod/avgDivisorDays:0, avgDivisorDays>0?drDohod/avgDivisorDays:0)) +
+    (to > todayStr ? '<div style="font-size:10px;color:#8888aa;margin:2px 0 0">за '+avgDivisorDays+' прошедших дн. из '+daysInPeriod+'</div>' : '');
+  var fotAvgWood = avgDivisorDays>0 ? totZp/avgDivisorDays : 0;
+  var fotAvgTravel = avgDivisorDays>0 ? totTravel/avgDivisorDays : 0;
   var operTypeLabels = {other:'📝 Иное', supplier:'🏭 Поставщику'};
   var operBreakdown = operEntries.length
     ? operEntries.slice().sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); }).map(function(e){
@@ -1640,14 +1647,31 @@ function generateProfitabilityReport(){
         '</div>';
       }).join('')
     : '<div style="font-size:11px;color:#8888aa;padding:4px 0">Записей нет</div>';
-  html += ExpRow('📝 Расходы операционные', totOper, '#f0a060', pct(totOper), false, 'profExp_oper', operBreakdown);
-  html += Row('🏠 Аренда', totRent, '#f0a060', pct(totRent))+(!Object.keys(rentSettings).length?'<div style="font-size:10px;color:#8888aa;padding:2px 0 6px">Аренда не настроена — задайте её в Настройках</div>':'');
-  html += Row('Итого расходы', totalCosts, '#f06060', pct(totalCosts), true);
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0 2px;margin-top:6px;border-top:2px solid '+(profit>=0?'#60f090':'#f06060')+'">'+
-    '<span style="font-size:15px;font-weight:700">Доходы − Расходы</span>'+
-    '<span style="font-size:19px;font-weight:700;color:'+(profit>=0?'#60f090':'#f06060')+';font-family:Unbounded,sans-serif">'+f2(profit)+'</span>'+
-  '</div>';
-  html += '<div style="text-align:right;font-size:12px;color:'+(profit>=0?'#60f090':'#f06060')+'">'+pct(profit)+'% от оборота</div>';
+  var raskhodyBody =
+    ExpRow('💰 ФОТ (оклад/%+проезд)', fot, '#f0a060', pct(fot), false, 'profExp_fot',
+      SubRow('💼 ЗП', totZp, '#f0a060')+SubRow('🚗 Проезд', totTravel, '#f0a060')+
+      '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #2e2e3e">'+
+        SubRow('💼 ЗП, в среднем/день', fotAvgWood, '#f0a060')+SubRow('🚗 Проезд, в среднем/день', fotAvgTravel, '#f0a060')+
+      '</div>') +
+    ExpRow('📝 Расходы операционные', totOper, '#f0a060', pct(totOper), false, 'profExp_oper', operBreakdown) +
+    Row('🏠 Аренда', totRent, '#f0a060', pct(totRent))+(!Object.keys(rentSettings).length?'<div style="font-size:10px;color:#8888aa;padding:2px 0 6px">Аренда не настроена — задайте её в Настройках</div>':'') +
+    Row('Итого расходы', totalCosts, '#f06060', pct(totalCosts), true);
+  var html = '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:14px">';
+  html += '<div style="font-size:11px;color:#8888aa;margin-bottom:10px">📅 '+periodLabel+' · '+filtered.length+' смен'+(shopF?' · '+shopF:' · все магазины')+(daysInPeriod?' · '+daysInPeriod+' дн.':'')+'</div>';
+  html += SectionBox('💹 Оборот', '#60c8f0', oborotBody);
+  html += SectionBox('💸 Расходы', '#f06060', raskhodyBody);
+  var profitByOborot = oborot - totalCosts;
+  var profitNet = dohod - totalCosts; // = profit, оставлено под старым именем ниже для читаемости диффа
+  var profit = profitNet;
+  var profitBlock = function(title, sub, val){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0 2px;margin-top:4px;border-top:2px solid '+(val>=0?'#60f090':'#f06060')+'">'+
+      '<div><div style="font-size:14px;font-weight:700">'+title+'</div><div style="font-size:10px;color:#8888aa;margin-top:1px">'+sub+'</div></div>'+
+      '<span style="font-size:18px;font-weight:700;color:'+(val>=0?'#60f090':'#f06060')+';font-family:Unbounded,sans-serif;white-space:nowrap;margin-left:8px">'+f2(val)+'</span>'+
+    '</div>'+
+    '<div style="text-align:right;font-size:11px;color:'+(val>=0?'#60f090':'#f06060')+'">'+pct(val)+'% от оборота</div>';
+  };
+  html += profitBlock('Доходы − Расходы (по обороту)', 'Оборот целиком, включая скидку, минус расходы', profitByOborot);
+  html += profitBlock('Доходы − Расходы (чистыми)', 'Оборот за вычетом скидки (нал+безнал), минус расходы', profitNet);
   html += '</div>';
   if(!shopF){
     var byShop = {};
