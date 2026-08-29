@@ -1799,7 +1799,15 @@ function _svRecoverSalesFromBackupReal(shiftId, sh, shifts, idx){
       var jnl = sh.journal||[];
       var jnlIds = {}; jnl.forEach(function(e){ if(e.id) jnlIds[e.id]=true; });
       var deletedIds = {}; getTombstones().forEach(function(id){ deletedIds[id]=true; });
-      var missing = backupAll.filter(function(s){ return s.id && !jnlIds[s.id] && !deletedIds[s.id]; });
+      // Бэкап ищется по магазину+дате (записи сами по себе не привязаны к конкретной открытой
+      // смене, пока её не найти), но у каждой уже есть свой shiftId — если он указывает на
+      // ДРУГУЮ смену, запись сюда не подходит: раньше это не проверялось, и продажи чужой
+      // (например, несохранившейся) смены на ту же дату и магазин утекали не туда.
+      var missing = backupAll.filter(function(s){
+        if(!s.id || jnlIds[s.id] || deletedIds[s.id]) return false;
+        if(s.shiftId && s.shiftId!==shiftId) return false;
+        return true;
+      });
       if(!missing.length){ showToast('✅ Всё сходится — в подстраховке нет ничего лишнего'); return; }
       var total = missing.reduce(function(s,m){ return s+(m.amount||0); },0);
       var kindLabels = {sale:'продаж', expense:'расходов', receive:'приходов', writeoff:'списаний'};

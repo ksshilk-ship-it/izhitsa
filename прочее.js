@@ -1509,7 +1509,15 @@ function loadBackupAudit(){
       if(!backupAll.length) return;
       var jnl = sh.journal||[];
       var jnlIds = {}; jnl.forEach(function(e){ if(e.id) jnlIds[e.id]=true; });
-      var missing = backupAll.filter(function(b){ return b.id && !jnlIds[b.id] && !deletedIds[b.id]; });
+      // Бэкап группируется по магазину+дате, но у каждой записи уже есть свой shiftId — если он
+      // указывает на ДРУГУЮ смену (в т.ч. на смену, чей документ вообще не сохранился, и потому
+      // не попал в dupCount ниже), запись сюда не подходит. Раньше это не проверялось, и продажи
+      // чужой несохранившейся смены на ту же дату и магазин утекали не туда.
+      var missing = backupAll.filter(function(b){
+        if(!b.id || jnlIds[b.id] || deletedIds[b.id]) return false;
+        if(b.shiftId && b.shiftId!==sid) return false;
+        return true;
+      });
       if(!missing.length) return;
       var total = missing.reduce(function(s,m){ return s+(m.amount||0); },0);
       var byKind = {}; missing.forEach(function(m){ byKind[m.type]=(byKind[m.type]||0)+1; });
