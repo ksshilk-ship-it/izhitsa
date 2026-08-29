@@ -2087,7 +2087,12 @@ function renderClose(){
     '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">🚌 Проезд</span><span style="color:#f0a060">'+fmt(travel)+'</span></div>'+
     '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">🏦 Инкассация</span><span style="color:#f0a060">'+fmt(inkass)+'</span></div>'+
     '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">📝 Прочее</span><span style="color:#f0a060">'+fmt(other)+'</span></div>'+
-    (expenses.filter(function(e){return e.expType==='other'&&e.comment;}).map(function(e){return '<div style="font-size:11px;color:#555568;padding:2px 0">· '+e.comment+'</div>';}).join(''));
+    (expenses.filter(function(e){return e.expType==='other'&&e.comment;}).map(function(e){return '<div style="font-size:11px;color:#555568;padding:2px 0">· '+e.comment+'</div>';}).join(''))+
+    // Частая ошибка при внесении расходов — проезд заносят одной суммой вместе с ЗП вместо
+    // отдельной строки (нашли реальный случай: 3 смены за один месяц, 1200₽ уехали из "Проезд"
+    // в "ЗП" в отчёте по рентабельности). Явная подсказка в момент закрытия — самое дешёвое
+    // место поймать это, пока смена ещё открыта у того же продавца.
+    (zp>0 && travel===0 ? '<div style="margin-top:8px;background:#2a1e14;border:1px solid #f0a060;border-radius:8px;padding:8px 10px;font-size:11px;color:#f0a060">⚠️ Внесена ЗП, но нет отдельного расхода «Проезд» за эту смену. Если проезд оплачен — занесите его отдельной строкой (а не одной суммой с ЗП), иначе в отчётах по рентабельности деньги посчитаются как зарплата, а не как проезд.</div>' : '');
   var wd = document.getElementById('closeWoDetail');
   if(wd){
     var woTotal = writeoffs.reduce(function(s,w){return s+(w.amount||0);},0);
