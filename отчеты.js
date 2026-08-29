@@ -1022,18 +1022,49 @@ function generateItemSalesReport(){
   }).join('');
   c.innerHTML=html;
 }
+var prPeriodType = 'month';
 function setPrPeriod(type,el){
-  document.querySelectorAll('#profDetailView > div:nth-child(2) button').forEach(function(b){
-    b.style.background='#22222e'; b.style.color='#8888aa'; b.style.borderColor='#2e2e3e'; b.style.fontWeight='';
+  prPeriodType = type;
+  // Раньше сброс "активности" кнопок был завязан на позицию блока внутри profDetailView
+  // (nth-child) — когда соседний блок убрали, селектор стал указывать не туда, и подсветка
+  // активной кнопки переставала сбрасываться (можно было "нажать" сразу две). Теперь у каждой
+  // кнопки свой id, и сброс идёт по ним напрямую, независимо от того, что вокруг меняется.
+  ['week','month','quarter','custom'].forEach(function(t){
+    var btn = document.getElementById('prPeriod_'+t); if(!btn) return;
+    var active = t===type;
+    btn.style.borderWidth = active?'2px':'1px'; btn.style.background = active?'#1e2a14':'#22222e';
+    btn.style.color = active?'#c8f060':'#8888aa'; btn.style.borderColor = active?'#c8f060':'#2e2e3e';
+    btn.style.fontWeight = active?'700':'400';
   });
-  el.style.background='#1e2a14'; el.style.color='#c8f060'; el.style.borderColor='#c8f060'; el.style.fontWeight='700';
-  var now=new Date(), today=now.toISOString().split('T')[0], from;
-  if(type==='week'){var d=new Date();d.setDate(d.getDate()-6);from=d.toISOString().split('T')[0];}
-  else if(type==='month'){var y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');from=y+'-'+m+'-01';}
-  else if(type==='quarter'){var q=Math.floor(now.getMonth()/3),qm=String(q*3+1).padStart(2,'0');from=now.getFullYear()+'-'+qm+'-01';}
-  else {generatePeriodReport();return;}
-  document.getElementById('prDateFrom').value=from;
-  document.getElementById('prDateTo').value=today;
+  var mW=document.getElementById('prMonthWrap'), qW=document.getElementById('prQuarterWrap'),
+      yW=document.getElementById('prYearWrap'), cD=document.getElementById('prCustomDates');
+  if(mW) mW.style.display = type==='month' ? 'block':'none';
+  if(qW) qW.style.display = type==='quarter' ? 'block':'none';
+  if(yW) yW.style.display = (type==='month'||type==='quarter') ? 'block':'none';
+  if(cD) cD.style.display = type==='custom' ? 'flex':'none';
+  _prRecomputeRange();
+}
+function _prRecomputeRange(){
+  var now=new Date(), today=now.toISOString().split('T')[0];
+  if(prPeriodType==='week'){
+    var d=new Date(); d.setDate(d.getDate()-6);
+    document.getElementById('prDateFrom').value=d.toISOString().split('T')[0];
+    document.getElementById('prDateTo').value=today;
+  } else if(prPeriodType==='month'){
+    var y=parseInt((document.getElementById('prYear')||{}).value)||now.getFullYear();
+    var mIdx=parseInt((document.getElementById('prMonth')||{}).value)||0;
+    document.getElementById('prDateFrom').value = y+'-'+String(mIdx+1).padStart(2,'0')+'-01';
+    document.getElementById('prDateTo').value = y+'-'+String(mIdx+1).padStart(2,'0')+'-'+String(_profLastDayOfMonth(y,mIdx)).padStart(2,'0');
+  } else if(prPeriodType==='quarter'){
+    var y2=parseInt((document.getElementById('prYear')||{}).value)||now.getFullYear();
+    var q=parseInt((document.getElementById('prQuarter')||{}).value)||1;
+    var qStartM=(q-1)*3;
+    document.getElementById('prDateFrom').value = y2+'-'+String(qStartM+1).padStart(2,'0')+'-01';
+    document.getElementById('prDateTo').value = y2+'-'+String(qStartM+3).padStart(2,'0')+'-'+String(_profLastDayOfMonth(y2,qStartM+2)).padStart(2,'0');
+  } else {
+    generatePeriodReport();
+    return;
+  }
   generatePeriodReport();
 }
 var _prLastFiltered = [], _prLastFrom = '', _prLastTo = '', _prLastShop = '';
@@ -1315,11 +1346,16 @@ function openProfitabilityReport(){
     for(var y=curYear; y>=curYear-4; y--) years.push(y);
     yearSel.innerHTML = years.map(function(y){ return '<option value="'+y+'"'+(y===curYear?' selected':'')+'>'+y+'</option>'; }).join('');
   }
-  var ym = String(curMonth+1).padStart(2,'0');
-  var prFrom = document.getElementById('prDateFrom'), prTo = document.getElementById('prDateTo');
-  if(prFrom) prFrom.value = curYear+'-'+ym+'-01';
-  if(prTo) prTo.value = new Date(curYear,curMonth+1,0).toISOString().split('T')[0];
+  var prMonthSel = document.getElementById('prMonth');
+  if(prMonthSel) prMonthSel.innerHTML = PROF_MONTH_NAMES.map(function(name,i){ return '<option value="'+i+'"'+(i===curMonth?' selected':'')+'>'+name.charAt(0).toUpperCase()+name.slice(1)+'</option>'; }).join('');
+  var prYearSel = document.getElementById('prYear');
+  if(prYearSel){
+    var prYears = [];
+    for(var y2=curYear; y2>=curYear-4; y2--) prYears.push(y2);
+    prYearSel.innerHTML = prYears.map(function(y){ return '<option value="'+y+'"'+(y===curYear?' selected':'')+'>'+y+'</option>'; }).join('');
+  }
   setProfPeriodType('month', document.getElementById('profPeriod_month'));
+  setPrPeriod('month', document.getElementById('prPeriod_month'));
   setProfView('simple');
   openMo('profitabilityMo');
 }
