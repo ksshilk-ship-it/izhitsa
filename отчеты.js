@@ -1037,18 +1037,6 @@ function setPrPeriod(type,el){
   generatePeriodReport();
 }
 var _prLastFiltered = [], _prLastFrom = '', _prLastTo = '', _prLastShop = '';
-var prMode = 'live';
-function setPrMode(mode, el) {
-  prMode = mode;
-  ['live','archive','all'].forEach(function(m){
-    var btn=document.getElementById('prMode_'+m); if(!btn) return;
-    var active=m===mode;
-    btn.style.borderWidth=active?'2px':'1px'; btn.style.background=active?'#1e2a14':'#22222e';
-    btn.style.color=active?'#c8f060':'#8888aa'; btn.style.borderColor=active?'#c8f060':'#2e2e3e';
-    btn.style.fontWeight=active?'700':'400';
-  });
-  generatePeriodReport();
-}
 function deletePeriodReportShift(id){
   if(!confirm('Удалить эту смену?')) return;
   addShiftTombstone(id);
@@ -1075,12 +1063,9 @@ function generatePeriodReport(){
   var shopF=(document.getElementById('prShopFilter')||{}).value||'';
   if(!from||!to) return;
   var shifts=getShifts();
-  if(prMode==='live') shifts=shifts.filter(function(s){return !s.isArchive;});
-  else if(prMode==='archive') shifts=shifts.filter(function(s){return !!s.isArchive;});
   var filtered=shifts.filter(function(s){return s.date>=from&&s.date<=to&&(!shopF||s.shopName===shopF);});
-  var modeLabel=prMode==='archive'?'🗄 Архив':prMode==='live'?'📊 Живые':'🔗 Все данные';
   var c=document.getElementById('periodReportBody');
-  if(!filtered.length){c.innerHTML='<div class="empty"><div class="ei">📊</div>Нет данных ('+modeLabel+')</div>';return;}
+  if(!filtered.length){c.innerHTML='<div class="empty"><div class="ei">📊</div>Нет данных за период</div>';return;}
   var totCash=0,totCard=0,totDisc=0,totZp=0,totTravel=0,totInkass=0,totOther=0,totSupplier=0,totDrInkass=0,totDrSupplier=0,totDrOther=0;
   filtered.forEach(function(s){
     var ccd=_shiftCashCardDisc(s);
