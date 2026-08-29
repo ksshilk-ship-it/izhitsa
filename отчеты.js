@@ -1314,7 +1314,7 @@ function closePrDailyBreakdown(){
   if(overlay) overlay.classList.remove('open');
 }
 var profPeriodType = 'month';
-var PROF_MONTH_NAMES = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+var PROF_MONTH_NAMES = ['январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
 function openProfitabilityReport(){
   var shops = getShopNames();
   var shopSel = document.getElementById('profShopFilter');
@@ -1393,6 +1393,13 @@ function _computeRentForShop(shop, from, to, allShifts, rentCfg){
     cursor = new Date(y, mIdx+1, 1);
   }
   return total;
+}
+function _profToggleRow(id){
+  var el = document.getElementById(id); if(!el) return;
+  var open = el.style.display!=='none';
+  el.style.display = open ? 'none' : 'block';
+  var arrow = document.getElementById(id+'_arrow');
+  if(arrow) arrow.textContent = open ? '▸' : '▾';
 }
 function generateProfitabilityReport(){
   var c = document.getElementById('profitabilityBody'); if(!c) return;
@@ -1475,12 +1482,28 @@ function generateProfitabilityReport(){
       '<span style="font-size:'+(bold?'15px':'13px')+';font-weight:700;color:'+color+'">'+f2(val)+(pctVal!=null?' <span style="color:#555568;font-size:11px;font-weight:400">('+pctVal+'%)</span>':'')+'</span>'+
     '</div>';
   };
+  // Сама сумма кликабельна и раскрывает разбивку под собой — не отдельная кнопка, чтобы не
+  // плодить лишние элементы в и без того плотном отчёте.
+  var SubRow = function(label, val, color){
+    return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#8888aa">'+
+      '<span>'+label+'</span><span style="font-weight:700;color:'+color+'">'+f2(val)+'</span></div>';
+  };
+  var ExpRow = function(label, val, color, pctVal, bold, id, breakdownHtml){
+    return '<div onclick="_profToggleRow(\''+id+'\')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:'+(bold?'9px':'6px')+' 0;border-bottom:1px solid #2e2e3e">'+
+      '<span style="font-size:'+(bold?'14px':'13px')+';color:'+(bold?'#f0f0f8':'#8888aa')+';font-weight:'+(bold?'700':'400')+'">'+label+' <span id="'+id+'_arrow" style="color:#555568;font-size:10px">▸</span></span>'+
+      '<span style="font-size:'+(bold?'15px':'13px')+';font-weight:700;color:'+color+'">'+f2(val)+(pctVal!=null?' <span style="color:#555568;font-size:11px;font-weight:400">('+pctVal+'%)</span>':'')+'</span>'+
+    '</div>'+
+    '<div id="'+id+'" style="display:none;padding:2px 0 6px 14px">'+breakdownHtml+'</div>';
+  };
   var html = '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:14px">';
   html += '<div style="font-size:11px;color:#8888aa;margin-bottom:10px">📅 '+periodLabel+' · '+filtered.length+' смен'+(shopF?' · '+shopF:' · все магазины')+(daysInPeriod?' · '+daysInPeriod+' дн.':'')+'</div>';
   html += '<div style="font-size:10px;color:#60c8f0;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Оборот</div>';
-  html += Row('💵 Нал', totCash, '#60f090');
-  html += Row('💳 Безнал', totCard, '#60c8f0');
-  html += Row('🎁 Скидка', totDisc, '#8888aa', pct(totDisc));
+  html += ExpRow('💵 Нал', totCash, '#60f090', null, false, 'profExp_cash',
+    SubRow('🌳 Дерево', typeTotals.derevo.cash, '#c8f060')+SubRow('🎁 ДР Товар', typeTotals.dr.cash, '#a060f0'));
+  html += ExpRow('💳 Безнал', totCard, '#60c8f0', null, false, 'profExp_card',
+    SubRow('🌳 Дерево', typeTotals.derevo.card, '#c8f060')+SubRow('🎁 ДР Товар', typeTotals.dr.card, '#a060f0'));
+  html += ExpRow('🎁 Скидка', totDisc, '#8888aa', pct(totDisc), false, 'profExp_disc',
+    SubRow('🌳 Дерево', typeTotals.derevo.disc, '#c8f060')+SubRow('🎁 ДР Товар', typeTotals.dr.disc, '#a060f0'));
   html += Row('Итого оборот', oborot, '#c8f060', 100, true);
   html += Row('Итого доход (нал+безнал)', dohod, '#c8f060', pct(dohod), true);
   var todayStr = new Date().toISOString().split('T')[0];
@@ -1494,20 +1517,9 @@ function generateProfitabilityReport(){
   html += Row('Средняя выручка/день (с учётом скидки)', avgOborotPerDay, '#8888aa');
   html += Row('Средняя выручка/день (без скидки)', avgDohodPerDay, '#8888aa');
   if(to > todayStr) html += '<div style="font-size:10px;color:#8888aa;margin:-4px 0 4px">за '+avgDivisorDays+' прошедших дн. из '+daysInPeriod+'</div>';
-  var typeBlock = function(title, t, color){
-    var itogo = t.cash+t.card+t.disc;
-    return '<div style="margin-top:10px;background:#16161d;border:1px solid #2e2e3e;border-radius:10px;padding:10px 12px">'+
-      '<div style="font-size:11px;color:'+color+';font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">'+title+'</div>'+
-      Row('💵 Нал', t.cash, '#60f090')+
-      Row('💳 Безнал', t.card, '#60c8f0')+
-      Row('🎁 Скидка', t.disc, '#8888aa')+
-      Row('Итого', itogo, color, null, true)+
-    '</div>';
-  };
-  html += typeBlock('🌳 Дерево', typeTotals.derevo, '#c8f060');
-  html += typeBlock('🎁 ДР Товар', typeTotals.dr, '#a060f0');
   html += '<div style="font-size:10px;color:#f06060;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 4px">Расходы</div>';
-  html += Row('💰 ФОТ (оклад/%+проезд)', fot, '#f0a060', pct(fot));
+  html += ExpRow('💰 ФОТ (оклад/%+проезд)', fot, '#f0a060', pct(fot), false, 'profExp_fot',
+    SubRow('💼 ЗП', totZp, '#f0a060')+SubRow('🚗 Проезд', totTravel, '#f0a060'));
   html += Row('📝 Расходы операционные', totOper, '#f0a060', pct(totOper));
   html += Row('🏠 Аренда', totRent, '#f0a060', pct(totRent))+(!Object.keys(rentSettings).length?'<div style="font-size:10px;color:#8888aa;padding:2px 0 6px">Аренда не настроена — задайте её в Настройках</div>':'');
   html += Row('Итого расходы', totalCosts, '#f06060', pct(totalCosts), true);
