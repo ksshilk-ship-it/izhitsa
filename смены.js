@@ -2309,10 +2309,16 @@ function validateClose(){
     return;
   }
   const t = calcTotals();
+  // У онлайн/опт-точек нет физической кассы — блок счёта наличных (closeCassaWood) скрыт в
+  // renderClose() точно так же, как ДР-блок уже скрывается для drBlockVisible ниже, но раньше
+  // это нигде не учитывалось для основной (Дерево) кассы: closeShiftBtn оставался вечно
+  // задизейбленным, потому что cashEveInput — скрытое, никогда не заполняемое поле.
+  const shopTypeVC = session.shopType || getShopType(session.shopName||'');
+  const isShopTypeVC = shopTypeVC === 'shop';
   const expectedCash = t.cash;
   const expectedCashDr = t.cashDr;
   const expectedCashStaff = (session.cashStaffMorning||0) + t.staff;
-  const cashEveVal = (document.getElementById('cashEveInput')||{}).value||'';
+  const cashEveVal = isShopTypeVC ? ((document.getElementById('cashEveInput')||{}).value||'') : '0';
   const cashEve = parseFloat(cashEveVal)||0;
   const cv = document.getElementById('cashValidation');
   const crb = document.getElementById('cashDiffReasonBlock');
@@ -2336,7 +2342,7 @@ function validateClose(){
     return;
   }
   const diff = Math.round(cashEve - expectedCash);
-  const hasDiff = Math.abs(diff) >= 1;
+  const hasDiff = isShopTypeVC && Math.abs(diff) >= 1; // нет физической кассы — нечего сверять
   const diffDr = Math.round(drCashEve - expectedCashDr);
   const hasDiffDr = drBlockVisible && Math.abs(diffDr) >= 1;
   const diffStaff = Math.round(staffCashEve - expectedCashStaff);
@@ -2587,10 +2593,19 @@ function _closeShiftReal(){
     openMo('fixMorningCashMo'); renderFixMorningCashForm();
     return;
   }
-  const cashEveVal=(document.getElementById('cashEveInput')||{}).value||'';
-  if(!cashEveVal){showToast('Введите остаток наличных вечер');return;}
-  const cashEve=parseFloat(cashEveVal)||0;
+  // Онлайн/опт-точки закрываются без физической кассы — итог берётся из расчёта (t.cash),
+  // а не из ручного пересчёта, который для них нигде и не показывается (см. renderClose()).
+  const shopTypeCSR = session.shopType || getShopType(session.shopName||'');
+  const isShopTypeCSR = shopTypeCSR === 'shop';
   const t=calcTotals();
+  var cashEve;
+  if(isShopTypeCSR){
+    const cashEveVal=(document.getElementById('cashEveInput')||{}).value||'';
+    if(!cashEveVal){showToast('Введите остаток наличных вечер');return;}
+    cashEve=parseFloat(cashEveVal)||0;
+  } else {
+    cashEve=t.cash;
+  }
   const expArr=journal.filter(e=>e.type==='expense');
   const inkass=expArr.filter(e=>e.expType==='inkass'&&e.goodsType!=='dr').reduce((s,e)=>s+e.amount,0);
   const drInkassFromExp=expArr.filter(e=>e.expType==='inkass'&&e.goodsType==='dr').reduce((s,e)=>s+e.amount,0);
