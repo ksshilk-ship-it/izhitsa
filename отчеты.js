@@ -1422,6 +1422,7 @@ function generateProfitabilityReport(){
     return;
   }
   var totZp=0, totTravel=0, totOper=0;
+  var operEntries = [];
   var typeTotals = {derevo:{cash:0,card:0,disc:0}, dr:{cash:0,card:0,disc:0}};
   filtered.forEach(function(s){
     (s.journal||[]).forEach(function(e){
@@ -1440,7 +1441,10 @@ function generateProfitabilityReport(){
     if(allExp.length){
       totZp += allExp.filter(function(e){ return e.expType==='zp'; }).reduce(function(a,e){ return a+(e.amount||0); },0);
       totTravel += allExp.filter(function(e){ return e.expType==='travel'; }).reduce(function(a,e){ return a+(e.amount||0); },0);
-      totOper += allExp.filter(function(e){ return e.expType==='other'||e.expType==='supplier'; }).reduce(function(a,e){ return a+(e.amount||0); },0);
+      allExp.filter(function(e){ return e.expType==='other'||e.expType==='supplier'; }).forEach(function(e){
+        totOper += (e.amount||0);
+        operEntries.push({date:s.date, amount:e.amount||0, expType:e.expType, comment:e.comment||'', supplier:e.supplier||''});
+      });
     } else {
       // Совсем старые смены без единой записи расхода в журнале — последний резерв
       totZp += s.zp||0; totTravel += s.travel||0;
@@ -1511,7 +1515,20 @@ function generateProfitabilityReport(){
   html += '<div style="font-size:10px;color:#f06060;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 4px">Расходы</div>';
   html += ExpRow('💰 ФОТ (оклад/%+проезд)', fot, '#f0a060', pct(fot), false, 'profExp_fot',
     SubRow('💼 ЗП', totZp, '#f0a060')+SubRow('🚗 Проезд', totTravel, '#f0a060'));
-  html += Row('📝 Расходы операционные', totOper, '#f0a060', pct(totOper));
+  var operTypeLabels = {other:'📝 Иное', supplier:'🏭 Поставщику'};
+  var operBreakdown = operEntries.length
+    ? operEntries.slice().sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); }).map(function(e){
+        var reason = e.supplier || e.comment || '—';
+        return '<div style="padding:5px 0;border-bottom:1px solid #2e2e3e33">'+
+          '<div style="display:flex;justify-content:space-between;font-size:12px">'+
+            '<span style="color:#8888aa">'+(e.date||'—')+' · '+(operTypeLabels[e.expType]||e.expType)+'</span>'+
+            '<span style="font-weight:700;color:#f0a060">'+f2(e.amount)+'</span>'+
+          '</div>'+
+          '<div style="font-size:11px;color:#555568;margin-top:2px">'+reason+'</div>'+
+        '</div>';
+      }).join('')
+    : '<div style="font-size:11px;color:#8888aa;padding:4px 0">Записей нет</div>';
+  html += ExpRow('📝 Расходы операционные', totOper, '#f0a060', pct(totOper), false, 'profExp_oper', operBreakdown);
   html += Row('🏠 Аренда', totRent, '#f0a060', pct(totRent))+(!Object.keys(rentSettings).length?'<div style="font-size:10px;color:#8888aa;padding:2px 0 6px">Аренда не настроена — задайте её в Настройках</div>':'');
   html += Row('Итого расходы', totalCosts, '#f06060', pct(totalCosts), true);
   html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0 2px;margin-top:6px;border-top:2px solid '+(profit>=0?'#60f090':'#f06060')+'">'+
