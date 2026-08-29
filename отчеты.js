@@ -1431,12 +1431,18 @@ function generateProfitabilityReport(){
       typeTotals.derevo.cash+=cashW; typeTotals.derevo.card+=cardW; typeTotals.derevo.disc+=(goodsW-cashW-cardW);
       typeTotals.dr.cash+=cashD; typeTotals.dr.card+=cardD; typeTotals.dr.disc+=(goodsD-cashD-cardD);
     });
-    var exps = s.expenses||[];
-    if(exps.length){
-      totZp += exps.filter(function(e){ return e.expType==='zp'; }).reduce(function(a,e){ return a+(e.amount||0); },0);
-      totTravel += exps.filter(function(e){ return e.expType==='travel'; }).reduce(function(a,e){ return a+(e.amount||0); },0);
-      totOper += exps.filter(function(e){ return e.expType==='other'||e.expType==='supplier'; }).reduce(function(a,e){ return a+(e.amount||0); },0);
+    // ФОТ/Проезд/операционные — фактически внесённые расходы (не расчётная ЗП по формуле,
+    // это разные числа: shift.zp/travel — сколько ПОЛОЖЕНО по окладу+%, а расход в журнале —
+    // сколько РЕАЛЬНО выплачено). Источник — журнал смены: отдельное поле shift.expenses
+    // заполняется не для всех смен (проверено на реальных данных), а журнал — всегда.
+    var jExps = (s.journal||[]).filter(function(e){ return e.type==='expense'; });
+    var allExp = jExps.length ? jExps : (s.expenses||[]);
+    if(allExp.length){
+      totZp += allExp.filter(function(e){ return e.expType==='zp'; }).reduce(function(a,e){ return a+(e.amount||0); },0);
+      totTravel += allExp.filter(function(e){ return e.expType==='travel'; }).reduce(function(a,e){ return a+(e.amount||0); },0);
+      totOper += allExp.filter(function(e){ return e.expType==='other'||e.expType==='supplier'; }).reduce(function(a,e){ return a+(e.amount||0); },0);
     } else {
+      // Совсем старые смены без единой записи расхода в журнале — последний резерв
       totZp += s.zp||0; totTravel += s.travel||0;
       totOper += (s.otherExp||0)+(s.supplierExp||0)+(s.drSupplierAmt||0);
     }
