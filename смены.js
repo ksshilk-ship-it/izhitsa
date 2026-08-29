@@ -734,6 +734,7 @@ function openMorningModal(){
     journal=[{id:uid(),type:'open',ts:_workingNowISO(),icon:'🔓',
       label:'Смена открыта · '+(shopType==='online'?'📱 Онлайн':'🏭 Офлайн')+(restoreMode?' (восстановление)':''),
       sub:'📦 Товар: '+fmt(goodsM),cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:0}];
+    _backupCheckPassed = false; _zpTravelWarnAcknowledged = false;
     saveS(); saveJ(); startApp();
     if(restoreMode) syncRestoreUIChrome();
     return;
@@ -794,6 +795,7 @@ function checkMorningValid(){
 }
 function confirmMorning(){
   _backupCheckPassed = false;
+  _zpTravelWarnAcknowledged = false;
   function filledNonNeg(id){
     var el = document.getElementById(id);
     var v = el ? el.value : '';
@@ -1120,6 +1122,14 @@ function startAdminAlertsListener(){
     },function(e){console.log('alerts err',e&&e.code);});
 }
 function alertCard(a){
+  if(a.type==='zp_no_travel'){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #3e2e2e">'+
+      '<div><div style="font-size:12px;font-weight:700;color:#f0a060">⚠️ ЗП без отдельного «Проезда» — '+(a.shopName||'')+'</div>'+
+      '<div class="u-fs11-gray">'+(a.sellerName||'—')+' закрыл(а) смену с ЗП '+fmt(a.zpTotal||0)+', не выделив проезд отдельной строкой — подтвердил(а), что оставляет как есть</div>'+
+      '<div class="u-fs10-gray">'+(a.date||'')+'</div></div>'+
+      '<button onclick="markAlertRead(\''+a.id+'\')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:4px 8px;color:#8888aa;font-size:10px;cursor:pointer;flex-shrink:0;margin-left:8px">✓ Прочитано</button>'+
+    '</div>';
+  }
   if(a.type==='shift_conflict'){
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #3e2e2e">'+
       '<div><div style="font-size:12px;font-weight:700;color:#f06060">⛔ Попытка открыть занятую смену — '+(a.shopName||'')+'</div>'+
@@ -2534,7 +2544,107 @@ function runBackupCheck(){
     _renderBackupStatusList();
   });
 }
+// Частая ошибка продавцов: проезд заносят одной суммой вместе с ЗП, либо дважды жмут «ЗП»
+// вместо «Проезд». Раньше это была просто подсказка в свёрнутом блоке расходов — легко
+// пропустить. Теперь при попытке закрыть смену это останавливает закрытие явным красным
+// экраном: можно поправить на месте (перевести запись целиком в «Проезд» или выделить из
+// неё часть суммы) либо осознанно оставить как есть — тогда админу уходит уведомление.
+var _zpTravelWarnAcknowledged = false;
+function _zpTravelSuspect(){
+  var zpEntries = journal.filter(function(e){ return e.type==='expense' && e.expType==='zp'; });
+  var travelEntries = journal.filter(function(e){ return e.type==='expense' && e.expType==='travel'; });
+  var zpTotal = zpEntries.reduce(function(s,e){ return s+(e.amount||0); },0);
+  if(!zpTotal || travelEntries.length) return null;
+  return {zpEntries:zpEntries, zpTotal:zpTotal};
+}
+function _zpTravelDefaultRate(){
+  try{
+    var settings = JSON.parse(localStorage.getItem('iz_shop_zp_settings')||'{}');
+    var s = settings[session.shopName];
+    return (s && s.travel) ? s.travel : 400;
+  }catch(e){ return 400; }
+}
+function openZpTravelWarnMo(){
+  openMo('zpTravelWarnMo');
+  _renderZpTravelWarnList();
+}
+function _renderZpTravelWarnList(){
+  var suspect = _zpTravelSuspect();
+  if(!suspect){ closeMo('zpTravelWarnMo'); closeShift(); return; } // всё поправили — можно продолжать закрытие
+  var rate = _zpTravelDefaultRate();
+  var c = document.getElementById('zpTravelWarnList'); if(!c) return;
+  c.innerHTML = suspect.zpEntries.map(function(e){
+    var suggestedSplit = e.amount>rate ? rate : '';
+    return '<div style="background:#0f0f13;border:1px solid #3e2e2e;border-radius:10px;padding:10px;margin-bottom:8px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
+        '<span style="font-size:12px;color:#8888aa">💰 ЗП'+(e.comment?' · '+e.comment:'')+'</span>'+
+        '<span style="font-size:14px;font-weight:700;color:#f0a060">'+fmt(e.amount)+'</span>'+
+      '</div>'+
+      '<button type="button" onclick="_zpTravelConvert(\''+e.id+'\')" style="width:100%;margin-bottom:6px;padding:8px;background:#22222e;border:1px solid #60c8f0;border-radius:8px;color:#60c8f0;font-size:12px;font-weight:700;cursor:pointer">🔀 Это целиком Проезд, не ЗП</button>'+
+      '<div style="display:flex;gap:6px;align-items:center">'+
+        '<input class="fi" type="text" inputmode="numeric" id="zpSplitAmt_'+e.id+'" placeholder="₽ на проезд" value="'+suggestedSplit+'" style="margin:0;padding:8px;flex:1">'+
+        '<button type="button" onclick="_zpTravelSplit(\''+e.id+'\')" style="padding:8px 12px;background:#22222e;border:1px solid #2e2e3e;border-radius:8px;color:#f0f0f8;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">✂️ Выделить</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+function _zpTravelConvert(entryId){
+  var e = journal.find(function(x){ return x.id===entryId; });
+  if(!e){ showToast('Запись не найдена'); return; }
+  e.expType = 'travel';
+  e.label = 'Расход: 🚌 Проезд'+(e.goodsType==='dr'?' (ДР)':'');
+  saveJ();
+  showToast('✅ Запись переведена в «Проезд»');
+  _renderZpTravelWarnList();
+  renderClose();
+}
+function _zpTravelSplit(entryId){
+  var input = document.getElementById('zpSplitAmt_'+entryId);
+  var travelAmt = parseFloat(input && input.value)||0;
+  if(travelAmt<=0){ showToast('Введите сумму проезда'); return; }
+  var e = journal.find(function(x){ return x.id===entryId; });
+  if(!e){ showToast('Запись не найдена'); return; }
+  if(travelAmt>=e.amount){ showToast('Сумма проезда должна быть меньше суммы ЗП — используйте «Это целиком Проезд»'); return; }
+  var isDr = e.goodsType==='dr', isStaff = e.goodsType==='staff';
+  var payMethod = e.payMethod||'cash';
+  e.amount = e.amount - travelAmt;
+  e.cashEffect = (isDr||isStaff||payMethod!=='cash') ? 0 : -e.amount;
+  e.cashDrEffect = (isDr && payMethod==='cash') ? -e.amount : 0;
+  var travelEntry = {
+    id:uid(), type:'expense', ts:_workingNowISO(), icon:'💸',
+    label:'Расход: 🚌 Проезд'+(isDr?' (ДР)':''), sub:fmt(travelAmt)+' · выделено из записи ЗП',
+    expType:'travel', goodsType:e.goodsType, amount:travelAmt, comment:'Выделено из ЗП при закрытии смены',
+    payMethod:payMethod, forSeller:e.forSeller||null, amtCls:'exp', amtSign:'−',
+    cashEffect:(isDr||isStaff||payMethod!=='cash')?0:-travelAmt,
+    cashDrEffect:(isDr&&payMethod==='cash')?-travelAmt:0,
+    cardEffect:0, staffEffect:0, goodsEffect:0
+  };
+  journal.push(travelEntry);
+  _recordJournalEntryIndependently(travelEntry, session.shopName, 'expense');
+  saveJ();
+  showToast('✅ Разделено: ЗП '+fmt(e.amount)+' + Проезд '+fmt(travelAmt));
+  _renderZpTravelWarnList();
+  renderClose();
+}
+function _zpTravelLeaveAsIs(){
+  var suspect = _zpTravelSuspect();
+  if(suspect){
+    saveAdminAlert({
+      type:'zp_no_travel', shopName:session.shopName, sellerName:session.sellerName,
+      date:(session.openedAt||'').split('T')[0]||new Date().toISOString().split('T')[0],
+      zpTotal:suspect.zpTotal,
+      note:'Продавец закрыл смену без отдельного расхода «Проезд» при внесённой ЗП — подтвердил, что оставляет как есть.'
+    });
+  }
+  _zpTravelWarnAcknowledged = true;
+  closeMo('zpTravelWarnMo');
+  closeShift();
+}
 function closeShift(){
+  if(!_zpTravelWarnAcknowledged && _zpTravelSuspect()){
+    openZpTravelWarnMo();
+    return;
+  }
   if(!_backupCheckPassed){
     showToast('🛟 Сначала нажмите «Подстраховка» — нужно убедиться, что все данные сохранены');
     return;
