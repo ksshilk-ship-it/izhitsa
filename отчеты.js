@@ -1029,7 +1029,8 @@ function setPrPeriod(type,el){
   // (nth-child) — когда соседний блок убрали, селектор стал указывать не туда, и подсветка
   // активной кнопки переставала сбрасываться (можно было "нажать" сразу две). Теперь у каждой
   // кнопки свой id, и сброс идёт по ним напрямую, независимо от того, что вокруг меняется.
-  ['week','month','quarter','custom'].forEach(function(t){
+  // Набор периодов сделан идентичным вкладке «Кратко» (Месяц/Квартал/Полугодие/Год/Период).
+  ['month','quarter','half','year','custom'].forEach(function(t){
     var btn = document.getElementById('prPeriod_'+t); if(!btn) return;
     var active = t===type;
     btn.style.borderWidth = active?'2px':'1px'; btn.style.background = active?'#1e2a14':'#22222e';
@@ -1037,30 +1038,34 @@ function setPrPeriod(type,el){
     btn.style.fontWeight = active?'700':'400';
   });
   var mW=document.getElementById('prMonthWrap'), qW=document.getElementById('prQuarterWrap'),
-      yW=document.getElementById('prYearWrap'), cD=document.getElementById('prCustomDates');
+      hW=document.getElementById('prHalfWrap'), yW=document.getElementById('prYearWrap'),
+      cD=document.getElementById('prCustomDates');
   if(mW) mW.style.display = type==='month' ? 'block':'none';
   if(qW) qW.style.display = type==='quarter' ? 'block':'none';
-  if(yW) yW.style.display = (type==='month'||type==='quarter') ? 'block':'none';
+  if(hW) hW.style.display = type==='half' ? 'block':'none';
+  if(yW) yW.style.display = (type==='custom') ? 'none':'block';
   if(cD) cD.style.display = type==='custom' ? 'flex':'none';
   _prRecomputeRange();
 }
 function _prRecomputeRange(){
-  var now=new Date(), today=now.toISOString().split('T')[0];
-  if(prPeriodType==='week'){
-    var d=new Date(); d.setDate(d.getDate()-6);
-    document.getElementById('prDateFrom').value=d.toISOString().split('T')[0];
-    document.getElementById('prDateTo').value=today;
-  } else if(prPeriodType==='month'){
-    var y=parseInt((document.getElementById('prYear')||{}).value)||now.getFullYear();
+  var now=new Date();
+  var y=parseInt((document.getElementById('prYear')||{}).value)||now.getFullYear();
+  if(prPeriodType==='month'){
     var mIdx=parseInt((document.getElementById('prMonth')||{}).value)||0;
     document.getElementById('prDateFrom').value = y+'-'+String(mIdx+1).padStart(2,'0')+'-01';
     document.getElementById('prDateTo').value = y+'-'+String(mIdx+1).padStart(2,'0')+'-'+String(_profLastDayOfMonth(y,mIdx)).padStart(2,'0');
   } else if(prPeriodType==='quarter'){
-    var y2=parseInt((document.getElementById('prYear')||{}).value)||now.getFullYear();
     var q=parseInt((document.getElementById('prQuarter')||{}).value)||1;
     var qStartM=(q-1)*3;
-    document.getElementById('prDateFrom').value = y2+'-'+String(qStartM+1).padStart(2,'0')+'-01';
-    document.getElementById('prDateTo').value = y2+'-'+String(qStartM+3).padStart(2,'0')+'-'+String(_profLastDayOfMonth(y2,qStartM+2)).padStart(2,'0');
+    document.getElementById('prDateFrom').value = y+'-'+String(qStartM+1).padStart(2,'0')+'-01';
+    document.getElementById('prDateTo').value = y+'-'+String(qStartM+3).padStart(2,'0')+'-'+String(_profLastDayOfMonth(y,qStartM+2)).padStart(2,'0');
+  } else if(prPeriodType==='half'){
+    var h=parseInt((document.getElementById('prHalf')||{}).value)||1;
+    if(h===1){ document.getElementById('prDateFrom').value=y+'-01-01'; document.getElementById('prDateTo').value=y+'-06-30'; }
+    else { document.getElementById('prDateFrom').value=y+'-07-01'; document.getElementById('prDateTo').value=y+'-12-31'; }
+  } else if(prPeriodType==='year'){
+    document.getElementById('prDateFrom').value = y+'-01-01';
+    document.getElementById('prDateTo').value = y+'-12-31';
   } else {
     generatePeriodReport();
     return;
