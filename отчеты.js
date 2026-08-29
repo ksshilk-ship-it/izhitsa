@@ -1575,6 +1575,20 @@ function generateProfitabilityReport(){
     return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#8888aa">'+
       '<span>'+label+'</span><span style="font-weight:700;color:'+color+'">'+f2(val)+'</span></div>';
   };
+  // Разбивка Дерево/ДР Товар — не просто строчки текста, а два визуально обособленных
+  // цветных блока рядом, чтобы цифры не сливались друг с другом и с остальным отчётом.
+  var TypeSplit = function(woodVal, drVal){
+    return '<div style="display:flex;gap:8px;padding:4px 0 2px">'+
+      '<div style="flex:1;background:#16210c;border:1px solid #c8f06055;border-radius:9px;padding:8px;text-align:center">'+
+        '<div style="font-size:10px;color:#c8f060;font-weight:700">🌳 ДЕРЕВО</div>'+
+        '<div style="font-size:14px;font-weight:700;color:#c8f060;margin-top:2px">'+f2(woodVal)+'</div>'+
+      '</div>'+
+      '<div style="flex:1;background:#1a0f1a;border:1px solid #a060f055;border-radius:9px;padding:8px;text-align:center">'+
+        '<div style="font-size:10px;color:#a060f0;font-weight:700">🎁 ДР ТОВАР</div>'+
+        '<div style="font-size:14px;font-weight:700;color:#a060f0;margin-top:2px">'+f2(drVal)+'</div>'+
+      '</div>'+
+    '</div>';
+  };
   var ExpRow = function(label, val, color, pctVal, bold, id, breakdownHtml){
     return '<div onclick="_profToggleRow(\''+id+'\')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:'+(bold?'9px':'6px')+' 0;border-bottom:1px solid #2e2e3e">'+
       '<span style="font-size:'+(bold?'14px':'13px')+';color:'+(bold?'#f0f0f8':'#8888aa')+';font-weight:'+(bold?'700':'400')+'">'+label+' <span id="'+id+'_arrow" style="color:#555568;font-size:10px">▸</span></span>'+
@@ -1585,14 +1599,18 @@ function generateProfitabilityReport(){
   var html = '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:14px">';
   html += '<div style="font-size:11px;color:#8888aa;margin-bottom:10px">📅 '+periodLabel+' · '+filtered.length+' смен'+(shopF?' · '+shopF:' · все магазины')+(daysInPeriod?' · '+daysInPeriod+' дн.':'')+'</div>';
   html += '<div style="font-size:10px;color:#60c8f0;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Оборот</div>';
+  var woodOborot = typeTotals.derevo.cash+typeTotals.derevo.card+typeTotals.derevo.disc;
+  var drOborot = typeTotals.dr.cash+typeTotals.dr.card+typeTotals.dr.disc;
+  var woodDohod = typeTotals.derevo.cash+typeTotals.derevo.card;
+  var drDohod = typeTotals.dr.cash+typeTotals.dr.card;
   html += ExpRow('💵 Нал', totCash, '#60f090', null, false, 'profExp_cash',
-    SubRow('🌳 Дерево', typeTotals.derevo.cash, '#c8f060')+SubRow('🎁 ДР Товар', typeTotals.dr.cash, '#a060f0'));
+    TypeSplit(typeTotals.derevo.cash, typeTotals.dr.cash));
   html += ExpRow('💳 Безнал', totCard, '#60c8f0', null, false, 'profExp_card',
-    SubRow('🌳 Дерево', typeTotals.derevo.card, '#c8f060')+SubRow('🎁 ДР Товар', typeTotals.dr.card, '#a060f0'));
+    TypeSplit(typeTotals.derevo.card, typeTotals.dr.card));
   html += ExpRow('🎁 Скидка', totDisc, '#8888aa', pct(totDisc), false, 'profExp_disc',
-    SubRow('🌳 Дерево', typeTotals.derevo.disc, '#c8f060')+SubRow('🎁 ДР Товар', typeTotals.dr.disc, '#a060f0'));
-  html += Row('Итого оборот', oborot, '#c8f060', 100, true);
-  html += Row('Итого доход (нал+безнал)', dohod, '#c8f060', pct(dohod), true);
+    TypeSplit(typeTotals.derevo.disc, typeTotals.dr.disc));
+  html += ExpRow('Итого оборот', oborot, '#c8f060', 100, true, 'profExp_oborot', TypeSplit(woodOborot, drOborot));
+  html += ExpRow('Итого доход (нал+безнал)', dohod, '#c8f060', pct(dohod), true, 'profExp_dohod', TypeSplit(woodDohod, drDohod));
   var todayStr = new Date().toISOString().split('T')[0];
   var avgDivisorDays = daysInPeriod;
   if(to > todayStr){
@@ -1601,8 +1619,10 @@ function generateProfitabilityReport(){
   }
   var avgOborotPerDay = avgDivisorDays>0 ? oborot/avgDivisorDays : 0;
   var avgDohodPerDay = avgDivisorDays>0 ? dohod/avgDivisorDays : 0;
-  html += Row('Средняя выручка/день (с учётом скидки)', avgOborotPerDay, '#8888aa');
-  html += Row('Средняя выручка/день (без скидки)', avgDohodPerDay, '#8888aa');
+  html += ExpRow('Средняя выручка/день (с учётом скидки)', avgOborotPerDay, '#8888aa', null, false, 'profExp_avgOborot',
+    TypeSplit(avgDivisorDays>0?woodOborot/avgDivisorDays:0, avgDivisorDays>0?drOborot/avgDivisorDays:0));
+  html += ExpRow('Средняя выручка/день (без скидки)', avgDohodPerDay, '#8888aa', null, false, 'profExp_avgDohod',
+    TypeSplit(avgDivisorDays>0?woodDohod/avgDivisorDays:0, avgDivisorDays>0?drDohod/avgDivisorDays:0));
   if(to > todayStr) html += '<div style="font-size:10px;color:#8888aa;margin:-4px 0 4px">за '+avgDivisorDays+' прошедших дн. из '+daysInPeriod+'</div>';
   html += '<div style="font-size:10px;color:#f06060;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 4px">Расходы</div>';
   html += ExpRow('💰 ФОТ (оклад/%+проезд)', fot, '#f0a060', pct(fot), false, 'profExp_fot',
