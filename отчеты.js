@@ -1298,6 +1298,39 @@ function generatePeriodReport(){
   html+='</div>';
   c.innerHTML=html;
 }
+function _prFmtCompact(n){
+  n = Math.round(n||0);
+  if(!n) return '—';
+  if(Math.abs(n)>=1000){
+    var k = n/1000;
+    var s = (Math.round(k*10)/10).toString().replace(/\.0$/,'');
+    return s+'k';
+  }
+  return String(n);
+}
+function _buildPrCalendarMonth(year, monthIdx, byDate, color){
+  var daysInMonth = new Date(year, monthIdx+1, 0).getDate();
+  var firstDow = new Date(year, monthIdx, 1).getDay();
+  var leadOffset = (firstDow+6)%7; // неделя с понедельника
+  var cells = [];
+  for(var i=0;i<leadOffset;i++) cells.push('<div></div>');
+  for(var d=1; d<=daysInMonth; d++){
+    var dateStr = year+'-'+String(monthIdx+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    var has = byDate.hasOwnProperty(dateStr) && byDate[dateStr];
+    cells.push('<div style="background:'+(has?'#1a1a22':'transparent')+';border-radius:6px;padding:4px 2px;text-align:center;min-height:36px">'+
+      '<div style="font-size:9px;color:#666676">'+d+'</div>'+
+      '<div style="font-size:12px;font-weight:700;color:'+(has?color:'#3e3e4e')+'">'+_prFmtCompact(byDate[dateStr])+'</div>'+
+    '</div>');
+  }
+  var monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  return '<div style="margin-bottom:16px">'+
+    '<div style="font-size:12px;font-weight:700;color:#c8f060;margin-bottom:6px">'+monthNames[monthIdx]+' '+year+'</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;font-size:9px;color:#555568;margin-bottom:3px;text-align:center">'+
+      ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(function(dn){return '<div>'+dn+'</div>';}).join('')+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">'+cells.join('')+'</div>'+
+  '</div>';
+}
 function showPrDailyBreakdown(field, label, color){
   var byDate = {};
   _prLastFiltered.forEach(function(s){
@@ -1305,13 +1338,27 @@ function showPrDailyBreakdown(field, label, color){
     var v = field==='cash' ? ccd.cash : field==='card' ? ccd.card : ccd.disc;
     byDate[s.date] = (byDate[s.date]||0) + v;
   });
-  var dates = Object.keys(byDate).sort().reverse();
   var f2=function(n){return Math.round(n||0).toLocaleString('ru-RU')+'₽';};
-  var total = dates.reduce(function(s,d){return s+byDate[d];},0);
-  var rows = dates.map(function(d){
-    return '<div style="display:flex;justify-content:space-between;padding:8px 2px;border-bottom:1px solid #2e2e3e;font-size:13px">'+
-      '<span>'+d+'</span><span style="font-weight:700;color:'+color+'">'+f2(byDate[d])+'</span></div>';
-  }).join('');
+  var total = Object.keys(byDate).reduce(function(s,d){return s+byDate[d];},0);
+  // Средняя за день — как в «Кратко»: если период ещё не закончился, делим только на уже
+  // прошедшие дни, а не на весь период целиком (иначе средняя занижена).
+  var todayStr = new Date().toISOString().split('T')[0];
+  var daysInPeriod = Math.round((new Date(_prLastTo)-new Date(_prLastFrom))/86400000)+1;
+  var avgDivisorDays = daysInPeriod;
+  if(_prLastTo > todayStr){
+    var effectiveTo = todayStr < _prLastFrom ? _prLastFrom : todayStr;
+    avgDivisorDays = Math.max(1, Math.round((new Date(effectiveTo)-new Date(_prLastFrom))/86400000)+1);
+  }
+  var avgPerDay = avgDivisorDays>0 ? total/avgDivisorDays : 0;
+  var fy=parseInt(_prLastFrom.slice(0,4)), fm=parseInt(_prLastFrom.slice(5,7))-1;
+  var ty=parseInt(_prLastTo.slice(0,4)), tm=parseInt(_prLastTo.slice(5,7))-1;
+  var calHtml = '';
+  var y=fy, m=fm, guard=0;
+  while((y<ty || (y===ty && m<=tm)) && guard<36){
+    calHtml += _buildPrCalendarMonth(y, m, byDate, color);
+    m++; if(m>11){m=0;y++;}
+    guard++;
+  }
   var overlay = document.getElementById('prDailyOverlay');
   if(!overlay){
     overlay = document.createElement('div');
@@ -1325,8 +1372,12 @@ function showPrDailyBreakdown(field, label, color){
       '<div style="font-size:16px;font-weight:700">'+label+' по дням</div>'+
       '<button onclick="closePrDailyBreakdown()" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer">✕</button>'+
     '</div>'+
-    '<div style="font-size:11px;color:#8888aa;margin-bottom:10px">📅 '+_prLastFrom+' — '+_prLastTo+(_prLastShop?' · '+_prLastShop:'')+' · Итого: '+f2(total)+'</div>'+
-    (rows||'<div class="empty"><div class="ei">📅</div>Нет данных</div>')+
+    '<div style="font-size:11px;color:#8888aa;margin-bottom:4px">📅 '+_prLastFrom+' — '+_prLastTo+(_prLastShop?' · '+_prLastShop:'')+'</div>'+
+    '<div style="display:flex;gap:14px;margin-bottom:14px">'+
+      '<div><span style="font-size:11px;color:#8888aa">Итого: </span><span style="font-size:13px;font-weight:700;color:'+color+'">'+f2(total)+'</span></div>'+
+      '<div><span style="font-size:11px;color:#8888aa">В среднем/день: </span><span style="font-size:13px;font-weight:700;color:'+color+'">'+f2(avgPerDay)+'</span></div>'+
+    '</div>'+
+    (calHtml||'<div class="empty"><div class="ei">📅</div>Нет данных</div>')+
   '</div>';
   overlay.classList.add('open');
 }
