@@ -1103,6 +1103,7 @@ function generatePeriodReport(){
   var c=document.getElementById('periodReportBody');
   if(!filtered.length){c.innerHTML='<div class="empty"><div class="ei">📊</div>Нет данных за период</div>';return;}
   var totCash=0,totCard=0,totDisc=0,totZp=0,totTravel=0,totInkass=0,totOther=0,totSupplier=0,totDrInkass=0,totDrSupplier=0,totDrOther=0;
+  var totReceive=0,totReceiveDr=0,totWriteoff=0,totWriteoffDr=0;
   filtered.forEach(function(s){
     var ccd=_shiftCashCardDisc(s);
     totCash+=ccd.cash;totCard+=ccd.card;totDisc+=ccd.disc;
@@ -1125,6 +1126,15 @@ function generatePeriodReport(){
       totOther+=s.otherExp||0;totSupplier+=s.supplierExp||0;
       totDrInkass+=s.drInkass||0;totDrSupplier+=s.drSupplierAmt||0;
     }
+    // Приходы/Списания — не расход и не выручка, а движение товара (сколько получили от
+    // мастерской, сколько списали брака/боя). Показываются отдельным блоком, не в РАСХОДАХ.
+    (s.journal||[]).forEach(function(e){
+      if(e.type==='receive'){
+        if(e.goodsType==='dr') totReceiveDr+=(e.amount||0); else totReceive+=(e.amount||0);
+      } else if(e.type==='writeoff'){
+        if(e.goodsType==='dr') totWriteoffDr+=(e.amount||0); else totWriteoff+=(e.amount||0);
+      }
+    });
   });
   var totRev=totCash+totCard+totDisc,totExp=totZp+totTravel+totInkass+totOther+totSupplier+totDrInkass+totDrSupplier+totDrOther;
   var f2=function(n){return Math.round(n||0).toLocaleString('ru-RU')+'₽';};
@@ -1134,12 +1144,19 @@ function generatePeriodReport(){
   var bySeller={};
   filtered.forEach(function(s){
     var k=(s.sellerName||'—').replace(/^Восст. /,'');
-    if(!bySeller[k])bySeller[k]={n:0,rev:0,zp:0};
+    if(!bySeller[k])bySeller[k]={n:0,rev:0,zp:0,travel:0,zpPlan:0,travelPlan:0};
     var ccd3=_shiftCashCardDisc(s);
     bySeller[k].n++; bySeller[k].rev+=ccd3.cash+ccd3.card+ccd3.disc;
     var jExps3=(s.journal||[]).filter(function(e){return e.type==='expense';});
     var exps3=jExps3.length?jExps3:(s.expenses||[]);
     bySeller[k].zp+=exps3.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+(e.amount||0);},0);
+    bySeller[k].travel+=exps3.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+(e.amount||0);},0);
+    // План — расчётная ЗП по формуле (оклад+% от чистой выручки), та же, что видит продавец
+    // при закрытии смены (calcShiftZpStandalone). Сравниваем с фактически выплаченным, чтобы
+    // сразу видеть у кого системное расхождение план/факт.
+    var zc = calcShiftZpStandalone(s.shopName, s);
+    bySeller[k].zpPlan += zc.zpCalcTotal;
+    bySeller[k].travelPlan += zc.travelCalc;
   });
   var prPct=function(n){return totRev>0?' <span style="color:#555568;font-size:11px">('+Math.round(n/totRev*100)+'%)</span>':'';};
   var Rp=function(lbl,val,col,sp){return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span style="color:#8888aa">'+lbl+'</span><span style="color:'+(col||'#f0f0f8')+';font-weight:700">'+f2(val)+(sp?prPct(val):'')+'</span></div>';};
@@ -1227,6 +1244,18 @@ function generatePeriodReport(){
         '<span style="font-size:15px;font-weight:700;color:#f0a060">'+f2(totInkassCombined)+'</span>'+
       '</div>'+
       '<div style="font-size:10px;color:#8888aa;margin-top:4px">Не расход — наличные переместились из кассы, а не потрачены</div>'+
+    '</div>' : '')+
+    ((totReceive+totReceiveDr+totWriteoff+totWriteoffDr) ? '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">'+
+      '<div style="font-size:13px;font-weight:700;color:#f0f0f8;margin-bottom:6px">📦 Товародвижение</div>'+
+      ((totReceive+totReceiveDr) ? '<div onclick="showPrDailyBreakdown(\'receive\',\'📥 Приходы\',\'#60f090\')" style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #2e2e3e;cursor:pointer">'+
+        '<span style="font-size:13px;color:#8888aa">📥 Приходы <span style="font-size:10px;color:#555568">▸ по дням</span></span>'+
+        '<span style="font-size:14px;font-weight:700;color:#60f090">'+f2(totReceive+totReceiveDr)+'</span>'+
+      '</div>' : '')+
+      ((totWriteoff+totWriteoffDr) ? '<div onclick="showPrDailyBreakdown(\'writeoff\',\'🗑 Списания\',\'#f06060\')" style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;cursor:pointer">'+
+        '<span style="font-size:13px;color:#8888aa">🗑 Списания <span style="font-size:10px;color:#555568">▸ по дням</span></span>'+
+        '<span style="font-size:14px;font-weight:700;color:#f06060">'+f2(totWriteoff+totWriteoffDr)+'</span>'+
+      '</div>' : '')+
+      '<div style="font-size:10px;color:#8888aa;margin-top:4px">Не расход и не выручка — движение товара (получили от мастерской / списали брак)</div>'+
     '</div>' : '');
   if(Object.keys(byShop).length>1){
     html+='<div class="card" style="margin-bottom:10px"><div class="ctitle">По магазинам</div>'+
@@ -1241,12 +1270,16 @@ function generatePeriodReport(){
       // Делим на число СМЕН этого продавца, а не на календарные дни периода — иначе тот, кто
       // отработал 16 смен из 30 дней, получал заниженную среднюю (делили на 30, а не на 16).
       var avgRev=e[1].rev/e[1].n, avgZp=e[1].zp/e[1].n;
+      var factTotal=e[1].zp+e[1].travel, planTotal=e[1].zpPlan+e[1].travelPlan;
+      var diff=factTotal-planTotal;
+      var diffColor=Math.abs(diff)>500?'#f06060':'#60f090';
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#22222e;border-radius:8px;margin-bottom:6px">'+
         '<div><div class="u-fs13-bold">👤 '+e[0]+'</div><div class="u-fs11-gray">'+e[1].n+' смен</div></div>'+
         '<div style="text-align:right">'+
           '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;color:#c8f060">'+f2(e[1].rev)+'</div>'+
           '<div style="font-size:10px;color:#8888aa">выручка/день '+f2(avgRev)+'</div>'+
           (e[1].zp?'<div style="font-size:10px;color:#f0a060">ЗП '+f2(e[1].zp)+' / день '+f2(avgZp)+'</div>':'')+
+          (planTotal?'<div style="font-size:10px;color:'+diffColor+'">план '+f2(planTotal)+' · '+(diff>=0?'+':'−')+f2(Math.abs(diff))+'</div>':'')+
         '</div></div>';
     }).join('')+'</div>';
   if(!window._prOpen) window._prOpen={};
@@ -1345,6 +1378,14 @@ function _prDailyValue(s, field){
   if(field==='inkassWood') return exps.filter(function(e){return e.expType==='inkass'&&e.goodsType!=='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
   if(field==='inkassDr') return exps.filter(function(e){return e.expType==='inkass'&&e.goodsType==='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
   if(field==='expenses') return exps.filter(function(e){return e.expType!=='inkass';}).reduce(function(a,e){return a+(e.amount||0);},0);
+  // Приходы/Списания — не из «expense», а отдельные типы записей журнала (движение товара,
+  // не расход и не выручка).
+  if(field==='receive') return (s.journal||[]).filter(function(e){return e.type==='receive';}).reduce(function(a,e){return a+(e.amount||0);},0);
+  if(field==='receiveWood') return (s.journal||[]).filter(function(e){return e.type==='receive'&&e.goodsType!=='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
+  if(field==='receiveDr') return (s.journal||[]).filter(function(e){return e.type==='receive'&&e.goodsType==='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
+  if(field==='writeoff') return (s.journal||[]).filter(function(e){return e.type==='writeoff';}).reduce(function(a,e){return a+(e.amount||0);},0);
+  if(field==='writeoffWood') return (s.journal||[]).filter(function(e){return e.type==='writeoff'&&e.goodsType!=='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
+  if(field==='writeoffDr') return (s.journal||[]).filter(function(e){return e.type==='writeoff'&&e.goodsType==='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
   return 0;
 }
 // Разбивка Нал/Безнал/Скидка/Итого оборот на Дерево/ДР товар для одной смены — та же формула,
@@ -1384,9 +1425,9 @@ function showPrDailyBreakdown(field, label, color){
   var byDateWood = {}, byDateDr = {};
   _prLastFiltered.forEach(function(s){
     byDate[s.date] = (byDate[s.date]||0) + _prDailyValue(s, field);
-    if(field==='inkass'){
-      byDateWood[s.date] = (byDateWood[s.date]||0) + _prDailyValue(s, 'inkassWood');
-      byDateDr[s.date] = (byDateDr[s.date]||0) + _prDailyValue(s, 'inkassDr');
+    if(field==='inkass'||field==='receive'||field==='writeoff'){
+      byDateWood[s.date] = (byDateWood[s.date]||0) + _prDailyValue(s, field+'Wood');
+      byDateDr[s.date] = (byDateDr[s.date]||0) + _prDailyValue(s, field+'Dr');
     } else if(splittable){
       var sp = _prDailyValueSplit(s, field);
       byDateWood[s.date] = (byDateWood[s.date]||0) + sp.wood;
@@ -1419,7 +1460,7 @@ function showPrDailyBreakdown(field, label, color){
     m++; if(m>11){m=0;y++;}
     guard++;
   }
-  var showSplitBox = (field==='inkass') || splittable;
+  var showSplitBox = (field==='inkass'||field==='receive'||field==='writeoff') || splittable;
   var overlay = document.getElementById('prDailyOverlay');
   if(!overlay){
     overlay = document.createElement('div');
