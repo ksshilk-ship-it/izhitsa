@@ -1302,6 +1302,33 @@ function _prFmtCompact(n){
   }
   return String(n);
 }
+// Календарь-версия для раздельного показа Дерево/ДР (Нал/Безнал/Скидка/Итого оборот) — та же
+// сетка, что и _buildPrCalendarMonth, но в каждой ячейке две цифры (дерево сверху, ДР снизу).
+function _buildPrCalendarMonthSplit(year, monthIdx, byDateWood, byDateDr){
+  var daysInMonth = new Date(year, monthIdx+1, 0).getDate();
+  var firstDow = new Date(year, monthIdx, 1).getDay();
+  var leadOffset = (firstDow+6)%7;
+  var cells = [];
+  for(var i=0;i<leadOffset;i++) cells.push('<div></div>');
+  for(var d=1; d<=daysInMonth; d++){
+    var dateStr = year+'-'+String(monthIdx+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    var hasW = byDateWood.hasOwnProperty(dateStr) && byDateWood[dateStr];
+    var hasD = byDateDr.hasOwnProperty(dateStr) && byDateDr[dateStr];
+    cells.push('<div style="background:'+((hasW||hasD)?'#1a1a22':'transparent')+';border-radius:6px;padding:4px 2px;text-align:center;min-height:44px">'+
+      '<div style="font-size:9px;color:#666676">'+d+'</div>'+
+      '<div style="font-size:10px;font-weight:700;color:'+(hasW?'#c8f060':'#3e3e4e')+'">'+_prFmtCompact(byDateWood[dateStr])+'</div>'+
+      '<div style="font-size:10px;font-weight:700;color:'+(hasD?'#a060f0':'#3e3e4e')+'">'+_prFmtCompact(byDateDr[dateStr])+'</div>'+
+    '</div>');
+  }
+  var monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  return '<div style="margin-bottom:16px">'+
+    '<div style="font-size:12px;font-weight:700;color:#c8f060;margin-bottom:6px">'+monthNames[monthIdx]+' '+year+'</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;font-size:9px;color:#555568;margin-bottom:3px;text-align:center">'+
+      ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(function(dn){return '<div>'+dn+'</div>';}).join('')+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">'+cells.join('')+'</div>'+
+  '</div>';
+}
 function _buildPrCalendarMonth(year, monthIdx, byDate, color){
   var daysInMonth = new Date(year, monthIdx+1, 0).getDate();
   var firstDow = new Date(year, monthIdx, 1).getDay();
@@ -1346,7 +1373,33 @@ function _prDailyValue(s, field){
   if(field==='expenses') return exps.filter(function(e){return e.expType!=='inkass';}).reduce(function(a,e){return a+(e.amount||0);},0);
   return 0;
 }
+// Разбивка Нал/Безнал/Скидка/Итого оборот на Дерево/ДР товар для одной смены — та же формула,
+// что и typeTotals в «Кратко» (generateProfitabilityReport), чтобы split-цифры совпадали в обоих отчётах.
+function _prDailyValueSplit(s, field){
+  var cashW=0,cardW=0,discW=0,cashD=0,cardD=0,discD=0;
+  (s.journal||[]).forEach(function(e){
+    if(e.type!=='sale') return;
+    var cw=e.cashEffect||0, cdw=e.cardEffect||0, gw=-(e.goodsEffect||0);
+    var cd=e.cashDrEffect||0, cdd=e.cardDrEffect||0, gd=-(e.goodsDrEffect||0);
+    cashW+=cw; cardW+=cdw; discW+=(gw-cw-cdw);
+    cashD+=cd; cardD+=cdd; discD+=(gd-cd-cdd);
+  });
+  if(field==='cash') return {wood:cashW, dr:cashD};
+  if(field==='card') return {wood:cardW, dr:cardD};
+  if(field==='disc') return {wood:discW, dr:discD};
+  if(field==='total') return {wood:cashW+cardW+discW, dr:cashD+cardD+discD};
+  return {wood:0, dr:0};
+}
+function _prToggleSplitMode(){
+  window._prSplitMode = !window._prSplitMode;
+  showPrDailyBreakdown(window._prLastBdField, window._prLastBdLabel, window._prLastBdColor);
+}
 function showPrDailyBreakdown(field, label, color){
+  window._prLastBdField=field; window._prLastBdLabel=label; window._prLastBdColor=color;
+  // Дерево/ДР можно разложить для сумм из продаж (Нал/Безнал/Скидка/Итого оборот) — переключатель
+  // «Раздельно» показывает split вместо/вместе с общей суммой, не убирая привычный общий вид.
+  var splittable = (field==='cash'||field==='card'||field==='disc'||field==='total');
+  var splitOn = splittable && !!window._prSplitMode;
   var byDate = {};
   var byDateWood = {}, byDateDr = {};
   _prLastFiltered.forEach(function(s){
@@ -1354,10 +1407,16 @@ function showPrDailyBreakdown(field, label, color){
     if(field==='inkass'){
       byDateWood[s.date] = (byDateWood[s.date]||0) + _prDailyValue(s, 'inkassWood');
       byDateDr[s.date] = (byDateDr[s.date]||0) + _prDailyValue(s, 'inkassDr');
+    } else if(splittable){
+      var sp = _prDailyValueSplit(s, field);
+      byDateWood[s.date] = (byDateWood[s.date]||0) + sp.wood;
+      byDateDr[s.date] = (byDateDr[s.date]||0) + sp.dr;
     }
   });
   var f2=function(n){return Math.round(n||0).toLocaleString('ru-RU')+'₽';};
   var total = Object.keys(byDate).reduce(function(s,d){return s+byDate[d];},0);
+  var totalWood = Object.keys(byDateWood).reduce(function(s,d){return s+byDateWood[d];},0);
+  var totalDr = Object.keys(byDateDr).reduce(function(s,d){return s+byDateDr[d];},0);
   // Средняя за день — как в «Кратко»: если период ещё не закончился, делим только на уже
   // прошедшие дни, а не на весь период целиком (иначе средняя занижена).
   var todayStr = new Date().toISOString().split('T')[0];
@@ -1373,10 +1432,11 @@ function showPrDailyBreakdown(field, label, color){
   var calHtml = '';
   var y=fy, m=fm, guard=0;
   while((y<ty || (y===ty && m<=tm)) && guard<36){
-    calHtml += _buildPrCalendarMonth(y, m, byDate, color);
+    calHtml += splitOn ? _buildPrCalendarMonthSplit(y, m, byDateWood, byDateDr) : _buildPrCalendarMonth(y, m, byDate, color);
     m++; if(m>11){m=0;y++;}
     guard++;
   }
+  var showSplitBox = (field==='inkass') || splitOn;
   var overlay = document.getElementById('prDailyOverlay');
   if(!overlay){
     overlay = document.createElement('div');
@@ -1388,21 +1448,24 @@ function showPrDailyBreakdown(field, label, color){
   overlay.innerHTML = '<div class="md">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'+
       '<div style="font-size:16px;font-weight:700">'+label+' по дням</div>'+
-      '<button onclick="closePrDailyBreakdown()" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer">✕</button>'+
+      '<div style="display:flex;gap:6px">'+
+        (splittable ? '<button onclick="_prToggleSplitMode()" style="background:'+(splitOn?'#1e2a14':'#22222e')+';border:1px solid '+(splitOn?'#c8f060':'#2e2e3e')+';border-radius:8px;padding:0 10px;height:30px;color:'+(splitOn?'#c8f060':'#8888aa')+';font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">🌳🎁 Раздельно</button>' : '')+
+        '<button onclick="closePrDailyBreakdown()" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer">✕</button>'+
+      '</div>'+
     '</div>'+
     '<div style="font-size:11px;color:#8888aa;margin-bottom:4px">📅 '+_prLastFrom+' — '+_prLastTo+(_prLastShop?' · '+_prLastShop:'')+'</div>'+
-    '<div style="display:flex;gap:14px;margin-bottom:'+(field==='inkass'?'8px':'14px')+'">'+
+    '<div style="display:flex;gap:14px;margin-bottom:'+(showSplitBox?'8px':'14px')+'">'+
       '<div><span style="font-size:11px;color:#8888aa">Итого: </span><span style="font-size:13px;font-weight:700;color:'+color+'">'+f2(total)+'</span></div>'+
       '<div><span style="font-size:11px;color:#8888aa">В среднем/день: </span><span style="font-size:13px;font-weight:700;color:'+color+'">'+f2(avgPerDay)+'</span></div>'+
     '</div>'+
-    (field==='inkass' ? '<div style="display:flex;gap:8px;margin-bottom:14px">'+
+    (showSplitBox ? '<div style="display:flex;gap:8px;margin-bottom:14px">'+
       '<div style="flex:1;background:#16210c;border:1px solid #c8f06055;border-radius:9px;padding:8px;text-align:center">'+
         '<div style="font-size:10px;color:#c8f060;font-weight:700">🌳 ДЕРЕВО</div>'+
-        '<div style="font-size:14px;font-weight:700;color:#c8f060;margin-top:2px">'+f2(Object.keys(byDateWood).reduce(function(s,d){return s+byDateWood[d];},0))+'</div>'+
+        '<div style="font-size:14px;font-weight:700;color:#c8f060;margin-top:2px">'+f2(totalWood)+'</div>'+
       '</div>'+
       '<div style="flex:1;background:#1a0f1a;border:1px solid #a060f055;border-radius:9px;padding:8px;text-align:center">'+
         '<div style="font-size:10px;color:#a060f0;font-weight:700">🎁 ДР ТОВАР</div>'+
-        '<div style="font-size:14px;font-weight:700;color:#a060f0;margin-top:2px">'+f2(Object.keys(byDateDr).reduce(function(s,d){return s+byDateDr[d];},0))+'</div>'+
+        '<div style="font-size:14px;font-weight:700;color:#a060f0;margin-top:2px">'+f2(totalDr)+'</div>'+
       '</div>'+
     '</div>' : '')+
     (calHtml||'<div class="empty"><div class="ei">📅</div>Нет данных</div>')+
