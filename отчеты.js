@@ -1236,10 +1236,11 @@ function generatePeriodReport(){
           '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;color:#c8f060">'+f2(rev)+'</div></div>';
       }).join('')+'</div>';
   }
-  var prSellerDays = Math.max(1, Math.round((new Date(to)-new Date(from))/86400000)+1);
   html+='<div class="card" style="margin-bottom:10px"><div class="ctitle">По продавцам</div>'+
     Object.entries(bySeller).sort(function(a,b){return b[1].rev-a[1].rev;}).map(function(e){
-      var avgRev=e[1].rev/prSellerDays, avgZp=e[1].zp/prSellerDays;
+      // Делим на число СМЕН этого продавца, а не на календарные дни периода — иначе тот, кто
+      // отработал 16 смен из 30 дней, получал заниженную среднюю (делили на 30, а не на 16).
+      var avgRev=e[1].rev/e[1].n, avgZp=e[1].zp/e[1].n;
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#22222e;border-radius:8px;margin-bottom:6px">'+
         '<div><div class="u-fs13-bold">👤 '+e[0]+'</div><div class="u-fs11-gray">'+e[1].n+' смен</div></div>'+
         '<div style="text-align:right">'+
