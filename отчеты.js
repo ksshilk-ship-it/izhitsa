@@ -1294,7 +1294,11 @@ function generatePeriodReport(){
           '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;color:#c8f060">'+f2(e[1].rev)+'</div>'+
           '<div style="font-size:10px;color:#8888aa">выручка/день '+f2(avgRev)+'</div>'+
           (e[1].zp?'<div style="font-size:10px;color:#f0a060">ЗП '+f2(e[1].zp)+' / день '+f2(avgZp)+'</div>':'')+
-          (planTotal?'<div style="font-size:10px;color:'+diffColor+'">план '+f2(planTotal)+' · '+(diff>=0?'+':'−')+f2(Math.abs(diff))+'</div>':'')+
+          // «План» — это расчёт ЗП+Проезд ВМЕСТЕ (та же формула оклад+%, что видит продавец
+          // при закрытии смены), а строка «ЗП» выше — только факт ЗП без проезда. Сравнивать
+          // напрямую эти две цифры нельзя, поэтому здесь всегда явно пишем факт ЗП+Проезд рядом
+          // с планом — иначе выглядит как будто план посчитан неверно.
+          (planTotal?'<div style="font-size:10px;color:'+diffColor+'">план ЗП+Проезд '+f2(planTotal)+' · факт '+f2(factTotal)+' ('+(diff>=0?'+':'−')+f2(Math.abs(diff))+')</div>':'')+
         '</div></div>';
     }).join('')+'</div>';
   if(!window._prOpen) window._prOpen={};
