@@ -1443,7 +1443,10 @@ function showPrDailyBreakdown(field, label, color){
   if(window._prLastBdField !== field) window._prCalMode = 'all';
   window._prLastBdField=field; window._prLastBdLabel=label; window._prLastBdColor=color;
   var splittable = (field==='cash'||field==='card'||field==='disc'||field==='total');
-  var calMode = splittable ? (window._prCalMode||'all') : 'all';
+  // Инкассация/Приходы/Списания тоже делятся на Дерево/ДР — та же кнопка-переключатель
+  // календаря, что и у Нал/Безнал/Скидка/Итого оборот.
+  var calSplittable = splittable || field==='inkass' || field==='receive' || field==='writeoff';
+  var calMode = calSplittable ? (window._prCalMode||'all') : 'all';
   var byDate = {};
   var byDateWood = {}, byDateDr = {};
   _prLastFiltered.forEach(function(s){
@@ -1515,7 +1518,7 @@ function showPrDailyBreakdown(field, label, color){
       '<div><span style="font-size:11px;color:#8888aa">Итого: </span><span style="font-size:13px;font-weight:700;color:'+color+'">'+f2(total)+'</span></div>'+
       '<div><span style="font-size:11px;color:#8888aa">В среднем/день: </span><span style="font-size:13px;font-weight:700;color:'+color+'">'+f2(avgPerDay)+'</span></div>'+
     '</div>'+
-    (showSplitBox ? '<div style="display:flex;gap:8px;margin-bottom:'+(splittable?'10px':'14px')+'">'+
+    (showSplitBox ? '<div style="display:flex;gap:8px;margin-bottom:'+(calSplittable?'10px':'14px')+'">'+
       '<div style="flex:1;background:#16210c;border:1px solid #c8f06055;border-radius:9px;padding:8px;text-align:center">'+
         '<div style="font-size:10px;color:#c8f060;font-weight:700">🌳 ДЕРЕВО</div>'+
         '<div style="font-size:14px;font-weight:700;color:#c8f060;margin-top:2px">'+f2(totalWood)+'</div>'+
@@ -1525,7 +1528,7 @@ function showPrDailyBreakdown(field, label, color){
         '<div style="font-size:14px;font-weight:700;color:#a060f0;margin-top:2px">'+f2(totalDr)+'</div>'+
       '</div>'+
     '</div>' : '')+
-    (splittable ? '<div style="display:flex;gap:6px;margin-bottom:14px">'+
+    (calSplittable ? '<div style="display:flex;gap:6px;margin-bottom:14px">'+
       _prCalModeBtn('wood','🌳 Дерево','#c8f060','#1e2a14',calMode)+
       _prCalModeBtn('dr','🎁 ДР Товар','#a060f0','#1a0f1a',calMode)+
       _prCalModeBtn('all','🌳+🎁 Вместе',color,'#20202c',calMode)+
