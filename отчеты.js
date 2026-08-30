@@ -1137,6 +1137,18 @@ function generatePeriodReport(){
     });
   });
   var totRev=totCash+totCard+totDisc,totExp=totZp+totTravel+totInkass+totOther+totSupplier+totDrInkass+totDrSupplier+totDrOther;
+  // Аренда — тот же расчёт, что и в «Кратко» (_computeRentForShop), иначе Итого расходы
+  // в «Подробно» были занижены на всю сумму аренды и не совпадали с «Кратко».
+  var rentSettingsPr = getShopRentSettings();
+  var shiftsForRentCalcPr = getShifts();
+  var totRent = 0;
+  if(shopF){
+    totRent = _computeRentForShop(shopF, from, to, shiftsForRentCalcPr, rentSettingsPr[shopF]);
+  } else {
+    Object.keys(rentSettingsPr).forEach(function(shop){
+      totRent += _computeRentForShop(shop, from, to, shiftsForRentCalcPr, rentSettingsPr[shop]);
+    });
+  }
   var f2=function(n){return Math.round(n||0).toLocaleString('ru-RU')+'₽';};
   var R=function(lbl,val,col){return '<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #2e2e3e;font-size:13px"><span style="color:#8888aa">'+lbl+'</span><span style="color:'+(col||'#f0f0f8')+';font-weight:700">'+f2(val)+'</span></div>';};
   var byShop={};
@@ -1164,7 +1176,7 @@ function generatePeriodReport(){
   _prLastFiltered = filtered; _prLastFrom = from; _prLastTo = to; _prLastShop = shopF;
   // Инкассация — не расход (просто наличные уехали из кассы, а не потрачены), поэтому не
   // входит в totExpNoInkass и показывается отдельным блоком ниже, а не в разделе «Расходы».
-  var totExpNoInkass = totZp+totTravel+totOther+totSupplier+totDrSupplier+totDrOther;
+  var totExpNoInkass = totZp+totTravel+totOther+totSupplier+totDrSupplier+totDrOther+totRent;
   var totInkassCombined = totInkass+totDrInkass;
   var RpClickBold=function(lbl,val,col,field){
     return '<div onclick="showPrDailyBreakdown(\''+field+'\',\''+lbl.replace(/'/g,"")+'\',\''+col+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:15px;font-weight:700;border-top:1px solid #2e2e3e;margin-top:2px;cursor:pointer">'+
@@ -1236,6 +1248,9 @@ function generatePeriodReport(){
                (drSupRows.length?collapsible('drsupplier','📦 Поставщик ДР',drSupRows.reduce(function(s,r){return s+r.amt;},0),drSupRows,'#a060f0',false):'')+
                (drOthRows.length||totDrOther?collapsible('drother','📋 Прочие ДР',Math.max(drOthRows.reduce(function(s,r){return s+r.amt;},0),totDrOther),drOthRows,'#a060f0',false):'');
       })()+
+      // Аренда — не из журнала смены (расчёт по настройкам магазина, как в «Кратко»), поэтому
+      // не кликабельна на календарь, в отличие от остальных строк расходов.
+      (totRent?R('🏠 Аренда',totRent,'#f0a060'):(!Object.keys(rentSettingsPr).length?'<div style="font-size:10px;color:#8888aa;padding:2px 0 6px">Аренда не настроена — задайте её в Настройках</div>':''))+
       RpClickBold('Итого расходы',totExpNoInkass,'#f06060','expenses')+
     '</div>':'')+'</div>'+
     (totInkassCombined ? '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:12px;margin-bottom:10px">'+
@@ -1372,12 +1387,16 @@ function _prDailyValue(s, field){
   }
   var jExps=(s.journal||[]).filter(function(e){return e.type==='expense';});
   var exps=jExps.length?jExps:(s.expenses||[]);
-  if(field==='zp') return exps.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+(e.amount||0);},0);
-  if(field==='travel') return exps.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+(e.amount||0);},0);
-  if(field==='inkass') return exps.filter(function(e){return e.expType==='inkass';}).reduce(function(a,e){return a+(e.amount||0);},0);
-  if(field==='inkassWood') return exps.filter(function(e){return e.expType==='inkass'&&e.goodsType!=='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
-  if(field==='inkassDr') return exps.filter(function(e){return e.expType==='inkass'&&e.goodsType==='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
-  if(field==='expenses') return exps.filter(function(e){return e.expType!=='inkass';}).reduce(function(a,e){return a+(e.amount||0);},0);
+  // Совсем старые смены без записей в журнале и без s.expenses — тот же 3-й резервный
+  // уровень (плоские поля s.zp/s.travel/...), что и в шапке отчёта (generatePeriodReport).
+  // Без этого календарь по дням не совпадал с общей цифрой наверху на такие смены.
+  var hasExps = exps.length>0;
+  if(field==='zp') return hasExps ? exps.filter(function(e){return e.expType==='zp';}).reduce(function(a,e){return a+(e.amount||0);},0) : (s.zp||0);
+  if(field==='travel') return hasExps ? exps.filter(function(e){return e.expType==='travel';}).reduce(function(a,e){return a+(e.amount||0);},0) : (s.travel||0);
+  if(field==='inkass') return hasExps ? exps.filter(function(e){return e.expType==='inkass';}).reduce(function(a,e){return a+(e.amount||0);},0) : ((s.inkass||0)+(s.drInkass||0));
+  if(field==='inkassWood') return hasExps ? exps.filter(function(e){return e.expType==='inkass'&&e.goodsType!=='dr';}).reduce(function(a,e){return a+(e.amount||0);},0) : (s.inkass||0);
+  if(field==='inkassDr') return hasExps ? exps.filter(function(e){return e.expType==='inkass'&&e.goodsType==='dr';}).reduce(function(a,e){return a+(e.amount||0);},0) : (s.drInkass||0);
+  if(field==='expenses') return hasExps ? exps.filter(function(e){return e.expType!=='inkass';}).reduce(function(a,e){return a+(e.amount||0);},0) : ((s.zp||0)+(s.travel||0)+(s.otherExp||0)+(s.supplierExp||0)+(s.drSupplierAmt||0));
   // Приходы/Списания — не из «expense», а отдельные типы записей журнала (движение товара,
   // не расход и не выручка).
   if(field==='receive') return (s.journal||[]).filter(function(e){return e.type==='receive';}).reduce(function(a,e){return a+(e.amount||0);},0);
@@ -1434,6 +1453,19 @@ function showPrDailyBreakdown(field, label, color){
       byDateDr[s.date] = (byDateDr[s.date]||0) + sp.dr;
     }
   });
+  // «Итого расходы» включает аренду (как в «Кратко»), а аренда — не из журнала смены, а
+  // расчёт по календарным дням, поэтому её нужно добавить в календарь отдельно, иначе сумма
+  // по дням не сойдётся с общей цифрой в шапке.
+  if(field==='expenses'){
+    var rentSettingsBd = getShopRentSettings();
+    var allShiftsBd = getShifts();
+    var addRentMap = function(shop, cfg){
+      var m = _computeRentDailyMap(shop, _prLastFrom, _prLastTo, allShiftsBd, cfg);
+      Object.keys(m).forEach(function(d){ byDate[d] = (byDate[d]||0) + m[d]; });
+    };
+    if(_prLastShop) addRentMap(_prLastShop, rentSettingsBd[_prLastShop]);
+    else Object.keys(rentSettingsBd).forEach(function(shop){ addRentMap(shop, rentSettingsBd[shop]); });
+  }
   var f2=function(n){return Math.round(n||0).toLocaleString('ru-RU')+'₽';};
   var total = Object.keys(byDate).reduce(function(s,d){return s+byDate[d];},0);
   var totalWood = Object.keys(byDateWood).reduce(function(s,d){return s+byDateWood[d];},0);
@@ -1587,6 +1619,51 @@ function _computeRentForShop(shop, from, to, allShifts, rentCfg){
     cursor = new Date(y, mIdx+1, 1);
   }
   return total;
+}
+// То же самое, что и _computeRentForShop, но возвращает разбивку по датам (dateStr -> сумма),
+// а не одну общую цифру — нужно, чтобы календарь «Итого расходы ▸ по дням» в «Подробно»
+// суммировался ровно в ту же цифру, что показана в шапке (иначе они бы разошлись на аренду).
+function _computeRentDailyMap(shop, from, to, allShifts, rentCfg){
+  var map = {};
+  if(!rentCfg || !rentCfg.amount) return map;
+  var overrides = rentCfg.overrides || {};
+  var fromD = new Date(from+'T00:00:00'), toD = new Date(to+'T00:00:00');
+  var cursor = new Date(fromD.getFullYear(), fromD.getMonth(), 1);
+  function addRange(rangeStart, rangeEnd, perDay){
+    for(var d=new Date(rangeStart); d<=rangeEnd; d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1)){
+      var ds = d.toISOString().split('T')[0];
+      map[ds] = (map[ds]||0) + perDay;
+    }
+  }
+  while(cursor <= toD){
+    var y = cursor.getFullYear(), mIdx = cursor.getMonth();
+    var monthKey = y+'-'+String(mIdx+1).padStart(2,'0');
+    var daysInMonth = new Date(y, mIdx+1, 0).getDate();
+    var monthStart = new Date(y, mIdx, 1), monthEnd = new Date(y, mIdx, daysInMonth);
+    var rangeStart = fromD > monthStart ? fromD : monthStart;
+    var rangeEnd = toD < monthEnd ? toD : monthEnd;
+    var daysInRangeThisMonth = Math.round((rangeEnd-rangeStart)/86400000)+1;
+    var wholeMonth = daysInRangeThisMonth===daysInMonth;
+    var dailyRateThisMonth = rentCfg.mode==='month' ? (rentCfg.amount/daysInMonth) : rentCfg.amount;
+    if(daysInRangeThisMonth>0){
+      if(overrides[monthKey]!=null){
+        addRange(rangeStart, rangeEnd, overrides[monthKey]/daysInMonth);
+      } else if(rentCfg.workedDaysOnly){
+        var rangeStartStr = rangeStart.toISOString().split('T')[0], rangeEndStr = rangeEnd.toISOString().split('T')[0];
+        var workedDates = {};
+        allShifts.forEach(function(s){
+          if(s.shopName===shop && s.date>=rangeStartStr && s.date<=rangeEndStr) workedDates[s.date]=true;
+        });
+        Object.keys(workedDates).forEach(function(ds){ map[ds] = (map[ds]||0) + dailyRateThisMonth; });
+      } else if(rentCfg.mode==='month' && wholeMonth){
+        addRange(rangeStart, rangeEnd, rentCfg.amount/daysInMonth);
+      } else {
+        addRange(rangeStart, rangeEnd, dailyRateThisMonth);
+      }
+    }
+    cursor = new Date(y, mIdx+1, 1);
+  }
+  return map;
 }
 function _profToggleRow(id){
   var el = document.getElementById(id); if(!el) return;
