@@ -1280,26 +1280,32 @@ function generatePeriodReport(){
           '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;color:#c8f060">'+f2(rev)+'</div></div>';
       }).join('')+'</div>';
   }
+  if(!window._prSellerOpen) window._prSellerOpen={};
   html+='<div class="card" style="margin-bottom:10px"><div class="ctitle">По продавцам</div>'+
     Object.entries(bySeller).sort(function(a,b){return b[1].rev-a[1].rev;}).map(function(e){
       // Делим на число СМЕН этого продавца, а не на календарные дни периода — иначе тот, кто
       // отработал 16 смен из 30 дней, получал заниженную среднюю (делили на 30, а не на 16).
-      var avgRev=e[1].rev/e[1].n, avgZp=e[1].zp/e[1].n;
-      var factTotal=e[1].zp+e[1].travel, planTotal=e[1].zpPlan+e[1].travelPlan;
-      var diff=factTotal-planTotal;
-      var diffColor=Math.abs(diff)>500?'#f06060':'#60f090';
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#22222e;border-radius:8px;margin-bottom:6px">'+
-        '<div><div class="u-fs13-bold">👤 '+e[0]+'</div><div class="u-fs11-gray">'+e[1].n+' смен</div></div>'+
-        '<div style="text-align:right">'+
-          '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;color:#c8f060">'+f2(e[1].rev)+'</div>'+
-          '<div style="font-size:10px;color:#8888aa">выручка/день '+f2(avgRev)+'</div>'+
-          (e[1].zp?'<div style="font-size:10px;color:#f0a060">ЗП '+f2(e[1].zp)+' / день '+f2(avgZp)+'</div>':'')+
-          // «План» — это расчёт ЗП+Проезд ВМЕСТЕ (та же формула оклад+%, что видит продавец
-          // при закрытии смены), а строка «ЗП» выше — только факт ЗП без проезда. Сравнивать
-          // напрямую эти две цифры нельзя, поэтому здесь всегда явно пишем факт ЗП+Проезд рядом
-          // с планом — иначе выглядит как будто план посчитан неверно.
-          (planTotal?'<div style="font-size:10px;color:'+diffColor+'">план ЗП+Проезд '+f2(planTotal)+' · факт '+f2(factTotal)+' ('+(diff>=0?'+':'−')+f2(Math.abs(diff))+')</div>':'')+
-        '</div></div>';
+      var avgRev=e[1].rev/e[1].n, avgZp=e[1].zp/e[1].n, avgZpT=(e[1].zp+e[1].travel)/e[1].n;
+      var sellerKey='pr_seller_'+e[0];
+      var sellerOpen = !!window._prSellerOpen[sellerKey];
+      var zpDiff = e[1].zp-e[1].zpPlan, zpDiffColor = Math.abs(zpDiff)>300?'#f06060':'#60f090';
+      var travelDiff = e[1].travel-e[1].travelPlan, travelDiffColor = Math.abs(travelDiff)>100?'#f06060':'#60f090';
+      // В свёрнутом виде — только общая выручка и средняя/день. ЗП/Проезд план-факт и средняя
+      // ЗП/день — в раскрывающейся части, чтобы карточка продавца не была перегружена цифрами.
+      return '<div style="background:#22222e;border-radius:8px;margin-bottom:6px;overflow:hidden">'+
+        '<div onpointerdown="event.preventDefault();window._prSellerOpen[\''+sellerKey+'\']='+(sellerOpen?'false':'true')+';generatePeriodReport()" style="display:flex;justify-content:space-between;align-items:center;padding:8px;cursor:pointer">'+
+          '<div><div class="u-fs13-bold">👤 '+e[0]+' <span style="color:#555568;font-size:10px">'+(sellerOpen?'▾':'▸')+'</span></div><div class="u-fs11-gray">'+e[1].n+' смен</div></div>'+
+          '<div style="text-align:right">'+
+            '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;color:#c8f060">'+f2(e[1].rev)+'</div>'+
+            '<div style="font-size:10px;color:#8888aa">выручка/день '+f2(avgRev)+'</div>'+
+          '</div>'+
+        '</div>'+
+        (sellerOpen?'<div style="padding:0 8px 8px;font-size:11px">'+
+          ((e[1].zp||e[1].zpPlan)?'<div style="display:flex;justify-content:space-between;padding:4px 0;border-top:1px solid #1a1a22"><span style="color:#8888aa">💼 ЗП</span><span style="color:'+zpDiffColor+'">план '+f2(e[1].zpPlan)+' / факт '+f2(e[1].zp)+'</span></div>':'')+
+          ((e[1].travel||e[1].travelPlan)?'<div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#8888aa">🚗 Проезд</span><span style="color:'+travelDiffColor+'">план '+f2(e[1].travelPlan)+' / факт '+f2(e[1].travel)+'</span></div>':'')+
+          '<div style="display:flex;justify-content:space-between;padding:4px 0"><span style="color:#8888aa">Средняя ЗП/день</span><span style="color:#f0a060">без проезда '+f2(avgZp)+' · с проездом '+f2(avgZpT)+'</span></div>'+
+        '</div>':'')+
+      '</div>';
     }).join('')+'</div>';
   if(!window._prOpen) window._prOpen={};
   var byShopMonth={};
