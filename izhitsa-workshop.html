@@ -675,10 +675,16 @@ function showUpdateBanner(){
     </div>
 
     <!-- ГЛАВНЫЕ КНОПКИ -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
       <button class="btn green" onclick="openManualAcceptMo()" style="font-size:15px;font-weight:700">➕ Новая приёмка</button>
       <button class="btn" style="background:var(--s2);border:1px solid var(--border);color:var(--t1);font-size:15px;font-weight:700;cursor:pointer" onclick="showReceivingArchiveView()">📋 Архив приёмок</button>
     </div>
+
+    <!-- Заявки кладовщика на исправление приёмок задним числом — видно только администратору/управляющему -->
+    <button id="maEditReqBadgeBtn" onclick="openMaEditRequestsMo()" style="display:none;width:100%;margin-bottom:16px;padding:10px;background:var(--s2);border:1px solid var(--border);border-radius:12px;color:var(--t1);font-weight:700;font-size:13px;cursor:pointer;align-items:center;justify-content:center;gap:8px">
+      🔔 Заявки на исправление
+      <span id="maEditReqBadgeCount" style="display:none;background:var(--exp);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px"></span>
+    </button>
 
     <!-- ОСНОВНОЙ КОНТЕНТ (переключается между новой приёмкой и архивом) -->
     <div id="rcvMainContent">
@@ -2874,6 +2880,14 @@ function startListeners(){
     _maHistory.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
     renderManualAcceptHistory();
   }, e => { console.error('Ошибка загрузки приёмок:', e); showToast('❌ Ошибка приёмок: '+e.message); });
+  // Заявки кладовщика на исправление приёмок за прошлые дни
+  db.collection('ws_edit_requests').onSnapshot(snap=>{
+    _maEditRequests = snap.docs.map(d=>d.data());
+    _maEditRequests.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+    renderManualAcceptHistory();
+    renderMaEditRequestsBadge();
+    if(document.getElementById('maEditReqListMo')?.classList.contains('open')) renderMaEditRequestsList();
+  }, e => { console.error('Ошибка загрузки заявок на исправление:', e); });
   // Первая инвентаризация (внесение остатков с нуля)
   db.collection('ws_first_inventory').onSnapshot(snap=>{
     _fiGroups = snap.docs.map(d=>({id:d.id,...d.data()}));
@@ -8553,6 +8567,7 @@ function finishOTTask(id){
 // ════════════════════════════════
 let _maItems = []; // временный список позиций в открытой форме
 let _maHistory = []; // загруженные из Firebase приёмки
+let _maEditRequests = []; // заявки кладовщика на исправление приёмок за прошлые дни
 
 function setPendSubTab(tab){
   const t1=document.getElementById('pendSubTab1'), t2=document.getElementById('pendSubTab2');
@@ -9538,7 +9553,18 @@ function renderDateItems(c){
       }
       html += '</div>';
     }
-    
+    // Кладовщику недоступно редактирование этой приёмки (прошлый день, нет разрешения) —
+    // предложить создать заявку на исправление администратору, либо показать статус уже поданной
+    if(!canEdit && session && session.role==='кладовщик'){
+      const myReq = getMaEditRequestForAcc(acc);
+      if(myReq && myReq.status==='pending'){
+        html += '<div style="font-size:10px;color:var(--a4);font-weight:700;text-align:right;max-width:110px">⏳ Заявка на рассмотрении</div>';
+      } else {
+        const label = (myReq && (myReq.status==='denied'||myReq.status==='closed')) ? '🔁 Заявка снова' : '📝 Запросить исправление';
+        html += '<button onclick="event.stopPropagation();openMaEditRequestMo(\''+acc.id+'\')" style="padding:4px 8px;background:var(--s2);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;font-weight:700;font-size:10px;white-space:nowrap;max-width:110px">'+label+'</button>';
+      }
+    }
+
     html += '</div>';
     html += '</div>';
     
@@ -9728,6 +9754,7 @@ function openMaDetail(accId){
   const todayStr = new Date().toISOString().split('T')[0];
   const entryDay = (acc.createdAt || '').split('T')[0];
   const isEditable = isMaEditAllowed(acc);
+  const editGrant = (session && session.role==='кладовщик') ? getMaApprovedEditGrant(acc) : null;
 
   const h = document.getElementById('maDetailHeader');
   if(h){
@@ -9767,9 +9794,20 @@ function openMaDetail(accId){
   const lockNote = document.getElementById('maDetailLockNote');
   if(!isEditable){
     if(lockNote){ lockNote.style.display='block'; lockNote.textContent = '🔒 Приёмка внесена ' + entryDay + ' — редактирование позиций закрыто. Можно только принять/забраковать и провести.'; }
+  } else if(editGrant){
+    // Кладовщик правит по разовому разрешению администратора — доступ закроется по кнопке "Закрыть"
+    if(lockNote){
+      lockNote.style.display='block'; lockNote.style.color='var(--inc)';
+      lockNote.style.background='rgba(80,255,150,0.1)'; lockNote.style.borderColor='var(--inc)';
+      lockNote.textContent = '🔓 Разрешено администратором по вашей заявке: «' + (editGrant.comment||'') + '». Нажмите «Закрыть», когда закончите — доступ на редактирование снова закроется.';
+    }
   } else if(entryDay !== todayStr){
     // Админ редактирует чужой день задним числом — мягкое предупреждение, чтобы не забыть об осторожности
-    if(lockNote){ lockNote.style.display='block'; lockNote.style.color='var(--a4)'; lockNote.textContent = '✏️ Правка задним числом (приёмка от ' + entryDay + ') — доступно только Администратору.'; }
+    if(lockNote){
+      lockNote.style.display='block'; lockNote.style.color='var(--a4)';
+      lockNote.style.background='rgba(255,180,60,0.1)'; lockNote.style.borderColor='var(--a4)';
+      lockNote.textContent = '✏️ Правка задним числом (приёмка от ' + entryDay + ') — доступно только Администратору.';
+    }
   } else {
     if(lockNote) lockNote.style.display='none';
   }
@@ -9860,7 +9898,165 @@ function isMaEditAllowed(acc){
   if(entryDay === todayStr) return true;
   // Проверить флаг: может ли кладовщик редактировать приёмки за прошлые дни
   if(session && session.role==='кладовщик' && session.canEditPastMaAcceptances === true) return true;
+  // Разовое разрешение от администратора по заявке (см. блок «Заявки на исправление» ниже)
+  if(session && session.role==='кладовщик' && getMaApprovedEditGrant(acc)) return true;
   return false;
+}
+
+// ════════════════════════════════════════════════
+// ЗАЯВКИ КЛАДОВЩИКА НА ИСПРАВЛЕНИЕ ПРИЁМОК ЗА ПРОШЛЫЕ ДНИ
+// ════════════════════════════════════════════════
+// Кладовщик не может сам редактировать приёмку прошлым днём (см. isMaEditAllowed) —
+// вместо этого он создаёт заявку с причиной, администратор её разрешает или отклоняет,
+// и только после разрешения кладовщику на ОДНУ сессию редактирования открывается доступ
+// к этой конкретной приёмке. Как только кладовщик закрывает окно приёмки (кнопка
+// «Закрыть» в maDetailMo) — доступ автоматически закрывается снова, и для дальнейших
+// правок нужна новая заявка.
+
+// Самая свежая заявка ТЕКУЩЕГО пользователя по этой приёмке (любого статуса)
+function getMaEditRequestForAcc(acc){
+  if(!session) return null;
+  return _maEditRequests
+    .filter(r => r.accId===acc.id && r.requestedById===session.id)
+    .sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''))[0] || null;
+}
+// Действующее (одобренное и ещё не закрытое) разрешение текущего пользователя на эту приёмку
+function getMaApprovedEditGrant(acc){
+  const r = getMaEditRequestForAcc(acc);
+  return (r && r.status==='approved') ? r : null;
+}
+
+let _maEditReqTargetAccId = null;
+function openMaEditRequestMo(accId){
+  _maEditReqTargetAccId = accId;
+  const acc = _maHistory.find(a=>a.id===accId);
+  const ta = document.getElementById('maEditReqComment');
+  if(ta) ta.value = '';
+  const info = document.getElementById('maEditReqTargetInfo');
+  if(info && acc) info.textContent = acc.masterName + ' · сдал ' + acc.deliveredDate;
+  openMo('maEditReqCreateMo');
+}
+async function submitMaEditRequest(){
+  const accId = _maEditReqTargetAccId;
+  const acc = accId ? _maHistory.find(a=>a.id===accId) : null;
+  if(!acc){ showToast('Приёмка не найдена'); return; }
+  const comment = (document.getElementById('maEditReqComment')?.value||'').trim();
+  if(!comment){ showToast('Опишите, что нужно исправить и почему'); return; }
+  if(isSaving('maEditReq')) return;
+  beginSave('maEditReq');
+  try{
+    const id = uid();
+    await db.collection('ws_edit_requests').doc(id).set({
+      id, accId,
+      accMasterName: acc.masterName, accDate: acc.deliveredDate,
+      requestedById: session.id, requestedByName: session.name,
+      comment, status: 'pending', createdAt: now()
+    });
+    logAction('ma_edit_request_created', {accId, comment});
+    closeMo('maEditReqCreateMo');
+    showToast('✅ Заявка отправлена администратору');
+  }catch(e){ showToast('Ошибка: '+e.message); }
+  finally{ endSave('maEditReq'); }
+}
+
+// ════ АДМИН: список заявок и решение по ним ════
+function renderMaEditRequestsBadge(){
+  const btn = document.getElementById('maEditReqBadgeBtn');
+  if(!btn) return;
+  const isAdmin = session && (session.role==='администратор'||session.role==='управляющий');
+  if(!isAdmin){ btn.style.display='none'; return; }
+  const pending = _maEditRequests.filter(r=>r.status==='pending').length;
+  btn.style.display = 'block';
+  document.getElementById('maEditReqBadgeCount').textContent = pending ? String(pending) : '';
+  document.getElementById('maEditReqBadgeCount').style.display = pending ? 'inline-block' : 'none';
+}
+
+function openMaEditRequestsMo(){
+  renderMaEditRequestsList();
+  openMo('maEditReqListMo');
+}
+
+function _maEditReqStatusLabel(status){
+  return {
+    pending: '⏳ Ждёт решения',
+    approved: '🔓 Разрешено — кладовщик правит',
+    denied: '❌ Отклонена',
+    closed: '✅ Правки внесены, доступ закрыт'
+  }[status] || status;
+}
+
+function renderMaEditRequestsList(){
+  const c = document.getElementById('maEditReqListContent');
+  if(!c) return;
+  if(!_maEditRequests.length){
+    c.innerHTML = '<div class="empty" style="padding:10px 0"><div class="ei">📭</div>Заявок пока нет</div>';
+    return;
+  }
+  const order = {pending:0, approved:1, denied:2, closed:3};
+  const sorted = _maEditRequests.slice().sort((a,b)=>{
+    const oa = order[a.status]??9, ob = order[b.status]??9;
+    if(oa!==ob) return oa-ob;
+    return (b.createdAt||'').localeCompare(a.createdAt||'');
+  });
+  c.innerHTML = sorted.map(r=>{
+    const statusColor = {pending:'var(--a4)', approved:'var(--inc)', denied:'var(--exp)', closed:'var(--t2)'}[r.status]||'var(--t2)';
+    let actions = '';
+    if(r.status==='pending'){
+      actions = `<div style="display:flex;gap:8px;margin-top:8px">
+        <button onclick="respondMaEditRequest('${r.id}','approved')" style="flex:1;padding:9px;border-radius:8px;border:none;background:var(--accent);color:#000;font-weight:700;font-size:12px;cursor:pointer">✅ Разрешить</button>
+        <button onclick="respondMaEditRequest('${r.id}','denied')" style="flex:1;padding:9px;border-radius:8px;border:1px solid var(--exp);background:none;color:var(--exp);font-weight:700;font-size:12px;cursor:pointer">❌ Отклонить</button>
+      </div>`;
+    } else if(r.status==='approved'){
+      actions = `<button onclick="revokeMaEditGrant('${r.id}')" style="width:100%;margin-top:8px;padding:9px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--t2);font-weight:700;font-size:12px;cursor:pointer">🔒 Отозвать доступ</button>`;
+    }
+    return `<div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">
+        <div style="font-size:13px;font-weight:700">${r.accMasterName||'—'} · сдал ${r.accDate||'—'}</div>
+        <div style="font-size:11px;font-weight:700;color:${statusColor};white-space:nowrap">${_maEditReqStatusLabel(r.status)}</div>
+      </div>
+      <div style="font-size:11px;color:var(--t2);margin-bottom:6px">От: ${r.requestedByName||'—'} · ${fmtDT(r.createdAt)}</div>
+      <div style="font-size:12px;background:var(--s1);border-radius:8px;padding:8px;margin-bottom:4px">${(r.comment||'').replace(/</g,'&lt;')}</div>
+      ${r.respondedByName ? `<div style="font-size:11px;color:var(--t2);margin-top:6px">Решение: ${r.respondedByName} · ${fmtDT(r.respondedAt)}</div>` : ''}
+      ${actions}
+    </div>`;
+  }).join('');
+}
+
+async function respondMaEditRequest(reqId, decision){
+  const lock = 'maEditReqResp_'+reqId;
+  if(isSaving(lock)) return;
+  beginSave(lock);
+  try{
+    await db.collection('ws_edit_requests').doc(reqId).update({
+      status: decision, respondedAt: now(), respondedById: session.id, respondedByName: session.name
+    });
+    logAction('ma_edit_request_'+decision, {reqId});
+    showToast(decision==='approved' ? '✅ Разрешение выдано' : '❌ Заявка отклонена');
+  }catch(e){ showToast('Ошибка: '+e.message); }
+  finally{ endSave(lock); }
+}
+
+async function revokeMaEditGrant(reqId){
+  if(!confirm('Отозвать доступ на редактирование у кладовщика?')) return;
+  try{
+    await db.collection('ws_edit_requests').doc(reqId).update({status:'closed', closedAt: now(), respondedById: session.id, respondedByName: session.name});
+    showToast('🔒 Доступ отозван');
+  }catch(e){ showToast('Ошибка: '+e.message); }
+}
+
+// Кладовщик закрывает окно приёмки — если оно было открыто по одобренной заявке,
+// доступ на редактирование закрывается автоматически (нужна новая заявка для дальнейших правок)
+async function closeMaDetailMo(){
+  const accId = document.getElementById('maProvedBtn')?.getAttribute('data-acc-id');
+  const acc = accId ? _maHistory.find(a=>a.id===accId) : null;
+  if(acc && session && session.role==='кладовщик'){
+    const grant = getMaApprovedEditGrant(acc);
+    if(grant){
+      try{ await db.collection('ws_edit_requests').doc(grant.id).update({status:'closed', closedAt: now()}); }
+      catch(e){ console.log('close grant err', e); }
+    }
+  }
+  closeMo('maDetailMo');
 }
 
 // Изменить мастера у уже сохранённой приёмки — доступно только в день внесения (админу — всегда)
@@ -10082,7 +10278,7 @@ async function provedMaAccept(){
 
     // Логирование в аудит
     logAction('manual_acceptance_processed', {masterName:acc.masterName, accepted:accepted.length, defects:defects.length, accId: acc.id});
-    closeMo('maDetailMo');
+    closeMaDetailMo();
     showSavedBanner(`✅ Проведено: +${accepted.length} на склад, ${defects.length} в брак мастеру`);
   }catch(e){ showToast('Ошибка: '+e.message); }
   finally{ endSave('maProved'); }
@@ -11029,8 +11225,32 @@ document.addEventListener('DOMContentLoaded', ()=>{
     <div id="maDetailHeader" style="margin-bottom:14px"></div>
     <div id="maDetailItems" style="margin-bottom:14px"></div>
     <button class="btn green" onclick="provedMaAccept()" id="maProvedBtn">✅ Провести</button>
-    <button class="btn sec" style="margin-top:8px" onclick="closeMo('maDetailMo')">Закрыть</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMaDetailMo()">Закрыть</button>
     <button class="btn" id="maDeleteBtn" style="margin-top:8px;background:none;border:1px solid var(--exp);color:var(--exp);display:none" onclick="deleteMaAcceptance(document.getElementById('maProvedBtn').getAttribute('data-acc-id'));closeMo('maDetailMo')">🗑 Удалить приёмку целиком</button>
+  </div>
+</div>
+
+<!-- КЛАДОВЩИК: СОЗДАНИЕ ЗАЯВКИ НА ИСПРАВЛЕНИЕ ПРИЁМКИ ЗАДНИМ ЧИСЛОМ -->
+<div class="mo" id="maEditReqCreateMo">
+  <div class="md"><div class="mh"></div>
+    <div class="mt">📝 Заявка на исправление</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:10px" id="maEditReqTargetInfo"></div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:10px">Опишите, что нужно исправить и почему. Администратор увидит эту заявку и разрешит правку — тогда вы сможете отредактировать приёмку один раз.</div>
+    <div class="fg" style="margin-bottom:8px">
+      <label class="fl">Комментарий</label>
+      <textarea class="fi" id="maEditReqComment" rows="4" placeholder="Например: перепутал породу у позиции 3, нужно Дуб → Ясень"></textarea>
+    </div>
+    <button class="btn green" onclick="submitMaEditRequest()">📤 Отправить заявку</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('maEditReqCreateMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- АДМИН: СПИСОК ЗАЯВОК НА ИСПРАВЛЕНИЕ -->
+<div class="mo" id="maEditReqListMo">
+  <div class="md"><div class="mh"></div>
+    <div class="mt">🔔 Заявки на исправление</div>
+    <div id="maEditReqListContent" style="margin-bottom:10px"></div>
+    <button class="btn sec" onclick="closeMo('maEditReqListMo')">Закрыть</button>
   </div>
 </div>
 
