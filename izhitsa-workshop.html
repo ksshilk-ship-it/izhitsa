@@ -2319,12 +2319,22 @@ function _fillLoginList(role) {
     }).map(function(s){ return {id:s.id, name:s.name}; });
     emps = [{id:'__superadmin__', name:'Администратор (системный)'}].concat(staffAdmins);
   } else {
-    // Show everyone who has this role in their roles[]
+    // Show everyone who has this role in their roles[] (единая база iz_staff)
     emps = getStaff().filter(function(s){
       if(s.blocked || s.archived) return false;
       if(!s.roles) return false;
       return s.roles.indexOf(sysRole) >= 0;
     }).map(function(s){ return {id:s.id, name:s.name}; });
+    // Резерв: сотрудники этой роли, которых нет (или роль ещё не проставлена)
+    // в единой базе iz_staff, но которые есть в легаси ws_employees.
+    // getEmployees() уже умеет сводить оба источника воедино, а doLogin() уже
+    // умеет авторизовать таких через fallback на ws_employees — не хватало
+    // только показать их в этом списке, иначе выбрать их было просто нельзя
+    // и казалось, что сотрудник "пропал".
+    var seenIds = {}; emps.forEach(function(e){ seenIds[e.id]=true; });
+    getEmployees().filter(function(e){
+      return !e.blocked && e.role === role && !seenIds[e.id];
+    }).forEach(function(e){ emps.push({id:e.id, name:e.name}); seenIds[e.id]=true; });
   }
   var sel = document.getElementById('loginUser');
   if(sel) {
