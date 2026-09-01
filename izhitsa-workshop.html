@@ -9687,12 +9687,16 @@ function renderArchiveItems(c){
             ? `<button onclick="openMaDetail('${acc.id}')" style="padding:8px;background:var(--s2);border:1px solid var(--border);color:var(--text);border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">✏️ Изменить</button>`
             : (session && session.role==='администратор'
               ? `<button onclick="openMaDetail('${acc.id}')" style="padding:8px;background:var(--a2);border:1px solid var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">✏️ Правка (Адм)</button>`
-              : `<button disabled style="padding:8px;background:var(--s2);border:1px solid var(--border);color:var(--t2);border-radius:8px;cursor:not-allowed;font-weight:700;font-size:12px;opacity:0.5">✏️ Изменить</button>`
+              : `<div style="grid-column:1/-1">${maEditRequestButtonHtml(acc)}</div>`
             )
           }
           <button onclick="finalizeMaAcceptance('${acc.id}')" style="padding:8px;background:var(--accent);color:#000;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">✅ Провести</button>
         `
-        : `<button onclick="openMaDetail('${acc.id}')" style="width:100%;padding:8px;background:var(--s1);border:1px solid var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">✏️ Открыть для правки (Администратор)</button>`
+        : `<div style="grid-column:1/-1">${
+            isMaEditAllowed(acc)
+              ? `<button onclick="openMaDetail('${acc.id}')" style="width:100%;padding:8px;background:var(--s1);border:1px solid var(--accent);color:var(--accent);border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">✏️ Открыть для правки</button>`
+              : maEditRequestButtonHtml(acc)
+          }</div>`
       }
     </div>
   </div>` +
@@ -9924,6 +9928,21 @@ function getMaEditRequestForAcc(acc){
 function getMaApprovedEditGrant(acc){
   const r = getMaEditRequestForAcc(acc);
   return (r && r.status==='approved') ? r : null;
+}
+
+// Общий HTML-фрагмент для мест, где обычное редактирование приёмки недоступно:
+// кладовщику — кнопка/статус заявки на исправление, остальным ролям — просто
+// пометка "правки закрыты" (без доступа и без права на заявку).
+function maEditRequestButtonHtml(acc){
+  if(!session || session.role!=='кладовщик'){
+    return '<div style="font-size:11px;color:var(--t2);text-align:center;padding:8px">🔒 Правки закрыты</div>';
+  }
+  const myReq = getMaEditRequestForAcc(acc);
+  if(myReq && myReq.status==='pending'){
+    return '<div style="font-size:11px;color:var(--a4);font-weight:700;text-align:center;padding:8px;background:rgba(255,180,60,0.1);border-radius:8px">⏳ Заявка на исправление отправлена, ждёт решения администратора</div>';
+  }
+  const label = (myReq && (myReq.status==='denied'||myReq.status==='closed')) ? '🔁 Подать заявку на исправление снова' : '📝 Запросить исправление у администратора';
+  return '<button onclick="openMaEditRequestMo(\''+acc.id+'\')" style="width:100%;padding:8px;background:var(--s2);border:1px solid var(--border);color:var(--text);border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">'+label+'</button>';
 }
 
 let _maEditReqTargetAccId = null;
