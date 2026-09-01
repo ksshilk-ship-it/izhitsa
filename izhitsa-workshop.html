@@ -9960,6 +9960,23 @@ function maEditRequestButtonHtml(acc){
   return '<button onclick="openMaEditRequestMo(\''+acc.id+'\')" style="width:100%;padding:8px;background:var(--s2);border:1px solid var(--border);color:var(--text);border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">'+label+'</button>';
 }
 
+// Человекочитаемые подписи полей позиции — для истории изменений по заявке
+const MA_POS_FIELD_LABEL = {artikul:'Артикул', name:'Наименование', qty:'Количество', wood:'Порода/вид', price:'Цена', zp:'ЗП мастеру'};
+
+// Фиксирует одно изменение в ту заявку, по которой кладовщику сейчас открыт доступ к этой
+// приёмке (если правка идёт не по заявке — например, тот же день своей же приёмки — писать
+// некуда и не нужно, это не то, что просили отслеживать).
+async function logMaEditRequestChange(acc, text){
+  if(!session || session.role!=='кладовщик') return;
+  const grant = getMaApprovedEditGrant(acc);
+  if(!grant || typeof firebase==='undefined') return;
+  try{
+    await db.collection('ws_edit_requests').doc(grant.id).update({
+      changes: firebase.firestore.FieldValue.arrayUnion({text, at: now()})
+    });
+  }catch(e){ console.log('log edit request change err', e); }
+}
+
 let _maEditReqTargetAccId = null;
 function openMaEditRequestMo(accId){
   _maEditReqTargetAccId = accId;
@@ -10051,6 +10068,12 @@ function renderMaEditRequestsList(){
       <div style="font-size:11px;color:var(--t2);margin-bottom:6px">От: ${r.requestedByName||'—'} · ${fmtDT(r.createdAt)}</div>
       <div style="font-size:12px;background:var(--s1);border-radius:8px;padding:8px;margin-bottom:4px">${(r.comment||'').replace(/</g,'&lt;')}</div>
       ${r.respondedByName ? `<div style="font-size:11px;color:var(--t2);margin-top:6px">Решение: ${r.respondedByName} · ${fmtDT(r.respondedAt)}</div>` : ''}
+      ${(r.changes && r.changes.length) ? `
+        <div style="margin-top:8px;padding:8px;background:rgba(80,255,150,0.06);border:1px solid var(--border);border-radius:8px">
+          <div style="font-size:10px;color:var(--t2);font-weight:700;margin-bottom:4px">ЧТО ИЗМЕНЕНО (${r.changes.length}):</div>
+          ${r.changes.map(ch=>`<div style="font-size:11px;color:var(--t1);margin-bottom:2px">• ${(ch.text||'').replace(/</g,'&lt;')}</div>`).join('')}
+        </div>
+      ` : ''}
       ${actions}
     </div>`;
   }).join('');
@@ -10099,9 +10122,11 @@ function updateMaAccMaster(accId, masterId){
   if(!isMaEditAllowed(acc)){ showToast('🔒 Редактирование доступно только в день внесения приёмки'); openMaDetail(accId); return; }
   if(!masterId){ showToast('Выберите мастера'); openMaDetail(accId); return; }
   const master = getEmployees().find(e=>e.id===masterId);
+  const oldName = acc.masterName;
   acc.masterId = masterId;
   acc.masterName = master?.name || '';
   db.collection('ws_master_acceptances').doc(accId).update({masterId: acc.masterId, masterName: acc.masterName}).then(()=>{
+    if(oldName !== acc.masterName) logMaEditRequestChange(acc, 'Мастер: «'+oldName+'» → «'+acc.masterName+'»');
     showToast('✅ Мастер изменён');
     openMaDetail(accId);
   }).catch(e=>showToast('Ошибка: '+e.message));
@@ -10112,8 +10137,10 @@ function updateMaAccDate(accId, date){
   const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
   if(!isMaEditAllowed(acc)){ showToast('🔒 Редактирование доступно только в день внесения приёмки'); openMaDetail(accId); return; }
   if(!date){ showToast('Укажите дату'); openMaDetail(accId); return; }
+  const oldDate = acc.deliveredDate;
   acc.deliveredDate = date;
   db.collection('ws_master_acceptances').doc(accId).update({deliveredDate: date}).then(()=>{
+    if(oldDate !== date) logMaEditRequestChange(acc, 'Дата сдачи: '+(oldDate||'—')+' → '+date);
     showToast('✅ Дата изменена');
     openMaDetail(accId);
   }).catch(e=>showToast('Ошибка: '+e.message));
@@ -10143,7 +10170,9 @@ function updateMaPosField(accId, rid, field, value){
   const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
   if(!isMaEditAllowed(acc)){ showToast('🔒 Редактирование доступно только в день внесения приёмки'); openMaDetail(accId); return; }
   const pos = acc.positions.find(p=>p.rid===rid); if(!pos) return;
-  
+  const posLabel = pos.name || pos.artikul || 'без названия';
+  const oldValue = pos[field];
+
   // Преобразование значения в правильный тип
   if(field==='price' || field==='zp') {
     pos[field] = parseFloat(value)||0;
@@ -10152,9 +10181,13 @@ function updateMaPosField(accId, rid, field, value){
   } else {
     pos[field] = value;
   }
-  
+
   db.collection('ws_master_acceptances').doc(accId).update({positions: acc.positions})
     .then(() => {
+      if(oldValue !== pos[field]){
+        const fieldLabel = MA_POS_FIELD_LABEL[field] || field;
+        logMaEditRequestChange(acc, '«'+posLabel+'» — '+fieldLabel+': «'+(oldValue||'—')+'» → «'+(pos[field]||'—')+'»');
+      }
       openMaDetail(accId); // перерисовать форму с обновлёнными ИТОГО
       renderManualAcceptHistory(); // перерисовать архив
     })
@@ -10197,6 +10230,7 @@ function addMaPositionToExisting(accId){
   db.collection('ws_master_acceptances').doc(accId).update({positions: acc.positions})
     .then(() => {
       logAction('acceptance_position_added', {accId, masterName: acc.masterName, totalCount: acc.positions.length});
+      logMaEditRequestChange(acc, '➕ Добавлена новая позиция (' + acc.positions.length + '-я по счёту)');
       openMaDetail(accId); // перерисовать с новой позицией
     })
     .catch(e => showToast('❌ Ошибка: ' + e.message));
@@ -10207,20 +10241,22 @@ function deleteMaPosition(accId, rid){
   const acc = _maHistory.find(a=>a.id===accId); if(!acc) return;
   const posIndex = acc.positions.findIndex(p=>p.rid===rid);
   if(posIndex === -1) return;
-  
+
   // Проверка прав
   const isEditable = isMaEditAllowed(acc);
   if(!isEditable){ showToast('Вы не можете редактировать эту приёмку'); return; }
-  
+
   if(!confirm('Удалить эту позицию из приёмки?')) return;
-  
+
   // Удалить позицию
+  const deletedPos = acc.positions[posIndex];
   acc.positions.splice(posIndex, 1);
-  
+
   // Сохранить в Firebase
   db.collection('ws_master_acceptances').doc(accId).update({positions: acc.positions})
     .then(() => {
       logAction('acceptance_position_deleted', {accId, masterName: acc.masterName, remainingCount: acc.positions.length});
+      logMaEditRequestChange(acc, '🗑 Удалена позиция: «'+(deletedPos.name||deletedPos.artikul||'без названия')+'»'+(deletedPos.artikul?' · '+deletedPos.artikul:''));
       showToast('✅ Позиция удалена');
       openMaDetail(accId); // перерисовать
     })
