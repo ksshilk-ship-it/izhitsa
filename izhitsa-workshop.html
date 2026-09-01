@@ -9797,7 +9797,18 @@ function openMaDetail(accId){
   const c = document.getElementById('maDetailItems');
   const lockNote = document.getElementById('maDetailLockNote');
   if(!isEditable){
-    if(lockNote){ lockNote.style.display='block'; lockNote.textContent = '🔒 Приёмка внесена ' + entryDay + ' — редактирование позиций закрыто. Можно только принять/забраковать и провести.'; }
+    if(lockNote){
+      lockNote.style.display='block';
+      let lockMsg;
+      if(acc.status==='done'){
+        lockMsg = '🔒 Приёмка уже проведена — товар списан на склад, ЗП посчитана. Для исправления запросите разрешение у администратора.';
+      } else if(entryDay===todayStr && session && acc.createdById!==session.id){
+        lockMsg = '🔒 Эту приёмку внёс(ла) ' + (acc.createdBy||'другой сотрудник') + ' — сегодня редактировать её может только он(а) или администратор. Запросите разрешение, если нужно исправить.';
+      } else {
+        lockMsg = '🔒 Приёмка внесена ' + entryDay + ' — редактирование позиций закрыто. Можно только принять/забраковать и провести.';
+      }
+      lockNote.textContent = lockMsg;
+    }
   } else if(editGrant){
     // Кладовщик правит по разовому разрешению администратора — доступ закроется по кнопке "Закрыть"
     if(lockNote){
@@ -9893,14 +9904,18 @@ function openMaDetail(accId){
   openMo('maDetailMo');
 }
 
-// Разрешено ли редактировать позиции приёмки: обычным ролям — только в день внесения,
-// Администратору — всегда (чтобы можно было исправить ошибку кладовщика/мастера задним числом)
+// Разрешено ли редактировать позиции приёмки: в день внесения — только тот, кто её внёс
+// (плюс Администратор — всегда), и только пока она ещё не проведена (товар не ушёл на
+// склад, ЗП не посчитана). Как только приёмка проведена, или это уже другой день, или её
+// вносил кто-то другой — нужно либо быть Администратором, либо иметь разрешение по заявке.
 function isMaEditAllowed(acc){
   if(session && session.role==='администратор') return true;
-  const entryDay = (acc.createdAt || '').split('T')[0];
-  const todayStr = new Date().toISOString().split('T')[0];
-  if(entryDay === todayStr) return true;
-  // Проверить флаг: может ли кладовщик редактировать приёмки за прошлые дни
+  if(acc.status !== 'done' && session && acc.createdById === session.id){
+    const entryDay = (acc.createdAt || '').split('T')[0];
+    const todayStr = new Date().toISOString().split('T')[0];
+    if(entryDay === todayStr) return true;
+  }
+  // Проверить флаг: может ли кладовщик редактировать приёмки за прошлые дни / уже проведённые
   if(session && session.role==='кладовщик' && session.canEditPastMaAcceptances === true) return true;
   // Разовое разрешение от администратора по заявке (см. блок «Заявки на исправление» ниже)
   if(session && session.role==='кладовщик' && getMaApprovedEditGrant(acc)) return true;
