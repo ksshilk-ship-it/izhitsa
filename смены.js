@@ -2884,30 +2884,38 @@ function setHistPeriod(period, el){
   });
   var rangeEl = document.getElementById('histCustomRange');
   var qSelEl = document.getElementById('histQuarterSelect');
-  if(period === 'custom'){
-    if(rangeEl) rangeEl.style.display = 'flex';
-    if(qSelEl) qSelEl.style.display = 'none';
-    return;
-  }
-  if(rangeEl) rangeEl.style.display = 'none';
+  var mSelEl = document.getElementById('histMonthSelect');
+  var wSelEl = document.getElementById('histWeekSelect');
+  if(rangeEl) rangeEl.style.display = period==='custom' ? 'flex' : 'none';
+  if(qSelEl) qSelEl.style.display = period==='quarter' ? 'block' : 'none';
+  if(mSelEl) mSelEl.style.display = period==='month' ? 'block' : 'none';
+  if(wSelEl) wSelEl.style.display = period==='week' ? 'block' : 'none';
+  if(period === 'custom') return;
   if(period === 'quarter'){
-    if(qSelEl) qSelEl.style.display = 'block';
     _populateHistQuarterPicker();
-    var picker = document.getElementById('histQuarterPicker');
-    applyHistQuarter(picker ? picker.value : _histQuarterKey(new Date()));
+    var qPicker = document.getElementById('histQuarterPicker');
+    applyHistQuarter(qPicker ? qPicker.value : _histQuarterKey(new Date()));
     return;
   }
-  if(qSelEl) qSelEl.style.display = 'none';
+  // «Месяц» — как в Рентабельности: список конкретных календарных месяцев, а не «последние 30
+  // дней». «Неделя» — список недель ТЕКУЩЕГО месяца (Пн—Вс), а не «последние 7 дней».
+  if(period === 'month'){
+    _populateHistMonthPicker();
+    var mPicker = document.getElementById('histMonthPicker');
+    var today0 = new Date();
+    applyHistMonth(mPicker && mPicker.value ? mPicker.value : (today0.getFullYear()+'-'+today0.getMonth()));
+    return;
+  }
+  if(period === 'week'){
+    _populateHistWeekPicker();
+    var wPicker = document.getElementById('histWeekPicker');
+    if(wPicker) applyHistWeek(wPicker.value);
+    return;
+  }
   var today = new Date();
   var todayStr = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
-  if(period === 'week'){
-    var weekAgo = new Date(today.getTime() - 6*86400000);
-    _histPeriodFrom = weekAgo.getFullYear()+'-'+String(weekAgo.getMonth()+1).padStart(2,'0')+'-'+String(weekAgo.getDate()).padStart(2,'0');
-    _histPeriodTo = todayStr;
-  } else if(period === 'month'){
-    var monthAgo = new Date(today.getTime() - 29*86400000);
-    _histPeriodFrom = monthAgo.getFullYear()+'-'+String(monthAgo.getMonth()+1).padStart(2,'0')+'-'+String(monthAgo.getDate()).padStart(2,'0');
-    _histPeriodTo = todayStr;
+  if(period === 'today'){
+    _histPeriodFrom = todayStr; _histPeriodTo = todayStr;
   } else { // all
     _histPeriodFrom = ''; _histPeriodTo = '';
   }
@@ -2915,6 +2923,74 @@ function setHistPeriod(period, el){
   if(period==='all'){
     try{ _ensureShiftsLoadedForRange(_histPeriodFrom).then(renderShiftHistory); }catch(e){}
   }
+}
+function _populateHistMonthPicker(){
+  var sel = document.getElementById('histMonthPicker');
+  if(!sel || sel.options.length) return; // already populated
+  var today = new Date();
+  var curY = today.getFullYear(), curM = today.getMonth();
+  var opts = '';
+  for(var i=0;i<24;i++){
+    var m = curM - i, y = curY;
+    while(m<0){ m+=12; y--; }
+    var name = PROF_MONTH_NAMES[m];
+    opts += '<option value="'+y+'-'+m+'">'+(name.charAt(0).toUpperCase()+name.slice(1))+' '+y+'</option>';
+  }
+  sel.innerHTML = opts;
+}
+function applyHistMonth(value){
+  var parts = (value||'').split('-');
+  var y = parseInt(parts[0],10), m = parseInt(parts[1],10);
+  if(isNaN(y)||isNaN(m)) return;
+  var from = new Date(y, m, 1);
+  var to = new Date(y, m+1, 0);
+  var pad = function(n){ return String(n).padStart(2,'0'); };
+  _histPeriodFrom = from.getFullYear()+'-'+pad(from.getMonth()+1)+'-'+pad(from.getDate());
+  _histPeriodTo = to.getFullYear()+'-'+pad(to.getMonth()+1)+'-'+pad(to.getDate());
+  renderShiftHistory();
+  try{ _ensureShiftsLoadedForRange(_histPeriodFrom).then(renderShiftHistory); }catch(e){}
+}
+// Недели ТЕКУЩЕГО месяца — Пн—Вс, первая и последняя неделя могут быть короче (обрезаны
+// границами месяца), как в календаре «Подробно».
+function _histWeeksOfMonth(year, monthIdx){
+  var daysInMonth = new Date(year, monthIdx+1, 0).getDate();
+  var weeks = [], current = null;
+  for(var d=1; d<=daysInMonth; d++){
+    var dow = (new Date(year, monthIdx, d).getDay()+6)%7; // 0=Пн..6=Вс
+    if(dow===0 || !current){
+      if(current) weeks.push(current);
+      current = {from:d, to:d};
+    } else {
+      current.to = d;
+    }
+  }
+  if(current) weeks.push(current);
+  return weeks;
+}
+function _populateHistWeekPicker(){
+  var sel = document.getElementById('histWeekPicker');
+  if(!sel || sel.options.length) return; // уже заполнено
+  var today = new Date();
+  var year = today.getFullYear(), monthIdx = today.getMonth(), todayD = today.getDate();
+  var weeks = _histWeeksOfMonth(year, monthIdx);
+  var monthName = PROF_MONTH_NAMES[monthIdx];
+  var pad = function(n){ return String(n).padStart(2,'0'); };
+  var defaultIdx = 0;
+  var opts = weeks.map(function(w,i){
+    if(todayD>=w.from && todayD<=w.to) defaultIdx = i;
+    var fromStr = year+'-'+pad(monthIdx+1)+'-'+pad(w.from);
+    var toStr = year+'-'+pad(monthIdx+1)+'-'+pad(w.to);
+    return '<option value="'+fromStr+'_'+toStr+'">Неделя '+(i+1)+' ('+w.from+'–'+w.to+' '+monthName+')</option>';
+  }).join('');
+  sel.innerHTML = opts;
+  sel.selectedIndex = defaultIdx;
+}
+function applyHistWeek(value){
+  var parts = (value||'').split('_');
+  if(!parts[0]) return;
+  _histPeriodFrom = parts[0]; _histPeriodTo = parts[1]||parts[0];
+  renderShiftHistory();
+  try{ _ensureShiftsLoadedForRange(_histPeriodFrom).then(renderShiftHistory); }catch(e){}
 }
 function _histQuarterKey(d){
   return d.getFullYear()+'-'+(Math.floor(d.getMonth()/3)+1);
