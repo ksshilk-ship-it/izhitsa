@@ -210,7 +210,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '09.02.01';
+var APP_BUILD_VERSION = '09.03.01';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -1208,7 +1208,27 @@ function doLogin(){
           var todayStr0 = new Date().toISOString().split('T')[0];
           var shiftDate0 = sameSellerShift.date || (sameSellerShift.openedAt||'').split('T')[0] || '';
           if(shiftDate0 && shiftDate0 < todayStr0){
-            db.collection('iz_shifts').doc(sameSellerShift.id).set({status:'closed',_autoFixedStale:true,closedAt: sameSellerShift.closedAt || new Date().toISOString()},{merge:true}).then(function(){
+            // Продавец физически не мог закрыть эту смену вручную — она осталась открытой, и
+            // систему просто заставили выставить статус «closed», чтобы не блокировать вход.
+            // Раньше это оставляло cashEvening/drCashEvening/goodsEvening пустыми навсегда, и
+            // «Проверка дат» потом писала «нал вечер не введён», как будто виноват продавец —
+            // хотя ему просто не дали шанса его ввести. Теперь досчитываем эти поля по журналу
+            // смены (та же формула, что и в «Проверка дат») и помечаем autoClosedNoCount:true,
+            // чтобы админ видел — это расчёт системы, а не физический пересчёт кассы.
+            var _autoFixPatch = {status:'closed', _autoFixedStale:true, closedAt: sameSellerShift.closedAt || new Date().toISOString()};
+            try{
+              if(typeof _calcShiftExpectedEvening==='function'){
+                var _autoExp = _calcShiftExpectedEvening(sameSellerShift);
+                var _autoFilledAny = false;
+                if(sameSellerShift.cashEvening==null){ _autoFixPatch.cashEvening = Math.round(_autoExp.cash); _autoFilledAny = true; }
+                if(sameSellerShift.drCashEvening==null && (sameSellerShift.cashDrMorning||sameSellerShift.goodsDrMorning)){ _autoFixPatch.drCashEvening = Math.round(_autoExp.cashDr); _autoFilledAny = true; }
+                if(sameSellerShift.goodsEvening==null){ _autoFixPatch.goodsEvening = Math.round(_autoExp.goodsWood); _autoFilledAny = true; }
+                if(sameSellerShift.drGoodsEvening==null){ _autoFixPatch.drGoodsEvening = Math.round(_autoExp.goodsDr); _autoFilledAny = true; }
+                if(sameSellerShift.cashStaffEvening==null && (sameSellerShift.cashStaffMorning || _autoExp.staffCashEffect)){ _autoFixPatch.cashStaffEvening = Math.round(_autoExp.cashStaff); _autoFilledAny = true; }
+                if(_autoFilledAny) _autoFixPatch.autoClosedNoCount = true;
+              }
+            }catch(e){}
+            db.collection('iz_shifts').doc(sameSellerShift.id).set(_autoFixPatch,{merge:true}).then(function(){
               doLogin();
             }).catch(function(){ doLogin(); });
             try{

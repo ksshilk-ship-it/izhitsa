@@ -3238,10 +3238,58 @@ function toggleHistShowOpen(){
   renderShiftHistory();
 }
 var _histInited = false;
+// Общий расчёт «сколько должно быть на вечер» (товар и касса) по журналу смены — источник
+// правды и для «Проверка дат» (сравнить с тем, что ввёл продавец), и для автозакрытия зависшей
+// смены (см. синхронизация.js), чтобы у автозакрытой смены были расчётные цифры вечера, а не
+// пустые поля, из-за которых «Проверка дат» пишет «не введён» на смене, которую продавец
+// физически не мог закрыть — её закрыла система.
+function _calcShiftExpectedEvening(sh){
+  var jnl = sh.journal||[];
+  var sales = jnl.filter(function(e){ return e.type==='sale'; });
+  function _resolveGoodsEffect(e, isDr){
+    var entryIsDr = e.goodsType==='dr';
+    if(isDr){
+      if(e.goodsDrEffect!=null) return e.goodsDrEffect;
+    } else {
+      if(e.goodsEffect!=null) return e.goodsEffect;
+    }
+    if(entryIsDr !== isDr) return 0; // запись относится к другой категории
+    var amt = e.amount||0;
+    if(e.type==='sale') return -amt;
+    if(e.type==='receive') return amt;
+    if(e.type==='writeoff') return -amt;
+    return 0;
+  }
+  var _legacyWoodWo = (sh.goodsWriteoffs||[]).reduce(function(s,w){return s+(w.amount!=null?w.amount:(w.amt||0));},0);
+  var _legacyDrWo = (sh.drGoodsWriteoffs||[]).reduce(function(s,w){return s+(w.amount!=null?w.amount:(w.amt||0));},0);
+  var _legacyWoodRcv = (sh.goodsReceives||[]).reduce(function(s,w){return s+(w.amount!=null?w.amount:(w.amt||0));},0);
+  var _legacyDrRcv = (sh.drGoodsReceives||[]).reduce(function(s,w){return s+(w.amount!=null?w.amount:(w.amt||0));},0);
+  var _jnlHasWoodWo = jnl.some(function(e){ return e.type==='writeoff' && e.goodsType!=='dr'; });
+  var _jnlHasDrWo = jnl.some(function(e){ return e.type==='writeoff' && e.goodsType==='dr'; });
+  var _jnlHasWoodRcv = jnl.some(function(e){ return e.type==='receive' && e.goodsType!=='dr'; });
+  var _jnlHasDrRcv = jnl.some(function(e){ return e.type==='receive' && e.goodsType==='dr'; });
+  var goodsWood = (sh.goodsMorning||0) + jnl.reduce(function(s,e){ return s+_resolveGoodsEffect(e,false); },0)
+    - (_jnlHasWoodWo?0:_legacyWoodWo) + (_jnlHasWoodRcv?0:_legacyWoodRcv);
+  var goodsDr = (sh.goodsDrMorning||0) + jnl.reduce(function(s,e){ return s+_resolveGoodsEffect(e,true); },0)
+    - (_jnlHasDrWo?0:_legacyDrWo) + (_jnlHasDrRcv?0:_legacyDrRcv);
+  var cashRev=0, drCashRev=0;
+  sales.forEach(function(s){ cashRev += (s.cashEffect||0); drCashRev += (s.cashDrEffect||0); });
+  var otherCashEffect = jnl.reduce(function(s,e){ return (e.type!=='sale') ? s+(e.cashEffect||0) : s; }, 0);
+  var otherCashDrEffect = jnl.reduce(function(s,e){ return (e.type!=='sale') ? s+(e.cashDrEffect||0) : s; }, 0);
+  var cash = (sh.cashMorning||0) + cashRev + otherCashEffect;
+  var cashDr = (sh.cashDrMorning||0) + drCashRev + otherCashDrEffect;
+  var staffCashEffect = jnl.reduce(function(s,e){
+    if(e.type==='sale') return s;
+    if(e.staffEffect) return s+e.staffEffect;
+    if(e.type==='expense' && e.goodsType==='staff') return s-(e.amount||0);
+    return s;
+  }, 0);
+  var cashStaff = (sh.cashStaffMorning||0) + staffCashEffect;
+  return {goodsWood:goodsWood, goodsDr:goodsDr, cash:cash, cashDr:cashDr, cashStaff:cashStaff, staffCashEffect:staffCashEffect};
+}
 function evaluateShiftIssues(sh){
   var issues = [];
   var jnl = sh.journal||[];
-  var sales = jnl.filter(function(e){ return e.type==='sale'; });
   (function(){
     var prevChk = getPrevShiftByOpenOrder(sh.shopName, sh.openedAt || (sh.date ? sh.date+'T23:59:59' : ''));
     if(!prevChk) return;
@@ -3267,55 +3315,10 @@ function evaluateShiftIssues(sh){
   if(sh.goodsDrMorning==null){
     issues.push({code:'morn_dr_zero', label:'🛍 Остаток товара (ДР Товар) на утро не занесён'});
   }
-  function itemAmt(it){ return it.amt!=null?it.amt:(it.price||0)*(it.qty||1); }
-  function grossSold(isDr){
-    var total=0;
-    sales.forEach(function(e){
-      var items=e.items||[];
-      if(!items.length){ if(!isDr) total += (e.amount||0)+(e.discount||0); return; }
-      items.filter(function(it){ return isDr ? it.goodsType==='dr' : it.goodsType!=='dr'; })
-        .forEach(function(it){ total += itemAmt(it); });
-    });
-    return total;
-  }
-  var jRcvWood = jnl.filter(function(e){ return e.type==='receive' && e.goodsType!=='dr'; }).reduce(function(s,e){return s+(e.goodsEffect||e.amount||0);},0);
-  var jWoWood = jnl.filter(function(e){ return e.type==='writeoff' && e.goodsType!=='dr'; }).reduce(function(s,e){return s+Math.abs(e.amount||0);},0);
-  var jRcvDr = jnl.filter(function(e){ return e.type==='receive' && e.goodsType==='dr'; }).reduce(function(s,e){return s+(e.goodsDrEffect!=null?e.goodsDrEffect:(e.goodsEffect||e.amount||0));},0);
-  var jWoDr = jnl.filter(function(e){ return e.type==='writeoff' && e.goodsType==='dr'; }).reduce(function(s,e){return s+Math.abs(e.amount||0);},0);
-  var manRcvWood = (sh.goodsReceives||[]).reduce(function(s,r){return s+(r.amt!=null?r.amt:(r.amount||0));},0);
-  var manWoWood = (sh.goodsWriteoffs||[]).reduce(function(s,w){return s+(w.amt!=null?w.amt:(w.amount||0));},0);
-  var manRcvDr = (sh.drGoodsReceives||[]).reduce(function(s,r){return s+(r.amt!=null?r.amt:(r.amount||0));},0);
-  var manWoDr = (sh.drGoodsWriteoffs||[]).reduce(function(s,w){return s+(w.amt!=null?w.amt:(w.amount||0));},0);
-  var jStaffWood = jnl.filter(function(e){ return e.type==='staff' && (e.goodsType||'wood')!=='dr'; })
-    .reduce(function(s,e){ return s + Math.abs(e.goodsEffect || e.retail || e.opt || 0); }, 0);
-  var jStaffDr = jnl.filter(function(e){ return e.type==='staff' && e.goodsType==='dr'; })
-    .reduce(function(s,e){ return s + Math.abs(e.goodsDrEffect || e.retail || e.opt || 0); }, 0);
-  function _resolveGoodsEffect(e, isDr){
-    var entryIsDr = e.goodsType==='dr';
-    if(isDr){
-      if(e.goodsDrEffect!=null) return e.goodsDrEffect;
-    } else {
-      if(e.goodsEffect!=null) return e.goodsEffect;
-    }
-    if(entryIsDr !== isDr) return 0; // запись относится к другой категории
-    var amt = e.amount||0;
-    if(e.type==='sale') return -amt;
-    if(e.type==='receive') return amt;
-    if(e.type==='writeoff') return -amt;
-    return 0;
-  }
-  var _legacyWoodWo = (sh.goodsWriteoffs||[]).reduce(function(s,w){return s+(w.amount!=null?w.amount:(w.amt||0));},0);
-  var _legacyDrWo = (sh.drGoodsWriteoffs||[]).reduce(function(s,w){return s+(w.amount!=null?w.amount:(w.amt||0));},0);
-  var _legacyWoodRcv = (sh.goodsReceives||[]).reduce(function(s,w){return s+(w.amount!=null?w.amount:(w.amt||0));},0);
-  var _legacyDrRcv = (sh.drGoodsReceives||[]).reduce(function(s,w){return s+(w.amount!=null?w.amount:(w.amt||0));},0);
-  var _jnlHasWoodWo = jnl.some(function(e){ return e.type==='writeoff' && e.goodsType!=='dr'; });
-  var _jnlHasDrWo = jnl.some(function(e){ return e.type==='writeoff' && e.goodsType==='dr'; });
-  var _jnlHasWoodRcv = jnl.some(function(e){ return e.type==='receive' && e.goodsType!=='dr'; });
-  var _jnlHasDrRcv = jnl.some(function(e){ return e.type==='receive' && e.goodsType==='dr'; });
-  var calcEveWood = (sh.goodsMorning||0) + jnl.reduce(function(s,e){ return s+_resolveGoodsEffect(e,false); },0)
-    - (_jnlHasWoodWo?0:_legacyWoodWo) + (_jnlHasWoodRcv?0:_legacyWoodRcv);
-  var calcEveDr = (sh.goodsDrMorning||0) + jnl.reduce(function(s,e){ return s+_resolveGoodsEffect(e,true); },0)
-    - (_jnlHasDrWo?0:_legacyDrWo) + (_jnlHasDrRcv?0:_legacyDrRcv);
+  // Расчётные «должно быть на вечер» — та же функция, что использует автозакрытие зависшей
+  // смены в синхронизация.js, чтобы обе стороны считали строго одинаково.
+  var _exp = _calcShiftExpectedEvening(sh);
+  var calcEveWood = _exp.goodsWood, calcEveDr = _exp.goodsDr;
   if(sh.goodsEvening==null){
     issues.push({code:'eve_wood_zero', label:'🌳 Остаток товара (Дерево) на вечер не занесён'});
   } else if(Math.abs((sh.goodsEvening||0) - calcEveWood) >= 1){
@@ -3326,15 +3329,7 @@ function evaluateShiftIssues(sh){
   } else if(Math.abs((sh.drGoodsEvening||0) - calcEveDr) >= 1){
     issues.push({code:'eve_dr_mismatch', label:'🛍 Остаток товара (ДР Товар) на вечер не совпадает с расчётным ('+Math.round(calcEveDr).toLocaleString('ru-RU')+'₽)'});
   }
-  var cashRev=0, drCashRev=0;
-  sales.forEach(function(s){
-    cashRev += (s.cashEffect||0);
-    drCashRev += (s.cashDrEffect||0);
-  });
-  var otherCashEffect = jnl.reduce(function(s,e){ return (e.type!=='sale') ? s+(e.cashEffect||0) : s; }, 0);
-  var otherCashDrEffect = jnl.reduce(function(s,e){ return (e.type!=='sale') ? s+(e.cashDrEffect||0) : s; }, 0);
-  var expCash = (sh.cashMorning||0) + cashRev + otherCashEffect;
-  var expCashDr = (sh.cashDrMorning||0) + drCashRev + otherCashDrEffect;
+  var expCash = _exp.cash, expCashDr = _exp.cashDr;
   if(sh.cashEvening==null){
     issues.push({code:'eve_cash_missing', label:'💵 Нал вечер (Дерево) не введён'});
   } else if(Math.abs((sh.cashEvening||0) - expCash) >= 1){
@@ -3345,12 +3340,7 @@ function evaluateShiftIssues(sh){
   } else if(Math.abs((sh.drCashEvening||0) - expCashDr) >= 1){
     issues.push({code:'eve_cash_dr_mismatch', label:'💵 Нал вечер (ДР Товар) не сходится с расчётным ('+Math.round(expCashDr).toLocaleString('ru-RU')+'₽)'});
   }
-  var staffCashEffectChk = jnl.reduce(function(s,e){
-    if(e.type==='sale') return s;
-    if(e.staffEffect) return s+e.staffEffect;
-    if(e.type==='expense' && e.goodsType==='staff') return s-(e.amount||0);
-    return s;
-  }, 0);
+  var staffCashEffectChk = _exp.staffCashEffect;
   if(staffCashEffectChk || sh.cashStaffMorning || sh.cashStaffEvening!=null){
     var expCashStaffChk = (sh.cashStaffMorning||0) + staffCashEffectChk;
     if(sh.cashStaffEvening==null){
@@ -3955,6 +3945,7 @@ function _renderShiftView(){
     '</div>'+
     issuesListHtml+
     summaryRows+
+    (sh.autoClosedNoCount?'<div style="font-size:10px;color:#f0c060;margin-top:10px;padding-top:8px;border-top:1px solid #2e2e3e">🤖 Продавец не закрыл смену вручную — система автоматически закрыла её при входе на следующий день. Суммы вечера расчётные (по журналу), кассир их физически не подтверждал.</div>':'')+
     (sh.editedBy?'<div style="font-size:10px;color:#555568;margin-top:10px;padding-top:8px;border-top:1px solid #2e2e3e">✏️ Правки: '+sh.editedBy+(sh.editReason?' · '+sh.editReason:'')+'</div>':'')+
   '</div>';
   function acc(id, icon, title, color, count, body){
