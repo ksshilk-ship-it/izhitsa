@@ -8689,6 +8689,7 @@ function runMaSearch(){
         + '</div>'
         + '<div style="font-size:11px;color:var(--t2)">'+(p.wood?p.wood+' · ':'')+'ЗП: '+fmt(p.zp||0)+' ₽</div>'
         + '<div style="font-size:11px;color:var(--t2);margin-top:4px">👤 '+(acc.masterName||'—')+' · 📅 сдал '+(acc.deliveredDate||'—')+' · '+accStatus+'</div>'
+        + '<div style="font-size:11px;color:var(--t2);margin-top:2px">📝 Внёс(ла): '+(acc.createdBy||'—')+' · '+fmtDT(acc.createdAt)+'</div>'
       + '</div>';
     }).join('');
 }
@@ -9609,7 +9610,8 @@ function renderDateItems(c){
     
     html += '<div style="flex:1">';
     html += '<div style="font-weight:700;font-size:13px;margin-bottom:3px">' + acc.masterName + ' · ' + itemCount + ' поз</div>';
-    html += '<div style="font-size:11px;color:var(--t2);margin-bottom:6px">' + dateFormatted + '</div>';
+    html += '<div style="font-size:11px;color:var(--t2);margin-bottom:3px">' + dateFormatted + '</div>';
+    html += '<div style="font-size:11px;color:var(--t2);margin-bottom:6px">📝 Внёс(ла): ' + (acc.createdBy||'—') + ' · ' + fmtDT(acc.createdAt) + '</div>';
     html += '<div style="font-size:11px">' + fmt(accPrice) + ' ₽ · ЗП: <span style="color:var(--a5);font-weight:700">' + fmt(accZP) + ' ₽</span></div>';
     html += '</div>';
     
@@ -9707,7 +9709,7 @@ function renderArchiveMasterDates(c){
       <div class="li-ico" style="background:#1a1e2a">📦</div>
       <div class="li-info">
         <div class="li-name">${dateFormatted} · ${total} шт</div>
-        <div class="li-sub">Принял: ${acc.createdBy}</div>
+        <div class="li-sub">📝 Внёс(ла): ${acc.createdBy||'—'} · ${fmtDT(acc.createdAt)}</div>
         <div class="li-sub">${statusLabel}</div>
       </div>
     </div>`;
@@ -9748,7 +9750,7 @@ function renderArchiveItems(c){
   <div style="padding:12px;background:var(--s2);border-radius:10px;margin-bottom:12px;border:1px solid var(--border)">
     <div class="at-row"><span class="at-lbl">Мастер</span><span class="at-val">${acc.masterName}</span></div>
     <div class="at-row"><span class="at-lbl">Дата сдачи</span><span class="at-val">${acc.deliveredDate}</span></div>
-    <div class="at-row"><span class="at-lbl">Принял</span><span class="at-val">${acc.createdBy}</span></div>
+    <div class="at-row"><span class="at-lbl">Внёс(ла)</span><span class="at-val">${acc.createdBy||'—'} · ${fmtDT(acc.createdAt)}</span></div>
     <div class="at-row"><span class="at-lbl">Статус</span><span class="at-val">${acc.status==='done'?'✅ Проведена':'⏳ Открыта'}</span></div>
     <div class="at-row"><span class="at-lbl">Количество изделий</span><span class="at-val">${acc.positions.length} шт</span></div>
     <div class="at-row"><span class="at-lbl">Сумма изделий</span><span class="at-val" style="color:var(--accent)">${fmt(acc.positions.reduce((s,p)=>s+(p.price||0),0))}</span></div>
@@ -9842,6 +9844,7 @@ function openMaDetail(accId){
     const totalZP = acc.positions.reduce((s,p)=>s+((p.zp||0)*(p.qty||1)),0);
     
     const summaryHtml = `<div style="padding:10px 12px;background:var(--s2);border-radius:10px;margin-bottom:10px;font-size:12px">
+      <div class="at-row"><span class="at-lbl">Внёс(ла)</span><span class="at-val">${acc.createdBy||'—'} · ${fmtDT(acc.createdAt)}</span></div>
       <div class="at-row"><span class="at-lbl">Количество изделий</span><span class="at-val">${totalItemCount} шт</span></div>
       <div class="at-row"><span class="at-lbl">Сумма изделий</span><span class="at-val" style="color:var(--accent)">${fmt(totalPrice)}</span></div>
       <div class="at-row"><span class="at-lbl">Сумма ЗП</span><span class="at-val" style="color:var(--a5)">${fmt(totalZP)}</span></div>
