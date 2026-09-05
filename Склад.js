@@ -1115,7 +1115,7 @@ function _acceptInvoiceProceed(inv, who){
   const goodsTotal=accepted.reduce((s,a)=>s+a.factPrice,0);
   var _rcvEntry = {id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',label:'Приёмка '+inv2.num,
     sub:inv2.items.length+' изд. · принял: '+who,amount:goodsTotal,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:goodsTotal,
-    invId:inv2.id||inv2._id};
+    invId:inv2.id||inv2._id, acceptedBy:who};
   journal.push(_rcvEntry);
   _recordJournalEntryIndependently(_rcvEntry, session&&session.shopName, 'receive');
   _backupCheckPassed = false;
@@ -1835,13 +1835,13 @@ function saveManualInvoice() {
   journal.push({
     id:uid(), type:'receive', ts:_workingNowISO(), icon:'📥',
     label:'Приёмка '+num+(_isDrInv?' (ДР)':''),
-    sub:_manInvItems.length+' изд.'+(from?' · от '+from:''),
+    sub:_manInvItems.length+' изд.'+(from?' · от '+from:'')+(inv.createdBy?' · принял: '+inv.createdBy:''),
     amount:totalAmt,
     amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
     goodsEffect: _isDrInv ? 0 : totalAmt,
     goodsDrEffect: _isDrInv ? totalAmt : 0,
     goodsType: _manInvGoodsType,
-    invId:inv.id
+    invId:inv.id, acceptedBy:inv.createdBy||''
   });
   _manInvGoodsType = 'derevo'; setManInvType('derevo'); // reset
   saveJ();
@@ -2158,13 +2158,13 @@ function saveManualInvoiceEdit(id){
   journal.push({
     id:uid(), type:'receive', ts:preservedTs, icon:'📥',
     label:'Приёмка '+data.num+(_isDrSeller?' (ДР)':''),
-    sub:(data.items||[]).length+' изд.'+(data.from?' · от '+data.from:''),
+    sub:(data.items||[]).length+' изд.'+(data.from?' · от '+data.from:'')+(data.createdBy?' · принял: '+data.createdBy:''),
     amount:data.totalAmt,
     amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
     goodsType:_sellerGt,
     goodsEffect:_isDrSeller?0:data.totalAmt,
     goodsDrEffect:_isDrSeller?data.totalAmt:0,
-    invId:id, editedAt:new Date().toISOString()
+    invId:id, editedAt:new Date().toISOString(), acceptedBy:data.createdBy||''
   });
   saveJ();
   delete window._manInvEdit[id];
@@ -2790,13 +2790,15 @@ function renderAdminRcvWo(){
       var amt = type==='receive' ? (e.goodsDrEffect && e.goodsType==='dr' ? e.goodsDrEffect : (e.goodsEffect||e.amount||0)) : (e.amount||0);
       var invNum = '';
       var invItemsFallback = null;
+      var invAcceptedByFallback = '';
       if(e.invId){
         var found = allInvCache.find(function(i){ return (i.id||i._id)===e.invId; });
         if(found&&found.num) invNum = found.num;
         if(found) invItemsFallback = found.acceptedItems||found.items||null;
+        if(found) invAcceptedByFallback = found.acceptedBy||found.createdBy||'';
       }
       var rowItems = (e.items&&e.items.length) ? e.items : (invItemsFallback||[]);
-      rows.push({shop:sn, date:shDate, ts:e.ts||shDate, label:invNum?'Приёмка '+invNum:(e.label||e.sub||''), sub:e.sub||'', amount:amt, goodsType:e.goodsType||'derevo', invId:e.invId||null, entryId:e.id||null, shiftId:sh.id||sh._id||null, items:rowItems, reason:e.reason||'', isRevaluation:!!e.isRevaluation});
+      rows.push({shop:sn, date:shDate, ts:e.ts||shDate, label:invNum?'Приёмка '+invNum:(e.label||e.sub||''), sub:e.sub||'', amount:amt, goodsType:e.goodsType||'derevo', invId:e.invId||null, entryId:e.id||null, shiftId:sh.id||sh._id||null, items:rowItems, reason:e.reason||'', isRevaluation:!!e.isRevaluation, acceptedBy:e.acceptedBy||invAcceptedByFallback||''});
     });
     if(type==='receive'){
       (sh.goodsReceives||[]).forEach(function(r){ rows.push({shop:sn,date:shDate,ts:shDate,label:'Приход Дерево',sub:r.name||'',amount:r.amt||r.amount||0,goodsType:'derevo',items:[],isRevaluation:!!r.isRevaluation}); });
@@ -2858,6 +2860,7 @@ function renderAdminRcvWo(){
           '</div>'+
           '<div class="u-fs13-bold">'+r.label+'</div>'+
           (r.sub&&r.sub!==r.label?'<div class="u-fs11-gray">'+r.sub+'</div>':'')+
+          (type==='receive'&&r.acceptedBy?'<div style="font-size:11px;color:#60c8f0;margin-top:2px">👤 принял: '+r.acceptedBy+'</div>':'')+
           (r.reason?'<div style="font-size:11px;color:#a060f0">'+r.reason+'</div>':'')+
           ((r.qtyArt||r.qtyNoArt)?'<div style="font-size:11px;color:#8888aa;margin-top:2px">'+(r.qtyArt+r.qtyNoArt)+' шт. ('+r.qtyArt+' с арт. · '+r.qtyNoArt+' без)</div>':'')+
         '</div>'+
@@ -3383,10 +3386,12 @@ function renderStockByInvoice(){
           '<div style="text-align:right"><div>получено: '+received+'</div><div style="color:'+(curQty<=0?'#f06060':'#60f090')+'">в наличии: '+curQty+'</div></div>'+
         '</div>';
       }).join('');
+      var acceptedByLbl = inv.acceptedBy || inv.createdBy || '';
       return '<div style="border:1px solid #2e2e3e;border-radius:12px;margin-bottom:8px;overflow:hidden">'+
         '<div onclick="_toggleStockGroup(\''+ikey+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:12px;cursor:pointer;background:#1a1a22">'+
           '<div><div class="u-fs13-bold">'+(inv.num?'№'+inv.num+' · ':'')+(inv.date||'')+'</div>'+
-            '<div class="u-fs10-gray">'+shopName+(inv.from?' · от '+inv.from:'')+' · '+items.length+' поз.</div></div>'+
+            '<div class="u-fs10-gray">'+shopName+(inv.from?' · от '+inv.from:'')+' · '+items.length+' поз.</div>'+
+            (acceptedByLbl?'<div style="font-size:10px;color:#60c8f0;margin-top:2px">👤 принял: '+acceptedByLbl+'</div>':'')+'</div>'+
           '<div style="display:flex;align-items:center;gap:8px">'+
             '<div class="u-fs11-gray">🟢'+stillHave+' 🔴'+soldOut+'</div>'+
             '<span id="'+ikey+'_arr" style="color:#8888aa">▶</span>'+

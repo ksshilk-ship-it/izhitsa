@@ -1038,13 +1038,14 @@ function _reconcileReceiveEntries(archivedInvIds){
     var ts = inv.acceptedAt || inv.date || new Date().toISOString();
     var invGt = inv.goodsType || (inv.category==='dr'?'dr':'derevo');
     var isDr = invGt==='dr';
+    var invAcceptedBy = inv.acceptedBy || inv.createdBy || '';
     journal.push({
       id:_stableReceiveId(iid), type:'receive', ts:ts, icon:'📥',
       label:'Приёмка '+(inv.num||''),
-      sub:count+' изд.'+(inv.from?' · от '+inv.from:''),
+      sub:count+' изд.'+(inv.from?' · от '+inv.from:'')+(invAcceptedBy?' · принял: '+invAcceptedBy:''),
       amount:total, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
       goodsType:invGt,
-      goodsEffect:isDr?0:total, goodsDrEffect:isDr?total:0, invId:iid
+      goodsEffect:isDr?0:total, goodsDrEffect:isDr?total:0, invId:iid, acceptedBy:invAcceptedBy
     });
   });
   journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
@@ -5399,14 +5400,15 @@ function svSaveInvoiceFromArchive(id, isManual){
   if(jIdx>=0){
     var before = Object.assign({}, jnl[jIdx]);
     var _isDrSave = _savedGt==='dr';
+    var _editAcceptedBy = data.acceptedBy || data.createdBy || jnl[jIdx].acceptedBy || '';
     jnl[jIdx] = Object.assign({}, jnl[jIdx], {
       label:'Приёмка '+data.num+(_isDrSave?' (ДР)':''),
-      sub:(data.items||[]).length+' изд.'+(data.from?' · от '+data.from:''),
+      sub:(data.items||[]).length+' изд.'+(data.from?' · от '+data.from:'')+(_editAcceptedBy?' · принял: '+_editAcceptedBy:''),
       amount:newTotal,
       goodsEffect: _isDrSave?0:newTotal,
       goodsDrEffect: _isDrSave?newTotal:0,
       goodsType: _savedGt,
-      invId:id,
+      invId:id, acceptedBy:_editAcceptedBy,
       editedAt:new Date().toISOString()
     });
     try{ logEntryEdit(before, jnl[jIdx], (_currentShiftView&&(_currentShiftView.id||_currentShiftView._id))); }catch(e){}
