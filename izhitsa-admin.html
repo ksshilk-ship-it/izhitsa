@@ -3749,16 +3749,14 @@ function deleteRefBookItem(bookId, idx, key) {
 }
 
 function initRefBooks() {
-  if(!localStorage.getItem('iz_sales_sources')) {
-    saveRefBook('iz_sales_sources', [
-      {id: uid(), name: 'Роза Хутор', type: 'shop'},
-      {id: uid(), name: 'Горки', type: 'shop'},
-      {id: uid(), name: 'ТГ канал', type: 'online'},
-      {id: uid(), name: 'Instagram', type: 'online'},
-      {id: uid(), name: 'Опт', type: 'offline'}
-    ]);
-  }
-  
+  // ⚠️ Раньше здесь был авто-инициализатор iz_sales_sources жёстко зашитым списком из 5
+  // точек — он срабатывал на КАЖДОМ устройстве, где локально ещё не было этого ключа
+  // (новый браузер, очищенный кеш, приватное окно), и МГНОВЕННО перезаписывал общий
+  // документ iz_settings/sales_sources в Firestore этим устаревшим списком — раньше, чем
+  // успевал прийти настоящий список через живой листенер (гонка). Так 04-05.09.2026
+  // дважды пропадали Колесо/Парк Ривьера Сочи/ТГ-Inst для всего приложения. Настоящий
+  // список должен приходить только из Firestore (adminSyncListen), никогда — из
+  // локального хардкода.
   if(!localStorage.getItem('iz_accounts')) {
     saveRefBook('iz_accounts', [
       {id: uid(), name: 'Касса 1', type: 'cash'},
@@ -6673,18 +6671,6 @@ document.addEventListener('DOMContentLoaded', function() {
       {id: uid(), type: 'expense', amount: 3000, source: '', category: 'Коммунальные', date: today.toISOString(), createdAt: now(), createdBy: 'System'}
     ];
     saveTransactions(testTransactions);
-  }
-  
-  // Init sales sources if not exist
-  if(!localStorage.getItem('iz_sales_sources')) {
-    saveSalesSources([
-      {id: uid(), name: 'Роза Хутор', type: 'shop', createdAt: now()},
-      {id: uid(), name: 'Горки', type: 'shop', createdAt: now()},
-      {id: uid(), name: 'ТГ канал', type: 'online', createdAt: now()},
-      {id: uid(), name: 'Instagram', type: 'online', createdAt: now()},
-      {id: uid(), name: 'Мастерская', type: 'workshop', createdAt: now()},
-      {id: uid(), name: 'Опт', type: 'offline', createdAt: now()}
-    ]);
   }
   
   // Init users if not exist
