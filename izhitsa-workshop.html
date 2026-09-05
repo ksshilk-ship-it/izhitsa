@@ -1775,7 +1775,14 @@ var WS_SYNC_SETTINGS = {
   'ws_extra_cats':  {doc:'ws_extra_cats',field:'data'},
   'ws_ot_categories': {doc:'ws_ot_categories', field:'data'},
   'iz_items':       {doc:'items',        field:'items'},
-  'iz_admin_shops': {doc:'shops',        field:'shops'},
+  // ВАЖНО: doc:'sales_sources'/field:'data' — тот же документ, что читает и пишет главный.html
+  // (см. SYNC_SETTINGS в синхронизация.js). Раньше здесь стояло doc:'shops'/field:'shops' —
+  // отдельный, никем больше не используемый документ с устаревшим списком точек. Из-за этого
+  // список точек продаж в этом разделе не совпадал с настоящим, а живой листенер на неверный
+  // документ мог тихо перезаписать localStorage['iz_admin_shops'] чужими данными на этом
+  // устройстве — а следующее же сохранение списка магазинов из главный.html увозило эту порчу
+  // в общую базу для всех (так 04.09.2026 пропали Колесо/Ривьера/ТГ-Inst).
+  'iz_admin_shops': {doc:'sales_sources', field:'data', shopsShared:true},
 };
 // Общие справочники (goods/materials/sizes) в shop/admin хранятся как [{id,name}],
 // а в workshop как простой массив строк ["Дуб","Ясень"]. Конвертируем туда-обратно.
@@ -1786,13 +1793,25 @@ function _wsNormalizeShared(val){
 function _wsDenormalizeShared(names){
   return names.map(function(n){ return {id: n, name: n}; });
 }
+// Точки продаж — отдельная пара normalize/denormalize: в отличие от goods/materials/sizes,
+// у точки есть ещё и type (shop/online/offline), который эта простая текстовая форма
+// (только имя) не редактирует и не должна терять. Поэтому запоминаем последний «сырой»
+// массив с сервера и при сохранении подставляем id/type существующих точек обратно по имени,
+// а по-настоящему новым точкам, добавленным здесь, даём безопасный дефолт type:'shop'.
+var _wsLastRawShops = null;
+function _wsDenormalizeShops(names){
+  var byName = {};
+  (_wsLastRawShops||[]).forEach(function(s){ if(s && s.name) byName[s.name]=s; });
+  return names.map(function(n){ return byName[n] || {id: Math.random().toString(36).slice(2,11), type:'shop', name:n}; });
+}
 function wsSyncListen(lsKey) {
   var m = WS_SYNC_SETTINGS[lsKey]; if(!m || _wsSyncUnsubs[lsKey]) return;
   _wsSyncUnsubs[lsKey] = db.collection('iz_settings').doc(m.doc).onSnapshot(function(snap){
     if(!snap.exists) return;
     var val = snap.data()[m.field];
     if(val !== undefined){
-      var stored = m.shared ? _wsNormalizeShared(val) : val;
+      if(m.shopsShared) _wsLastRawShops = val;
+      var stored = (m.shared || m.shopsShared) ? _wsNormalizeShared(val) : val;
       localStorage.setItem(lsKey, JSON.stringify(stored));
       // Обновить открытые селекты сразу, если функции рендера уже определены
       try{
@@ -1817,7 +1836,8 @@ async function wsFetchFreshRef(lsKey){
     if(!snap.exists) return;
     const val = snap.data()[m.field];
     if(val !== undefined){
-      const stored = m.shared ? _wsNormalizeShared(val) : val;
+      if(m.shopsShared) _wsLastRawShops = val;
+      const stored = (m.shared || m.shopsShared) ? _wsNormalizeShared(val) : val;
       localStorage.setItem(lsKey, JSON.stringify(stored));
     }
   }catch(e){ console.log('wsFetchFreshRef err', lsKey, e.code||e); }
@@ -1827,7 +1847,7 @@ function wsSyncSave(lsKey, data) {
   localStorage.setItem(lsKey, JSON.stringify(data));
   var m = WS_SYNC_SETTINGS[lsKey]; if(!m) return;
   var obj = {};
-  obj[m.field] = m.shared ? _wsDenormalizeShared(data) : data;
+  obj[m.field] = m.shopsShared ? _wsDenormalizeShops(data) : (m.shared ? _wsDenormalizeShared(data) : data);
   obj.updatedAt = new Date().toISOString();
   db.collection('iz_settings').doc(m.doc).set(obj, {merge:true}).catch(function(e){
     console.log('ws save err', lsKey, e.code||e);

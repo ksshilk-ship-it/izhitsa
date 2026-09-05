@@ -1109,14 +1109,11 @@ function adminSyncListen(lsKey) {
     var val = snap.data()[m.field];
     if(val !== undefined) {
       localStorage.setItem(lsKey, JSON.stringify(val));
-      // Mirror shops to iz_admin_shops for shop module
-      if(lsKey === 'iz_shops') localStorage.setItem('iz_admin_shops', JSON.stringify(val));
     }
   }, function(e){ console.log('adminSyncListen err', lsKey, e.code||e); });
 }
 function adminSyncSave(lsKey, data) {
   localStorage.setItem(lsKey, JSON.stringify(data));
-  if(lsKey === 'iz_shops') localStorage.setItem('iz_admin_shops', JSON.stringify(data));
   var m = ADMIN_SYNC_SETTINGS[lsKey]; if(!m) return;
   var obj = {}; obj[m.field] = data; obj.updatedAt = new Date().toISOString();
   db.collection('iz_settings').doc(m.doc).set(obj, {merge:true}).catch(function(e){ console.log('adminSyncSave err', lsKey, e.code||e); });
@@ -6653,11 +6650,6 @@ document.addEventListener('DOMContentLoaded', function() {
   // Auto-select first role card
   var firstCard = document.querySelector('.role-card');
   if(firstCard) firstCard.click();
-  // Init shops if not exist
-  if(!localStorage.getItem('iz_shops')) {
-    saveShops(['ОПИТ', 'ТГ канал', 'Instagram', 'Роза Хутор', 'Горки', 'Мастерская']);
-  }
-  
   // Init plan data if not exist
   if(!localStorage.getItem('iz_plan_data')) {
     savePlanData({
