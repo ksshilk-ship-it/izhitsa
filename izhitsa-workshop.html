@@ -680,6 +680,10 @@ function showUpdateBanner(){
       <button class="btn" style="background:var(--s2);border:1px solid var(--border);color:var(--t1);font-size:15px;font-weight:700;cursor:pointer" onclick="showReceivingArchiveView()">📋 Архив приёмок</button>
     </div>
 
+    <button onclick="openMaSearchMo()" style="width:100%;margin-bottom:8px;padding:10px;background:var(--s2);border:1px solid var(--border);border-radius:12px;color:var(--t1);font-weight:700;font-size:13px;cursor:pointer">
+      🔍 Поиск по артикулу / названию / цене
+    </button>
+
     <!-- Заявки кладовщика на исправление приёмок задним числом — видно только администратору/управляющему -->
     <button id="maEditReqBadgeBtn" onclick="openMaEditRequestsMo()" style="display:none;width:100%;margin-bottom:16px;padding:10px;background:var(--s2);border:1px solid var(--border);border-radius:12px;color:var(--t1);font-weight:700;font-size:13px;cursor:pointer;align-items:center;justify-content:center;gap:8px">
       🔔 Заявки на исправление
@@ -8640,6 +8644,55 @@ function clearMaDraftFromLocal(){
   try{ localStorage.removeItem(MA_DRAFT_KEY); }catch(e){}
 }
 
+// ════ ПОИСК ПО АРТИКУЛУ / НАЗВАНИЮ / ЦЕНЕ ПО ВСЕМ ПРИЁМКАМ ════
+// Ищет прямо в уже загруженной _maHistory (живой список из Firestore) — без
+// отдельного запроса, мгновенно, по всей истории сразу, а не только в открытой дате.
+function openMaSearchMo(){
+  const inp = document.getElementById('maSearchInput');
+  if(inp) inp.value = '';
+  const c = document.getElementById('maSearchResults');
+  if(c) c.innerHTML = '<div class="empty" style="padding:10px 0"><div class="ei">🔍</div>Введите артикул, название или цену</div>';
+  openMo('maSearchMo');
+  setTimeout(function(){ if(inp) inp.focus(); }, 150);
+}
+
+function runMaSearch(){
+  const qRaw = (document.getElementById('maSearchInput')?.value||'').trim();
+  const q = qRaw.toLowerCase();
+  const c = document.getElementById('maSearchResults');
+  if(!c) return;
+  if(!q){ c.innerHTML = '<div class="empty" style="padding:10px 0"><div class="ei">🔍</div>Введите артикул, название или цену</div>'; return; }
+
+  const results = [];
+  _maHistory.forEach(function(acc){
+    (acc.positions||[]).forEach(function(p){
+      const hay = [p.artikul, p.name, p.wood, String(p.price||''), String(p.zp||'')].join(' ').toLowerCase();
+      if(hay.indexOf(q) >= 0) results.push({acc:acc, p:p});
+    });
+  });
+
+  if(!results.length){
+    c.innerHTML = '<div class="empty" style="padding:10px 0"><div class="ei">🔍</div>Ничего не найдено по «'+qRaw.replace(/</g,'&lt;')+'»</div>';
+    return;
+  }
+  results.sort(function(a,b){ return (b.acc.deliveredDate||'').localeCompare(a.acc.deliveredDate||''); });
+
+  c.innerHTML = '<div style="font-size:11px;color:var(--t2);margin-bottom:8px">Найдено позиций: '+results.length+'</div>' +
+    results.map(function(r){
+      const acc = r.acc, p = r.p;
+      const statusIcon = p.status==='accepted' ? '✅' : p.status==='defect' ? '⚠️' : '⏳';
+      const accStatus = acc.status==='done' ? '✅ Проведена' : '⏳ Открыта';
+      return '<div onclick="closeMo(\'maSearchMo\');openMaDetail(\''+acc.id+'\')" style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid var(--border);cursor:pointer">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px">'
+        +   '<div style="font-size:13px;font-weight:700">'+statusIcon+' '+(p.name||'—')+(p.artikul?' · '+p.artikul:'')+'</div>'
+        +   '<div style="font-size:12px;color:var(--accent);font-weight:700;white-space:nowrap">'+fmt(p.price||0)+' ₽</div>'
+        + '</div>'
+        + '<div style="font-size:11px;color:var(--t2)">'+(p.wood?p.wood+' · ':'')+'ЗП: '+fmt(p.zp||0)+' ₽</div>'
+        + '<div style="font-size:11px;color:var(--t2);margin-top:4px">👤 '+(acc.masterName||'—')+' · 📅 сдал '+(acc.deliveredDate||'—')+' · '+accStatus+'</div>'
+      + '</div>';
+    }).join('');
+}
+
 function openManualAcceptMo(){
   const draft = loadMaDraftFromLocal();
   if(draft){
@@ -11341,6 +11394,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
     <div class="mt">🔔 Заявки на исправление</div>
     <div id="maEditReqListContent" style="margin-bottom:10px"></div>
     <button class="btn sec" onclick="closeMo('maEditReqListMo')">Закрыть</button>
+  </div>
+</div>
+
+<!-- ПОИСК ПО АРТИКУЛУ / НАЗВАНИЮ / ЦЕНЕ ПО ВСЕМ ПРИЁМКАМ -->
+<div class="mo" id="maSearchMo">
+  <div class="md"><div class="mh"></div>
+    <div class="mt">🔍 Поиск по приёмкам</div>
+    <div class="fg" style="margin-bottom:10px">
+      <input class="fi" id="maSearchInput" placeholder="Артикул, название или цена" autocomplete="off" oninput="runMaSearch()">
+    </div>
+    <div id="maSearchResults" style="margin-bottom:10px"></div>
+    <button class="btn sec" onclick="closeMo('maSearchMo')">Закрыть</button>
   </div>
 </div>
 
