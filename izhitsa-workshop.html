@@ -8745,25 +8745,29 @@ function selectMaAcceptanceMode(mode){
 
 // Следующий сквозной номер артикула по базе товаров мастерской (древесина)
 // ════════ ПРОВЕРКА ДУБЛЕЙ ПО АРТИКУЛУ ════════
-// Ищет товар на складе с таким же артикулом (среди status:'received')
+// Ищет товар с таким же артикулом СРЕДИ ВСЕХ ТОВАРОВ, любого статуса — включая уже
+// отгруженные/списанные, которых физически на складе больше нет. Артикул — постоянный
+// идентификатор изделия и не должен переиспользоваться просто потому, что старый товар
+// уже покинул склад.
 function findDuplicateByArtikul(artikul){
   if(!artikul || !String(artikul).trim()) return null;
   const a = String(artikul).trim();
-  return items.find(i=>i.status==='received' && String(i.artikul||'').trim()===a) || null;
+  return items.find(i=>String(i.artikul||'').trim()===a) || null;
 }
 
 // ════ ЖЁСТКИЙ ЗАПРЕТ НА ЗАДВОЕНИЕ АРТИКУЛОВ ПРИ ВНЕСЕНИИ В ПРИЁМКУ ════
-// В отличие от findDuplicateByArtikul (которая смотрит только уже принятый склад и
-// используется как мягкое предупреждение при "Провести"), эта проверяет ВЕЗДЕ, где
-// артикул уже мог быть использован: склад, позиции любой приёмки (открытой или уже
-// проведённой — не только принятый товар), и — через skipRid — исключает саму
-// редактируемую позицию, чтобы не спорить сама с собой. Возвращает строку с описанием
-// конфликта или null, если артикул свободен.
+// В отличие от findDuplicateByArtikul (которая используется как мягкое предупреждение
+// при "Провести"), эта проверяет ВЕЗДЕ, где артикул уже мог быть использован: любой
+// товар когда-либо принятый (независимо от текущего статуса — даже если он уже
+// отгружен/списан и на складе его больше нет), позиции любой приёмки (открытой или уже
+// проведённой), и — через skipRid — исключает саму редактируемую позицию, чтобы не
+// спорить сама с собой. Возвращает строку с описанием конфликта или null, если артикул
+// свободен.
 function findMaArtikulConflict(artikul, skipRid){
   const a = String(artikul||'').trim();
   if(!a) return null;
-  const stockItem = items.find(i=>i.status==='received' && String(i.artikul||'').trim()===a);
-  if(stockItem) return 'уже на складе («'+(stockItem.name||stockItem.itemName||'—')+'»)';
+  const stockItem = items.find(i=>String(i.artikul||'').trim()===a);
+  if(stockItem) return 'уже использовался ранее («'+(stockItem.name||stockItem.itemName||'—')+'», статус: '+(stockItem.status||'—')+')';
   for(const acc of _maHistory){
     for(const p of (acc.positions||[])){
       if(skipRid && p.rid===skipRid) continue;
