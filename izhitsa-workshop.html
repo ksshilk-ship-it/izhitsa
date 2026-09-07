@@ -8752,6 +8752,29 @@ function findDuplicateByArtikul(artikul){
   return items.find(i=>i.status==='received' && String(i.artikul||'').trim()===a) || null;
 }
 
+// ════ ЖЁСТКИЙ ЗАПРЕТ НА ЗАДВОЕНИЕ АРТИКУЛОВ ПРИ ВНЕСЕНИИ В ПРИЁМКУ ════
+// В отличие от findDuplicateByArtikul (которая смотрит только уже принятый склад и
+// используется как мягкое предупреждение при "Провести"), эта проверяет ВЕЗДЕ, где
+// артикул уже мог быть использован: склад, позиции любой приёмки (открытой или уже
+// проведённой — не только принятый товар), и — через skipRid — исключает саму
+// редактируемую позицию, чтобы не спорить сама с собой. Возвращает строку с описанием
+// конфликта или null, если артикул свободен.
+function findMaArtikulConflict(artikul, skipRid){
+  const a = String(artikul||'').trim();
+  if(!a) return null;
+  const stockItem = items.find(i=>i.status==='received' && String(i.artikul||'').trim()===a);
+  if(stockItem) return 'уже на складе («'+(stockItem.name||stockItem.itemName||'—')+'»)';
+  for(const acc of _maHistory){
+    for(const p of (acc.positions||[])){
+      if(skipRid && p.rid===skipRid) continue;
+      if(String(p.artikul||'').trim()===a){
+        return 'уже в приёмке от '+(acc.masterName||'—')+' ('+(acc.deliveredDate||'—')+', «'+(p.name||'без названия')+'»)';
+      }
+    }
+  }
+  return null;
+}
+
 // Показывает модал с инфо о найденном дубле, вызывает onAccept() или onReject()
 let _dupOnAccept = null;
 let _dupOnReject = null;
@@ -9206,6 +9229,24 @@ async function saveManualAccept(){
         });
       }
     });
+  }
+
+  // Жёсткий запрет на задвоение артикулов: со складом, с любой другой приёмкой,
+  // и между позициями этой же приёмки — сохранение не проходит, пока не исправлено.
+  const seenInBatch = new Set();
+  for(const pos of positions){
+    const a = String(pos.artikul||'').trim();
+    if(!a) continue; // без артикула — дублей не проверяем
+    if(seenInBatch.has(a)){
+      showToast('❌ Артикул «'+a+'» повторяется несколько раз в этой же приёмке — исправьте перед сохранением');
+      return;
+    }
+    seenInBatch.add(a);
+    const conflict = findMaArtikulConflict(a);
+    if(conflict){
+      showToast('❌ Артикул «'+a+'» '+conflict+' — исправьте перед сохранением');
+      return;
+    }
   }
 
   beginSave('maAccept');
@@ -10248,6 +10289,19 @@ function updateMaPosField(accId, rid, field, value){
   const pos = acc.positions.find(p=>p.rid===rid); if(!pos) return;
   const posLabel = pos.name || pos.artikul || 'без названия';
   const oldValue = pos[field];
+
+  // Жёсткий запрет на задвоение артикулов — так же, как при первом внесении приёмки
+  if(field==='artikul'){
+    const newA = String(value||'').trim();
+    if(newA && newA !== String(oldValue||'').trim()){
+      const conflict = findMaArtikulConflict(newA, rid);
+      if(conflict){
+        showToast('❌ Артикул «'+newA+'» '+conflict+' — исправьте перед сохранением');
+        openMaDetail(accId); // откатить визуально к прежнему значению
+        return;
+      }
+    }
+  }
 
   // Преобразование значения в правильный тип
   if(field==='price' || field==='zp') {
