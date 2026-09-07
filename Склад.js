@@ -942,6 +942,7 @@ function _shInvToggle(id, i){
   renderShInvItems(id);
 }
 function editShopInvoice(id){
+  try{ if(typeof _buildUsedArticleIndex==='function') _buildUsedArticleIndex(); }catch(e){}
   var inv = getInvoices().find(function(i){ return String(i._id!=null?i._id:i.id)===id; });
   if(!inv) return;
   var card = document.getElementById('shinv_'+id); if(!card) return;
@@ -967,6 +968,10 @@ function _shInvQty(id,i,v){ if(window._shInvEdit[id]&&window._shInvEdit[id].item
 function _shInvPrice(id,i,v){ if(window._shInvEdit[id]&&window._shInvEdit[id].items[i]) window._shInvEdit[id].items[i].price=parseFloat(v)||0; }
 function saveShopInvoice(id){
   var data = window._shInvEdit[id]; if(!data) return;
+  if(typeof _findArtDupInItems==='function'){
+    var _artDupMsg2 = _findArtDupInItems(data.items, id);
+    if(_artDupMsg2){ showToast('⛔ '+_artDupMsg2+' — исправьте номер'); return; }
+  }
   var wasAccepted = data.status==='accepted';
   var oldNum = (getInvoices().find(function(i){ return String(i._id!=null?i._id:i.id)===id; })||{}).num;
   data.num = (document.getElementById('shinv_num_'+id)||{}).value || data.num;
@@ -1035,6 +1040,7 @@ function loadInvProgress(invId){
 function clearInvProgress(invId){ localStorage.removeItem(_invProgressKey(invId)); }
 var _currentInvItems = [];
 function openInvoice(invId){
+  try{ if(typeof _buildUsedArticleIndex==='function') _buildUsedArticleIndex(); }catch(e){}
   currentInvId=invId; const inv=getInvoices().find(i=>(i.id||i._id)===invId); if(!inv)return;
   _currentInvItems = inv.items;
   var saved = loadInvProgress(invId);
@@ -1087,6 +1093,10 @@ function pauseInvoice(){
 function acceptInvoice(){
   const who=gv('invWho'); if(!who){showToast('Укажите кто принял');return;}
   const invs=getInvoices(); const inv=invs.find(i=>(i.id||i._id)===currentInvId); if(!inv)return;
+  if(typeof _findArtDupInItems==='function'){
+    var _artDupMsg3 = _findArtDupInItems(inv.items, inv.id||inv._id);
+    if(_artDupMsg3){ showToast('⛔ '+_artDupMsg3+' — исправьте номер через «✏️ Исправить» перед приёмкой'); return; }
+  }
   var todayStr = _workingNowISO().split('T')[0];
   var invDate = inv.date||'';
   if(invDate && invDate < todayStr){
@@ -1469,6 +1479,7 @@ function generateManInvNum(forDate){
   return n+'/'+dd+'.'+mm+'.'+yyyy+'/'+(shopShort||'Магазин');
 }
 function initManualInvoice() {
+  try{ if(typeof _buildUsedArticleIndex==='function') _buildUsedArticleIndex(); }catch(e){}
   var hadInMemory = _manInvItems.length>0;
   var restored = false;
   if(!hadInMemory){
@@ -1791,6 +1802,10 @@ function setManInvType(type){
 }
 function saveManualInvoice() {
   if(!_manInvItems.length) { showToast('Добавьте позиции'); return; }
+  if(typeof _findArtDupInItems==='function'){
+    var _artDupMsg0 = _findArtDupInItems(_manInvItems, null);
+    if(_artDupMsg0){ showToast('⛔ '+_artDupMsg0+' — исправьте номер'); return; }
+  }
   var num = (document.getElementById('manInvNum')||{}).value || 'НАК-???';
   var docDate = (document.getElementById('manInvDate')||{}).value || new Date().toISOString().split('T')[0];
   var from = (document.getElementById('manInvFrom')||{}).value || '';
@@ -1861,6 +1876,7 @@ function saveManualInvoice() {
 }
 window._manInvEdit = window._manInvEdit || {};
 function editManualInvoice(id){
+  try{ if(typeof _buildUsedArticleIndex==='function') _buildUsedArticleIndex(); }catch(e){}
   var all = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   var inv = all.find(function(i){ return String(i._id!=null?i._id:i.id)===id; });
   if(!inv) return;
@@ -2115,6 +2131,10 @@ function _cascadeGoodsForward(target, shifts){
 }
 function saveManualInvoiceEdit(id){
   var data = window._manInvEdit[id]; if(!data) return;
+  if(typeof _findArtDupInItems==='function'){
+    var _artDupMsg1 = _findArtDupInItems(data.items, id);
+    if(_artDupMsg1){ showToast('⛔ '+_artDupMsg1+' — исправьте номер'); return; }
+  }
   var all = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   var idx = all.findIndex(function(i){ return String(i._id!=null?i._id:i.id)===id; });
   if(idx<0) return;
@@ -3400,6 +3420,133 @@ function renderStockByInvoice(){
         '<div id="'+ikey+'" style="display:none;padding:0 12px 12px">'+rows+'</div>'+
       '</div>';
     }).join('');
+}
+// ════ Задвоение номеров изделий ════
+// Каждый номер изделия (артикул) должен встречаться в приёмках ровно один раз за всю историю —
+// это уникальная бирка, которую мастерская наносит на конкретную физическую вещь. Если один и
+// тот же номер попадает в приёмку дважды под разными названиями — это ломает остатки (обе вещи
+// делят один слот на складе) и путает продавцов при продаже/списании. Индекс строится по ВСЕМ
+// сменам всех магазинов сразу (номер должен быть уникален для всей сети, а не в рамках одного
+// магазина), поэтому используется одним и тем же кодом и для аудита, и для проверки при вводе.
+var _usedArtIndex = null; // num(string) -> [{shop,date,name,species,invId,invNum}]
+var _usedArtIndexAt = 0;
+function _buildUsedArticleIndex(forceRefresh){
+  var now = Date.now();
+  if(_usedArtIndex && !forceRefresh && (now - _usedArtIndexAt) < 10*60*1000){
+    return Promise.resolve(_usedArtIndex);
+  }
+  // Состав позиций живёт в самих документах накладной (iz_manual_invoices / iz_invoices) —
+  // items у "Приёмки" в журнале смены НЕ хранятся (там только итоговая сумма), поэтому
+  // раньше сканирование по журналу пропускало все накладные, внесённые вручную (именно там
+  // и нашлось реальное задвоение №51962 — Менажница/Подсвечник).
+  return Promise.all([
+    db.collection('iz_manual_invoices').get({source:'server'}),
+    db.collection('iz_invoices').get({source:'server'})
+  ]).then(function(res){
+    var idx = {};
+    function addOcc(num, occ){
+      var key = String(num||'').trim();
+      if(!key) return;
+      if(!idx[key]) idx[key] = [];
+      idx[key].push(occ);
+    }
+    function scanInvoiceSnap(snap){
+      snap.forEach(function(doc){
+        var inv = doc.data();
+        var invId = inv.id!=null ? inv.id : (inv._id!=null ? inv._id : doc.id);
+        var items = inv.acceptedItems || inv.items || [];
+        items.forEach(function(it){
+          addOcc(it.num||it.article, {shop:inv.destName||inv.shopName||'—', date:inv.date||inv.acceptedDate||'—', name:it.name||'—', species:it.species||'', invId:invId, invNum:inv.num||''});
+        });
+      });
+    }
+    scanInvoiceSnap(res[0]);
+    scanInvoiceSnap(res[1]);
+    _usedArtIndex = idx;
+    _usedArtIndexAt = now;
+    return idx;
+  });
+}
+// Синхронная проверка одного номера по уже загруженному индексу (для проверки при вводе —
+// без ожидания сети). excludeInvId — чтобы не считать «задвоением» ту же самую накладную,
+// которую сейчас редактируют (иначе уже сохранённый номер этой же позиции ложно ловился бы
+// как задвоение сам с собой).
+function _checkArtDupSync(num, excludeInvId){
+  if(!_usedArtIndex) return null;
+  var key = String(num||'').trim();
+  if(!key) return null;
+  var occs = _usedArtIndex[key];
+  if(!occs || !occs.length) return null;
+  var filtered = excludeInvId ? occs.filter(function(o){ return o.invId!==excludeInvId; }) : occs;
+  return filtered.length ? filtered : null;
+}
+function loadDupArticleAudit(forceRefresh){
+  var status = document.getElementById('daStatus');
+  var results = document.getElementById('daResults');
+  if(status){ status.style.display='block'; status.textContent='⏳ Загружаю все приёмки по всем магазинам...'; }
+  if(results) results.innerHTML='';
+  var settled = false;
+  var timeoutP = new Promise(function(resolve){ setTimeout(function(){ if(!settled){ settled=true; resolve('timeout'); } }, 20000); });
+  var fetchP = _buildUsedArticleIndex(forceRefresh).then(function(){ if(!settled){ settled=true; } return 'ok'; })
+    .catch(function(){ if(!settled){ settled=true; } return 'error'; });
+  Promise.race([fetchP, timeoutP]).then(function(result){
+    if(status){
+      status.style.display = result==='ok' ? 'none' : 'block';
+      if(result==='timeout') status.textContent = '⚠️ Сервер не отвечает — попробуйте ещё раз';
+      else if(result==='error') status.textContent = '❌ Не удалось загрузить данные';
+    }
+    renderDupArticleAudit();
+  });
+}
+function renderDupArticleAudit(){
+  var c = document.getElementById('daResults'); if(!c) return;
+  if(!_usedArtIndex){ c.innerHTML = '<div class="empty"><div class="ei">🔢</div>Нажмите «Проверить все приёмки»</div>'; return; }
+  var numericOnly = (document.getElementById('daNumericOnly')||{}).checked;
+  var dupKeys = Object.keys(_usedArtIndex).filter(function(num){
+    var occs = _usedArtIndex[num];
+    if(occs.length < 2) return false;
+    // «Числовой артикул» — уникальная бирка на конкретной физической вещи (например 51962).
+    // Коды вроде «СвечСот02» — общий шифр партии товара без индивидуальной нумерации, там
+    // повтор ожидаем и не является ошибкой. По умолчанию показываем только числовые, чтобы
+    // не топить реальную проблему в шуме от партийных кодов.
+    if(numericOnly && !/^\d+$/.test(num)) return false;
+    return true;
+  }).sort(function(a,b){ return _usedArtIndex[b].length - _usedArtIndex[a].length; });
+  if(!dupKeys.length){ c.innerHTML = '<div class="empty"><div class="ei">✅</div>Задвоений номеров не найдено</div>'; return; }
+  c.innerHTML = '<div style="font-size:12px;color:#f06060;font-weight:700;margin-bottom:8px">⚠️ Найдено '+dupKeys.length+' номеров, использованных больше одного раза</div>'+
+    dupKeys.map(function(num){
+      var occs = _usedArtIndex[num];
+      return '<div style="background:#2e1a1a;border:1px solid #f06060;border-radius:10px;padding:10px 12px;margin-bottom:8px">'+
+        '<div style="font-size:13px;font-weight:700;color:#f06060;margin-bottom:6px">№'+num+' — встречается '+occs.length+' раз</div>'+
+        occs.map(function(o){
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px solid #3e2020;font-size:12px">'+
+            '<div><b>'+o.name+'</b>'+(o.species?' · '+o.species:'')+'<div class="u-fs10-gray">'+o.shop+' · '+o.date+'</div></div>'+
+            (o.invId?'<button type="button" onclick="adminOpenInvoiceFromList(\''+o.invId+'\',\''+(o.shiftId||'')+'\')" style="font-size:10px;padding:3px 8px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#60c8f0;cursor:pointer;flex-shrink:0;margin-left:8px">📋 Открыть</button>':'')+
+          '</div>';
+        }).join('')+
+      '</div>';
+    }).join('');
+}
+// Запрет повторного использования номера изделия при приёмке — та же проверка вызывается из
+// всех форм, где продавец может вписать/поправить номер (новая накладная вручную, исправление
+// накладной, приём накладной от мастерской). Если индекс ещё не подгрузился (нет сети/только
+// открыли форму) — не блокируем, чтобы не мешать работать оффлайн; индекс предзагружается при
+// открытии этих форм заранее, так что в норме к моменту сохранения он уже готов.
+function _findArtDupInItems(items, excludeInvId){
+  if(!_usedArtIndex) return null;
+  var seenInThisInvoice = {};
+  for(var i=0;i<(items||[]).length;i++){
+    var num = String((items[i].num||items[i].article||'')).trim();
+    if(!num) continue;
+    if(seenInThisInvoice[num]) return '№'+num+' указан в этой накладной дважды';
+    seenInThisInvoice[num] = true;
+    var occs = _checkArtDupSync(num, excludeInvId);
+    if(occs && occs.length){
+      var o = occs[0];
+      return '№'+num+' уже был использован: «'+o.name+'» ('+o.shop+', '+o.date+')';
+    }
+  }
+  return null;
 }
 function stockOnFilterChange(){
   var sel = document.getElementById('stockFilterBy');
