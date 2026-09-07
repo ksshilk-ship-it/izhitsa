@@ -3134,14 +3134,25 @@ function _syncDerivedFromStaff(staff) {
     .map(function(s){ return {id:s.id, name:s.name, pass:s.pass, shops:s.shops||[], blocked:s.blocked||false, rate:s.wsRate||0}; });
   adminSyncSave('iz_sellers', sellers);
 
-  // Derive ws_employees for workshop module
+  // Derive ws_employees for workshop module — СЛИЯНИЕ с уже существующим списком, а не
+  // перезапись. Раньше это писало ТОЛЬКО производный от iz_staff список — и любой
+  // сотрудник, ещё не перенесённый в единую базу (или перенесённый без роли мастерской),
+  // полностью стирался из общего Firestore-документа iz_settings/ws_employees при КАЖДОМ
+  // сохранении в "Сотрудниках", даже по не связанной причине. Так 07.09.2026 разом
+  // пропали все мастера мастерской (Илья, Караулов Володя, Алексей, Сергей, Настя, Марат
+  // и др.) после добавления одного нового сотрудника. Теперь сохраняем производных из
+  // iz_staff как есть, а тех, кто ещё не в этом производном списке (легаси-записи), —
+  // оставляем как было, вместо того чтобы стирать.
   var wsRoles = ['мастер','заготовщик','кладовщик','управляющий'];
-  var wsEmps = staff.filter(function(s){
+  var wsEmpsFromStaff = staff.filter(function(s){
     return s.roles && s.roles.some(function(r){ return wsRoles.indexOf(r) >= 0; });
   }).map(function(s){
     var wsRole = s.roles.find(function(r){ return wsRoles.indexOf(r) >= 0; }) || 'мастер';
     return {id:s.id, name:s.name, pass:s.pass, role:wsRole, rate:s.wsRate||0, blocked:s.blocked||false};
   });
+  var derivedIds = {}; wsEmpsFromStaff.forEach(function(e){ derivedIds[e.id] = true; });
+  var legacyOnly = getWsEmployees().filter(function(e){ return !derivedIds[e.id]; });
+  var wsEmps = wsEmpsFromStaff.concat(legacyOnly);
   adminSyncSave('iz_ws_employees', wsEmps);
 
   // Derive iz_shop_admins / iz_admin_users
