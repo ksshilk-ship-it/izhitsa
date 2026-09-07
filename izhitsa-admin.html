@@ -3768,24 +3768,10 @@ function initRefBooks() {
   // дважды пропадали Колесо/Парк Ривьера Сочи/ТГ-Inst для всего приложения. Настоящий
   // список должен приходить только из Firestore (adminSyncListen), никогда — из
   // локального хардкода.
-  if(!localStorage.getItem('iz_accounts')) {
-    saveRefBook('iz_accounts', [
-      {id: uid(), name: 'Касса 1', type: 'cash'},
-      {id: uid(), name: 'Касса 2', type: 'cash'},
-      {id: uid(), name: 'Расчётный счёт', type: 'bank'},
-      {id: uid(), name: 'Касса Роза Хутор Дерево', type: 'cash'}
-    ]);
-  }
-  
-  if(!localStorage.getItem('iz_payment_methods')) {
-    saveRefBook('iz_payment_methods', [
-      {id: uid(), name: 'Нал'},
-      {id: uid(), name: 'Терминал'},
-      {id: uid(), name: 'СБП'},
-      {id: uid(), name: 'Перевод'}
-    ]);
-  }
-  
+  // ⚠️ iz_accounts и iz_payment_methods раньше сеялись хардкодом здесь же (шаблон для
+  // ювелирного магазина) и синхронизировались в ОБЩИЕ Firestore-документы accounts/
+  // payment_methods — те же, что читает главный.html. Тот же класс бага, что вызвал пропажу
+  // точек продаж и подмену пород дерева (см. iz_materials ниже) — убрано по тем же причинам.
   if(!localStorage.getItem('iz_salary_formulas')) {
     saveRefBook('iz_salary_formulas', [
       {id: uid(), name: 'Роза Хутор 5%'},
@@ -3793,22 +3779,8 @@ function initRefBooks() {
     ]);
   }
   
-  if(!localStorage.getItem('iz_goods')) {
-    saveRefBook('iz_goods', [
-      {id: uid(), name: 'Кольцо'},
-      {id: uid(), name: 'Кулон'},
-      {id: uid(), name: 'Браслет'},
-      {id: uid(), name: 'Серьги'}
-    ]);
-  }
-  
-  if(!localStorage.getItem('iz_suppliers')) {
-    saveRefBook('iz_suppliers', [
-      {id: uid(), name: 'Поставщик 1'},
-      {id: uid(), name: 'Поставщик 2'}
-    ]);
-  }
-  
+  // ⚠️ iz_goods (Кольцо/Кулон/Браслет/Серьги) и iz_suppliers — тот же ювелирный хардкод,
+  // синхронизировался в общие документы goods/suppliers. Убрано по той же причине.
   if(!localStorage.getItem('iz_expense_items')) {
     saveRefBook('iz_expense_items', [
       {id: uid(), name: 'Аренда и помещения', children: [
@@ -3864,29 +3836,10 @@ function initRefBooks() {
     ]);
   }
   
-  if(!localStorage.getItem('iz_materials')) {
-    saveRefBook('iz_materials', [
-      {id: uid(), name: 'Золото 585'},
-      {id: uid(), name: 'Серебро 925'},
-      {id: uid(), name: 'Платина'}
-    ]);
-  }
-  
-  if(!localStorage.getItem('iz_employee_statuses')) {
-    saveRefBook('iz_employee_statuses', [
-      {id: uid(), name: 'Активный'},
-      {id: uid(), name: 'Отпуск'},
-      {id: uid(), name: 'Уволен'}
-    ]);
-  }
-  
-  if(!localStorage.getItem('iz_work_schedules')) {
-    saveRefBook('iz_work_schedules', [
-      {id: uid(), name: 'Пн-Пт 9-18'},
-      {id: uid(), name: 'Пн-Пт 10-19'},
-      {id: uid(), name: 'Сб-Вс 10-18'}
-    ]);
-  }
+  // ⚠️ iz_materials (Золото/Серебро/Платина — реальный инцидент 07.09.2026: подменил
+  // породы дерева, продавцам стало нечего выбирать в автоподсказке при продаже),
+  // iz_employee_statuses и iz_work_schedules — тот же хардкод из ювелирного шаблона,
+  // синхронизировался в общие документы. Убрано по той же причине.
 }
 
 // ════ ANALYTICS & DASHBOARD ════
@@ -6684,19 +6637,13 @@ document.addEventListener('DOMContentLoaded', function() {
     saveTransactions(testTransactions);
   }
   
-  // Init users if not exist
-  // Init admin users - CRITICAL
-  if(!localStorage.getItem('iz_admin_users')) {
-    const adminUsers = [
-      {id: '1', name: 'Ксения', role: 'admin', pass: '1'},
-      {id: '2', name: 'Елена', role: 'admin', pass: '1'},
-      {id: '3', name: 'Владимир', role: 'owner', pass: '1'},
-      {id: '4', name: 'Анна', role: 'accountant', pass: '1'}
-    ];
-    localStorage.setItem('iz_admin_users', JSON.stringify(adminUsers));
-    console.log('✅ Admin users initialized');
-  }
-  
+  // ⚠️ Раньше здесь безусловно подставлялся хардкод из 4 фейковых админов с паролем «1»
+  // (в том числе один по имени «Ксения» — опасное совпадение с реальным именем владелицы),
+  // если локально ещё не было iz_admin_users. Список админов синхронизируется в тот же
+  // общий Firestore-документ admins, что и настоящий iz_shop_admins в главный.html — тот
+  // же класс бага, что и с точками продаж/породами дерева, только на логинах администратора.
+  // Безопасная инициализация одного дефолтного админа уже сделана выше (см. hasDefault).
+
   // Initialize first role on page load
   setTimeout(function() {
     const firstCard = document.querySelector('.role-card');
