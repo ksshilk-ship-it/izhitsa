@@ -778,6 +778,17 @@ function showUpdateBanner(){
         <div id="invFiGroupsList"></div>
       </div>
 
+      <!-- ПОЛНАЯ ИНВЕНТАРИЗАЦИЯ (ПЕРЕСЧЁТ ВСЕГО СКЛАДА) -->
+      <div id="invRecountSection" style="margin-top:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div style="font-size:13px;font-weight:700;color:var(--exp)">🔄 Полная инвентаризация (пересчёт)</div>
+          <button onclick="openRecountGroupMo()" style="background:var(--a2);border:none;border-radius:8px;padding:6px 12px;color:#000;font-size:12px;font-weight:700;cursor:pointer">➕ Группа пересчёта</button>
+        </div>
+        <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Независимый счёт с нуля — не мешает обычной работе и текущему балансу, пока вы вносите товары. По готовности нажмите «Обновить остатки», чтобы заменить весь текущий баланс склада этим счётом целиком.</div>
+        <div id="invRecountGroupsList"></div>
+        <button id="rcApplyBtn" onclick="applyStockRecount()" style="display:none;width:100%;margin-top:10px;padding:12px;background:var(--exp);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer">✅ Обновить остатки</button>
+      </div>
+
       <!-- ИСТОРИЯ СВЕРОК — заголовок и кнопка рендерятся в JS -->
       <div id="invHistorySection">
         <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 8px">
@@ -2919,6 +2930,12 @@ function startListeners(){
     renderFirstInventoryGroups();
     renderInvFiGroups();
   }, e => { console.error('Ошибка загрузки инвентаризации:', e); showToast('❌ Ошибка инвентаризации: '+e.message); });
+  // Полная инвентаризация (пересчёт всего склада, независимо от текущих остатков)
+  db.collection('ws_stock_recount').onSnapshot(snap=>{
+    _rcGroups = snap.docs.map(d=>({id:d.id,...d.data()}));
+    _rcGroups.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+    renderRecountGroups();
+  }, e => { console.error('Ошибка загрузки пересчёта склада:', e); });
 }
 
 function updateBadges(){
@@ -7801,6 +7818,7 @@ function renderInventoryPage(){
   if(hm) hm.style.display='block';
   if(am) am.style.display='none';
   renderInvFiGroups();
+  renderRecountGroups();
   if(!_invHistories.length) loadInvHistories();
   else renderInventoryHistory();
 }
@@ -10966,6 +10984,319 @@ async function activateFirstInvGroup(groupId){
   finally{ endSave('fiActivate_'+groupId); }
 }
 
+// ════════════════════════════════════════════════
+// ПОЛНАЯ ИНВЕНТАРИЗАЦИЯ (ПЕРЕСЧЁТ ВСЕГО СКЛАДА)
+// ════════════════════════════════════════════════
+// В отличие от «Первой инвентаризации» (которая ДОБАВЛЯЕТ товар к текущему балансу),
+// это независимый пересчёт с нуля: во время внесения текущий баланс никак не трогается
+// (можно спокойно продолжать обычную работу), а по кнопке «Обновить остатки» весь
+// текущий баланс архивируется (не удаляется — просто скрывается из активного остатка,
+// история сохраняется) и заменяется целиком результатом этого пересчёта.
+let _rcItems = [];        // позиции в открытой группе пересчёта
+let _rcGroups = [];       // все группы пересчёта (из Firebase ws_stock_recount)
+let _rcCurrentGroupId = null;
+
+function openRecountGroupMo(){
+  _rcCurrentGroupId = null;
+  const nameEl = document.getElementById('rcGroupName');
+  if(nameEl){ nameEl.value=''; nameEl.removeAttribute('disabled'); }
+  const titleEl = document.querySelector('#recountMo .mt');
+  if(titleEl) titleEl.textContent = '🔄 Новая группа пересчёта';
+  const saveBtn = document.querySelector('#recountMo .btn.green');
+  if(saveBtn) saveBtn.textContent = '💾 Сохранить группу';
+  _rcItems = [];
+  addRcItemRow();
+  renderRcItemsList();
+  openMo('recountMo');
+}
+
+function openRecountGroupForEdit(groupId){
+  const g = _rcGroups.find(x=>x.id===groupId); if(!g) return;
+  if(g.status==='applied'){ showToast('Эта группа уже применена к остаткам'); return; }
+  _rcCurrentGroupId = groupId;
+  const nameEl = document.getElementById('rcGroupName');
+  if(nameEl){ nameEl.value=g.groupName; nameEl.setAttribute('disabled','disabled'); }
+  const titleEl = document.querySelector('#recountMo .mt');
+  if(titleEl) titleEl.textContent = '➕ Дополнить «'+g.groupName+'»';
+  const saveBtn = document.querySelector('#recountMo .btn.green');
+  if(saveBtn) saveBtn.textContent = '💾 Добавить товары в группу';
+  _rcItems = [];
+  addRcItemRow();
+  renderRcItemsList();
+  openMo('recountMo');
+}
+
+function deleteRecountGroup(groupId){
+  if(!confirm('Удалить эту группу пересчёта целиком? Это не затронет текущий баланс склада.')) return;
+  db.collection('ws_stock_recount').doc(groupId).delete().catch(e=>showToast('Ошибка: '+e.message));
+}
+
+function addRcItemRow(){
+  _rcItems.push({rid:uid(), artikul:'', name:'', wood:'', price:0, qty:'', goodsType:'derevo'});
+  renderRcItemsList();
+}
+function removeRcItemRow(rid){
+  _rcItems = _rcItems.filter(x=>x.rid!==rid);
+  renderRcItemsList();
+}
+function setRcItemGoodsType(rid, type){
+  const it = _rcItems.find(x=>x.rid===rid); if(!it) return;
+  it.goodsType = type;
+  renderRcItemsList();
+}
+function updateRcItem(rid, field, val){
+  const it = _rcItems.find(x=>x.rid===rid); if(!it) return;
+  it[field] = (field==='price'||field==='qty') ? (parseFloat(val)||0) : val;
+  const sumEl = document.getElementById('rcRowSum_'+rid);
+  if(sumEl) sumEl.textContent = fmt((it.price||0)*(it.qty||0));
+  renderRcTotals();
+}
+function updateRcArtikul(rid, val){
+  const it = _rcItems.find(x=>x.rid===rid); if(!it) return;
+  it.artikul = val;
+}
+// По потере фокуса поля артикула — если такой артикул уже встречался в системе
+// (в любом статусе, включая уже отгруженный/списанный), подтягиваем его последние
+// известные наименование/породу/цену. Поля остаются полностью редактируемыми вручную.
+function finalizeRcArtikul(rid){
+  const it = _rcItems.find(x=>x.rid===rid); if(!it) return;
+  const a = String(it.artikul||'').trim();
+  if(!a){ renderRcItemsList(); return; }
+  const found = items.find(i=>String(i.artikul||'').trim()===a);
+  if(found){
+    it.name = found.name || found.itemName || it.name;
+    it.wood = found.wood || it.wood;
+    if(found.price) it.price = found.price;
+    if(found.goodsType) it.goodsType = found.goodsType;
+    showToast('📋 Артикул «'+a+'» уже есть в системе — данные подтянуты, можно поправить');
+  }
+  renderRcItemsList();
+}
+
+function acPickRcName(val, rid){ const el=document.getElementById('rcName_'+rid); if(el) el.value=val; acHideSugg('rcName_'+rid); updateRcItem(rid,'name',val); }
+function acPickRcWood(val, rid){ const el=document.getElementById('rcWood_'+rid); if(el) el.value=val; acHideSugg('rcWood_'+rid); updateRcItem(rid,'wood',val); }
+
+function renderRcItemsList(){
+  _rcItems.forEach(it=>{ applyGoodsTypeLists('rcName_'+it.rid, 'rcWood_'+it.rid, it.goodsType||'derevo'); });
+  const c = document.getElementById('rcItemsList'); if(!c) return;
+  c.innerHTML = _rcItems.map((it,i)=>`
+    <div style="background:var(--s2);border-radius:12px;padding:12px;margin-bottom:10px;border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:11px;color:var(--t2);font-weight:700">Товар ${i+1}</span>
+        ${_rcItems.length>1?`<button onclick="removeRcItemRow('${it.rid}')" style="background:none;border:none;color:var(--t2);cursor:pointer;font-size:16px">✕</button>`:''}
+      </div>
+      <div class="fg" style="margin-bottom:8px">
+        <label class="fl">Артикул</label>
+        <input class="fi" type="text" inputmode="decimal" value="${(it.artikul||'').replace(/"/g,'&quot;')}" placeholder="Номер артикула (если есть)"
+          oninput="updateRcArtikul('${it.rid}',this.value)" onblur="finalizeRcArtikul('${it.rid}')">
+        <div style="font-size:11px;color:var(--t2);margin-top:5px">💡 Если этот артикул уже встречался в системе — название/порода/цена подтянутся сами</div>
+      </div>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">Категория товара</label>
+        ${goodsTypeToggleHtml(`setRcItemGoodsType('${it.rid}',`, it.goodsType||'derevo')}
+      </div>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">Наименование</label>
+        <div style="position:relative">
+          <input class="fi" id="rcName_${it.rid}" value="${(it.name||'').replace(/"/g,'&quot;')}" placeholder="Начните вводить..." autocomplete="off"
+            oninput="updateRcItem('${it.rid}','name',this.value);acSuggest('rcName_${it.rid}','acPickRcName','${it.rid}')"
+            onclick="acFieldTap('rcName_${it.rid}','acPickRcName','${it.rid}')">
+          <div id="rcName_${it.rid}_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
+        </div>
+      </div>
+      <div class="fg" style="margin-bottom:8px"><label class="fl">${goodsTypeWoodLabel(it.goodsType||'derevo')}</label>
+        <div style="position:relative">
+          <input class="fi" id="rcWood_${it.rid}" value="${(it.wood||'').replace(/"/g,'&quot;')}" placeholder="${goodsTypeWoodPlaceholder(it.goodsType||'derevo')}" autocomplete="off"
+            oninput="updateRcItem('${it.rid}','wood',this.value);acSuggest('rcWood_${it.rid}','acPickRcWood','${it.rid}')"
+            onclick="acFieldTap('rcWood_${it.rid}','acPickRcWood','${it.rid}')">
+          <div id="rcWood_${it.rid}_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:var(--s1);border:1px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="fg"><label class="fl">Цена (₽)</label>
+          <input class="fi" type="number" inputmode="numeric" value="${it.price||''}" oninput="updateRcItem('${it.rid}','price',this.value)" placeholder="0">
+        </div>
+        <div class="fg"><label class="fl">Количество</label>
+          <input class="fi" type="number" inputmode="numeric" value="${it.qty||''}" oninput="updateRcItem('${it.rid}','qty',this.value)" placeholder="1">
+        </div>
+      </div>
+      <div style="text-align:right;font-size:12px;color:var(--t2);margin-top:6px">Сумма: <span id="rcRowSum_${it.rid}" style="color:var(--accent);font-weight:700">${fmt((it.price||0)*(it.qty||0))}</span></div>
+    </div>`).join('');
+  renderRcTotals();
+}
+function renderRcTotals(){
+  const totalQty = _rcItems.reduce((s,it)=>s+(it.qty||0),0);
+  const totalSum = _rcItems.reduce((s,it)=>s+(it.price||0)*(it.qty||0),0);
+  const qtyEl = document.getElementById('rcTotalQty'); if(qtyEl) qtyEl.textContent = totalQty;
+  const sumEl = document.getElementById('rcTotalSum'); if(sumEl) sumEl.textContent = fmt(totalSum);
+}
+
+async function saveRecountGroup(){
+  const groupName = document.getElementById('rcGroupName')?.value.trim();
+  if(!groupName){ showToast('Укажите название группы'); return; }
+  if(!_rcItems.length){ showToast('Добавьте хотя бы один товар'); return; }
+
+  // Проверка дублей АРТИКУЛОВ — только внутри самого пересчёта (не против текущего
+  // склада: пересчёт намеренно независим от текущих остатков и переиспользует те же
+  // номера, что и раньше)
+  const seenNow = new Set();
+  for(const it of _rcItems){
+    const a = String(it.artikul||'').trim();
+    if(!a) continue;
+    if(seenNow.has(a)){ showToast('❌ Артикул «'+a+'» повторяется дважды в этой группе'); return; }
+    seenNow.add(a);
+  }
+  for(const g of _rcGroups){
+    if(g.status==='applied' || g.id===_rcCurrentGroupId) continue;
+    for(const p of (g.positions||[])){
+      const a = String(p.artikul||'').trim();
+      if(a && seenNow.has(a)){ showToast('❌ Артикул «'+a+'» уже внесён в группе «'+g.groupName+'» этого же пересчёта'); return; }
+    }
+  }
+
+  const newPositions = _rcItems.map(it=>({
+    rid: it.rid, artikul: it.artikul||'', name: it.name, wood: it.wood, goodsType: it.goodsType||'derevo',
+    price: it.price||0, qty: it.qty||1
+  }));
+
+  if(isSaving('rcGroupSave')) return;
+  beginSave('rcGroupSave');
+  try{
+    if(_rcCurrentGroupId){
+      const g = _rcGroups.find(x=>x.id===_rcCurrentGroupId); if(!g){ endSave('rcGroupSave'); return; }
+      const merged = [...(g.positions||[]), ...newPositions];
+      await db.collection('ws_stock_recount').doc(_rcCurrentGroupId).update({positions: merged, updatedAt: now(), updatedBy: session.name});
+      showSavedBanner(`✅ Добавлено ${newPositions.length} товар(ов) в группу «${g.groupName}»`);
+    } else {
+      const groupId = uid();
+      await db.collection('ws_stock_recount').doc(groupId).set({
+        id: groupId, groupName, positions: newPositions, status: 'draft',
+        createdBy: session.name, createdById: session.id, createdAt: now()
+      });
+      showSavedBanner(`✅ Группа «${groupName}» сохранена · ${newPositions.length} товаров`);
+    }
+    logAction('stock_recount_group_saved', {groupName, count:newPositions.length});
+    closeMo('recountMo');
+  }catch(e){ showToast('Ошибка: '+e.message); }
+  finally{ endSave('rcGroupSave'); }
+}
+
+function renderRecountGroups(){
+  const c = document.getElementById('invRecountGroupsList');
+  const applyBtn = document.getElementById('rcApplyBtn');
+  if(!c) return;
+  const isAdmin = typeof isInvAdmin==='function' ? isInvAdmin() : (session && (session.role==='администратор'||session.role==='управляющий'));
+  const activeGroups = _rcGroups.filter(g=>g.status!=='applied');
+  const totalPositions = activeGroups.reduce((s,g)=>s+(g.positions||[]).length,0);
+  const totalQty = activeGroups.reduce((s,g)=>s+(g.positions||[]).reduce((s2,p)=>s2+(p.qty||1),0),0);
+
+  if(applyBtn){
+    applyBtn.style.display = (isAdmin && totalPositions>0) ? 'block' : 'none';
+    applyBtn.textContent = `✅ Обновить остатки (${totalPositions} поз. · ${totalQty} шт вместо текущего склада)`;
+  }
+
+  if(!_rcGroups.length){
+    c.innerHTML = '<div style="font-size:12px;color:var(--t2);padding:8px 0">Групп пересчёта пока нет. Нажмите «➕ Группа пересчёта», чтобы начать.</div>';
+    return;
+  }
+
+  c.innerHTML = _rcGroups.map(g=>{
+    const qty = (g.positions||[]).reduce((s,p)=>s+(p.qty||1),0);
+    const sum = (g.positions||[]).reduce((s,p)=>s+(p.price||0)*(p.qty||1),0);
+    const applied = g.status==='applied';
+    const statusLabel = applied ? '✅ Применена к остаткам' : '📝 Черновик';
+    const statusColor = applied ? 'var(--t2)' : 'var(--a4)';
+    return `<div style="background:var(--s1);border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div style="font-size:13px;font-weight:700">${g.groupName}</div>
+        <div style="font-size:11px;font-weight:700;color:${statusColor};white-space:nowrap">${statusLabel}</div>
+      </div>
+      <div style="font-size:11px;color:var(--t2)">${(g.positions||[]).length} поз. · ${qty} шт · ${fmt(sum)} ₽</div>
+      ${!applied ? `<div style="display:flex;gap:8px;margin-top:8px">
+        <button onclick="openRecountGroupForEdit('${g.id}')" style="flex:1;padding:7px;background:var(--s2);border:1px solid var(--border);color:var(--text);border-radius:7px;cursor:pointer;font-size:11px;font-weight:700">➕ Дополнить</button>
+        <button onclick="deleteRecountGroup('${g.id}')" style="flex:1;padding:7px;background:none;border:1px solid var(--exp);color:var(--exp);border-radius:7px;cursor:pointer;font-size:11px;font-weight:700">🗑 Удалить</button>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// Firestore-батч ограничен 500 операциями — разбиваем на чанки
+async function commitInChunks(ops, mode){
+  mode = mode || 'set';
+  const chunkSize = 450;
+  for(let i=0; i<ops.length; i+=chunkSize){
+    const batch = db.batch();
+    ops.slice(i, i+chunkSize).forEach(op=>{
+      if(mode==='update') batch.update(op.ref, op.data);
+      else batch.set(op.ref, op.data);
+    });
+    await batch.commit();
+  }
+}
+
+// ════ ОБНОВИТЬ ОСТАТКИ — заменить весь текущий баланс склада результатом пересчёта ════
+// Старые записи НЕ удаляются — помечаются isShopArchived:true (скрываются из активного
+// баланса, но остаются в истории/отчётах). Новые товары из пересчёта встают на баланс
+// как обычный принятый товар.
+async function applyStockRecount(){
+  const isAdmin = typeof isInvAdmin==='function' ? isInvAdmin() : (session && (session.role==='администратор'||session.role==='управляющий'));
+  if(!isAdmin){ showToast('🔒 Доступно только администратору/управляющему'); return; }
+
+  const activeGroups = _rcGroups.filter(g=>g.status!=='applied');
+  const allPositions = [];
+  activeGroups.forEach(g=>(g.positions||[]).forEach(p=>allPositions.push(p)));
+  if(!allPositions.length){ showToast('Нет позиций пересчёта для применения'); return; }
+
+  const totalQty = allPositions.reduce((s,p)=>s+(p.qty||1),0);
+  if(!confirm(`Заменить ВЕСЬ текущий баланс склада результатом пересчёта?\n\n${allPositions.length} поз. · ${totalQty} шт встанут на баланс.\nТекущий остаток будет скрыт из баланса (архивирован, не удалён — история сохранится).\n\nПродолжить?`)) return;
+
+  if(isSaving('rcApply')) return;
+  beginSave('rcApply');
+  try{
+    // 1) Архивируем весь текущий активный остаток (скрываем из баланса, не удаляем)
+    const currentStockSnap = await db.collection('ws_items').where('status','==','received').get();
+    const toArchive = currentStockSnap.docs.filter(d => !d.data().isShopArchived);
+    await commitInChunks(toArchive.map(d => ({
+      ref: d.ref,
+      data: {isShopArchived:true, archivedByRecountAt: now(), archivedByRecountBy: session.name}
+    })), 'update');
+
+    // 2) Создаём новые товары из позиций пересчёта
+    const newDocs = [];
+    allPositions.forEach(p=>{
+      const qty = parseInt(p.qty)||1;
+      const baseArtikul = parseInt(p.artikul);
+      for(let q=0; q<qty; q++){
+        let artikul = p.artikul||'';
+        if(!isNaN(baseArtikul) && qty>1) artikul = String(baseArtikul+q);
+        newDocs.push({
+          ref: db.collection('ws_items').doc(),
+          data: {
+            id: uid(), name: p.name||'', itemName: p.name||'', wood: p.wood||'',
+            artikul: artikul, price: p.price||0, zp: 0, zpPaid: false,
+            masterId: '', masterName: 'Инвентаризация (пересчёт)',
+            status: 'received',
+            createdAt: now(), receivedAt: now(),
+            isManual: true, fromStockRecount: true,
+            itemNum: artikul || ('ИНВ-'+uid().slice(-4).toUpperCase()+'-'+(q+1))
+          }
+        });
+      }
+    });
+    await commitInChunks(newDocs, 'set');
+
+    // 3) Помечаем применённые группы пересчёта
+    await commitInChunks(activeGroups.map(g => ({
+      ref: db.collection('ws_stock_recount').doc(g.id),
+      data: {status:'applied', appliedAt: now(), appliedBy: session.name}
+    })), 'update');
+
+    logAction('stock_recount_applied', {groupsCount: activeGroups.length, positionsCount: allPositions.length, totalQty, archivedOldCount: toArchive.length});
+    showSavedBanner(`✅ Остатки обновлены: ${totalQty} шт поставлено на баланс, ${toArchive.length} старых записей архивировано`);
+    loadDataFromFirebase();
+    setTimeout(()=>renderWarehouse(), 400);
+  }catch(e){ showToast('❌ Ошибка: ' + e.message); }
+  finally{ endSave('rcApply'); }
+}
+
 async function reactivateFiGroup(groupId){
   if(isSaving('fiReactivate_'+groupId)) return;
   const g = _fiGroups.find(x=>x.id===groupId); if(!g) return;
@@ -11590,6 +11921,29 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     <button class="btn green" onclick="saveFirstInvGroup()">💾 Сохранить группу</button>
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('firstInvMo')">Отмена</button>
+  </div>
+</div>
+
+<!-- ПОЛНАЯ ИНВЕНТАРИЗАЦИЯ (ПЕРЕСЧЁТ ВСЕГО СКЛАДА) -->
+<div class="mo" id="recountMo">
+  <div class="md"><div class="mh"></div><div class="mt">🔄 Новая группа пересчёта</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:12px">Считайте товар с нуля — этот счёт не зависит от текущего баланса склада и не мешает обычной работе, пока не будет применён кнопкой «Обновить остатки».</div>
+
+    <div class="fg"><label class="fl">Группа товаров</label>
+      <input class="fi" id="rcGroupName" placeholder="Например: Полка А, Столешницы">
+    </div>
+
+    <div id="rcItemsList" style="margin:14px 0"></div>
+
+    <button class="btn" style="background:var(--a2);margin-bottom:10px" onclick="addRcItemRow()">➕ Добавить товар в группу</button>
+
+    <div class="card" style="background:var(--s2);margin:10px 0">
+      <div class="at-row"><span class="at-lbl">Количество товаров</span><span class="at-val" id="rcTotalQty">0</span></div>
+      <div class="at-row"><span class="at-lbl">Общая сумма</span><span class="at-val" style="color:var(--accent)" id="rcTotalSum">0 ₽</span></div>
+    </div>
+
+    <button class="btn green" onclick="saveRecountGroup()">💾 Сохранить группу</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('recountMo')">Отмена</button>
   </div>
 </div>
 
