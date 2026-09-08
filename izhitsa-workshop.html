@@ -7866,7 +7866,7 @@ function renderInvFiGroups(){
     byDate[key].groups.push(g);
   });
 
-  c.innerHTML = Object.values(byDate).sort((a,b)=>b.ts-a.ts).map(({date,groups})=>{
+  c.innerHTML = Object.values(byDate).sort((a,b)=>b.ts-a.ts).map(({date,groups},dateIdx)=>{
     const totalPositions = groups.reduce((s,g)=>s+(g.positions||[]).length,0);
     const totalQty       = groups.reduce((s,g)=>s+(g.positions||[]).reduce((ss,p)=>ss+(parseInt(p.qty)||1),0),0);
     const activeCount    = groups.filter(g=>g.status==='active').length;
@@ -7874,14 +7874,18 @@ function renderInvFiGroups(){
     const totalSum       = groups.reduce((s,g)=>s+(g.positions||[]).reduce((ss,p)=>ss+(p.price||0)*(parseInt(p.qty)||1),0),0);
     const realOnStock    = groups.reduce((s,g)=>s+items.filter(i=>i.fromFirstInventory===g.id&&i.status==='received').length,0);
     const mismatch       = activeCount>0 && realOnStock<totalQty;
+    // Свежая дата (первая в списке) — сразу развёрнута, все предыдущие — свёрнуты
+    // в одну строку-заголовок, разворачиваются по клику
+    const bodyId = 'invFiDateBody_'+dateIdx;
+    const expanded = dateIdx===0;
 
     return `<div style="margin-bottom:10px;border:1px solid ${mismatch?'var(--exp)':draftCount?'var(--a4)':'var(--border)'};border-radius:12px;overflow:hidden">
-      <div style="padding:10px 12px;background:var(--s2);border-bottom:1px solid var(--border)">
+      <div onclick="const b=document.getElementById('${bodyId}'),a=document.getElementById('${bodyId}_arr');b.style.display=b.style.display==='none'?'block':'none';a.textContent=b.style.display==='none'?'▸':'▾';" style="padding:10px 12px;background:var(--s2);border-bottom:1px solid var(--border);cursor:pointer">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <div style="font-size:13px;font-weight:700">${date}</div>
+          <div style="font-size:13px;font-weight:700"><span id="${bodyId}_arr" style="display:inline-block;width:12px;color:var(--t2)">${expanded?'▾':'▸'}</span> ${date}</div>
           <div style="font-size:11px;color:var(--t2)">${groups.length} гр. · ${totalPositions} поз. · ${fmt(totalSum)}</div>
         </div>
-        <div style="margin-top:5px;display:flex;gap:10px;flex-wrap:wrap">
+        <div style="margin-top:5px;display:flex;gap:10px;flex-wrap:wrap;padding-left:18px">
           ${activeCount?`<span style="font-size:11px;color:var(--inc)">✅ Активировано: ${activeCount}</span>`:''}
           ${draftCount?`<span style="font-size:11px;color:var(--a4)">⏳ Черновики: ${draftCount}</span>`:''}
           ${mismatch
@@ -7889,6 +7893,7 @@ function renderInvFiGroups(){
             :activeCount?`<span style="font-size:11px;color:var(--inc)">📦 На складе: ${realOnStock} шт.</span>`:''}
         </div>
       </div>
+      <div id="${bodyId}" style="display:${expanded?'block':'none'}">
       ${groups.map(g=>{
         const gQty  = (g.positions||[]).reduce((s,p)=>s+(parseInt(p.qty)||1),0);
         const gSum  = (g.positions||[]).reduce((s,p)=>s+(p.price||0)*(parseInt(p.qty)||1),0);
@@ -7897,7 +7902,7 @@ function renderInvFiGroups(){
         const icon  = {draft:'⏳',active:'✅',archived:'🟡'}[g.status]||'';
         const tCreate = new Date(g.createdAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
         const tActive = g.activatedAt ? new Date(g.activatedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : null;
-        return `<div onclick="openFiGroupDetail('${g.id}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;background:${gMiss?'rgba(255,80,80,0.05)':''}">
+        return `<div onclick="event.stopPropagation();openFiGroupDetail('${g.id}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;background:${gMiss?'rgba(255,80,80,0.05)':''}">
           <div>
             <div style="font-size:13px;font-weight:600">${icon} ${g.groupName || '(без названия)'}</div>
             <div style="font-size:11px;color:var(--t2)">${gQty} шт. · ${fmt(gSum)}</div>
@@ -7907,6 +7912,7 @@ function renderInvFiGroups(){
           <span style="font-size:18px;color:var(--t2)">›</span>
         </div>`;
       }).join('')}
+      </div>
     </div>`;
   }).join('');
 }
