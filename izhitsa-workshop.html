@@ -7900,16 +7900,10 @@ function renderInvFiGroups(){
         const gReal = items.filter(i=>i.fromFirstInventory===g.id&&i.status==='received').length;
         const gMiss = g.status==='active' && gReal<gQty;
         const icon  = {draft:'⏳',active:'✅',archived:'🟡'}[g.status]||'';
-        const tCreate = new Date(g.createdAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
-        const tActive = g.activatedAt ? new Date(g.activatedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : null;
-        return `<div onclick="event.stopPropagation();openFiGroupDetail('${g.id}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;background:${gMiss?'rgba(255,80,80,0.05)':''}">
-          <div>
-            <div style="font-size:13px;font-weight:600">${icon} ${g.groupName || '(без названия)'}</div>
-            <div style="font-size:11px;color:var(--t2)">${gQty} шт. · ${fmt(gSum)}</div>
-            <div style="font-size:10px;color:var(--t2)">Внесено в ${tCreate}${tActive?' · Активировано в '+tActive:''}</div>
-            ${gMiss?`<div style="font-size:11px;color:var(--exp)">⚠️ На складе ${gReal}/${gQty} — нажмите для доактивации</div>`:''}
-          </div>
-          <span style="font-size:18px;color:var(--t2)">›</span>
+        // Каждая группа — в одну строку (дата/время/статус доступны в детальной карточке по клику)
+        return `<div onclick="event.stopPropagation();openFiGroupDetail('${g.id}')" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;background:${gMiss?'rgba(255,80,80,0.05)':''};white-space:nowrap;overflow:hidden">
+          <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis">${icon} ${g.groupName || '(без названия)'} <span style="font-weight:400;color:var(--t2)">· ${gQty} шт. · ${fmt(gSum)}</span>${gMiss?` <span style="color:var(--exp);font-weight:700">⚠️ ${gReal}/${gQty}</span>`:''}</div>
+          <span style="font-size:16px;color:var(--t2);flex-shrink:0">›</span>
         </div>`;
       }).join('')}
       </div>
