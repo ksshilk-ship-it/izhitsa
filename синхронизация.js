@@ -210,7 +210,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '09.07.02';
+var APP_BUILD_VERSION = '09.09.01';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -949,7 +949,38 @@ function getShopType(name){
   var s=shops.find(function(x){return (x.name||x)===name;});
   return s?s.type||'shop':'shop';
 }
-function saveJ(){ localStorage.setItem(restoreMode?KEY.restoreJournal:KEY.journal,JSON.stringify(journal)); }
+// Единая защита от переполнения localStorage (5–10 МБ на сайт в мобильных браузерах) — раньше
+// только saveShifts() умел переживать переполнение и обрезать старый локальный кэш; saveJ()/
+// saveS() падали синхронно с "The quota has been exceeded" прямо из середины saveSale() (после
+// journal.push, но до resetSaleForm()/closeMo()) — форма продажи оставалась открытой с теми же
+// позициями, продавец жал «Зафиксировать» ещё раз, и продажа задваивалась в самом Firestore
+// (инцидент 09.09.2026, Колесо, Инчина Олеся — по этой же причине там же «не в наличии» путался
+// стек: saveStock() падала точно так же). Теперь при переполнении сначала обрезаем локальный кэш
+// старых смен (та же логика, что и в saveShifts) и пробуем ещё раз, а если совсем не помогает —
+// тихо предупреждаем и НЕ бросаем исключение: вызывающий код должен всегда доходить до конца
+// (данные всё равно уходят в Firestore через живую синхронизацию, не только через localStorage).
+function _safeLocalSet(key, valueStr){
+  try{
+    localStorage.setItem(key, valueStr);
+    return true;
+  }catch(e){
+    try{
+      var cutoff = typeof _shiftsLiveSyncCutoff==='function' ? _shiftsLiveSyncCutoff() : '';
+      if(cutoff){
+        var shifts = JSON.parse(localStorage.getItem(KEY.shifts)||'[]');
+        var pruned = shifts.filter(function(s){ return (s.date||'')>=cutoff || s.status==='open' || s._pendingSync; });
+        if(pruned.length < shifts.length) localStorage.setItem(KEY.shifts, JSON.stringify(pruned));
+      }
+      localStorage.setItem(key, valueStr);
+      return true;
+    }catch(e2){
+      console.log('[_safeLocalSet] не удалось сохранить '+key+' даже после обрезки:', e2 && e2.message);
+      try{ showToast('⚠️ Память телефона переполнена — данные уйдут в облако, но не закешируются локально. Обновите приложение (🔄) или очистите кеш браузера.'); }catch(e3){}
+      return false;
+    }
+  }
+}
+function saveJ(){ _safeLocalSet(restoreMode?KEY.restoreJournal:KEY.journal, JSON.stringify(journal)); }
 function loadAndCleanJournal(){
   var isRestore = restoreMode;
   var raw = JSON.parse(localStorage.getItem(isRestore?KEY.restoreJournal:KEY.journal)||'[]');
@@ -963,7 +994,7 @@ function loadAndCleanJournal(){
     return true;
   });
 }
-function saveS(){ localStorage.setItem(restoreMode?KEY.restoreSession:KEY.session,JSON.stringify(session)); }
+function saveS(){ _safeLocalSet(restoreMode?KEY.restoreSession:KEY.session, JSON.stringify(session)); }
 function getAuditLog(){ try { return JSON.parse(localStorage.getItem('iz_audit_log_shop')||'[]'); } catch(e) { return []; } }
 function saveAuditLog(data){ localStorage.setItem('iz_audit_log_shop',JSON.stringify(data)); }
 function logAction(action, details, shiftIdOverride) {

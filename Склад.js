@@ -2959,7 +2959,14 @@ function getStock(){
   try{ return JSON.parse(localStorage.getItem('iz_stock')||'{}'); }catch(e){ return {}; }
 }
 function saveStock(stock){
-  localStorage.setItem('iz_stock',JSON.stringify(stock));
+  // Раньше localStorage.setItem здесь падал синхронно при переполнении памяти телефона и
+  // обрывал функцию ДО цикла отправки в Firestore ниже — значит, при переполнении остаток
+  // не обновлялся вообще нигде (ни локально, ни в облаке), и товар оставался «не в наличии»
+  // даже после реальной приёмки/продажи (тот же инцидент 09.09.2026, что и с задвоением
+  // продаж — переполнение памяти на телефоне продавца). _safeLocalSet сама пробует освободить
+  // место и не бросает исключение, так что цикл ниже теперь выполняется всегда.
+  if(typeof _safeLocalSet==='function') _safeLocalSet('iz_stock', JSON.stringify(stock));
+  else localStorage.setItem('iz_stock', JSON.stringify(stock));
   var shops=Object.keys(stock);
   shops.forEach(function(sn){
     try{ db.collection('iz_settings').doc('stock_'+sn.replace(/\s+/g,'_')).set({items:stock[sn],updatedAt:new Date().toISOString()}); }catch(e){}
