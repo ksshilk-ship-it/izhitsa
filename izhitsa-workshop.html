@@ -778,15 +778,13 @@ function showUpdateBanner(){
         <div id="invFiGroupsList"></div>
       </div>
 
-      <!-- ПОЛНАЯ ИНВЕНТАРИЗАЦИЯ (ПЕРЕСЧЁТ ВСЕГО СКЛАДА) -->
-      <div id="invRecountSection" style="margin-top:16px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <!-- ПОЛНАЯ ИНВЕНТАРИЗАЦИЯ (ПЕРЕСЧЁТ ВСЕГО СКЛАДА) — отдельный экран, тут только карточка-ссылка -->
+      <div id="invRecountCard" onclick="showPg('recount',null)" style="margin-top:16px;padding:12px;background:var(--s1);border:1px solid var(--exp);border-radius:12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div style="min-width:0">
           <div style="font-size:13px;font-weight:700;color:var(--exp)">🔄 Полная инвентаризация (пересчёт)</div>
-          <button onclick="openRecountGroupMo()" style="background:var(--a2);border:none;border-radius:8px;padding:6px 12px;color:#000;font-size:12px;font-weight:700;cursor:pointer">➕ Группа пересчёта</button>
+          <div id="invRecountCardSub" style="font-size:11px;color:var(--t2);margin-top:2px">Загрузка...</div>
         </div>
-        <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Независимый счёт с нуля — не мешает обычной работе и текущему балансу, пока вы вносите товары. По готовности нажмите «Обновить остатки», чтобы заменить весь текущий баланс склада этим счётом целиком.</div>
-        <div id="invRecountGroupsList"></div>
-        <button id="rcApplyBtn" onclick="applyStockRecount()" style="display:none;width:100%;margin-top:10px;padding:12px;background:var(--exp);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer">✅ Обновить остатки</button>
+        <span style="font-size:18px;color:var(--t2);flex-shrink:0">›</span>
       </div>
 
       <!-- ИСТОРИЯ СВЕРОК — заголовок и кнопка рендерятся в JS -->
@@ -814,6 +812,16 @@ function showUpdateBanner(){
       </div>
       <div id="invGroupsList"></div>
     </div>
+  </div>
+
+  <!-- 🔄 ПОЛНАЯ ИНВЕНТАРИЗАЦИЯ (ПЕРЕСЧЁТ) — отдельный экран -->
+  <div class="page" id="pg-recount">
+    <div style="margin-bottom:8px"><span onclick="showPg('inventory',null)" style="color:var(--t2);font-size:12px;cursor:pointer">⬅ Инвентаризация</span></div>
+    <div class="stitle">🔄 Полная инвентаризация (пересчёт)</div>
+    <div style="font-size:11px;color:var(--t2);margin-bottom:12px">Независимый счёт с нуля — не мешает обычной работе и текущему балансу, пока вы вносите товары. По готовности нажмите «Обновить остатки», чтобы заменить весь текущий баланс склада этим счётом целиком.</div>
+    <button onclick="openRecountGroupMo()" class="btn green" style="margin-bottom:12px">➕ Группа пересчёта</button>
+    <div id="invRecountGroupsList"></div>
+    <button id="rcApplyBtn" onclick="applyStockRecount()" style="display:none;width:100%;margin-top:10px;padding:12px;background:var(--exp);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer">✅ Обновить остатки</button>
   </div>
 
   <!-- 👥 РОЛИ (хаб администратора для входа в интерфейс любой роли) -->
@@ -2223,6 +2231,7 @@ function showPg(name,el){
   if(name==='shipment')  renderShipmentPage();
   if(name==='receiving') renderReceivingPage();
   if(name==='inventory') renderInventoryPage();
+  if(name==='recount')   renderRecountGroups();
   if(name==='delivery')  renderDeliveryPage();
   if(name==='catalog')   renderCatalogPage();
   if(name==='zp')        renderZP();
@@ -11179,7 +11188,24 @@ async function saveRecountGroup(){
   finally{ endSave('rcGroupSave'); }
 }
 
+// Компактная карточка-сводка на странице «Инвентаризация» — сам список групп живёт
+// на отдельном экране pg-recount (открывается по клику на карточку), чтобы не мешать
+// в кучу с «Внесением остатков» на одной странице
+function renderRecountCard(){
+  const sub = document.getElementById('invRecountCardSub');
+  if(!sub) return;
+  const activeGroups = _rcGroups.filter(g=>g.status!=='applied');
+  if(!activeGroups.length){
+    sub.textContent = _rcGroups.length ? 'Все группы применены — нажмите, чтобы начать новый пересчёт' : 'Групп пока нет — нажмите, чтобы начать';
+    return;
+  }
+  const totalPositions = activeGroups.reduce((s,g)=>s+(g.positions||[]).length,0);
+  const totalQty = activeGroups.reduce((s,g)=>s+(g.positions||[]).reduce((s2,p)=>s2+(p.qty||1),0),0);
+  sub.textContent = activeGroups.length+' груп. · '+totalPositions+' поз. · '+totalQty+' шт — нажмите, чтобы открыть';
+}
+
 function renderRecountGroups(){
+  renderRecountCard();
   const c = document.getElementById('invRecountGroupsList');
   const applyBtn = document.getElementById('rcApplyBtn');
   if(!c) return;
@@ -11198,19 +11224,20 @@ function renderRecountGroups(){
     return;
   }
 
-  c.innerHTML = _rcGroups.map(g=>{
+  // Каждая группа — одна строка, действия (Дополнить/Удалить) скрыты, пока по строке не кликнут
+  c.innerHTML = _rcGroups.map((g,i)=>{
     const qty = (g.positions||[]).reduce((s,p)=>s+(p.qty||1),0);
     const sum = (g.positions||[]).reduce((s,p)=>s+(p.price||0)*(p.qty||1),0);
     const applied = g.status==='applied';
-    const statusLabel = applied ? '✅ Применена к остаткам' : '📝 Черновик';
+    const statusLabel = applied ? '✅ Применена' : '📝 Черновик';
     const statusColor = applied ? 'var(--t2)' : 'var(--a4)';
-    return `<div style="background:var(--s1);border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid var(--border)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <div style="font-size:13px;font-weight:700">${g.groupName}</div>
-        <div style="font-size:11px;font-weight:700;color:${statusColor};white-space:nowrap">${statusLabel}</div>
+    const actionsId = 'rcGroupActions_'+i;
+    return `<div style="background:var(--s1);border-radius:12px;margin-bottom:8px;border:1px solid var(--border);overflow:hidden">
+      <div onclick="const b=document.getElementById('${actionsId}');if(b)b.style.display=b.style.display==='none'?'flex':'none';" style="padding:10px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;overflow:hidden">
+        <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis">${g.groupName || '(без названия)'} <span style="font-weight:400;color:var(--t2)">· ${(g.positions||[]).length} поз. · ${qty} шт · ${fmt(sum)} ₽</span></div>
+        <div style="font-size:11px;font-weight:700;color:${statusColor};flex-shrink:0">${statusLabel}</div>
       </div>
-      <div style="font-size:11px;color:var(--t2)">${(g.positions||[]).length} поз. · ${qty} шт · ${fmt(sum)} ₽</div>
-      ${!applied ? `<div style="display:flex;gap:8px;margin-top:8px">
+      ${!applied ? `<div id="${actionsId}" style="display:none;gap:8px;padding:0 12px 12px">
         <button onclick="openRecountGroupForEdit('${g.id}')" style="flex:1;padding:7px;background:var(--s2);border:1px solid var(--border);color:var(--text);border-radius:7px;cursor:pointer;font-size:11px;font-weight:700">➕ Дополнить</button>
         <button onclick="deleteRecountGroup('${g.id}')" style="flex:1;padding:7px;background:none;border:1px solid var(--exp);color:var(--exp);border-radius:7px;cursor:pointer;font-size:11px;font-weight:700">🗑 Удалить</button>
       </div>` : ''}
