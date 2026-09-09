@@ -2068,24 +2068,20 @@ function _recalcClosedShiftGoodsForInvoice(invoiceId){
   entry.goodsEffect = isDr?0:(inv.totalAmt||0);
   entry.goodsDrEffect = isDr?(inv.totalAmt||0):0;
   entry.label = 'Приёмка '+inv.num+(isDr?' (ДР)':'');
-  function recalcOne(sh){
-    var g = sh.goodsMorning||0, gDr = sh.goodsDrMorning||0;
-    (sh.journal||[]).forEach(function(je){ g+=(je.goodsEffect||0); gDr+=(je.goodsDrEffect||0); });
-    sh.goodsEvening = Math.max(0,g);
-    sh.drGoodsEvening = Math.max(0,gDr);
-  }
-  recalcOne(target);
+  // Пересчёт «со сдвигом» (см. _recalcGoodsEveningPreserveDelta в синхронизация.js) —
+  // не затирает ручную правку остатка этой смены, если она была.
+  if(typeof _recalcGoodsEveningPreserveDelta==='function') _recalcGoodsEveningPreserveDelta(target);
   saveShifts(shifts);
   _pushShiftWithRetry(target.id||target._id, target);
   var cascadeResult = _cascadeGoodsForward(target, shifts);
   return {touched: 1 + cascadeResult.touched};
 }
 function _cascadeGoodsForward(target, shifts){
+  // Пересчёт «со сдвигом» (см. _recalcGoodsEveningPreserveDelta в синхронизация.js) —
+  // не затирает ручную правку остатка/недостачу, зафиксированную на смене дальше по
+  // цепочке, а просто двигает её на ту же величину, что и утро.
   function recalcOne(sh){
-    var g = sh.goodsMorning||0, gDr = sh.goodsDrMorning||0;
-    (sh.journal||[]).forEach(function(je){ g+=(je.goodsEffect||0); gDr+=(je.goodsDrEffect||0); });
-    sh.goodsEvening = Math.max(0,g);
-    sh.drGoodsEvening = Math.max(0,gDr);
+    if(typeof _recalcGoodsEveningPreserveDelta==='function') _recalcGoodsEveningPreserveDelta(sh);
   }
   var touched = [];
   var needsReview = [];

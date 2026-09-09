@@ -1,3 +1,35 @@
+// Пересчёт «остатка товара на вечер» смены, который НЕ затирает ручную правку.
+// До 09.09.2026 пересчёт (свRecalcGoodsEvening в смены.js и recalcOne внутри
+// _cascadeGoodsForward в Склад.js) при КАЖДОМ действии со сменой — добавили приход,
+// удалили дубль продажи, приняли накладную, добавили расход — тупо переписывал
+// goodsEvening = goodsMorning + сумма журнала, поверх того, что там уже стояло.
+// Из-за этого правка через «Товар» (кнопка ✏️ у остатка), сделанная админом ради
+// исправления реального расхождения, слетала обратно при ЛЮБОМ следующем действии
+// с этой же сменой — даже никак не связанном с товаром (пример: Колесо, смена
+// 09.08.2026 — исправили 23.08, к 09.09 значение снова другое, хотя editedAt
+// не менялся — правку тихо переписал этот пересчёт, а не что-то со сбоем сохранения).
+// Решение: помнить «чисто расчётное» значение на момент последнего пересчёта
+// (sh._lastCalcEveWood/Dr) и при новом пересчёте сдвигать goodsEvening на РАЗНИЦУ
+// между новым расчётным и тем, что было раньше — а не подменять его расчётным
+// целиком. Так реальная правка (или физическая недостача) остаётся на месте, а
+// новые приходы/расходы/продажи всё равно корректно двигают остаток.
+function _recalcGoodsEveningPreserveDelta(sh){
+  if(!sh) return;
+  var exp;
+  try{ exp = _calcShiftExpectedEvening(sh); }catch(e){ return; }
+  var newWood = exp.goodsWood, newDr = exp.goodsDr;
+  if(sh._lastCalcEveWood==null || sh._lastCalcEveDr==null){
+    // Первый пересчёт на этой смене — не знаем, было ли текущее значение ручной
+    // правкой, поэтому его не трогаем, а только запоминаем точку отсчёта на будущее.
+    if(sh.goodsEvening==null) sh.goodsEvening = newWood;
+    if(sh.drGoodsEvening==null) sh.drGoodsEvening = newDr;
+  } else {
+    sh.goodsEvening = Math.max(0, (sh.goodsEvening!=null?sh.goodsEvening:newWood) + (newWood - sh._lastCalcEveWood));
+    sh.drGoodsEvening = Math.max(0, (sh.drGoodsEvening!=null?sh.drGoodsEvening:newDr) + (newDr - sh._lastCalcEveDr));
+  }
+  sh._lastCalcEveWood = newWood;
+  sh._lastCalcEveDr = newDr;
+}
 // Простое key-value хранилище поверх IndexedDB — для данных, которые не помещаются
 // в localStorage (там жёсткий лимит браузера на пару МБ на весь сайт, независимо
 // от диска устройства). IndexedDB хранится на диске и переживает перезапуск вкладки.
@@ -210,7 +242,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '09.09.01';
+var APP_BUILD_VERSION = '09.09.02';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;

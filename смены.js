@@ -5087,6 +5087,14 @@ function svSaveTovar(){
   _currentShiftView.editedBy=(session&&(session.name||session.sellerName))||'admin';
   _currentShiftView.editedAt=new Date().toISOString();
   _currentShiftView.editReason=reason;
+  // Заново «заякорить» точку отсчёта для будущих автопересчётов (приход/расход/удаление
+  // записи и т.п.) — иначе следующий такой пересчёт сравнит новый расчёт со старым
+  // якорем (ещё до этой правки) и всё равно сдвинет остаток на неверную величину.
+  try{
+    var _anchorExp = _calcShiftExpectedEvening(_currentShiftView);
+    _currentShiftView._lastCalcEveWood = _anchorExp.goodsWood;
+    _currentShiftView._lastCalcEveDr = _anchorExp.goodsDr;
+  }catch(e){}
   try{
     logAction('GOODS_MORNING_EDIT', {
       shopName: _currentShiftView.shopName, shiftDate: _currentShiftView.date, reason: reason,
@@ -5516,18 +5524,11 @@ function svDeleteShift(){
   closeMo('editShiftMo'); renderShiftHistory(); showToast('🗑 Смена удалена');
 }
 function svRecalcGoodsEvening(){
-  var sh = _currentShiftView; if(!sh) return;
-  var goods = sh.goodsMorning||0, goodsDr = sh.goodsDrMorning||0;
-  (sh.journal||[]).forEach(function(e){
-    goods += (e.goodsEffect||0);
-    goodsDr += (e.goodsDrEffect||0);
-  });
-  (sh.goodsReceives||[]).forEach(function(r){ goods += (r.amt!=null?r.amt:(r.amount||0)); });
-  (sh.drGoodsReceives||[]).forEach(function(r){ goodsDr += (r.amt!=null?r.amt:(r.amount||0)); });
-  (sh.goodsWriteoffs||[]).forEach(function(w){ goods -= (w.amt!=null?w.amt:(w.amount||0)); });
-  (sh.drGoodsWriteoffs||[]).forEach(function(w){ goodsDr -= (w.amt!=null?w.amt:(w.amount||0)); });
-  sh.goodsEvening = goods;
-  sh.drGoodsEvening = goodsDr;
+  // Раньше здесь считалось goodsEvening = goodsMorning + сумма журнала «с нуля» —
+  // это затирало любую ручную правку остатка при каждом несвязанном действии со
+  // сменой (приход/расход/удаление дубля продажи). Теперь сдвигаем на разницу, см.
+  // _recalcGoodsEveningPreserveDelta в синхронизация.js.
+  if(typeof _recalcGoodsEveningPreserveDelta==='function') _recalcGoodsEveningPreserveDelta(_currentShiftView);
 }
 var _svEditedSinceOpen = false;
 function svPersist(skipGoodsRecalc){
