@@ -242,7 +242,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '09.09.02';
+var APP_BUILD_VERSION = '09.09.03';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -798,8 +798,28 @@ function syncListenCollection(lsKey, colName, queryFn) {
       docs = docs.filter(function(d){ return !tomb[d._id||d.id]; });
       var local = JSON.parse(localStorage.getItem(lsKey)||'[]');
       local = local.filter(function(loc){ return !tomb[loc._id||loc.id]; });
+      // Этот слушатель обновляется на КАЖДУЮ запись в коллекцию iz_shifts — от
+      // любого магазина, любого устройства. Раньше он безусловно подменял смену
+      // тем, что пришло со снапшота, даже если у нас лежит собственная, ещё не
+      // подтверждённая сервером правка (_pendingSync=true, поставили её только
+      // что через svPersist/saveShift). Если снапшот успевал прилететь раньше,
+      // чем сервер зафиксировал именно эту правку, локально сохранённые цифры
+      // (остаток, касса — что угодно) тихо откатывались на старые — независимо
+      // от фикса пересчёта остатка выше. Теперь, пока правка не подтверждена
+      // (см. _clearShiftPendingFlag), локальная версия смены в приоритете.
       var remoteIds = {};
       docs.forEach(function(d){ remoteIds[d._id||d.id] = true; });
+      var localPendingById = {};
+      local.forEach(function(loc){
+        var lid = loc._id||loc.id;
+        if(lid && loc._pendingSync) localPendingById[lid] = loc;
+      });
+      if(Object.keys(localPendingById).length){
+        docs = docs.map(function(d){
+          var did = d._id||d.id;
+          return (did && localPendingById[did]) ? localPendingById[did] : d;
+        });
+      }
       local.forEach(function(loc){
         var lid = loc._id||loc.id;
         if(lid && !remoteIds[lid]) docs.push(loc);
