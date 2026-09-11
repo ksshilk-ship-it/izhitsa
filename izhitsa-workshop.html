@@ -822,6 +822,10 @@ function showUpdateBanner(){
     <button onclick="openRecountGroupMo()" class="btn green" style="margin-bottom:12px">➕ Группа пересчёта</button>
     <div id="invRecountGroupsList"></div>
     <button id="rcApplyBtn" onclick="applyStockRecount()" style="display:none;width:100%;margin-top:10px;padding:12px;background:var(--exp);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer">✅ Обновить остатки</button>
+    <div id="rcFixReservesWrap" style="display:none;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--t2);margin-bottom:8px">Уже нажали «Обновить остатки», но на Балансе в «Запасах» всё ещё видны старые группы из прошлой инвентаризации? Это отдельная цифра, которую первое нажатие могло не зацепить — обнулите её здесь.</div>
+      <button onclick="fixLeftoverReservesAfterRecount()" style="width:100%;padding:10px;background:none;border:1px solid var(--exp);color:var(--exp);border-radius:10px;font-weight:700;font-size:12px;cursor:pointer">🔧 Обнулить старые «Запасы», оставшиеся после пересчёта</button>
+    </div>
   </div>
 
   <!-- 👥 РОЛИ (хаб администратора для входа в интерфейс любой роли) -->
@@ -4730,7 +4734,10 @@ function renderBalance(){
   }
   
   // Обновить счётчики
-  const archivReserves = (_fiGroups || []).filter(g => g.status === 'archived');
+  // supersededByRecount — группы «Первой инвентаризации», обнулённые полным пересчётом
+  // (см. applyStockRecount): их позиции больше не считаем в «Запасы», иначе старые данные
+  // продолжают числиться на балансе параллельно с новым пересчётом
+  const archivReserves = (_fiGroups || []).filter(g => g.status === 'archived' && !g.supersededByRecount);
   let reserveItems = 0, reserveSum = 0;
   archivReserves.forEach(g => {
     (g.positions||[]).forEach(p=>{
@@ -11218,6 +11225,8 @@ function renderRecountGroups(){
     applyBtn.style.display = (isAdmin && totalPositions>0) ? 'block' : 'none';
     applyBtn.textContent = `✅ Обновить остатки (${totalPositions} поз. · ${totalQty} шт вместо текущего склада)`;
   }
+  const fixWrap = document.getElementById('rcFixReservesWrap');
+  if(fixWrap) fixWrap.style.display = isAdmin ? 'block' : 'none';
 
   if(!_rcGroups.length){
     c.innerHTML = '<div style="font-size:12px;color:var(--t2);padding:8px 0">Групп пересчёта пока нет. Нажмите «➕ Группа пересчёта», чтобы начать.</div>';
@@ -11263,6 +11272,37 @@ async function commitInChunks(ops, mode){
 // Старые записи НЕ удаляются — помечаются isShopArchived:true (скрываются из активного
 // баланса, но остаются в истории/отчётах). Новые товары из пересчёта встают на баланс
 // как обычный принятый товар.
+// «Запасы» на Балансе считаются НЕ из ws_items, а напрямую из старых групп «Первой
+// инвентаризации» со статусом archived (см. renderBalance) — applyStockRecount() их не
+// трогает при обычном применении новых групп. Вынесено отдельной функцией, чтобы можно
+// было исправить уже случившийся пересчёт (когда «Обновить остатки» уже нажали, новых
+// групп для применения больше нет, а старые «Запасы» всё ещё висят на балансе).
+async function clearOldReserveGroups(){
+  const oldReserveGroupsSnap = await db.collection('ws_first_inventory').where('status','==','archived').get();
+  const toSupersede = oldReserveGroupsSnap.docs.filter(d => !d.data().supersededByRecount);
+  await commitInChunks(toSupersede.map(d => ({
+    ref: d.ref,
+    data: {supersededByRecount:true, supersededByRecountAt: now(), supersededByRecountBy: session.name}
+  })), 'update');
+  return toSupersede.length;
+}
+
+async function fixLeftoverReservesAfterRecount(){
+  const isAdmin = typeof isInvAdmin==='function' ? isInvAdmin() : (session && (session.role==='администратор'||session.role==='управляющий'));
+  if(!isAdmin){ showToast('🔒 Доступно только администратору/управляющему'); return; }
+  if(!confirm('Обнулить старые группы «Запасов» (из прошлой, ещё старой инвентаризации)? Использовать только если вы уже применили пересчёт кнопкой «Обновить остатки», а старые «Запасы» всё ещё видны на Балансе.')) return;
+  if(isSaving('rcFixReserves')) return;
+  beginSave('rcFixReserves');
+  try{
+    const n = await clearOldReserveGroups();
+    logAction('stock_recount_fix_leftover_reserves', {supersededReserveGroups: n});
+    showSavedBanner(n ? `✅ Обнулено групп в «Запасах»: ${n}` : 'Нечего обнулять — старых групп в «Запасах» не найдено');
+    loadDataFromFirebase();
+    setTimeout(()=>renderWarehouse(), 400);
+  }catch(e){ showToast('❌ Ошибка: ' + e.message); }
+  finally{ endSave('rcFixReserves'); }
+}
+
 async function applyStockRecount(){
   const isAdmin = typeof isInvAdmin==='function' ? isInvAdmin() : (session && (session.role==='администратор'||session.role==='управляющий'));
   if(!isAdmin){ showToast('🔒 Доступно только администратору/управляющему'); return; }
@@ -11285,6 +11325,10 @@ async function applyStockRecount(){
       ref: d.ref,
       data: {isShopArchived:true, archivedByRecountAt: now(), archivedByRecountBy: session.name}
     })), 'update');
+
+    // 1b) «Запасы» на Балансе считаются ОТДЕЛЬНО от ws_items — без этого шага старые
+    // «Запасы» продолжали бы висеть на балансе параллельно с новым пересчётом
+    const supersededCount = await clearOldReserveGroups();
 
     // 2) Создаём новые товары из позиций пересчёта
     const newDocs = [];
@@ -11316,8 +11360,8 @@ async function applyStockRecount(){
       data: {status:'applied', appliedAt: now(), appliedBy: session.name}
     })), 'update');
 
-    logAction('stock_recount_applied', {groupsCount: activeGroups.length, positionsCount: allPositions.length, totalQty, archivedOldCount: toArchive.length});
-    showSavedBanner(`✅ Остатки обновлены: ${totalQty} шт поставлено на баланс, ${toArchive.length} старых записей архивировано`);
+    logAction('stock_recount_applied', {groupsCount: activeGroups.length, positionsCount: allPositions.length, totalQty, archivedOldCount: toArchive.length, supersededReserveGroups: supersededCount});
+    showSavedBanner(`✅ Остатки обновлены: ${totalQty} шт поставлено на баланс, ${toArchive.length} старых записей и ${supersededCount} групп в «Запасах» архивировано`);
     loadDataFromFirebase();
     setTimeout(()=>renderWarehouse(), 400);
   }catch(e){ showToast('❌ Ошибка: ' + e.message); }
