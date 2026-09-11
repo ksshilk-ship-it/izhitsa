@@ -181,6 +181,30 @@ function applyUpdate() {
   setTimeout(function(){ window.location.reload(true); }, 1500);
 }
 
+// ════ РУЧНОЕ ПРИНУДИТЕЛЬНОЕ ОБНОВЛЕНИЕ (как в приложении магазина) ════
+// В отличие от applyUpdate() (которая ждёт, пока сам браузер обнаружит новую версию SW —
+// иногда не срабатывает вовремя), эта кнопка снимает регистрацию SW, чистит ВСЕ его кэши
+// и грузит страницу заново с уникальным параметром — гарантированно свежая версия, без
+// необходимости ждать automatic updatefound.
+function forceUpdateNow() {
+  if(typeof showToast==='function') showToast('⏳ Обновляю приложение...');
+  var reload = function(){ window.location.href = window.location.pathname + '?v=' + Date.now(); };
+  var clearCachesThenReload = function(){
+    if('caches' in window){
+      caches.keys().then(function(names){
+        Promise.all(names.map(function(n){ return caches.delete(n); })).finally(reload);
+      }).catch(reload);
+    } else { reload(); }
+  };
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      Promise.all(regs.map(function(r){ return r.unregister(); })).finally(clearCachesThenReload);
+    }).catch(clearCachesThenReload);
+  } else {
+    clearCachesThenReload();
+  }
+}
+
 // ════ ВЕРСИОНИРОВАНИЕ ПРИЛОЖЕНИЯ ════
 async function checkAppVersion(){
   try {
@@ -252,6 +276,7 @@ function showUpdateBanner(){
     <div class="fg"><label class="fl">Пароль</label><input class="fi" type="text" inputmode="text" id="loginPass" placeholder="••••" style="-webkit-text-security:disc"></div>
     <div id="loginErr" style="color:var(--exp);font-size:12px;margin-bottom:8px;display:none">Неверный пароль</div>
     <button class="btn" onclick="doLogin()">Войти →</button>
+    <button type="button" onclick="forceUpdateNow()" style="display:block;margin:12px auto 0;padding:8px 16px;background:var(--s2);border:1px solid var(--a2);border-radius:20px;color:var(--a2);font-size:11px;font-weight:700;cursor:pointer">🔄 Обновить до последней версии</button>
   </div>
 
 </div>
@@ -267,6 +292,7 @@ function showUpdateBanner(){
         <div class="hdr-role" id="hdrRole"></div>
         <div style="font-size:10px;color:var(--t2);margin-top:2px" id="hdrVersion"></div>
       </div>
+      <button class="exit-btn" onclick="forceUpdateNow()" title="Принудительно обновить приложение до последней версии" style="border-color:var(--a2);color:var(--a2)">⬆️</button>
       <button class="exit-btn" onclick="doLogout()">Выйти</button>
     </div>
   </div>
