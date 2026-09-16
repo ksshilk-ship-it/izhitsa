@@ -4134,6 +4134,13 @@ function _renderShiftView(){
     '<button onclick="svSaveTovar()" style="width:100%;padding:9px;background:#c8f060;border:none;border-radius:9px;font-weight:700;font-size:12px;color:#0f0f13;cursor:pointer">💾 Сохранить остатки</button>'+
     '<button onclick="svCascadeGoodsOnly()" style="width:100%;margin-top:6px;padding:9px;background:#22222e;border:1px solid #60c8f0;border-radius:9px;font-weight:700;font-size:12px;color:#60c8f0;cursor:pointer">➡️ Пересчитать смены дальше по датам (без изменения этой)</button>'+
   '</div>';
+  var dateBody = '<div style="font-size:11px;color:#8888aa;margin-bottom:10px">Смену открыли и закрыли не в тот день, но данные фактически относятся к другой дате (например, продавец забыл войти через «Восстановление смены» и просто открыл обычную)? Здесь можно перенести смену на нужную дату — время открытия/закрытия при этом не меняется, поменяется только дата, за которую смена считается в отчётах и в «Проверке дат».</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">'+
+      '<div><div class="u-fs10-gray-mb3">Сейчас указана дата</div><input class="fi u-inp-compact" type="text" value="'+sh.date+'" disabled style="opacity:.6"></div>'+
+      '<div><div class="u-fs10-gray-mb3">Новая дата</div><input class="fi u-inp-compact" type="date" id="sv_shiftDate" value="'+sh.date+'"></div>'+
+    '</div>'+
+    '<input class="fi" id="sv_dateReason" placeholder="Причина правки (обязательно)..." style="margin:0;padding:8px;margin-bottom:8px">'+
+    '<button onclick="svSaveShiftDate()" style="width:100%;padding:9px;background:#a060f0;border:none;border-radius:9px;font-weight:700;font-size:12px;color:#fff;cursor:pointer">💾 Перенести смену на эту дату</button>';
   var rcvAllLen = receives.length + woodRcv.length + drRcv.length;
   var woodRcvItems = receives.concat(woodRcv); // journal receives + manual wood receives
   var rcvBody = '';
@@ -4559,6 +4566,7 @@ function _renderShiftView(){
     acc('solditems', '📦', 'Проданные товары', '#f0c060', (soldItemsWoodList.length+soldItemsDrList.length)||null, soldItemsBody) +
     acc('cassa', '🏦', 'Касса', '#f0c060', null, cassaBody) +
     acc('tovar', '📦', 'Товар', '#f0a060', null, tovarBody) +
+    acc('shiftdate', '📅', 'Дата смены', '#a060f0', (sh.dateFixed?1:null), dateBody) +
     acc('rcv', '📥', 'Приходы', '#60f090', rcvAllLen||null, rcvBody) +
     acc('wo', '🗑', 'Списания', '#f06060', woAllLen||null, woBody) +
     acc('exp', '💸', 'Расходы', '#f0a060', (expenses.length||(zp||inkass||otherExp||drInkass||drSupplier?1:0))||null, expBody) +
@@ -5110,6 +5118,52 @@ function svSaveTovar(){
   }
   _renderShiftView();
   showToast((cascadeResult && cascadeResult.touched ? ('✅ Остатки товара обновлены, пересчитано смен дальше по датам: '+cascadeResult.touched) : '✅ Остатки товара обновлены') + _cascadeReviewMsg(cascadeResult));
+}
+// Продавец иногда открывает обычную смену на текущий день вместо того, чтобы войти
+// через «Восстановление смены» — данные по факту относятся к другой (обычно вчерашней)
+// дате. Переносим смену на нужную дату; время открытия/закрытия (openedAt/closedAt) не
+// трогаем — сверка кассы между соседними сменами (getPrevShiftByOpenOrder, каскад
+// остатков) идёт по openedAt, то есть по реальной хронологии, а не по проставленной
+// дате, так что менять openedAt не нужно и даже вредно.
+function svSaveShiftDate(){
+  var reasonEl = document.getElementById('sv_dateReason');
+  var reason = ((reasonEl||{}).value||'').trim();
+  if(!reason){
+    showToast('⛔ Не сохранено! Укажите причину правки — поле подсвечено красным ниже');
+    if(reasonEl){
+      reasonEl.style.borderColor='#f06060';
+      reasonEl.style.background='#2e1a1a';
+      reasonEl.focus();
+      reasonEl.scrollIntoView({behavior:'smooth', block:'center'});
+    }
+    return;
+  }
+  if(reasonEl){ reasonEl.style.borderColor=''; reasonEl.style.background=''; }
+  var newDate = ((document.getElementById('sv_shiftDate')||{}).value||'').trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(newDate)){ showToast('⛔ Укажите корректную дату'); return; }
+  var oldDate = _currentShiftView.date;
+  if(newDate===oldDate){ showToast('Дата не изменилась'); return; }
+  if(!confirm('Перенести смену «'+_currentShiftView.shopName+'» с '+oldDate+' на '+newDate+'? Время открытия/закрытия останется прежним — изменится только дата, за которую смена считается в отчётах и «Проверке дат».')) return;
+  _currentShiftView.date = newDate;
+  try{ if(typeof _isArchiveShift==='function') _currentShiftView._archiveOnly = _isArchiveShift(_currentShiftView); }catch(e){}
+  // Помечаем "задним числом" — иначе автомиграция дат (см. migrateLegacyShiftDates в
+  // этом файле) при следующем открытии истории смен тихо вернёт дату назад, пересчитав
+  // её из openedAt — тот же класс бага, из-за которого раньше откатывался остаток/касса.
+  _currentShiftView.backfilled = true;
+  _currentShiftView.dateFixed = true;
+  _currentShiftView.editedBy=(session&&(session.name||session.sellerName))||'admin';
+  _currentShiftView.editedAt=new Date().toISOString();
+  _currentShiftView.editReason=reason;
+  try{
+    logAction('SHIFT_DATE_EDIT', {
+      shopName: _currentShiftView.shopName, reason: reason,
+      before: {date: oldDate}, after: {date: newDate}
+    }, _currentShiftView.id||_currentShiftView._id);
+  }catch(e){}
+  svPersist(true);
+  _renderShiftView();
+  renderShiftHistory();
+  showToast('✅ Смена перенесена на '+newDate);
 }
 function _cascadeReviewMsg(cascadeResult){
   var list = cascadeResult && cascadeResult.needsReview;
