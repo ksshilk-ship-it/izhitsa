@@ -5092,6 +5092,18 @@ function svSaveTovar(){
   _currentShiftView.goodsEvening=goodsEve;
   _currentShiftView.goodsDrMorning=newDrMorn;
   _currentShiftView.drGoodsEvening=goodsDrEve;
+  // Третья находка того же класса бага, что и с откатом остатка/кассы вечера: правка
+  // утреннего остатка через "Товар" НИКОГДА не помечала goodsMornSource='manual' —
+  // а именно на этот флаг смотрит _cascadeGoodsForward (Склад.js), решая, можно ли
+  // тихо переписать "утро" этой смены остатком "вечер" предыдущей. Раз флаг оставался
+  // 'auto', ЛЮБАЯ следующая правка ЛЮБОЙ более ранней смены этого магазина (даже по
+  // совсем другому поводу — она чинила соседние смены за апрель-май) при каскаде
+  // молча стирала только что сохранённую вручную правку утра — без изменения editedAt,
+  // то есть незаметно. Теперь ручная правка через "Товар" сама метит себя как manual,
+  // и каскад корректно останавливается на такой смене с предупреждением вместо тихой
+  // перезаписи (см. needsReview в _cascadeGoodsForward).
+  _currentShiftView.goodsMornSource = 'manual';
+  _currentShiftView.goodsDrMornSource = 'manual';
   _currentShiftView.editedBy=(session&&(session.name||session.sellerName))||'admin';
   _currentShiftView.editedAt=new Date().toISOString();
   _currentShiftView.editReason=reason;
