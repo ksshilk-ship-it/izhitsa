@@ -2064,6 +2064,9 @@ function _recalcClosedShiftGoodsForInvoice(invoiceId){
   if(!target) return {touched:0};
   var isDr = (inv.goodsType==='dr');
   var entry = target.journal.find(function(je){ return je.type==='receive' && je.invId===invoiceId; });
+  // Ставим точку отсчёта ДО правки записи журнала — иначе первый же пересчёт после
+  // этого изменения не будет знать, от чего считать сдвиг (см. _ensureGoodsEveningAnchor).
+  if(typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(target);
   entry.goodsType = inv.goodsType||'derevo';
   entry.goodsEffect = isDr?0:(inv.totalAmt||0);
   entry.goodsDrEffect = isDr?(inv.totalAmt||0):0;
@@ -2094,6 +2097,10 @@ function _cascadeGoodsForward(target, shifts){
   for(var i=startIdx+1; i<chain.length; i++){
     var sh = chain[i];
     var changed = false;
+    // Точка отсчёта ставится по состоянию ДО того, как каскад ниже поменяет её утро —
+    // иначе на первом же касании этой смены пересчёт вечера ниже не сдвинется вообще
+    // (см. _ensureGoodsEveningAnchor в синхронизация.js).
+    if(typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(sh);
     if(!stopWood){
       var expMorn = prev.goodsEvening||0;
       if((sh.goodsMornSource||'auto')==='auto'){

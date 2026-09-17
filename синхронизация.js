@@ -13,14 +13,29 @@
 // между новым расчётным и тем, что было раньше — а не подменять его расчётным
 // целиком. Так реальная правка (или физическая недостача) остаётся на месте, а
 // новые приходы/расходы/продажи всё равно корректно двигают остаток.
+// Ставит точку отсчёта (если её ещё нет) по ТЕКУЩЕМУ состоянию смены — до того, как
+// её что-то поменяет (например, каскад вот-вот перепишет goodsMorning). Без этого
+// первый же пересчёт после такого внешнего изменения морning ловит "нет точки
+// отсчёта" и на всякий случай НЕ трогает вечер вообще — из-за этого 03.06.2026
+// (Горки) не подхватило пересчёт вечера при каскаде с 02.06: утро обновилось,
+// а вечер — нет, потому что якоря на этой смене раньше просто не было.
+function _ensureGoodsEveningAnchor(sh){
+  if(!sh || (sh._lastCalcEveWood!=null && sh._lastCalcEveDr!=null)) return;
+  try{
+    var exp = _calcShiftExpectedEvening(sh);
+    if(sh._lastCalcEveWood==null) sh._lastCalcEveWood = exp.goodsWood;
+    if(sh._lastCalcEveDr==null) sh._lastCalcEveDr = exp.goodsDr;
+  }catch(e){}
+}
 function _recalcGoodsEveningPreserveDelta(sh){
   if(!sh) return;
   var exp;
   try{ exp = _calcShiftExpectedEvening(sh); }catch(e){ return; }
   var newWood = exp.goodsWood, newDr = exp.goodsDr;
   if(sh._lastCalcEveWood==null || sh._lastCalcEveDr==null){
-    // Первый пересчёт на этой смене — не знаем, было ли текущее значение ручной
-    // правкой, поэтому его не трогаем, а только запоминаем точку отсчёта на будущее.
+    // Точку отсчёта так и не поставили заранее (_ensureGoodsEveningAnchor не звали) —
+    // не знаем, было ли текущее значение ручной правкой, поэтому его не трогаем,
+    // а только запоминаем точку отсчёта на будущее.
     if(sh.goodsEvening==null) sh.goodsEvening = newWood;
     if(sh.drGoodsEvening==null) sh.drGoodsEvening = newDr;
   } else {
@@ -242,7 +257,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '09.16.02';
+var APP_BUILD_VERSION = '09.17.01';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
