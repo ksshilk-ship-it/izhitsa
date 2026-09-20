@@ -1815,7 +1815,10 @@ function setManInvType(type){
 }
 function saveManualInvoice() {
   if(!_manInvItems.length) { showToast('Добавьте позиции'); return; }
-  if(typeof _findArtDupInItems==='function'){
+  // Переоценка: те же изделия (те же номера) возвращаются на баланс по новой цене — проверки на
+  // «номер уже занят» и «похожая накладная» к ней не применяются.
+  var isReval = !!(document.getElementById('manInvReval')||{}).checked;
+  if(!isReval && typeof _findArtDupInItems==='function'){
     var _artDupMsg0 = _findArtDupInItems(_manInvItems, null);
     if(_artDupMsg0){ showToast('⛔ '+_artDupMsg0+' — исправьте номер'); return; }
   }
@@ -1827,7 +1830,7 @@ function saveManualInvoice() {
   // Приход), и раньше здесь вообще не было проверки на дубли — только в форме смены (смены.js)
   // такая проверка была. Именно через отсутствие проверки в одной из двух форм 14.07 была
   // задвоена реальная поставка — используем ту же общую проверку в обеих формах.
-  if(typeof _findDuplicateInvoiceCandidate==='function'){
+  if(!isReval && typeof _findDuplicateInvoiceCandidate==='function'){
     var possibleDupManInv = _findDuplicateInvoiceCandidate(session.shopName, _manInvItems, totalAmt, docDate);
     if(!_confirmNotDuplicateInvoice(possibleDupManInv, totalAmt, _manInvItems.length)) return;
   }
@@ -1846,6 +1849,7 @@ function saveManualInvoice() {
     createdBy: session.sellerName || session.name || '',
     manual: true
   };
+  if(isReval) inv.isRevaluation = true;
   var existing = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   existing.unshift(inv);
   localStorage.setItem('iz_manual_invoices', JSON.stringify(existing));
@@ -1860,9 +1864,9 @@ function saveManualInvoice() {
     autoSaveToItemBase(item.name, item.article, item.price, _gt4save);
   });
   var _isDrInv = _manInvGoodsType === 'dr';
-  journal.push({
+  var _manRcvEntry = {
     id:uid(), type:'receive', ts:_workingNowISO(), icon:'📥',
-    label:'Приёмка '+num+(_isDrInv?' (ДР)':''),
+    label:(isReval?'🔄 ПЕРЕОЦЕНКА · ':'')+'Приёмка '+num+(_isDrInv?' (ДР)':''),
     sub:_manInvItems.length+' изд.'+(from?' · от '+from:'')+(inv.createdBy?' · принял: '+inv.createdBy:''),
     amount:totalAmt,
     amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
@@ -1870,7 +1874,15 @@ function saveManualInvoice() {
     goodsDrEffect: _isDrInv ? totalAmt : 0,
     goodsType: _manInvGoodsType,
     invId:inv.id, acceptedBy:inv.createdBy||''
-  });
+  };
+  if(isReval) _manRcvEntry.isRevaluation = true;
+  journal.push(_manRcvEntry);
+  if(isReval){
+    // на складе переоценка только обновляет цену изделий с номером (qty не растёт) — см. stockApplyReceive
+    try{ stockApplyReceive(session.shopName, _manInvItems.map(function(it){ return {num:it.article||it.num, name:it.name, price:it.price, qty:it.qty, species:it.species, goodsType:_gt4save}; }), acceptedDateStr, _gt4save, true); }catch(e){}
+    try{ logAction('REVALUATION', {direction:'receive', goodsType:_gt4save, itemCount:_manInvItems.length, names:_manInvItems.map(function(it){return it.name;}).join(', '), amount:totalAmt, shop:session.shopName, invNum:num}); }catch(e){}
+  }
+  var _rvBox=document.getElementById('manInvReval'); if(_rvBox) _rvBox.checked=false;
   _manInvGoodsType = 'derevo'; setManInvType('derevo'); // reset
   saveJ();
   _manInvItems = [];
@@ -1885,7 +1897,7 @@ function saveManualInvoice() {
   renderManInvItems();
   renderReceiveArchive();
   renderAll();
-  showToast('✅ Накладная '+num+' принята на баланс');
+  showToast((isReval?'🔄 Переоценка ':'✅ Накладная ')+num+' принята на баланс');
 }
 window._manInvEdit = window._manInvEdit || {};
 function editManualInvoice(id){
@@ -2191,9 +2203,9 @@ function saveManualInvoiceEdit(id){
   });
   var _sellerGt = data.goodsType || 'derevo';
   var _isDrSeller = _sellerGt==='dr';
-  journal.push({
+  var _editedRcv = {
     id:uid(), type:'receive', ts:preservedTs, icon:'📥',
-    label:'Приёмка '+data.num+(_isDrSeller?' (ДР)':''),
+    label:(data.isRevaluation?'🔄 ПЕРЕОЦЕНКА · ':'')+'Приёмка '+data.num+(_isDrSeller?' (ДР)':''),
     sub:(data.items||[]).length+' изд.'+(data.from?' · от '+data.from:'')+(data.createdBy?' · принял: '+data.createdBy:''),
     amount:data.totalAmt,
     amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
@@ -2201,7 +2213,9 @@ function saveManualInvoiceEdit(id){
     goodsEffect:_isDrSeller?0:data.totalAmt,
     goodsDrEffect:_isDrSeller?data.totalAmt:0,
     invId:id, editedAt:new Date().toISOString(), acceptedBy:data.createdBy||''
-  });
+  };
+  if(data.isRevaluation) _editedRcv.isRevaluation = true; // не кладём undefined — Firestore такое не принимает
+  journal.push(_editedRcv);
   saveJ();
   delete window._manInvEdit[id];
   renderAll(); renderReceiveArchive();
@@ -3183,7 +3197,10 @@ function rebuildStock(showMsg){
   var shops=getShopNames();
   shops.forEach(function(sn){ stock[sn]={}; });
   var manInvs=JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-  manInvs.forEach(function(inv){
+  // По возрастанию времени приёмки: цена изделия берётся у ПОСЛЕДНЕЙ накладной (иначе более старая
+  // накладная, обработанная позже, возвращала прежнюю цену поверх переоценки).
+  var _manInvsAsc = manInvs.slice().sort(function(a,b){ return String(a.acceptedAt||a.date||'').localeCompare(String(b.acceptedAt||b.date||'')); });
+  _manInvsAsc.forEach(function(inv){
     var sn=inv.destName||inv.shopName||inv.shop;
     if(!sn) return;
     if(!stock[sn]) stock[sn]={};
@@ -3197,7 +3214,7 @@ function rebuildStock(showMsg){
       if(!artNum) artNum=_noArticleStockKey(it.name,pr,it.species,gt);
       if(!artNum) return;
       var key=String(artNum);
-      var qty=it.qty||1;
+      var qty=inv.isRevaluation ? 0 : (it.qty||1); // переоценка — тот же товар с новой ценой, не новая поставка
       if(!stock[sn][key]) stock[sn][key]={num:key,name:it.name||'',price:pr,species:it.species||'',goodsType:gt,size:it.size||'',qty:0,lastReceived:''};
       stock[sn][key].qty+=qty;
       if(date>(stock[sn][key].lastReceived||'')) stock[sn][key].lastReceived=date;
@@ -3581,6 +3598,7 @@ function _buildUsedArticleIndex(forceRefresh){
     function scanInvoiceSnap(snap){
       snap.forEach(function(doc){
         var inv = doc.data();
+        if(inv.isRevaluation) return; // переоценка возвращает те же номера — это не задвоение
         var invId = inv.id!=null ? inv.id : (inv._id!=null ? inv._id : doc.id);
         var items = inv.acceptedItems || inv.items || [];
         items.forEach(function(it){

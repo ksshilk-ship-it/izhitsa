@@ -68,16 +68,16 @@ function _shiftForCloud(o){
 // её со «стабильным» id 'receive_<invId>'. Копия смены с одним id и облачная с другим при
 // слиянии (svPersist / _pushShiftWithRetry / _shiftSetSafe) давали ДВЕ записи на одну накладную —
 // три пары по 24 400 / 38 250 / 75 450₽ (каждая накладная посчитана дважды). Теперь приход с
-// invId, который в локальном журнале уже есть, повторно не добавляется (кроме переоценок).
+// invId, который в локальном журнале уже есть, повторно не добавляется.
 function _remoteEntriesMissingLocally(remoteJnl, localJnl, deletedIds){
   var localIds = {}, localRcvInv = {};
   (localJnl||[]).forEach(function(e){
     if(e.id) localIds[e.id] = true;
-    if(e.type==='receive' && e.invId && !e.isRevaluation) localRcvInv[e.invId] = true;
+    if(e.type==='receive' && e.invId) localRcvInv[e.invId] = true;
   });
   return (remoteJnl||[]).filter(function(e){
     if(!e.id || localIds[e.id] || (deletedIds && deletedIds[e.id])) return false;
-    if(e.type==='receive' && e.invId && !e.isRevaluation && localRcvInv[e.invId]) return false;
+    if(e.type==='receive' && e.invId && localRcvInv[e.invId]) return false;
     return true;
   });
 }
@@ -325,7 +325,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '09.20.10';
+var APP_BUILD_VERSION = '09.20.12';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;

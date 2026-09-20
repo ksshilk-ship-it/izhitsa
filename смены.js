@@ -1004,7 +1004,7 @@ function _archivedReceiveInvIds(shiftsArr){
     .filter(function(s){ return s.id!==session.shiftId && !s._deleted; })
     .forEach(function(s){
       (s.journal||[]).forEach(function(e){
-        if(e.type==='receive' && e.invId && !e.isRevaluation) ids[e.invId]=true;
+        if(e.type==='receive' && e.invId) ids[e.invId]=true;
       });
     });
   return ids;
@@ -1079,14 +1079,16 @@ function _reconcileReceiveEntries(archivedInvIds){
     var invGt = inv.goodsType || (inv.category==='dr'?'dr':'derevo');
     var isDr = invGt==='dr';
     var invAcceptedBy = inv.acceptedBy || inv.createdBy || '';
-    journal.push({
+    var _rcvNew = {
       id:(_prevRcvIds[iid]||_stableReceiveId(iid)), type:'receive', ts:ts, icon:'📥',
-      label:'Приёмка '+(inv.num||''),
+      label:(inv.isRevaluation?'🔄 ПЕРЕОЦЕНКА · ':'')+'Приёмка '+(inv.num||''),
       sub:count+' изд.'+(inv.from?' · от '+inv.from:'')+(invAcceptedBy?' · принял: '+invAcceptedBy:''),
       amount:total, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
       goodsType:invGt,
       goodsEffect:isDr?0:total, goodsDrEffect:isDr?total:0, invId:iid, acceptedBy:invAcceptedBy
-    });
+    };
+    if(inv.isRevaluation) _rcvNew.isRevaluation = true; // не кладём undefined — Firestore такое не принимает
+    journal.push(_rcvNew);
   });
   journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
   saveJ();
@@ -5613,7 +5615,7 @@ function _applyInvoiceToReceiveEntry(entry, data, gt, newTotal){
   var isDr = gt==='dr';
   var by = data.acceptedBy || data.createdBy || entry.acceptedBy || '';
   return Object.assign({}, entry, {
-    label:'Приёмка '+data.num+(isDr?' (ДР)':''),
+    label:(entry.isRevaluation?'🔄 ПЕРЕОЦЕНКА · ':'')+'Приёмка '+data.num+(isDr?' (ДР)':''),
     sub:(data.items||[]).length+' изд.'+(data.from?' · от '+data.from:'')+(by?' · принял: '+by:''),
     amount:newTotal,
     goodsEffect: isDr?0:newTotal,
@@ -5641,7 +5643,7 @@ function _syncInvoiceEntryToOtherShifts(invId, data, gt, newTotal, skipShiftId, 
       if(sh.id===skipShiftId || sh._deleted) return;
       var touched = false;
       (sh.journal||[]).forEach(function(e, i){
-        if(e.type!=='receive' || e.invId!==invId || e.isRevaluation) return;
+        if(e.type!=='receive' || e.invId!==invId) return;
         if(Math.round(e.amount||0)===Math.round(newTotal) && ((e.goodsType==='dr')===isDr)) return;
         if(!touched){
           touched = true;
