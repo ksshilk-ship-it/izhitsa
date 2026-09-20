@@ -347,6 +347,17 @@ function _pushShiftWithRetry(shiftId, data){
         // копия устарела) — НЕ перезаливаем свою поверх, а берём облачную. Раньше устройство,
         // у которого смена висела как «неподтверждённая», раз в 45 с молча откатывало правки
         // админа на свою старую версию.
+        if(remote.status==='closed' && data.status!=='closed'){
+          // В облаке смена закрыта, а наша копия — «открытая» (устаревшая). Раньше такая копия при повторной
+          // отправке возвращала закрытой смене статус «open»: Колесо 09.09 (Олеся), Роза Хутор 06.08 и 04.08 —
+          // отчёт закрытия в облаке есть, а смена снова «висит открытой». Берём облачную, свою не заливаем.
+          var shiftsC = getShifts();
+          var idxC = shiftsC.findIndex(function(s){ return (s.id||s._id)===shiftId; });
+          var adoptedC = Object.assign({}, remote, {id: shiftId}); delete adoptedC._pendingSync; delete adoptedC._archiveOnly;
+          if(idxC>=0){ shiftsC[idxC] = adoptedC; saveShifts(shiftsC); }
+          console.log('[_pushShiftWithRetry] смена закрыта в облаке — устаревшую открытую копию не заливаю:', shiftId);
+          return;
+        }
         if(remote.editedAt && remote.editedAt > (data.editedAt||'') && remote.status!=='closed' && data.status==='closed'){
           // Наш отчёт закрытия ещё не дошёл, а админ тем временем поправил открытую смену —
           // закрытие отправляем, но с его правкой поверх (не теряем ни то, ни другое).
@@ -2683,6 +2694,16 @@ function _zpTravelLeaveAsIs(){
   closeMo('zpTravelWarnMo');
   closeShift();
 }
+// closeShift() в самом начале ставит _shiftForceClosedRemotely=true («смена закрыта — живую синхронизацию
+// не запускать»). Если закрытие потом НЕ состоялось (касса не сходится, нет остатка, нет «Подстраховки»,
+// нашлись пропавшие записи), флаг оставался true до конца сеанса: живая синхронизация выключалась, и всё,
+// что продавец вносил/правил после неудачной попытки, в облако не уходило — смена там зависала «открытой»
+// с обрывком журнала (пример: Парк Ривьера Сочи 19.09 — в облаке 2 записи с 10:01). Теперь при отказе
+// закрытия флаг снимается и синхронизация возобновляется.
+function _abortCloseAttempt(){
+  _shiftForceClosedRemotely = false;
+  try{ syncLiveShift(); }catch(e){}
+}
 function closeShift(){
   if(!_zpTravelWarnAcknowledged && _zpTravelSuspect()){
     openZpTravelWarnMo();
@@ -2736,6 +2757,7 @@ function closeShift(){
       saveJ();
       showToast('🛟 Перед закрытием нашлись и восстановлены пропавшие записи: '+recovered+'. Проверьте смену и нажмите «Закрыть смену» ещё раз.');
       try{ renderAll(); }catch(e){}
+      _abortCloseAttempt();
       return;
     }
     _closeShiftReal();
@@ -2749,6 +2771,7 @@ function _closeShiftReal(){
   if(morningChkReal.hasDiff){
     showToast('⛔ Нал утро не сходится с вечером пред. смены — исправьте сумму');
     openMo('fixMorningCashMo'); renderFixMorningCashForm();
+    _abortCloseAttempt();
     return;
   }
   // Онлайн/опт-точки закрываются без физической кассы — итог берётся из расчёта (t.cash),
@@ -2759,7 +2782,7 @@ function _closeShiftReal(){
   var cashEve;
   if(isShopTypeCSR){
     const cashEveVal=(document.getElementById('cashEveInput')||{}).value||'';
-    if(!cashEveVal){showToast('Введите остаток наличных вечер');return;}
+    if(!cashEveVal){showToast('Введите остаток наличных вечер');_abortCloseAttempt();return;}
     cashEve=parseFloat(cashEveVal)||0;
   } else {
     cashEve=t.cash;
@@ -2778,25 +2801,25 @@ function _closeShiftReal(){
   const drOtherExpAmt=expArr.filter(e=>e.expType==='other'&&e.goodsType==='dr').reduce((s,e)=>s+e.amount,0);
   const expectedCash=t.cash;
   const cashDiff=Math.round(cashEve-expectedCash);
-  if(Math.abs(cashDiff)>=1){showToast('⛔ Неверный остаток наличных — пересчитайте кассу');return;}
+  if(Math.abs(cashDiff)>=1){showToast('⛔ Неверный остаток наличных — пересчитайте кассу');_abortCloseAttempt();return;}
   const drBlock=document.getElementById('closeDrCassaBlock');
   const drBlockVisible=drBlock && drBlock.style.display!=='none';
   var drCashEve=null, drCashDiff=0;
   if(drBlockVisible){
     const drCashEveVal=(document.getElementById('drCashEveInput')||{}).value||'';
-    if(!drCashEveVal){showToast('Введите остаток наличных ДР вечер');return;}
+    if(!drCashEveVal){showToast('Введите остаток наличных ДР вечер');_abortCloseAttempt();return;}
     drCashEve=parseFloat(drCashEveVal)||0;
     drCashDiff=Math.round(drCashEve-t.cashDr);
-    if(Math.abs(drCashDiff)>=1){showToast('⛔ Неверный остаток наличных ДР — пересчитайте кассу');return;}
+    if(Math.abs(drCashDiff)>=1){showToast('⛔ Неверный остаток наличных ДР — пересчитайте кассу');_abortCloseAttempt();return;}
   }
   const staffCashEveVal=(document.getElementById('staffCashEveInput')||{}).value||'';
   var _hasStaff=journal.some(function(e){return e.type==='staff';});
   var _staffReq=_hasStaff||(session.cashStaffMorning||0)>0;
-  if(_staffReq&&!staffCashEveVal){showToast('Введите остаток наличных вечер (Покупки сотрудников)');return;}
+  if(_staffReq&&!staffCashEveVal){showToast('Введите остаток наличных вечер (Покупки сотрудников)');_abortCloseAttempt();return;}
   const staffCashEve=parseFloat(staffCashEveVal)||0;
   const expectedCashStaff=(session.cashStaffMorning||0)+t.staff;
   const staffCashDiff=Math.round(staffCashEve-expectedCashStaff);
-  if(Math.abs(staffCashDiff)>=1){showToast('⛔ Неверный остаток наличных (Покупки сотрудников) — пересчитайте кассу');return;}
+  if(Math.abs(staffCashDiff)>=1){showToast('⛔ Неверный остаток наличных (Покупки сотрудников) — пересчитайте кассу');_abortCloseAttempt();return;}
   const reason='';
   const prev=getPrevShiftByOpenOrder(session.shopName, session.openedAt);
   const morningDiff=(prev&&prev.cashEvening)!=null?Math.abs(session.cashMorning-prev.cashEvening):0;
@@ -2903,11 +2926,15 @@ function _closeShiftReal(){
   };
   // Перед записью читаем облако: если админ успел поправить эту смену (пока она была открыта),
   // его утро/кассу нельзя затирать своими — накладываем правку на отчёт (см. _overlayAdminEditsOnReport).
+  var _reportWritten = false;
   var _writeClosedReport = function(){
+    if(_reportWritten) return; _reportWritten = true;
     try{
       db.collection('iz_shifts').doc(report.id).set(_shiftForCloud(report)).then(function(){ _closeSettle(true); }).catch(function(){ _closeSettle(false); });
     }catch(e){ _closeSettle(false); }
   };
+  // Проверка «не правил ли админ эту смену» не должна задерживать закрытие: не отвечает 4 с — пишем как есть.
+  setTimeout(_writeClosedReport, 4000);
   try{
     db.collection('iz_shifts').doc(report.id).get({source:'server'}).then(function(snap){
       try{
