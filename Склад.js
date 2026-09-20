@@ -367,6 +367,7 @@ function resetWoForm(){
   ['woNum','woName','woSpecies','woAmt','woReason'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   var qtyEl=document.getElementById('woQty'); if(qtyEl) qtyEl.value='';
   var priceEl=document.getElementById('woPrice'); if(priceEl) priceEl.value='';
+  var _wr=document.getElementById('woReval'); if(_wr) _wr.checked=false;
   setWoItemType('derevo');
   renderWoItems();
 }
@@ -397,7 +398,9 @@ function saveWriteoff(){
     g.items.push(it);
   });
   var baseTs = Date.now();
+  var isReval = !!(document.getElementById('woReval')||{}).checked;
   groups.forEach(function(g, idx){
+    if(isReval) g.items.forEach(function(it){ it.isRevaluation = true; });
     var total = g.items.reduce(function(s,it){ return s+(it.amt||0); },0);
     var totalQty = g.items.reduce(function(s,it){ return s+(it.qty||1); },0);
     var ts = new Date(baseTs+idx).toISOString();
@@ -405,22 +408,26 @@ function saveWriteoff(){
     var sub = g.items.length===1
       ? ((g.items[0].num?'№'+g.items[0].num+' ':'')+g.items[0].name+(g.items[0].species?' · '+g.items[0].species:'')+(g.items[0].qty&&g.items[0].qty!==1?' × '+g.items[0].qty:'')+' · '+g.reason)
       : (g.items.length+' позиций ('+totalQty+' шт.): '+namesPreview+' · '+g.reason);
-    var entry = {id:uid(),type:'writeoff',ts:ts,icon:'🗑️',label:'Списание',
+    var entry = {id:uid(),type:'writeoff',ts:ts,icon:'🗑️',label:(isReval?'🔄 ПЕРЕОЦЕНКА · ':'')+'Списание',
       sub:sub,
       goodsType: g.isDr?'dr':'derevo', items: g.items,
       amount:total,amtCls:'exp',amtSign:'−',cashEffect:0,cardEffect:0,staffEffect:0,
       goodsEffect: g.isDr?0:-total, goodsDrEffect: g.isDr?-total:0};
+    if(isReval) entry.isRevaluation = true;
     journal.push(entry);
     _recordJournalEntryIndependently(entry, session&&session.shopName, 'writeoff');
     _backupCheckPassed = false;
     g.items.forEach(function(it){ logWriteoff(it.reason, it.amt, session.shopName); });
+    if(isReval){ try{ logAction('REVALUATION', {direction:'writeoff', goodsType:g.isDr?'dr':'derevo', itemCount:g.items.length, names:namesPreview, amount:total, reason:g.reason, shop:session&&session.shopName}); }catch(e){} }
   });
   var total = woItems.reduce(function(s,it){ return s+(it.amt||0); },0);
   var count = woItems.length;
-  try{ var _woSh=session&&session.shopName; woItems.forEach(function(it){ if(it.num&&_woSh) stockUpdateQty(_woSh,it.num,it.name,it.price,it.species,it.goodsType,it.size,-(it.qty||1),null); }); }catch(e){}
+  // Переоценка — тот же физический товар с новой ценой: количество на складе не меняем
+  // (как у прихода-переоценки, у которого qty тоже 0), иначе изделие «пропадало» со склада.
+  try{ var _woSh=session&&session.shopName; if(!isReval) woItems.forEach(function(it){ if(it.num&&_woSh) stockUpdateQty(_woSh,it.num,it.name,it.price,it.species,it.goodsType,it.size,-(it.qty||1),null); }); }catch(e){}
   saveJ(); clearWoDraft(); resetWoForm();
   closeMo('woMo'); renderAll();
-  showToast('🗑️ Списано '+count+(count===1?' позиция':' позиций')+' на '+fmt(total));
+  showToast((isReval?'🔄 Переоценка: списано ':'🗑️ Списано ')+count+(count===1?' позиция':' позиций')+' на '+fmt(total));
 }
 var _retItemGoodsType = 'derevo';
 var returnItems = [];
@@ -614,22 +621,28 @@ function saveReceive(){
   var article=gv('rcvArticle');
   var rcvQtyNum=parseFloat(gv('rcvQty'))||1;
   var isDr = _rcvGoodsType === 'dr';
+  // «Это переоценка» — как у админа в карточке смены: пометка в истории, а на складе количество не растёт
+  // (переоценка правит цену уже существующего изделия, а не добавляет новую единицу).
+  var isReval = !!(document.getElementById('rcvReval')||{}).checked;
   var entry = {id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',
-    label:'Приход '+(isDr?'ДР Товар':'товара'),
+    label:(isReval?'🔄 ПЕРЕОЦЕНКА · ':'')+'Приход '+(isDr?'ДР Товар':'товара'),
     sub:(article?'№'+article+' ':'')+name+(gv('rcvQty')?' · '+gv('rcvQty'):'')+' · '+gv('rcvFrom')+' · '+gv('rcvDate'),
     amount:price,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,
     goodsEffect: isDr?0:price, goodsDrEffect: isDr?price:0,
     goodsType: _rcvGoodsType,
     article:article};
+  if(isReval) entry.isRevaluation = true;
   journal.push(entry);
   _recordJournalEntryIndependently(entry, session&&session.shopName, 'receive');
   _backupCheckPassed = false;
-  if(article){ try{ stockApplyReceive(session&&session.shopName,[{num:article,name:name,price:price,qty:rcvQtyNum,goodsType:_rcvGoodsType}],gv('rcvDate')||new Date().toISOString().split('T')[0]); }catch(e){} }
+  if(article){ try{ stockApplyReceive(session&&session.shopName,[{num:article,name:name,price:price,qty:rcvQtyNum,goodsType:_rcvGoodsType}],gv('rcvDate')||new Date().toISOString().split('T')[0],undefined,isReval); }catch(e){} }
+  if(isReval){ try{ logAction('REVALUATION', {direction:'receive', goodsType:_rcvGoodsType, itemCount:1, names:name, amount:price, shop:session&&session.shopName}); }catch(e){} }
   saveJ(); ['rcvArticle','rcvName','rcvQty','rcvPrice','rcvFrom'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  var _rv=document.getElementById('rcvReval'); if(_rv) _rv.checked=false;
   logReceive(gv('rcvFrom'), price, session.shopName);
   var hint=document.getElementById('rcvLookupHint'); if(hint) hint.style.display='none';
   setRcvGoodsType('derevo'); // reset to Дерево
-  closeMo('receiveMo'); renderAll(); showToast('📥 '+(isDr?'🛍 ДР Товар':'🌳 Дерево')+' принят: '+fmt(price));
+  closeMo('receiveMo'); renderAll(); showToast((isReval?'🔄 Переоценка: ':'📥 ')+(isDr?'🛍 ДР Товар':'🌳 Дерево')+' принят: '+fmt(price));
 }
 var spGoodsType = 'derevo';
 function setSpGoods(type, el){
