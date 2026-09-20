@@ -4460,7 +4460,7 @@ function _renderShiftView(){
     var wItems = w.items||[];
     if(wItems.length > 0){
       wItems.forEach(function(it, wi){
-        var lbl = (it.article||it.num?'№'+(it.article||it.num)+' ':'')+(it.name||'Списание')+(it.species?' · '+it.species:'')+(it.qty&&it.qty>1?' × '+it.qty:'');
+        var lbl = ((it.isRevaluation||w.isRevaluation)?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'')+(it.article||it.num?'№'+(it.article||it.num)+' ':'')+(it.name||'Списание')+(it.species?' · '+it.species:'')+(it.qty&&it.qty>1?' × '+it.qty:'');
         var sub = '🌳'+(it.price?' · '+f(it.price)+'/шт':'')+((it.reason||w.reason)?' · '+(it.reason||w.reason):'');
         var jwoKey = i+'_'+wi;
         woBody += woItem(lbl, sub, '#555568', (it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwoItem\',\''+jwoKey+'\')');
@@ -4469,7 +4469,7 @@ function _renderShiftView(){
         }
       });
     } else {
-      woBody += woItem(w.sub||w.label||'Списание', w.reason||'', '#555568', w.amount||0, 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwo\','+i+')');
+      woBody += woItem((w.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'')+(w.sub||w.label||'Списание'), w.reason||'', '#555568', w.amount||0, 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwo\','+i+')');
       if(_svEditTarget && _svEditTarget.kind==='jwo' && _svEditTarget.idx===i){
         woBody += simpleEditForm('jwo'+i, '#f06060', {kind:'jwo', idx:i, saveFn:'svSaveJEntrySimple(\'writeoff\','+i+')', prefill:{sub:w.sub||w.label||'', amt:w.amount||0, goodsType:w.goodsType}});
       }
@@ -4493,7 +4493,7 @@ function _renderShiftView(){
     var wItems = w.items||[];
     if(wItems.length > 0){
       wItems.forEach(function(it, wi){
-        var lbl = (it.article||it.num?'№'+(it.article||it.num)+' ':'')+(it.name||'Списание')+(it.species?' · '+it.species:'')+(it.qty&&it.qty>1?' × '+it.qty:'');
+        var lbl = ((it.isRevaluation||w.isRevaluation)?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'')+(it.article||it.num?'№'+(it.article||it.num)+' ':'')+(it.name||'Списание')+(it.species?' · '+it.species:'')+(it.qty&&it.qty>1?' × '+it.qty:'');
         var sub = '🛍'+(it.price?' · '+f(it.price)+'/шт':'')+((it.reason||w.reason)?' · '+(it.reason||w.reason):'');
         var jwoKey = i+'_'+wi;
         woBody += woItem(lbl, sub, '#a060f0', (it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwoItem\',\''+jwoKey+'\')');
@@ -4502,7 +4502,7 @@ function _renderShiftView(){
         }
       });
     } else {
-      woBody += woItem(w.sub||w.label||'Списание', w.reason||'', '#a060f0', w.amount||0, 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwo\','+i+')');
+      woBody += woItem((w.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'')+(w.sub||w.label||'Списание'), w.reason||'', '#a060f0', w.amount||0, 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwo\','+i+')');
       if(_svEditTarget && _svEditTarget.kind==='jwo' && _svEditTarget.idx===i){
         woBody += simpleEditForm('jwo'+i, '#a060f0', {kind:'jwo', idx:i, saveFn:'svSaveJEntrySimple(\'writeoff\','+i+')', prefill:{sub:w.sub||w.label||'', amt:w.amount||0, goodsType:w.goodsType}});
       }
