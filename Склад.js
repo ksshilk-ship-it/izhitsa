@@ -2766,6 +2766,96 @@ function adminMoveReceiptDate(entryId, sourceShiftId){
   showToast('✅ Приход перенесён на '+newDate);
   try{ renderAdminRcvWo(); }catch(e){}
 }
+// Удаление накладной админом со страницы «Приходы». Раньше удалить накладную можно было только
+// из открытой смены самого продавца (deleteManualInvoice) — админ не мог убрать ни накладную,
+// ни приход из уже закрытой смены. Удаляем всё связанное разом, чтобы ничего не «всплыло» снова:
+//  • запись прихода в журнале смены (в корзину на 7 дней — с облачным «надгробием» для устройств продавцов),
+//  • сам документ накладной (копия сохраняется в iz_deleted_invoices — можно восстановить руками),
+//  • остаток товара смены (вечер сдвигается на сумму прихода, дальше по цепочке — каскадом),
+//  • количество изделий на складе магазина.
+function adminDeleteReceipt(entryId, shiftId, invId){
+  if(!(session && session.role==='shopadmin')){ showToast('⛔ Удалять накладные может только администратор'); return; }
+  var shifts = getShifts();
+  var srcShift = shifts.find(function(s){ return (s.id||s._id)===shiftId; });
+  if(!srcShift){ showToast('Смена не найдена локально — сначала нажми ☁️ Синх'); return; }
+  var srcEntry = (srcShift.journal||[]).find(function(e){ return e.id===entryId; });
+  if(!srcEntry){ showToast('Запись прихода не найдена в смене — возможно, уже удалена'); return; }
+  var manAll = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
+  var wsAll = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
+  var inv = null, invCol = '';
+  if(invId){
+    inv = manAll.find(function(i){ return String(i._id!=null?i._id:i.id)===String(invId) || String(i.id)===String(invId); });
+    if(inv) invCol = 'iz_manual_invoices';
+    else { inv = wsAll.find(function(i){ return String(i.id||i._id)===String(invId); }); if(inv) invCol = 'iz_invoices'; }
+  }
+  // Все смены, где есть приход по этой накладной (обычно одна)
+  var targets = [];
+  shifts.forEach(function(sh){
+    (sh.journal||[]).forEach(function(e){
+      if(e.type!=='receive') return;
+      if((invId && e.invId===invId) || (sh===srcShift && e.id===entryId)) targets.push({sh:sh, entry:e});
+    });
+  });
+  var total = targets.reduce(function(a,t){ return a+((t.entry.goodsType==='dr'?(t.entry.goodsDrEffect||0):(t.entry.goodsEffect||0))||t.entry.amount||0); },0);
+  var label = (inv&&inv.num) ? ('накладную '+inv.num) : ('приход «'+(srcEntry.label||srcEntry.sub||'')+'»');
+  if(!confirm('Удалить '+label+' ('+Math.round(total).toLocaleString('ru-RU')+'₽) из магазина «'+srcShift.shopName+'»?\n\n'+
+    '• запись исчезнет из смены ('+srcShift.date+') и из «Приходов»\n'+
+    '• остаток товара смены и последующих смен пересчитается\n'+
+    '• количество изделий на складе магазина уменьшится\n'+
+    (inv?'• сама накладная будет удалена (копия сохранится в архиве удалённых)\n':'')+
+    '\nЗапись прихода можно вернуть из «Корзины» в течение 7 дней.')) return;
+  var adminName = (session&&(session.name||session.sellerName))||'admin';
+  var nowIso = new Date().toISOString();
+  var touchedShifts = [];
+  targets.forEach(function(t){
+    var sh = t.sh;
+    if(touchedShifts.indexOf(sh)<0) touchedShifts.push(sh);
+    try{ if(sh.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(sh); }catch(e){}
+    try{ addToTrash(t.entry, {shopName:sh.shopName, shiftId:sh.id||sh._id, reason:'invoice_deleted_by_admin', deletedByOverride:adminName+' (удаление накладной)'}); }catch(e){}
+    sh.journal = (sh.journal||[]).filter(function(e){ return e.id!==t.entry.id; });
+  });
+  touchedShifts.forEach(function(sh){
+    if(sh.status==='closed' && typeof _recalcGoodsEveningPreserveDelta==='function') _recalcGoodsEveningPreserveDelta(sh);
+    sh.editedAt = nowIso; sh.editedBy = adminName; sh.editReason = 'Удалена накладная'+((inv&&inv.num)?(' '+inv.num):'');
+  });
+  saveShifts(shifts);
+  touchedShifts.forEach(function(sh){
+    try{ logAction('RECEIPT_DELETED', {invId:invId||null, invNum:(inv&&inv.num)||null, shopName:sh.shopName, shiftDate:sh.date, amount:total}, sh.id||sh._id); }catch(e){}
+    _pushShiftWithRetry(sh.id||sh._id, sh);
+  });
+  // склад магазина: минус изделия из накладной (только существующие позиции, не ниже нуля)
+  try{
+    var items = inv ? (inv.acceptedItems||inv.items||[]) : (srcEntry.items||[]);
+    var isRev = srcEntry.isRevaluation;
+    if(items.length && !isRev){
+      var stock = getStock(); var shopStock = stock[srcShift.shopName]||{}; var changed=false;
+      items.forEach(function(it){
+        var gt = it.goodsType||(it.category==='dr'?'dr':((inv&&inv.goodsType)||srcEntry.goodsType||'derevo'));
+        var artNum = it.article||it.num||it.artNum;
+        if(!artNum) artNum = _noArticleStockKey(it.name, it.factPrice||it.price||0, it.species, gt);
+        var ent = artNum ? shopStock[String(artNum)] : null;
+        if(ent){ ent.qty = Math.max(0,(ent.qty||0)-(it.qty||1)); changed=true; }
+      });
+      if(changed){ stock[srcShift.shopName]=shopStock; saveStock(stock); }
+    }
+  }catch(e){ console.log('[adminDeleteReceipt] склад:', e); }
+  // сама накладная
+  if(inv && invCol){
+    var did = String(inv._id!=null?inv._id:inv.id);
+    try{ db.collection('iz_deleted_invoices').doc(did).set(Object.assign({}, inv, {deletedAt:nowIso, deletedBy:adminName, fromCollection:invCol, fromShiftId:shiftId})); }catch(e){}
+    try{ db.collection(invCol).doc(did).delete(); }catch(e){}
+    var list = invCol==='iz_manual_invoices' ? manAll : wsAll;
+    localStorage.setItem(invCol, JSON.stringify(list.filter(function(i){ return String(i._id!=null?i._id:i.id)!==did; })));
+  }
+  // остатки следующих смен
+  var casc = 0;
+  touchedShifts.forEach(function(sh){
+    try{ if(sh.status==='closed'){ var r = _cascadeGoodsForward(sh, getShifts()); casc += (r&&r.touched)||0; } }catch(e){ console.log('[adminDeleteReceipt] cascade', e); }
+  });
+  showToast('🗑 Накладная удалена'+(casc?(' · пересчитано смен дальше: '+casc):''));
+  try{ renderAdminRcvWo(); }catch(e){}
+  try{ renderShiftHistory(); }catch(e){}
+}
 function adminOpenInvoiceFromList(invId, shiftId){
   if(shiftId){
     var shifts = getShifts();
@@ -2892,6 +2982,7 @@ function renderAdminRcvWo(){
         '</div>'+
       '</div>'+
       (r.invId?'<button type="button" onclick="adminOpenInvoiceFromList(\''+r.invId+'\',\''+(r.shiftId||'')+'\')" style="font-size:11px;padding:3px 9px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#60c8f0;cursor:pointer;margin-top:5px;margin-right:6px">📋 Открыть накладную</button>':'')+
+      (type==='receive'&&r.entryId&&r.shiftId&&session&&session.role==='shopadmin'?'<button type="button" onclick="adminDeleteReceipt(\''+r.entryId+'\',\''+r.shiftId+'\',\''+(r.invId||'')+'\')" style="font-size:11px;padding:3px 9px;background:#2e1a1a;border:1px solid #f06060;border-radius:6px;color:#f06060;cursor:pointer;margin-top:5px;margin-left:6px">🗑 Удалить накладную</button>':'')+
       (r.entryId&&r.shiftId?'<button type="button" onclick="adminToggleMoveDate(this,\''+r.entryId+'\',\''+r.shiftId+'\',\''+r.shop.replace(/'/g,"\\'")+'\')" style="font-size:11px;padding:3px 9px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0a060;cursor:pointer;margin-top:5px">📅 Изменить дату прихода</button>':'')+
     '</div>';
   }
