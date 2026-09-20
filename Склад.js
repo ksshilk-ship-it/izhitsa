@@ -2857,13 +2857,27 @@ function adminDeleteReceipt(entryId, shiftId, invId){
   try{ renderShiftHistory(); }catch(e){}
 }
 function adminOpenInvoiceFromList(invId, shiftId){
-  if(shiftId){
-    var shifts = getShifts();
-    var sh = shifts.find(function(s){ return (s.id||s._id)===shiftId; });
-    if(sh) _currentShiftView = sh;
-    else { showToast('⚠️ Смена этой накладной не найдена локально — нажми ☁️ Синх и попробуй снова'); return; }
+  if(!shiftId){ svOpenInvoiceFromReceive(invId); return; }
+  var local = getShifts().find(function(s){ return (s.id||s._id)===shiftId; });
+  function openWith(sh){
+    // Смена из списка приходов — локальная копия, которая может отставать от облака; правка накладной
+    // потом записывает эту смену целиком, поэтому берём свежую копию из облака (как openShiftView).
+    sh = Object.assign({}, sh, {id: shiftId}); delete sh._pendingSync; delete sh._archiveOnly;
+    try{ if(sh.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(sh); }catch(e){}
+    _currentShiftView = sh;
+    svOpenInvoiceFromReceive(invId);
   }
-  svOpenInvoiceFromReceive(invId);
+  try{
+    db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
+      if(snap.exists) openWith(snap.data());
+      else if(local) openWith(local);
+      else showToast('⚠️ Смена этой накладной не найдена — нажми ☁️ Синх и попробуй снова');
+    }).catch(function(){
+      if(local) openWith(local); else showToast('⚠️ Смена этой накладной не найдена локально — нажми ☁️ Синх и попробуй снова');
+    });
+  }catch(e){
+    if(local) openWith(local); else showToast('⚠️ Смена этой накладной не найдена локально — нажми ☁️ Синх и попробуй снова');
+  }
 }
 function _showFallbackInvoiceView(invId){
   var r = (window._adminRcvRowsByInv||{})[invId];

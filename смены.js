@@ -3727,6 +3727,9 @@ function openShiftView(id){
   // it survived whatever copy/clone/refresh produced this object, since a raw Firestore doc.data()
   // (used below when refreshing from the cloud) never carries this client-only flag at all.
   _currentShiftView._archiveOnly = _isArchiveShift(_currentShiftView);
+  // Точка отсчёта остатка ДО любых правок в этой карточке — иначе первая же правка журнала
+  // (приход, списание, накладная) при сохранении не сдвинет вечерний остаток на разницу.
+  try{ if(_currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
   _svOpenAccs = {};
   _svEditedSinceOpen = false;
   _renderShiftView();
@@ -3752,6 +3755,7 @@ function openShiftView(id){
       var remoteCompare = Object.assign({}, remote); delete remoteCompare._archiveOnly;
       var changed = JSON.stringify(remoteCompare) !== JSON.stringify(localCompare);
       _currentShiftView = remote;
+      try{ if(remote.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(remote); }catch(e){}
       var allShifts = getShifts();
       var idx = allShifts.findIndex(function(s){ return (s.id||s._id)===id; });
       if(idx>=0) allShifts[idx] = remote; else allShifts.push(remote);
@@ -5559,6 +5563,73 @@ function svOpenInvoiceFromReceive(invId){
   }
   openMo('adminInvMo');
 }
+// Накладную поправили — приводим запись прихода в журнале смены в соответствие (сумма, эффект на остаток, тип).
+function _applyInvoiceToReceiveEntry(entry, data, gt, newTotal){
+  var isDr = gt==='dr';
+  var by = data.acceptedBy || data.createdBy || entry.acceptedBy || '';
+  return Object.assign({}, entry, {
+    label:'Приёмка '+data.num+(isDr?' (ДР)':''),
+    sub:(data.items||[]).length+' изд.'+(data.from?' · от '+data.from:'')+(by?' · принял: '+by:''),
+    amount:newTotal,
+    goodsEffect: isDr?0:newTotal,
+    goodsDrEffect: isDr?newTotal:0,
+    goodsType: gt,
+    invId: entry.invId||data.id||data._id, acceptedBy:by,
+    editedAt:new Date().toISOString()
+  });
+}
+// Правка накладной в архиве меняла запись прихода ТОЛЬКО в открытой в этот момент смене (и молча
+// ничего не делала, если запись там не находилась). Пример: Роза Хутор, накладная 026/20.07.2026 —
+// в самой накладной 2 500₽, а в смене и списке приходов остались 2 000₽. Теперь по данным облака
+// ищем приход по этой накладной в соседних по дате сменах и приводим его к сумме накладной:
+// остаток смены двигается на разницу, следующие смены пересчитываются каскадом.
+function _syncInvoiceEntryToOtherShifts(invId, data, gt, newTotal, skipShiftId, reason){
+  if(typeof db==='undefined' || !db) return;
+  var base = String(data.acceptedAt||data.date||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(base)) return;
+  function shiftDay(str, n){ var d=new Date(str+'T12:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
+  var isDr = gt==='dr';
+  db.collection('iz_shifts').where('date','>=',shiftDay(base,-7)).where('date','<=',shiftDay(base,7)).get({source:'server'}).then(function(snap){
+    var changed = [];
+    snap.forEach(function(d){
+      var sh = d.data(); sh.id = d.id;
+      if(sh.id===skipShiftId || sh._deleted) return;
+      var touched = false;
+      (sh.journal||[]).forEach(function(e, i){
+        if(e.type!=='receive' || e.invId!==invId || e.isRevaluation) return;
+        if(Math.round(e.amount||0)===Math.round(newTotal) && ((e.goodsType==='dr')===isDr)) return;
+        if(!touched){
+          touched = true;
+          if(sh.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(sh);
+        }
+        var before = Object.assign({}, e);
+        sh.journal[i] = _applyInvoiceToReceiveEntry(e, data, gt, newTotal);
+        try{ logEntryEdit(before, sh.journal[i], sh.id); }catch(err){}
+      });
+      if(!touched) return;
+      if(sh.status==='closed' && typeof _recalcGoodsEveningPreserveDelta==='function') _recalcGoodsEveningPreserveDelta(sh);
+      sh.editedAt = new Date().toISOString();
+      sh.editedBy = (session&&(session.name||session.sellerName))||'admin';
+      sh.editReason = 'Исправлена накладная '+(data.num||'')+(reason?': '+reason:'');
+      delete sh._pendingSync; delete sh._archiveOnly;
+      changed.push(sh);
+    });
+    if(!changed.length) return;
+    var all = getShifts();
+    changed.forEach(function(sh){
+      var ix = all.findIndex(function(x){ return (x.id||x._id)===sh.id; });
+      if(ix>=0) all[ix] = sh; else all.push(sh);
+    });
+    saveShifts(all);
+    var casc = 0;
+    changed.forEach(function(sh){
+      _pushShiftWithRetry(sh.id, sh);
+      try{ if(sh.status==='closed'){ var r=_cascadeGoodsForward(sh, getShifts()); casc += (r&&r.touched)||0; } }catch(err){}
+    });
+    showToast('✅ Сумма прихода поправлена ещё в смен'+(changed.length===1?'е':'ах')+': '+changed.map(function(s){return s.date;}).join(', ')+(casc?' · пересчитано смен дальше: '+casc:''));
+    try{ renderShiftHistory(); }catch(e){}
+  }).catch(function(err){ console.log('[_syncInvoiceEntryToOtherShifts]', err); });
+}
 function svSaveInvoiceFromArchive(id, isManual){
   var reason = ((document.getElementById('adminInv_reason_'+id)||{}).value||'').trim();
   if(!reason){ showToast('Укажите причину правки'); return; }
@@ -5593,23 +5664,19 @@ function svSaveInvoiceFromArchive(id, isManual){
     return e.sub && e.sub.indexOf(oldNum)>=0;
   });
   var newTotal = data.totalAmt!=null ? data.totalAmt : (data.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
+  // Точка отсчёта остатка — до правки записи (см. _ensureGoodsEveningAnchor), иначе вечер смены не сдвинется на разницу.
+  try{ if(_currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
   if(jIdx>=0){
     var before = Object.assign({}, jnl[jIdx]);
-    var _isDrSave = _savedGt==='dr';
-    var _editAcceptedBy = data.acceptedBy || data.createdBy || jnl[jIdx].acceptedBy || '';
-    jnl[jIdx] = Object.assign({}, jnl[jIdx], {
-      label:'Приёмка '+data.num+(_isDrSave?' (ДР)':''),
-      sub:(data.items||[]).length+' изд.'+(data.from?' · от '+data.from:'')+(_editAcceptedBy?' · принял: '+_editAcceptedBy:''),
-      amount:newTotal,
-      goodsEffect: _isDrSave?0:newTotal,
-      goodsDrEffect: _isDrSave?newTotal:0,
-      goodsType: _savedGt,
-      invId:id, acceptedBy:_editAcceptedBy,
-      editedAt:new Date().toISOString()
-    });
+    jnl[jIdx] = _applyInvoiceToReceiveEntry(jnl[jIdx], data, _savedGt, newTotal);
     try{ logEntryEdit(before, jnl[jIdx], (_currentShiftView&&(_currentShiftView.id||_currentShiftView._id))); }catch(e){}
+  } else {
+    // Раньше здесь молча ничего не происходило: накладная сохранялась, а сумма прихода в смене оставалась старой.
+    showToast('⚠️ В этой смене не нашлась запись прихода по накладной — сумма прихода в смене не изменена. Проверю остальные смены.');
   }
   _currentShiftView.journal = jnl;
+  // Приход по этой накладной может лежать и в других сменах (перенесли дату, пересоздали) — правим и там, по данным облака
+  try{ _syncInvoiceEntryToOtherShifts(id, data, _savedGt, newTotal, (_currentShiftView.id||_currentShiftView._id), reason); }catch(e){ console.log('[svSaveInvoiceFromArchive] sync other shifts', e); }
   if(isManual) delete window._manInvEdit[id]; else delete window._shInvEdit[id];
   closeMo('adminInvMo');
   svPersist(); _renderShiftView();
@@ -5724,8 +5791,9 @@ function svPersist(skipGoodsRecalc){
   _currentShiftView._pendingSync = true;
   _svEditedSinceOpen = true;
   var shifts=getShifts();
-  var idx=shifts.findIndex(function(s){return (s.id||s._id)===_currentShiftView.id;}); if(idx<0) return;
-  shifts[idx]=_currentShiftView;
+  var idx=shifts.findIndex(function(s){return (s.id||s._id)===_currentShiftView.id;});
+  if(idx<0) shifts.push(_currentShiftView); // смены нет в локальном кэше (открыта по данным облака) — раньше правка молча не сохранялась
+  else shifts[idx]=_currentShiftView;
   saveShifts(shifts);
   var shiftId = _currentShiftView.id;
   var toSave = _currentShiftView;
