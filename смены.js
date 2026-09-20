@@ -343,6 +343,24 @@ function _pushShiftWithRetry(shiftId, data){
     db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
       if(snap.exists){
         var remote = snap.data();
+        // В облаке правка новее, чем в нашей копии (её сделали на другом устройстве, а эта
+        // копия устарела) — НЕ перезаливаем свою поверх, а берём облачную. Раньше устройство,
+        // у которого смена висела как «неподтверждённая», раз в 45 с молча откатывало правки
+        // админа на свою старую версию.
+        if(remote.editedAt && remote.editedAt > (data.editedAt||'') && remote.status!=='closed' && data.status==='closed'){
+          // Наш отчёт закрытия ещё не дошёл, а админ тем временем поправил открытую смену —
+          // закрытие отправляем, но с его правкой поверх (не теряем ни то, ни другое).
+          data = Object.assign({}, data);
+          try{ _overlayAdminEditsOnReport(data, remote); }catch(e){}
+        } else if(remote.editedAt && remote.editedAt > (data.editedAt||'')){
+          var shiftsR = getShifts();
+          var idxR = shiftsR.findIndex(function(s){ return (s.id||s._id)===shiftId; });
+          var adopted = Object.assign({}, remote, {id: shiftId}); delete adopted._pendingSync; delete adopted._archiveOnly;
+          if(idxR>=0){ shiftsR[idxR] = adopted; saveShifts(shiftsR); }
+          console.log('[_pushShiftWithRetry] в облаке правка новее — взяла облачную, свою не заливаю:', shiftId);
+          try{ if(typeof renderShiftHistory==='function') renderShiftHistory(); }catch(e){}
+          return;
+        }
         var remoteJnl = remote.journal||[];
         var localJnl = data.journal||[];
         var localIds = {}; localJnl.forEach(function(e){ if(e.id) localIds[e.id]=true; });
@@ -357,7 +375,7 @@ function _pushShiftWithRetry(shiftId, data){
           if(idx2>=0){ shifts2[idx2] = data; saveShifts(shifts2); }
         }
       }
-      db.collection('iz_shifts').doc(shiftId).set(data).then(function(){
+      db.collection('iz_shifts').doc(shiftId).set(_shiftForCloud(data)).then(function(){
         _clearShiftPendingFlag(shiftId);
       }).catch(function(err){
         console.log('[_pushShiftWithRetry] не удалось, останется в очереди на повтор:', shiftId, err);
@@ -396,7 +414,7 @@ function _verifyRecentClosedShifts(){
         var remoteLen = snap.exists ? ((snap.data().journal||[]).length) : -1;
         if(remoteLen < localLen){
           console.log('[_verifyRecentClosedShifts] досылаю смену, которой не было в облаке:', s.id);
-          db.collection('iz_shifts').doc(s.id).set(s).catch(function(){});
+          _pushShiftWithRetry(s.id, s);
         }
       }).catch(function(){});
     });
@@ -422,7 +440,7 @@ window.addEventListener('online', function(){ setTimeout(_retryPendingShiftSyncs
 var _liveShiftSyncTimer = null;
 function buildLiveShiftDoc(){
   var t = calcTotals();
-  return {
+  var doc = {
     id: session.shiftId, status:'open', source:'shop',
     shopName: session.shopName, sellerName: session.sellerName,
     date: new Date().toISOString().split('T')[0],
@@ -437,6 +455,10 @@ function buildLiveShiftDoc(){
     journal: journal.slice(),
     tombstones: getTombstones()
   };
+  // Правка админа (утро/касса/причина) должна пережить перезапись смены продавцом — см.
+  // _adoptAdminEditsIntoSession в синхронизация.js.
+  try{ Object.assign(doc, _adminMetaForLiveDoc()); }catch(e){}
+  return doc;
 }
 var _shiftForceClosedRemotely = false;
 var _liveSyncFailCount = 0;
@@ -484,6 +506,9 @@ function syncLiveShift(){
         try{ stopLiveShiftListener(); }catch(e){}
         return;
       }
+      // Забираем правку админа (утро/касса) ДО сборки документа — иначе set() ниже затрёт её
+      // утром из нашей session (см. _adoptAdminEditsIntoSession).
+      try{ if(snap.exists && _adoptAdminEditsIntoSession(snap.data())) renderAll(); }catch(e){}
       _mergeRemoteJournalWithCloudTrash(snap.exists?snap.data():null, function(){
         docRef.set(buildLiveShiftDoc()).then(function(){
           _hideLiveSyncFailBanner();
@@ -611,6 +636,7 @@ function manualSync(){
         showToast('🔐 Эта смена уже закрыта — откройте новую смену через "Выйти".');
         return null;
       }
+      try{ if(remote) _adoptAdminEditsIntoSession(remote); }catch(e){}
       var added = remote ? mergeRemoteJournal(remote) : 0;
       return docRef.set(buildLiveShiftDoc()).then(function(){ return added; });
     })
@@ -647,6 +673,7 @@ function startLiveShiftListener(){
           showToast('🔐 Эта смена была закрыта администратором. Откройте новую смену через "Выйти".');
           return;
         }
+        try{ if(_adoptAdminEditsIntoSession(remote)){ renderAll(); showToast('✏️ Администратор поправил остатки этой смены'); } }catch(e){}
         _mergeRemoteJournalWithCloudTrash(remote, function(added){
           if(added>0){
             renderAll();
@@ -1744,7 +1771,7 @@ function _shiftSetSafe(shiftId, sh, successMsg, errPrefix){
     if(settled) return; settled = true;
     try{ _clearShiftPendingFlag(shiftId); }catch(e){} if(successMsg) showToast(successMsg);
   };
-  setTimeout(function(){ onFail(new Error('timeout: Firestore не ответил за 10с')); }, 10000);
+  setTimeout(function(){ if(!settled) showToast('⚠️ Сохранено на устройстве, отправка в облако продолжается…'); }, 10000);
   try{
     db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
       var dataToSend = sh;
@@ -1774,9 +1801,9 @@ function _shiftSetSafe(shiftId, sh, successMsg, errPrefix){
           showToast('ℹ️ В облаке нашлись записи, которых не было локально — объединила, ничего не потеряно');
         }
       }
-      db.collection('iz_shifts').doc(shiftId).set(dataToSend).then(onOk).catch(onFail);
+      db.collection('iz_shifts').doc(shiftId).set(_shiftForCloud(dataToSend)).then(onOk).catch(onFail);
     }).catch(function(){
-      db.collection('iz_shifts').doc(shiftId).set(sh).then(onOk).catch(onFail);
+      db.collection('iz_shifts').doc(shiftId).set(_shiftForCloud(sh)).then(onOk).catch(onFail);
     });
   }catch(e){
     onFail(e);
@@ -2859,9 +2886,25 @@ function _closeShiftReal(){
       showToast('⚠️ Смена закрыта, но НЕ сохранилась в облаке — данные остались только на этом телефоне. Откройте приложение здесь ещё раз при хорошем интернете.');
     }
   };
+  // Перед записью читаем облако: если админ успел поправить эту смену (пока она была открыта),
+  // его утро/кассу нельзя затирать своими — накладываем правку на отчёт (см. _overlayAdminEditsOnReport).
+  var _writeClosedReport = function(){
+    try{
+      db.collection('iz_shifts').doc(report.id).set(_shiftForCloud(report)).then(function(){ _closeSettle(true); }).catch(function(){ _closeSettle(false); });
+    }catch(e){ _closeSettle(false); }
+  };
   try{
-    db.collection('iz_shifts').doc(report.id).set(report).then(function(){ _closeSettle(true); }).catch(function(){ _closeSettle(false); });
-  }catch(e){ _closeSettle(false); }
+    db.collection('iz_shifts').doc(report.id).get({source:'server'}).then(function(snap){
+      try{
+        if(snap.exists && snap.data().editedAt){
+          _overlayAdminEditsOnReport(report, snap.data());
+          var _cur = getShifts(); var _ci = _cur.findIndex(function(s){ return (s.id||s._id)===report.id; });
+          if(_ci>=0){ _cur[_ci] = Object.assign({}, report, {_pendingSync:true}); saveShifts(_cur); }
+        }
+      }catch(e){}
+      _writeClosedReport();
+    }).catch(function(){ _writeClosedReport(); });
+  }catch(e){ _writeClosedReport(); }
   // Было 8с — для смены с длинным журналом (много продаж за день) документ мог легитимно
   // сохраняться дольше на совершенно нормальной сети, и продавец видел пугающее "не
   // сохранилось", хотя запись просто ещё не успела прийти. Данные всё равно не теряются
@@ -5618,7 +5661,9 @@ function svPersist(skipGoodsRecalc){
     if(_persistSettled) return; _persistSettled = true;
     try{ _clearShiftPendingFlag(shiftId); }catch(e){}
   };
-  setTimeout(function(){ onSaveFail(new Error('timeout: Firestore не ответил за 10с')); }, 10000);
+  // Таймаут только предупреждает: раньше он помечал запись «завершённой» и потом, когда запись
+  // на самом деле доходила, onSaveOk уже ничего не делал — флаг _pendingSync оставался навсегда.
+  setTimeout(function(){ if(!_persistSettled) showToast('⚠️ Сохранено на устройстве, отправка в облако продолжается…'); }, 10000);
   try{
     db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
       var dataToSend = toSave;
@@ -5640,9 +5685,9 @@ function svPersist(skipGoodsRecalc){
           showToast('ℹ️ В облаке нашлись записи, которых не было локально — объединила, ничего не потеряно');
         }
       }
-      db.collection('iz_shifts').doc(shiftId).set(dataToSend).then(onSaveOk).catch(onSaveFail);
+      db.collection('iz_shifts').doc(shiftId).set(_shiftForCloud(dataToSend)).then(onSaveOk).catch(onSaveFail);
     }).catch(function(){
-      db.collection('iz_shifts').doc(shiftId).set(toSave).then(onSaveOk).catch(onSaveFail);
+      db.collection('iz_shifts').doc(shiftId).set(_shiftForCloud(toSave)).then(onSaveOk).catch(onSaveFail);
     });
   }catch(e){
     onSaveFail(e);

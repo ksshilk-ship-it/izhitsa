@@ -13,6 +13,54 @@
 // между новым расчётным и тем, что было раньше — а не подменять его расчётным
 // целиком. Так реальная правка (или физическая недостача) остаётся на месте, а
 // новые приходы/расходы/продажи всё равно корректно двигают остаток.
+// ── Защита правок админа от перезаписи устройством продавца ─────────────────────────
+// Найдено 20.09.2026 (Роза Хутор, смена 18.09): админ поправил утро смены через «Товар»
+// (лог GOODS_MORNING_EDIT 18.09 12:16, 1 026 068 → 1 023 068), пока смена ещё была ОТКРЫТА
+// у продавца. Устройство продавца при каждой продаже (syncLiveShift) и при закрытии
+// (closeShift) делает docRef.set() ПОЛНОЙ копией смены, собранной из его собственной
+// session — с его старым утром, без editedAt/причины правки. Правка админа затиралась
+// целиком, тихо, и через два дня в логе «до» снова стояло старое утро. Теперь перед
+// записью читаем облако и, если у смены есть правка админа (editedAt), забираем оттуда
+// утренние остатки/кассу и метки правки в session/отчёт, а не затираем их своими.
+var _ADMIN_MORNING_FIELDS = ['goodsMorning','goodsDrMorning','cashMorning','cashDrMorning','cashStaffMorning','goodsMornSource','goodsDrMornSource'];
+function _adoptAdminEditsIntoSession(remote){
+  try{
+    if(!remote || !remote.editedAt || typeof session==='undefined' || !session) return false;
+    if(session._adminEditAdopted && session._adminEditAdopted >= remote.editedAt) return false;
+    _ADMIN_MORNING_FIELDS.forEach(function(k){ if(remote[k]!=null) session[k] = remote[k]; });
+    session.editedAt = remote.editedAt; session.editedBy = remote.editedBy; session.editReason = remote.editReason;
+    session._adminEditAdopted = remote.editedAt;
+    if(typeof saveS==='function') saveS();
+    return true;
+  }catch(e){ return false; }
+}
+function _adminMetaForLiveDoc(){
+  var m = {};
+  if(typeof session==='undefined' || !session || !session.editedAt) return m;
+  m.editedAt = session.editedAt; m.editedBy = session.editedBy; m.editReason = session.editReason;
+  if(session.goodsMornSource) m.goodsMornSource = session.goodsMornSource;
+  if(session.goodsDrMornSource) m.goodsDrMornSource = session.goodsDrMornSource;
+  return m;
+}
+// То же для отчёта закрытия: если правку админа сессия ещё не успела забрать (устройство
+// было офлайн), накладываем её на отчёт и сдвигаем вечерний остаток на разницу утра.
+function _overlayAdminEditsOnReport(report, remote){
+  if(!report || !remote || !remote.editedAt) return;
+  var dW = remote.goodsMorning!=null ? remote.goodsMorning - (report.goodsMorning||0) : 0;
+  var dD = remote.goodsDrMorning!=null ? remote.goodsDrMorning - (report.goodsDrMorning||0) : 0;
+  _ADMIN_MORNING_FIELDS.forEach(function(k){ if(remote[k]!=null) report[k] = remote[k]; });
+  if(dW) report.goodsEvening = (report.goodsEvening||0) + dW;
+  if(dD) report.drGoodsEvening = (report.drGoodsEvening||0) + dD;
+  report.editedAt = remote.editedAt; report.editedBy = remote.editedBy; report.editReason = remote.editReason;
+  if(remote.dateFixed){ report.date = remote.date; report.backfilled = remote.backfilled; report.dateFixed = true; }
+}
+// Служебные поля устройства (_pendingSync, _archiveOnly) не должны попадать в облако:
+// раньше _pendingSync=true уезжал на сервер вместе со сменой, и каждое устройство,
+// получившее такую копию, считало её «своей неподтверждённой правкой» и потом само
+// перезаливало (иногда устаревшую) поверх более новых правок.
+function _shiftForCloud(o){
+  var c = Object.assign({}, o); delete c._pendingSync; delete c._archiveOnly; return c;
+}
 // Ставит точку отсчёта (если её ещё нет) по ТЕКУЩЕМУ состоянию смены — до того, как
 // её что-то поменяет (например, каскад вот-вот перепишет goodsMorning). Без этого
 // первый же пересчёт после такого внешнего изменения морning ловит "нет точки
@@ -257,7 +305,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '09.17.01';
+var APP_BUILD_VERSION = '09.20.01';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -807,6 +855,11 @@ function syncListenCollection(lsKey, colName, queryFn) {
   var ref = queryFn ? queryFn(db.collection(colName)) : db.collection(colName);
   _syncUnsubs[lsKey] = ref.onSnapshot(function(snap){
     var docs = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
+    if(lsKey === 'iz_shifts'){
+      // Копия с сервера — по определению подтверждённая: флаг _pendingSync, случайно уехавший
+      // в облако со старых версий, здесь игнорируем (см. _shiftForCloud).
+      docs.forEach(function(d){ delete d._pendingSync; delete d._archiveOnly; });
+    }
     docs.sort(function(a,b){ return (b.date||b.closedAt||b.createdAt||'').localeCompare(a.date||a.closedAt||a.createdAt||''); });
     if(lsKey === 'iz_shifts'){
       var tomb = {}; getShiftTombstones().forEach(function(id){ tomb[id]=true; });
