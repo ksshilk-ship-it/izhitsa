@@ -3591,6 +3591,7 @@ function renderShiftHistory(){
       return '<div style="padding:5px 12px;border-radius:20px;border:'+(active?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(active?'#c8f060':'#1a1a22')+';color:'+(active?'#0f0f13':'#8888aa')+';font-size:11px;cursor:pointer;white-space:nowrap;font-weight:'+(active?'700':'400')+'" onclick="filterHistShop(\''+name.replace(/'/g,"\\'")+'\',this)">'+name+'</div>';
     }).join('');
   }
+  try{ _refreshHistoryFromServer(_histPeriodFrom, _histPeriodTo); }catch(e){}
   var allShifts=getShifts();
   allShifts = allShifts.filter(function(s){
     if(_histShowOpen) return s.status==='open'; // diagnostic mode: show ONLY stuck open shifts
@@ -3642,6 +3643,55 @@ function renderShiftHistory(){
       '</div>'+
     '</div>';
   }).join('');
+}
+// Список «Архив» строится из локальных копий смен. Смены старше окна живой синхронизации
+// (35 дней) слушатель не обновляет — их копии на этом устройстве устаревают, как только смену
+// поправили на другом устройстве (или система пересчитала цепочку). Отсюда: в списке красное
+// «Есть несовпадения», а внутри той же смены (она при открытии подтягивается из облака) —
+// «Всё сходится». Поэтому при показе списка за период один раз в 90 с сверяем копии с облаком.
+var _histServerRefreshAt = {};
+var _histServerRefreshBusy = false;
+function _shiftFingerprint(s){
+  var j = s.journal||[];
+  return [s.date,s.status,s.closedAt,s.editedAt,s.goodsMorning,s.goodsEvening,s.goodsDrMorning,s.drGoodsEvening,
+    s.cashMorning,s.cashEvening,s.cashDrMorning,s.drCashEvening,s.cashStaffMorning,s.cashStaffEvening,
+    s.goodsMornSource,s.goodsDrMornSource,j.length,j.map(function(e){return e.id||'';}).join(',')].join('|');
+}
+function _applyServerShiftCopies(docs){
+  var extra = window._extraArchiveShifts || [];
+  var local; try{ local = JSON.parse(localStorage.getItem(KEY.shifts)||'[]'); }catch(e){ local = []; }
+  var tomb = {}; try{ getShiftTombstones().forEach(function(id){ tomb[id]=true; }); }catch(e){}
+  var localChanged = 0, extraChanged = 0;
+  docs.forEach(function(r){
+    var id = r.id||r._id; if(!id || tomb[id] || r._deleted) return;
+    r.id = id; delete r._pendingSync; delete r._archiveOnly;
+    var fp = _shiftFingerprint(r);
+    var li = local.findIndex(function(x){ return (x.id||x._id)===id; });
+    if(li>=0){
+      if(local[li]._pendingSync || _shiftFingerprint(local[li])===fp) return;
+      local[li] = r; localChanged++; return;
+    }
+    var ei = extra.findIndex(function(x){ return (x.id||x._id)===id; });
+    if(ei>=0){
+      if(extra[ei]._pendingSync || _shiftFingerprint(extra[ei])===fp) return;
+      extra[ei] = r; extraChanged++;
+    }
+  });
+  if(localChanged) saveShifts(local);
+  if(extraChanged){ window._extraArchiveShifts = extra; try{ _persistExtraArchiveShifts(); }catch(e){} }
+  return localChanged + extraChanged;
+}
+function _refreshHistoryFromServer(from, to){
+  if(!from || typeof db==='undefined' || !db || !navigator.onLine) return;
+  var key = from+'|'+(to||''), now = Date.now();
+  if(_histServerRefreshBusy || (_histServerRefreshAt[key] && now-_histServerRefreshAt[key] < 90000)) return;
+  _histServerRefreshAt[key] = now; _histServerRefreshBusy = true;
+  var q = db.collection('iz_shifts').where('date','>=',from);
+  if(to) q = q.where('date','<=',to);
+  q.get({source:'server'}).then(function(snap){
+    var docs = []; snap.forEach(function(d){ var x = d.data(); x.id = d.id; docs.push(x); });
+    if(_applyServerShiftCopies(docs)){ try{ renderShiftHistory(); }catch(e){} } // повторный вызов упрётся в паузу 90 с — цикла нет
+  }).catch(function(){}).then(function(){ _histServerRefreshBusy = false; });
 }
 var _histShopFilter = '';
 var _histPeriodFrom = '';
@@ -3702,6 +3752,9 @@ function openShiftView(id){
       if(changed){
         _svOpenAccs = {};
         _renderShiftView();
+        // Список смен за фоном строится из локальных копий и до этого оставался со старыми
+        // цифрами (красное «Есть несовпадения»), хотя внутри смены после обновления всё сходилось.
+        try{ renderShiftHistory(); }catch(e){}
         showToast('🔄 Данные смены обновлены из облака');
       }
     }).catch(function(){});
