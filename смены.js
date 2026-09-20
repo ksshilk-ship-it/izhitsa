@@ -995,10 +995,16 @@ function _archivedReceiveInvIds(shiftsArr){
   var ids = {};
   (shiftsArr||[])
     .filter(function(s){ return s.shopName===session.shopName; })
-    .filter(function(s){ return s.status==='closed' && s.id!==session.shiftId; })
+    // Раньше учитывались ТОЛЬКО закрытые смены. Если предыдущая смена осталась «висеть» открытой
+    // (продавец не нажал «закрыть» — потом её закрывает автозакрытие, STALE_OPEN_SHIFT_AUTOFIXED),
+    // её приходы не считались «уже учтёнными», и _reconcileReceiveEntries пересоздавал их в СЛЕДУЮЩЕЙ
+    // смене: Роза Хутор, накладные 032 и 033 от 25.07 (Елена, смена 25.07 закрылась только 29.07)
+    // появились ещё и в сменах Натальи 26.07 и 28.07. Теперь приход по накладной, лежащий в ЛЮБОЙ
+    // другой смене магазина (закрытой или нет), повторно не создаётся.
+    .filter(function(s){ return s.id!==session.shiftId && !s._deleted; })
     .forEach(function(s){
       (s.journal||[]).forEach(function(e){
-        if(e.type==='receive' && e.invId) ids[e.invId]=true;
+        if(e.type==='receive' && e.invId && !e.isRevaluation) ids[e.invId]=true;
       });
     });
   return ids;
@@ -3839,6 +3845,37 @@ function loadShiftAuditLog(shiftId, btnEl){
     if(btnEl){ btnEl.disabled=false; btnEl.textContent='🔍 Загрузить историю действий'; }
   });
 }
+// Удаляет ОДНУ запись прихода-дубля из смены (накладную и склад не трогает — дубль создан пересборкой
+// журнала и на склад не попадал). Смену берём из облака, остаток двигаем со сдвигом, дальше — каскад.
+function adminRemoveDupReceiveEntry(shiftId, entryId, btn){
+  if(!(session && session.role==='shopadmin')){ showToast('⛔ Только для администратора'); return; }
+  if(!confirm('Удалить эту запись прихода из смены? Накладная и склад не изменятся; запись можно вернуть из «Корзины» в течение 7 дней.')) return;
+  if(btn){ btn.disabled = true; btn.style.opacity = '0.5'; }
+  db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
+    if(!snap.exists){ showToast('Смена не найдена в облаке'); return; }
+    var sh = snap.data(); sh.id = shiftId; delete sh._pendingSync; delete sh._archiveOnly;
+    var e = (sh.journal||[]).find(function(x){ return x.id===entryId && x.type==='receive'; });
+    if(!e){ showToast('Запись уже удалена'); return; }
+    if(sh.status==='closed') _ensureGoodsEveningAnchor(sh);
+    var adminName = (session&&(session.name||session.sellerName))||'admin';
+    // id у дубля такой же, как у настоящей записи в другой смене — в корзину кладём копию с другим id,
+    // иначе «надгробие» по id заденет и настоящую запись.
+    try{ addToTrash(Object.assign({}, e, {id: e.id+'__dup_'+shiftId}), {shopName:sh.shopName, shiftId:shiftId, reason:'duplicate_receive_removed', deletedByOverride:adminName+' (удаление дубля прихода)'}); }catch(err){}
+    sh.journal = (sh.journal||[]).filter(function(x){ return x.id!==entryId; });
+    if(sh.status==='closed') _recalcGoodsEveningPreserveDelta(sh);
+    sh.editedAt = new Date().toISOString(); sh.editedBy = adminName; sh.editReason = 'Удалён дубль прихода '+(e.label||'');
+    var all = getShifts(); var ix = all.findIndex(function(x){ return (x.id||x._id)===shiftId; });
+    if(ix>=0) all[ix] = sh; else all.push(sh);
+    saveShifts(all);
+    try{ logAction('RECEIPT_DUP_REMOVED', {invId:e.invId||null, label:e.label||'', amount:e.amount||0, shiftDate:sh.date, shopName:sh.shopName}, shiftId); }catch(err){}
+    _pushShiftWithRetry(shiftId, sh);
+    var casc = 0;
+    try{ if(sh.status==='closed'){ var r=_cascadeGoodsForward(sh, getShifts()); casc=(r&&r.touched)||0; } }catch(err){}
+    showToast('🗑 Дубль удалён из смены '+sh.date+(casc?' · пересчитано смен дальше: '+casc:''));
+    if(btn && btn.parentElement){ btn.parentElement.style.opacity='0.4'; btn.remove(); }
+    try{ renderShiftHistory(); }catch(err){}
+  }).catch(function(err){ console.log('[adminRemoveDupReceiveEntry]', err); showToast('⚠️ Не удалось — проверьте связь'); if(btn){ btn.disabled=false; btn.style.opacity='1'; } });
+}
 function scanCrossShiftDuplicateReceives(currentShiftId, shopName, btnEl){
   var body = document.getElementById('crossShiftDupResult');
   if(!body) return;
@@ -3857,7 +3894,7 @@ function scanCrossShiftDuplicateReceives(currentShiftId, shopName, btnEl){
       (s.journal||[]).forEach(function(e){
         if(e.type!=='receive' || !e.invId) return;
         if(!byInv[e.invId]) byInv[e.invId]=[];
-        byInv[e.invId].push({shiftId:s.id||s._id, date:s.date, amount:e.amount, label:e.label});
+        byInv[e.invId].push({shiftId:s.id||s._id, date:s.date, amount:e.amount, label:e.label, entryId:e.id, ts:e.ts||''});
       });
     });
     var dupGroups = Object.keys(byInv).map(function(invId){ return {invId:invId, entries:byInv[invId]}; })
@@ -3873,15 +3910,23 @@ function scanCrossShiftDuplicateReceives(currentShiftId, shopName, btnEl){
       dupGroups.map(function(g){
         return '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:9px;padding:9px 10px;margin-bottom:6px">'+
           '<div style="font-size:12px;font-weight:700;color:#f0f0f8;margin-bottom:4px">'+(g.entries[0].label||'Приёмка')+' — встречается в '+g.entries.length+' сменах</div>'+
-          g.entries.map(function(e){
-            var isCurrent = e.shiftId===currentShiftId;
-            return '<div style="font-size:11px;color:'+(isCurrent?'#f0c060':'#8888aa')+';padding:2px 0">'+
-              '📅 '+(e.date||'?')+' · '+Math.round(e.amount||0).toLocaleString('ru-RU')+'₽'+(isCurrent?' · эта смена':'')+
-            '</div>';
-          }).join('')+
+          (function(){
+            // «родная» смена — та, чья дата совпадает с датой приёмки (ts записи); иначе самая ранняя
+            var home = g.entries.find(function(x){ return (x.ts||'').slice(0,10)===x.date; }) ||
+              g.entries.slice().sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); })[0];
+            return g.entries.map(function(e){
+              var isCurrent = e.shiftId===currentShiftId;
+              var isHome = e===home;
+              var canDel = !isHome && session && session.role==='shopadmin' && e.entryId;
+              return '<div style="font-size:11px;color:'+(isCurrent?'#f0c060':'#8888aa')+';padding:3px 0;display:flex;align-items:center;justify-content:space-between;gap:8px">'+
+                '<span>📅 '+(e.date||'?')+' · '+Math.round(e.amount||0).toLocaleString('ru-RU')+'₽'+(isCurrent?' · эта смена':'')+(isHome?' · <b style="color:#60f090">оставить</b>':' · <b style="color:#f06060">дубль</b>')+'</span>'+
+                (canDel?'<button type="button" onclick="adminRemoveDupReceiveEntry(\''+e.shiftId+'\',\''+e.entryId+'\',this)" style="font-size:10px;padding:3px 8px;background:#2e1a1a;border:1px solid #f06060;border-radius:6px;color:#f06060;cursor:pointer;flex-shrink:0">🗑 Удалить дубль</button>':'')+
+              '</div>';
+            }).join('');
+          })()+
         '</div>';
       }).join('')+
-      '<div style="font-size:10px;color:#8888aa;margin-top:6px">Оставьте запись в той смене, где накладная реально была принята, а лишние удалите через ❌ у соответствующей записи прихода в разделе «Приходы» этой смены.</div>';
+      '<div style="font-size:10px;color:#8888aa;margin-top:6px">Запись остаётся в той смене, где накладная реально была принята (дата смены = дата приёмки). У остальных нажмите «Удалить дубль» — запись уйдёт в корзину на 7 дней, остаток смены и следующих смен пересчитается.</div>';
   }).catch(function(err){
     if(btnEl){ btnEl.disabled=false; btnEl.textContent='🔍 Проверить задвоения приходов между сменами'; }
     body.innerHTML = '<div style="font-size:12px;color:#f06060;text-align:center;padding:8px">❌ Ошибка: '+(err&&err.message||err)+'</div>';
@@ -5787,6 +5832,7 @@ function svRecalcGoodsEvening(){
 }
 var _svEditedSinceOpen = false;
 function svPersist(skipGoodsRecalc){
+  var _eveBefore = _currentShiftView ? [_currentShiftView.goodsEvening, _currentShiftView.drGoodsEvening] : null;
   if(!skipGoodsRecalc) svRecalcGoodsEvening();
   _currentShiftView._pendingSync = true;
   _svEditedSinceOpen = true;
@@ -5795,6 +5841,21 @@ function svPersist(skipGoodsRecalc){
   if(idx<0) shifts.push(_currentShiftView); // смены нет в локальном кэше (открыта по данным облака) — раньше правка молча не сохранялась
   else shifts[idx]=_currentShiftView;
   saveShifts(shifts);
+  // Правка журнала закрытой смены (удалили приход, добавили списание, поправили накладную…) меняет её
+  // вечерний остаток — а «утро» следующих смен раньше оставалось прежним, пока не нажмёшь вручную
+  // «Пересчитать смены дальше». Теперь цепочка подтягивается сразу.
+  if(!skipGoodsRecalc && _eveBefore && _currentShiftView.status==='closed' &&
+     (_eveBefore[0]!==_currentShiftView.goodsEvening || _eveBefore[1]!==_currentShiftView.drGoodsEvening)){
+    try{
+      var _cr = _cascadeGoodsForward(_currentShiftView, getShifts());
+      if(_cr && _cr.touched){
+        try{ logAction('GOODS_CASCADE_RECALC', {shopName:_currentShiftView.shopName, fromDate:_currentShiftView.date, shiftsTouched:_cr.touched, auto:true}, _currentShiftView.id||_currentShiftView._id); }catch(e){}
+        showToast('🔄 Остатки в следующих сменах пересчитаны: '+_cr.touched+_cascadeReviewMsg(_cr));
+      } else if(_cr && _cr.needsReview && _cr.needsReview.length){
+        showToast('⚠️'+_cascadeReviewMsg(_cr));
+      }
+    }catch(e){ console.log('[svPersist] cascade', e); }
+  }
   var shiftId = _currentShiftView.id;
   var toSave = _currentShiftView;
   var _persistSettled = false;

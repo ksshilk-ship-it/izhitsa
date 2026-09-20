@@ -47,7 +47,7 @@ function checkDuplicateReceives(){
   if(resEl) resEl.innerHTML = '<div style="font-size:12px;color:#8888aa;padding:6px 0">⏳ Проверяю…</div>';
   db.collection('iz_shifts').where('shopName','==',session.shopName).get().then(function(snap){
     var allShifts = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
-    var closedShifts = allShifts.filter(function(s){ return s.status==='closed' && s.id!==session.shiftId; });
+    var closedShifts = allShifts.filter(function(s){ return s.id!==session.shiftId && !s._deleted; }); // не только закрытые — см. _archivedReceiveInvIds
     var archived = {}; // invId -> info about the closed shift it's already counted in
     closedShifts.forEach(function(s){
       (s.journal||[]).forEach(function(e){
