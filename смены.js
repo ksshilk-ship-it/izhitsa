@@ -365,7 +365,7 @@ function _pushShiftWithRetry(shiftId, data){
         var localJnl = data.journal||[];
         var localIds = {}; localJnl.forEach(function(e){ if(e.id) localIds[e.id]=true; });
         var deletedIds = {}; getTombstones().forEach(function(id){ deletedIds[id]=true; });
-        var missingFromServer = remoteJnl.filter(function(e){ return e.id && !localIds[e.id] && !deletedIds[e.id]; });
+        var missingFromServer = _remoteEntriesMissingLocally(remoteJnl, localJnl, deletedIds);
         if(missingFromServer.length){
           var merged = localJnl.concat(missingFromServer);
           merged.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
@@ -1028,7 +1028,10 @@ function _reconcileReceiveEntries(archivedInvIds){
     var total = inv.totalAmt!=null ? inv.totalAmt
       : (inv.items||[]).reduce(function(s,it){ return s+(it.qty||1)*(it.price||0); },0);
     var existing = journal.filter(function(e){ return e.type==='receive' && e.invId===iid; });
-    return existing.length===1 && existing[0].id===_stableReceiveId(iid) && Math.round(existing[0].amount||0)===Math.round(total);
+    // id записи раньше обязан был быть 'receive_<invId>' — из-за этого приёмка, записанная при
+    // приёмке накладной со случайным id, «исправлялась» пересозданием с другим id, и при слиянии
+    // копий смены оба варианта оставались в журнале (задвоение прихода). Достаточно одной записи с верной суммой.
+    return existing.length===1 && Math.round(existing[0].amount||0)===Math.round(total);
   });
   var hasLegacyRows = journal.some(function(e){ return e.type==='receive' && e.label==='Приход товара' && !e.invId; });
   var hasArchivedGhosts = journal.some(function(e){ return e.type==='receive' && e.invId && archivedInvIds[e.invId]; });
@@ -1041,6 +1044,10 @@ function _reconcileReceiveEntries(archivedInvIds){
     });
   })();
   if(alreadyCorrect && !hasLegacyRows && !hasDuplicates && !hasArchivedGhosts) return false;
+  // Пересоздавая запись прихода, сохраняем id уже существующей — так копия смены на другом устройстве
+  // не видит «новую» запись рядом со «старой» (см. _remoteEntriesMissingLocally в синхронизация.js).
+  var _prevRcvIds = {};
+  journal.forEach(function(e){ if(e.type==='receive' && e.invId && !_prevRcvIds[e.invId]) _prevRcvIds[e.invId] = e.id; });
   journal.forEach(function(e){
     if(e.type!=='receive') return;
     var isLegacyRow = !e.invId && e.label==='Приход товара';
@@ -1067,7 +1074,7 @@ function _reconcileReceiveEntries(archivedInvIds){
     var isDr = invGt==='dr';
     var invAcceptedBy = inv.acceptedBy || inv.createdBy || '';
     journal.push({
-      id:_stableReceiveId(iid), type:'receive', ts:ts, icon:'📥',
+      id:(_prevRcvIds[iid]||_stableReceiveId(iid)), type:'receive', ts:ts, icon:'📥',
       label:'Приёмка '+(inv.num||''),
       sub:count+' изд.'+(inv.from?' · от '+inv.from:'')+(invAcceptedBy?' · принял: '+invAcceptedBy:''),
       amount:total, amtCls:'neu', cashEffect:0, cardEffect:0, staffEffect:0,
@@ -1789,7 +1796,7 @@ function _shiftSetSafe(shiftId, sh, successMsg, errPrefix){
         var localJnl = sh.journal||[];
         var localIds = {}; localJnl.forEach(function(e){ if(e.id) localIds[e.id]=true; });
         var deletedIds = {}; getTombstones().forEach(function(id){ deletedIds[id]=true; });
-        var missingFromServer = remoteJnl.filter(function(e){ return e.id && !localIds[e.id] && !deletedIds[e.id]; });
+        var missingFromServer = _remoteEntriesMissingLocally(remoteJnl, localJnl, deletedIds);
         if(missingFromServer.length){
           var mergedJnl = localJnl.concat(missingFromServer);
           mergedJnl.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
@@ -5745,7 +5752,7 @@ function svPersist(skipGoodsRecalc){
         var localJnl = toSave.journal||[];
         var localIds = {}; localJnl.forEach(function(e){ if(e.id) localIds[e.id]=true; });
         var deletedIds = {}; getTombstones().forEach(function(id){ deletedIds[id]=true; });
-        var missingFromServer = remoteJnl.filter(function(e){ return e.id && !localIds[e.id] && !deletedIds[e.id]; });
+        var missingFromServer = _remoteEntriesMissingLocally(remoteJnl, localJnl, deletedIds);
         if(missingFromServer.length){
           var mergedJnl = localJnl.concat(missingFromServer);
           mergedJnl.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });

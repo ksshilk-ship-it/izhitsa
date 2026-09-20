@@ -61,6 +61,26 @@ function _overlayAdminEditsOnReport(report, remote){
 function _shiftForCloud(o){
   var c = Object.assign({}, o); delete c._pendingSync; delete c._archiveOnly; return c;
 }
+// Записи облачного журнала, которых нет в локальном. Раньше сравнение шло ТОЛЬКО по id записи,
+// и приход по одной и той же накладной, лежащий под двумя разными id, склеивался в задвоение.
+// Так получилось на Роза Хутор 19.07.2026: приёмку накладной записывают в журнал со случайным id
+// (acceptInvoice/сохранение накладной), а _reconcileReceiveEntries на телефоне продавца пересоздаёт
+// её со «стабильным» id 'receive_<invId>'. Копия смены с одним id и облачная с другим при
+// слиянии (svPersist / _pushShiftWithRetry / _shiftSetSafe) давали ДВЕ записи на одну накладную —
+// три пары по 24 400 / 38 250 / 75 450₽ (каждая накладная посчитана дважды). Теперь приход с
+// invId, который в локальном журнале уже есть, повторно не добавляется (кроме переоценок).
+function _remoteEntriesMissingLocally(remoteJnl, localJnl, deletedIds){
+  var localIds = {}, localRcvInv = {};
+  (localJnl||[]).forEach(function(e){
+    if(e.id) localIds[e.id] = true;
+    if(e.type==='receive' && e.invId && !e.isRevaluation) localRcvInv[e.invId] = true;
+  });
+  return (remoteJnl||[]).filter(function(e){
+    if(!e.id || localIds[e.id] || (deletedIds && deletedIds[e.id])) return false;
+    if(e.type==='receive' && e.invId && !e.isRevaluation && localRcvInv[e.invId]) return false;
+    return true;
+  });
+}
 // Ставит точку отсчёта (если её ещё нет) по ТЕКУЩЕМУ состоянию смены — до того, как
 // её что-то поменяет (например, каскад вот-вот перепишет goodsMorning). Без этого
 // первый же пересчёт после такого внешнего изменения морning ловит "нет точки
@@ -305,7 +325,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '09.20.04';
+var APP_BUILD_VERSION = '09.20.05';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
