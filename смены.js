@@ -142,6 +142,22 @@ function saveShifts(shifts){
       if(idx>=0) window._extraArchiveShifts[idx] = updated;
     });
   }
+  // Смены, которые уже лежат в архивном IndexedDB-кэше (старше окна живой синхронизации), не дублируем в
+  // localStorage: раньше любой saveShifts(getShifts()) — а его вызывает каждый каскад остатков и правка —
+  // сваливал ВСЕ несколько сотен старых смен (десятки МБ) в лимит localStorage в 5-10 МБ, из-за чего у админа
+  // переполнялась память устройства и рушились соседние записи (журнал действий, корзина, склад).
+  // Правка такой смены обновляет её копию в архиве по id. Смены с неподтверждённой правкой и открытые — по-прежнему в localStorage.
+  var _xa = window._extraArchiveShifts;
+  if(_xa && _xa.length){
+    var _xaIdx = {}; _xa.forEach(function(x,i){ _xaIdx[x.id||x._id] = i; });
+    var _toLocal = [];
+    shifts.forEach(function(s){
+      var sid = s.id||s._id;
+      if(sid!=null && _xaIdx[sid]!==undefined && !s._pendingSync && s.status!=='open'){ _xa[_xaIdx[sid]] = s; }
+      else _toLocal.push(s);
+    });
+    shifts = _toLocal;
+  }
   try{ if(typeof _persistExtraArchiveShifts==='function') _persistExtraArchiveShifts(); }catch(e){}
   try{
     localStorage.setItem(KEY.shifts, JSON.stringify(shifts));
@@ -189,7 +205,13 @@ function pullShiftTombstonesFromCloud(cb){
 function getTrash(){
   try{ return JSON.parse(localStorage.getItem(KEY.trash)||'[]'); }catch(e){ return []; }
 }
-function saveTrash(items){ localStorage.setItem(KEY.trash, JSON.stringify(items)); }
+// То же, что с журналом действий: корзина — локальная копия (облачная — shop_trash), переполнение памяти не должно
+// обрывать удаление записи на полпути.
+function saveTrash(items){
+  try{ localStorage.setItem(KEY.trash, JSON.stringify(items)); return; }catch(e){}
+  try{ localStorage.setItem(KEY.trash, JSON.stringify((items||[]).slice(0, Math.max(20, Math.floor((items||[]).length/2))))); }
+  catch(e2){ console.log('[saveTrash] не поместилось в память устройства', e2 && e2.message); }
+}
 function purgeExpiredTrash(items){
   var cutoff = Date.now() - TRASH_RETENTION_DAYS*86400000;
   return items.filter(function(t){ return new Date(t.deletedAt).getTime() > cutoff; });

@@ -325,7 +325,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '09.20.13';
+var APP_BUILD_VERSION = '09.20.14';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -1136,7 +1136,21 @@ function loadAndCleanJournal(){
 }
 function saveS(){ _safeLocalSet(restoreMode?KEY.restoreSession:KEY.session, JSON.stringify(session)); }
 function getAuditLog(){ try { return JSON.parse(localStorage.getItem('iz_audit_log_shop')||'[]'); } catch(e) { return []; } }
-function saveAuditLog(data){ localStorage.setItem('iz_audit_log_shop',JSON.stringify(data)); }
+// Локальная копия журнала действий нужна только для показа; оригинал каждой записи сразу уходит в облако
+// (iz_audit_log). Раньше localStorage.setItem здесь при переполнении памяти устройства бросал
+// QuotaExceededError прямо из logAction() — и обрывал вызвавшую операцию на полпути и без единого сообщения:
+// админ жал «Сохранить всё» в списании закрытой смены — запись оставалась только в памяти окна, ни тоста,
+// ни сохранения, а повторное нажатие плодило дубли (Роза Хутор 11.08, 20.09). Теперь не бросаем никогда:
+// не влезло — оставляем свежую часть журнала, не влезло и это — очищаем локальную копию.
+function saveAuditLog(data){
+  try{ localStorage.setItem('iz_audit_log_shop', JSON.stringify(data)); return; }catch(e){}
+  try{
+    var keep = (data||[]).slice(-Math.max(50, Math.floor((data||[]).length/4)));
+    localStorage.setItem('iz_audit_log_shop', JSON.stringify(keep));
+  }catch(e2){
+    try{ localStorage.removeItem('iz_audit_log_shop'); }catch(e3){}
+  }
+}
 function logAction(action, details, shiftIdOverride) {
   if(!session) return;
   var log = getAuditLog();
@@ -1149,9 +1163,11 @@ function logAction(action, details, shiftIdOverride) {
     action: action,
     details: details || {}
   };
-  log.push(entry);
-  if(log.length > 5000) log.splice(0, log.length - 5000);
-  saveAuditLog(log);
+  try{
+    log.push(entry);
+    if(log.length > 5000) log.splice(0, log.length - 5000);
+    saveAuditLog(log);
+  }catch(e){}
   try{ db.collection('iz_audit_log').doc(entry.id).set(entry); }catch(e){}
 }
 function logSale(itemCount, total, shop){ logAction('SALE', {itemCount:itemCount, total:total, shop:shop}); }
