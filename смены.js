@@ -3173,32 +3173,48 @@ function migrateLegacyShiftDates(){
     return y+'-'+m+'-'+day;
   }
   var changed = false;
+  var patches = {}; // id -> только реально изменённые поля
   shifts.forEach(function(sh){
     if(!sh.openedAt || sh.backfilled || sh.isArchive) return; // backfilled/archive shifts set their own date intentionally
     var openedDateStr = localDateStr(sh.openedAt);
     if(sh.date !== openedDateStr){
       sh.date = openedDateStr;
       changed = true;
+      var pid = sh.id||sh._id; if(pid) patches[pid] = {date: openedDateStr};
     }
   });
   if(changed){
     saveShifts(shifts);
-    try{
-      shifts.forEach(function(sh){
-        var id = sh.id||sh._id; if(!id) return;
-        db.collection('iz_shifts').doc(id).set(sh, {merge:true}).catch(function(){});
-      });
-    }catch(e){}
+    _pushShiftPatches(patches);
   }
+}
+// Раньше обе миграции (даты и выручки) при ЛЮБОМ изменении хоть одной смены заливали в облако
+// ВСЕ смены из локального кэша целиком (set(sh,{merge:true})). Локальные копии старых смен
+// (старше окна живой синхронизации, лежат в IndexedDB-архиве) не обновляются слушателем и
+// устаревают, как только смену поправили на другом устройстве — и такая массовая заливка
+// возвращала в облако старые остатки/кассу (merge оставлял только поля, которых в старой копии
+// не было: editedAt, причина правки), поэтому правка «сохранялась», но цифры тихо откатывались.
+// Например: Роза Хутор 01.06.2026 — правка утра 27.08 вернулась к прежнему значению, а
+// editedAt и причина остались. Теперь заливаем только реально пересчитанные поля.
+function _pushShiftPatches(patches){
+  try{
+    Object.keys(patches).forEach(function(id){
+      var patch = patches[id]; if(!patch || !Object.keys(patch).length) return;
+      db.collection('iz_shifts').doc(id).set(patch, {merge:true}).catch(function(){});
+    });
+  }catch(e){}
 }
 function migrateLegacyShiftRevenue(){
   var shifts = getShifts();
   if(!shifts.length) return;
   var changed = false;
+  var patches = {}; // id -> только реально изменённые поля (см. _pushShiftPatches)
+  var journalTouched = {};
   shifts.forEach(function(sh){
     if(!sh.journal || !sh.journal.length) return;
     sh.journal.forEach(function(e){
       if(e.type==='expense' && e.cashEffect===undefined && e.cashDrEffect===undefined){
+        journalTouched[sh.id||sh._id] = true;
         var isDr = e.goodsType==='dr';
         e.cashEffect = isDr?0:-(e.amount||0);
         e.cashDrEffect = isDr?-(e.amount||0):0;
@@ -3207,6 +3223,7 @@ function migrateLegacyShiftRevenue(){
         changed = true;
       }
       if(e.type==='staff' && e.cashEffect===undefined && e.staffEffect===undefined){
+        journalTouched[sh.id||sh._id] = true;
         e.cashEffect = 0; e.cardEffect = e.cardEffect||0;
         e.staffEffect = e.amount||e.opt||0; e.goodsEffect = -(e.retail||0);
         if(!e.id) e.id = uid();
@@ -3251,17 +3268,19 @@ function migrateLegacyShiftRevenue(){
       if(Math.round(sh[k]||0) !== Math.round(fields[k])){
         sh[k] = fields[k];
         changed = true;
+        var rid = sh.id||sh._id;
+        if(rid){ patches[rid] = patches[rid]||{}; patches[rid][k] = fields[k]; }
       }
     });
   });
-  if(changed){
+  // смены, у которых достроили эффекты старых записей журнала — им уходит и журнал (редкий случай)
+  shifts.forEach(function(sh){
+    var jid = sh.id||sh._id;
+    if(jid && journalTouched[jid]){ patches[jid] = patches[jid]||{}; patches[jid].journal = sh.journal; }
+  });
+  if(changed || Object.keys(journalTouched).length){
     saveShifts(shifts);
-    try{
-      shifts.forEach(function(sh){
-        var id = sh.id||sh._id; if(!id) return;
-        db.collection('iz_shifts').doc(id).set(sh, {merge:true}).catch(function(){});
-      });
-    }catch(e){}
+    _pushShiftPatches(patches);
   }
 }
 var _histShowOpen = false;
