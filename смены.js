@@ -6513,3 +6513,140 @@ function populatePastShiftSellers(){
   el.innerHTML=sellers.map(s=>`<option>${s.name}</option>`).join('');
   if(_restoreShift && _restoreShift.sellerName) el.value = _restoreShift.sellerName;
 }
+
+// ══════════════ «Мои смены» — просмотр продавцом СВОИХ закрытых смен за последние 2 недели ══════════════
+// Только просмотр (никаких форм правки): продавец сам видит расхождения, которые видит админ
+// («Есть несовпадения» и причины), и записи журнала, чтобы находить свои ошибки и сообщать о них админу.
+function _mshEsc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function _normSellerName(n){ return String(n||'').replace(/\s+/g,' ').trim().toLowerCase(); }
+function _myShiftsFromDate(){
+  var d = new Date(); d.setDate(d.getDate()-14);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function _isMyShift(sh){
+  if(!sh || typeof session==='undefined' || !session || !session.sellerName) return false;
+  if(_normSellerName(sh.sellerName)!==_normSellerName(session.sellerName)) return false;
+  if(sh.isRestoreShift || sh.backfilled || sh.isArchive || sh._deleted) return false;
+  return sh.status==='closed';
+}
+function _myShifts(){
+  var from = _myShiftsFromDate();
+  return getShifts().filter(function(s){ return _isMyShift(s) && (s.date||'')>=from; })
+    .sort(function(a,b){ return String(b.openedAt||b.date||'').localeCompare(String(a.openedAt||a.date||'')); });
+}
+function _mshSalesTotals(sh){
+  var cash=0, card=0, cnt=0;
+  (sh.journal||[]).forEach(function(e){
+    if(e.type!=='sale') return;
+    cnt++; cash += (e.cashEffect||0)+(e.cashDrEffect||0); card += (e.cardEffect||0)+(e.cardDrEffect||0);
+  });
+  return {cash:cash, card:card, cnt:cnt, total:cash+card};
+}
+function renderMyShifts(){
+  var c = document.getElementById('myShiftsList'); if(!c) return;
+  var list = _myShifts();
+  var fromLbl = _myShiftsFromDate().split('-').reverse().join('.');
+  var hdr = document.getElementById('myShiftsPeriod');
+  if(hdr) hdr.textContent = 'Ваши закрытые смены с '+fromLbl+' (последние 2 недели)';
+  if(!list.length){
+    c.innerHTML = '<div class="empty"><div class="ei">📁</div>За последние 2 недели закрытых смен не найдено<div style="font-size:11px;color:#555568;margin-top:6px">Если смена была, нажмите «🔄 Обновить»</div></div>';
+    return;
+  }
+  c.innerHTML = list.map(function(sh){
+    var t = _mshSalesTotals(sh);
+    var iss = evaluateShiftIssues(sh);
+    var bad = iss.hasIssues;
+    return '<div class="card" style="cursor:pointer;border-color:'+(bad?'#f06060':'#2e2e3e')+'" onclick="openMyShiftView(\''+_mshEsc(sh.id||sh._id)+'\')">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div>'+
+          '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700">'+_mshEsc(sh.shopName)+'</div>'+
+          '<div style="font-size:11px;color:#8888aa;margin-top:2px">📅 '+_mshEsc(sh.date)+'</div>'+
+          (bad?'<div style="font-size:10px;color:#f06060;margin-top:3px;font-weight:700">⚠️ Есть несовпадения ('+iss.issues.length+')</div>'
+              :'<div style="font-size:10px;color:#60f090;margin-top:3px">✅ Всё сходится</div>')+
+        '</div>'+
+        '<div style="text-align:right">'+
+          '<div style="font-family:Unbounded,sans-serif;font-size:14px;font-weight:700;color:#c8f060">'+fmt(t.total)+'</div>'+
+          '<div style="font-size:11px;color:#8888aa;margin-top:2px">💵 '+fmt(t.cash)+' / 💳 '+fmt(t.card)+' · '+t.cnt+' прод.</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+var _myShiftsRefreshAt = 0;
+function refreshMyShifts(force){
+  if(typeof db==='undefined' || !db || !navigator.onLine) return;
+  var now = Date.now();
+  if(!force && now-_myShiftsRefreshAt < 90000) return;
+  _myShiftsRefreshAt = now;
+  var btn = document.getElementById('myShiftsRefreshBtn'); if(btn){ btn.disabled=true; btn.textContent='⏳ Обновляю...'; }
+  db.collection('iz_shifts').where('date','>=',_myShiftsFromDate()).get({source:'server'}).then(function(snap){
+    var docs = []; snap.forEach(function(d){ var x=d.data(); x.id=d.id; docs.push(x); });
+    var changed = 0;
+    try{ changed += _applyServerShiftCopies(docs.slice()); }catch(e){}
+    // свои смены, которых на этом телефоне ещё нет — добавляем (чужие не сохраняем)
+    var all = getShifts(), added = 0;
+    docs.forEach(function(d){
+      if(!_isMyShift(d)) return;
+      if(all.some(function(x){ return (x.id||x._id)===d.id; })) return;
+      delete d._pendingSync; delete d._archiveOnly; all.push(d); added++;
+    });
+    if(added){ saveShifts(all); changed += added; }
+    renderMyShifts();
+  }).catch(function(err){ console.log('[refreshMyShifts]', err); showToast('⚠️ Не удалось обновить — проверьте связь'); })
+  .then(function(){ var b=document.getElementById('myShiftsRefreshBtn'); if(b){ b.disabled=false; b.textContent='🔄 Обновить'; } });
+}
+function openMyShiftView(id){
+  var sh = getShifts().find(function(s){ return (s.id||s._id)===id; });
+  if(!sh || !_isMyShift(sh)){ showToast('Смена не найдена'); return; }
+  var body = document.getElementById('myShiftBody'); if(!body) return;
+  var fmtT = function(iso){ if(!iso) return '—'; var d=new Date(iso); return d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}); };
+  var tm = function(iso){ return iso ? new Date(iso).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : ''; };
+  var ttl = document.getElementById('myShiftTitle'); if(ttl) ttl.textContent = sh.shopName+' · '+sh.date;
+  var sub = document.getElementById('myShiftSubtitle'); if(sub) sub.innerHTML = '🕐 Открыта: '+_mshEsc(fmtT(sh.openedAt))+'<br>🔐 Закрыта: '+_mshEsc(fmtT(sh.closedAt));
+  var iss = evaluateShiftIssues(sh);
+  var exp = _calcShiftExpectedEvening(sh);
+  var t = _mshSalesTotals(sh);
+  var html = '';
+  html += iss.hasIssues
+    ? '<div style="background:#2e1a1a;border:2px solid #f06060;border-radius:12px;padding:10px 12px;margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:#f06060;margin-bottom:6px">⚠️ Есть несовпадения — проверьте свои записи</div>'+
+        iss.issues.map(function(i){ return '<div style="font-size:12px;color:#f0c0c0;margin-bottom:5px">• '+_mshEsc(i.label)+'</div>'; }).join('')+
+        '<div style="font-size:10.5px;color:#8888aa;margin-top:6px">Нашли ошибку в своих записях — сообщите администратору, он исправит.</div></div>'
+    : '<div style="background:#1a2e1e;border:2px solid #60f090;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:12px;font-weight:700;color:#60f090">✅ Всё сходится</div>';
+  function row(label, a, b, c, warn){
+    return '<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:4px;padding:5px 0;border-bottom:1px solid #22222e;font-size:11.5px;align-items:center">'+
+      '<div style="color:#8888aa">'+label+'</div><div>'+a+'</div><div'+(warn?' style="color:#f06060;font-weight:700"':'')+'>'+b+'</div><div style="color:#8888aa">'+c+'</div></div>';
+  }
+  var f = function(n){ return n==null ? '—' : Math.round(n).toLocaleString('ru-RU')+'₽'; };
+  var d1 = function(real, calc){ return real!=null && Math.abs((real||0)-(calc||0))>=1; };
+  html += '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:12px;padding:8px 10px;margin-bottom:12px">'+
+    '<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:4px;font-size:10px;color:#555568;padding-bottom:4px;border-bottom:1px solid #2e2e3e"><div></div><div>Утро</div><div>Вечер (в отчёте)</div><div>Вечер (по журналу)</div></div>'+
+    row('🌳 Товар (Дерево)', f(sh.goodsMorning), f(sh.goodsEvening), f(exp.goodsWood), d1(sh.goodsEvening,exp.goodsWood))+
+    row('🛍 Товар (ДР)', f(sh.goodsDrMorning), f(sh.drGoodsEvening), f(exp.goodsDr), d1(sh.drGoodsEvening,exp.goodsDr))+
+    row('💵 Нал (Дерево)', f(sh.cashMorning), f(sh.cashEvening), f(exp.cash), d1(sh.cashEvening,exp.cash))+
+    row('💵 Нал (ДР)', f(sh.cashDrMorning), f(sh.drCashEvening), f(exp.cashDr), d1(sh.drCashEvening,exp.cashDr))+
+    '<div style="font-size:10px;color:#555568;margin-top:6px">«Вечер (по журналу)» — сколько должно получиться по вашим записям ниже. Красным — если в отчёте другое число.</div>'+
+  '</div>';
+  html += '<div style="font-size:12px;font-weight:700;margin-bottom:6px">💰 Продажи: '+fmt(t.total)+' <span style="color:#8888aa;font-weight:400">(💵 '+fmt(t.cash)+' / 💳 '+fmt(t.card)+', '+t.cnt+' шт.)</span></div>';
+  var icons = {sale:'💰', receive:'📥', writeoff:'🗑️', expense:'💸', staff:'🛒', return:'↩️'};
+  var jn = (sh.journal||[]).filter(function(e){ return e.type!=='open'; }).slice().sort(function(a,b){ return String(a.ts||'').localeCompare(String(b.ts||'')); });
+  html += '<div style="font-size:12px;font-weight:700;margin:12px 0 6px">📋 Записи смены ('+jn.length+')</div>';
+  if(!jn.length){ html += '<div style="font-size:11px;color:#555568">Записей нет</div>'; }
+  jn.forEach(function(e){
+    var minus = (e.type==='writeoff'||e.type==='expense'||e.type==='staff'||e.type==='return');
+    var amt = e.amount!=null ? e.amount : (e.totalPaid||0);
+    var itemsHtml = (e.items||[]).slice(0,12).map(function(it){
+      return '<div style="font-size:10.5px;color:'+(it.hasDiff?'#f0c060':'#8888aa')+'">'+(it.hasDiff?'⚠️ ':'· ')+(it.num||it.article?'№'+_mshEsc(it.num||it.article)+' ':'')+_mshEsc(it.name||'')+(it.species?' · '+_mshEsc(it.species):'')+' — '+f(it.amt!=null?it.amt:(it.price||0)*(it.qty||1))+(it.hasDiff&&it.diffNote?' <i>'+_mshEsc(it.diffNote)+'</i>':'')+'</div>';
+    }).join('');
+    html += '<div style="background:#13131a;border:1px solid '+(e.editedAt?'#604020':'#2a2a3a')+';border-radius:10px;padding:8px 10px;margin-bottom:6px">'+
+      '<div style="display:flex;justify-content:space-between;gap:8px"><div style="min-width:0"><div style="font-size:12px;font-weight:700">'+(icons[e.type]||'📄')+' '+_mshEsc(e.label||e.type)+' <span style="color:#555568;font-weight:400;font-size:10px">'+tm(e.ts)+'</span></div>'+
+      (e.sub&&!itemsHtml?'<div style="font-size:10.5px;color:#8888aa">'+_mshEsc(e.sub)+'</div>':'')+
+      (e.reason?'<div style="font-size:10.5px;color:#a060f0">'+_mshEsc(e.reason)+'</div>':'')+
+      (e.comment?'<div style="font-size:10.5px;color:#8888aa">💬 '+_mshEsc(e.comment)+'</div>':'')+
+      '</div><div style="font-size:13px;font-weight:700;flex-shrink:0;color:'+(minus?'#f06060':'#60f090')+'">'+(minus?'−':'+')+f(amt)+'</div></div>'+
+      itemsHtml+
+      (e.editedAt?'<div style="font-size:10px;color:#f0a060;margin-top:3px">✏️ Запись исправлена администратором</div>':'')+
+    '</div>';
+  });
+  body.innerHTML = html;
+  openMo('myShiftMo');
+}

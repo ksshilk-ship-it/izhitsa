@@ -325,7 +325,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '09.21.01';
+var APP_BUILD_VERSION = '09.21.02';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -1674,6 +1674,7 @@ function buildSellerTabs(){
     <button class="tab" onclick="showPg('writeoffs',this);renderWriteoffs()"><div class="ti">🗑</div><span>Списание</span><div id="tabBadgeWo" class="tbadge" style="display:none">●</div></button>
     <button class="tab" onclick="showPg('staff-tab',this);renderStaff()"><div class="ti">🛒</div><span>Покупки</span></button>
     <button class="tab" onclick="showPg('close',this);renderClose()"><div class="ti">🔐</div><span>Закрыть</span></button>
+    <button class="tab" onclick="showPg('myshifts',this);renderMyShifts();refreshMyShifts()"><div class="ti">📁</div><span>Мои смены</span></button>
     <button class="tab" onclick="showPg('personal',this);initPersonalTab()"><div class="ti">📈</div><span>Личное</span></button>
     <button class="tab" onclick="showPg('stock',this);initStockPage()"><div class="ti">📦</div><span>Склад</span></button>`;
 }
