@@ -151,12 +151,8 @@ function renderStatusBar(){
         sbCell('🌳 Дерево', s.staffWood, '#60c8f0')+sbCell('🛍 ДР', s.staffDr, '#60c8f0')+sbCell('Σ Всего', s.staffTotal, '#60c8f0')+
       '</div>'+
     '</div>'+
-    '<div style="background:#1a1a22;border-radius:9px;padding:8px 10px;margin-bottom:6px">'+
-      '<div style="font-size:10px;color:#60f090;font-weight:700;margin-bottom:4px">💵 ФАКТ НАЛИЧНЫХ В КАССЕ</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;text-align:center">'+
-        sbCell('🌳 Дерево', s.cashWood, '#60f090')+sbCell('🛍 ДР', s.cashDr, '#60f090')+sbCell('🛒 Сотр.', s.staffCashBalance, '#a060f0')+sbCell('Σ Итого', s.cashTotal, '#60f090')+
-      '</div>'+
-    '</div>'+
+    // Блок «Наличных в кассе» (расчётные Дерево/ДР/Сотр./Итого) убран с экрана продавца: при закрытии смены он
+    // работал как подсказка — сумму нужно вводить по РЕАЛЬНОМУ пересчёту денег в кассе, а не по цифре на экране.
     '<div style="background:#1a1a22;border-radius:9px;padding:8px 10px;margin-bottom:6px">'+
       '<div style="font-size:10px;color:#f0a060;font-weight:700;margin-bottom:4px">💸 РАСХОДЫ</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center">'+
