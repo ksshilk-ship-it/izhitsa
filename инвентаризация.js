@@ -145,7 +145,26 @@ function invResumeSession(id){
     _invEnterCount();
   }).catch(function(){ _invCounts={}; _invEnterCount(); showToast('⚠️ Не удалось загрузить уже посчитанное — начните досчитывать заново'); });
 }
+// Подсказки из справочников при занесении изделия без артикула: названия товаров (справочник Дерево / ДР Товар + то, что уже
+// есть на складе магазина) и породы/материалы. Раньше в полях «Наименование» и «Порода» списка не было.
+function _invFillRefLists(){
+  var gt = _invSession ? _invSession.goodsType : 'derevo';
+  var names = {}, species = {};
+  function addName(n){ n = (typeof n==='string' ? n : (n&&n.name)||'').trim(); if(n) names[n] = true; }
+  try{ (getRefBook(gt==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo')||[]).forEach(addName); }catch(e){}
+  try{ (getItemsBase()||[]).forEach(addName); }catch(e){}
+  try{ Object.keys((_invSession&&_invSession.snapshot)||{}).forEach(function(k){ addName(_invSession.snapshot[k].name); var sp=(_invSession.snapshot[k].species||'').trim(); if(sp) species[sp]=true; }); }catch(e){}
+  try{ (getSpecies()||[]).forEach(function(sp){ sp = String(sp||'').trim(); if(sp) species[sp]=true; }); }catch(e){}
+  try{ if(gt==='dr') (getRefBook('iz_dr_species')||[]).forEach(function(m){ var sp=(typeof m==='string'?m:(m&&m.name)||'').trim(); if(sp) species[sp]=true; }); }catch(e){}
+  var fill = function(id, set){
+    var el = document.getElementById(id); if(!el) return;
+    el.innerHTML = Object.keys(set).sort(function(a,b){ return a.toLowerCase().localeCompare(b.toLowerCase(),'ru'); }).slice(0,600)
+      .map(function(v){ return '<option value="'+_invEsc(v)+'">'; }).join('');
+  };
+  fill('invNameList', names); fill('invSpeciesList', species);
+}
 function _invEnterCount(){
+  try{ _invFillRefLists(); }catch(e){}
   _invSearch = '';
   var se = document.getElementById('invSearch');
   if(se){
@@ -346,8 +365,8 @@ function _invRenderRow(key, it, isNew){
       '<div style="display:flex;gap:6px;align-items:center;flex-shrink:0">'+editBtn+(counted ? '<div style="font-size:14px">✅</div>' : '')+'</div>'+
     '</div>'+
     (canEdit ? '<div id="invEditChar_'+safeKey+'" style="display:none;background:#0f0f13;border-radius:8px;padding:8px;margin-bottom:8px">'+
-      '<div class="fg" style="margin-bottom:6px"><label class="fl">Название</label><input class="fi" id="invEcName_'+safeKey+'" value="'+_invEsc(it.name)+'" style="margin:0;padding:7px"></div>'+
-      '<div class="fg" style="margin-bottom:6px"><label class="fl">Порода / характеристика</label><input class="fi" id="invEcSpecies_'+safeKey+'" value="'+_invEsc(it.species)+'" style="margin:0;padding:7px"></div>'+
+      '<div class="fg" style="margin-bottom:6px"><label class="fl">Название</label><input class="fi" id="invEcName_'+safeKey+'" value="'+_invEsc(it.name)+'" list="invNameList" autocomplete="off" style="margin:0;padding:7px"></div>'+
+      '<div class="fg" style="margin-bottom:6px"><label class="fl">Порода / характеристика</label><input class="fi" id="invEcSpecies_'+safeKey+'" list="invSpeciesList" autocomplete="off" value="'+_invEsc(it.species)+'" style="margin:0;padding:7px"></div>'+
       '<div class="fg" style="margin-bottom:8px"><label class="fl">Цена ₽</label><input class="fi" type="text" inputmode="numeric" id="invEcPrice_'+safeKey+'" value="'+(it.price||0)+'" style="margin:0;padding:7px"></div>'+
       '<button type="button" onclick="invSaveCharacteristics(\''+safeKey+'\','+(isNew?'true':'false')+')" style="width:100%;padding:8px;background:#60c8f0;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить характеристики</button>'+
     '</div>' : '')+
