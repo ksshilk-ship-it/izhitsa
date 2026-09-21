@@ -3141,6 +3141,22 @@ function svToggleEdit(kind, idx){
   else _svEditTarget={kind:kind, idx:idx};
   _renderShiftView();
 }
+// «Это переоценка» при ИСПРАВЛЕНИИ записи — раньше пометку можно было поставить только в момент внесения,
+// а у уже занесённой записи (например, списание «Ошиблась в цене» 03.09 + приход по новой цене) — нельзя.
+var _REVAL_PREFIX = '🔄 ПЕРЕОЦЕНКА · ';
+function _revalCheckboxHtml(id, checked){
+  return '<label style="display:flex;align-items:center;gap:6px;margin:0 0 8px;cursor:pointer">'+
+    '<input type="checkbox" id="svEdit_'+id+'_reval"'+(checked?' checked':'')+' style="width:16px;height:16px;flex-shrink:0">'+
+    '<span style="font-size:11px;color:#f0a060;font-weight:700">🔄 Это переоценка — легко найти в истории</span></label>';
+}
+function _svEditReval(id){ var el=document.getElementById('svEdit_'+id+'_reval'); return el ? !!el.checked : null; } // null — в форме нет галочки
+function _applyRevalToEntry(entry, on){
+  if(on===null || on===undefined || !entry) return;
+  var lbl = String(entry.label||'');
+  var has = lbl.indexOf(_REVAL_PREFIX)===0;
+  if(on){ entry.isRevaluation = true; if(!has) entry.label = _REVAL_PREFIX+lbl; }
+  else { delete entry.isRevaluation; if(has) entry.label = lbl.slice(_REVAL_PREFIX.length); }
+}
 function editItemForm(id, color, opts){
   opts = opts || {};
   var items = getItemsBase();
@@ -3178,6 +3194,9 @@ function editItemForm(id, color, opts){
   if(opts.extra){
     html += '<div style="margin-bottom:6px"><div class="u-fs10-gray-mb3">'+opts.extra.label+'</div>'+
       '<input class="fi u-inp-compact" id="svEdit_'+id+'_'+opts.extra.id+'" value="'+(p[opts.extra.valueKey||opts.extra.id]||'')+'" placeholder="'+opts.extra.placeholder+'"></div>';
+  }
+  if(['jwoItem','jrcvItem','woWoodArr','woDrArr','rcvWoodArr','rcvDrArr'].indexOf(opts.kind)>=0){
+    html += _revalCheckboxHtml(id, opts.revalChecked!==undefined ? opts.revalChecked : !!p.isRevaluation);
   }
   html += '<div class="u-fs10-gray-mb3">Причина правки</div>'+
     '<input class="fi" id="svEdit_'+id+'_reason" placeholder="Обязательно укажите причину..." style="margin:0;padding:8px;margin-bottom:8px">';
@@ -3219,6 +3238,9 @@ function simpleEditForm(id, color, opts){
         '<option value="derevo"'+(curGt==='derevo'?' selected':'')+'>🌳 Дерево</option>'+
         '<option value="dr"'+(curGt==='dr'?' selected':'')+'>🛍 ДР Товар</option>'+
       '</select></div>';
+  }
+  if(opts.kind==='jrcv' || opts.kind==='jwo'){
+    html += _revalCheckboxHtml(id, opts.revalChecked!==undefined ? opts.revalChecked : !!p.isRevaluation);
   }
   html += '<div class="u-fs10-gray-mb3">Причина правки</div>'+
     '<input class="fi" id="svEdit_'+id+'_reason" placeholder="Обязательно укажите причину..." style="margin:0;padding:8px;margin-bottom:8px">';
@@ -4393,10 +4415,10 @@ function _renderShiftView(){
     if(r.items && r.items.length===1){
       if(_svEditTarget && _svEditTarget.kind==='jrcvItem' && _svEditTarget.idx===i){
         var rit=r.items[0];
-        rcvBody += editItemForm('eJrcv'+i, '#60f090', {kind:'jrcvItem', idx:i, extra:{id:'from',label:'Откуда / поставщик',placeholder:'необязательно'}, saveFn:'svSaveJrcvItemEdit('+i+',\'eJrcv'+i+'\')', prefill:{art:rit.article||rit.num, name:rit.name, species:rit.species, price:rit.price, qty:rit.qty, amt:amt}});
+        rcvBody += editItemForm('eJrcv'+i, '#60f090', {kind:'jrcvItem', revalChecked:!!r.isRevaluation, idx:i, extra:{id:'from',label:'Откуда / поставщик',placeholder:'необязательно'}, saveFn:'svSaveJrcvItemEdit('+i+',\'eJrcv'+i+'\')', prefill:{art:rit.article||rit.num, name:rit.name, species:rit.species, price:rit.price, qty:rit.qty, amt:amt}});
       }
     } else if(_svEditTarget && _svEditTarget.kind==='jrcv' && _svEditTarget.idx===i){
-      rcvBody += simpleEditForm('jrcv'+i, '#60f090', {kind:'jrcv', idx:i, saveFn:'svSaveJEntrySimple(\'receive\','+i+')', prefill:{sub:r.sub||r.label||'', amt:amt, goodsType:r.goodsType}});
+      rcvBody += simpleEditForm('jrcv'+i, '#60f090', {kind:'jrcv', revalChecked:!!r.isRevaluation, idx:i, saveFn:'svSaveJEntrySimple(\'receive\','+i+')', prefill:{sub:r.sub||r.label||'', amt:amt, goodsType:r.goodsType}});
     }
     woodRcvCount++;
   });
@@ -4420,10 +4442,10 @@ function _renderShiftView(){
     if(r.items && r.items.length===1){
       if(_svEditTarget && _svEditTarget.kind==='jrcvItem' && _svEditTarget.idx===i){
         var ritDr=r.items[0];
-        rcvBody += editItemForm('eJrcv'+i, '#a060f0', {kind:'jrcvItem', idx:i, extra:{id:'from',label:'Откуда / поставщик',placeholder:'необязательно'}, saveFn:'svSaveJrcvItemEdit('+i+',\'eJrcv'+i+'\')', prefill:{art:ritDr.article||ritDr.num, name:ritDr.name, species:ritDr.species, price:ritDr.price, qty:ritDr.qty, amt:amt}});
+        rcvBody += editItemForm('eJrcv'+i, '#a060f0', {kind:'jrcvItem', revalChecked:!!r.isRevaluation, idx:i, extra:{id:'from',label:'Откуда / поставщик',placeholder:'необязательно'}, saveFn:'svSaveJrcvItemEdit('+i+',\'eJrcv'+i+'\')', prefill:{art:ritDr.article||ritDr.num, name:ritDr.name, species:ritDr.species, price:ritDr.price, qty:ritDr.qty, amt:amt}});
       }
     } else if(_svEditTarget && _svEditTarget.kind==='jrcv' && _svEditTarget.idx===i){
-      rcvBody += simpleEditForm('jrcv'+i, '#a060f0', {kind:'jrcv', idx:i, saveFn:'svSaveJEntrySimple(\'receive\','+i+')', prefill:{sub:r.sub||r.label||'', amt:amt, goodsType:r.goodsType}});
+      rcvBody += simpleEditForm('jrcv'+i, '#a060f0', {kind:'jrcv', revalChecked:!!r.isRevaluation, idx:i, saveFn:'svSaveJEntrySimple(\'receive\','+i+')', prefill:{sub:r.sub||r.label||'', amt:amt, goodsType:r.goodsType}});
     }
     drRcvCount++;
   });
@@ -4465,13 +4487,13 @@ function _renderShiftView(){
         var jwoKey = i+'_'+wi;
         woBody += woItem(lbl, sub, '#555568', (it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwoItem\',\''+jwoKey+'\')');
         if(_svEditTarget && _svEditTarget.kind==='jwoItem' && _svEditTarget.idx===jwoKey){
-          woBody += editItemForm('eJwo'+jwoKey, '#f06060', {kind:'jwoItem', idx:jwoKey, extra:{id:'wreason',valueKey:'reason',label:'Причина списания',placeholder:'например: брак, бой, недостача'}, saveFn:'svSaveJwoItemEdit('+i+','+wi+',\'eJwo'+jwoKey+'\')', prefill:{art:it.num||it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, amt:(it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), reason:it.reason||w.reason||''}});
+          woBody += editItemForm('eJwo'+jwoKey, '#f06060', {kind:'jwoItem', revalChecked:!!(it.isRevaluation||w.isRevaluation), idx:jwoKey, extra:{id:'wreason',valueKey:'reason',label:'Причина списания',placeholder:'например: брак, бой, недостача'}, saveFn:'svSaveJwoItemEdit('+i+','+wi+',\'eJwo'+jwoKey+'\')', prefill:{art:it.num||it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, amt:(it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), reason:it.reason||w.reason||''}});
         }
       });
     } else {
       woBody += woItem((w.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'')+(w.sub||w.label||'Списание'), w.reason||'', '#555568', w.amount||0, 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwo\','+i+')');
       if(_svEditTarget && _svEditTarget.kind==='jwo' && _svEditTarget.idx===i){
-        woBody += simpleEditForm('jwo'+i, '#f06060', {kind:'jwo', idx:i, saveFn:'svSaveJEntrySimple(\'writeoff\','+i+')', prefill:{sub:w.sub||w.label||'', amt:w.amount||0, goodsType:w.goodsType}});
+        woBody += simpleEditForm('jwo'+i, '#f06060', {kind:'jwo', revalChecked:!!w.isRevaluation, idx:i, saveFn:'svSaveJEntrySimple(\'writeoff\','+i+')', prefill:{sub:w.sub||w.label||'', amt:w.amount||0, goodsType:w.goodsType}});
       }
     }
     woodWoCount++;
@@ -4498,13 +4520,13 @@ function _renderShiftView(){
         var jwoKey = i+'_'+wi;
         woBody += woItem(lbl, sub, '#a060f0', (it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwoItem\',\''+jwoKey+'\')');
         if(_svEditTarget && _svEditTarget.kind==='jwoItem' && _svEditTarget.idx===jwoKey){
-          woBody += editItemForm('eJwo'+jwoKey, '#a060f0', {kind:'jwoItem', idx:jwoKey, extra:{id:'wreason',valueKey:'reason',label:'Причина списания',placeholder:'например: брак, бой, недостача'}, saveFn:'svSaveJwoItemEdit('+i+','+wi+',\'eJwo'+jwoKey+'\')', prefill:{art:it.num||it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, amt:(it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), reason:it.reason||w.reason||''}});
+          woBody += editItemForm('eJwo'+jwoKey, '#a060f0', {kind:'jwoItem', revalChecked:!!(it.isRevaluation||w.isRevaluation), idx:jwoKey, extra:{id:'wreason',valueKey:'reason',label:'Причина списания',placeholder:'например: брак, бой, недостача'}, saveFn:'svSaveJwoItemEdit('+i+','+wi+',\'eJwo'+jwoKey+'\')', prefill:{art:it.num||it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, amt:(it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), reason:it.reason||w.reason||''}});
         }
       });
     } else {
       woBody += woItem((w.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'')+(w.sub||w.label||'Списание'), w.reason||'', '#a060f0', w.amount||0, 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwo\','+i+')');
       if(_svEditTarget && _svEditTarget.kind==='jwo' && _svEditTarget.idx===i){
-        woBody += simpleEditForm('jwo'+i, '#a060f0', {kind:'jwo', idx:i, saveFn:'svSaveJEntrySimple(\'writeoff\','+i+')', prefill:{sub:w.sub||w.label||'', amt:w.amount||0, goodsType:w.goodsType}});
+        woBody += simpleEditForm('jwo'+i, '#a060f0', {kind:'jwo', revalChecked:!!w.isRevaluation, idx:i, saveFn:'svSaveJEntrySimple(\'writeoff\','+i+')', prefill:{sub:w.sub||w.label||'', amt:w.amount||0, goodsType:w.goodsType}});
       }
     }
     drWoCount++;
@@ -5440,13 +5462,17 @@ function svSaveJEntrySimple(type, idx){
     target.goodsEffect = gtWo==='dr' ? 0 : -Math.abs(amt);
     target.goodsDrEffect = gtWo==='dr' ? -Math.abs(amt) : 0;
   }
+  var _rvS = _svEditReval((type==='receive'?'jrcv':'jwo')+idx);
+  var _wasRvS = !!before.isRevaluation;
+  _applyRevalToEntry(target, _rvS);
+  if(_rvS && !_wasRvS){ try{ logAction('REVALUATION', {direction:type==='receive'?'receive':'writeoff', amount:amt, names:(target.sub||target.label||''), retro:true, shop:_currentShiftView.shopName, date:_currentShiftView.date}, _currentShiftView.id||_currentShiftView._id); }catch(e){} }
   target.editedBy=(session&&(session.name||session.sellerName))||'admin';
   target.editedAt=new Date().toISOString();
   target.editReason=reason;
   try{ logEntryEdit(before, target, (_currentShiftView&&(_currentShiftView.id||_currentShiftView._id))); }catch(e){}
   _svEditTarget = null;
   svPersist(); _renderShiftView();
-  showToast('✅ Запись обновлена');
+  showToast('✅ Запись обновлена'+(_rvS&&!_wasRvS?' · помечена как переоценка':(_rvS===false&&_wasRvS?' · пометка переоценки снята':'')));
 }
 function svSaveArrItemEdit(arrKey, idx, formId){
   var extraKey = arrKey==='goodsReceives' ? 'from' : (arrKey==='goodsWriteoffs'||arrKey==='drGoodsWriteoffs') ? 'wreason' : null;
@@ -5460,6 +5486,9 @@ function svSaveArrItemEdit(arrKey, idx, formId){
   target.price = d.price; target.qty = d.qty; target.amt = d.amt;
   if(arrKey==='goodsReceives') target.from = d.extra;
   if(arrKey==='goodsWriteoffs' || arrKey==='drGoodsWriteoffs') target.reason = d.extra;
+  var _rvA = _svEditReval(formId);
+  if(_rvA===true) target.isRevaluation = true; else if(_rvA===false) delete target.isRevaluation;
+  if(_rvA && !before.isRevaluation){ try{ logAction('REVALUATION', {direction:arrKey.indexOf('Writeoff')>=0?'writeoff':'receive', name:d.name, price:d.price, qty:d.qty, retro:true, shop:_currentShiftView.shopName, date:_currentShiftView.date}, _currentShiftView.id||_currentShiftView._id); }catch(e){} }
   target.editedBy=(session&&(session.name||session.sellerName))||'admin';
   target.editedAt=new Date().toISOString();
   target.editReason=d.reason;
@@ -5481,6 +5510,14 @@ function svSaveJwoItemEdit(entryIdx, itemIdx, formId){
   item.num = d.art; item.name = d.name; item.species = d.species;
   item.price = d.price; item.qty = d.qty; item.amt = d.amt;
   item.reason = d.extra;
+  var _rvW = _svEditReval(formId);
+  var _wasRvW = !!(before.isRevaluation || entry.isRevaluation);
+  if(_rvW===true) item.isRevaluation = true; else if(_rvW===false) delete item.isRevaluation;
+  if(_rvW!==null){
+    var _allRv = (entry.items||[]).every(function(it){ return !!it.isRevaluation; });
+    _applyRevalToEntry(entry, _allRv);
+  }
+  if(_rvW && !_wasRvW){ try{ logAction('REVALUATION', {direction:'writeoff', goodsType:entry.goodsType==='dr'?'dr':'derevo', names:d.name, amount:d.amt, reason:d.extra, retro:true, shop:_currentShiftView.shopName, date:_currentShiftView.date}, _currentShiftView.id||_currentShiftView._id); }catch(e){} }
   var isDr = entry.goodsType==='dr';
   var newTotal = (entry.items||[]).reduce(function(s,it){ return s+(it.amt!=null?it.amt:(it.price||0)*(it.qty||1)); },0);
   var totalQty = (entry.items||[]).reduce(function(s,it){ return s+(it.qty||1); },0);
@@ -5520,6 +5557,10 @@ function svSaveJrcvItemEdit(entryIdx, formId){
   entry.goodsEffect = isDr?0:newTotal;
   entry.goodsDrEffect = isDr?newTotal:0;
   entry.sub = (item.article?'№'+item.article+' ':'')+item.name+(item.species?' · '+item.species:'')+(item.qty&&item.qty!==1?' × '+item.qty:'')+(d.extra?' · от '+d.extra:'');
+  var _rvR = _svEditReval(formId);
+  var _wasRvR = !!entry.isRevaluation;
+  _applyRevalToEntry(entry, _rvR);
+  if(_rvR && !_wasRvR){ try{ logAction('REVALUATION', {direction:'receive', goodsType:entry.goodsType==='dr'?'dr':'derevo', name:d.name, article:d.art, price:d.price, qty:d.qty, amount:newTotal, retro:true, shop:_currentShiftView.shopName, date:_currentShiftView.date}, _currentShiftView.id||_currentShiftView._id); }catch(e){} }
   entry.editedBy=(session&&(session.name||session.sellerName))||'admin';
   entry.editedAt=new Date().toISOString();
   entry.editReason=d.reason;
@@ -5623,6 +5664,7 @@ function svOpenInvoiceFromReceive(invId){
       '<div id="maninv_items_'+invId+'"></div>'+
       '<button type="button" onclick="addManInvEditItem(\''+invId+'\')" class="btn sec" style="font-size:12px;margin:6px 0 0">＋ Добавить позицию</button>'+
       '<div id="maninv_total_'+invId+'" style="margin-top:8px"></div>'+
+      '<label style="display:flex;align-items:center;gap:6px;margin:8px 0 6px;cursor:pointer"><input type="checkbox" id="adminInv_reval_'+invId+'"'+(inv.isRevaluation?' checked':'')+' style="width:16px;height:16px;flex-shrink:0"><span style="font-size:11px;color:#f0a060;font-weight:700">🔄 Это переоценка — легко найти в истории</span></label>'+
       '<div style="font-size:10px;color:#8888aa;margin:8px 0 3px">Причина правки</div>'+
       '<input class="fi" id="adminInv_reason_'+invId+'" placeholder="Обязательно укажите причину..." style="margin:0;padding:7px;margin-bottom:8px">'+
       '<div class="u-flex-g6">'+
@@ -5663,8 +5705,9 @@ function svOpenInvoiceFromReceive(invId){
 function _applyInvoiceToReceiveEntry(entry, data, gt, newTotal){
   var isDr = gt==='dr';
   var by = data.acceptedBy || data.createdBy || entry.acceptedBy || '';
-  return Object.assign({}, entry, {
-    label:(entry.isRevaluation?'🔄 ПЕРЕОЦЕНКА · ':'')+'Приёмка '+data.num+(isDr?' (ДР)':''),
+  var rev = (data.isRevaluation===true) || (data.isRevaluation===undefined && !!entry.isRevaluation);
+  var res = Object.assign({}, entry, {
+    label:(rev?'🔄 ПЕРЕОЦЕНКА · ':'')+'Приёмка '+data.num+(isDr?' (ДР)':''),
     sub:(data.items||[]).length+' изд.'+(data.from?' · от '+data.from:'')+(by?' · принял: '+by:''),
     amount:newTotal,
     goodsEffect: isDr?0:newTotal,
@@ -5673,6 +5716,8 @@ function _applyInvoiceToReceiveEntry(entry, data, gt, newTotal){
     invId: entry.invId||data.id||data._id, acceptedBy:by,
     editedAt:new Date().toISOString()
   });
+  if(rev) res.isRevaluation = true; else delete res.isRevaluation;
+  return res;
 }
 // Правка накладной в архиве меняла запись прихода ТОЛЬКО в открытой в этот момент смене (и молча
 // ничего не делала, если запись там не находилась). Пример: Роза Хутор, накладная 026/20.07.2026 —
@@ -5693,7 +5738,8 @@ function _syncInvoiceEntryToOtherShifts(invId, data, gt, newTotal, skipShiftId, 
       var touched = false;
       (sh.journal||[]).forEach(function(e, i){
         if(e.type!=='receive' || e.invId!==invId) return;
-        if(Math.round(e.amount||0)===Math.round(newTotal) && ((e.goodsType==='dr')===isDr)) return;
+        var _revNow = (data.isRevaluation===true) || (data.isRevaluation===undefined && !!e.isRevaluation);
+        if(Math.round(e.amount||0)===Math.round(newTotal) && ((e.goodsType==='dr')===isDr) && (!!e.isRevaluation===_revNow)) return;
         if(!touched){
           touched = true;
           if(sh.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(sh);
@@ -5742,6 +5788,12 @@ function svSaveInvoiceFromArchive(id, isManual){
   data.editedAt = new Date().toISOString();
   data.editedBy = (session&&(session.name||session.sellerName))||'admin';
   data.editReason = reason;
+  var _rvInvEl = isManual ? document.getElementById('adminInv_reval_'+id) : null;
+  if(_rvInvEl){
+    if(_rvInvEl.checked) data.isRevaluation = true;
+    else if(all[idx].isRevaluation) data.isRevaluation = false; // было переоценкой — явно снимаем (merge-запись не удалит поле)
+    else delete data.isRevaluation;
+  }
   var _savedGt = (window._manInvEdit&&window._manInvEdit[id]&&window._manInvEdit[id].goodsType) || data.goodsType || all[idx].goodsType || 'derevo';
   data.goodsType = _savedGt;
   all[idx] = data;
