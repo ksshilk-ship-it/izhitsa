@@ -135,11 +135,16 @@ function saveShifts(shifts){
   // перенести правку обратно в настоящий window._extraArchiveShifts по id — иначе _persistExtraArchiveShifts()
   // ниже просто пересохранит старую, нетронутую версию, и правка «слетит обратно» при следующем
   // открытии списка смен, даже если открытая карточка какое-то время показывала верные данные.
-  if(archiveEdits.length && window._extraArchiveShifts){
+  if(archiveEdits.length){
+    if(!window._extraArchiveShifts) window._extraArchiveShifts = [];
     archiveEdits.forEach(function(updated){
       var uid = updated.id||updated._id;
       var idx = window._extraArchiveShifts.findIndex(function(s){ return (s.id||s._id)===uid; });
+      // Раньше, если такой смены не было в архивном кэше (она лежала в localStorage — например, подгружена до сокращения
+      // окна синхронизации до 14 дней), правка/обновление из облака молча выбрасывало смену и из localStorage (флаг
+      // _archiveOnly), и из архива — она пропадала из списка («Нет смены»): Горки 01.09 и 02.09 после открытия карточки.
       if(idx>=0) window._extraArchiveShifts[idx] = updated;
+      else { var c = Object.assign({}, updated); delete c._archiveOnly; window._extraArchiveShifts.push(c); }
     });
   }
   // Смены, которые уже лежат в архивном IndexedDB-кэше (старше окна живой синхронизации), не дублируем в
@@ -172,6 +177,17 @@ function saveShifts(shifts){
         return (s.date||'')>=cutoff || s.status==='open' || s._pendingSync;
       }) : shifts;
       localStorage.setItem(KEY.shifts, JSON.stringify(pruned));
+      // Выброшенные из localStorage старые смены не теряем — переносим в архивный кэш (IndexedDB), иначе они
+      // пропадали из списков и календаря «Проверка дат» до ручной синхронизации.
+      if(pruned.length < shifts.length){
+        try{
+          if(!window._extraArchiveShifts) window._extraArchiveShifts = [];
+          var have = {}; window._extraArchiveShifts.forEach(function(x){ have[x.id||x._id] = true; });
+          var keepIds = {}; pruned.forEach(function(x){ keepIds[x.id||x._id] = true; });
+          shifts.forEach(function(x){ var xid = x.id||x._id; if(!keepIds[xid] && !have[xid]) window._extraArchiveShifts.push(x); });
+          if(typeof _persistExtraArchiveShifts==='function') _persistExtraArchiveShifts();
+        }catch(e3){}
+      }
       return pruned.length < shifts.length;
     }catch(e2){
       console.log('[saveShifts] не удалось сохранить даже после обрезки:', e2);
@@ -3743,8 +3759,9 @@ function _shiftFingerprint(s){
     s.cashMorning,s.cashEvening,s.cashDrMorning,s.drCashEvening,s.cashStaffMorning,s.cashStaffEvening,
     s.goodsMornSource,s.goodsDrMornSource,j.length,j.map(function(e){return e.id||'';}).join(',')].join('|');
 }
-function _applyServerShiftCopies(docs){
+function _applyServerShiftCopies(docs, addMissing){
   var extra = window._extraArchiveShifts || [];
+  if(!window._extraArchiveShifts) window._extraArchiveShifts = extra;
   var local; try{ local = JSON.parse(localStorage.getItem(KEY.shifts)||'[]'); }catch(e){ local = []; }
   var tomb = {}; try{ getShiftTombstones().forEach(function(id){ tomb[id]=true; }); }catch(e){}
   var localChanged = 0, extraChanged = 0;
@@ -3761,6 +3778,12 @@ function _applyServerShiftCopies(docs){
     if(ei>=0){
       if(extra[ei]._pendingSync || _shiftFingerprint(extra[ei])===fp) return;
       extra[ei] = r; extraChanged++;
+      return;
+    }
+    // Смены нет ни в списке, ни в архивном кэше (пропала после обрезки/сбоя) — возвращаем из облака.
+    if(addMissing){
+      if(_isArchiveShift(r)){ extra.push(r); extraChanged++; }
+      else { local.push(r); localChanged++; }
     }
   });
   if(localChanged) saveShifts(local);
@@ -3776,7 +3799,7 @@ function _refreshHistoryFromServer(from, to){
   if(to) q = q.where('date','<=',to);
   q.get({source:'server'}).then(function(snap){
     var docs = []; snap.forEach(function(d){ var x = d.data(); x.id = d.id; docs.push(x); });
-    if(_applyServerShiftCopies(docs)){ try{ renderShiftHistory(); }catch(e){} } // повторный вызов упрётся в паузу 90 с — цикла нет
+    if(_applyServerShiftCopies(docs, true)){ try{ renderShiftHistory(); }catch(e){} } // повторный вызов упрётся в паузу 90 с — цикла нет
   }).catch(function(){}).then(function(){ _histServerRefreshBusy = false; });
 }
 var _histShopFilter = '';
