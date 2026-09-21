@@ -325,7 +325,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '09.21.04';
+var APP_BUILD_VERSION = '09.21.05';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -1762,6 +1762,7 @@ function buildAdminTabs(){
     <button class="tab" onclick="showPg('alerts',this);renderAlertsPage()"><div class="ti">🚨</div><span>Тревога</span><div class="tbadge" id="alertsBadge"></div></button>
     <button class="tab" onclick="_histShowOpen=false;showPg('history',this);renderShiftHistory()"><div class="ti">📁</div><span>Архив</span></button>
     <button class="tab" onclick="showPg('stock',this);initStockPage()"><div class="ti">📦</div><span>Склад</span></button>
+    <button class="tab" onclick="showPg('invadmin',this);renderInvAdmin()"><div class="ti">📋</div><span>Инвентар.</span></button>
     <button class="tab" onclick="showPg('admin-rcv-wo',this);initAdminRcvWo()"><div class="ti">📥</div><span>Приходы</span></button>
     <button class="tab" onclick="showPg('seller-stats',this);renderSellerStats()"><div class="ti">📊</div><span>Продавцы</span></button>
     <button class="tab" onclick="openProfitabilityReport()"><div class="ti">📈</div><span>Рентабельность</span></button>

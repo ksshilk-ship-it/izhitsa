@@ -12,6 +12,8 @@ var _invActiveSessions = [];
 var _invSearch = '';
 var _invReportRows = {};      // itemKey -> row shown in отчёт (используется кнопками "Применить")
 var _invPendingMode = 'checklist'; // 'checklist' | 'freeform' — выбор режима перед стартом нового пересчёта
+var _invPendingDate = (function(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
+var _invPendingParallel = false;
 var _invFfMatches = [];       // текущие подсказки поиска в свободном режиме
 
 function openInventoryModal(){
@@ -85,7 +87,13 @@ function _invRenderStart(){
   }).join('');
   var newBtns = '';
   if(!startedTypes.derevo || !startedTypes.dr){
-    newBtns += '<div style="font-size:11px;color:#8888aa;margin-bottom:6px">Как считать:</div>'+
+    var _todayInv = new Date(); var _todayInvStr = _todayInv.getFullYear()+'-'+String(_todayInv.getMonth()+1).padStart(2,'0')+'-'+String(_todayInv.getDate()).padStart(2,'0');
+    newBtns += '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:10px;padding:10px;margin-bottom:10px">'+
+      '<div style="font-size:11px;color:#8888aa;margin-bottom:4px">📅 Дата инвентаризации</div>'+
+      '<input class="fi" type="date" id="invPendDate" value="'+_invPendingDate+'" max="'+_todayInvStr+'" onchange="_invPendingDate=this.value" style="margin:0 0 8px;padding:7px;-webkit-appearance:none;color-scheme:dark">'+
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="invPendParallel"'+(_invPendingParallel?' checked':'')+' onchange="_invPendingParallel=this.checked" style="width:16px;height:16px;flex-shrink:0"><span style="font-size:11.5px;color:#f0c060;font-weight:700">🏪 Магазин не закрывался — продажи шли параллельно пересчёту</span></label>'+
+    '</div>'+
+    '<div style="font-size:11px;color:#8888aa;margin-bottom:6px">Как считать:</div>'+
       '<div style="display:flex;gap:6px;margin-bottom:10px">'+
         '<button type="button" onclick="invSetPendingMode(\'checklist\')" style="flex:1;padding:9px 6px;border-radius:9px;border:'+(_invPendingMode==='checklist'?'2px solid #60c8f0':'1px solid #2e2e3e')+';background:'+(_invPendingMode==='checklist'?'#0f1a22':'#1a1a22')+';color:'+(_invPendingMode==='checklist'?'#60c8f0':'#8888aa')+';font-size:11px;font-weight:700;cursor:pointer">📋 По списку системы</button>'+
         '<button type="button" onclick="invSetPendingMode(\'freeform\')" style="flex:1;padding:9px 6px;border-radius:9px;border:'+(_invPendingMode==='freeform'?'2px solid #60c8f0':'1px solid #2e2e3e')+';background:'+(_invPendingMode==='freeform'?'#0f1a22':'#1a1a22')+';color:'+(_invPendingMode==='freeform'?'#60c8f0':'#8888aa')+';font-size:11px;font-weight:700;cursor:pointer">✍️ Свободный ввод</button>'+
@@ -113,7 +121,15 @@ function invStartSession(goodsType){
     }
   });
   var id = uid();
-  _invSession = {id:id, shopName:session.shopName, goodsType:goodsType, startedAt:new Date().toISOString(), startedBy:(session.sellerName||session.name||'—'), status:'active', mode:_invPendingMode, snapshot:snapshot};
+  var _todayS = new Date(); var _todayStr = _todayS.getFullYear()+'-'+String(_todayS.getMonth()+1).padStart(2,'0')+'-'+String(_todayS.getDate()).padStart(2,'0');
+  var invDate = (document.getElementById('invPendDate')||{}).value || _invPendingDate || _todayStr;
+  if(invDate>_todayStr) invDate = _todayStr;
+  var parallel = !!(document.getElementById('invPendParallel')||{}).checked;
+  _invSession = {id:id, shopName:session.shopName, goodsType:goodsType, startedAt:new Date().toISOString(), startedBy:(session.sellerName||session.name||'—'), status:'active', mode:_invPendingMode, snapshot:snapshot,
+    inventoryDate:invDate, parallelSales:parallel,
+    // Инвентаризация внесена задним числом: снимок — это ТЕКУЩИЙ остаток (нужен как справочник изделий для поиска),
+    // а не остаток на дату инвентаризации; сравнение по изделиям для такой сессии не строится, только по суммам.
+    backdated: invDate<_todayStr};
   _invCounts = {};
   try{ db.collection('iz_inventory_sessions').doc(id).set(_invSession); }catch(e){}
   _invEnterCount();
@@ -154,11 +170,13 @@ function invOnSearchInput(v){
 function _invRenderCountHeader(){
   var el = document.getElementById('invCountHeader');
   if(!el || !_invSession) return;
-  var total = Object.keys(_invSession.snapshot).length;
-  var done = Object.keys(_invCounts).filter(function(k){ return _invSession.snapshot[k] && !_invCounts[k].isNew; }).length;
-  var newCount = Object.keys(_invCounts).filter(function(k){ return _invCounts[k].isNew; }).length;
+  // Пересчёт слепой: продавцу/инвентаризатору НЕ показываем ни сколько позиций «должно быть» по системе, ни итоги в ₽,
+  // ни расхождения — только сколько позиций он сам уже занёс. Итоги и расхождения видит администратор (вкладка «Инвентар.»).
+  var cnt = Object.keys(_invCounts).length;
+  var pcs = Object.keys(_invCounts).reduce(function(a,k){ return a+(_invCounts[k].countedQty||0); },0);
+  var dTxt = (_invSession.inventoryDate||'').split('-').reverse().join('.');
   el.innerHTML = '<div style="font-size:13px;font-weight:700">'+(_invSession.goodsType==='dr'?'🛍 ДР Товар':'🌳 Дерево')+' · '+_invSession.shopName+'</div>'+
-    '<div style="font-size:11px;color:#8888aa;margin-top:2px">Посчитано '+done+' из '+total+(newCount?' · +'+newCount+' новых (не было в системе)':'')+'</div>';
+    '<div style="font-size:11px;color:#8888aa;margin-top:2px">'+(dTxt?'📅 '+dTxt+' · ':'')+'Занесено позиций: '+cnt+' · всего '+pcs+' шт.'+(_invSession.parallelSales?' · 🏪 продажи шли параллельно':'')+'</div>';
 }
 function invSearchInput(v){ _invSearch = (v||'').trim().toLowerCase(); renderInvCountList(); }
 // ===== Свободный ввод: сначала заносим всё найденное по одному, без сверки на ходу — сверка
@@ -245,12 +263,32 @@ function _invRenderFreeformTally(){
         '<button type="button" onclick="invFfAdjustQty(\''+safeKey+'\',1)" style="width:32px;height:32px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#f0f0f8;font-size:16px;font-weight:700;cursor:pointer">+</button>'+
         '<button type="button" onclick="invFfRemoveCount(\''+safeKey+'\')" style="padding:8px 10px;border-radius:8px;border:1px solid #f0606055;background:transparent;color:#f06060;font-size:12px;cursor:pointer;flex-shrink:0">✕</button>'+
       '</div>'+
+      (_invSession.parallelSales ? '<div style="display:flex;gap:6px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid #2e2e3e44">'+
+        '<span style="font-size:10.5px;color:#f0c060;flex:1">🛒 продано во время пересчёта</span>'+
+        '<button type="button" onclick="invFfAdjustSold(\''+safeKey+'\',-1)" style="width:28px;height:28px;border-radius:7px;border:1px solid #2e2e3e;background:#22222e;color:#f0f0f8;font-size:14px;cursor:pointer">−</button>'+
+        '<div style="min-width:22px;text-align:center;font-size:13px;font-weight:700;color:#f0c060">'+(it.soldQty||0)+'</div>'+
+        '<button type="button" onclick="invFfAdjustSold(\''+safeKey+'\',1)" style="width:28px;height:28px;border-radius:7px;border:1px solid #2e2e3e;background:#22222e;color:#f0f0f8;font-size:14px;cursor:pointer">+</button>'+
+      '</div>' : '')+
     '</div>';
   }).join('');
+}
+// «Продано во время пересчёта» — магазин работал, пока считали: изделие занесли, а потом продали. Такие штуки
+// вычитаются из внесённого итога при сравнении с системой (см. отчёт администратора).
+function invFfAdjustSold(key, delta){
+  var it = _invCounts[key]; if(!it) return;
+  var v = Math.max(0, Math.min(it.countedQty||0, (it.soldQty||0)+delta));
+  it.soldQty = v;
+  it.countedAt = new Date().toISOString();
+  try{
+    db.collection('iz_inventory_counts').doc(_invSession.id+'_'+key).set(it)
+      .catch(function(){ showToast('⚠️ Не отправилось в облако'); });
+  }catch(e){}
+  _invRenderFreeformTally();
 }
 function invFfAdjustQty(key, delta){
   var it = _invCounts[key]; if(!it) return;
   it.countedQty = Math.max(0, (it.countedQty||0)+delta);
+  if((it.soldQty||0) > it.countedQty) it.soldQty = it.countedQty;
   it.countedAt = new Date().toISOString();
   it.countedBy = session.sellerName||session.name||'—';
   try{
@@ -313,6 +351,7 @@ function _invRenderRow(key, it, isNew){
       '<div class="fg" style="margin-bottom:8px"><label class="fl">Цена ₽</label><input class="fi" type="text" inputmode="numeric" id="invEcPrice_'+safeKey+'" value="'+(it.price||0)+'" style="margin:0;padding:7px"></div>'+
       '<button type="button" onclick="invSaveCharacteristics(\''+safeKey+'\','+(isNew?'true':'false')+')" style="width:100%;padding:8px;background:#60c8f0;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить характеристики</button>'+
     '</div>' : '')+
+    ((_invSession && _invSession.parallelSales) ? '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><span style="font-size:10.5px;color:#f0c060;flex:1">🛒 продано во время пересчёта, шт</span><input class="fi" type="number" inputmode="decimal" id="invSold_'+safeKey+'" placeholder="0" value="'+(counted&&counted.soldQty?counted.soldQty:'')+'" style="width:70px;margin:0;padding:6px" min="0"></div>' : '')+
     '<div style="display:flex;gap:6px;align-items:center">'+
       '<input class="fi" type="number" inputmode="decimal" id="invQty_'+safeKey+'" placeholder="Кол-во" value="'+(counted?counted.countedQty:'')+'" style="flex:1;margin:0;padding:8px" min="0">'+
       '<button type="button" onclick="invSaveCount(\''+safeKey+'\','+(isNew?'true':'false')+')" style="padding:8px 14px;background:#c8f060;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Сохранить</button>'+
@@ -347,6 +386,7 @@ function invSaveCharacteristics(key, isNew){
   var base = _invSession.snapshot[key];
   if(!base){ showToast('Товар не найден'); return; }
   if(!base.num){ showToast('Для товара без артикула характеристики правьте через Склад'); return; }
+  if(_invSession.backdated){ showToast('В инвентаризации задним числом правка характеристик системных товаров отключена — она изменила бы сегодняшнюю смену'); return; }
   _invQueueCharEdit(key, base.num, name, species, price);
 }
 // Правка характеристик пишется той же очередью, что и применение расхождений — обе операции
@@ -404,6 +444,8 @@ function invSaveCount(key, isNew){
     countedQty:qty, countedBy:(session.sellerName||session.name||'—'), countedAt:new Date().toISOString(),
     isNew:!!isNew
   };
+  var _soldEl = document.getElementById('invSold_'+key);
+  if(_soldEl){ var sq = parseFloat(_soldEl.value)||0; if(sq>0) rec.soldQty = Math.min(sq, qty); }
   _invCounts[key] = rec;
   try{
     db.collection('iz_inventory_counts').doc(_invSession.id+'_'+key).set(rec)
@@ -619,4 +661,350 @@ function invCloseModal(){
   }
   closeMo('invStockMo');
   loadInvHomeActive();
+}
+
+// ══════════════ Администратор: инвентаризации — итоги, расхождения, дата, загрузка списка ══════════════
+// Инвентаризатор считает «вслепую» (ни итогов, ни расхождений, ни того, сколько «должно быть»). Всё это видит
+// только администратор — вкладка «Инвентар.»: внесённый итог по Дереву и ДР, продано во время пересчёта,
+// сравнение с остатком товара по сменам на дату инвентаризации.
+var _invAdmSessions = [];
+var _invAdmGroups = {};
+var _invAdmCur = null; // {key, shopName, date, sessions:[], counts:{sessionId:{itemKey:rec}}, shifts:[], atTime:'', filter:''}
+function _iaEsc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function _iaMoney(n){ return Math.round(n||0).toLocaleString('ru-RU')+'₽'; }
+function _iaDateRu(d){ return String(d||'').split('-').reverse().join('.'); }
+function _iaSessDate(s){ return s.inventoryDate || (s.startedAt||'').slice(0,10); }
+function renderInvAdmin(){
+  var c = document.getElementById('invAdmList'); if(!c) return;
+  c.innerHTML = '<div style="font-size:12px;color:#8888aa;padding:8px">⏳ Загружаю инвентаризации...</div>';
+  db.collection('iz_inventory_sessions').get({source:'server'}).then(function(snap){
+    _invAdmSessions = snap.docs.map(function(d){ var x=d.data(); if(!x.id) x.id=d.id; return x; });
+    _invAdmGroups = {};
+    _invAdmSessions.forEach(function(x){
+      var k = (x.shopName||'')+'|'+_iaSessDate(x);
+      if(!_invAdmGroups[k]) _invAdmGroups[k] = {key:k, shopName:x.shopName, date:_iaSessDate(x), sessions:[]};
+      _invAdmGroups[k].sessions.push(x);
+    });
+    var groups = Object.keys(_invAdmGroups).map(function(k){ return _invAdmGroups[k]; })
+      .sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+    if(!groups.length){ c.innerHTML = '<div class="empty"><div class="ei">📋</div>Инвентаризаций пока нет</div>'; return; }
+    c.innerHTML = groups.map(function(g){
+      var types = ['derevo','dr'].map(function(t){
+        var ss = g.sessions.filter(function(x){ return (x.goodsType||'derevo')===t; });
+        if(!ss.length) return '';
+        var done = ss.every(function(x){ return x.status==='completed'; });
+        return '<span style="font-size:10px;margin-right:8px;color:'+(done?'#60f090':'#f0c060')+'">'+(t==='dr'?'🛍 ДР':'🌳 Дерево')+' '+(done?'✅':'⏳ идёт')+(ss.length>1?' ×'+ss.length:'')+'</span>';
+      }).join('');
+      var who = g.sessions.map(function(x){ return x.startedBy||''; }).filter(function(v,i,a){ return v && a.indexOf(v)===i; }).join(', ');
+      var par = g.sessions.some(function(x){ return x.parallelSales; });
+      return '<div class="card" style="cursor:pointer" onclick="invAdmOpen(\''+_iaEsc(g.key).replace(/'/g,"\\'")+'\')">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start"><div>'+
+          '<div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700">'+_iaEsc(g.shopName)+'</div>'+
+          '<div style="font-size:11px;color:#8888aa;margin-top:2px">📅 '+_iaDateRu(g.date)+(who?' · 👤 '+_iaEsc(who):'')+'</div>'+
+          '<div style="margin-top:4px">'+types+'</div>'+
+        '</div>'+(par?'<div style="font-size:10px;color:#f0c060;text-align:right">🏪 продажи<br>шли параллельно</div>':'')+'</div></div>';
+    }).join('');
+  }).catch(function(err){ c.innerHTML = '<div class="empty">❌ Не удалось загрузить: '+_iaEsc(err&&err.message||err)+'</div>'; });
+}
+function invAdmOpen(key){
+  var g = _invAdmGroups[key]; if(!g){ showToast('Инвентаризация не найдена'); return; }
+  _invAdmCur = {key:key, shopName:g.shopName, date:g.date, sessions:g.sessions, counts:{}, shifts:[], atTime:'', filter:''};
+  var body = document.getElementById('invAdmBody'); if(body) body.innerHTML = '<div style="padding:20px;text-align:center;color:#8888aa;font-size:12px">⏳ Загружаю данные...</div>';
+  openMo('invAdmMo');
+  Promise.all(g.sessions.map(function(sx){
+    return db.collection('iz_inventory_counts').where('sessionId','==',sx.id).get({source:'server'}).then(function(snap){
+      var m = {}; snap.forEach(function(d){ var c=d.data(); m[c.itemKey||d.id] = c; }); _invAdmCur.counts[sx.id] = m;
+    });
+  })).then(function(){ return _invAdmLoadShifts(); }).then(function(){ _invAdmRender(); })
+  .catch(function(err){ if(body) body.innerHTML = '<div class="empty">❌ '+_iaEsc(err&&err.message||err)+'</div>'; });
+}
+function _invAdmLoadShifts(){
+  var cur = _invAdmCur;
+  return db.collection('iz_shifts').where('date','==',cur.date).get({source:'server'}).then(function(snap){
+    cur.shifts = snap.docs.map(function(d){ var x=d.data(); x.id=d.id; return x; })
+      .filter(function(x){ return x.shopName===cur.shopName && !x._deleted && !x.isRestoreShift; })
+      .sort(function(a,b){ return String(a.openedAt||'').localeCompare(String(b.openedAt||'')); });
+  });
+}
+function _invAdmTotals(gt){
+  var cur = _invAdmCur, qty=0, sum=0, sold=0, soldSum=0, pos=0;
+  cur.sessions.filter(function(x){ return (x.goodsType||'derevo')===gt; }).forEach(function(x){
+    var m = cur.counts[x.id]||{};
+    Object.keys(m).forEach(function(k){
+      var r = m[k]; var q = r.countedQty||0, sq = Math.min(r.soldQty||0, q), pr = r.price||0;
+      pos++; qty += q; sum += q*pr; sold += sq; soldSum += sq*pr;
+    });
+  });
+  return {pos:pos, qty:qty, sum:sum, sold:sold, soldSum:soldSum, net:sum-soldSum};
+}
+// Остаток по системе на дату инвентаризации: утро первой смены, вечер последней, либо на выбранное время
+// (утро + движение по журналам смен этого дня до этого времени).
+function _invAdmSystem(gt){
+  var cur = _invAdmCur, sh = cur.shifts;
+  if(!sh.length) return null;
+  var isDr = gt==='dr';
+  var first = sh[0], last = sh[sh.length-1];
+  var morn = isDr ? (first.goodsDrMorning||0) : (first.goodsMorning||0);
+  var eve;
+  if(isDr) eve = last.drGoodsEvening!=null ? last.drGoodsEvening : _calcShiftExpectedEvening(last).goodsDr;
+  else eve = last.goodsEvening!=null ? last.goodsEvening : _calcShiftExpectedEvening(last).goodsWood;
+  var atTime = null;
+  if(cur.atTime){
+    var limit = new Date(cur.date+'T'+cur.atTime+':00');
+    var delta = 0;
+    sh.forEach(function(s){ (s.journal||[]).forEach(function(e){
+      if(!e.ts || e.type==='open') return;
+      if(new Date(e.ts) <= limit) delta += isDr ? (e.goodsDrEffect||0) : (e.goodsEffect||0);
+    }); });
+    atTime = morn + delta;
+  }
+  return {morn:morn, eve:eve, atTime:atTime, lastOpen: last.status!=='closed'};
+}
+function invAdmSetTime(v){ _invAdmCur.atTime = v||''; _invAdmRender(); }
+function invAdmSetFilter(v){ _invAdmCur.filter = (v||'').trim().toLowerCase(); _invAdmRenderItems(); }
+function _invAdmRender(){
+  var cur = _invAdmCur, body = document.getElementById('invAdmBody'); if(!body||!cur) return;
+  var ttl = document.getElementById('invAdmTitle'); if(ttl) ttl.textContent = cur.shopName+' · инвентаризация '+_iaDateRu(cur.date);
+  var tw = _invAdmTotals('derevo'), td = _invAdmTotals('dr');
+  var sw = _invAdmSystem('derevo'), sd = _invAdmSystem('dr');
+  var parallel = cur.sessions.some(function(x){ return x.parallelSales; });
+  var who = cur.sessions.map(function(x){ return x.startedBy||''; }).filter(function(v,i,a){ return v && a.indexOf(v)===i; }).join(', ');
+  function diffCell(net, ref){
+    if(ref==null) return '<span style="color:#555568">—</span>';
+    var d = net-ref; var ok = Math.abs(d)<1;
+    return '<span style="font-weight:700;color:'+(ok?'#60f090':(d>0?'#f0c060':'#f06060'))+'">'+(ok?'сходится':(d>0?'+':'−')+_iaMoney(Math.abs(d)))+'</span>';
+  }
+  function row(label, a, b, opt){ opt=opt||{}; return '<div style="display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:6px;padding:6px 0;border-bottom:1px solid #22222e;font-size:12px;align-items:center'+(opt.bold?';font-weight:700':'')+'"><div style="color:'+(opt.dim?'#8888aa':'#f0f0f8')+'">'+label+'</div><div>'+a+'</div><div>'+b+'</div></div>'; }
+  var noShift = !cur.shifts.length;
+  var html = '';
+  html += '<div style="font-size:11px;color:#8888aa;margin-bottom:10px">'+(who?'👤 '+_iaEsc(who)+' · ':'')+cur.sessions.length+' сесс. · '+(parallel?'🏪 магазин работал во время инвентаризации, продажи шли параллельно':'магазин не работал параллельно')+'</div>';
+  // дата
+  html += '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:10px;padding:10px;margin-bottom:12px"><div style="font-size:11px;color:#8888aa;margin-bottom:5px">📅 Дата инвентаризации</div>'+
+    '<div style="display:flex;gap:6px"><input class="fi" type="date" id="invAdmDate" value="'+cur.date+'" style="margin:0;padding:7px;flex:1;-webkit-appearance:none;color-scheme:dark">'+
+    '<button type="button" onclick="invAdmSaveDate()" style="padding:7px 12px;background:#60c8f0;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить дату</button></div>'+
+    '<div style="font-size:10px;color:#555568;margin-top:4px">Если внесли сегодня, а считали раньше — поставьте дату, когда считали: по ней берутся остатки смен для сравнения.</div></div>';
+  // итоги и сравнение
+  html += '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:12px;padding:8px 10px;margin-bottom:12px">'+
+    '<div style="display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:6px;font-size:10px;color:#555568;padding-bottom:4px;border-bottom:1px solid #2e2e3e"><div></div><div style="color:#c8f060;font-weight:700">🌳 ДЕРЕВО</div><div style="color:#a060f0;font-weight:700">🛍 ДР ТОВАР</div></div>'+
+    row('Внесено по листам', _iaMoney(tw.sum)+'<div style="font-size:10px;color:#8888aa">'+tw.pos+' поз. · '+tw.qty+' шт.</div>', _iaMoney(td.sum)+'<div style="font-size:10px;color:#8888aa">'+td.pos+' поз. · '+td.qty+' шт.</div>', {bold:true})+
+    (parallel || tw.soldSum || td.soldSum ? row('− продано во время пересчёта', _iaMoney(tw.soldSum)+'<div style="font-size:10px;color:#8888aa">'+tw.sold+' шт.</div>', _iaMoney(td.soldSum)+'<div style="font-size:10px;color:#8888aa">'+td.sold+' шт.</div>', {dim:true}) : '')+
+    row('= К сравнению с системой', _iaMoney(tw.net), _iaMoney(td.net), {bold:true})+
+    (noShift ? '<div style="font-size:12px;color:#f0c060;padding:10px 0">⚠️ У магазина нет смен за '+_iaDateRu(cur.date)+' — сравнивать не с чем. Проверьте дату.</div>' :
+      row('Система: утро '+_iaDateRu(cur.date), _iaMoney(sw.morn), _iaMoney(sd.morn), {dim:true})+
+      row('Система: вечер '+_iaDateRu(cur.date)+(sw.lastOpen?' (смена не закрыта — расчёт)':''), _iaMoney(sw.eve), _iaMoney(sd.eve), {dim:true})+
+      '<div style="display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:6px;padding:6px 0;border-bottom:1px solid #22222e;font-size:12px;align-items:center"><div style="color:#8888aa">Система на время <input type="time" value="'+(cur.atTime||'')+'" onchange="invAdmSetTime(this.value)" style="background:#0f0f13;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;padding:3px 5px;font-size:11px;color-scheme:dark;width:88px"></div><div>'+(sw.atTime!=null?_iaMoney(sw.atTime):'<span style="color:#555568">задайте время</span>')+'</div><div>'+(sd.atTime!=null?_iaMoney(sd.atTime):'—')+'</div></div>'+
+      '<div style="font-size:11px;font-weight:700;color:#f0c060;margin:10px 0 2px">РАСХОЖДЕНИЕ (к сравнению − система)</div>'+
+      row('с остатком на вечер', diffCell(tw.net, sw.eve), diffCell(td.net, sd.eve))+
+      row('с остатком на утро', diffCell(tw.net, sw.morn), diffCell(td.net, sd.morn))+
+      (sw.atTime!=null?row('с остатком на '+cur.atTime, diffCell(tw.net, sw.atTime), diffCell(td.net, sd.atTime)):''))+
+    '</div>';
+  html += '<div style="font-size:10.5px;color:#8888aa;margin-bottom:12px;line-height:1.45">«+» — изделий на складе фактически больше, чем в системе, «−» — меньше. Магазин работал во время пересчёта, поэтому: изделие, которое занесли, а потом продали, отмечено как «продано во время пересчёта» и вычтено из внесённого итога; сравнивайте с остатком на <b>вечер</b> (продажи и приходы дня уже учтены) либо на выбранное время.</div>';
+  // смены дня
+  if(cur.shifts.length){
+    html += '<div style="font-size:11px;color:#8888aa;margin-bottom:10px">Смены за день: '+cur.shifts.map(function(x){ return _iaEsc(x.sellerName||'—')+' ('+(x.openedAt?new Date(x.openedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'?')+'–'+(x.closedAt?new Date(x.closedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'открыта')+')'; }).join('; ')+'</div>';
+  }
+  // отчёт по изделиям — только для инвентаризаций «в тот же день» (у задним числом нет остатка по количеству на дату)
+  var live = cur.sessions.filter(function(x){ return !x.backdated && x.snapshot && Object.keys(x.snapshot).length; });
+  if(live.length){
+    html += '<div style="margin-bottom:12px">'+live.map(function(x){ return '<button type="button" onclick="invAdmItemReport(\''+x.id+'\')" style="padding:8px 12px;margin:0 6px 6px 0;background:#1a1f2e;border:1px solid #60c8f0;border-radius:8px;color:#60c8f0;font-size:11px;font-weight:700;cursor:pointer">📑 Отчёт по изделиям — '+(x.goodsType==='dr'?'ДР':'Дерево')+'</button>'; }).join('')+'</div>';
+  } else {
+    html += '<div style="font-size:10.5px;color:#555568;margin-bottom:12px">Сравнение по отдельным изделиям для инвентаризации задним числом не строится (остатки по количеству на прошлую дату не хранятся) — только по суммам выше.</div>';
+  }
+  html += '<div style="display:flex;gap:6px;margin-bottom:8px"><input class="fi" id="invAdmFilter" placeholder="🔍 Поиск по списку внесённого..." oninput="invAdmSetFilter(this.value)" style="margin:0;padding:8px;flex:1" value="'+_iaEsc(cur.filter)+'"><button type="button" onclick="invAdmAddItem()" style="padding:8px 12px;background:#f0c060;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">➕ Позиция</button></div>';
+  html += '<div id="invAdmItems"></div>';
+  body.innerHTML = html;
+  _invAdmRenderItems();
+}
+function _invAdmAllRows(){
+  var cur = _invAdmCur, rows = [];
+  cur.sessions.forEach(function(x){ var m = cur.counts[x.id]||{}; Object.keys(m).forEach(function(k){ rows.push({sid:x.id, key:k, rec:m[k], gt:x.goodsType||'derevo'}); }); });
+  return rows;
+}
+function _invAdmRenderItems(){
+  var host = document.getElementById('invAdmItems'); if(!host || !_invAdmCur) return;
+  var f = _invAdmCur.filter;
+  var rows = _invAdmAllRows().filter(function(r){
+    if(!f) return true; var c=r.rec;
+    return String(c.name||'').toLowerCase().indexOf(f)>=0 || String(c.num||'').toLowerCase().indexOf(f)>=0 || String(c.species||'').toLowerCase().indexOf(f)>=0;
+  }).sort(function(a,b){ return (a.gt+String(a.rec.name||'')).localeCompare(b.gt+String(b.rec.name||''),'ru'); });
+  var total = rows.length; rows = rows.slice(0,150);
+  if(!rows.length){ host.innerHTML = '<div class="empty">Ничего не внесено</div>'; return; }
+  host.innerHTML = '<div style="font-size:10.5px;color:#8888aa;margin-bottom:6px">Показано '+rows.length+' из '+total+(total>rows.length?' — уточните поиск':'')+'. Количество, цену и «продано» можно исправить прямо тут.</div>'+
+    rows.map(function(r){
+      var c=r.rec, id=_iaEsc(r.sid)+'|'+_iaEsc(r.key);
+      return '<div style="display:flex;gap:6px;align-items:center;border-bottom:1px solid #22222e;padding:6px 0;font-size:11.5px">'+
+        '<div style="flex:1;min-width:0"><div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(r.gt==='dr'?'🛍':'🌳')+' '+(c.num?'№'+_iaEsc(c.num)+' ':'')+_iaEsc(c.name||'—')+'</div><div style="font-size:10px;color:#8888aa">'+_iaEsc(c.species||'')+'</div></div>'+
+        '<input type="text" inputmode="numeric" value="'+(c.price||0)+'" title="цена" onchange="invAdmEditRow(\''+id+'\',\'price\',this.value)" style="width:58px;background:#0f0f13;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;padding:4px;font-size:11px;text-align:right">'+
+        '<input type="text" inputmode="numeric" value="'+(c.countedQty||0)+'" title="кол-во" onchange="invAdmEditRow(\''+id+'\',\'countedQty\',this.value)" style="width:42px;background:#0f0f13;border:1px solid #60f09055;border-radius:6px;color:#f0f0f8;padding:4px;font-size:11px;text-align:center">'+
+        '<input type="text" inputmode="numeric" value="'+(c.soldQty||0)+'" title="продано во время пересчёта" onchange="invAdmEditRow(\''+id+'\',\'soldQty\',this.value)" style="width:38px;background:#0f0f13;border:1px solid #f0c06055;border-radius:6px;color:#f0c060;padding:4px;font-size:11px;text-align:center">'+
+        '<button type="button" onclick="invAdmDelRow(\''+id+'\')" style="background:none;border:1px solid #f0606055;border-radius:6px;color:#f06060;padding:3px 7px;cursor:pointer">✕</button></div>';
+    }).join('');
+}
+function invAdmEditRow(id, field, val){
+  var parts = id.split('|'), sid = parts[0], key = parts.slice(1).join('|');
+  var rec = (_invAdmCur.counts[sid]||{})[key]; if(!rec) return;
+  var v = parseFloat(String(val).replace(/\s/g,'').replace(',','.'));
+  if(isNaN(v) || v<0){ showToast('Введите число'); _invAdmRenderItems(); return; }
+  rec[field] = v;
+  if((rec.soldQty||0) > (rec.countedQty||0)) rec.soldQty = rec.countedQty;
+  rec.editedByAdmin = (session&&(session.name||session.sellerName))||'admin';
+  try{ db.collection('iz_inventory_counts').doc(sid+'_'+key).set(rec).catch(function(){ showToast('⚠️ Не отправилось в облако'); }); }catch(e){}
+  _invAdmRender();
+}
+function invAdmDelRow(id){
+  var parts = id.split('|'), sid = parts[0], key = parts.slice(1).join('|');
+  var rec = (_invAdmCur.counts[sid]||{})[key]; if(!rec) return;
+  if(!confirm('Убрать позицию «'+(rec.name||key)+'» из инвентаризации?')) return;
+  delete _invAdmCur.counts[sid][key];
+  try{ db.collection('iz_inventory_counts').doc(sid+'_'+key).delete(); }catch(e){}
+  _invAdmRender();
+}
+function invAdmAddItem(){
+  var cur = _invAdmCur; if(!cur) return;
+  var gt = confirm('Добавить изделие в ДЕРЕВО?\n\nОК — Дерево, Отмена — ДР Товар') ? 'derevo' : 'dr';
+  var sess = cur.sessions.filter(function(x){ return (x.goodsType||'derevo')===gt; })[0];
+  if(!sess){ showToast('Для этого вида товара в инвентаризации нет сессии — используйте «Загрузить список»'); return; }
+  var num = (prompt('Артикул (можно пусто):','')||'').trim();
+  var name = (prompt('Название изделия:','')||'').trim(); if(!name) return;
+  var species = (prompt('Порода / особенность (можно пусто):','')||'').trim();
+  var price = parseFloat(prompt('Цена ₽:','0'))||0;
+  var qty = parseFloat(prompt('Количество, шт:','1'))||1;
+  var key = num || _noArticleStockKey(name, price, species, gt) || ('new_'+uid());
+  var rec = {sessionId:sess.id, itemKey:key, num:num, name:name, price:price, species:species, size:'', goodsType:gt, countedQty:qty, countedBy:sess.startedBy||'—', countedAt:new Date().toISOString(), isNew:false, addedByAdmin:true};
+  cur.counts[sess.id] = cur.counts[sess.id]||{};
+  var ex = cur.counts[sess.id][key]; if(ex){ rec.countedQty = (ex.countedQty||0)+qty; rec.soldQty = ex.soldQty||0; }
+  cur.counts[sess.id][key] = rec;
+  try{ db.collection('iz_inventory_counts').doc(sess.id+'_'+key).set(rec); }catch(e){}
+  _invAdmRender();
+}
+function invAdmSaveDate(){
+  var cur = _invAdmCur; var el = document.getElementById('invAdmDate'); var nd = el && el.value;
+  if(!nd){ showToast('Укажите дату'); return; }
+  var today = new Date(); var todayStr = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  if(nd>todayStr){ showToast('Дата не может быть в будущем'); return; }
+  if(nd===cur.date){ showToast('Дата не изменилась'); return; }
+  if(!confirm('Изменить дату инвентаризации '+_iaDateRu(cur.date)+' → '+_iaDateRu(nd)+'?')) return;
+  Promise.all(cur.sessions.map(function(x){
+    x.inventoryDate = nd; x.backdated = nd<todayStr;
+    return db.collection('iz_inventory_sessions').doc(x.id).set({inventoryDate:nd, backdated:x.backdated, dateEditedBy:(session&&(session.name||session.sellerName))||'admin', dateEditedAt:new Date().toISOString()}, {merge:true});
+  })).then(function(){
+    cur.date = nd; return _invAdmLoadShifts();
+  }).then(function(){ showToast('✅ Дата изменена на '+_iaDateRu(nd)); _invAdmRender(); renderInvAdmin(); })
+  .catch(function(err){ showToast('❌ Не удалось: '+(err&&err.message||err)); });
+}
+function invAdmItemReport(sessionId){
+  var cur = _invAdmCur; var sx = cur.sessions.find(function(x){ return x.id===sessionId; }); if(!sx) return;
+  _invSession = sx; _invCounts = cur.counts[sx.id] || {};
+  openMo('invStockMo'); _invRenderReport();
+}
+
+// ── Загрузка списка (расшифровка рукописных листов / таблица) ──
+// Формат строки (разделитель — табуляция, «;» или «|»): № ; Название ; Порода ; Цена ; Кол-во ; Продано
+// «№» и «Порода» можно оставить пустыми, «Цена» — если артикул есть в системе, подставится цена из системы.
+var _invImpRows = [];
+function invAdmOpenImport(){
+  var shops = (typeof getShopNames==='function') ? getShopNames() : [];
+  var sel = document.getElementById('invImpShop');
+  if(sel) sel.innerHTML = shops.map(function(n){ return '<option>'+_iaEsc(n)+'</option>'; }).join('');
+  var today = new Date(); var ts = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  var dEl = document.getElementById('invImpDate'); if(dEl){ dEl.max = ts; if(!dEl.value) dEl.value = ts; }
+  var who = document.getElementById('invImpWho');
+  if(who && !who.value){
+    var staff = (typeof getInventoryStaff==='function') ? getInventoryStaff() : [];
+    who.value = (staff[0] && staff[0].name) || '';
+  }
+  _invImpRows = []; var pv = document.getElementById('invImpPreview'); if(pv) pv.innerHTML = '';
+  openMo('invImportMo');
+}
+function _invImpNum(v){
+  var t = String(v==null?'':v).replace(/\s/g,'').replace(/₽|руб\.?|р\./gi,'').replace(',','.');
+  if(t==='') return null; var n = parseFloat(t); return isNaN(n) ? null : n;
+}
+function invImpParse(){
+  var raw = (document.getElementById('invImpText')||{}).value || '';
+  var gt = (document.getElementById('invImpType')||{}).value || 'derevo';
+  var shop = (document.getElementById('invImpShop')||{}).value || '';
+  var stock = ((typeof getStock==='function' ? getStock() : {})[shop]) || {};
+  var rows = [];
+  raw.split(/\r?\n/).forEach(function(line){
+    line = line.trim(); if(!line) return;
+    var delim = line.indexOf('\t')>=0 ? '\t' : (line.indexOf(';')>=0 ? ';' : (line.indexOf('|')>=0 ? '|' : null));
+    var cells = delim ? line.split(delim).map(function(c){ return c.trim(); }) : [line];
+    if(/^(№|номер|арт)/i.test(cells[0]) && /назв/i.test(cells[1]||'')) return; // строка-заголовок
+    var num = cells[0]||'', name = cells[1]!==undefined ? cells[1] : '', species = cells[2]||'';
+    if(cells.length===1){ name = cells[0]; num = ''; }
+    var price = _invImpNum(cells[3]), qty = _invImpNum(cells[4]), sold = _invImpNum(cells[5]);
+    var sys = null;
+    if(num && stock[num] && (stock[num].goodsType||'derevo')===gt) sys = stock[num];
+    if(sys){ if(!name) name = sys.name||''; if(!species) species = sys.species||''; if(price==null) price = sys.price||0; }
+    var issues = [];
+    if(!name) issues.push('нет названия');
+    if(price==null) issues.push('нет цены');
+    if(qty==null){ qty = 1; }
+    rows.push({num:num, name:name, species:species, price:price==null?0:price, qty:qty, sold:sold||0, inSystem:!!sys, issues:issues});
+  });
+  _invImpRows = rows;
+  _invImpRender();
+}
+function _invImpRender(){
+  var pv = document.getElementById('invImpPreview'); if(!pv) return;
+  if(!_invImpRows.length){ pv.innerHTML = '<div style="font-size:11px;color:#f0c060;padding:8px 0">Строк не найдено — вставьте список выше</div>'; return; }
+  var sum=0, qty=0, bad=0;
+  _invImpRows.forEach(function(r){ sum += (r.price||0)*(r.qty||0); qty += r.qty||0; if(r.issues.length) bad++; });
+  var inp = function(i,f,v,w,extra){ return '<input type="text" value="'+_iaEsc(v)+'" onchange="invImpEdit('+i+',\''+f+'\',this.value)" style="width:'+w+';background:#0f0f13;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;padding:4px;font-size:11px;'+(extra||'')+'">'; };
+  pv.innerHTML = '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:10px;padding:8px 10px;margin:10px 0;font-size:12px"><b>'+_invImpRows.length+'</b> позиций · <b>'+qty+'</b> шт. · итого <b style="color:#c8f060">'+_iaMoney(sum)+'</b>'+(bad?' · <span style="color:#f06060">⚠️ строк с вопросами: '+bad+'</span>':'')+'</div>'+
+    '<div style="font-size:10px;color:#8888aa;margin-bottom:6px">Проверьте и поправьте прямо в таблице. № · Название · Порода · Цена · Шт. · Продано</div>'+
+    _invImpRows.map(function(r,i){
+      return '<div style="display:flex;gap:4px;align-items:center;padding:4px 0;border-bottom:1px solid #22222e;'+(r.issues.length?'background:#2e1a1a33':'')+'">'+
+        inp(i,'num',r.num,'46px')+inp(i,'name',r.name,'auto','flex:1;min-width:70px')+inp(i,'species',r.species,'56px')+inp(i,'price',r.price,'50px','text-align:right')+inp(i,'qty',r.qty,'34px','text-align:center')+inp(i,'sold',r.sold,'30px','text-align:center;color:#f0c060')+
+        '<button type="button" onclick="invImpDel('+i+')" style="background:none;border:none;color:#f06060;cursor:pointer;font-size:13px">✕</button></div>'+
+        (r.issues.length?'<div style="font-size:10px;color:#f06060;margin:-2px 0 4px">'+r.issues.join(', ')+'</div>':'');
+    }).join('');
+}
+function invImpEdit(i, f, v){
+  var r = _invImpRows[i]; if(!r) return;
+  if(f==='price'||f==='qty'||f==='sold'){ var n=_invImpNum(v); r[f] = n==null?0:n; } else r[f] = String(v).trim();
+  r.issues = []; if(!r.name) r.issues.push('нет названия'); if(!r.price) r.issues.push('нет цены');
+  _invImpRender();
+}
+function invImpDel(i){ _invImpRows.splice(i,1); _invImpRender(); }
+function invImpSave(){
+  var shop = (document.getElementById('invImpShop')||{}).value;
+  var date = (document.getElementById('invImpDate')||{}).value;
+  var gt = (document.getElementById('invImpType')||{}).value || 'derevo';
+  var who = ((document.getElementById('invImpWho')||{}).value||'').trim() || 'Инвентаризация';
+  var parallel = !!(document.getElementById('invImpParallel')||{}).checked;
+  if(!shop || !date){ showToast('Укажите магазин и дату'); return; }
+  var rows = _invImpRows.filter(function(r){ return r.name; });
+  if(!rows.length){ showToast('Нет позиций для сохранения — сначала «Разобрать список»'); return; }
+  var noPrice = rows.filter(function(r){ return !r.price; }).length;
+  if(noPrice && !confirm('У '+noPrice+' позиций нет цены (они войдут в итог как 0₽). Сохранить всё равно?')) return;
+  var today = new Date(); var ts = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  var now = new Date().toISOString();
+  var sid = uid();
+  var sessionDoc = {id:sid, shopName:shop, goodsType:gt, startedAt:now, startedBy:who, status:'completed', completedAt:now, completedBy:who, mode:'import',
+    snapshot:{}, inventoryDate:date, parallelSales:parallel, backdated:date<ts, importedBy:(session&&(session.name||session.sellerName))||'admin'};
+  var merged = {};
+  rows.forEach(function(r){
+    var key = r.num || _noArticleStockKey(r.name, r.price, r.species, gt) || ('new_'+uid());
+    var ex = merged[key];
+    if(ex){ ex.countedQty += r.qty||0; ex.soldQty = Math.min(ex.countedQty, (ex.soldQty||0)+(r.sold||0)); }
+    else merged[key] = {sessionId:sid, itemKey:key, num:r.num||'', name:r.name, price:r.price||0, species:r.species||'', size:'', goodsType:gt, countedQty:r.qty||0, soldQty:Math.min(r.qty||0, r.sold||0), countedBy:who, countedAt:now, isNew:false, imported:true};
+  });
+  var keys = Object.keys(merged);
+  var ops = [db.collection('iz_inventory_sessions').doc(sid).set(sessionDoc)];
+  for(var i=0;i<keys.length;i+=400){
+    (function(chunk){
+      var b = db.batch();
+      chunk.forEach(function(k){ b.set(db.collection('iz_inventory_counts').doc(sid+'_'+k), merged[k]); });
+      ops.push(b.commit());
+    })(keys.slice(i,i+400));
+  }
+  showToast('⏳ Сохраняю...');
+  Promise.all(ops).then(function(){
+    showToast('✅ Загружено '+keys.length+' позиций — инвентаризация '+_iaDateRu(date));
+    closeMo('invImportMo'); _invImpRows = [];
+    var t = document.getElementById('invImpText'); if(t) t.value='';
+    renderInvAdmin();
+  }).catch(function(err){ showToast('❌ Не удалось сохранить: '+(err&&err.message||err)); });
 }

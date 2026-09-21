@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><title>Ижица — Магазин</title>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="стили.css?v=09.21.04">
+<link rel="stylesheet" href="стили.css?v=09.21.05">
   <link rel="manifest" href="manifest-shop.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -391,6 +391,15 @@
     <div style="font-size:11px;color:#8888aa;margin-bottom:10px;line-height:1.45">Здесь только ваши закрытые смены за последние 2 недели, только для просмотра. Красная рамка — есть несовпадения: откройте смену, найдите запись с ошибкой и сообщите администратору.</div>
     <button type="button" id="myShiftsRefreshBtn" onclick="refreshMyShifts(true)" style="padding:6px 14px;border-radius:20px;border:1px solid #60c8f0;background:#1a2a2e;color:#60c8f0;font-size:11px;cursor:pointer;margin-bottom:10px">🔄 Обновить</button>
     <div id="myShiftsList"></div>
+  </div>
+  <div class="page" id="pg-invadmin">
+    <div class="stitle">📋 Инвентаризации</div>
+    <div style="font-size:11px;color:#8888aa;margin-bottom:10px;line-height:1.45">Итоги, «продано во время пересчёта» и расхождения с остатком по сменам видны только здесь. Инвентаризатор считает вслепую и этого не видит.</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <button type="button" onclick="invAdmOpenImport()" style="padding:9px 14px;background:#c8f060;border:none;border-radius:10px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">📥 Загрузить список (с листов)</button>
+      <button type="button" onclick="renderInvAdmin()" style="padding:9px 14px;background:#1a2a2e;border:1px solid #60c8f0;border-radius:10px;color:#60c8f0;font-size:12px;cursor:pointer">🔄 Обновить</button>
+    </div>
+    <div id="invAdmList"></div>
   </div>
   <div class="page" id="pg-personal">
     <div class="stitle">Личное</div>
@@ -1719,6 +1728,39 @@
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('lostDataMo')">Закрыть</button>
   </div>
 </div>
+<div class="mo" id="invAdmMo">
+  <div class="md"><div class="mh"></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+      <div class="mt" style="margin:0" id="invAdmTitle">Инвентаризация</div>
+      <button onclick="closeMo('invAdmMo')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:5px 10px;color:#8888aa;cursor:pointer;font-size:12px;flex-shrink:0">✕</button>
+    </div>
+    <div id="invAdmBody"></div>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('invAdmMo')">Закрыть</button>
+  </div>
+</div>
+<div class="mo" id="invImportMo">
+  <div class="md"><div class="mh"></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+      <div class="mt" style="margin:0">📥 Загрузить список инвентаризации</div>
+      <button onclick="closeMo('invImportMo')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:5px 10px;color:#8888aa;cursor:pointer;font-size:12px;flex-shrink:0">✕</button>
+    </div>
+    <div style="font-size:11px;color:#8888aa;margin-bottom:10px;line-height:1.45">Вставьте расшифровку рукописных листов: одна строка — одно изделие, поля через «;» или табуляцию:<br><b style="color:#f0f0f8">№ ; Название ; Порода ; Цена ; Кол-во ; Продано</b> (№, породу и «Продано» можно пропустить). Дерево и ДР загружаются отдельными списками.</div>
+    <div class="row2">
+      <div class="fg" style="flex:1"><label class="fl">Магазин</label><select class="fi" id="invImpShop"></select></div>
+      <div class="fg" style="flex:1"><label class="fl">Дата инвентаризации</label><input class="fi" type="date" id="invImpDate" style="-webkit-appearance:none;color-scheme:dark"></div>
+    </div>
+    <div class="row2">
+      <div class="fg" style="flex:1"><label class="fl">Вид товара</label><select class="fi" id="invImpType"><option value="derevo">🌳 Дерево</option><option value="dr">🛍 ДР Товар</option></select></div>
+      <div class="fg" style="flex:1"><label class="fl">Кто считал</label><input class="fi" id="invImpWho" placeholder="Имя"></div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin:0 0 10px;cursor:pointer"><input type="checkbox" id="invImpParallel" checked style="width:16px;height:16px"><span style="font-size:11.5px;color:#f0c060;font-weight:700">🏪 Магазин не закрывался — продажи шли параллельно</span></label>
+    <textarea class="fi" id="invImpText" rows="8" placeholder="52482;Доска д/разделки;Черешня;1300;1&#10;;Подсвечник;Каштан;900;2;1" style="font-size:12px;font-family:monospace"></textarea>
+    <button class="btn blue" style="margin-top:8px" onclick="invImpParse()">🔎 Разобрать список</button>
+    <div id="invImpPreview"></div>
+    <button class="btn" style="margin-top:8px" onclick="invImpSave()">💾 Сохранить инвентаризацию</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('invImportMo')">Отмена</button>
+  </div>
+</div>
 <div class="mo" id="invStockMo">
   <div class="md">
     <div class="mh"></div>
@@ -1750,7 +1792,7 @@
       <div id="invCountList"></div>
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn sec" style="flex:1;margin:0" onclick="invCloseModal()">Отложить</button>
-        <button class="btn" style="flex:1;margin:0" onclick="invGoToReport()">Отчёт →</button>
+        <button class="btn" style="flex:1;margin:0" onclick="invFinalizeSession()">✅ Завершить</button>
       </div>
     </div>
     <div id="invStep_report" style="display:none">
@@ -2232,14 +2274,14 @@
 </div>
 <div class="toast" id="toast"></div>
 <!-- Firebase SDK загружается асинхронно через _loadFirebaseSDK() -->
-<script src="синхронизация.js?v=09.21.04"></script>
-<script src="смены.js?v=09.21.04"></script>
-<script src="отчеты.js?v=09.21.04"></script>
-<script src="продажи.js?v=09.21.04"></script>
-<script src="Склад.js?v=09.21.04"></script>
-<script src="прочее.js?v=09.21.04"></script>
-<script src="импорт.js?v=09.21.04"></script>
-<script src="инвентаризация.js?v=09.21.04"></script>
+<script src="синхронизация.js?v=09.21.05"></script>
+<script src="смены.js?v=09.21.05"></script>
+<script src="отчеты.js?v=09.21.05"></script>
+<script src="продажи.js?v=09.21.05"></script>
+<script src="Склад.js?v=09.21.05"></script>
+<script src="прочее.js?v=09.21.05"></script>
+<script src="импорт.js?v=09.21.05"></script>
+<script src="инвентаризация.js?v=09.21.05"></script>
 <script>
 _initFirebase(); // Firebase загружается асинхронно, не блокируя UI
 init();
