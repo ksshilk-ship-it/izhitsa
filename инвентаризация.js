@@ -669,12 +669,14 @@ function invFinalizeSession(){
   _invSession.completedAt = new Date().toISOString();
   _invSession.completedBy = session.sellerName||session.name||'—';
   try{ db.collection('iz_inventory_sessions').doc(_invSession.id).set(_invSession); }catch(e){}
+  if(_invAdminMode){ showToast('✅ Инвентаризация завершена'); _invAdminReturn(); return; }
   closeMo('invStockMo');
   showToast('✅ Инвентаризация завершена');
   _invSession = null; _invCounts = {}; _invReportRows = {};
   loadInvHomeActive();
 }
 function invCloseModal(){
+  if(_invAdminMode){ _invAdminReturn(); return; }
   if(_invSession && _invSession.status==='active'){
     showToast('Пересчёт сохранён — можно продолжить позже через «Инвентаризация»');
   }
@@ -802,6 +804,18 @@ function _invAdmRender(){
     '<div style="display:flex;gap:6px"><input class="fi" type="date" id="invAdmDate" value="'+cur.date+'" style="margin:0;padding:7px;flex:1;-webkit-appearance:none;color-scheme:dark">'+
     '<button type="button" onclick="invAdmSaveDate()" style="padding:7px 12px;background:#60c8f0;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить дату</button></div>'+
     '<div style="font-size:10px;color:#555568;margin-top:4px">Если внесли сегодня, а считали раньше — поставьте дату, когда считали: по ней берутся остатки смен для сравнения.</div></div>';
+  // управление сессиями: кто считал, параллельные продажи, статус, продолжить/править в окне пересчёта, удалить
+  html += '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:10px;padding:10px;margin-bottom:12px"><div style="font-size:11px;color:#8888aa;margin-bottom:6px">⚙️ Управление инвентаризацией</div>'+
+    '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px"><input class="fi" id="invAdmWho" value="'+_iaEsc(who)+'" placeholder="Кто считал" style="margin:0;padding:7px;flex:1"><label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#f0c060;cursor:pointer;flex-shrink:0"><input type="checkbox" id="invAdmParallel"'+(parallel?' checked':'')+' style="width:15px;height:15px">параллельно</label>'+
+    '<button type="button" onclick="invAdmSaveMeta()" style="padding:7px 10px;background:#60c8f0;border:none;border-radius:8px;color:#0f0f13;font-size:11px;font-weight:700;cursor:pointer">💾</button></div>'+
+    cur.sessions.map(function(x){
+      var n = Object.keys(cur.counts[x.id]||{}).length, done = x.status==='completed';
+      return '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:6px 0;border-top:1px solid #22222e"><div style="flex:1;min-width:140px;font-size:11.5px"><b>'+(x.goodsType==='dr'?'🛍 ДР':'🌳 Дерево')+'</b> · '+n+' поз. · '+(done?'<span style="color:#60f090">✅ завершена</span>':'<span style="color:#f0c060">⏳ в работе</span>')+(x.mode==='import'?' · 📥 загружена списком':'')+'</div>'+
+        '<button type="button" onclick="invAdmContinue(\''+x.id+'\')" style="padding:6px 9px;background:#1a1f2e;border:1px solid #60c8f0;border-radius:7px;color:#60c8f0;font-size:10.5px;font-weight:700;cursor:pointer">✍️ Добавлять / править</button>'+
+        (done ? '<button type="button" onclick="invAdmSetStatus(\''+x.id+'\',\'active\')" style="padding:6px 9px;background:none;border:1px solid #f0c060;border-radius:7px;color:#f0c060;font-size:10.5px;cursor:pointer">🔓 Вернуть в работу</button>'
+              : '<button type="button" onclick="invAdmSetStatus(\''+x.id+'\',\'completed\')" style="padding:6px 9px;background:none;border:1px solid #60f090;border-radius:7px;color:#60f090;font-size:10.5px;cursor:pointer">✅ Завершить</button>')+
+        '<button type="button" onclick="invAdmDeleteSession(\''+x.id+'\')" style="padding:6px 9px;background:none;border:1px solid #f0606055;border-radius:7px;color:#f06060;font-size:10.5px;cursor:pointer">🗑 Удалить</button></div>';
+    }).join('')+'</div>';
   // итоги и сравнение
   html += '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:12px;padding:8px 10px;margin-bottom:12px">'+
     '<div style="display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:6px;font-size:10px;color:#555568;padding-bottom:4px;border-bottom:1px solid #2e2e3e"><div></div><div style="color:#c8f060;font-weight:700">🌳 ДЕРЕВО</div><div style="color:#a060f0;font-weight:700">🛍 ДР ТОВАР</div></div>'+
@@ -910,6 +924,59 @@ function invAdmSaveDate(){
     cur.date = nd; return _invAdmLoadShifts();
   }).then(function(){ showToast('✅ Дата изменена на '+_iaDateRu(nd)); _invAdmRender(); renderInvAdmin(); })
   .catch(function(err){ showToast('❌ Не удалось: '+(err&&err.message||err)); });
+}
+function invAdmSaveMeta(){
+  var cur = _invAdmCur; var who = ((document.getElementById('invAdmWho')||{}).value||'').trim();
+  var par = !!(document.getElementById('invAdmParallel')||{}).checked;
+  Promise.all(cur.sessions.map(function(x){
+    if(who) x.startedBy = who; x.parallelSales = par;
+    return db.collection('iz_inventory_sessions').doc(x.id).set({startedBy:x.startedBy||'', parallelSales:par}, {merge:true});
+  })).then(function(){ showToast('✅ Сохранено'); _invAdmRender(); }).catch(function(err){ showToast('❌ '+(err&&err.message||err)); });
+}
+function invAdmSetStatus(sid, status){
+  var cur = _invAdmCur; var x = cur.sessions.find(function(v){ return v.id===sid; }); if(!x) return;
+  var who = (session&&(session.name||session.sellerName))||'admin';
+  var patch = status==='completed' ? {status:'completed', completedAt:new Date().toISOString(), completedBy:who} : {status:'active', reopenedAt:new Date().toISOString(), reopenedBy:who};
+  db.collection('iz_inventory_sessions').doc(sid).set(patch, {merge:true}).then(function(){
+    Object.assign(x, patch); showToast(status==='completed' ? '✅ Инвентаризация завершена' : '🔓 Возвращена в работу — инвентаризатор может продолжить'); _invAdmRender(); renderInvAdmin();
+  }).catch(function(err){ showToast('❌ '+(err&&err.message||err)); });
+}
+function invAdmDeleteSession(sid){
+  var cur = _invAdmCur; var x = cur.sessions.find(function(v){ return v.id===sid; }); if(!x) return;
+  var n = Object.keys(cur.counts[sid]||{}).length;
+  if(!confirm('Удалить инвентаризацию «'+(x.goodsType==='dr'?'ДР Товар':'Дерево')+'» ('+n+' поз.) за '+_iaDateRu(cur.date)+' совсем? Восстановить будет нельзя.')) return;
+  db.collection('iz_inventory_counts').where('sessionId','==',sid).get().then(function(snap){
+    var ops = [], docs = snap.docs;
+    for(var i=0;i<docs.length;i+=400){ (function(chunk){ var b=db.batch(); chunk.forEach(function(d){ b.delete(d.ref); }); ops.push(b.commit()); })(docs.slice(i,i+400)); }
+    return Promise.all(ops);
+  }).then(function(){ return db.collection('iz_inventory_sessions').doc(sid).delete(); })
+  .then(function(){
+    cur.sessions = cur.sessions.filter(function(v){ return v.id!==sid; }); delete cur.counts[sid];
+    showToast('🗑 Инвентаризация удалена');
+    if(!cur.sessions.length){ closeMo('invAdmMo'); } else { _invAdmRender(); }
+    renderInvAdmin();
+  }).catch(function(err){ showToast('❌ Не удалось удалить: '+(err&&err.message||err)); });
+}
+// Администратор добавляет/правит список в том же окне, где считает инвентаризатор (поиск по артикулу и названию, подсказки, ±, удалить).
+var _invAdminMode = false;
+function invAdmContinue(sid){
+  var cur = _invAdmCur; var x = cur.sessions.find(function(v){ return v.id===sid; }); if(!x) return;
+  if(!x.snapshot || !Object.keys(x.snapshot).length){
+    var stock = (getStock()[x.shopName]) || {}, snap = {};
+    Object.keys(stock).forEach(function(k){ var it=stock[k]; if((it.goodsType||'derevo')===(x.goodsType||'derevo')) snap[k] = {num:it.num||k, name:it.name||'', price:it.price||0, species:it.species||'', size:it.size||'', goodsType:x.goodsType||'derevo', qty:it.qty||0}; });
+    x.snapshot = snap; // справочник изделий для поиска (не остаток на дату инвентаризации)
+  }
+  x.mode = 'freeform';
+  _invSession = x; _invCounts = cur.counts[sid] = cur.counts[sid] || {};
+  _invAdminMode = true;
+  closeMo('invAdmMo'); openMo('invStockMo'); _invEnterCount();
+}
+function _invAdminReturn(){
+  if(!_invAdminMode) return false;
+  _invAdminMode = false;
+  closeMo('invStockMo');
+  if(_invAdmCur) invAdmOpen(_invAdmCur.key);
+  return true;
 }
 function invAdmItemReport(sessionId){
   var cur = _invAdmCur; var sx = cur.sessions.find(function(x){ return x.id===sessionId; }); if(!sx) return;
