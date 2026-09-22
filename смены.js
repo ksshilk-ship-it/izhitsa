@@ -910,7 +910,7 @@ function confirmMorning(){
     goodsMornSource:_goodsMornMode, goodsDrMornSource:_goodsDrMode
   });
   if(restoreMode) session.isRestoreShift = true;
-  var prev=getPrevShiftByOpenOrder(pendingSession.shopName, session.openedAt);
+  var prev=getPrevShiftByOpenOrder(pendingSession.shopName, session.openedAt, session.shiftId);
   var hasCashDiff=false;
   var diffParts=[];
   if(prev){
@@ -977,27 +977,34 @@ function getPrevShift(shopName){
     return s.shopName===shopName;
   }).sort(function(a,b){return new Date(b.closedAt||0)-new Date(a.closedAt||0);})[0]||null;
 }
-function getPrevShiftByOpenOrder(shopName, beforeOpenedAt){
+// «Предыдущая смена» = предыдущая по РЕАЛЬНОМУ времени открытия (openedAt), а не по проставленной
+// дате (date) — те же 12:00 как условное время для старых смен без openedAt, что использует
+// _cascadeGoodsForward. Раньше сортировка и фильтр шли по date: после переноса даты смены через
+// «Дата смены» (openedAt остаётся реальным, меняется только date) смена с более ранней date, чем
+// дата её собственного openedAt, проходила свой же фильтр «date < дата открытия» и, будучи самой
+// «поздней» среди совпадающих по дате, выбиралась как САМА СЕБЕ предыдущая смена — Горки, смена
+// 15.09 (дата перенесена с 16.09, openedAt так и остался 16.09 06:38): getPrevShiftByOpenOrder
+// возвращал эту же смену, и баннер показывал 'не сходится с вечером пред. смены' со значением,
+// совпадающим с её же собственным остатком.
+function _shiftOpenedKey(s){ return s.openedAt || ((s.date||'')+'T12:00:00.000Z'); }
+function getPrevShiftByOpenOrder(shopName, beforeOpenedAt, excludeId){
   var all = getShifts();
-  var beforeDate = beforeOpenedAt ? beforeOpenedAt.split('T')[0] : '';
   var candidates = all.filter(function(s){
     if(s.isRestoreShift && s.status==='open') return false; // исключаем только незакрытые «призрачные» сессии восстановления; закрытые архивные/импортированные смены с реальными данными участвуют в сравнении как обычно
     if(s.shopName!==shopName) return false;
-    var sDate = s.date || (s.openedAt||'').split('T')[0];
-    if(!sDate) return false; // дата открытия — обязательное поле, есть даже у старых смен
-    return beforeDate ? sDate < beforeDate : true;
+    if(excludeId && (s.id||s._id)===excludeId) return false;
+    var sOpened = _shiftOpenedKey(s);
+    if(!sOpened) return false;
+    return beforeOpenedAt ? sOpened < beforeOpenedAt : true;
   });
   candidates.sort(function(a,b){
-    var da = a.date || (a.openedAt||'').split('T')[0];
-    var db2 = b.date || (b.openedAt||'').split('T')[0];
-    if(da !== db2) return da < db2 ? 1 : -1; // по убыванию даты
-    var ao = a.openedAt||'', bo = b.openedAt||'';
-    return ao < bo ? 1 : (ao > bo ? -1 : 0); // при совпадении даты — точное время как тай-брейкер
+    var ao = _shiftOpenedKey(a), bo = _shiftOpenedKey(b);
+    return ao < bo ? 1 : (ao > bo ? -1 : 0); // по убыванию реального времени открытия
   });
   return candidates[0] || null;
 }
 function _computeMorningCashDiffParts(sh){
-  var prev = getPrevShiftByOpenOrder(sh.shopName, sh.openedAt);
+  var prev = getPrevShiftByOpenOrder(sh.shopName, sh.openedAt, sh.id||sh._id);
   if(!prev) return [];
   var parts = [];
   if(prev.cashEvening!=null && Math.abs((sh.cashMorning||0)-prev.cashEvening)>=1){
@@ -2870,7 +2877,7 @@ function _closeShiftReal(){
   const staffCashDiff=Math.round(staffCashEve-expectedCashStaff);
   if(Math.abs(staffCashDiff)>=1){showToast('⛔ Неверный остаток наличных (Покупки сотрудников) — пересчитайте кассу');_abortCloseAttempt();return;}
   const reason='';
-  const prev=getPrevShiftByOpenOrder(session.shopName, session.openedAt);
+  const prev=getPrevShiftByOpenOrder(session.shopName, session.openedAt, session.shiftId);
   const morningDiff=(prev&&prev.cashEvening)!=null?Math.abs(session.cashMorning-prev.cashEvening):0;
   const sales=journal.filter(e=>e.type==='sale');
   const openedDateStr = (function(){
@@ -3467,7 +3474,7 @@ function evaluateShiftIssues(sh){
   var issues = [];
   var jnl = sh.journal||[];
   (function(){
-    var prevChk = getPrevShiftByOpenOrder(sh.shopName, sh.openedAt || (sh.date ? sh.date+'T23:59:59' : ''));
+    var prevChk = getPrevShiftByOpenOrder(sh.shopName, sh.openedAt || (sh.date ? sh.date+'T23:59:59' : ''), sh.id||sh._id);
     if(!prevChk) return;
     if(prevChk.cashEvening!=null && prevChk.cashEvening>=100 && Math.abs((sh.cashMorning||0)-prevChk.cashEvening)>=1){
       issues.push({code:'morn_cash_diff_t', label:'💵 Нал утро (Дерево) не сходится с вечером пред. смены ('+fmt(prevChk.cashEvening)+')'});
@@ -4128,7 +4135,7 @@ function _renderShiftView(){
   var zpStandalone = calcShiftZpStandalone(sh.shopName, sh);
   var zpFactTotal = (zpStandalone.zpFact||0)+(zpStandalone.travelFact||0);
   var zpDiff = Math.round(zpStandalone.zpCalcWithTravel - zpFactTotal);
-  var prevShiftForThis = getPrevShiftByOpenOrder(sh.shopName, sh.openedAt);
+  var prevShiftForThis = getPrevShiftByOpenOrder(sh.shopName, sh.openedAt, sh.id||sh._id);
   function enteredMismatch(enteredVal, prevVal){
     return enteredVal!=null && prevVal!=null && Math.abs(enteredVal-prevVal)>=1;
   }
