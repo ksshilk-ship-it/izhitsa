@@ -4047,6 +4047,20 @@ function scanCrossShiftDuplicateReceives(currentShiftId, shopName, btnEl){
     body.innerHTML = '<div style="font-size:12px;color:#f06060;text-align:center;padding:8px">❌ Ошибка: '+(err&&err.message||err)+'</div>';
   });
 }
+// Кто фактически открыл и кто фактически закрыл смену — отдельно от «продавец смены» (sh.sellerName),
+// потому что реально закрыть мог не он: администратор принудительно (forceClosedBy), система сама при
+// следующем входе продавца (_autoFixedStale/autoClosedNoCount — кассу тогда никто не подтверждал), либо
+// смена осталась висеть открытой и её закрыл процесс восстановления другой смены (closedByRestore).
+function _shiftOpenCloseWho(sh){
+  var opener = sh.sellerName || '—';
+  var closer;
+  if(sh.status==='open'){ closer = '— смена ещё открыта'; }
+  else if(sh.forceClosedBy){ closer = sh.forceClosedBy+' <span style="color:#f0a060">(принудительно, администратор)</span>'; }
+  else if(sh.autoClosedNoCount || sh._autoFixedStale){ closer = '<span style="color:#f0a060">🤖 Система — автозакрытие при входе продавца на смену следующего дня, кассу никто не подтверждал</span>'; }
+  else if(sh.closedByRestore){ closer = '<span style="color:#a060f0">Закрыта автоматически — тот же продавец в этот день провёл смену через «Восстановление»</span>'; }
+  else { closer = sh.sellerName || '—'; }
+  return {opener: opener, closer: closer};
+}
 function _renderShiftView(){
   var sh = _currentShiftView; if(!sh) return;
   document.getElementById('editShiftTitle').textContent = sh.shopName + ' · ' + sh.date;
@@ -4057,7 +4071,9 @@ function _renderShiftView(){
       var d = new Date(iso);
       return d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
     };
-    subtitleEl.innerHTML = '🕐 Открыта: '+fmtDT(sh.openedAt)+'<br>🔐 Закрыта: '+fmtDT(sh.closedAt);
+    var _who = _shiftOpenCloseWho(sh);
+    subtitleEl.innerHTML = '🕐 Открыта: '+fmtDT(sh.openedAt)+' · 👤 '+_who.opener+
+      '<br>🔐 Закрыта: '+fmtDT(sh.closedAt)+' · 👤 '+_who.closer;
   }
   var f = function(n){ return Math.round(n||0).toLocaleString('ru-RU')+'₽'; };
   var jnl=sh.journal||[];
@@ -6657,7 +6673,11 @@ function openMyShiftView(id){
   var fmtT = function(iso){ if(!iso) return '—'; var d=new Date(iso); return d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}); };
   var tm = function(iso){ return iso ? new Date(iso).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : ''; };
   var ttl = document.getElementById('myShiftTitle'); if(ttl) ttl.textContent = sh.shopName+' · '+sh.date;
-  var sub = document.getElementById('myShiftSubtitle'); if(sub) sub.innerHTML = '🕐 Открыта: '+_mshEsc(fmtT(sh.openedAt))+'<br>🔐 Закрыта: '+_mshEsc(fmtT(sh.closedAt));
+  var sub = document.getElementById('myShiftSubtitle');
+  if(sub){
+    var _whoM = _shiftOpenCloseWho(sh);
+    sub.innerHTML = '🕐 Открыта: '+_mshEsc(fmtT(sh.openedAt))+' · 👤 '+_whoM.opener+'<br>🔐 Закрыта: '+_mshEsc(fmtT(sh.closedAt))+' · 👤 '+_whoM.closer;
+  }
   var iss = evaluateShiftIssues(sh);
   var exp = _calcShiftExpectedEvening(sh);
   var t = _mshSalesTotals(sh);
