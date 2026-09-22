@@ -122,9 +122,20 @@ function getShifts(){
   var local;
   try{ local = JSON.parse(localStorage.getItem(KEY.shifts)||'[]'); }catch(e){ local = []; }
   var extra = window._extraArchiveShifts;
-  if(!extra || !extra.length) return local;
-  var localIds = {}; local.forEach(function(s){ localIds[s.id||s._id]=true; });
-  return local.concat(extra.filter(function(s){ return !localIds[s.id||s._id]; }));
+  var res;
+  if(!extra || !extra.length) res = local;
+  else {
+    var localIds = {}; local.forEach(function(s){ localIds[s.id||s._id]=true; });
+    res = local.concat(extra.filter(function(s){ return !localIds[s.id||s._id]; }));
+  }
+  // Удалённые смены (надгробия iz_shift_tombstones) не показываем, даже если копия осталась в локальном кэше/архиве:
+  // живой слушатель специально не вычищает локальные смены, которых нет в облаке, — поэтому удалённая в облаке
+  // смена (например, тестовая запись) оставалась в списках и календаре на устройстве навсегда.
+  try{
+    var tomb = getShiftTombstones();
+    if(tomb.length){ var tset = {}; tomb.forEach(function(id){ tset[id]=true; }); res = res.filter(function(s){ return !tset[s.id||s._id]; }); }
+  }catch(e){}
+  return res;
 }
 function saveShifts(shifts){
   var archiveEdits = shifts.filter(function(s){ return s._archiveOnly; });
@@ -3795,6 +3806,7 @@ function _refreshHistoryFromServer(from, to){
   var key = from+'|'+(to||''), now = Date.now();
   if(_histServerRefreshBusy || (_histServerRefreshAt[key] && now-_histServerRefreshAt[key] < 90000)) return;
   _histServerRefreshAt[key] = now; _histServerRefreshBusy = true;
+  try{ pullShiftTombstonesFromCloud(function(){ try{ renderShiftHistory(); }catch(e){} }); }catch(e){} // подтянуть удалённые смены и убрать их из списка
   var q = db.collection('iz_shifts').where('date','>=',from);
   if(to) q = q.where('date','<=',to);
   q.get({source:'server'}).then(function(snap){
