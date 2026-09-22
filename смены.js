@@ -5091,6 +5091,7 @@ function _confirmNotDuplicateInvoice(dup, totalAmt, itemCount){
     'Всё равно сохранить как новую накладную?');
 }
 function _svSaveManualInvIntoShiftReal(){
+  try{ if(_currentShiftView && _currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
   if(!_svManInv || !_currentShiftView){ alert('⛔ Форма накладной не найдена — откройте смену заново и внесите позиции ещё раз.'); return; }
   var s = _svManInv;
   var items = s.items.filter(function(it){ return (it.name||'').trim() && (it.price||0)>0; });
@@ -5157,6 +5158,7 @@ function svShowInvoicePicker(){
   box.style.display='block';
 }
 function svAcceptInvoiceIntoShift(invId){
+  try{ if(_currentShiftView && _currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
   if(!_currentShiftView) return;
   var who = (session&&(session.name||session.sellerName))||'Администратор';
   var manual = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
@@ -5480,6 +5482,7 @@ function svCascadeGoodsOnly(){
   showToast((cascadeResult && cascadeResult.touched ? ('✅ Пересчитано смен дальше по датам: '+cascadeResult.touched) : 'ℹ️ Все последующие смены уже соответствуют — пересчитывать нечего') + _cascadeReviewMsg(cascadeResult));
 }
 function svSaveJEntrySimple(type, idx){
+  try{ if(_currentShiftView && _currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
   var jnl = _currentShiftView.journal||[];
   var ofType = jnl.filter(function(e){ return e.type===type; });
   var target = ofType[idx]; if(!target){ showToast('Запись не найдена'); return; }
@@ -5517,6 +5520,7 @@ function svSaveJEntrySimple(type, idx){
   showToast('✅ Запись обновлена'+(_rvS&&!_wasRvS?' · помечена как переоценка':(_rvS===false&&_wasRvS?' · пометка переоценки снята':'')));
 }
 function svSaveArrItemEdit(arrKey, idx, formId){
+  try{ if(_currentShiftView && _currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
   var extraKey = arrKey==='goodsReceives' ? 'from' : (arrKey==='goodsWriteoffs'||arrKey==='drGoodsWriteoffs') ? 'wreason' : null;
   var d = _svEditItemRow(formId, extraKey);
   if(!d.name){ showToast('Укажите наименование'); return; }
@@ -5541,6 +5545,7 @@ function svSaveArrItemEdit(arrKey, idx, formId){
   showToast('✅ Запись обновлена');
 }
 function svSaveJwoItemEdit(entryIdx, itemIdx, formId){
+  try{ if(_currentShiftView && _currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
   var d = _svEditItemRow(formId, 'wreason');
   if(!d.name){ showToast('Укажите наименование'); return; }
   if(!d.reason){ showToast('Укажите причину правки'); return; }
@@ -5583,6 +5588,7 @@ function svSaveJwoItemEdit(entryIdx, itemIdx, formId){
   showToast('✅ Запись обновлена');
 }
 function svSaveJrcvItemEdit(entryIdx, formId){
+  try{ if(_currentShiftView && _currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
   var d = _svEditItemRow(formId, 'from');
   if(!d.name){ showToast('Укажите наименование'); return; }
   if(!d.reason){ showToast('Укажите причину правки'); return; }
@@ -5873,6 +5879,7 @@ function svSaveInvoiceFromArchive(id, isManual){
   showToast('✅ Накладная исправлена');
 }
 function svDeleteJEntry(type, idx){
+  try{ if(_currentShiftView && _currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
   if(!confirm('Удалить эту запись? Она будет перемещена в корзину на 7 дней.')) return;
   var jnl=_currentShiftView.journal||[];
   var ofType=jnl.filter(function(e){return e.type===type;});
@@ -5882,6 +5889,7 @@ function svDeleteJEntry(type, idx){
   svPersist(); _renderShiftView(); showToast('🗑 Перемещено в корзину');
 }
 function svDeleteWoodRcv(idx){
+  try{ if(_currentShiftView && _currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
   if(!confirm('Удалить этот приход?')) return;
   var arr=_currentShiftView.goodsReceives||[];
   arr.splice(idx,1);
@@ -5889,6 +5897,7 @@ function svDeleteWoodRcv(idx){
   svPersist(); _renderShiftView(); showToast('🗑 Удалено');
 }
 function svDeleteDrRcv(idx){
+  try{ if(_currentShiftView && _currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
   if(!confirm('Удалить этот приход?')) return;
   var arr=_currentShiftView.drGoodsReceives||[];
   arr.splice(idx,1);
@@ -5896,6 +5905,7 @@ function svDeleteDrRcv(idx){
   svPersist(); _renderShiftView(); showToast('🗑 Удалено');
 }
 function svDeleteWoodWo(idx){
+  try{ if(_currentShiftView && _currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
   if(!confirm('Удалить это списание?')) return;
   var arr=_currentShiftView.goodsWriteoffs||[];
   arr.splice(idx,1);
@@ -5903,6 +5913,7 @@ function svDeleteWoodWo(idx){
   svPersist(); _renderShiftView(); showToast('🗑 Удалено');
 }
 function svDeleteDrWo(idx){
+  try{ if(_currentShiftView && _currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
   if(!confirm('Удалить это списание?')) return;
   var arr=_currentShiftView.drGoodsWriteoffs||[];
   arr.splice(idx,1);
@@ -6051,6 +6062,7 @@ function saveEditShift(){}
 function _svVal(id){ var el=document.getElementById(id); return el ? el.value : ''; }
 function _svNum(id){ return parseFloat(_svVal(id))||0; }
 function svAddRcv(type){
+  try{ if(_currentShiftView && _currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
   var isWood = type==='wood';
   var id = isWood?'rcvWood':'rcvDr';
   var row = _svItemRow(id);
@@ -6102,6 +6114,7 @@ function _renderWoBatchList(id){
     }).join('');
 }
 function svAddWo(type){
+  try{ if(_currentShiftView && _currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
   var isWood = type==='wood';
   var id = isWood?'woWood':'woDr';
   var reason = _svVal('svAdd_'+id+'_reason').trim();
