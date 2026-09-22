@@ -1029,16 +1029,35 @@ function invImpParse(){
     if(qty==null){ qty = 1; }
     rows.push({num:num, name:name, species:species, price:price==null?0:price, qty:qty, sold:sold||0, inSystem:!!sys, issues:issues});
   });
-  _invImpRows = rows;
+  if(!rows.length){ showToast('Строк не найдено во вставленном тексте'); return; }
+  // Добавляем к уже накопленному списку (несколько страниц подряд), а не заменяем его —
+  // повторный номер/позицию (число совпадает по номеру, а без номера — по названию+цене+породе) суммируем.
+  var addedNew = 0, mergedInto = 0;
+  rows.forEach(function(r){
+    var key = (r.num||'').trim() ? 'n:'+r.num.trim() : 's:'+(r.name||'').trim().toLowerCase()+'|'+(r.price||0)+'|'+(r.species||'').trim().toLowerCase();
+    var existing = _invImpRows.find(function(x){
+      var xk = (x.num||'').trim() ? 'n:'+x.num.trim() : 's:'+(x.name||'').trim().toLowerCase()+'|'+(x.price||0)+'|'+(x.species||'').trim().toLowerCase();
+      return xk===key;
+    });
+    if(existing){ existing.qty = (existing.qty||0)+(r.qty||0); existing.sold = (existing.sold||0)+(r.sold||0); mergedInto++; }
+    else { _invImpRows.push(r); addedNew++; }
+  });
+  var ta = document.getElementById('invImpText'); if(ta) ta.value = ''; // очищаем поле — готово для вставки следующей страницы
   _invImpRender();
+  showToast('✅ Добавлено '+addedNew+(mergedInto?', объединено с уже внесёнными: '+mergedInto:'')+' — вставьте следующую страницу или сохраните');
+}
+function invImpClearAll(){
+  if(!_invImpRows.length) return;
+  if(!confirm('Очистить весь накопленный список ('+_invImpRows.length+' позиций)? Вставленные страницы придётся разбирать заново.')) return;
+  _invImpRows = []; _invImpRender();
 }
 function _invImpRender(){
   var pv = document.getElementById('invImpPreview'); if(!pv) return;
-  if(!_invImpRows.length){ pv.innerHTML = '<div style="font-size:11px;color:#f0c060;padding:8px 0">Строк не найдено — вставьте список выше</div>'; return; }
+  if(!_invImpRows.length){ pv.innerHTML = '<div style="font-size:11px;color:#f0c060;padding:8px 0">Строк не найдено — вставьте список выше и нажмите «Разобрать список». Можно вставлять и разбирать несколько страниц подряд — они добавятся в один общий список.</div>'; return; }
   var sum=0, qty=0, bad=0;
   _invImpRows.forEach(function(r){ sum += (r.price||0)*(r.qty||0); qty += r.qty||0; if(r.issues.length) bad++; });
   var inp = function(i,f,v,w,extra){ return '<input type="text" value="'+_iaEsc(v)+'" onchange="invImpEdit('+i+',\''+f+'\',this.value)" style="width:'+w+';background:#0f0f13;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;padding:4px;font-size:11px;'+(extra||'')+'">'; };
-  pv.innerHTML = '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:10px;padding:8px 10px;margin:10px 0;font-size:12px"><b>'+_invImpRows.length+'</b> позиций · <b>'+qty+'</b> шт. · итого <b style="color:#c8f060">'+_iaMoney(sum)+'</b>'+(bad?' · <span style="color:#f06060">⚠️ строк с вопросами: '+bad+'</span>':'')+'</div>'+
+  pv.innerHTML = '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:10px;padding:8px 10px;margin:10px 0;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:8px"><div><b>'+_invImpRows.length+'</b> позиций · <b>'+qty+'</b> шт. · итого <b style="color:#c8f060">'+_iaMoney(sum)+'</b>'+(bad?' · <span style="color:#f06060">⚠️ строк с вопросами: '+bad+'</span>':'')+'</div><button type="button" onclick="invImpClearAll()" style="font-size:10px;padding:4px 8px;background:none;border:1px solid #f0606055;border-radius:6px;color:#f06060;cursor:pointer;flex-shrink:0">🗑 Очистить всё</button></div>'+
     '<div style="font-size:10px;color:#8888aa;margin-bottom:6px">Проверьте и поправьте прямо в таблице. № · Название · Порода · Цена · Шт. · Продано</div>'+
     _invImpRows.map(function(r,i){
       return '<div style="display:flex;gap:4px;align-items:center;padding:4px 0;border-bottom:1px solid #22222e;'+(r.issues.length?'background:#2e1a1a33':'')+'">'+
