@@ -1001,6 +1001,43 @@ function invAdmOpenImport(){
   }
   _invImpRows = []; var pv = document.getElementById('invImpPreview'); if(pv) pv.innerHTML = '';
   openMo('invImportMo');
+  invImpRefreshTargets();
+}
+// Куда сохранять: по умолчанию новая инвентаризация, но если для этого же магазина+даты+вида товара уже есть
+// начатая (кем угодно — через приложение или предыдущей загрузкой списка), можно дозаписать прямо в неё, а не
+// плодить параллельные сессии на одну и ту же инвентаризацию.
+var _invImpTargetsReqId = 0;
+function invImpRefreshTargets(){
+  var shop = (document.getElementById('invImpShop')||{}).value;
+  var date = (document.getElementById('invImpDate')||{}).value;
+  var gt = (document.getElementById('invImpType')||{}).value || 'derevo';
+  var sel = document.getElementById('invImpTarget'), hint = document.getElementById('invImpTargetHint');
+  if(!sel) return;
+  if(!shop || !date){ sel.innerHTML = '<option value="">➕ Новая инвентаризация</option>'; if(hint) hint.textContent=''; return; }
+  var reqId = ++_invImpTargetsReqId;
+  if(hint) hint.textContent = '⏳ Проверяю, нет ли уже начатой...';
+  db.collection('iz_inventory_sessions').where('shopName','==',shop).get({source:'server'}).then(function(snap){
+    if(reqId!==_invImpTargetsReqId) return; // магазин/дата/вид успели поменять — этот ответ устарел
+    var matches = snap.docs.map(function(d){ var x=d.data(); if(!x.id) x.id=d.id; return x; })
+      .filter(function(x){ return _iaSessDate(x)===date && (x.goodsType||'derevo')===gt; });
+    if(!matches.length){
+      sel.innerHTML = '<option value="">➕ Новая инвентаризация</option>';
+      if(hint) hint.textContent = 'Для этого магазина/даты/вида товара пока ничего нет — создастся новая.';
+      return;
+    }
+    Promise.all(matches.map(function(x){
+      return db.collection('iz_inventory_counts').where('sessionId','==',x.id).get({source:'server'}).then(function(cs){ return cs.size; }).catch(function(){ return null; });
+    })).then(function(counts){
+      if(reqId!==_invImpTargetsReqId) return;
+      var opts = '<option value="">➕ Новая инвентаризация</option>';
+      matches.forEach(function(x,i){
+        var n = counts[i]; var nTxt = n==null ? '' : (' · '+n+' поз.');
+        opts += '<option value="'+x.id+'">📥 Добавить в начатую — '+_iaEsc(x.startedBy||'—')+nTxt+' · '+(x.status==='completed'?'завершена':'в работе')+'</option>';
+      });
+      sel.innerHTML = opts; sel.value = matches[0].id; // по умолчанию предлагаем дозаписать в найденную, а не плодить новую
+      if(hint) hint.textContent = 'Найдена начатая инвентаризация на эту дату — по умолчанию список добавится в неё. Чтобы завести отдельную, выберите «➕ Новая» выше.';
+    });
+  }).catch(function(){ if(reqId===_invImpTargetsReqId){ sel.innerHTML = '<option value="">➕ Новая инвентаризация</option>'; if(hint) hint.textContent=''; } });
 }
 function _invImpNum(v){
   var t = String(v==null?'':v).replace(/\s/g,'').replace(/₽|руб\.?|р\./gi,'').replace(',','.');
@@ -1086,30 +1123,60 @@ function invImpSave(){
   if(noPrice && !confirm('У '+noPrice+' позиций нет цены (они войдут в итог как 0₽). Сохранить всё равно?')) return;
   var today = new Date(); var ts = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
   var now = new Date().toISOString();
-  var sid = uid();
-  var sessionDoc = {id:sid, shopName:shop, goodsType:gt, startedAt:now, startedBy:who, status:'completed', completedAt:now, completedBy:who, mode:'import',
-    snapshot:{}, inventoryDate:date, parallelSales:parallel, backdated:date<ts, importedBy:(session&&(session.name||session.sellerName))||'admin'};
-  var merged = {};
-  rows.forEach(function(r){
-    var key = r.num || _noArticleStockKey(r.name, r.price, r.species, gt) || ('new_'+uid());
-    var ex = merged[key];
-    if(ex){ ex.countedQty += r.qty||0; ex.soldQty = Math.min(ex.countedQty, (ex.soldQty||0)+(r.sold||0)); }
-    else merged[key] = {sessionId:sid, itemKey:key, num:r.num||'', name:r.name, price:r.price||0, species:r.species||'', size:'', goodsType:gt, countedQty:r.qty||0, soldQty:Math.min(r.qty||0, r.sold||0), countedBy:who, countedAt:now, isNew:false, imported:true};
-  });
-  var keys = Object.keys(merged);
-  var ops = [db.collection('iz_inventory_sessions').doc(sid).set(sessionDoc)];
-  for(var i=0;i<keys.length;i+=400){
-    (function(chunk){
-      var b = db.batch();
-      chunk.forEach(function(k){ b.set(db.collection('iz_inventory_counts').doc(sid+'_'+k), merged[k]); });
-      ops.push(b.commit());
-    })(keys.slice(i,i+400));
+  var targetId = (document.getElementById('invImpTarget')||{}).value || '';
+  function buildMerged(sid){
+    var merged = {};
+    rows.forEach(function(r){
+      var key = r.num || _noArticleStockKey(r.name, r.price, r.species, gt) || ('new_'+uid());
+      var ex = merged[key];
+      if(ex){ ex.countedQty += r.qty||0; ex.soldQty = Math.min(ex.countedQty, (ex.soldQty||0)+(r.sold||0)); }
+      else merged[key] = {sessionId:sid, itemKey:key, num:r.num||'', name:r.name, price:r.price||0, species:r.species||'', size:'', goodsType:gt, countedQty:r.qty||0, soldQty:Math.min(r.qty||0, r.sold||0), countedBy:who, countedAt:now, isNew:false, imported:true};
+    });
+    return merged;
   }
-  showToast('⏳ Сохраняю...');
-  Promise.all(ops).then(function(){
-    showToast('✅ Загружено '+keys.length+' позиций — инвентаризация '+_iaDateRu(date));
+  function writeCounts(sid, merged, extraOps){
+    var keys = Object.keys(merged);
+    var ops = (extraOps||[]).slice();
+    for(var i=0;i<keys.length;i+=400){
+      (function(chunk){
+        var b = db.batch();
+        chunk.forEach(function(k){ b.set(db.collection('iz_inventory_counts').doc(sid+'_'+k), merged[k]); });
+        ops.push(b.commit());
+      })(keys.slice(i,i+400));
+    }
+    return {ops:ops, count:keys.length};
+  }
+  function finish(count, dateLabel){
+    showToast('✅ Загружено '+count+' позиций — инвентаризация '+dateLabel);
     closeMo('invImportMo'); _invImpRows = [];
     var t = document.getElementById('invImpText'); if(t) t.value='';
     renderInvAdmin();
-  }).catch(function(err){ showToast('❌ Не удалось сохранить: '+(err&&err.message||err)); });
+  }
+  if(targetId){
+    // Дозаписываем в уже существующую инвентаризацию — количество складывается с уже внесённым по той же позиции,
+    // а не заменяет его (та же логика 'добавить страницу', что и при разборе списка, только теперь через сохранённую сессию).
+    showToast('⏳ Добавляю в начатую инвентаризацию...');
+    db.collection('iz_inventory_counts').where('sessionId','==',targetId).get({source:'server'}).then(function(snap){
+      var existing = {};
+      snap.forEach(function(d){ existing[String(d.id).replace(targetId+'_','')] = d.data(); });
+      var merged = buildMerged(targetId);
+      Object.keys(merged).forEach(function(k){
+        var ex = existing[k];
+        if(ex){ merged[k].countedQty = (merged[k].countedQty||0)+(ex.countedQty||0); merged[k].soldQty = Math.min(merged[k].countedQty, (ex.soldQty||0)+(merged[k].soldQty||0)); }
+      });
+      var extraOps = [];
+      if(parallel) extraOps.push(db.collection('iz_inventory_sessions').doc(targetId).set({parallelSales:true},{merge:true}));
+      var w = writeCounts(targetId, merged, extraOps);
+      return Promise.all(w.ops).then(function(){ finish(w.count, _iaDateRu(date)); });
+    }).catch(function(err){ showToast('❌ Не удалось сохранить: '+(err&&err.message||err)); });
+    return;
+  }
+  var sid = uid();
+  var sessionDoc = {id:sid, shopName:shop, goodsType:gt, startedAt:now, startedBy:who, status:'completed', completedAt:now, completedBy:who, mode:'import',
+    snapshot:{}, inventoryDate:date, parallelSales:parallel, backdated:date<ts, importedBy:(session&&(session.name||session.sellerName))||'admin'};
+  var merged2 = buildMerged(sid);
+  var w2 = writeCounts(sid, merged2, [db.collection('iz_inventory_sessions').doc(sid).set(sessionDoc)]);
+  showToast('⏳ Сохраняю...');
+  Promise.all(w2.ops).then(function(){ finish(w2.count, _iaDateRu(date)); })
+  .catch(function(err){ showToast('❌ Не удалось сохранить: '+(err&&err.message||err)); });
 }
