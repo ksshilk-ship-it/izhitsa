@@ -146,22 +146,33 @@ function invResumeSession(id){
   }).catch(function(){ _invCounts={}; _invEnterCount(); showToast('⚠️ Не удалось загрузить уже посчитанное — начните досчитывать заново'); });
 }
 // Подсказки из справочников при занесении изделия без артикула: названия товаров (справочник Дерево / ДР Товар + то, что уже
-// есть на складе магазина) и породы/материалы. Раньше в полях «Наименование» и «Порода» списка не было.
-function _invFillRefLists(){
-  var gt = _invSession ? _invSession.goodsType : 'derevo';
+// есть на складе магазина) и породы/материалы. Общая для счёта в приложении (invNameList/invSpeciesList), правки уже
+// занесённой позиции и разбора списка с фото (invImpNameList/invImpSpeciesList — иначе там подсказок не было вовсе).
+function _invBuildRefLists(gt, snapshot){
   var names = {}, species = {};
   function addName(n){ n = (typeof n==='string' ? n : (n&&n.name)||'').trim(); if(n) names[n] = true; }
   try{ (getRefBook(gt==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo')||[]).forEach(addName); }catch(e){}
   try{ (getItemsBase()||[]).forEach(addName); }catch(e){}
-  try{ Object.keys((_invSession&&_invSession.snapshot)||{}).forEach(function(k){ addName(_invSession.snapshot[k].name); var sp=(_invSession.snapshot[k].species||'').trim(); if(sp) species[sp]=true; }); }catch(e){}
+  try{ Object.keys(snapshot||{}).forEach(function(k){ addName(snapshot[k].name); var sp=(snapshot[k].species||'').trim(); if(sp) species[sp]=true; }); }catch(e){}
   try{ (getSpecies()||[]).forEach(function(sp){ sp = String(sp||'').trim(); if(sp) species[sp]=true; }); }catch(e){}
   try{ if(gt==='dr') (getRefBook('iz_dr_species')||[]).forEach(function(m){ var sp=(typeof m==='string'?m:(m&&m.name)||'').trim(); if(sp) species[sp]=true; }); }catch(e){}
-  var fill = function(id, set){
-    var el = document.getElementById(id); if(!el) return;
-    el.innerHTML = Object.keys(set).sort(function(a,b){ return a.toLowerCase().localeCompare(b.toLowerCase(),'ru'); }).slice(0,600)
-      .map(function(v){ return '<option value="'+_invEsc(v)+'">'; }).join('');
-  };
-  fill('invNameList', names); fill('invSpeciesList', species);
+  return {names:names, species:species};
+}
+function _invFillDatalist(id, set){
+  var el = document.getElementById(id); if(!el) return;
+  el.innerHTML = Object.keys(set).sort(function(a,b){ return a.toLowerCase().localeCompare(b.toLowerCase(),'ru'); }).slice(0,600)
+    .map(function(v){ return '<option value="'+_invEsc(v)+'">'; }).join('');
+}
+function _invFillRefLists(){
+  var gt = _invSession ? _invSession.goodsType : 'derevo';
+  var lists = _invBuildRefLists(gt, _invSession && _invSession.snapshot);
+  _invFillDatalist('invNameList', lists.names); _invFillDatalist('invSpeciesList', lists.species);
+}
+// То же для окна «Загрузить список» — по выбранному там виду товара (Дерево/ДР), без привязки к сессии пересчёта.
+function invImpFillRefLists(){
+  var gt = (document.getElementById('invImpType')||{}).value || 'derevo';
+  var lists = _invBuildRefLists(gt, null);
+  _invFillDatalist('invImpNameList', lists.names); _invFillDatalist('invImpSpeciesList', lists.species);
 }
 function _invEnterCount(){
   try{ _invFillRefLists(); }catch(e){}
@@ -1002,6 +1013,7 @@ function invAdmOpenImport(){
   _invImpRows = []; var pv = document.getElementById('invImpPreview'); if(pv) pv.innerHTML = '';
   openMo('invImportMo');
   invImpRefreshTargets();
+  invImpFillRefLists();
 }
 // Куда сохранять: по умолчанию новая инвентаризация, но если для этого же магазина+даты+вида товара уже есть
 // начатая (кем угодно — через приложение или предыдущей загрузкой списка), можно дозаписать прямо в неё, а не
@@ -1093,12 +1105,12 @@ function _invImpRender(){
   if(!_invImpRows.length){ pv.innerHTML = '<div style="font-size:11px;color:#f0c060;padding:8px 0">Строк не найдено — вставьте список выше и нажмите «Разобрать список». Можно вставлять и разбирать несколько страниц подряд — они добавятся в один общий список.</div>'; return; }
   var sum=0, qty=0, bad=0;
   _invImpRows.forEach(function(r){ sum += (r.price||0)*(r.qty||0); qty += r.qty||0; if(r.issues.length) bad++; });
-  var inp = function(i,f,v,w,extra){ return '<input type="text" value="'+_iaEsc(v)+'" onchange="invImpEdit('+i+',\''+f+'\',this.value)" style="width:'+w+';background:#0f0f13;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;padding:4px;font-size:11px;'+(extra||'')+'">'; };
+  var inp = function(i,f,v,w,extra,listId){ return '<input type="text" value="'+_iaEsc(v)+'"'+(listId?' list="'+listId+'" autocomplete="off"':'')+' onchange="invImpEdit('+i+',\''+f+'\',this.value)" style="width:'+w+';background:#0f0f13;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;padding:4px;font-size:11px;'+(extra||'')+'">'; };
   pv.innerHTML = '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:10px;padding:8px 10px;margin:10px 0;font-size:12px;display:flex;justify-content:space-between;align-items:center;gap:8px"><div><b>'+_invImpRows.length+'</b> позиций · <b>'+qty+'</b> шт. · итого <b style="color:#c8f060">'+_iaMoney(sum)+'</b>'+(bad?' · <span style="color:#f06060">⚠️ строк с вопросами: '+bad+'</span>':'')+'</div><button type="button" onclick="invImpClearAll()" style="font-size:10px;padding:4px 8px;background:none;border:1px solid #f0606055;border-radius:6px;color:#f06060;cursor:pointer;flex-shrink:0">🗑 Очистить всё</button></div>'+
     '<div style="font-size:10px;color:#8888aa;margin-bottom:6px">Проверьте и поправьте прямо в таблице. № · Название · Порода · Цена · Шт. · Продано</div>'+
     _invImpRows.map(function(r,i){
       return '<div style="display:flex;gap:4px;align-items:center;padding:4px 0;border-bottom:1px solid #22222e;'+(r.issues.length?'background:#2e1a1a33':'')+'">'+
-        inp(i,'num',r.num,'46px')+inp(i,'name',r.name,'auto','flex:1;min-width:70px')+inp(i,'species',r.species,'56px')+inp(i,'price',r.price,'50px','text-align:right')+inp(i,'qty',r.qty,'34px','text-align:center')+inp(i,'sold',r.sold,'30px','text-align:center;color:#f0c060')+
+        inp(i,'num',r.num,'46px')+inp(i,'name',r.name,'auto','flex:1;min-width:70px','invImpNameList')+inp(i,'species',r.species,'56px',null,'invImpSpeciesList')+inp(i,'price',r.price,'50px','text-align:right')+inp(i,'qty',r.qty,'34px','text-align:center')+inp(i,'sold',r.sold,'30px','text-align:center;color:#f0c060')+
         '<button type="button" onclick="invImpDel('+i+')" style="background:none;border:none;color:#f06060;cursor:pointer;font-size:13px">✕</button></div>'+
         (r.issues.length?'<div style="font-size:10px;color:#f06060;margin:-2px 0 4px">'+r.issues.join(', ')+'</div>':'');
     }).join('');
