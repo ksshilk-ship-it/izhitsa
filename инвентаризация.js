@@ -326,7 +326,20 @@ function _invRenderFreeformTally(){
     var it = _invCounts[k];
     var safeKey = k.replace(/'/g,"\\'");
     return '<div style="border:1px solid #60f09055;background:#0f1a12;border-radius:10px;padding:9px 10px;margin-bottom:6px">'+
-      '<div style="font-size:12px;font-weight:700;margin-bottom:6px">'+(it.num?'№'+it.num+' ':'')+(it.name||'—')+(it.species?' <span style="color:#f0c060;font-weight:400">· '+it.species+'</span>':'')+(it.isNew?' <span style="color:#f0c060;font-size:10px">(нов.)</span>':'')+'</div>'+
+      '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;align-items:flex-start">'+
+        '<div style="font-size:12px;font-weight:700">'+(it.num?'№'+it.num+' ':'')+(it.name||'—')+(it.species?' <span style="color:#f0c060;font-weight:400">· '+it.species+'</span>':'')+(it.isNew?' <span style="color:#f0c060;font-size:10px">(нов.)</span>':'')+'<div style="font-size:10.5px;color:#8888aa;font-weight:400;margin-top:2px">'+_iaMoney(it.price||0)+' за шт.</div></div>'+
+        '<button type="button" onclick="invFfToggleEdit(\''+safeKey+'\')" style="background:none;border:1px solid #2e2e3e;border-radius:7px;padding:4px 7px;color:#8888aa;font-size:11px;cursor:pointer;flex-shrink:0">✏️</button>'+
+      '</div>'+
+      // Правка тут — только для самой записи пересчёта (номер/название/порода/цена, как занесли), без
+      // выхода в систему: в отличие от _invRenderRow (обычный, не свободный счёт) это НЕ вызывает
+      // переоценку по кассе — тут ловим типичные ошибки расшифровки с фото, а не meняем каталог задним числом.
+      '<div id="invFfEdit_'+safeKey+'" style="display:none;background:#0f0f13;border-radius:8px;padding:8px;margin-bottom:8px">'+
+        '<div class="fg" style="margin-bottom:6px"><label class="fl">№ артикула (можно пусто)</label><input class="fi" id="invFfEcNum_'+safeKey+'" value="'+_invEsc(it.num||'')+'" style="margin:0;padding:7px"></div>'+
+        '<div class="fg" style="margin-bottom:6px"><label class="fl">Название</label>'+_invSugField('<input class="fi" id="invFfEcName_'+safeKey+'" value="'+_invEsc(it.name)+'" autocomplete="off" style="margin:0;padding:7px"'+_invSugAttrs('_invNamesArr')+'>','invFfEcName_'+safeKey)+'</div>'+
+        '<div class="fg" style="margin-bottom:6px"><label class="fl">Порода / характеристика</label>'+_invSugField('<input class="fi" id="invFfEcSpecies_'+safeKey+'" autocomplete="off" value="'+_invEsc(it.species)+'" style="margin:0;padding:7px"'+_invSugAttrs('_invSpeciesArr')+'>','invFfEcSpecies_'+safeKey)+'</div>'+
+        '<div class="fg" style="margin-bottom:8px"><label class="fl">Цена ₽</label><input class="fi" type="text" inputmode="numeric" id="invFfEcPrice_'+safeKey+'" value="'+(it.price||0)+'" style="margin:0;padding:7px"></div>'+
+        '<button type="button" onclick="invFfSaveEdit(\''+safeKey+'\')" style="width:100%;padding:8px;background:#60c8f0;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
+      '</div>'+
       '<div style="display:flex;gap:6px;align-items:center">'+
         '<button type="button" onclick="invFfAdjustQty(\''+safeKey+'\',-1)" style="width:32px;height:32px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#f0f0f8;font-size:16px;font-weight:700;cursor:pointer">−</button>'+
         '<div style="flex:1;text-align:center;font-size:14px;font-weight:700">'+it.countedQty+'</div>'+
@@ -348,6 +361,27 @@ function invFfAdjustQty(key, delta){
       .catch(function(){ showToast('⚠️ Не отправилось в облако'); });
   }catch(e){}
   _invRenderCountHeader();
+  _invRenderFreeformTally();
+}
+function invFfToggleEdit(key){
+  var el = document.getElementById('invFfEdit_'+key); if(!el) return;
+  el.style.display = el.style.display==='none' ? 'block' : 'none';
+}
+function invFfSaveEdit(key){
+  var it = _invCounts[key]; if(!it) return;
+  var nameEl = document.getElementById('invFfEcName_'+key);
+  var name = (nameEl && nameEl.value||'').trim();
+  if(!name){ showToast('Название не может быть пустым'); return; }
+  it.num = ((document.getElementById('invFfEcNum_'+key)||{}).value||'').trim();
+  it.name = name;
+  it.species = ((document.getElementById('invFfEcSpecies_'+key)||{}).value||'').trim();
+  it.price = parseFloat((document.getElementById('invFfEcPrice_'+key)||{}).value)||0;
+  it.countedAt = new Date().toISOString();
+  try{
+    db.collection('iz_inventory_counts').doc(_invSession.id+'_'+key).set(it)
+      .catch(function(){ showToast('⚠️ Не отправилось в облако'); });
+  }catch(e){}
+  showToast('✅ Сохранено');
   _invRenderFreeformTally();
 }
 function invFfRemoveCount(key){
