@@ -171,11 +171,23 @@ function _invFillRefLists(){
   var lists = _invBuildRefLists(gt, _invSession && _invSession.snapshot);
   _invNamesArr = _invSortRu(lists.names); _invSpeciesArr = _invSortRu(lists.species);
 }
-// То же для окна «Загрузить список» — по выбранному там виду товара (Дерево/ДР), без привязки к сессии пересчёта.
+// То же для окна «Загрузить список» — по выбранному там магазину и виду товара (Дерево/ДР). В отличие от счёта
+// в приложении тут нет своей сессии со снепшотом остатка — поэтому подмешиваем остаток выбранного магазина
+// (getStock()[shop]) сами, тем же способом, каким invImpParse() уже сопоставляет вставленный артикул с
+// названием/породой/ценой (см. её var stock=... выше) — иначе название вроде «Соусник», которое есть только
+// в остатке магазина, а не в общем справочнике/каталоге товаров, не попадёт в список подсказок.
 var _invImpNamesArr = [], _invImpSpeciesArr = [];
 function invImpFillRefLists(){
   var gt = (document.getElementById('invImpType')||{}).value || 'derevo';
-  var lists = _invBuildRefLists(gt, null);
+  var shop = (document.getElementById('invImpShop')||{}).value || '';
+  var snap = {};
+  try{
+    var stock = ((typeof getStock==='function' ? getStock() : {})[shop]) || {};
+    Object.keys(stock).forEach(function(k){
+      var it = stock[k]; if((it.goodsType||'derevo')===gt) snap[k] = {name:it.name||'', species:it.species||''};
+    });
+  }catch(e){}
+  var lists = _invBuildRefLists(gt, snap);
   _invImpNamesArr = _invSortRu(lists.names); _invImpSpeciesArr = _invSortRu(lists.species);
 }
 // Подсказки-подстановки: oninput/onfocus запоминают id поля, из которого вызваны (через this.id, без
