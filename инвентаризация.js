@@ -325,28 +325,30 @@ function _invRenderFreeformTally(){
   c.innerHTML = keys.map(function(k){
     var it = _invCounts[k];
     var safeKey = k.replace(/'/g,"\\'");
-    return '<div style="border:1px solid #60f09055;background:#0f1a12;border-radius:10px;padding:9px 10px;margin-bottom:6px">'+
-      '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;align-items:flex-start">'+
-        '<div style="font-size:12px;font-weight:700">'+(it.num?'№'+it.num+' ':'')+(it.name||'—')+(it.species?' <span style="color:#f0c060;font-weight:400">· '+it.species+'</span>':'')+(it.isNew?' <span style="color:#f0c060;font-size:10px">(нов.)</span>':'')+'<div style="font-size:10.5px;color:#8888aa;font-weight:400;margin-top:2px">'+_iaMoney(it.price||0)+' за шт.</div></div>'+
-        '<button type="button" onclick="invFfToggleEdit(\''+safeKey+'\')" style="background:none;border:1px solid #2e2e3e;border-radius:7px;padding:4px 7px;color:#8888aa;font-size:11px;cursor:pointer;flex-shrink:0">✏️</button>'+
+    return '<div style="border:1px solid #60f09055;background:#0f1a12;border-radius:9px;padding:7px 9px;margin-bottom:5px">'+
+      '<div style="display:flex;justify-content:space-between;gap:6px;align-items:center;margin-bottom:5px">'+
+        '<div style="font-size:12px;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(it.num?'№'+it.num+' ':'')+(it.name||'—')+(it.species?' <span style="color:#f0c060;font-weight:400">· '+it.species+'</span>':'')+(it.isNew?' <span style="color:#f0c060;font-size:10px">(нов.)</span>':'')+'</div>'+
+        '<div style="font-size:10.5px;color:#8888aa;flex-shrink:0;white-space:nowrap">'+_iaMoney(it.price||0)+'/шт</div>'+
       '</div>'+
       // Правка тут — только для самой записи пересчёта (номер/название/порода/цена, как занесли), без
       // выхода в систему: в отличие от _invRenderRow (обычный, не свободный счёт) это НЕ вызывает
       // переоценку по кассе — тут ловим типичные ошибки расшифровки с фото, а не meняем каталог задним числом.
-      '<div id="invFfEdit_'+safeKey+'" style="display:none;background:#0f0f13;border-radius:8px;padding:8px;margin-bottom:8px">'+
+      '<div id="invFfEdit_'+safeKey+'" style="display:none;background:#0f0f13;border-radius:8px;padding:8px;margin-bottom:6px">'+
         '<div class="fg" style="margin-bottom:6px"><label class="fl">№ артикула (можно пусто)</label><input class="fi" id="invFfEcNum_'+safeKey+'" value="'+_invEsc(it.num||'')+'" style="margin:0;padding:7px"></div>'+
         '<div class="fg" style="margin-bottom:6px"><label class="fl">Название</label>'+_invSugField('<input class="fi" id="invFfEcName_'+safeKey+'" value="'+_invEsc(it.name)+'" autocomplete="off" style="margin:0;padding:7px"'+_invSugAttrs('_invNamesArr')+'>','invFfEcName_'+safeKey)+'</div>'+
         '<div class="fg" style="margin-bottom:6px"><label class="fl">Порода / характеристика</label>'+_invSugField('<input class="fi" id="invFfEcSpecies_'+safeKey+'" autocomplete="off" value="'+_invEsc(it.species)+'" style="margin:0;padding:7px"'+_invSugAttrs('_invSpeciesArr')+'>','invFfEcSpecies_'+safeKey)+'</div>'+
         '<div class="fg" style="margin-bottom:8px"><label class="fl">Цена ₽</label><input class="fi" type="text" inputmode="numeric" id="invFfEcPrice_'+safeKey+'" value="'+(it.price||0)+'" style="margin:0;padding:7px"></div>'+
         '<button type="button" onclick="invFfSaveEdit(\''+safeKey+'\')" style="width:100%;padding:8px;background:#60c8f0;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
       '</div>'+
-      '<div style="display:flex;gap:6px;align-items:center">'+
-        '<button type="button" onclick="invFfAdjustQty(\''+safeKey+'\',-1)" style="width:32px;height:32px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#f0f0f8;font-size:16px;font-weight:700;cursor:pointer">−</button>'+
-        '<div style="flex:1;text-align:center;font-size:14px;font-weight:700">'+it.countedQty+'</div>'+
-        '<button type="button" onclick="invFfAdjustQty(\''+safeKey+'\',1)" style="width:32px;height:32px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#f0f0f8;font-size:16px;font-weight:700;cursor:pointer">+</button>'+
-        '<button type="button" onclick="invFfRemoveCount(\''+safeKey+'\')" style="padding:8px 10px;border-radius:8px;border:1px solid #f0606055;background:transparent;color:#f06060;font-size:12px;cursor:pointer;flex-shrink:0">✕</button>'+
+      '<div style="display:flex;gap:5px;align-items:center">'+
+        '<button type="button" onclick="invFfAdjustQty(\''+safeKey+'\',-1)" style="width:26px;height:26px;border-radius:7px;border:1px solid #2e2e3e;background:#22222e;color:#f0f0f8;font-size:14px;font-weight:700;cursor:pointer;flex-shrink:0">−</button>'+
+        '<div style="min-width:20px;text-align:center;font-size:13px;font-weight:700">'+it.countedQty+'</div>'+
+        '<button type="button" onclick="invFfAdjustQty(\''+safeKey+'\',1)" style="width:26px;height:26px;border-radius:7px;border:1px solid #2e2e3e;background:#22222e;color:#f0f0f8;font-size:14px;font-weight:700;cursor:pointer;flex-shrink:0">+</button>'+
+        '<div style="flex:1"></div>'+
+        '<button type="button" onclick="invFfToggleEdit(\''+safeKey+'\')" style="width:26px;height:26px;border-radius:7px;border:1px solid #2e2e3e;background:none;color:#8888aa;font-size:11px;cursor:pointer;flex-shrink:0">✏️</button>'+
+        '<button type="button" onclick="invFfRemoveCount(\''+safeKey+'\')" style="width:26px;height:26px;border-radius:7px;border:1px solid #f0606055;background:transparent;color:#f06060;font-size:12px;cursor:pointer;flex-shrink:0">✕</button>'+
       '</div>'+
-      (it.soldQty ? '<div style="font-size:10px;color:#f0c060;margin-top:6px;padding-top:6px;border-top:1px solid #2e2e3e44">🛒 продано во время пересчёта: '+it.soldQty+' шт. — изменить в разделе ниже</div>' : '')+
+      (it.soldQty ? '<div style="font-size:10px;color:#f0c060;margin-top:5px;padding-top:5px;border-top:1px solid #2e2e3e44">🛒 продано во время пересчёта: '+it.soldQty+' шт. — изменить в разделе ниже</div>' : '')+
     '</div>';
   }).join('');
 }
