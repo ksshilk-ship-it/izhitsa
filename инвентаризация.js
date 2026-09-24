@@ -1392,17 +1392,26 @@ function invImpSave(){
     renderInvAdmin();
   }
   if(targetId){
-    // Дозаписываем в уже существующую инвентаризацию — количество складывается с уже внесённым по той же позиции,
-    // а не заменяет его (та же логика 'добавить страницу', что и при разборе списка, только теперь через сохранённую сессию).
+    // Дозаписываем в уже существующую инвентаризацию — но КАЖДАЯ загруженная партия остаётся
+    // отдельной строкой, даже если в ней встретился тот же артикул/та же позиция, что уже сохранена
+    // раньше (например, нашли ещё один такой же товар в другом месте магазина, отдельным листом) —
+    // раньше количество молча суммировалось В ту же строку, и по отчёту было не понять, что нашли
+    // в каком заходе. Если внутри ОДНОЙ партии (несколько вставленных подряд, ещё не сохранённых
+    // страниц) один и тот же артикул встретился дважды — та сумма по-прежнему считается (см.
+    // buildMerged/invImpParse), это внутренняя логика одной загрузки, а не разных заходов.
     showToast('⏳ Добавляю в начатую инвентаризацию...');
     db.collection('iz_inventory_counts').where('sessionId','==',targetId).get({source:'server'}).then(function(snap){
-      var existing = {}, maxSeq = -1;
-      snap.forEach(function(d){ var data = d.data(); existing[String(d.id).replace(targetId+'_','')] = data; if(typeof data.seq==='number' && data.seq>maxSeq) maxSeq = data.seq; });
+      var existingKeys = {}, maxSeq = -1;
+      snap.forEach(function(d){ var data = d.data(); existingKeys[String(d.id).replace(targetId+'_','')] = true; if(typeof data.seq==='number' && data.seq>maxSeq) maxSeq = data.seq; });
       var merged = buildMerged(targetId, maxSeq+1);
+      var batchSuffix = '_b'+Date.now();
+      var renamed = {};
       Object.keys(merged).forEach(function(k){
-        var ex = existing[k];
-        if(ex){ merged[k].countedQty = (merged[k].countedQty||0)+(ex.countedQty||0); merged[k].soldQty = Math.min(merged[k].countedQty, (ex.soldQty||0)+(merged[k].soldQty||0)); }
+        var finalKey = existingKeys[k] ? (k+batchSuffix) : k;
+        merged[k].itemKey = finalKey;
+        renamed[finalKey] = merged[k];
       });
+      merged = renamed;
       var extraOps = [];
       if(parallel) extraOps.push(db.collection('iz_inventory_sessions').doc(targetId).set({parallelSales:true},{merge:true}));
       var w = writeCounts(targetId, merged, extraOps);
