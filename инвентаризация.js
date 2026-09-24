@@ -1117,7 +1117,21 @@ function invAdmRevertToImport(sid){
   var counts = cur.counts[sid] || {};
   var n = Object.keys(counts).length;
   if(!confirm('Вернуть «'+(x.goodsType==='dr'?'ДР Товар':'Дерево')+'» ('+n+' поз., '+_iaEsc(cur.shopName)+', '+_iaDateRu(cur.date)+') в черновик разбора списка?\n\nВнесённые позиции будут удалены из сохранённой инвентаризации и откроются для правки в «Загрузить список» — там же можно будет поменять магазин/дату, если назначили не туда. Отменить это действие потом можно только занеся всё заново.')) return;
-  var rows = Object.keys(counts).map(function(k){
+  // Порядок строк — по seq (позиция в исходном списке при сохранении, см. invImpSave); без него
+  // Object.keys() сам переставил бы числовые артикулы по возрастанию впереди строковых ключей —
+  // ломая порядок бумажного листа, по которому потом сверяют. У сессий, сохранённых до того, как
+  // seq стали писать, откатить исходный порядок уже нечем — используем время внесения, а если и оно
+  // общее на весь пакет (обычная ситуация для «Загрузить список» одним махом) — сортируем по артикулу,
+  // это хотя бы предсказуемо, в отличие от порядка ключей объекта.
+  var orderedKeys = Object.keys(counts).sort(function(a,b){
+    var ra = counts[a], rb = counts[b];
+    var sa = typeof ra.seq==='number' ? ra.seq : Infinity, sb = typeof rb.seq==='number' ? rb.seq : Infinity;
+    if(sa!==sb) return sa-sb;
+    var ca = ra.countedAt||'', cb = rb.countedAt||'';
+    if(ca!==cb) return ca<cb?-1:1;
+    return String(ra.num||'').localeCompare(String(rb.num||''), 'ru', {numeric:true});
+  });
+  var rows = orderedKeys.map(function(k){
     var r = counts[k];
     var issues = []; if(!r.name) issues.push('нет названия'); if(!r.price) issues.push('нет цены');
     return {num:r.num||'', name:r.name||'', species:r.species||'', price:r.price||0, qty:r.countedQty||0, sold:r.soldQty||0, issues:issues};
@@ -1320,13 +1334,18 @@ function invImpSave(){
   var today = new Date(); var ts = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
   var now = new Date().toISOString();
   var targetId = (document.getElementById('invImpTarget')||{}).value || '';
-  function buildMerged(sid){
+  // seq — порядковый номер строки в том виде, как она шла в разобранном списке (порядок бумажного
+  // листа): без него при откате «в черновик» (invAdmRevertToImport) порядок восстановить нечем —
+  // Object.keys() у обычного объекта сам переставляет числовые артикулы по возрастанию перед
+  // строковыми ключами, и список перемешивается. seqOffset — чтобы при дозаписи следующей страницы
+  // в уже существующую сессию новые строки шли строго ПОСЛЕ уже сохранённых, а не с нуля.
+  function buildMerged(sid, seqOffset){
     var merged = {};
-    rows.forEach(function(r){
+    rows.forEach(function(r, idx){
       var key = r.num || _noArticleStockKey(r.name, r.price, r.species, gt) || ('new_'+uid());
       var ex = merged[key];
       if(ex){ ex.countedQty += r.qty||0; ex.soldQty = Math.min(ex.countedQty, (ex.soldQty||0)+(r.sold||0)); }
-      else merged[key] = {sessionId:sid, itemKey:key, num:r.num||'', name:r.name, price:r.price||0, species:r.species||'', size:'', goodsType:gt, countedQty:r.qty||0, soldQty:Math.min(r.qty||0, r.sold||0), countedBy:who, countedAt:now, isNew:false, imported:true};
+      else merged[key] = {sessionId:sid, itemKey:key, num:r.num||'', name:r.name, price:r.price||0, species:r.species||'', size:'', goodsType:gt, countedQty:r.qty||0, soldQty:Math.min(r.qty||0, r.sold||0), countedBy:who, countedAt:now, isNew:false, imported:true, seq:(seqOffset||0)+idx};
     });
     return merged;
   }
@@ -1353,9 +1372,9 @@ function invImpSave(){
     // а не заменяет его (та же логика 'добавить страницу', что и при разборе списка, только теперь через сохранённую сессию).
     showToast('⏳ Добавляю в начатую инвентаризацию...');
     db.collection('iz_inventory_counts').where('sessionId','==',targetId).get({source:'server'}).then(function(snap){
-      var existing = {};
-      snap.forEach(function(d){ existing[String(d.id).replace(targetId+'_','')] = d.data(); });
-      var merged = buildMerged(targetId);
+      var existing = {}, maxSeq = -1;
+      snap.forEach(function(d){ var data = d.data(); existing[String(d.id).replace(targetId+'_','')] = data; if(typeof data.seq==='number' && data.seq>maxSeq) maxSeq = data.seq; });
+      var merged = buildMerged(targetId, maxSeq+1);
       Object.keys(merged).forEach(function(k){
         var ex = existing[k];
         if(ex){ merged[k].countedQty = (merged[k].countedQty||0)+(ex.countedQty||0); merged[k].soldQty = Math.min(merged[k].countedQty, (ex.soldQty||0)+(merged[k].soldQty||0)); }
