@@ -1112,11 +1112,18 @@ function invAdmDeleteSession(sid){
 // «занесла и правлю», а не заново перепечатывать всё с листа. Внесённые позиции удаляются из сохранённой
 // инвентаризации и открываются как обычный черновик разбора — магазин, дату, вид товара и любые
 // значения строк можно поправить перед повторным сохранением.
+// sid откаченной сессии, чью запись в iz_inventory_sessions/iz_inventory_counts нужно будет удалить
+// ПОСЛЕ того, как черновик успешно пересохранится (см. invImpSave) — не раньше. Раньше эта функция
+// удаляла исходную сессию СРАЗУ, а черновик жил только в памяти (_invImpRows) до нажатия «Сохранить»;
+// если вкладку закрывали/обновляли/сессия обрывалась до сохранения — данные терялись безвозвратно,
+// без какой-либо возможности восстановить (в отличие от смен, у инвентаризации нет tombstone/бэкапа).
+// Именно так, по всей видимости, и пропала инвентаризация целиком.
+var _invImpRevertSourceSid = null;
 function invAdmRevertToImport(sid){
   var cur = _invAdmCur; var x = cur.sessions.find(function(v){ return v.id===sid; }); if(!x) return;
   var counts = cur.counts[sid] || {};
   var n = Object.keys(counts).length;
-  if(!confirm('Вернуть «'+(x.goodsType==='dr'?'ДР Товар':'Дерево')+'» ('+n+' поз., '+_iaEsc(cur.shopName)+', '+_iaDateRu(cur.date)+') в черновик разбора списка?\n\nВнесённые позиции будут удалены из сохранённой инвентаризации и откроются для правки в «Загрузить список» — там же можно будет поменять магазин/дату, если назначили не туда. Отменить это действие потом можно только занеся всё заново.')) return;
+  if(!confirm('Вернуть «'+(x.goodsType==='dr'?'ДР Товар':'Дерево')+'» ('+n+' поз., '+_iaEsc(cur.shopName)+', '+_iaDateRu(cur.date)+') в черновик разбора списка?\n\nОткроется в «Загрузить список» для правки. Сама сохранённая инвентаризация при этом НЕ удаляется и никуда не денется, пока вы не нажмёте «Сохранить инвентаризацию» в черновике — тогда старая версия заменится новой. Если просто закрыть окно без сохранения — ничего не изменится.')) return;
   // Порядок строк — по seq (позиция в исходном списке при сохранении, см. invImpSave); без него
   // Object.keys() сам переставил бы числовые артикулы по возрастанию впереди строковых ключей —
   // ломая порядок бумажного листа, по которому потом сверяют. У сессий, сохранённых до того, как
@@ -1136,30 +1143,23 @@ function invAdmRevertToImport(sid){
     var issues = []; if(!r.name) issues.push('нет названия'); if(!r.price) issues.push('нет цены');
     return {num:r.num||'', name:r.name||'', species:r.species||'', price:r.price||0, qty:r.countedQty||0, sold:r.soldQty||0, issues:issues};
   });
-  db.collection('iz_inventory_counts').where('sessionId','==',sid).get().then(function(snap){
-    var ops = [], docs = snap.docs;
-    for(var i=0;i<docs.length;i+=400){ (function(chunk){ var b=db.batch(); chunk.forEach(function(d){ b.delete(d.ref); }); ops.push(b.commit()); })(docs.slice(i,i+400)); }
-    return Promise.all(ops);
-  }).then(function(){ return db.collection('iz_inventory_sessions').doc(sid).delete(); })
-  .then(function(){
-    cur.sessions = cur.sessions.filter(function(v){ return v.id!==sid; }); delete cur.counts[sid];
-    if(!cur.sessions.length) closeMo('invAdmMo');
-    renderInvAdmin();
-    // Открываем «Загрузить список» с уже занесёнными строками и полями, взятыми из откаченной сессии —
-    // магазин/дату/тип можно тут же поправить, если раньше назначили неверно.
-    var shops = (typeof getShopNames==='function') ? getShopNames() : [];
-    var sel = document.getElementById('invImpShop');
-    if(sel){ sel.innerHTML = shops.map(function(sn){ return '<option>'+_iaEsc(sn)+'</option>'; }).join(''); sel.value = x.shopName||''; }
-    var typeEl = document.getElementById('invImpType'); if(typeEl) typeEl.value = x.goodsType||'derevo';
-    var dEl = document.getElementById('invImpDate');
-    if(dEl){ var today=new Date(); dEl.max = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0'); dEl.value = x.inventoryDate || cur.date; }
-    var whoEl = document.getElementById('invImpWho'); if(whoEl) whoEl.value = x.startedBy||'';
-    var parEl = document.getElementById('invImpParallel'); if(parEl) parEl.checked = !!x.parallelSales;
-    _invImpRows = rows;
-    closeMo('invAdmMo'); openMo('invImportMo');
-    _invImpRender(); invImpRefreshTargets(); invImpFillRefLists();
-    showToast('↩️ Возвращено в черновик — '+n+' поз., поправьте и сохраните заново');
-  }).catch(function(err){ showToast('❌ Не удалось откатить: '+(err&&err.message||err)); });
+  // Исходную сессию НЕ трогаем тут вообще — только запоминаем её sid, чтобы invImpSave() удалил её
+  // САМА, но только после того, как новая (исправленная) версия реально успешно сохранится.
+  _invImpRevertSourceSid = sid;
+  // Открываем «Загрузить список» с уже занесёнными строками и полями, взятыми из откаченной сессии —
+  // магазин/дату/тип можно тут же поправить, если раньше назначили неверно.
+  var shops = (typeof getShopNames==='function') ? getShopNames() : [];
+  var sel = document.getElementById('invImpShop');
+  if(sel){ sel.innerHTML = shops.map(function(sn){ return '<option>'+_iaEsc(sn)+'</option>'; }).join(''); sel.value = x.shopName||''; }
+  var typeEl = document.getElementById('invImpType'); if(typeEl) typeEl.value = x.goodsType||'derevo';
+  var dEl = document.getElementById('invImpDate');
+  if(dEl){ var today=new Date(); dEl.max = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0'); dEl.value = x.inventoryDate || cur.date; }
+  var whoEl = document.getElementById('invImpWho'); if(whoEl) whoEl.value = x.startedBy||'';
+  var parEl = document.getElementById('invImpParallel'); if(parEl) parEl.checked = !!x.parallelSales;
+  _invImpRows = rows;
+  closeMo('invAdmMo'); openMo('invImportMo');
+  _invImpRender(); invImpRefreshTargets(); invImpFillRefLists();
+  showToast('↩️ Открыто как черновик — поправьте и нажмите «Сохранить инвентаризацию». Старая версия останется как есть, пока не сохраните.');
 }
 // Администратор добавляет/правит список в том же окне, где считает инвентаризатор (поиск по артикулу и названию, подсказки, ±, удалить).
 var _invAdminMode = false;
@@ -1193,6 +1193,10 @@ function invAdmItemReport(sessionId){
 // «№» и «Порода» можно оставить пустыми, «Цена» — если артикул есть в системе, подставится цена из системы.
 var _invImpRows = [];
 function invAdmOpenImport(){
+  // Обычный вход в «Загрузить список» (не через «Вернуть в черновик») — это не продолжение
+  // отката, а новая, независимая загрузка, так что старую сессию из отката (если её не сохранили
+  // и просто открыли это окно заново) удалять не нужно и не должны.
+  _invImpRevertSourceSid = null;
   var shops = (typeof getShopNames==='function') ? getShopNames() : [];
   var sel = document.getElementById('invImpShop');
   if(sel) sel.innerHTML = shops.map(function(n){ return '<option>'+_iaEsc(n)+'</option>'; }).join('');
@@ -1361,10 +1365,25 @@ function invImpSave(){
     }
     return {ops:ops, count:keys.length};
   }
-  function finish(count, dateLabel){
+  function finish(count, dateLabel, savedIntoSid){
     showToast('✅ Загружено '+count+' позиций — инвентаризация '+dateLabel);
     closeMo('invImportMo'); _invImpRows = [];
     var t = document.getElementById('invImpText'); if(t) t.value='';
+    // Если это было пересохранение черновика после «Вернуть в черновик» — теперь, когда новая
+    // (исправленная) версия УЖЕ надёжно сохранена, можно безопасно убрать старую. Раньше старую
+    // удаляли сразу при откате, ДО сохранения черновика — и если черновик почему-то не досохраняли
+    // (закрыли окно, обновили страницу), данные терялись без возможности восстановить.
+    var toCleanup = _invImpRevertSourceSid;
+    _invImpRevertSourceSid = null;
+    if(toCleanup && toCleanup!==savedIntoSid){
+      db.collection('iz_inventory_counts').where('sessionId','==',toCleanup).get().then(function(snap){
+        var ops = [], docs = snap.docs;
+        for(var i=0;i<docs.length;i+=400){ (function(chunk){ var b=db.batch(); chunk.forEach(function(d){ b.delete(d.ref); }); ops.push(b.commit()); })(docs.slice(i,i+400)); }
+        return Promise.all(ops);
+      }).then(function(){ return db.collection('iz_inventory_sessions').doc(toCleanup).delete(); })
+      .then(function(){ renderInvAdmin(); })
+      .catch(function(err){ showToast('⚠️ Новая версия сохранена, но не удалось убрать старую — уберите вручную кнопкой «Удалить»: '+(err&&err.message||err)); });
+    }
     renderInvAdmin();
   }
   if(targetId){
@@ -1382,7 +1401,7 @@ function invImpSave(){
       var extraOps = [];
       if(parallel) extraOps.push(db.collection('iz_inventory_sessions').doc(targetId).set({parallelSales:true},{merge:true}));
       var w = writeCounts(targetId, merged, extraOps);
-      return Promise.all(w.ops).then(function(){ finish(w.count, _iaDateRu(date)); });
+      return Promise.all(w.ops).then(function(){ finish(w.count, _iaDateRu(date), targetId); });
     }).catch(function(err){ showToast('❌ Не удалось сохранить: '+(err&&err.message||err)); });
     return;
   }
@@ -1392,6 +1411,6 @@ function invImpSave(){
   var merged2 = buildMerged(sid);
   var w2 = writeCounts(sid, merged2, [db.collection('iz_inventory_sessions').doc(sid).set(sessionDoc)]);
   showToast('⏳ Сохраняю...');
-  Promise.all(w2.ops).then(function(){ finish(w2.count, _iaDateRu(date)); })
+  Promise.all(w2.ops).then(function(){ finish(w2.count, _iaDateRu(date), sid); })
   .catch(function(err){ showToast('❌ Не удалось сохранить: '+(err&&err.message||err)); });
 }
