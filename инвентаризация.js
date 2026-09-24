@@ -219,6 +219,9 @@ function _invEnterCount(){
   ['invNewName','invNewSpecies','invNewPrice'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   var qtyEl = document.getElementById('invNewQty'); if(qtyEl) qtyEl.value='1';
   var sugg = document.getElementById('invFfSugg'); if(sugg){ sugg.style.display='none'; sugg.innerHTML=''; }
+  var soldSe = document.getElementById('invSoldSearch'); if(soldSe) soldSe.value = '';
+  var soldSugg = document.getElementById('invSoldSugg'); if(soldSugg){ soldSugg.style.display='none'; soldSugg.innerHTML=''; }
+  _invSoldMatches = [];
   _invShowStep('count');
   _invRenderCountHeader();
   _invRenderCountBody();
@@ -241,6 +244,9 @@ function _invRenderCountHeader(){
   var dTxt = (_invSession.inventoryDate||'').split('-').reverse().join('.');
   el.innerHTML = '<div style="font-size:13px;font-weight:700">'+(_invSession.goodsType==='dr'?'🛍 ДР Товар':'🌳 Дерево')+' · '+_invSession.shopName+'</div>'+
     '<div style="font-size:11px;color:#8888aa;margin-top:2px">'+(dTxt?'📅 '+dTxt+' · ':'')+'Занесено позиций: '+cnt+' · всего '+pcs+' шт.'+(_invSession.parallelSales?' · 🏪 продажи шли параллельно':'')+'</div>';
+  var soldSec = document.getElementById('invSoldSection');
+  if(soldSec) soldSec.style.display = _invSession.parallelSales ? 'block' : 'none';
+  if(_invSession.parallelSales) _invRenderSoldList();
 }
 function invSearchInput(v){ _invSearch = (v||'').trim().toLowerCase(); renderInvCountList(); }
 // ===== Свободный ввод: сначала заносим всё найденное по одному, без сверки на ходу — сверка
@@ -327,27 +333,9 @@ function _invRenderFreeformTally(){
         '<button type="button" onclick="invFfAdjustQty(\''+safeKey+'\',1)" style="width:32px;height:32px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#f0f0f8;font-size:16px;font-weight:700;cursor:pointer">+</button>'+
         '<button type="button" onclick="invFfRemoveCount(\''+safeKey+'\')" style="padding:8px 10px;border-radius:8px;border:1px solid #f0606055;background:transparent;color:#f06060;font-size:12px;cursor:pointer;flex-shrink:0">✕</button>'+
       '</div>'+
-      (_invSession.parallelSales ? '<div style="display:flex;gap:6px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid #2e2e3e44">'+
-        '<span style="font-size:10.5px;color:#f0c060;flex:1">🛒 продано во время пересчёта</span>'+
-        '<button type="button" onclick="invFfAdjustSold(\''+safeKey+'\',-1)" style="width:28px;height:28px;border-radius:7px;border:1px solid #2e2e3e;background:#22222e;color:#f0f0f8;font-size:14px;cursor:pointer">−</button>'+
-        '<div style="min-width:22px;text-align:center;font-size:13px;font-weight:700;color:#f0c060">'+(it.soldQty||0)+'</div>'+
-        '<button type="button" onclick="invFfAdjustSold(\''+safeKey+'\',1)" style="width:28px;height:28px;border-radius:7px;border:1px solid #2e2e3e;background:#22222e;color:#f0f0f8;font-size:14px;cursor:pointer">+</button>'+
-      '</div>' : '')+
+      (it.soldQty ? '<div style="font-size:10px;color:#f0c060;margin-top:6px;padding-top:6px;border-top:1px solid #2e2e3e44">🛒 продано во время пересчёта: '+it.soldQty+' шт. — изменить в разделе ниже</div>' : '')+
     '</div>';
   }).join('');
-}
-// «Продано во время пересчёта» — магазин работал, пока считали: изделие занесли, а потом продали. Такие штуки
-// вычитаются из внесённого итога при сравнении с системой (см. отчёт администратора).
-function invFfAdjustSold(key, delta){
-  var it = _invCounts[key]; if(!it) return;
-  var v = Math.max(0, Math.min(it.countedQty||0, (it.soldQty||0)+delta));
-  it.soldQty = v;
-  it.countedAt = new Date().toISOString();
-  try{
-    db.collection('iz_inventory_counts').doc(_invSession.id+'_'+key).set(it)
-      .catch(function(){ showToast('⚠️ Не отправилось в облако'); });
-  }catch(e){}
-  _invRenderFreeformTally();
 }
 function invFfAdjustQty(key, delta){
   var it = _invCounts[key]; if(!it) return;
@@ -368,6 +356,81 @@ function invFfRemoveCount(key){
   try{ db.collection('iz_inventory_counts').doc(_invSession.id+'_'+key).delete(); }catch(e){}
   _invRenderCountHeader();
   _invRenderFreeformTally();
+}
+// ── «Продано во время пересчёта» — отдельный раздел, а не поле внутри каждой карточки. Раньше строка
+// «продано» показывалась сразу под каждой только что занесённой позицией (даже с нулём) и читалась так,
+// будто система сама что-то отмечает как проданное. Теперь это отдельный поиск: находите уже ЗАНЕСЁННУЮ
+// (физически найденную) позицию и отдельно отмечаете, что её, пока считали, продали — «найдено» при этом
+// не трогается. Отметить проданным можно только то, что уже занесено в счёт.
+var _invSoldMatches = [];
+function invSoldSearchInput(v){
+  var q = (v||'').trim().toLowerCase();
+  if(!q){ _invSoldMatches=[]; _invRenderSoldSuggestions(); return; }
+  _invSoldMatches = Object.keys(_invCounts).filter(function(k){
+    var it = _invCounts[k];
+    return (it.name||'').toLowerCase().indexOf(q)>=0 || String(it.num||k).toLowerCase().indexOf(q)>=0 || (it.species||'').toLowerCase().indexOf(q)>=0;
+  }).slice(0,8);
+  _invRenderSoldSuggestions();
+}
+function _invRenderSoldSuggestions(){
+  var el = document.getElementById('invSoldSugg'); if(!el) return;
+  var q = ((document.getElementById('invSoldSearch')||{}).value||'').trim();
+  if(!_invSoldMatches.length){
+    el.style.display = q ? 'block' : 'none';
+    el.innerHTML = q ? '<div style="padding:9px 10px;font-size:11px;color:#8888aa">Не найдено среди уже занесённого — сначала занесите находку выше</div>' : '';
+    return;
+  }
+  el.style.display = 'block';
+  el.innerHTML = _invSoldMatches.map(function(k){
+    var it = _invCounts[k], safeKey = k.replace(/'/g,"\\'");
+    return '<div onclick="invSoldPick(\''+safeKey+'\')" style="padding:9px 10px;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;gap:8px">'+
+      '<div style="font-size:12px">'+(it.num?'№'+it.num+' ':'')+(it.name||'—')+(it.species?' <span style="color:#f0c060">· '+it.species+'</span>':'')+'</div>'+
+      '<div style="font-size:11px;color:#8888aa;flex-shrink:0;white-space:nowrap">найдено '+it.countedQty+(it.soldQty?' · продано '+it.soldQty:'')+'</div>'+
+    '</div>';
+  }).join('');
+}
+function invSoldKeydown(e){
+  if(!e || e.key!=='Enter') return; e.preventDefault();
+  if(_invSoldMatches.length===1){ invSoldPick(_invSoldMatches[0]); return; }
+  showToast(_invSoldMatches.length ? 'Есть несколько совпадений — выберите из списка' : 'Не найдено среди уже занесённого');
+}
+function invSoldPick(key){
+  var it = _invCounts[key]; if(!it){ showToast('Сначала занесите позицию в счёт'); return; }
+  if((it.soldQty||0) >= (it.countedQty||0)){ showToast('Нельзя отметить проданным больше, чем занесено — сначала увеличьте «найдено»'); return; }
+  it.soldQty = (it.soldQty||0)+1;
+  it.countedAt = new Date().toISOString();
+  try{
+    db.collection('iz_inventory_counts').doc(_invSession.id+'_'+key).set(it)
+      .catch(function(){ showToast('⚠️ Не отправилось в облако'); });
+  }catch(e){}
+  var input = document.getElementById('invSoldSearch'); if(input){ input.value=''; input.focus(); }
+  _invSoldMatches=[]; _invRenderSoldSuggestions(); _invRenderSoldList();
+  _invRenderFreeformTally(); renderInvCountList(); // обновить бейдж «продано» на карточке
+  showToast('🛒 '+(it.name||'—')+' — продано во время пересчёта: '+it.soldQty);
+}
+function invSoldAdjust(key, delta){
+  var it = _invCounts[key]; if(!it) return;
+  it.soldQty = Math.max(0, Math.min(it.countedQty||0, (it.soldQty||0)+delta));
+  it.countedAt = new Date().toISOString();
+  try{
+    db.collection('iz_inventory_counts').doc(_invSession.id+'_'+key).set(it)
+      .catch(function(){ showToast('⚠️ Не отправилось в облако'); });
+  }catch(e){}
+  _invRenderSoldList(); _invRenderFreeformTally(); renderInvCountList();
+}
+function _invRenderSoldList(){
+  var host = document.getElementById('invSoldList'); if(!host || !_invSession) return;
+  var keys = Object.keys(_invCounts).filter(function(k){ return (_invCounts[k].soldQty||0)>0; });
+  if(!keys.length){ host.innerHTML = '<div style="font-size:11px;color:#8888aa;padding:4px 0 6px">Пока ничего не отмечено проданным во время пересчёта.</div>'; return; }
+  host.innerHTML = keys.map(function(k){
+    var it = _invCounts[k], safeKey = k.replace(/'/g,"\\'");
+    return '<div style="border:1px solid #f0c06055;background:#1a1710;border-radius:10px;padding:8px 10px;margin-bottom:6px;display:flex;align-items:center;gap:8px">'+
+      '<div style="flex:1;min-width:0"><div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(it.num?'№'+it.num+' ':'')+(it.name||'—')+'</div><div style="font-size:10px;color:#8888aa">найдено '+it.countedQty+' шт.</div></div>'+
+      '<button type="button" onclick="invSoldAdjust(\''+safeKey+'\',-1)" style="width:28px;height:28px;border-radius:7px;border:1px solid #2e2e3e;background:#22222e;color:#f0f0f8;font-size:14px;cursor:pointer;flex-shrink:0">−</button>'+
+      '<div style="min-width:20px;text-align:center;font-size:13px;font-weight:700;color:#f0c060">'+it.soldQty+'</div>'+
+      '<button type="button" onclick="invSoldAdjust(\''+safeKey+'\',1)" style="width:28px;height:28px;border-radius:7px;border:1px solid #2e2e3e;background:#22222e;color:#f0f0f8;font-size:14px;cursor:pointer;flex-shrink:0">+</button>'+
+    '</div>';
+  }).join('');
 }
 function renderInvCountList(){
   var c = document.getElementById('invCountList'); if(!c || !_invSession) return;
@@ -415,7 +478,7 @@ function _invRenderRow(key, it, isNew){
       '<div class="fg" style="margin-bottom:8px"><label class="fl">Цена ₽</label><input class="fi" type="text" inputmode="numeric" id="invEcPrice_'+safeKey+'" value="'+(it.price||0)+'" style="margin:0;padding:7px"></div>'+
       '<button type="button" onclick="invSaveCharacteristics(\''+safeKey+'\','+(isNew?'true':'false')+')" style="width:100%;padding:8px;background:#60c8f0;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить характеристики</button>'+
     '</div>' : '')+
-    ((_invSession && _invSession.parallelSales) ? '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><span style="font-size:10.5px;color:#f0c060;flex:1">🛒 продано во время пересчёта, шт</span><input class="fi" type="number" inputmode="decimal" id="invSold_'+safeKey+'" placeholder="0" value="'+(counted&&counted.soldQty?counted.soldQty:'')+'" style="width:70px;margin:0;padding:6px" min="0"></div>' : '')+
+    ((counted && counted.soldQty) ? '<div style="font-size:10px;color:#f0c060;margin-bottom:6px">🛒 продано во время пересчёта: '+counted.soldQty+' шт. — изменить в разделе ниже</div>' : '')+
     '<div style="display:flex;gap:6px;align-items:center">'+
       '<input class="fi" type="number" inputmode="decimal" id="invQty_'+safeKey+'" placeholder="Кол-во" value="'+(counted?counted.countedQty:'')+'" style="flex:1;margin:0;padding:8px" min="0">'+
       '<button type="button" onclick="invSaveCount(\''+safeKey+'\','+(isNew?'true':'false')+')" style="padding:8px 14px;background:#c8f060;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Сохранить</button>'+
@@ -508,8 +571,10 @@ function invSaveCount(key, isNew){
     countedQty:qty, countedBy:(session.sellerName||session.name||'—'), countedAt:new Date().toISOString(),
     isNew:!!isNew
   };
-  var _soldEl = document.getElementById('invSold_'+key);
-  if(_soldEl){ var sq = parseFloat(_soldEl.value)||0; if(sq>0) rec.soldQty = Math.min(sq, qty); }
+  // «Продано во время пересчёта» правится отдельно (раздел ниже), а не тут — просто переносим уже
+  // отмеченное значение на пересохранённую запись, ужимая при необходимости под новое «найдено».
+  var prevSold = (_invCounts[key]||{}).soldQty;
+  if(prevSold) rec.soldQty = Math.min(prevSold, qty);
   _invCounts[key] = rec;
   try{
     db.collection('iz_inventory_counts').doc(_invSession.id+'_'+key).set(rec)
