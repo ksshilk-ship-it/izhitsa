@@ -859,6 +859,7 @@ function _invAdmRender(){
         '<button type="button" onclick="invAdmContinue(\''+x.id+'\')" style="padding:6px 9px;background:#1a1f2e;border:1px solid #60c8f0;border-radius:7px;color:#60c8f0;font-size:10.5px;font-weight:700;cursor:pointer">✍️ Добавлять / править</button>'+
         (done ? '<button type="button" onclick="invAdmSetStatus(\''+x.id+'\',\'active\')" style="padding:6px 9px;background:none;border:1px solid #f0c060;border-radius:7px;color:#f0c060;font-size:10.5px;cursor:pointer">🔓 Вернуть в работу</button>'
               : '<button type="button" onclick="invAdmSetStatus(\''+x.id+'\',\'completed\')" style="padding:6px 9px;background:none;border:1px solid #60f090;border-radius:7px;color:#60f090;font-size:10.5px;cursor:pointer">✅ Завершить</button>')+
+        '<button type="button" onclick="invAdmRevertToImport(\''+x.id+'\')" title="Занесли по ошибке или не туда — вернуть в черновик разбора списка, чтобы поправить и сохранить заново" style="padding:6px 9px;background:none;border:1px solid #a06cf055;border-radius:7px;color:#a06cf0;font-size:10.5px;cursor:pointer">↩️ Вернуть в черновик</button>'+
         '<button type="button" onclick="invAdmDeleteSession(\''+x.id+'\')" style="padding:6px 9px;background:none;border:1px solid #f0606055;border-radius:7px;color:#f06060;font-size:10.5px;cursor:pointer">🗑 Удалить</button></div>';
     }).join('')+'</div>';
   // итоги и сравнение
@@ -1001,6 +1002,46 @@ function invAdmDeleteSession(sid){
     if(!cur.sessions.length){ closeMo('invAdmMo'); } else { _invAdmRender(); }
     renderInvAdmin();
   }).catch(function(err){ showToast('❌ Не удалось удалить: '+(err&&err.message||err)); });
+}
+// Откатить уже сохранённую инвентаризацию обратно в черновик разбора списка (окно «Загрузить список») —
+// на случай, когда данные сохранили по ошибке (не туда/с ошибками) и нужно вернуться к состоянию
+// «занесла и правлю», а не заново перепечатывать всё с листа. Внесённые позиции удаляются из сохранённой
+// инвентаризации и открываются как обычный черновик разбора — магазин, дату, вид товара и любые
+// значения строк можно поправить перед повторным сохранением.
+function invAdmRevertToImport(sid){
+  var cur = _invAdmCur; var x = cur.sessions.find(function(v){ return v.id===sid; }); if(!x) return;
+  var counts = cur.counts[sid] || {};
+  var n = Object.keys(counts).length;
+  if(!confirm('Вернуть «'+(x.goodsType==='dr'?'ДР Товар':'Дерево')+'» ('+n+' поз., '+_iaEsc(cur.shopName)+', '+_iaDateRu(cur.date)+') в черновик разбора списка?\n\nВнесённые позиции будут удалены из сохранённой инвентаризации и откроются для правки в «Загрузить список» — там же можно будет поменять магазин/дату, если назначили не туда. Отменить это действие потом можно только занеся всё заново.')) return;
+  var rows = Object.keys(counts).map(function(k){
+    var r = counts[k];
+    var issues = []; if(!r.name) issues.push('нет названия'); if(!r.price) issues.push('нет цены');
+    return {num:r.num||'', name:r.name||'', species:r.species||'', price:r.price||0, qty:r.countedQty||0, sold:r.soldQty||0, issues:issues};
+  });
+  db.collection('iz_inventory_counts').where('sessionId','==',sid).get().then(function(snap){
+    var ops = [], docs = snap.docs;
+    for(var i=0;i<docs.length;i+=400){ (function(chunk){ var b=db.batch(); chunk.forEach(function(d){ b.delete(d.ref); }); ops.push(b.commit()); })(docs.slice(i,i+400)); }
+    return Promise.all(ops);
+  }).then(function(){ return db.collection('iz_inventory_sessions').doc(sid).delete(); })
+  .then(function(){
+    cur.sessions = cur.sessions.filter(function(v){ return v.id!==sid; }); delete cur.counts[sid];
+    if(!cur.sessions.length) closeMo('invAdmMo');
+    renderInvAdmin();
+    // Открываем «Загрузить список» с уже занесёнными строками и полями, взятыми из откаченной сессии —
+    // магазин/дату/тип можно тут же поправить, если раньше назначили неверно.
+    var shops = (typeof getShopNames==='function') ? getShopNames() : [];
+    var sel = document.getElementById('invImpShop');
+    if(sel){ sel.innerHTML = shops.map(function(sn){ return '<option>'+_iaEsc(sn)+'</option>'; }).join(''); sel.value = x.shopName||''; }
+    var typeEl = document.getElementById('invImpType'); if(typeEl) typeEl.value = x.goodsType||'derevo';
+    var dEl = document.getElementById('invImpDate');
+    if(dEl){ var today=new Date(); dEl.max = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0'); dEl.value = x.inventoryDate || cur.date; }
+    var whoEl = document.getElementById('invImpWho'); if(whoEl) whoEl.value = x.startedBy||'';
+    var parEl = document.getElementById('invImpParallel'); if(parEl) parEl.checked = !!x.parallelSales;
+    _invImpRows = rows;
+    closeMo('invAdmMo'); openMo('invImportMo');
+    _invImpRender(); invImpRefreshTargets(); invImpFillRefLists();
+    showToast('↩️ Возвращено в черновик — '+n+' поз., поправьте и сохраните заново');
+  }).catch(function(err){ showToast('❌ Не удалось откатить: '+(err&&err.message||err)); });
 }
 // Администратор добавляет/правит список в том же окне, где считает инвентаризатор (поиск по артикулу и названию, подсказки, ±, удалить).
 var _invAdminMode = false;
