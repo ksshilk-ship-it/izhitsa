@@ -965,7 +965,14 @@ function _invAdmRender(){
               : '<button type="button" onclick="invAdmSetStatus(\''+x.id+'\',\'completed\')" style="padding:6px 9px;background:none;border:1px solid #60f090;border-radius:7px;color:#60f090;font-size:10.5px;cursor:pointer">✅ Завершить</button>')+
         '<button type="button" onclick="invAdmRevertToImport(\''+x.id+'\')" title="Занесли по ошибке или не туда — вернуть в черновик разбора списка, чтобы поправить и сохранить заново" style="padding:6px 9px;background:none;border:1px solid #a06cf055;border-radius:7px;color:#a06cf0;font-size:10.5px;cursor:pointer">↩️ Вернуть в черновик</button>'+
         '<button type="button" onclick="invAdmDeleteSession(\''+x.id+'\')" style="padding:6px 9px;background:none;border:1px solid #f0606055;border-radius:7px;color:#f06060;font-size:10.5px;cursor:pointer">🗑 Удалить</button></div>';
-    }).join('')+'</div>';
+    }).join('')+
+    // Итого по всем сессиям сразу под списком — чтобы не искать общую сумму отдельных партий
+    // прокруткой вниз до таблицы сравнения с системой (там она тоже есть, но не видна сразу).
+    (cur.sessions.length>1 ? '<div style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 0 0;margin-top:4px;border-top:1px solid #2e2e3e;font-size:11.5px;font-weight:700">'+
+      (tw.pos ? '<div>Итого 🌳 Дерево: '+tw.pos+' поз. · '+tw.qty+' шт. · '+_iaMoney(tw.sum)+'</div>' : '')+
+      (td.pos ? '<div>Итого 🛍 ДР: '+td.pos+' поз. · '+td.qty+' шт. · '+_iaMoney(td.sum)+'</div>' : '')+
+    '</div>' : '')+
+    '</div>';
   // итоги и сравнение
   html += '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:12px;padding:8px 10px;margin-bottom:12px">'+
     '<div style="display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:6px;font-size:10px;color:#555568;padding-bottom:4px;border-bottom:1px solid #2e2e3e"><div></div><div style="color:#c8f060;font-weight:700">🌳 ДЕРЕВО</div><div style="color:#a060f0;font-weight:700">🛍 ДР ТОВАР</div></div>'+
