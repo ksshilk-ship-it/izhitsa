@@ -209,9 +209,21 @@ function _invBuildManualCatalog(){
       Object.keys(st).forEach(function(k){ var it=st[k]; if((it.goodsType||'derevo')===gt) add(it.num || (_invLooksLikeRealArt(k)?k:''), it.name, it.species, it.price); });
     });
   }catch(e){}
-  // 3) Общая база названий (каталог + когда-либо занесённые товары) — даже без привязанного
-  // артикула: пусть найдётся хотя бы название, артикул при желании впишут вручную.
-  try{ (getItemsBase()||[]).forEach(function(it){ if(!it.category || it.category===gt) add(it.num, it.name, '', it.price); }); }catch(e){}
+  // 3) Общий каталог товаров (iz_goods_dr/iz_goods_derevo — та же «База товаров» в Настройках). У ДР
+  // Товара там уже готовы артикул+цена на каждую позицию. Раньше это брали через getItemsBase(),
+  // но она для позиций из каталога СПЕЦИАЛЬНО обнуляет артикул и цену (item.num='',price=0 — у неё
+  // это для другой задачи, общего списка названий без привязки к конкретному артикулу) и вдобавок
+  // сама смешивает Дерево и ДР Товар в одну кучу (общий список названий, без разделения по виду) —
+  // из-за этого готовый артикул терялся, а подсказка показывала «без арт.», хотя он есть.
+  try{
+    var rawCatalog = (typeof getRefBook==='function') ? getRefBook(gt==='dr'?'iz_goods_dr':'iz_goods_derevo') : [];
+    rawCatalog.forEach(function(it){
+      var nm = (typeof it==='string') ? it : (it&&it.name);
+      add((it&&it.article)||'', nm, '', (it&&it.price)||0);
+    });
+  }catch(e){}
+  // Плюс когда-либо занесённые товары (просто названия, без привязки к виду — если ещё не встретились выше).
+  try{ (getItemsBase()||[]).forEach(function(it){ add(it.num, it.name, '', it.price); }); }catch(e){}
   list.sort(function(a,b){ return a.name.toLowerCase().localeCompare(b.name.toLowerCase(),'ru'); });
   _invManualCatalog = list;
 }
