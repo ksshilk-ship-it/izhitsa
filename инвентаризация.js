@@ -216,7 +216,7 @@ function _invEnterCount(){
     se.value = '';
     se.placeholder = (_invSession.mode==='freeform') ? '🔍 Артикул или название — найти и занести' : '🔍 Поиск по названию/артикулу/породе';
   }
-  ['invNewName','invNewSpecies','invNewPrice'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  ['invNewNum','invNewName','invNewSpecies','invNewPrice'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   var qtyEl = document.getElementById('invNewQty'); if(qtyEl) qtyEl.value='1';
   var sugg = document.getElementById('invFfSugg'); if(sugg){ sugg.style.display='none'; sugg.innerHTML=''; }
   var soldSe = document.getElementById('invSoldSearch'); if(soldSe) soldSe.value = '';
@@ -630,23 +630,28 @@ function invSaveNewItem(){
   if(!name){ showToast('Введите название'); return; }
   var price = parseFloat(gv('invNewPrice'))||0;
   var species = (gv('invNewSpecies')||'').trim();
+  // Артикул тут необязателен — но если он есть (например, поиск выше не нашёл его в снимке
+  // остатка на дату инвентаризации, хотя на изделии он написан), заносим именно под ним, а не
+  // через синтетический ключ по названию+цене+породе — иначе для артикульного товара расхождение
+  // с системой посчитается неверно (система сверяет по номеру, а не по названию).
+  var num = (gv('invNewNum')||'').trim();
   var qtyRaw = gv('invNewQty');
   var qty = qtyRaw==='' ? 1 : parseFloat(qtyRaw);
   if(isNaN(qty) || qty<0){ showToast('Введите найденное количество'); return; }
   var gt = _invSession.goodsType;
-  var key = _noArticleStockKey(name, price, species, gt) || ('new_'+uid());
+  var key = num || _noArticleStockKey(name, price, species, gt) || ('new_'+uid());
   var collidesWithSnapshot = !!_invSession.snapshot[key];
   if(collidesWithSnapshot){
-    // Совпало с уже существующей позицией (по имени+цене+породе) — это не новый товар, а
-    // обычный пересчёт существующей строки, иначе в отчёте она задвоится: один раз как
+    // Совпало с уже существующей позицией (по артикулу либо по имени+цене+породе) — это не новый
+    // товар, а обычный пересчёт существующей строки, иначе в отчёте она задвоится: один раз как
     // расхождение с системой, второй раз как "излишек" на всё найденное количество.
     showToast('Такая позиция уже есть в системе — записала количество туда');
   }
   var existing = _invCounts[key];
-  var finalQty = existing ? existing.countedQty + qty : qty; // повтор той же безартикульной позиции (уже в снимке или уже занесённой ранее) — суммируем, а не перезаписываем
+  var finalQty = existing ? existing.countedQty + qty : qty; // повтор той же позиции (уже в снимке или уже занесённой ранее) — суммируем, а не перезаписываем
   var rec = {
     sessionId:_invSession.id, itemKey:key,
-    num:'', name:name, price:price, species:species, size:'', goodsType:gt,
+    num:num, name:name, price:price, species:species, size:'', goodsType:gt,
     countedQty:finalQty, countedBy:(session.sellerName||session.name||'—'), countedAt:new Date().toISOString(),
     isNew: !collidesWithSnapshot
   };
@@ -655,12 +660,11 @@ function invSaveNewItem(){
     db.collection('iz_inventory_counts').doc(_invSession.id+'_'+key).set(rec)
       .catch(function(){ showToast('⚠️ Сохранено на устройстве, но не отправилось в облако'); });
   }catch(e){}
-  ['invNewName','invNewSpecies','invNewPrice'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+  ['invNewNum','invNewName','invNewSpecies','invNewPrice'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
   var qtyEl = document.getElementById('invNewQty'); if(qtyEl) qtyEl.value='1';
   _invRenderCountHeader();
   _invRenderCountBody();
   showToast('✅ '+name+' — учтено '+finalQty+' шт.');
-  showToast('✅ Добавлено: '+name);
 }
 function invGoToReport(){
   var total = Object.keys(_invSession.snapshot).length;
