@@ -950,6 +950,12 @@ function _invAdmRender(){
   }
   function row(label, a, b, opt){ opt=opt||{}; return '<div style="display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:6px;padding:6px 0;border-bottom:1px solid #22222e;font-size:12px;align-items:center'+(opt.bold?';font-weight:700':'')+'"><div style="color:'+(opt.dim?'#8888aa':'#f0f0f8')+'">'+label+'</div><div>'+a+'</div><div>'+b+'</div></div>'; }
   var noShift = !cur.shifts.length;
+  // Для инвентаризации задним числом (расшифровка бумажного листа спустя время) неизвестно, в какой
+  // именно момент дня физически нашли каждую позицию — а без этого сравнение с ВЕЧЕРОМ требует по
+  // каждой запроданной позиции гадать, успели её занести до продажи или нет. Сравнение с УТРОМ этого
+  // не требует: всё, что нашли (внесено, без вычета «продано во время пересчёта») плюс то, что в тот
+  // день продали, но так и не нашли (см. «🧾 Продажи за день» ниже) — и есть утренний остаток.
+  var allBackdated = cur.sessions.length>0 && cur.sessions.every(function(x){ return x.backdated; });
   var html = '';
   html += '<div style="font-size:11px;color:#8888aa;margin-bottom:10px">'+(who?'👤 '+_iaEsc(who)+' · ':'')+cur.sessions.length+' сесс. · '+(parallel?'🏪 магазин работал во время инвентаризации, продажи шли параллельно':'магазин не работал параллельно')+'</div>';
   // дата
@@ -982,9 +988,19 @@ function _invAdmRender(){
   html += '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:12px;padding:8px 10px;margin-bottom:12px">'+
     '<div style="display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:6px;font-size:10px;color:#555568;padding-bottom:4px;border-bottom:1px solid #2e2e3e"><div></div><div style="color:#c8f060;font-weight:700">🌳 ДЕРЕВО</div><div style="color:#a060f0;font-weight:700">🛍 ДР ТОВАР</div></div>'+
     row('Внесено по листам', _iaMoney(tw.sum)+'<div style="font-size:10px;color:#8888aa">'+tw.pos+' поз. · '+tw.qty+' шт.</div>', _iaMoney(td.sum)+'<div style="font-size:10px;color:#8888aa">'+td.pos+' поз. · '+td.qty+' шт.</div>', {bold:true})+
-    (parallel || tw.soldSum || td.soldSum ? row('− продано во время пересчёта', _iaMoney(tw.soldSum)+'<div style="font-size:10px;color:#8888aa">'+tw.sold+' шт.</div>', _iaMoney(td.soldSum)+'<div style="font-size:10px;color:#8888aa">'+td.sold+' шт.</div>', {dim:true}) : '')+
-    row('= К сравнению с системой', _iaMoney(tw.net), _iaMoney(td.net), {bold:true})+
+    (!allBackdated && (parallel || tw.soldSum || td.soldSum) ? row('− продано во время пересчёта', _iaMoney(tw.soldSum)+'<div style="font-size:10px;color:#8888aa">'+tw.sold+' шт.</div>', _iaMoney(td.soldSum)+'<div style="font-size:10px;color:#8888aa">'+td.sold+' шт.</div>', {dim:true}) : '')+
+    (allBackdated ? '' : row('= К сравнению с системой', _iaMoney(tw.net), _iaMoney(td.net), {bold:true}))+
     (noShift ? '<div style="font-size:12px;color:#f0c060;padding:10px 0">⚠️ У магазина нет смен за '+_iaDateRu(cur.date)+' — сравнивать не с чем. Проверьте дату.</div>' :
+      allBackdated ?
+        // Задним числом сравниваем ТОЛЬКО с утром — без вычета «продано во время пересчёта» и без
+        // вечера/времени: то, что нашли при пересчёте, плюс то, что в тот день продали, но так и не
+        // нашли (см. «🧾 Продажи за день»), и есть утренний остаток. Расхождение тут — это то, что
+        // либо не нашли и не видно в продажах (реальная недостача), либо нашли лишнее.
+        row('Система: утро '+_iaDateRu(cur.date), _iaMoney(sw.morn), _iaMoney(sd.morn), {dim:true})+
+        '<div style="font-size:11px;font-weight:700;color:#f0c060;margin:10px 0 2px">РАСХОЖДЕНИЕ (внесено − утро)</div>'+
+        row('без учёта продаж за день', diffCell(tw.sum, sw.morn), diffCell(td.sum, sd.morn))+
+        '<div style="font-size:10px;color:#555568;margin-top:2px">Сверьте список продаж за день ниже — то, что продано, но не найдено при пересчёте, покроет часть этого расхождения.</div>'
+      :
       row('Система: утро '+_iaDateRu(cur.date), _iaMoney(sw.morn), _iaMoney(sd.morn), {dim:true})+
       row('Система: вечер '+_iaDateRu(cur.date)+(sw.lastOpen?' (смена не закрыта — расчёт)':''), _iaMoney(sw.eve), _iaMoney(sd.eve), {dim:true})+
       '<div style="display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:6px;padding:6px 0;border-bottom:1px solid #22222e;font-size:12px;align-items:center"><div style="color:#8888aa">Система на время <input type="time" value="'+(cur.atTime||'')+'" onchange="invAdmSetTime(this.value)" style="background:#0f0f13;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;padding:3px 5px;font-size:11px;color-scheme:dark;width:88px"></div><div>'+(sw.atTime!=null?_iaMoney(sw.atTime):'<span style="color:#555568">задайте время</span>')+'</div><div>'+(sd.atTime!=null?_iaMoney(sd.atTime):'—')+'</div></div>'+
@@ -993,10 +1009,13 @@ function _invAdmRender(){
       row('с остатком на утро', diffCell(tw.net, sw.morn), diffCell(td.net, sd.morn))+
       (sw.atTime!=null?row('с остатком на '+cur.atTime, diffCell(tw.net, sw.atTime), diffCell(td.net, sd.atTime)):''))+
     '</div>';
-  html += '<div style="font-size:10.5px;color:#8888aa;margin-bottom:12px;line-height:1.45">«+» — изделий на складе фактически больше, чем в системе, «−» — меньше. Магазин работал во время пересчёта, поэтому: изделие, которое занесли, а потом продали, отмечено как «продано во время пересчёта» и вычтено из внесённого итога; сравнивайте с остатком на <b>вечер</b> (продажи и приходы дня уже учтены) либо на выбранное время.</div>';
+  html += allBackdated ?
+    '<div style="font-size:10.5px;color:#8888aa;margin-bottom:12px;line-height:1.45">«+» — изделий на складе фактически больше, чем в системе, «−» — меньше. Инвентаризация задним числом — неизвестно, в какой момент дня физически нашли каждую позицию, поэтому сравниваем только с <b>утром</b> (до любых продаж/приходов дня), без вычета «продано во время пересчёта».</div>' :
+    '<div style="font-size:10.5px;color:#8888aa;margin-bottom:12px;line-height:1.45">«+» — изделий на складе фактически больше, чем в системе, «−» — меньше. Магазин работал во время пересчёта, поэтому: изделие, которое занесли, а потом продали, отмечено как «продано во время пересчёта» и вычтено из внесённого итога; сравнивайте с остатком на <b>вечер</b> (продажи и приходы дня уже учтены) либо на выбранное время.</div>';
   // смены дня
   if(cur.shifts.length){
     html += '<div style="font-size:11px;color:#8888aa;margin-bottom:10px">Смены за день: '+cur.shifts.map(function(x){ return _iaEsc(x.sellerName||'—')+' ('+(x.openedAt?new Date(x.openedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'?')+'–'+(x.closedAt?new Date(x.closedAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'открыта')+')'; }).join('; ')+'</div>';
+    html += '<button type="button" onclick="invAdmShowDaySales()" style="padding:8px 12px;margin-bottom:12px;background:#1a1f2e;border:1px solid #60c8f0;border-radius:8px;color:#60c8f0;font-size:11px;font-weight:700;cursor:pointer">🧾 Продажи за день — занесено / не занесено</button>';
   }
   // отчёт по изделиям — только для инвентаризаций «в тот же день» (у задним числом нет остатка по количеству на дату)
   var live = cur.sessions.filter(function(x){ return !x.backdated && x.snapshot && Object.keys(x.snapshot).length; });
@@ -1245,6 +1264,45 @@ function invAdmItemReport(sessionId){
   var cur = _invAdmCur; var sx = cur.sessions.find(function(x){ return x.id===sessionId; }); if(!sx) return;
   _invSession = sx; _invCounts = cur.counts[sx.id] || {};
   openMo('invStockMo'); _invRenderReport();
+}
+// Список всех продаж за день инвентаризации с пометкой, найдена ли эта же позиция среди занесённого
+// при пересчёте — специально для сравнения с УТРОМ (см. allBackdated в _invAdmRender): то, что продано,
+// но не занесено — и есть основная часть расхождения (товар успели продать до того, как до него дошли
+// при пересчёте).
+function invAdmShowDaySales(){
+  var cur = _invAdmCur; var body = document.getElementById('invAdmBody'); if(!cur||!body) return;
+  var sales = [];
+  cur.shifts.forEach(function(sh){
+    (sh.journal||[]).forEach(function(e){
+      if(e.type!=='sale') return;
+      (e.items||[]).forEach(function(it){
+        sales.push({art:String(it.article||it.num||'').trim(), name:it.name||'', species:it.species||'', price:it.price||0, qty:it.qty||1, ts:e.ts});
+      });
+    });
+  });
+  if(!sales.length){ body.innerHTML = '<button class="btn sec" style="margin-bottom:10px" onclick="_invAdmRender()">← Назад к инвентаризации</button><div class="empty">Продаж за этот день не найдено</div>'; return; }
+  var allRows = _invAdmAllRows();
+  var byArt = {};
+  allRows.forEach(function(r){ if(r.rec.num) (byArt[r.rec.num]=byArt[r.rec.num]||[]).push(r); });
+  function noArtKey(name,species,price){ return (name||'').trim().toLowerCase()+'|'+(species||'').trim().toLowerCase()+'|'+(price||0); }
+  var byNoArt = {};
+  allRows.forEach(function(r){ if(!r.rec.num){ var k=noArtKey(r.rec.name,r.rec.species,r.rec.price); (byNoArt[k]=byNoArt[k]||[]).push(r); } });
+  sales.sort(function(a,b){ return String(a.ts||'').localeCompare(String(b.ts||'')); });
+  var foundCount=0, notFoundCount=0, notFoundSum=0;
+  var rowsHtml = sales.map(function(s){
+    var matched = s.art ? (byArt[s.art]||[]) : (byNoArt[noArtKey(s.name,s.species,s.price)]||[]);
+    var found = matched.length>0;
+    if(found) foundCount++; else { notFoundCount++; notFoundSum += (s.price||0)*(s.qty||0); }
+    var timeStr = s.ts ? new Date(s.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}) : '?';
+    return '<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #22222e;font-size:11.5px;align-items:center">'+
+      '<div style="flex:1;min-width:0"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(s.art?'№'+_iaEsc(s.art)+' ':'')+_iaEsc(s.name||'—')+(s.species?' <span style="color:#f0c060">· '+_iaEsc(s.species)+'</span>':'')+'</div><div style="font-size:10px;color:#8888aa">'+timeStr+' · '+_iaMoney(s.price)+' × '+s.qty+'</div></div>'+
+      (found ? '<span style="color:#60f090;font-size:11px;flex-shrink:0;white-space:nowrap">✅ занесено'+(matched.length>1?' ('+matched.length+')':'')+'</span>' : '<span style="color:#f0c060;font-size:11px;flex-shrink:0;white-space:nowrap">⚠️ не занесено</span>')+
+    '</div>';
+  }).join('');
+  body.innerHTML = '<button class="btn sec" style="margin-bottom:10px" onclick="_invAdmRender()">← Назад к инвентаризации</button>'+
+    '<div style="font-size:12.5px;font-weight:700;margin-bottom:4px">🧾 Продажи за '+_iaDateRu(cur.date)+'</div>'+
+    '<div style="font-size:11px;color:#8888aa;margin-bottom:10px">Всего продаж: '+sales.length+' · ✅ занесено в пересчёт: '+foundCount+' · ⚠️ не занесено: '+notFoundCount+' на '+_iaMoney(notFoundSum)+'</div>'+
+    rowsHtml;
 }
 
 // ── Загрузка списка (расшифровка рукописных листов / таблица) ──
