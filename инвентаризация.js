@@ -170,7 +170,51 @@ function _invFillRefLists(){
   var gt = _invSession ? _invSession.goodsType : 'derevo';
   var lists = _invBuildRefLists(gt, _invSession && _invSession.snapshot);
   _invNamesArr = _invSortRu(lists.names); _invSpeciesArr = _invSortRu(lists.species);
+  _invBuildManualCatalog();
 }
+// Подсказки по названию в форме «Вручную» — в отличие от простого списка названий (_invNamesArr),
+// тут сразу виден и подставляется артикул, если для этого названия он есть в остатке магазина или в
+// общей базе товаров — иначе приходится вспоминать номер наизусть или заносить без него то, что на
+// самом деле уже есть под артикулом (и потом задваивается с системной позицией).
+var _invManualCatalog = [], _invManualMatches = [];
+function _invBuildManualCatalog(){
+  var gt = _invSession ? _invSession.goodsType : 'derevo';
+  var seen = {}, list = [];
+  function add(num, name, species, price){
+    name = (name||'').trim(); if(!name) return;
+    var key = (num||'').trim()+'|'+name.toLowerCase()+'|'+(species||'').trim().toLowerCase();
+    if(seen[key]) return; seen[key]=true;
+    list.push({num:(num||'').trim(), name:name, species:(species||'').trim(), price:price||0});
+  }
+  try{ Object.keys((_invSession&&_invSession.snapshot)||{}).forEach(function(k){ var it=_invSession.snapshot[k]; add(it.num||k, it.name, it.species, it.price); }); }catch(e){}
+  try{ (getItemsBase()||[]).forEach(function(it){ if(it.num && (!it.category || it.category===gt)) add(it.num, it.name, '', it.price); }); }catch(e){}
+  list.sort(function(a,b){ return a.name.toLowerCase().localeCompare(b.name.toLowerCase(),'ru'); });
+  _invManualCatalog = list;
+}
+function invManualNameInput(v){
+  var q = (v||'').trim().toLowerCase();
+  var el = document.getElementById('invNewName_sugg'); if(!el) return;
+  if(!q){ _invManualMatches=[]; el.style.display='none'; el.innerHTML=''; return; }
+  _invManualMatches = _invManualCatalog.filter(function(it){ return it.name.toLowerCase().indexOf(q)>=0; }).slice(0,8);
+  if(!_invManualMatches.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='block';
+  el.innerHTML = _invManualMatches.map(function(it,i){
+    return '<div onmousedown="event.preventDefault();invManualPick('+i+')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;gap:8px">'+
+      '<span>'+_invEsc(it.name)+(it.species?' <span style="color:#f0c060">· '+_invEsc(it.species)+'</span>':'')+'</span>'+
+      '<span style="color:#8888aa;flex-shrink:0;white-space:nowrap">'+(it.num?'№'+_invEsc(it.num):'без арт.')+(it.price?' · '+_iaMoney(it.price):'')+'</span>'+
+    '</div>';
+  }).join('');
+}
+function invManualPick(i){
+  var it = _invManualMatches[i]; if(!it) return;
+  var numEl = document.getElementById('invNewNum'); if(numEl) numEl.value = it.num||'';
+  var nameEl = document.getElementById('invNewName'); if(nameEl) nameEl.value = it.name||'';
+  var spEl = document.getElementById('invNewSpecies'); if(spEl) spEl.value = it.species||'';
+  var prEl = document.getElementById('invNewPrice'); if(prEl && it.price) prEl.value = it.price;
+  var el = document.getElementById('invNewName_sugg'); if(el){ el.style.display='none'; el.innerHTML=''; }
+  _invManualMatches = [];
+}
+function invManualNameHide(){ setTimeout(function(){ var el=document.getElementById('invNewName_sugg'); if(el) el.style.display='none'; }, 150); }
 // То же для окна «Загрузить список» — по выбранному там магазину и виду товара (Дерево/ДР). В отличие от счёта
 // в приложении тут нет своей сессии со снепшотом остатка — поэтому подмешиваем остаток выбранного магазина
 // (getStock()[shop]) сами, тем же способом, каким invImpParse() уже сопоставляет вставленный артикул с
