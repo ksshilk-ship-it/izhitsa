@@ -1005,7 +1005,9 @@ function _invAdmRender(){
   } else {
     html += '<div style="font-size:10.5px;color:#555568;margin-bottom:12px">Сравнение по отдельным изделиям для инвентаризации задним числом не строится (остатки по количеству на прошлую дату не хранятся) — только по суммам выше.</div>';
   }
-  html += '<div style="display:flex;gap:6px;margin-bottom:8px"><input class="fi" id="invAdmFilter" placeholder="🔍 Поиск по списку внесённого..." oninput="invAdmSetFilter(this.value)" style="margin:0;padding:8px;flex:1" value="'+_iaEsc(cur.filter)+'"><button type="button" onclick="invAdmAddItem()" style="padding:8px 12px;background:#f0c060;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">➕ Позиция</button></div>';
+  html += '<div style="display:flex;gap:6px;margin-bottom:8px"><input class="fi" id="invAdmFilter" placeholder="🔍 Поиск по списку внесённого..." oninput="invAdmSetFilter(this.value)" style="margin:0;padding:8px;flex:1" value="'+_iaEsc(cur.filter)+'">'+
+    '<button type="button" onclick="invAdmToggleSummary()" title="Сводка по наименованиям — где могут быть задвоения" style="padding:8px 10px;background:'+(_invAdmSummaryMode?'#60c8f0':'none')+';border:1px solid #60c8f0;border-radius:8px;color:'+(_invAdmSummaryMode?'#0f0f13':'#60c8f0')+';font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">📊 Сводка</button>'+
+    '<button type="button" onclick="invAdmAddItem()" style="padding:8px 12px;background:#f0c060;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">➕ Позиция</button></div>';
   html += '<div id="invAdmItems"></div>';
   body.innerHTML = html;
   _invAdmRenderItems();
@@ -1015,9 +1017,54 @@ function _invAdmAllRows(){
   cur.sessions.forEach(function(x){ var m = cur.counts[x.id]||{}; Object.keys(m).forEach(function(k){ rows.push({sid:x.id, key:k, rec:m[k], gt:x.goodsType||'derevo'}); }); });
   return rows;
 }
+// «📊 Сводка» — группирует внесённое по названию, а внутри — по породе+цене, чтобы видно было
+// не 369 строк подряд, а сколько всего Браслетов и какие у них варианты. Записи с одинаковыми
+// названием+породой+ценой, которых больше одной, подсвечены — это не обязательно ошибка (могут
+// быть разные реальные артикулы с совпавшей ценой), но чаще всего именно тут прячется задвоение.
+var _invAdmSummaryMode = false;
+function invAdmToggleSummary(){ _invAdmSummaryMode = !_invAdmSummaryMode; _invAdmRender(); }
+function _invAdmRenderSummary(host, rows){
+  if(!rows.length){ host.innerHTML = '<div class="empty">Ничего не внесено</div>'; return; }
+  var byName = {};
+  rows.forEach(function(r){
+    var c = r.rec, nm = (c.name||'—').trim() || '—';
+    var g = byName[nm] || (byName[nm] = {total:0, rowsCount:0, gt:r.gt, variants:{}});
+    g.total += c.countedQty||0; g.rowsCount++;
+    var vk = (c.species||'—')+'|'+(c.price||0);
+    var v = g.variants[vk] || (g.variants[vk] = {species:c.species||'—', price:c.price||0, qty:0, count:0, nums:[]});
+    v.qty += c.countedQty||0; v.count++;
+    if(c.num) v.nums.push(c.num);
+  });
+  var names = Object.keys(byName).sort(function(a,b){
+    var da = byName[a].rowsCount>1?1:0, db = byName[b].rowsCount>1?1:0; // подозрительные (несколько записей) — наверх
+    if(da!==db) return db-da;
+    return byName[b].rowsCount - byName[a].rowsCount;
+  });
+  host.innerHTML = '<div style="font-size:10.5px;color:#8888aa;margin-bottom:6px">'+names.length+' разных наименований. ⚠️ — есть несколько отдельных записей с одинаковой породой и ценой; может быть и не ошибкой (разные артикулы с совпавшей ценой), но стоит проверить.</div>'+
+    names.map(function(nm){
+      var g = byName[nm];
+      var vks = Object.keys(g.variants).sort(function(a,b){ return g.variants[b].count-g.variants[a].count; });
+      var suspicious = vks.some(function(vk){ return g.variants[vk].count>1; });
+      var head = '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;padding-bottom:3px;border-bottom:1px solid #2e2e3e"><div style="font-size:12.5px;font-weight:700">'+(g.gt==='dr'?'🛍':'🌳')+' '+_iaEsc(nm)+(suspicious?' <span style="color:#f0c060">⚠️</span>':'')+'</div><div style="font-size:10.5px;color:#8888aa;flex-shrink:0">'+g.rowsCount+' зап. · '+g.total+' шт.</div></div>';
+      var body = vks.map(function(vk){
+        var v = g.variants[vk], dup = v.count>1;
+        var numsTxt = v.nums.length ? ('№'+v.nums.slice(0,5).join(', №')+(v.nums.length>5?'…':'')) : 'без артикула';
+        return '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0 3px 12px;font-size:11px;'+(dup?'background:#2e1a1a44;border-radius:6px':'')+'"><div style="color:'+(dup?'#f0c060':'#c8c8d8')+'">'+_iaEsc(v.species)+' · '+_iaMoney(v.price)+(dup?' · '+v.count+' зап.':'')+'</div><div style="color:#8888aa;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%">'+v.qty+' шт. · '+numsTxt+'</div></div>';
+      }).join('');
+      return head+body;
+    }).join('');
+}
 function _invAdmRenderItems(){
   var host = document.getElementById('invAdmItems'); if(!host || !_invAdmCur) return;
   var f = _invAdmCur.filter;
+  if(_invAdmSummaryMode){
+    var allRows = _invAdmAllRows().filter(function(r){
+      if(!f) return true; var c=r.rec;
+      return String(c.name||'').toLowerCase().indexOf(f)>=0 || String(c.num||'').toLowerCase().indexOf(f)>=0 || String(c.species||'').toLowerCase().indexOf(f)>=0;
+    });
+    _invAdmRenderSummary(host, allRows);
+    return;
+  }
   var rows = _invAdmAllRows().filter(function(r){
     if(!f) return true; var c=r.rec;
     return String(c.name||'').toLowerCase().indexOf(f)>=0 || String(c.num||'').toLowerCase().indexOf(f)>=0 || String(c.species||'').toLowerCase().indexOf(f)>=0;
