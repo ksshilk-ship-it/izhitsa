@@ -177,17 +177,38 @@ function _invFillRefLists(){
 // общей базе товаров — иначе приходится вспоминать номер наизусть или заносить без него то, что на
 // самом деле уже есть под артикулом (и потом задваивается с системной позицией).
 var _invManualCatalog = [], _invManualMatches = [];
+// У товара без артикула ключ в остатке — синтетический хеш по названию+цене+породе (напр.
+// «DR_свеча_вощина_sm_200»), а не настоящий номер; показывать его как «№...» — вводить в заблуждение.
+// Настоящий артикул — либо явно в поле .num, либо (для старых записей без .num) сам ключ, если он
+// выглядит как артикул, т.е. состоит только из цифр.
+function _invLooksLikeRealArt(k){ return /^[0-9]+$/.test(String(k||'').trim()); }
 function _invBuildManualCatalog(){
   var gt = _invSession ? _invSession.goodsType : 'derevo';
   var seen = {}, list = [];
   function add(num, name, species, price){
     name = (name||'').trim(); if(!name) return;
-    var key = (num||'').trim()+'|'+name.toLowerCase()+'|'+(species||'').trim().toLowerCase();
+    num = (num||'').trim();
+    var key = num+'|'+name.toLowerCase()+'|'+(species||'').trim().toLowerCase();
     if(seen[key]) return; seen[key]=true;
-    list.push({num:(num||'').trim(), name:name, species:(species||'').trim(), price:price||0});
+    list.push({num:num, name:name, species:(species||'').trim(), price:price||0});
   }
-  try{ Object.keys((_invSession&&_invSession.snapshot)||{}).forEach(function(k){ var it=_invSession.snapshot[k]; add(it.num||k, it.name, it.species, it.price); }); }catch(e){}
-  try{ (getItemsBase()||[]).forEach(function(it){ if(it.num && (!it.category || it.category===gt)) add(it.num, it.name, '', it.price); }); }catch(e){}
+  // 1) Остаток ЭТОГО магазина.
+  try{
+    var snap = (_invSession&&_invSession.snapshot)||{};
+    Object.keys(snap).forEach(function(k){ var it=snap[k]; add(it.num || (_invLooksLikeRealArt(k)?k:''), it.name, it.species, it.price); });
+  }catch(e){}
+  // 2) Остаток ВСЕХ магазинов того же вида товара — та же позиция может быть заведена под артикулом
+  // в другом магазине, даже если тут её ещё не было.
+  try{
+    var allStock = (typeof getStock==='function') ? getStock() : {};
+    Object.keys(allStock).forEach(function(shop){
+      var st = allStock[shop]||{};
+      Object.keys(st).forEach(function(k){ var it=st[k]; if((it.goodsType||'derevo')===gt) add(it.num || (_invLooksLikeRealArt(k)?k:''), it.name, it.species, it.price); });
+    });
+  }catch(e){}
+  // 3) Общая база названий (каталог + когда-либо занесённые товары) — даже без привязанного
+  // артикула: пусть найдётся хотя бы название, артикул при желании впишут вручную.
+  try{ (getItemsBase()||[]).forEach(function(it){ if(!it.category || it.category===gt) add(it.num, it.name, '', it.price); }); }catch(e){}
   list.sort(function(a,b){ return a.name.toLowerCase().localeCompare(b.name.toLowerCase(),'ru'); });
   _invManualCatalog = list;
 }
@@ -195,7 +216,7 @@ function invManualNameInput(v){
   var q = (v||'').trim().toLowerCase();
   var el = document.getElementById('invNewName_sugg'); if(!el) return;
   if(!q){ _invManualMatches=[]; el.style.display='none'; el.innerHTML=''; return; }
-  _invManualMatches = _invManualCatalog.filter(function(it){ return it.name.toLowerCase().indexOf(q)>=0; }).slice(0,8);
+  _invManualMatches = _invManualCatalog.filter(function(it){ return it.name.toLowerCase().indexOf(q)>=0; }).slice(0,15);
   if(!_invManualMatches.length){ el.style.display='none'; el.innerHTML=''; return; }
   el.style.display='block';
   el.innerHTML = _invManualMatches.map(function(it,i){
