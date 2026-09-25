@@ -187,13 +187,32 @@ var _invManualCatalog = [], _invManualMatches = [];
 function _invLooksLikeRealArt(k){ return !/^(DR_|WD_)/.test(String(k||'').trim()); }
 function _invBuildManualCatalog(){
   var gt = _invSession ? _invSession.goodsType : 'derevo';
-  var seen = {}, list = [];
+  var byNameSpecies = {}, list = [];
+  // Группируем по названию+породе, а не по названию+породе+артикулу: несколько источников подряд
+  // (остаток магазина, остаток других магазинов, каталог, когда-либо занесённые) часто говорят про
+  // ОДНУ и ту же позицию — одни знают её артикул, другие нет. Без этого «без арт.» версия той же
+  // позиции добавлялась отдельной строкой рядом с уже найденной артикульной — путаница, будто это
+  // две разные позиции. Теперь: если для этого названия+породы уже есть запись без артикула, а
+  // новая его знает — дополняем существующую, а не плодим вторую строку; если у обеих есть номер,
+  // но РАЗНЫЙ — это правда разные позиции (напр. разные артикулы под одним названием), оставляем обе.
   function add(num, name, species, price){
     name = (name||'').trim(); if(!name) return;
-    num = (num||'').trim();
-    var key = num+'|'+name.toLowerCase()+'|'+(species||'').trim().toLowerCase();
-    if(seen[key]) return; seen[key]=true;
-    list.push({num:num, name:name, species:(species||'').trim(), price:price||0});
+    num = (num||'').trim(); species = (species||'').trim();
+    var nsKey = name.toLowerCase()+'|'+species.toLowerCase();
+    var group = byNameSpecies[nsKey];
+    if(!group){ group = byNameSpecies[nsKey] = []; }
+    if(num){
+      var sameNum = group.find(function(e){ return e.num===num; });
+      if(sameNum){ if(price && !sameNum.price) sameNum.price = price; return; }
+      var blank = group.find(function(e){ return !e.num; });
+      if(blank){ blank.num = num; if(price) blank.price = price; return; }
+      var rec = {num:num, name:name, species:species, price:price||0};
+      group.push(rec); list.push(rec);
+      return;
+    }
+    if(group.length) return; // позиция уже известна (с артикулом или без) — вторую «без арт.» не добавляем
+    var rec2 = {num:'', name:name, species:species, price:price||0};
+    group.push(rec2); list.push(rec2);
   }
   // 1) Остаток ЭТОГО магазина.
   try{
