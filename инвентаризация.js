@@ -181,7 +181,10 @@ var _invManualCatalog = [], _invManualMatches = [];
 // «DR_свеча_вощина_sm_200»), а не настоящий номер; показывать его как «№...» — вводить в заблуждение.
 // Настоящий артикул — либо явно в поле .num, либо (для старых записей без .num) сам ключ, если он
 // выглядит как артикул, т.е. состоит только из цифр.
-function _invLooksLikeRealArt(k){ return /^[0-9]+$/.test(String(k||'').trim()); }
+// Синтетический ключ всегда начинается с 'DR_' или 'WD_' (см. _noArticleStockKey в Склад.js) — а вот
+// настоящий артикул совсем не обязан быть числом (бывают и буквенные, напр. «Макраме01»), поэтому
+// проверять нужно именно отсутствие этого префикса, а не «состоит только из цифр».
+function _invLooksLikeRealArt(k){ return !/^(DR_|WD_)/.test(String(k||'').trim()); }
 function _invBuildManualCatalog(){
   var gt = _invSession ? _invSession.goodsType : 'derevo';
   var seen = {}, list = [];
