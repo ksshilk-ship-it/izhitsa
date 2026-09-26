@@ -485,9 +485,17 @@ function _rbRichWoodGroup(rich, allItems, bookId, key){
       if(a==='—') return 1; if(b==='—') return -1;
       return a.toLowerCase().localeCompare(b.toLowerCase(),'ru');
     });
+    window._rbRichSpeciesOpen = window._rbRichSpeciesOpen || {};
     var body = species.map(function(sp){
       var rows = bySpecies[sp].slice().sort(function(a,b){ return (a.price||0)-(b.price||0); });
-      var spHead = '<div style="padding:7px 10px 4px;font-size:10.5px;font-weight:700;color:'+(sp==='—'?'#8888aa':'#f0c060')+'">'+(sp==='—'?'❓ Без породы':'🪵 '+sp)+' ('+rows.length+')</div>';
+      var spGid = bookId+'__richspecies__'+nm+'__'+sp;
+      var spOpen = window._rbRichSpeciesOpen[spGid]===true;
+      var spEsc = sp.replace(/'/g,"\\'");
+      var spHead = '<div onclick="toggleRichSpeciesGroup(\''+bookId+'\',\''+key+'\',\''+esc+'\',\''+spEsc+'\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:7px 10px 7px 18px">'+
+        '<span style="font-size:10.5px;font-weight:700;color:'+(sp==='—'?'#8888aa':'#f0c060')+'">'+(sp==='—'?'❓ Без породы':'🪵 '+sp)+' ('+rows.length+')</span>'+
+        '<span style="color:#8888aa;font-size:10px">'+(spOpen?'▾':'▸')+'</span>'+
+      '</div>';
+      if(!spOpen) return spHead;
       var rowsHtml = rows.map(function(item){
         var realIdx = allItems.indexOf(item);
         return '<div style="display:flex;align-items:center;gap:4px;padding:4px 10px 4px 18px">'+
@@ -507,6 +515,12 @@ function toggleRichNameGroup(bookId, key, name){
   window._rbRichNameOpen = window._rbRichNameOpen || {};
   var gid = bookId+'__richname__'+name;
   window._rbRichNameOpen[gid] = !(window._rbRichNameOpen[gid]===true);
+  renderGoodsCatalogGrouped(bookId, key);
+}
+function toggleRichSpeciesGroup(bookId, key, name, species){
+  window._rbRichSpeciesOpen = window._rbRichSpeciesOpen || {};
+  var gid = bookId+'__richspecies__'+name+'__'+species;
+  window._rbRichSpeciesOpen[gid] = !(window._rbRichSpeciesOpen[gid]===true);
   renderGoodsCatalogGrouped(bookId, key);
 }
 function _drArticleTaken(key, article, excludeIdx){
