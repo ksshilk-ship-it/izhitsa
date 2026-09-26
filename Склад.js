@@ -3749,6 +3749,123 @@ function renderDupArticleAudit(){
       '</div>';
     }).join('');
 }
+// Сводка «что когда-либо продавалось/принималось/считалось под этим названием без артикула,
+// по какой цене и какой породы» — нужна для ручного переноса старых записей в каталог (см.
+// addWoodGoodsVariant в прочее.js). Артикул у ДР Товара обязателен всегда, поэтому смотрим
+// только Дерево. Источники ровно те же три, что видит человек «в приёмках/продажах/инвентаризациях»:
+// накладные (iz_manual_invoices/iz_invoices — как в _buildUsedArticleIndex), продажи из журналов
+// всех смен (iz_shifts), и подсчёты всех инвентаризаций (iz_inventory_sessions/iz_inventory_counts).
+function _naArticleOf(it){ return String((it&&(it.num||it.article))||'').trim(); }
+function _naAddRow(byName, name, species, price, qty, source){
+  name = String(name||'').trim(); if(!name) return;
+  var g = byName[name] || (byName[name] = {total:0, variants:{}});
+  g.total += qty||0;
+  var vk = (species||'—')+'|'+(price||0);
+  var v = g.variants[vk] || (g.variants[vk] = {species:species||'—', price:price||0, qty:0, count:0, receive:0, sale:0, inventory:0});
+  v.qty += qty||0; v.count++;
+  v[source] = (v[source]||0) + 1;
+}
+function loadNoArticleAudit(){
+  var status = document.getElementById('naStatus');
+  var results = document.getElementById('naResults');
+  if(status){ status.style.display='block'; status.textContent='⏳ Собираю накладные, продажи по всем сменам и инвентаризации...'; }
+  if(results) results.innerHTML='';
+  var byName = {};
+  function scanInvoiceSnap(snap){
+    snap.forEach(function(doc){
+      var inv = doc.data();
+      if(inv.isRevaluation) return; // переоценка возвращает те же вещи — не новое наблюдение
+      if((inv.goodsType||'derevo')==='dr') return;
+      var items = inv.acceptedItems || inv.items || [];
+      items.forEach(function(it){
+        if((it.goodsType||inv.goodsType||'derevo')==='dr') return;
+        if(_naArticleOf(it)) return;
+        _naAddRow(byName, it.name, it.species, it.price, it.qty||1, 'receive');
+      });
+    });
+  }
+  var tasks = [
+    db.collection('iz_manual_invoices').get({source:'server'}).then(scanInvoiceSnap),
+    db.collection('iz_invoices').get({source:'server'}).then(scanInvoiceSnap),
+    db.collection('iz_shifts').get({source:'server'}).then(function(snap){
+      snap.forEach(function(doc){
+        var sh = doc.data();
+        (sh.journal||[]).forEach(function(e){
+          if(e.type!=='sale') return;
+          (e.items||[]).forEach(function(it){
+            if((it.goodsType||'derevo')==='dr') return;
+            if(_naArticleOf(it)) return;
+            _naAddRow(byName, it.name, it.species, it.price, it.qty||1, 'sale');
+          });
+        });
+      });
+    }),
+    db.collection('iz_inventory_sessions').get({source:'server'}).then(function(snap){
+      var sessions = snap.docs.map(function(d){ var x=d.data(); x.id=d.id; return x; })
+        .filter(function(x){ return (x.goodsType||'derevo')!=='dr'; });
+      return Promise.all(sessions.map(function(sx){
+        return db.collection('iz_inventory_counts').where('sessionId','==',sx.id).get({source:'server'}).then(function(csnap){
+          csnap.forEach(function(cd){
+            var c = cd.data();
+            if(_naArticleOf(c)) return;
+            _naAddRow(byName, c.name, c.species, c.price, c.countedQty||0, 'inventory');
+          });
+        });
+      }));
+    })
+  ];
+  var settled = false;
+  var timeoutP = new Promise(function(resolve){ setTimeout(function(){ if(!settled){ settled=true; resolve('timeout'); } }, 25000); });
+  var fetchP = Promise.all(tasks).then(function(){ if(!settled){ settled=true; } return 'ok'; })
+    .catch(function(){ if(!settled){ settled=true; } return 'error'; });
+  Promise.race([fetchP, timeoutP]).then(function(result){
+    if(status){
+      status.style.display = result==='ok' ? 'none' : 'block';
+      if(result==='timeout') status.textContent = '⚠️ Сервер не отвечает — попробуйте ещё раз';
+      else if(result==='error') status.textContent = '❌ Не удалось загрузить данные';
+    }
+    window._naData = byName;
+    window._naOpen = {};
+    _naRenderResults();
+  });
+}
+function _naToggle(name){
+  window._naOpen = window._naOpen || {};
+  window._naOpen[name] = !window._naOpen[name];
+  _naRenderResults();
+}
+function _naRenderResults(){
+  var host = document.getElementById('naResults'); if(!host) return;
+  var byName = window._naData || {};
+  var names = Object.keys(byName);
+  if(!names.length){ host.innerHTML = '<div class="empty"><div class="ei">🪵</div>Нажмите «Собрать сводку»</div>'; return; }
+  names.sort(function(a,b){ return byName[b].total-byName[a].total; });
+  host.innerHTML = '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">'+names.length+' наименований без артикула — нажмите на название, чтобы развернуть варианты породы/цены</div>'+
+    names.map(function(nm){
+      var g = byName[nm];
+      var variants = Object.keys(g.variants).map(function(k){ return g.variants[k]; }).sort(function(a,b){ return b.qty-a.qty; });
+      var open = !!(window._naOpen||{})[nm];
+      var esc = nm.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+      var head = '<div onclick="_naToggle(\''+esc+'\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:9px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:'+(open?'10px 10px 0 0':'10px')+';margin-bottom:'+(open?'0':'6px')+'">'+
+        '<div style="font-size:12px;font-weight:700">🌳 '+nm+'</div>'+
+        '<div style="font-size:10.5px;color:#8888aa;display:flex;gap:6px;align-items:center"><span>'+variants.length+' вариант'+(variants.length===1?'':(variants.length<5?'а':'ов'))+' · '+g.total+' шт.</span><span style="color:#555568">'+(open?'▾':'▸')+'</span></div>'+
+      '</div>';
+      if(!open) return head;
+      var body = '<div style="padding:2px 0 4px;margin-bottom:6px;border:1px solid #2e2e3e;border-top:none;border-radius:0 0 10px 10px;background:#13131a">'+
+        variants.map(function(v){
+          var srcParts = [];
+          if(v.receive) srcParts.push('📥×'+v.receive);
+          if(v.sale) srcParts.push('💰×'+v.sale);
+          if(v.inventory) srcParts.push('📋×'+v.inventory);
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-bottom:1px solid #22222e;font-size:11.5px">'+
+            '<div style="color:#f0f0f8">'+v.species+'</div>'+
+            '<div style="display:flex;gap:8px;align-items:center;color:#8888aa;flex-shrink:0"><span style="color:#c8f060;font-weight:700">'+Math.round(v.price).toLocaleString('ru-RU')+'₽</span><span>'+v.qty+' шт.</span><span style="font-size:10px">'+srcParts.join(' ')+'</span></div>'+
+          '</div>';
+        }).join('')+
+      '</div>';
+      return head + body;
+    }).join('');
+}
 // Запрет повторного использования номера изделия при приёмке — та же проверка вызывается из
 // всех форм, где продавец может вписать/поправить номер (новая накладная вручную, исправление
 // накладной, приём накладной от мастерской). Если индекс ещё не подгрузился (нет сети/только
