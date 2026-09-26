@@ -347,17 +347,17 @@ function invOnSearchInput(v){
 function _invRenderCountHeader(){
   var el = document.getElementById('invCountHeader');
   if(!el || !_invSession) return;
-  // Пересчёт слепой: продавцу/инвентаризатору НЕ показываем ни сколько позиций «должно быть» по системе, ни итоги в ₽,
-  // ни расхождения — только сколько позиций он сам уже занёс (чтобы не подсказывать самому себе ожидаемое число).
-  // Итоги и расхождения видит администратор (вкладка «Инвентар.») — а вот тут, в «Добавлять/править», админ сам
-  // ТРАНСКРИБИРУЕТ уже готовый бумажный лист (не считает вслепую), так что сумма ему для проверки только помогает,
-  // никакого искажения счёта тут нет — поэтому показываем сумму в ₽ именно в admin-режиме (_invAdminMode).
+  // Пересчёт слепой в одном смысле: НЕ показываем, сколько «должно быть» по системе, и расхождение с
+  // ним — это могло бы подсказать самому себе ожидаемое число во время физического счёта. Но сумму
+  // ТОГО, ЧТО САМ ЖЕ И ЗАНЁС, это не касается — это просто арифметика его собственного ввода, без
+  // утечки системных данных, и по ней человек может сверить себя (не опечатался ли в цене/количестве)
+  // ещё до того, как администратор примет итог на баланс. Поэтому сумма видна всем, а не только админу.
   var cnt = Object.keys(_invCounts).length;
   var pcs = 0, sum = 0;
   Object.keys(_invCounts).forEach(function(k){ var r=_invCounts[k]; pcs += r.countedQty||0; sum += (r.countedQty||0)*(r.price||0); });
   var dTxt = (_invSession.inventoryDate||'').split('-').reverse().join('.');
   el.innerHTML = '<div style="font-size:13px;font-weight:700">'+(_invSession.goodsType==='dr'?'🛍 ДР Товар':'🌳 Дерево')+' · '+_invSession.shopName+'</div>'+
-    '<div style="font-size:11px;color:#8888aa;margin-top:2px">'+(dTxt?'📅 '+dTxt+' · ':'')+'Занесено позиций: '+cnt+' · всего '+pcs+' шт.'+(_invAdminMode?' · '+_iaMoney(sum):'')+(_invSession.parallelSales?' · 🏪 продажи шли параллельно':'')+'</div>';
+    '<div style="font-size:11px;color:#8888aa;margin-top:2px">'+(dTxt?'📅 '+dTxt+' · ':'')+'Занесено позиций: '+cnt+' · всего '+pcs+' шт. · '+_iaMoney(sum)+(_invSession.parallelSales?' · 🏪 продажи шли параллельно':'')+'</div>';
   var soldSec = document.getElementById('invSoldSection');
   if(soldSec) soldSec.style.display = _invSession.parallelSales ? 'block' : 'none';
   if(_invSession.parallelSales) _invRenderSoldList();
