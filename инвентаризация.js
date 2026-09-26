@@ -1433,26 +1433,45 @@ function invAdmItemReport(sessionId){
 // с чего начать проверку.
 function invAdmShowItemDiscrepancies(){
   var cur = _invAdmCur; var body = document.getElementById('invAdmBody'); if(!cur||!body) return;
+  // Ключ сравнения: настоящий артикул — если он есть (и не похож на служебный синтетический ключ
+  // безартикульной позиции вида 'WD_...'/'DR_...', см. _invRealArtOf) — иначе название+порода+цена,
+  // тем же способом, каким _noArticleStockKey сама строит ключ для безартикульных товаров в остатке.
+  // Раньше тут брался СЫРОЙ ключ остатка как есть — из-за этого синтетические ключи показывались как
+  // будто настоящие артикулы ('№WD_ложка_750' и т.п.).
+  function keyFor(num, name, species, price, gt){
+    return num ? (gt+'|'+num) : (gt+'|noart|'+(name||'').trim().toLowerCase()+'|'+(species||'').trim().toLowerCase()+'|'+Math.round(price||0));
+  }
   var allRows = _invAdmAllRows();
   var byArt = {};
   allRows.forEach(function(r){
     var c = r.rec;
-    var k = c.num ? (r.gt+'|'+c.num) : (r.gt+'|noart|'+(c.name||'').trim().toLowerCase()+'|'+(c.species||'').trim().toLowerCase());
+    var k = keyFor(c.num, c.name, c.species, c.price, r.gt);
     var it = byArt[k] || (byArt[k] = {num:c.num||'', name:c.name||'—', species:c.species||'', gt:r.gt, countedQty:0, price:c.price||0});
     it.countedQty += c.countedQty||0;
   });
+  // Остаток индексируем тем же ключом (keyFor), что и занесённое при пересчёте — иначе безартикульные
+  // позиции (у которых .num пустой и напрямую по нему в остатке не найти) вообще никогда бы не
+  // совпадали с остатком, даже если по названию+породе+цене это явно одна и та же позиция.
   var stock = (typeof getStock==='function') ? (getStock()[cur.shopName]||{}) : {};
+  var stockByKey = {};
+  Object.keys(stock).forEach(function(num){
+    var si = stock[num]||{}, gt = si.goodsType||'derevo';
+    var realNum = _invRealArtOf(si, num);
+    var k = keyFor(realNum, si.name, si.species, si.price, gt);
+    var ex = stockByKey[k];
+    if(ex) ex.qty += si.qty||0; // несколько записей остатка совпали в один ключ — суммируем, не теряем
+    else stockByKey[k] = {num:realNum, name:si.name, species:si.species, price:si.price, qty:si.qty||0, gt:gt};
+  });
   var rows = Object.keys(byArt).map(function(k){
-    var it = byArt[k];
-    var stockIt = it.num ? stock[it.num] : null;
-    var sysQty = stockIt ? (stockIt.qty||0) : null; // null — такого артикула сейчас в остатке магазина нет вовсе
+    var it = byArt[k], stockIt = stockByKey[k];
+    var sysQty = stockIt ? stockIt.qty : null; // null — такой позиции сейчас в остатке магазина нет вовсе
     return {it:it, sysQty:sysQty, diff: sysQty==null ? null : (it.countedQty - sysQty)};
   });
   // Плюс то, что сейчас есть в остатке магазина, но ни разу не встретилось при пересчёте — тоже расхождение (−qty целиком).
-  Object.keys(stock).forEach(function(num){
-    var si = stock[num]||{}, gt = si.goodsType||'derevo', k = gt+'|'+num;
+  Object.keys(stockByKey).forEach(function(k){
     if(byArt[k]) return;
-    rows.push({it:{num:num, name:si.name||'—', species:si.species||'', gt:gt, countedQty:0, price:si.price||0}, sysQty:si.qty||0, diff:0-(si.qty||0)});
+    var si = stockByKey[k];
+    rows.push({it:{num:si.num, name:si.name||'—', species:si.species||'', gt:si.gt, countedQty:0, price:si.price||0}, sysQty:si.qty, diff:0-si.qty});
   });
   var mismatches = rows.filter(function(r){ return r.diff!==null && r.diff!==0; }).sort(function(a,b){ return Math.abs(b.diff)-Math.abs(a.diff); });
   var noSys = rows.filter(function(r){ return r.diff===null; });
