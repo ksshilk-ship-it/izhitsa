@@ -459,6 +459,17 @@ function addSaleItem(){
   } else if(mb&&mb.style.display!=='none'){
     name=(gv('siNameM')||'').trim(); price=parseFloat(gv('siPriceM'))||0; species=(gv('siSpeciesM')||'').trim(); qty=parseFloat(gv('siQtyM'))||1;
     if(!name){showToast('Введите наименование');return;}
+    // Продавцы вписывали в «Наименование» отсебятину, а реальное название клали во «Вкус/Состав» —
+    // список/подсказки/📋 были только рекомендацией, ничего физически не мешало. Раз название не
+    // совпадает ни с одной позицией базы — не пускаем дальше: либо выбрать из списка, либо явно
+    // завести новое (кнопка ＋), но не мимо базы.
+    var _siMbKey = _siItemGoodsType==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
+    var _siMbNorm = name.toLowerCase().trim();
+    var _siMbInCatalog = getRefBook(_siMbKey).some(function(g){ return (g.name||g).toLowerCase().trim()===_siMbNorm; });
+    if(!_siMbInCatalog){
+      showToast('⛔ «'+name+'» нет в базе наименований — выберите из списка (📋) или добавьте через ＋, если это новая позиция');
+      return;
+    }
     if(!num && _siNoArticleMode){
     } else {
       hasDiff=true; diffNote='⚠️ артикул не найден в базе';
