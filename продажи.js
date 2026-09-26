@@ -582,13 +582,18 @@ function addSaleItem(){
     // Продавцы вписывали в «Наименование» отсебятину, а реальное название клали во «Вкус/Состав» —
     // список/подсказки/📋 были только рекомендацией, ничего физически не мешало. Раз название не
     // совпадает ни с одной позицией базы — не пускаем дальше: либо выбрать из списка, либо явно
-    // завести новое (кнопка ＋), но не мимо базы.
-    var _siMbKey = _siItemGoodsType==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
-    var _siMbNorm = name.toLowerCase().trim();
-    var _siMbInCatalog = getRefBook(_siMbKey).some(function(g){ return (g.name||g).toLowerCase().trim()===_siMbNorm; });
-    if(!_siMbInCatalog){
-      showNameRequestBanner(name, species, price, _siItemGoodsType);
-      return;
+    // завести новое (кнопка ＋), но не мимо базы. Администратора это не касается: заявка летит
+    // именно ему, и это ОН чинит старые продажи с историческими артефактами в названии (вроде
+    // «?» из давних несовершенных записей) — самому себе заявку отправлять незачем.
+    var _siIsAdminSale = session && session.role==='shopadmin';
+    if(!_siIsAdminSale){
+      var _siMbKey = _siItemGoodsType==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
+      var _siMbNorm = name.toLowerCase().trim();
+      var _siMbInCatalog = getRefBook(_siMbKey).some(function(g){ return (g.name||g).toLowerCase().trim()===_siMbNorm; });
+      if(!_siMbInCatalog){
+        showNameRequestBanner(name, species, price, _siItemGoodsType);
+        return;
+      }
     }
     if(!num && _siNoArticleMode){
     } else {
