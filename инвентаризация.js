@@ -333,8 +333,17 @@ function _invEnterCount(){
   var soldSugg = document.getElementById('invSoldSugg'); if(soldSugg){ soldSugg.style.display='none'; soldSugg.innerHTML=''; }
   _invSoldMatches = [];
   _invShowStep('count');
+  _invSyncFinalizeBtnLabel();
   _invRenderCountHeader();
   _invRenderCountBody();
+}
+// Кнопка внизу означает разное для админа и для обычного человека, проводящего инвентаризацию (см.
+// invFinalizeSession): у админа она правда завершает и закрывает инвентаризацию, а у рядового
+// счётчика — только сохраняет то, что занесено, не запирая сессию; принять инвентаризацию на баланс
+// (действительно завершить) может только администратор, отдельной кнопкой в «Инвентар.».
+function _invSyncFinalizeBtnLabel(){
+  var txt = _invAdminMode ? '✅ Завершить' : '💾 Сохранить';
+  ['invFinalizeBtn1','invFinalizeBtn2'].forEach(function(id){ var el=document.getElementById(id); if(el) el.textContent = txt; });
 }
 function _invRenderCountBody(){
   if(_invSession && _invSession.mode==='freeform') _invRenderFreeformTally();
@@ -789,6 +798,7 @@ function invGoToReport(){
 function invBackToCount(){ _invShowStep('count'); renderInvCountList(); }
 function _invRenderReport(){
   _invShowStep('report');
+  _invSyncFinalizeBtnLabel();
   var snap = _invSession.snapshot;
   var shortages=[], surplus=[], matched=[];
   _invReportRows = {};
@@ -931,14 +941,23 @@ function _invApplyRowReal(row){
 }
 function invFinalizeSession(){
   if(!_invSession) return;
-  if(!confirm('Завершить инвентаризацию? Досчитать позже будет нельзя — можно будет только посмотреть итог в истории.')) return;
-  _invSession.status = 'completed';
-  _invSession.completedAt = new Date().toISOString();
-  _invSession.completedBy = session.sellerName||session.name||'—';
-  try{ db.collection('iz_inventory_sessions').doc(_invSession.id).set(_invSession); }catch(e){}
-  if(_invAdminMode){ showToast('✅ Инвентаризация завершена'); _invAdminReturn(); return; }
+  if(_invAdminMode){
+    // Админ тут правда транскрибирует готовый лист и решает сам, когда всё сверено — для него кнопка
+    // по-прежнему завершает инвентаризацию по-настоящему.
+    if(!confirm('Завершить инвентаризацию? Досчитать позже будет нельзя — можно будет только посмотреть итог в истории.')) return;
+    _invSession.status = 'completed';
+    _invSession.completedAt = new Date().toISOString();
+    _invSession.completedBy = session.sellerName||session.name||'—';
+    try{ db.collection('iz_inventory_sessions').doc(_invSession.id).set(_invSession); }catch(e){}
+    showToast('✅ Инвентаризация завершена'); _invAdminReturn(); return;
+  }
+  // Обычный человек, проводящий инвентаризацию, кнопкой внизу больше НЕ завершает её сам — только
+  // сохраняет то, что занесено (и без того уже сохранено в облако по каждой позиции сразу), не запирая
+  // сессию. Принять инвентаризацию на баланс (по-настоящему завершить) — решение администратора, кнопкой
+  // «✅ Завершить» в «Инвентар.» (invAdmSetStatus). Так человек может вернуться и поправить свои же
+  // ошибки в любой момент, пока администратор не принял итог.
   closeMo('invStockMo');
-  showToast('✅ Инвентаризация завершена');
+  showToast('💾 Сохранено — администратор проверит и примет инвентаризацию');
   _invSession = null; _invCounts = {}; _invReportRows = {};
   loadInvHomeActive();
 }
