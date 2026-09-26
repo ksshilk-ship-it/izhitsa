@@ -1674,7 +1674,11 @@ function invImpSave(){
     return;
   }
   var sid = uid();
-  var sessionDoc = {id:sid, shopName:shop, goodsType:gt, startedAt:now, startedBy:who, status:'completed', completedAt:now, completedBy:who, mode:'import',
+  // status:'active', а не 'completed' — загрузка списка сохраняет данные, но это ещё не значит, что
+  // инвентаризацию приняли на баланс. Пока не завершена явно (кнопкой у администратора в «Инвентар.»),
+  // сессия остаётся «в работе» — и, в частности, видна тому, кто считал (startedBy), в его «Незавершённые
+  // пересчёты · ▶ Продолжить» на домашнем экране, где можно посмотреть внесённое и поправить свои ошибки.
+  var sessionDoc = {id:sid, shopName:shop, goodsType:gt, startedAt:now, startedBy:who, status:'active', mode:'import',
     snapshot:{}, inventoryDate:date, parallelSales:parallel, backdated:date<ts, importedBy:(session&&(session.name||session.sellerName))||'admin'};
   var merged2 = buildMerged(sid);
   var w2 = writeCounts(sid, merged2, [db.collection('iz_inventory_sessions').doc(sid).set(sessionDoc)]);
