@@ -284,6 +284,16 @@ function renderRefbookSections(){
               '</div>'+
               '<button onclick="addDrGoodsVariant(\''+book.id+'\',\''+book.key+'\')" style="padding:9px;background:#c8f060;border:none;border-radius:8px;color:#0f0f13;font-weight:700;font-size:13px;cursor:pointer">＋ Добавить позицию</button>'+
             '</div>'
+          : book.key==='iz_goods_derevo'
+          ? '<div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;padding:8px;background:#13131a;border-radius:8px">'+
+              '<div style="font-size:10px;color:#8888aa">Новая позиция без артикула (наименование + порода + цена — артикул присвоит система)</div>'+
+              '<input class="fi" id="rbWdName_'+book.id+'" placeholder="Наименование" autocomplete="off" style="margin:0">'+
+              '<div style="display:flex;gap:8px">'+
+                '<input class="fi" id="rbWdSpecies_'+book.id+'" placeholder="Порода" autocomplete="off" style="flex:1;margin:0">'+
+                '<input class="fi" id="rbWdPrice_'+book.id+'" type="number" placeholder="Цена" style="flex:1;margin:0">'+
+              '</div>'+
+              '<button onclick="addWoodGoodsVariant(\''+book.id+'\',\''+book.key+'\')" style="padding:9px;background:#c8f060;border:none;border-radius:8px;color:#0f0f13;font-weight:700;font-size:13px;cursor:pointer">＋ Добавить позицию</button>'+
+            '</div>'
           : '<div style="display:flex;gap:8px;margin-top:8px">'+
               '<input class="fi" id="rbNew_'+book.id+'" placeholder="Новая запись" autocomplete="off" style="flex:1;margin:0">'+
               '<button onclick="addRefbookItemShop(\''+book.id+'\',\''+book.key+'\')" style="flex-shrink:0;padding:0 16px;background:#c8f060;border:none;border-radius:8px;color:#0f0f13;font-weight:700;font-size:16px;cursor:pointer">＋</button>'+
@@ -364,6 +374,7 @@ function renderGoodsCatalogGrouped(bookId, key){
   window._rbCatOpen = window._rbCatOpen || {};
   var html = '<datalist id="'+datalistId+'">'+allCatsForList.map(function(c){ return '<option value="'+c.replace(/"/g,'&quot;')+'">'; }).join('')+'</datalist>';
   var isDr = key==='iz_goods_dr';
+  var isWood = key==='iz_goods_derevo';
   catNames.forEach(function(cat){
     var list = groups[cat].slice().sort(function(a,b){
       if(isDr){
@@ -373,7 +384,7 @@ function renderGoodsCatalogGrouped(bookId, key){
       }
       var na=(a.name||a).toLowerCase(), nb=(b.name||b).toLowerCase();
       if(na!==nb) return na.localeCompare(nb,'ru');
-      return (a.price||0)-(b.price||0);
+      return ((a.species||'')).toLowerCase().localeCompare((b.species||'').toLowerCase(),'ru');
     });
     var gid = bookId+'__'+cat;
     var open = window._rbCatOpen[gid]===true;
@@ -385,12 +396,16 @@ function renderGoodsCatalogGrouped(bookId, key){
       list.forEach(function(item){
         var realIdx = items.indexOf(item);
         var name = item.name||item;
-        if(isDr){
+        // У дерева старые записи (внесённые до артикулизации) — просто название+категория, как и
+        // раньше; новые (с артикулом — заведённые через «＋ Добавить позицию» или отредактированные
+        // вручную) показывают полную карточку с породой/ценой/артикулом, как у ДР Товара.
+        if(isDr || (isWood && item.article)){
           html += '<div style="padding:8px;background:#13131a;border-radius:8px;margin-bottom:6px">'+
             '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'+
               '<input type="text" value="'+name.replace(/"/g,'&quot;')+'" placeholder="Наименование" onchange="setRefbookItemName(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="flex:1;min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:12px;padding:6px 7px">'+
               '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+realIdx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer;padding:4px;flex-shrink:0">✕</button>'+
             '</div>'+
+            (isWood ? '<input type="text" value="'+(item.species||'').replace(/"/g,'&quot;')+'" placeholder="Порода" onchange="setRefbookItemSpecies(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:100%;margin-bottom:6px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:12px;padding:6px 7px;box-sizing:border-box">' : '')+
             '<div style="display:flex;gap:6px">'+
               '<input type="number" value="'+(item.price!=null?item.price:'')+'" placeholder="Цена" onchange="setRefbookItemPrice(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:80px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px;flex-shrink:0">'+
               '<input type="text" value="'+(item.article||'').replace(/"/g,'&quot;')+'" placeholder="Артикул" onchange="setRefbookItemArticle(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:90px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px;flex-shrink:0">'+
@@ -448,6 +463,53 @@ function setRefbookItemArticle(bookId, idx, key, value){
   it.article = value;
   saveRefBookShop(key, items);
   showToast(value?'✅ Артикул: '+value:'✅ Артикул снят');
+}
+function setRefbookItemSpecies(bookId, idx, key, value){
+  var items = getRefBook(key);
+  var it = items[idx]; if(!it) return;
+  it.species = (value||'').trim();
+  saveRefBookShop(key, items);
+  showToast('✅ Порода обновлена');
+}
+// Артикул для дерева система придумывает сама (буквы названия + буквы породы + при коллизии —
+// порядковый номер) — так же, как продавец видит готовые номера у ДР Товара, только тут их не
+// приходится вводить руками: имя+порода уникальны для позиции, артикул — просто их читаемый ярлык.
+function _genWoodArticle(name, species){
+  function abbr(s, n){ return String(s||'').toUpperCase().replace(/[^А-ЯЁA-Z]/g,'').slice(0,n) || 'X'; }
+  var base = abbr(name,4)+abbr(species,3);
+  var taken = {};
+  (getRefBook('iz_goods_derevo')||[]).forEach(function(it){ if(it.article) taken[it.article.toUpperCase()]=true; });
+  if(!taken[base]) return base;
+  var i=2; while(taken[base+i]) i++;
+  return base+i;
+}
+// Позиция дерева без артикула — по факту название+порода, то же самое, что уже делает
+// _noArticleStockKey для остатка, только тут это осознанный каталог с ценой и настоящим номером,
+// а не служебный технический ключ.
+function addWoodGoodsVariant(bookId, key){
+  var nameEl = document.getElementById('rbWdName_'+bookId);
+  var speciesEl = document.getElementById('rbWdSpecies_'+bookId);
+  var priceEl = document.getElementById('rbWdPrice_'+bookId);
+  var name = (nameEl&&nameEl.value||'').trim();
+  var species = (speciesEl&&speciesEl.value||'').trim();
+  var price = parseFloat(priceEl&&priceEl.value);
+  if(!name){ showToast('Введите наименование'); return; }
+  if(!species){ showToast('Укажите породу'); return; }
+  if(!price || price<=0){ showToast('Введите цену'); return; }
+  var existing = getRefBook(key);
+  var norm = name.toLowerCase().trim(), normSp = species.toLowerCase().trim();
+  var dup = existing.find(function(c){ return (c.name||'').toLowerCase().trim()===norm && (c.species||'').toLowerCase().trim()===normSp; });
+  if(dup){ showToast('Уже есть «'+name+' · '+species+'» — артикул '+(dup.article||'—')+' ('+(dup.price||0)+'₽)'); return; }
+  var article = _genWoodArticle(name, species);
+  var items2 = getRefBook(key);
+  items2.push({id:uid(), name:name, species:species, price:price, article:article});
+  items2.sort(function(a,b){ return (a.name||'').toLowerCase().localeCompare((b.name||'').toLowerCase(),'ru'); });
+  saveRefBookShop(key, items2);
+  _clearRefbookTombstone(key, name);
+  if(nameEl) nameEl.value=''; if(speciesEl) speciesEl.value=''; if(priceEl) priceEl.value='';
+  renderRefbookItemsShop(bookId,key);
+  updateRefbookCountShop(bookId,key);
+  showToast('✅ Добавлено: '+name+' · '+species+' · '+price+'₽ · арт. '+article);
 }
 function addDrGoodsVariant(bookId, key){
   var nameEl = document.getElementById('rbDrName_'+bookId);
