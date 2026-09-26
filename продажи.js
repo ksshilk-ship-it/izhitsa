@@ -98,12 +98,68 @@ function getItemNames(goodsType){
   return Object.keys(names);
 }
 function siPickName(val){ var el=document.getElementById('siName'); if(el){el.value=val;checkItemDiff();} var box=document.getElementById('siName_sugg'); if(box) box.style.display='none'; }
-function siPickNameM(val){ var el=document.getElementById('siNameM'); if(el) el.value=val; var box=document.getElementById('siNameM_sugg'); if(box) box.style.display='none'; _siCheckVariantsM(val); }
 var _siSelectedArticleM = '';
 function _siGetDrVariants(name){
   var norm = (name||'').toLowerCase().trim();
   if(!norm) return [];
   return getRefBook('iz_goods_dr').filter(function(g){ return (g.name||'').toLowerCase().trim()===norm && g.article; });
+}
+function _siGetGoodsVariants(name, goodsType){
+  var norm = (name||'').toLowerCase().trim();
+  if(!norm) return [];
+  var key = goodsType==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
+  return getRefBook(key).filter(function(g){ return (g.name||'').toLowerCase().trim()===norm && g.article; });
+}
+// Обычный psjSuggest показывает только названия — а продавцу нужно видеть цену/артикул уже
+// при вводе имени, а не только когда у товара 2+ варианта (см. _siCheckVariantsM ниже). Тут
+// для каждого совпавшего названия подтягиваются реальные варианты из каталога (цена+артикул,
+// у дерева ещё порода), и по клику подставляются сразу — как в 📋-списке (openSaleCatalogPicker).
+function siSuggestNameM(inputId){
+  var box = document.getElementById(inputId+'_sugg');
+  if(!box) return;
+  var val = (document.getElementById(inputId)||{}).value||'';
+  val = val.trim().toLowerCase();
+  if(!val){ box.style.display='none'; box.innerHTML=''; return; }
+  var names = getItemNames(_siItemGoodsType).filter(function(s){ return s.toLowerCase().indexOf(val)!==-1; });
+  names.sort(function(a,b){
+    var ai=a.toLowerCase().indexOf(val), bi=b.toLowerCase().indexOf(val);
+    if(ai!==bi) return ai-bi;
+    return a.length-b.length;
+  });
+  names = names.slice(0,8);
+  if(!names.length){ box.style.display='none'; box.innerHTML=''; return; }
+  var isWood = _siItemGoodsType!=='dr';
+  var rows = [];
+  names.forEach(function(nm){
+    var variants = _siGetGoodsVariants(nm, _siItemGoodsType);
+    if(!variants.length){ rows.push({name:nm, price:null, article:null, species:null}); return; }
+    variants.forEach(function(v){ rows.push({name:nm, price:v.price, article:v.article, species:v.species||null}); });
+  });
+  box.innerHTML = rows.map(function(r){
+    var infoStr = r.price!=null
+      ? ' · '+Math.round(r.price).toLocaleString('ru-RU')+'₽'+(r.article?' · №'+r.article:'')+(isWood&&r.species?' · '+r.species:'')
+      : '';
+    var priceArg = r.price!=null ? r.price : 'null';
+    var artArg = r.article ? "'"+r.article.replace(/'/g,"\\'")+"'" : 'null';
+    var spArg = r.species ? "'"+r.species.replace(/'/g,"\\'")+"'" : 'null';
+    return '<div onpointerdown="event.preventDefault();siPickVariantNameM(\''+inputId+'\',\''+r.name.replace(/'/g,"\\'")+'\','+priceArg+','+artArg+','+spArg+')" '+
+      'style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px">'+
+      '<span>'+r.name+'</span><span style="color:#8888aa;font-size:11px;white-space:nowrap;flex-shrink:0">'+infoStr+'</span></div>';
+  }).join('');
+  box.style.display='block';
+}
+function siPickVariantNameM(inputId, name, price, article, species){
+  var el = document.getElementById(inputId); if(el) el.value = name;
+  var box = document.getElementById(inputId+'_sugg'); if(box) box.style.display='none';
+  if(price!=null){
+    var priceEl = document.getElementById('siPriceM'); if(priceEl){ priceEl.value = price; siCalcAmtM(); }
+  }
+  if(species){
+    var spEl = document.getElementById('siSpeciesM'); if(spEl) spEl.value = species;
+  }
+  _siSelectedArticleM = article || '';
+  var vp = document.getElementById('siVariantPicker'); if(vp) vp.style.display='none';
+  siAutoDetectAndSetType(name);
 }
 function _siCheckVariantsM(name){
   _siSelectedArticleM = '';
