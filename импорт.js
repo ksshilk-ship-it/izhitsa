@@ -747,9 +747,17 @@ function psjSuggest(inputId, list, onPick){
   var val = (document.getElementById(inputId)||{}).value||'';
   val = val.trim().toLowerCase();
   if(!val){ box.style.display='none'; box.innerHTML=''; return; }
-  var matches = list.filter(function(s){ return s.toLowerCase().indexOf(val)!==-1; });
+  // Ищем по словам, а не по всей введённой строке целиком: «свеча соты» должно находить «свеча
+  // СТОЛБИК соты» — раньше требовалось точное совпадение подряд, и слово между ними («столбик»/
+  // «куб»/«цилиндр») ломало поиск целиком.
+  var words = val.split(/\s+/).filter(Boolean);
+  var matches = list.filter(function(s){
+    var low = s.toLowerCase();
+    return words.every(function(w){ return low.indexOf(w)>=0; });
+  });
   matches.sort(function(a,b){
-    var ai = a.toLowerCase().indexOf(val), bi = b.toLowerCase().indexOf(val);
+    var la=a.toLowerCase(), lb=b.toLowerCase();
+    var ai = la.indexOf(words[0]||''), bi = lb.indexOf(words[0]||'');
     if(ai!==bi) return ai-bi;
     return a.length-b.length;
   });

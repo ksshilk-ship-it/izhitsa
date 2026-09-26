@@ -120,9 +120,16 @@ function siSuggestNameM(inputId){
   var val = (document.getElementById(inputId)||{}).value||'';
   val = val.trim().toLowerCase();
   if(!val){ box.style.display='none'; box.innerHTML=''; return; }
-  var names = getItemNames(_siItemGoodsType).filter(function(s){ return s.toLowerCase().indexOf(val)!==-1; });
+  // Ищем по словам: «свеча соты» должно находить «свеча СТОЛБИК соты» — раньше требовалось
+  // совпадение подряд всей введённой строки, и слово посередине ломало поиск.
+  var words = val.split(/\s+/).filter(Boolean);
+  var names = getItemNames(_siItemGoodsType).filter(function(s){
+    var low = s.toLowerCase();
+    return words.every(function(w){ return low.indexOf(w)>=0; });
+  });
   names.sort(function(a,b){
-    var ai=a.toLowerCase().indexOf(val), bi=b.toLowerCase().indexOf(val);
+    var la=a.toLowerCase(), lb=b.toLowerCase();
+    var ai=la.indexOf(words[0]||''), bi=lb.indexOf(words[0]||'');
     if(ai!==bi) return ai-bi;
     return a.length-b.length;
   });

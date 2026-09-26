@@ -3299,11 +3299,13 @@ function svEditSuggestName(id){
   if(!box || !input) return;
   var val = (input.value||'').trim().toLowerCase();
   if(!val){ box.style.display='none'; box.innerHTML=''; return; }
+  var words = val.split(/\s+/).filter(Boolean);
   var names = getItemsBase().map(function(it){ return it.name; }).filter(Boolean)
     .filter(function(n, idx, arr){ return arr.indexOf(n)===idx; })
-    .filter(function(n){ return n.toLowerCase().indexOf(val)>=0; });
+    .filter(function(n){ var low=n.toLowerCase(); return words.every(function(w){ return low.indexOf(w)>=0; }); });
   names.sort(function(a,b){
-    var ai=a.toLowerCase().indexOf(val), bi=b.toLowerCase().indexOf(val);
+    var la=a.toLowerCase(), lb=b.toLowerCase();
+    var ai=la.indexOf(words[0]||''), bi=lb.indexOf(words[0]||'');
     if(ai!==bi) return ai-bi;
     return a.length-b.length;
   });
