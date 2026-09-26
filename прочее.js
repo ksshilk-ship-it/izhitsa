@@ -440,18 +440,78 @@ function renderGoodsCatalogGrouped(bookId, key){
   if(isWood){
     // Два раздела: просто названия (артикул присвоит система при приёмке, или он уже с изделия
     // из мастерской) — и позиции с артикулом, который она вносит сама вручную (перенос старых
-    // записей через аудит наименований).
+    // записей через аудит наименований). У «с артикулом» группировка не по категории (Категория
+    // тут вообще не используется — раньше туда вписывали название вручную, чтобы хоть как-то
+    // сгруппировать), а по названию, и внутри названия — по породе: так у одного «Лопатка» сразу
+    // видно все породы и их варианты цены/артикула, без ручной подмены категории.
     var simple = items.filter(function(it){ return !it.article; });
     var rich = items.filter(function(it){ return !!it.article; });
     html += '<div style="font-size:12px;font-weight:700;color:#f0f0f8;margin:6px 0 2px;padding:6px 4px;border-bottom:1px solid #2e2e3e">📋 Просто наименования ('+simple.length+')</div>'+
       '<div style="font-size:10px;color:#8888aa;padding:0 4px 8px">Без артикула — присвоится системой при приёмке на магазине, либо изделие уже с артикулом из мастерской</div>'+
       renderGroup(simple, false, 'simple')+
       '<div style="font-size:12px;font-weight:700;color:#f0f0f8;margin:16px 0 2px;padding:6px 4px;border-bottom:1px solid #2e2e3e">🔢 С артикулом вручную ('+rich.length+')</div>'+
-      renderGroup(rich, true, 'rich');
+      _rbRichWoodGroup(rich, items, bookId, key);
   } else {
     html += renderGroup(items, isDr, 'main');
   }
   c.innerHTML = html;
+}
+function _rbRichWoodGroup(rich, allItems, bookId, key){
+  var byName = {};
+  rich.forEach(function(it){
+    var nm = (it.name||'').trim() || '—';
+    if(!byName[nm]) byName[nm] = [];
+    byName[nm].push(it);
+  });
+  var names = Object.keys(byName).sort(function(a,b){ return a.toLowerCase().localeCompare(b.toLowerCase(),'ru'); });
+  window._rbRichNameOpen = window._rbRichNameOpen || {};
+  return names.map(function(nm){
+    var group = byName[nm];
+    var gid = bookId+'__richname__'+nm;
+    var open = window._rbRichNameOpen[gid]===true;
+    var esc = nm.replace(/'/g,"\\'");
+    var head = '<div onclick="toggleRichNameGroup(\''+bookId+'\',\''+key+'\',\''+esc+'\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 6px;margin:10px 0 4px;background:#1a1a22;border-radius:8px">'+
+      '<span style="font-size:11px;color:#c8f060;font-weight:700;text-transform:uppercase;letter-spacing:.5px">'+nm+' ('+group.length+')</span>'+
+      '<span style="color:#8888aa;font-size:11px">'+(open?'▾':'▸')+'</span>'+
+    '</div>';
+    if(!open) return head;
+    var bySpecies = {};
+    group.forEach(function(it){
+      var sp = (it.species||'').trim() || '—';
+      if(!bySpecies[sp]) bySpecies[sp] = [];
+      bySpecies[sp].push(it);
+    });
+    var species = Object.keys(bySpecies).sort(function(a,b){
+      if(a==='—') return 1; if(b==='—') return -1;
+      return a.toLowerCase().localeCompare(b.toLowerCase(),'ru');
+    });
+    var body = species.map(function(sp){
+      var rows = bySpecies[sp].slice().sort(function(a,b){ return (a.price||0)-(b.price||0); });
+      var spHead = '<div style="padding:7px 10px 4px;font-size:10.5px;font-weight:700;color:'+(sp==='—'?'#8888aa':'#f0c060')+'">'+(sp==='—'?'❓ Без породы':'🪵 '+sp)+' ('+rows.length+')</div>';
+      var rowsHtml = rows.map(function(item){
+        var realIdx = allItems.indexOf(item);
+        return '<div style="padding:6px 10px 6px 18px;margin-bottom:4px">'+
+          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">'+
+            '<input type="text" value="'+(item.name||'').replace(/"/g,'&quot;')+'" placeholder="Наименование" onchange="setRefbookItemName(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="flex:1;min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:12px;padding:6px 7px">'+
+            '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+realIdx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer;padding:4px;flex-shrink:0">✕</button>'+
+          '</div>'+
+          '<div style="display:flex;gap:6px">'+
+            '<input type="text" value="'+(item.species||'').replace(/"/g,'&quot;')+'" placeholder="Порода" onchange="setRefbookItemSpecies(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="flex:1;min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px">'+
+            '<input type="number" value="'+(item.price!=null?item.price:'')+'" placeholder="Цена" onchange="setRefbookItemPrice(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:70px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px;flex-shrink:0">'+
+            '<input type="text" value="'+(item.article||'').replace(/"/g,'&quot;')+'" placeholder="Артикул" onchange="setRefbookItemArticle(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:80px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px;flex-shrink:0">'+
+          '</div>'+
+        '</div>';
+      }).join('');
+      return spHead + rowsHtml;
+    }).join('');
+    return head + '<div style="background:#13131a;border-radius:8px;margin-bottom:6px">'+body+'</div>';
+  }).join('');
+}
+function toggleRichNameGroup(bookId, key, name){
+  window._rbRichNameOpen = window._rbRichNameOpen || {};
+  var gid = bookId+'__richname__'+name;
+  window._rbRichNameOpen[gid] = !(window._rbRichNameOpen[gid]===true);
+  renderGoodsCatalogGrouped(bookId, key);
 }
 function _drArticleTaken(key, article, excludeIdx){
   var norm = (article||'').trim().toLowerCase();
