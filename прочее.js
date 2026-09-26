@@ -586,6 +586,17 @@ function _genWoodArticle(name, species){
 // известен заранее и вводится вручную, как у ДР Товара, плюс порода (у дерева она обязательна).
 // Системный автогенератор _genWoodArticle используется не здесь, а в приёмке (Склад.js) —
 // для простых наименований без артикула, которому система присваивает номер сама.
+// При вводе подряд нескольких экземпляров одной породы/названия по разным ценам (как «ЛопаткаОрех01
+// … 08») не нужно каждый раз перепечатывать название и породу — форма после добавления держит их,
+// сбрасывает только цену и предлагает следующий номер артикула (если он оканчивается на цифры).
+function _incrementArticle(article){
+  var m = String(article||'').match(/^(.*?)(\d+)$/);
+  if(!m) return '';
+  var prefix = m[1], digits = m[2];
+  var next = String(parseInt(digits,10)+1);
+  while(next.length < digits.length) next = '0'+next;
+  return prefix + next;
+}
 function addWoodGoodsVariant(bookId, key){
   var nameEl = document.getElementById('rbWdName_'+bookId);
   var speciesEl = document.getElementById('rbWdSpecies_'+bookId);
@@ -614,7 +625,8 @@ function addWoodGoodsVariant(bookId, key){
   items2.sort(function(a,b){ return (a.name||'').toLowerCase().localeCompare((b.name||'').toLowerCase(),'ru'); });
   saveRefBookShop(key, items2);
   _clearRefbookTombstone(key, name);
-  if(nameEl) nameEl.value=''; if(speciesEl) speciesEl.value=''; if(artEl) artEl.value=''; if(priceEl) priceEl.value='';
+  if(artEl) artEl.value=_incrementArticle(article);
+  if(priceEl){ priceEl.value=''; priceEl.focus(); }
   renderRefbookItemsShop(bookId,key);
   updateRefbookCountShop(bookId,key);
   showToast('✅ Добавлено: '+name+' · '+species+' · '+price+'₽ · арт. '+article);
@@ -642,9 +654,8 @@ function addDrGoodsVariant(bookId, key){
     items2.sort(function(a,b){ return (a.name||'').toLowerCase().localeCompare((b.name||'').toLowerCase(),'ru'); });
     saveRefBookShop(key, items2);
     _clearRefbookTombstone(key, finalName);
-    if(nameEl) nameEl.value='';
-    if(priceEl) priceEl.value='';
-    if(artEl) artEl.value='';
+    if(artEl) artEl.value=_incrementArticle(article);
+    if(priceEl){ priceEl.value=''; priceEl.focus(); }
     renderRefbookItemsShop(bookId,key);
     updateRefbookCountShop(bookId,key);
     showToast('✅ Добавлено: '+finalName+' · '+price+'₽ · арт. '+article);
