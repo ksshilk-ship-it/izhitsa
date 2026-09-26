@@ -185,6 +185,14 @@ var _invManualCatalog = [], _invManualMatches = [];
 // настоящий артикул совсем не обязан быть числом (бывают и буквенные, напр. «Макраме01»), поэтому
 // проверять нужно именно отсутствие этого префикса, а не «состоит только из цифр».
 function _invLooksLikeRealArt(k){ return !/^(DR_|WD_)/.test(String(k||'').trim()); }
+// Настоящий артикул остатка: сперва пробуем поле .num, но и ОНО само может по ошибке (в старых
+// записях) содержать синтетический ключ — раньше это никак не проверялось и такой «артикул» всё
+// равно всплывал в подсказке (напр. «№DR_свеча_столбик_-_m_300»). Проверяем оба варианта.
+function _invRealArtOf(it, k){
+  var it_num = (it&&it.num) ? String(it.num).trim() : '';
+  if(it_num && _invLooksLikeRealArt(it_num)) return it_num;
+  return _invLooksLikeRealArt(k) ? String(k||'').trim() : '';
+}
 function _invBuildManualCatalog(){
   var gt = _invSession ? _invSession.goodsType : 'derevo';
   var byNameSpecies = {}, list = [];
@@ -214,31 +222,34 @@ function _invBuildManualCatalog(){
     var rec2 = {num:'', name:name, species:species, price:price||0};
     group.push(rec2); list.push(rec2);
   }
-  // 1) Остаток ЭТОГО магазина.
-  try{
-    var snap = (_invSession&&_invSession.snapshot)||{};
-    Object.keys(snap).forEach(function(k){ var it=snap[k]; add(it.num || (_invLooksLikeRealArt(k)?k:''), it.name, it.species, it.price); });
-  }catch(e){}
-  // 2) Остаток ВСЕХ магазинов того же вида товара — та же позиция может быть заведена под артикулом
-  // в другом магазине, даже если тут её ещё не было.
-  try{
-    var allStock = (typeof getStock==='function') ? getStock() : {};
-    Object.keys(allStock).forEach(function(shop){
-      var st = allStock[shop]||{};
-      Object.keys(st).forEach(function(k){ var it=st[k]; if((it.goodsType||'derevo')===gt) add(it.num || (_invLooksLikeRealArt(k)?k:''), it.name, it.species, it.price); });
-    });
-  }catch(e){}
-  // 3) Общий каталог товаров (iz_goods_dr/iz_goods_derevo — та же «База товаров» в Настройках). У ДР
-  // Товара там уже готовы артикул+цена на каждую позицию. Раньше это брали через getItemsBase(),
-  // но она для позиций из каталога СПЕЦИАЛЬНО обнуляет артикул и цену (item.num='',price=0 — у неё
-  // это для другой задачи, общего списка названий без привязки к конкретному артикулу) и вдобавок
-  // сама смешивает Дерево и ДР Товар в одну кучу (общий список названий, без разделения по виду) —
-  // из-за этого готовый артикул терялся, а подсказка показывала «без арт.», хотя он есть.
+  // 1) Общий каталог товаров (iz_goods_dr/iz_goods_derevo — та же «База товаров» в Настройках) — идёт
+  // ПЕРВЫМ и потому в приоритете по цене: это осознанно поддерживаемый прайс, а не то, что могло
+  // устареть в остатке (см. ниже — цена в остатке магазина иногда расходится с базой). add() всё
+  // равно не даёт каталогу перезаписать цену, если для этого артикула её уже кто-то выставил, так
+  // что порядок только решает, ЧЬЯ цена побеждает при расхождении, а не то, что кто-то потеряется.
+  // Раньше это брали через getItemsBase(), но она для позиций из каталога СПЕЦИАЛЬНО обнуляет
+  // артикул и цену (у неё это для другой задачи — общий список названий без привязки к артикулу)
+  // и вдобавок сама смешивает Дерево и ДР Товар в одну кучу — из-за этого готовый артикул терялся.
   try{
     var rawCatalog = (typeof getRefBook==='function') ? getRefBook(gt==='dr'?'iz_goods_dr':'iz_goods_derevo') : [];
     rawCatalog.forEach(function(it){
       var nm = (typeof it==='string') ? it : (it&&it.name);
       add((it&&it.article)||'', nm, '', (it&&it.price)||0);
+    });
+  }catch(e){}
+  // 2) Остаток ЭТОГО магазина — добавляет то, чего ещё нет в каталоге, либо доносит артикул для
+  // позиции, у которой в каталоге он почему-то не указан.
+  try{
+    var snap = (_invSession&&_invSession.snapshot)||{};
+    Object.keys(snap).forEach(function(k){ var it=snap[k]; add(_invRealArtOf(it,k), it.name, it.species, it.price); });
+  }catch(e){}
+  // 3) Остаток ВСЕХ магазинов того же вида товара — та же позиция может быть заведена под артикулом
+  // в другом магазине, даже если тут её ещё не было.
+  try{
+    var allStock = (typeof getStock==='function') ? getStock() : {};
+    Object.keys(allStock).forEach(function(shop){
+      var st = allStock[shop]||{};
+      Object.keys(st).forEach(function(k){ var it=st[k]; if((it.goodsType||'derevo')===gt) add(_invRealArtOf(it,k), it.name, it.species, it.price); });
     });
   }catch(e){}
   // Плюс когда-либо занесённые товары (просто названия, без привязки к виду — если ещё не встретились выше).
