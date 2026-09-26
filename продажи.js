@@ -300,7 +300,6 @@ function _scpPick(name, price, article, species){
   if(priceEl && price){ priceEl.value = price; siCalcAmtM(); }
   if(species){ var spEl=document.getElementById('siSpeciesM'); if(spEl) spEl.value = species; }
   _siSelectedArticleM = article || '';
-  _siCheckVariantsM(name);
   document.getElementById('saleCatalogOverlay').classList.remove('open');
   _siUpdateArticleHintM();
 }
