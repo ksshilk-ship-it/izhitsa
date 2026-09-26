@@ -4021,6 +4021,181 @@ function _naShowDetail(name, vk){
   '</div>';
   overlay.classList.add('open');
 }
+// Применение артикулов задним числом: как только в каталоге появилась позиция «название+порода
+// (+цена)» с настоящим артикулом (см. addWoodGoodsVariant/addDrGoodsVariant в прочее.js), эту же
+// связку могли уже сто раз принять/продать/списать без артикула — вручную искать и проставлять
+// артикул в каждой из этих старых записей нереально. Инструмент сканирует накладные и ЗАКРЫТЫЕ
+// смены (открытые не трогаем — их может редактировать продавец прямо сейчас), находит позиции
+// БЕЗ артикула, чьё имя+порода(+цена) точно совпадает с каталогом, и только заполняет пустое
+// поле — никогда не перезаписывает то, что уже есть. Предпросмотр обязателен перед применением.
+function _retroArtBuildLookup(){
+  var lookup = {};
+  (getRefBook('iz_goods_derevo')||[]).filter(function(c){ return c.article; }).forEach(function(c){
+    var k = 'wood|'+(c.name||'').toLowerCase().trim()+'|'+(c.species||'').toLowerCase().trim()+'|'+(c.price||0);
+    lookup[k] = c.article;
+  });
+  (getRefBook('iz_goods_dr')||[]).filter(function(c){ return c.article; }).forEach(function(c){
+    var k = 'dr|'+(c.name||'').toLowerCase().trim()+'|'+(c.price||0);
+    lookup[k] = c.article;
+  });
+  return lookup;
+}
+function _retroArtKeyFor(name, species, price, goodsType){
+  if(goodsType==='dr') return 'dr|'+String(name||'').toLowerCase().trim()+'|'+(price||0);
+  return 'wood|'+String(name||'').toLowerCase().trim()+'|'+String(species||'').toLowerCase().trim()+'|'+(price||0);
+}
+function loadRetroArticleAudit(){
+  var status = document.getElementById('raStatus');
+  var results = document.getElementById('raResults');
+  if(results) results.innerHTML='';
+  var lookup = _retroArtBuildLookup();
+  if(!Object.keys(lookup).length){
+    if(status){ status.style.display='block'; status.textContent='⚠️ В каталоге «С артикулом вручную» пока пусто — сначала занесите туда позиции'; }
+    return;
+  }
+  if(status){ status.style.display='block'; status.textContent='⏳ Ищу совпадения в накладных и закрытых сменах...'; }
+  var docUpdates = {};
+  var matchStats = {};
+  function articleOf(it){ return String((it&&(it.num||it.article))||'').trim(); }
+  function noteMatch(article, name, species, price, qty, source){
+    if(!matchStats[article]) matchStats[article]={name:name, species:species, price:price, count:0, qty:0, receive:0, sale:0, writeoff:0};
+    matchStats[article].count++;
+    matchStats[article].qty += (qty||0);
+    matchStats[article][source] = (matchStats[article][source]||0)+1;
+  }
+  function scanInvoiceDoc(doc, kind){
+    var inv = doc.data();
+    if(inv.isRevaluation || inv.status!=='accepted') return;
+    var field = inv.acceptedItems ? 'acceptedItems' : 'items';
+    var items = inv[field] || [];
+    var changes = [];
+    items.forEach(function(it, idx){
+      if(articleOf(it)) return;
+      var gt = it.goodsType || inv.goodsType || 'derevo';
+      var key = _retroArtKeyFor(it.name, it.species, it.price, gt);
+      var art = lookup[key];
+      if(!art) return;
+      changes.push({idx:idx, article:art, field:field});
+      noteMatch(art, it.name, it.species, it.price, it.qty, 'receive');
+    });
+    if(changes.length) docUpdates[kind+'_'+doc.id] = {kind:kind, id:doc.id, changes:changes};
+  }
+  function scanShiftDoc(doc){
+    var sh = doc.data();
+    if(sh.status!=='closed') return;
+    var journal = sh.journal||[];
+    var changes = [];
+    journal.forEach(function(e, eIdx){
+      if(e.type!=='sale' && e.type!=='writeoff') return;
+      (e.items||[]).forEach(function(it, iIdx){
+        if(articleOf(it)) return;
+        var gt = it.goodsType || e.goodsType || 'derevo';
+        var key = _retroArtKeyFor(it.name, it.species, it.price, gt);
+        var art = lookup[key];
+        if(!art) return;
+        changes.push({entryIdx:eIdx, itemIdx:iIdx, article:art});
+        noteMatch(art, it.name, it.species, it.price, it.qty, e.type==='sale'?'sale':'writeoff');
+      });
+    });
+    if(changes.length) docUpdates['shift_'+doc.id] = {kind:'shift', id:doc.id, changes:changes};
+  }
+  var tasks = [
+    db.collection('iz_manual_invoices').get({source:'server'}).then(function(snap){ snap.forEach(function(d){ scanInvoiceDoc(d,'manual_invoice'); }); }),
+    db.collection('iz_invoices').get({source:'server'}).then(function(snap){ snap.forEach(function(d){ scanInvoiceDoc(d,'invoice'); }); }),
+    db.collection('iz_shifts').get({source:'server'}).then(function(snap){ snap.forEach(function(d){ scanShiftDoc(d); }); })
+  ];
+  var settled = false;
+  var timeoutP = new Promise(function(resolve){ setTimeout(function(){ if(!settled){ settled=true; resolve('timeout'); } }, 30000); });
+  var fetchP = Promise.all(tasks).then(function(){ if(!settled){ settled=true; } return 'ok'; })
+    .catch(function(){ if(!settled){ settled=true; } return 'error'; });
+  Promise.race([fetchP, timeoutP]).then(function(result){
+    if(status){
+      status.style.display = result==='ok' ? 'none' : 'block';
+      if(result==='timeout') status.textContent = '⚠️ Сервер не отвечает — попробуйте ещё раз';
+      else if(result==='error') status.textContent = '❌ Не удалось загрузить данные';
+    }
+    window._retroArtPending = {docUpdates:docUpdates, matchStats:matchStats};
+    _renderRetroArtPreview();
+  });
+}
+function _renderRetroArtPreview(){
+  var host = document.getElementById('raResults'); if(!host) return;
+  var data = window._retroArtPending;
+  if(!data){ host.innerHTML=''; return; }
+  var articles = Object.keys(data.matchStats);
+  if(!articles.length){
+    host.innerHTML = '<div class="empty"><div class="ei">✅</div>Совпадений не найдено — либо все уже с артикулами, либо в каталоге нет подходящих позиций</div>';
+    return;
+  }
+  var totalRecords = articles.reduce(function(s,a){ return s+data.matchStats[a].count; },0);
+  articles.sort(function(a,b){ return data.matchStats[b].count - data.matchStats[a].count; });
+  host.innerHTML = '<div style="font-size:12px;color:#f0c060;font-weight:700;margin-bottom:8px">Найдено: '+totalRecords+' запис'+(totalRecords===1?'ь':(totalRecords<5?'и':'ей'))+' по '+articles.length+' артикул'+(articles.length===1?'у':(articles.length<5?'ам':'ам'))+'</div>'+
+    articles.map(function(art){
+      var m = data.matchStats[art];
+      var srcParts = [];
+      if(m.receive) srcParts.push('📥×'+m.receive);
+      if(m.sale) srcParts.push('💰×'+m.sale);
+      if(m.writeoff) srcParts.push('🗑️×'+m.writeoff);
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:5px;font-size:11.5px;gap:8px">'+
+        '<div><b>№'+art+'</b> — '+(m.name||'')+(m.species?' · '+m.species:'')+' · '+Math.round(m.price||0).toLocaleString('ru-RU')+'₽</div>'+
+        '<div style="color:#8888aa;flex-shrink:0;white-space:nowrap">'+m.count+' зап. · '+srcParts.join(' ')+'</div>'+
+      '</div>';
+    }).join('')+
+    '<button type="button" onclick="applyRetroArticleAudit()" style="width:100%;margin-top:10px;padding:10px;background:#c8f060;border:none;border-radius:10px;color:#0f0f13;font-size:13px;font-weight:700;cursor:pointer">✅ Применить '+totalRecords+' изменени'+(totalRecords===1?'е':(totalRecords<5?'я':'й'))+'</button>';
+}
+function applyRetroArticleAudit(){
+  var data = window._retroArtPending;
+  var docKeys = data ? Object.keys(data.docUpdates) : [];
+  if(!docKeys.length){ showToast('Нечего применять'); return; }
+  var totalRecords = Object.keys(data.matchStats).reduce(function(s,a){ return s+data.matchStats[a].count; },0);
+  if(!confirm('Проставить артикулы в '+totalRecords+' позициях ('+docKeys.length+' документов — накладные/смены)? Меняются только записи, где артикула ещё нет — существующие данные не трогаются.')) return;
+  var status = document.getElementById('raStatus');
+  if(status){ status.style.display='block'; status.textContent='⏳ Применяю...'; }
+  var applied = 0, failedDocs = 0;
+  var tasks = docKeys.map(function(dk){
+    var u = data.docUpdates[dk];
+    if(u.kind==='shift'){
+      var ref = db.collection('iz_shifts').doc(u.id);
+      return ref.get({source:'server'}).then(function(snap){
+        if(!snap.exists) return;
+        var sh = snap.data();
+        var journal = sh.journal||[];
+        u.changes.forEach(function(ch){
+          var e = journal[ch.entryIdx];
+          if(!e || !e.items || !e.items[ch.itemIdx]) return;
+          var it = e.items[ch.itemIdx];
+          if(it.num || it.article) return;
+          it.num = ch.article; it.article = ch.article;
+          applied++;
+        });
+        return ref.set(sh);
+      }).catch(function(){ failedDocs++; });
+    }
+    var col = u.kind==='manual_invoice' ? 'iz_manual_invoices' : 'iz_invoices';
+    var ref2 = db.collection(col).doc(u.id);
+    return ref2.get({source:'server'}).then(function(snap){
+      if(!snap.exists) return;
+      var inv = snap.data();
+      u.changes.forEach(function(ch){
+        var arr = inv[ch.field];
+        if(!arr || !arr[ch.idx]) return;
+        var it = arr[ch.idx];
+        if(it.num || it.article) return;
+        it.num = ch.article; it.article = ch.article;
+        applied++;
+      });
+      return ref2.set(inv);
+    }).catch(function(){ failedDocs++; });
+  });
+  Promise.all(tasks).then(function(){
+    if(status) status.style.display='none';
+    try{ logAction('RETRO_ARTICLE_APPLY', {appliedCount:applied, failedDocs:failedDocs, articles:Object.keys(data.matchStats)}); }catch(e){}
+    window._retroArtPending = null;
+    var host = document.getElementById('raResults');
+    if(host) host.innerHTML = '<div class="empty"><div class="ei">✅</div>Готово: проставлено артикулов — '+applied+(failedDocs?' · документов с ошибкой: '+failedDocs:'')+'</div>';
+    showToast('✅ Применено: '+applied+' позиций');
+  });
+}
 // Запрет повторного использования номера изделия при приёмке — та же проверка вызывается из
 // всех форм, где продавец может вписать/поправить номер (новая накладная вручную, исправление
 // накладной, приём накладной от мастерской). Если индекс ещё не подгрузился (нет сети/только
