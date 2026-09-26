@@ -348,12 +348,16 @@ function _invRenderCountHeader(){
   var el = document.getElementById('invCountHeader');
   if(!el || !_invSession) return;
   // Пересчёт слепой: продавцу/инвентаризатору НЕ показываем ни сколько позиций «должно быть» по системе, ни итоги в ₽,
-  // ни расхождения — только сколько позиций он сам уже занёс. Итоги и расхождения видит администратор (вкладка «Инвентар.»).
+  // ни расхождения — только сколько позиций он сам уже занёс (чтобы не подсказывать самому себе ожидаемое число).
+  // Итоги и расхождения видит администратор (вкладка «Инвентар.») — а вот тут, в «Добавлять/править», админ сам
+  // ТРАНСКРИБИРУЕТ уже готовый бумажный лист (не считает вслепую), так что сумма ему для проверки только помогает,
+  // никакого искажения счёта тут нет — поэтому показываем сумму в ₽ именно в admin-режиме (_invAdminMode).
   var cnt = Object.keys(_invCounts).length;
-  var pcs = Object.keys(_invCounts).reduce(function(a,k){ return a+(_invCounts[k].countedQty||0); },0);
+  var pcs = 0, sum = 0;
+  Object.keys(_invCounts).forEach(function(k){ var r=_invCounts[k]; pcs += r.countedQty||0; sum += (r.countedQty||0)*(r.price||0); });
   var dTxt = (_invSession.inventoryDate||'').split('-').reverse().join('.');
   el.innerHTML = '<div style="font-size:13px;font-weight:700">'+(_invSession.goodsType==='dr'?'🛍 ДР Товар':'🌳 Дерево')+' · '+_invSession.shopName+'</div>'+
-    '<div style="font-size:11px;color:#8888aa;margin-top:2px">'+(dTxt?'📅 '+dTxt+' · ':'')+'Занесено позиций: '+cnt+' · всего '+pcs+' шт.'+(_invSession.parallelSales?' · 🏪 продажи шли параллельно':'')+'</div>';
+    '<div style="font-size:11px;color:#8888aa;margin-top:2px">'+(dTxt?'📅 '+dTxt+' · ':'')+'Занесено позиций: '+cnt+' · всего '+pcs+' шт.'+(_invAdminMode?' · '+_iaMoney(sum):'')+(_invSession.parallelSales?' · 🏪 продажи шли параллельно':'')+'</div>';
   var soldSec = document.getElementById('invSoldSection');
   if(soldSec) soldSec.style.display = _invSession.parallelSales ? 'block' : 'none';
   if(_invSession.parallelSales) _invRenderSoldList();
