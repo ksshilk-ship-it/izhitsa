@@ -1206,6 +1206,14 @@ function _invAdmRenderSummary(host, rows){
       return head+body;
     }).join('');
 }
+// Список из сотен позиций иначе идёт одним сплошным полотном — группируем по названию, группа
+// свёрнута по умолчанию (виден только заголовок с количеством), разворачивается по клику. Пока
+// ищут — найденные группы разворачиваются сами, чтобы не кликать ещё раз.
+var _invAdmItemsOpen = {};
+function invAdmToggleItemGroup(key){
+  _invAdmItemsOpen[key] = !_invAdmItemsOpen[key];
+  _invAdmRenderItems();
+}
 function _invAdmRenderItems(){
   var host = document.getElementById('invAdmItems'); if(!host || !_invAdmCur) return;
   var f = _invAdmCur.filter;
@@ -1220,18 +1228,36 @@ function _invAdmRenderItems(){
   var rows = _invAdmAllRows().filter(function(r){
     if(!f) return true; var c=r.rec;
     return String(c.name||'').toLowerCase().indexOf(f)>=0 || String(c.num||'').toLowerCase().indexOf(f)>=0 || String(c.species||'').toLowerCase().indexOf(f)>=0;
-  }).sort(function(a,b){ return (a.gt+String(a.rec.name||'')).localeCompare(b.gt+String(b.rec.name||''),'ru'); });
-  var total = rows.length; rows = rows.slice(0,150);
+  });
   if(!rows.length){ host.innerHTML = '<div class="empty">Ничего не внесено</div>'; return; }
-  host.innerHTML = '<div style="font-size:10.5px;color:#8888aa;margin-bottom:6px">Показано '+rows.length+' из '+total+(total>rows.length?' — уточните поиск':'')+'. Количество, цену и «продано» можно исправить прямо тут.</div>'+
-    rows.map(function(r){
-      var c=r.rec, id=_iaEsc(r.sid)+'|'+_iaEsc(r.key);
-      return '<div style="display:flex;gap:6px;align-items:center;border-bottom:1px solid #22222e;padding:6px 0;font-size:11.5px">'+
-        '<div style="flex:1;min-width:0"><div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(r.gt==='dr'?'🛍':'🌳')+' '+(c.num?'№'+_iaEsc(c.num)+' ':'')+_iaEsc(c.name||'—')+'</div><div style="font-size:10px;color:#8888aa">'+_iaEsc(c.species||'')+'</div></div>'+
-        '<input type="text" inputmode="numeric" value="'+(c.price||0)+'" title="цена" onchange="invAdmEditRow(\''+id+'\',\'price\',this.value)" style="width:58px;background:#0f0f13;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;padding:4px;font-size:11px;text-align:right">'+
-        '<input type="text" inputmode="numeric" value="'+(c.countedQty||0)+'" title="кол-во" onchange="invAdmEditRow(\''+id+'\',\'countedQty\',this.value)" style="width:42px;background:#0f0f13;border:1px solid #60f09055;border-radius:6px;color:#f0f0f8;padding:4px;font-size:11px;text-align:center">'+
-        '<input type="text" inputmode="numeric" value="'+(c.soldQty||0)+'" title="продано во время пересчёта" onchange="invAdmEditRow(\''+id+'\',\'soldQty\',this.value)" style="width:38px;background:#0f0f13;border:1px solid #f0c06055;border-radius:6px;color:#f0c060;padding:4px;font-size:11px;text-align:center">'+
-        '<button type="button" onclick="invAdmDelRow(\''+id+'\')" style="background:none;border:1px solid #f0606055;border-radius:6px;color:#f06060;padding:3px 7px;cursor:pointer">✕</button></div>';
+  var groups = {}, order = [];
+  rows.forEach(function(r){
+    var nm = (r.rec.name||'—').trim();
+    var key = r.gt+'|'+nm.toLowerCase();
+    if(!groups[key]){ groups[key] = {name:nm, gt:r.gt, rows:[]}; order.push(key); }
+    groups[key].rows.push(r);
+  });
+  order.sort(function(a,b){ return (groups[a].gt+groups[a].name).toLowerCase().localeCompare((groups[b].gt+groups[b].name).toLowerCase(),'ru'); });
+  var autoOpen = !!f; // с поиском сразу разворачиваем найденное
+  host.innerHTML = '<div style="font-size:10.5px;color:#8888aa;margin-bottom:6px">'+order.length+' наименований · '+rows.length+' поз. Нажмите на название, чтобы развернуть и исправить количество/цену/«продано».</div>'+
+    order.map(function(key){
+      var g = groups[key], open = autoOpen || !!_invAdmItemsOpen[key];
+      var qty = g.rows.reduce(function(s,r){ return s+(r.rec.countedQty||0); },0);
+      var head = '<div onclick="invAdmToggleItemGroup(\''+key.replace(/'/g,"\\'")+'\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 0;border-bottom:1px solid #22222e">'+
+        '<div style="font-size:12px;font-weight:700">'+(g.gt==='dr'?'🛍':'🌳')+' '+_iaEsc(g.name)+'</div>'+
+        '<div style="font-size:10.5px;color:#8888aa;display:flex;align-items:center;gap:6px;flex-shrink:0"><span>'+g.rows.length+' поз. · '+qty+' шт.</span><span style="color:#555568">'+(open?'▾':'▸')+'</span></div>'+
+      '</div>';
+      if(!open) return head;
+      var body = g.rows.map(function(r){
+        var c=r.rec, id=_iaEsc(r.sid)+'|'+_iaEsc(r.key);
+        return '<div style="display:flex;gap:6px;align-items:center;border-bottom:1px solid #22222e;padding:6px 0 6px 16px;font-size:11.5px">'+
+          '<div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888aa">'+(c.num?'№'+_iaEsc(c.num)+' ':'')+_iaEsc(c.species||'')+'</div>'+
+          '<input type="text" inputmode="numeric" value="'+(c.price||0)+'" title="цена" onchange="invAdmEditRow(\''+id+'\',\'price\',this.value)" style="width:58px;background:#0f0f13;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;padding:4px;font-size:11px;text-align:right">'+
+          '<input type="text" inputmode="numeric" value="'+(c.countedQty||0)+'" title="кол-во" onchange="invAdmEditRow(\''+id+'\',\'countedQty\',this.value)" style="width:42px;background:#0f0f13;border:1px solid #60f09055;border-radius:6px;color:#f0f0f8;padding:4px;font-size:11px;text-align:center">'+
+          '<input type="text" inputmode="numeric" value="'+(c.soldQty||0)+'" title="продано во время пересчёта" onchange="invAdmEditRow(\''+id+'\',\'soldQty\',this.value)" style="width:38px;background:#0f0f13;border:1px solid #f0c06055;border-radius:6px;color:#f0c060;padding:4px;font-size:11px;text-align:center">'+
+          '<button type="button" onclick="invAdmDelRow(\''+id+'\')" style="background:none;border:1px solid #f0606055;border-radius:6px;color:#f06060;padding:3px 7px;cursor:pointer">✕</button></div>';
+      }).join('');
+      return head+body;
     }).join('');
 }
 function invAdmEditRow(id, field, val){
