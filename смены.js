@@ -1261,28 +1261,61 @@ function alertCard(a){
       '<button onclick="markAlertRead(\''+a.id+'\')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:4px 8px;color:#8888aa;font-size:10px;cursor:pointer;flex-shrink:0;margin-left:8px">✓ Прочитано</button>'+
     '</div>';
   }
-  var diff = a.morningDiff!=null ? a.morningDiff : a.cashDiff;
-  var title = a.type==='cash_diff' ? '⚠️ Расхождение при закрытии — '+(a.shopName||'') : '⚠️ Расхождение нала — '+(a.shopName||'');
-  var detail;
-  if(a.type==='cash_diff'){
-    detail = (a.sellerName||'')+' · итог не сошёлся на '+(diff>0?'+':'')+fmt(diff);
-  } else if(a.diffParts && a.diffParts.length){
-    detail = (a.sellerName||'')+' · '+a.diffParts.map(function(p){
-      var d = p.diff||0;
-      return p.label+': ввёл '+fmt(p.morning)+', вечер был '+fmt(p.prevEvening)+' ('+(d>0?'+':'')+fmt(d)+')';
-    }).join(' · ');
-  } else {
-    detail = (a.sellerName||'')+' · ввёл: '+fmt(a.cashMorning)+' · вечер был: '+fmt(a.prevCashEve||0)+' · разница: '+(diff>0?'+':'')+fmt(diff);
+  // Раньше зависшая смена не имела своей карточки и рисовалась через ветку «расхождение нала» ниже —
+  // выводился мусор (undefined/0₽), потому что поля у этого типа тревоги совсем другие.
+  if(a.type==='stale_shift_warning'){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #3e2e2e">'+
+      '<div><div style="font-size:12px;font-weight:700;color:#f0c060">⏳ Зависшая смена — '+(a.shopName||'')+'</div>'+
+      '<div class="u-fs11-gray">Смена '+(a.activeSellerName||'—')+' за '+(a.staleDate||'—')+' всё ещё висит открытой в облаке — возможно, не сохранилась при закрытии. '+(a.blockedSellerName||'—')+' пока не смог(ла) открыть новую</div>'+
+      '<div class="u-fs10-gray">'+(a.date||'')+'</div></div>'+
+      '<button onclick="markAlertRead(\''+a.id+'\')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:4px 8px;color:#8888aa;font-size:10px;cursor:pointer;flex-shrink:0;margin-left:8px">✓ Прочитано</button>'+
+    '</div>';
   }
+  if(a.type==='cash_diff'){
+    var diffCd = a.morningDiff!=null ? a.morningDiff : a.cashDiff;
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #3e2e2e">'+
+      '<div><div style="font-size:12px;font-weight:700;color:#f06060">💵 Расхождение при закрытии — '+(a.shopName||'')+'</div>'+
+      '<div class="u-fs11-gray">'+(a.sellerName||'')+' · итог не сошёлся на '+(diffCd>0?'+':'')+fmt(diffCd)+'</div>'+
+      '<div class="u-fs10-gray">'+(a.date||'')+'</div></div>'+
+      '<button onclick="markAlertRead(\''+a.id+'\')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:4px 8px;color:#8888aa;font-size:10px;cursor:pointer;flex-shrink:0;margin-left:8px">✓ Прочитано</button>'+
+    '</div>';
+  }
+  if(a.type==='morning_diff'){
+    var diffMd = a.morningDiff!=null ? a.morningDiff : a.cashDiff;
+    var detailMd;
+    if(a.diffParts && a.diffParts.length){
+      detailMd = a.diffParts.map(function(p){
+        var d = p.diff||0;
+        return p.label+': ввёл '+fmt(p.morning)+', вечер был '+fmt(p.prevEvening)+' ('+(d>0?'+':'')+fmt(d)+')';
+      }).join(' · ');
+    } else {
+      detailMd = 'ввёл: '+fmt(a.cashMorning)+' · вечер был: '+fmt(a.prevCashEve||0)+' · разница: '+(diffMd>0?'+':'')+fmt(diffMd);
+    }
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #3e2e2e">'+
+      '<div><div style="font-size:12px;font-weight:700;color:#f06060">💰 Расхождение нала при открытии — '+(a.shopName||'')+'</div>'+
+      '<div class="u-fs11-gray">'+(a.sellerName||'')+' · '+detailMd+'</div>'+
+      '<div class="u-fs10-gray">'+(a.date||'')+'</div></div>'+
+      '<button onclick="markAlertRead(\''+a.id+'\')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:4px 8px;color:#8888aa;font-size:10px;cursor:pointer;flex-shrink:0;margin-left:8px">✓ Прочитано</button>'+
+    '</div>';
+  }
+  // Неизвестный/будущий тип — показываем как есть, чтобы тревога не потерялась молча вместо
+  // того, чтобы тихо отрисоваться мусором через чужую ветку (как раньше было с зависшими сменами).
   return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #3e2e2e">'+
-    '<div><div style="font-size:12px;font-weight:700;color:#f06060">'+title+'</div>'+
-    '<div class="u-fs11-gray">'+detail+'</div>'+
+    '<div><div style="font-size:12px;font-weight:700;color:#f0a060">⚠️ '+(a.type||'Тревога')+' — '+(a.shopName||'')+'</div>'+
+    '<div class="u-fs11-gray">'+(a.sellerName||'')+'</div>'+
     '<div class="u-fs10-gray">'+(a.date||'')+'</div></div>'+
     '<button onclick="markAlertRead(\''+a.id+'\')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:4px 8px;color:#8888aa;font-size:10px;cursor:pointer;flex-shrink:0;margin-left:8px">✓ Прочитано</button>'+
   '</div>';
 }
 var _alertsShopFilter = '';
-function _setAlertOpen(key,val){if(!window._alertsOpen)window._alertsOpen={};window._alertsOpen[key]=val;}
+var ALERT_TYPE_DEFS = [
+  {type:'name_request', icon:'📨', title:'Заявки на наименования', hint:'Продавец пытался продать товар, которого нет в базе, — одобрите или отклоните'},
+  {type:'cash_diff', icon:'💵', title:'Расхождения при закрытии смены', hint:'Не сошёлся итог кассы — сверьте с продавцом, отметьте прочитанным, когда разобрались'},
+  {type:'morning_diff', icon:'💰', title:'Расхождения нала при открытии', hint:'Продавец ввёл сумму, не совпадающую с вечером прошлой смены'},
+  {type:'shift_conflict', icon:'⛔', title:'Конфликты смен', hint:'Кто-то пытался открыть уже открытую смену — доступ не дали, это просто к сведению'},
+  {type:'stale_shift_warning', icon:'⏳', title:'Зависшие смены', hint:'Смена за прошлый день осталась открытой в облаке — стоит проверить, не потерялось ли закрытие'},
+  {type:'zp_no_travel', icon:'🚕', title:'ЗП без отдельного проезда', hint:'Продавец закрыл смену, не выделив проезд отдельной строкой'}
+];
 function renderAlertsPage(){
   var c=document.getElementById('alertsPageContent'); if(!c) return;
   var fc=document.getElementById('alertsShopFilter');
@@ -1312,49 +1345,27 @@ function renderAlertsPage(){
     c.innerHTML='<div style="text-align:center;padding:20px;color:#8888aa">Нет тревог для выбранного магазина</div>';
     return;
   }
-  var grouped={};
-  alerts.forEach(function(a){
-    var s=a.shopName||'Без магазина';
-    if(!grouped[s]) grouped[s]=[];
-    grouped[s].push(a);
-  });
-  var sortedShops=Object.keys(grouped).sort();
-  if(!window._alertsOpen) window._alertsOpen={};
-  c.innerHTML=sortedShops.map(function(shop){
-    var shopAlerts=grouped[shop];
-    shopAlerts.sort(function(a,b){return (b.createdAt||b.date||'').localeCompare(a.createdAt||a.date||'');});
-    var byDate={};
-    shopAlerts.forEach(function(a){var d=a.date||'—';if(!byDate[d])byDate[d]=[];byDate[d].push(a);});
-    var sortedDates=Object.keys(byDate).sort(function(a,b){return b.localeCompare(a);});
-    var shopKey='shop_'+shop;
-    var shopOpen=window._alertsOpen[shopKey]!==false;
-    var shopCount=shopAlerts.length;
-    var datesHtml=sortedDates.map(function(date){
-      var dateAlerts=byDate[date];
-      var dateKey='date_'+shop+'_'+date;
-      var dateOpen=window._alertsOpen[dateKey]!==false;
-      return '<div style="margin-bottom:6px">'+
-        '<div onpointerdown="event.preventDefault();_setAlertOpen(\''+dateKey+'\','+(!dateOpen)+');renderAlertsPage()" '+
-          'style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#22222e;border-radius:8px;cursor:pointer;margin-bottom:'+(dateOpen?'4px':'0')+'">'+
-          '<span style="font-size:11px;color:#8888aa;font-weight:700">'+date+'</span>'+
-          '<div style="display:flex;align-items:center;gap:6px">'+
-            '<span style="background:#f06060;color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700">'+dateAlerts.length+'</span>'+
-            '<span style="color:#8888aa;font-size:11px">'+(dateOpen?'▾':'▸')+'</span>'+
-          '</div>'+
-        '</div>'+
-        (dateOpen?'<div style="background:#1a0f0f;border:1px solid #3e1e1e;border-radius:10px;padding:0 10px">'+dateAlerts.map(alertCard).join('')+'</div>':'')+
-      '</div>';
-    }).join('');
-    return '<div style="margin-bottom:14px">'+
-      '<div onpointerdown="event.preventDefault();_setAlertOpen(\''+shopKey+'\','+(!shopOpen)+');renderAlertsPage()" '+
-        'style="display:flex;justify-content:space-between;align-items:center;padding:7px 2px;cursor:pointer;margin-bottom:'+(shopOpen?'6px':'0')+'">'+
-        '<span style="font-size:12px;font-weight:700;color:#f0f0f8;text-transform:uppercase;letter-spacing:.5px">'+shop+'</span>'+
-        '<div style="display:flex;align-items:center;gap:6px">'+
-          '<span style="background:#f06060;color:#fff;border-radius:10px;padding:1px 8px;font-size:10px;font-weight:700">'+shopCount+'</span>'+
-          '<span style="color:#8888aa;font-size:13px">'+(shopOpen?'▾':'▸')+'</span>'+
-        '</div>'+
+  // Раньше группировали по магазину → дате, вложенными сворачиваемыми блоками — чтобы понять,
+  // что вообще случилось и что с этим делать, приходилось разворачивать каждый уровень. Теперь
+  // группируем по ТИПУ тревоги — сразу видно, сколько чего и что за тип, с пояснением под
+  // заголовком; заявки на наименования всегда первым блоком, чтобы не терялись среди прочего.
+  // Магазин/дата у каждой тревоги остаются — просто показаны прямо в карточке, не отдельным уровнем.
+  var byType={};
+  alerts.forEach(function(a){ var t=a.type||'other'; if(!byType[t]) byType[t]=[]; byType[t].push(a); });
+  var order = ALERT_TYPE_DEFS.map(function(d){ return d.type; });
+  var knownTypes = {}; order.forEach(function(t){ knownTypes[t]=true; });
+  Object.keys(byType).forEach(function(t){ if(!knownTypes[t]) order.push(t); });
+  var defByType = {}; ALERT_TYPE_DEFS.forEach(function(d){ defByType[d.type]=d; });
+  c.innerHTML = order.filter(function(t){ return byType[t] && byType[t].length; }).map(function(t){
+    var def = defByType[t] || {icon:'⚠️', title:t, hint:''};
+    var items = byType[t].slice().sort(function(a,b){ return (b.createdAt||b.date||'').localeCompare(a.createdAt||a.date||''); });
+    return '<div style="margin-bottom:16px">'+
+      '<div style="display:flex;align-items:center;gap:7px;margin-bottom:2px">'+
+        '<span style="font-size:12px;font-weight:700;color:#f0f0f8;text-transform:uppercase;letter-spacing:.5px">'+def.icon+' '+def.title+'</span>'+
+        '<span style="background:#f06060;color:#fff;border-radius:10px;padding:1px 8px;font-size:10px;font-weight:700">'+items.length+'</span>'+
       '</div>'+
-      (shopOpen?datesHtml:'')+
+      (def.hint ? '<div style="font-size:10.5px;color:#8888aa;margin-bottom:6px">'+def.hint+'</div>' : '')+
+      '<div style="background:#1a0f0f;border:1px solid #3e1e1e;border-radius:10px;padding:0 10px">'+items.map(alertCard).join('')+'</div>'+
     '</div>';
   }).join('');
 }
