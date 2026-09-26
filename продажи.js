@@ -64,7 +64,7 @@ function siAddToSpecies(inputId){
 }
 function setSiItemType(type, preserveName){
   _siItemGoodsType = type;
-  if(!preserveName){ _siSelectedArticleM=''; var vp=document.getElementById('siVariantPicker'); if(vp) vp.style.display='none'; }
+  if(!preserveName){ _siSelectedArticleM=''; var vp=document.getElementById('siVariantPicker'); if(vp) vp.style.display='none'; _siSetArticleHint(''); }
   var lbl = document.getElementById('siSpeciesLabel');
   var inp = document.getElementById('siSpecies');
   var inpM = document.getElementById('siSpeciesM');
@@ -160,6 +160,33 @@ function siPickVariantNameM(inputId, name, price, article, species){
   _siSelectedArticleM = article || '';
   var vp = document.getElementById('siVariantPicker'); if(vp) vp.style.display='none';
   siAutoDetectAndSetType(name);
+  _siUpdateArticleHintM();
+}
+// Продавец выбирает наименование (подсказка при вводе, список 📋 или подбор варианта) — но сам
+// артикул при этом нигде не виден до нажатия «Добавить в чек», поэтому непонятно, подтянулся ли
+// он вообще. Этот бейдж явно показывает совпадение с каталогом, а логика ниже — та же, что
+// реально сработает при добавлении в чек (см. addSaleItem): у ДР различают по цене, у Дерева —
+// по породе, потому что так устроены сами каталоги (Дерево хранит породу, ДР — нет).
+function _siSetArticleHint(article){
+  var hint = document.getElementById('siArtHintM');
+  if(!hint) return;
+  if(article){ hint.style.display='block'; hint.textContent='✅ Артикул из базы: №'+article; }
+  else { hint.style.display='none'; hint.textContent=''; }
+}
+function _siUpdateArticleHintM(){
+  var name = (document.getElementById('siNameM')||{}).value||'';
+  var price = parseFloat((document.getElementById('siPriceM')||{}).value)||0;
+  var variants = _siGetGoodsVariants(name, _siItemGoodsType);
+  if(!variants.length){ _siSetArticleHint(''); return; }
+  if(variants.length===1){ _siSetArticleHint(variants[0].article); return; }
+  if(_siItemGoodsType==='dr'){
+    var m = variants.find(function(v){ return Math.round(v.price)===Math.round(price); });
+    _siSetArticleHint(m?m.article:'');
+  } else {
+    var species = ((document.getElementById('siSpeciesM')||{}).value||'').toLowerCase().trim();
+    var m2 = species ? variants.find(function(v){ return (v.species||'').toLowerCase().trim()===species; }) : null;
+    _siSetArticleHint(m2?m2.article:'');
+  }
 }
 function _siCheckVariantsM(name){
   _siSelectedArticleM = '';
@@ -180,6 +207,7 @@ function siPickVariantM(price, article){
   _siSelectedArticleM = article;
   var priceEl = document.getElementById('siPriceM'); if(priceEl){ priceEl.value = price; siCalcAmtM(); }
   var box = document.getElementById('siVariantPicker'); if(box) box.style.display='none';
+  _siSetArticleHint(article);
 }
 function openSaleCatalogPicker(){
   var isDr = _siItemGoodsType==='dr';
@@ -246,10 +274,11 @@ function _renderSaleCatalogPicker(){
       '</div>';
       if(!open) return header;
       return header + list.map(function(it){
-          var priceStr = isDr ? (' · '+Math.round(it.price||0).toLocaleString('ru-RU')+'₽'+(it.article?' · №'+it.article:'')) : '';
-          return '<div onclick="_scpPick(\''+(it.name||'').replace(/'/g,"\\'")+'\','+(it.price||0)+',\''+(it.article||'').replace(/'/g,"\\'")+'\')" '+
+          var priceStr = (isDr || it.article) ? (' · '+Math.round(it.price||0).toLocaleString('ru-RU')+'₽'+(it.article?' · №'+it.article:'')) : '';
+          var speciesStr = (!isDr && it.species) ? ' · '+it.species : '';
+          return '<div onclick="_scpPick(\''+(it.name||'').replace(/'/g,"\\'")+'\','+(it.price||0)+',\''+(it.article||'').replace(/'/g,"\\'")+'\',\''+(it.species||'').replace(/'/g,"\\'")+'\')" '+
             'style="padding:9px 10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:5px;cursor:pointer;font-size:13px">'+
-            (it.name||'')+'<span style="color:#8888aa;font-size:12px">'+priceStr+'</span>'+
+            (it.name||'')+'<span style="color:#8888aa;font-size:12px">'+speciesStr+priceStr+'</span>'+
           '</div>';
         }).join('');
     }).join('');
@@ -262,15 +291,18 @@ function _renderSaleCatalogPicker(){
     '<div style="max-height:60vh;overflow-y:auto">'+body+'</div>'+
   '</div>';
 }
-function _scpPick(name, price, article){
+function _scpPick(name, price, article, species){
   var mb = document.getElementById('siManualBlock');
   var nameEl, priceEl;
   if(mb && mb.style.display!=='none'){ nameEl=document.getElementById('siNameM'); priceEl=document.getElementById('siPriceM'); }
   else { nameEl=document.getElementById('siNameM'); priceEl=document.getElementById('siPriceM'); mb.style.display='block'; document.getElementById('siLookupResult').style.display='none'; }
   if(nameEl) nameEl.value = name;
   if(priceEl && price){ priceEl.value = price; siCalcAmtM(); }
+  if(species){ var spEl=document.getElementById('siSpeciesM'); if(spEl) spEl.value = species; }
+  _siSelectedArticleM = article || '';
   _siCheckVariantsM(name);
   document.getElementById('saleCatalogOverlay').classList.remove('open');
+  _siUpdateArticleHintM();
 }
 function siPickSpecies(val){ var el=document.getElementById('siSpecies'); if(el) el.value=val; var box=document.getElementById('siSpecies_sugg'); if(box) box.style.display='none'; }
 function siPickSpeciesM(val){ var el=document.getElementById('siSpeciesM'); if(el) el.value=val; var box=document.getElementById('siSpeciesM_sugg'); if(box) box.style.display='none'; }
@@ -445,6 +477,17 @@ function addSaleItem(){
       }
     } else if(drVariants.length===1){
       num = drVariants[0].article; hasDiff=false; diffNote='';
+    }
+  } else if(_siItemGoodsType!=='dr' && mb && mb.style.display!=='none' && !num){
+    // Дерево различают по породе, не по цене (у ДР катaлога породы нет вовсе) — при однозначном
+    // совпадении подставляем артикул так же, как ДР выше; неоднозначность не блокирует продажу,
+    // просто оставляем без артикула, как было раньше.
+    var woodVariants = _siGetGoodsVariants(name, 'derevo');
+    if(woodVariants.length===1){
+      num = woodVariants[0].article; hasDiff=false; diffNote='';
+    } else if(woodVariants.length>=2 && species){
+      var matchedW = woodVariants.find(function(v){ return (v.species||'').toLowerCase().trim()===species.toLowerCase().trim(); });
+      if(matchedW){ num = matchedW.article; hasDiff=false; diffNote=''; }
     }
   }
   if(qty<=0) qty=1;
