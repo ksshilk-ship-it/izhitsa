@@ -1768,14 +1768,44 @@ function _manInvAutoFillFromCatalog(i){
   var match = (getRefBook('iz_goods_derevo')||[]).find(function(c){
     return c.article && (c.name||'').toLowerCase().trim()===norm && (c.species||'').toLowerCase().trim()===normSp;
   });
-  if(!match) return;
-  item.price = match.price;
-  item.article = match.article;
+  if(match){
+    item.price = match.price;
+    item.article = match.article;
+    saveManInvDraft();
+    setTimeout(function(){
+      renderManInvItems();
+      showToast('✅ Подтянуто из каталога: '+match.price+'₽ · арт. '+match.article);
+    }, 0);
+    return;
+  }
+  // Совпадения по каталогу нет — это новое наименование+порода, система сама присваивает
+  // артикул (как для ДР Товара продавцу видны готовые номера, тут их не приходится вводить
+  // вручную); при сохранении накладной пара name+species+article зарегистрируется в каталоге
+  // (см. _woodCatalogAutoRegister), и цена, указанная сейчас, станет фиксированной для неё.
+  if(typeof _genWoodArticle!=='function') return;
+  item.article = _genWoodArticle(name, species);
   saveManInvDraft();
   setTimeout(function(){
     renderManInvItems();
-    showToast('✅ Подтянуто из каталога: '+match.price+'₽ · арт. '+match.article);
+    showToast('🆕 Новый артикул системы: '+item.article+' — укажите цену');
   }, 0);
+}
+function _woodCatalogAutoRegister(items){
+  var cat = getRefBook('iz_goods_derevo')||[];
+  var changed = false;
+  (items||[]).forEach(function(it){
+    var name = (it.name||'').trim(), species = (it.species||'').trim(), article = (it.article||'').trim();
+    if(!name || !species || !article) return;
+    var norm = name.toLowerCase(), normSp = species.toLowerCase();
+    var exists = cat.some(function(c){ return c.article && (c.name||'').toLowerCase().trim()===norm && (c.species||'').toLowerCase().trim()===normSp; });
+    if(exists) return;
+    cat.push({id:uid(), name:name, species:species, price:it.price||0, article:article});
+    changed = true;
+  });
+  if(changed){
+    cat.sort(function(a,b){ return (a.name||'').toLowerCase().localeCompare((b.name||'').toLowerCase(),'ru'); });
+    saveRefBookShop('iz_goods_derevo', cat);
+  }
 }
 function _manInvAddSpecies(i){
   var el = document.getElementById('manInvSpecies_'+i);
@@ -1892,6 +1922,7 @@ function saveManualInvoice() {
   });
   try{ _backupInvoiceIndependently(inv); }catch(e){}
   var _gt4save = _manInvGoodsType || 'derevo';
+  if(_gt4save==='derevo'){ try{ _woodCatalogAutoRegister(_manInvItems); }catch(e){} }
   _manInvItems.forEach(function(item){
     autoSaveToItemBase(item.name, item.article, item.price, _gt4save);
   });
