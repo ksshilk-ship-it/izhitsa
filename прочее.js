@@ -601,10 +601,14 @@ function addWoodGoodsVariant(bookId, key){
   if(!price || price<=0){ showToast('Введите цену'); return; }
   var taken = _drArticleTaken(key, article, -1);
   if(taken){ showToast('⚠️ Артикул «'+article+'» уже занят: «'+taken.name+'» ('+(taken.price||0)+'₽)'); return; }
+  // Одно и то же название+порода — это не обязательно одна и та же вещь: разные физические
+  // экземпляры (доски одной породы, например) законно стоят по-разному и у каждого свой
+  // артикул, точно как у ДР Товара несколько цен под одним названием. Блокируем только точное
+  // совпадение название+порода+цена — это уже похоже на случайный повтор, а не на новый экземпляр.
   var existing = getRefBook(key);
   var norm = name.toLowerCase().trim(), normSp = species.toLowerCase().trim();
-  var dup = existing.find(function(c){ return (c.name||'').toLowerCase().trim()===norm && (c.species||'').toLowerCase().trim()===normSp; });
-  if(dup){ showToast('Уже есть «'+name+' · '+species+'» — артикул '+(dup.article||'—')+' ('+(dup.price||0)+'₽)'); return; }
+  var exactDup = existing.find(function(c){ return (c.name||'').toLowerCase().trim()===norm && (c.species||'').toLowerCase().trim()===normSp && (c.price||0)===price; });
+  if(exactDup){ showToast('Уже есть «'+name+' · '+species+'» по цене '+price+'₽ — артикул '+(exactDup.article||'—')); return; }
   var items2 = getRefBook(key);
   items2.push({id:uid(), name:name, species:species, price:price, article:article});
   items2.sort(function(a,b){ return (a.name||'').toLowerCase().localeCompare((b.name||'').toLowerCase(),'ru'); });
