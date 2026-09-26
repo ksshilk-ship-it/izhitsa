@@ -4057,11 +4057,12 @@ function loadRetroArticleAudit(){
   var docUpdates = {};
   var matchStats = {};
   function articleOf(it){ return String((it&&(it.num||it.article))||'').trim(); }
-  function noteMatch(article, name, species, price, qty, source){
-    if(!matchStats[article]) matchStats[article]={name:name, species:species, price:price, count:0, qty:0, receive:0, sale:0, writeoff:0};
+  function noteMatch(article, name, species, price, qty, source, ref){
+    if(!matchStats[article]) matchStats[article]={name:name, species:species, price:price, count:0, qty:0, receive:0, sale:0, writeoff:0, refs:[]};
     matchStats[article].count++;
     matchStats[article].qty += (qty||0);
     matchStats[article][source] = (matchStats[article][source]||0)+1;
+    if(ref){ ref.source = source; ref.qty = qty||0; matchStats[article].refs.push(ref); }
   }
   function scanInvoiceDoc(doc, kind){
     var inv = doc.data();
@@ -4069,6 +4070,7 @@ function loadRetroArticleAudit(){
     var field = inv.acceptedItems ? 'acceptedItems' : 'items';
     var items = inv[field] || [];
     var changes = [];
+    var shop = inv.destName||inv.shopName||'—', date = inv.date||inv.acceptedDate||'—', invNum = inv.num||'';
     items.forEach(function(it, idx){
       if(articleOf(it)) return;
       var gt = it.goodsType || inv.goodsType || 'derevo';
@@ -4076,7 +4078,7 @@ function loadRetroArticleAudit(){
       var art = lookup[key];
       if(!art) return;
       changes.push({idx:idx, article:art, field:field});
-      noteMatch(art, it.name, it.species, it.price, it.qty, 'receive');
+      noteMatch(art, it.name, it.species, it.price, it.qty, 'receive', {shop:shop, date:date, invNum:invNum});
     });
     if(changes.length) docUpdates[kind+'_'+doc.id] = {kind:kind, id:doc.id, changes:changes};
   }
@@ -4085,6 +4087,7 @@ function loadRetroArticleAudit(){
     if(sh.status!=='closed') return;
     var journal = sh.journal||[];
     var changes = [];
+    var shop = sh.shopName||'—', date = sh.date||'—';
     journal.forEach(function(e, eIdx){
       if(e.type!=='sale' && e.type!=='writeoff') return;
       (e.items||[]).forEach(function(it, iIdx){
@@ -4094,7 +4097,7 @@ function loadRetroArticleAudit(){
         var art = lookup[key];
         if(!art) return;
         changes.push({entryIdx:eIdx, itemIdx:iIdx, article:art});
-        noteMatch(art, it.name, it.species, it.price, it.qty, e.type==='sale'?'sale':'writeoff');
+        noteMatch(art, it.name, it.species, it.price, it.qty, e.type==='sale'?'sale':'writeoff', {shop:shop, date:date});
       });
     });
     if(changes.length) docUpdates['shift_'+doc.id] = {kind:'shift', id:doc.id, changes:changes};
@@ -4129,19 +4132,52 @@ function _renderRetroArtPreview(){
   }
   var totalRecords = articles.reduce(function(s,a){ return s+data.matchStats[a].count; },0);
   articles.sort(function(a,b){ return data.matchStats[b].count - data.matchStats[a].count; });
-  host.innerHTML = '<div style="font-size:12px;color:#f0c060;font-weight:700;margin-bottom:8px">Найдено: '+totalRecords+' запис'+(totalRecords===1?'ь':(totalRecords<5?'и':'ей'))+' по '+articles.length+' артикул'+(articles.length===1?'у':(articles.length<5?'ам':'ам'))+'</div>'+
+  host.innerHTML = '<div style="font-size:12px;color:#f0c060;font-weight:700;margin-bottom:8px">Найдено: '+totalRecords+' запис'+(totalRecords===1?'ь':(totalRecords<5?'и':'ей'))+' по '+articles.length+' артикул'+(articles.length===1?'у':(articles.length<5?'ам':'ам'))+' — нажмите на строку, чтобы увидеть сами записи</div>'+
     articles.map(function(art){
       var m = data.matchStats[art];
       var srcParts = [];
       if(m.receive) srcParts.push('📥×'+m.receive);
       if(m.sale) srcParts.push('💰×'+m.sale);
       if(m.writeoff) srcParts.push('🗑️×'+m.writeoff);
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:5px;font-size:11.5px;gap:8px">'+
+      var artEsc = art.replace(/'/g,"\\'");
+      return '<div onclick="_retroArtShowDetail(\''+artEsc+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:5px;font-size:11.5px;gap:8px;cursor:pointer">'+
         '<div><b>№'+art+'</b> — '+(m.name||'')+(m.species?' · '+m.species:'')+' · '+Math.round(m.price||0).toLocaleString('ru-RU')+'₽</div>'+
-        '<div style="color:#8888aa;flex-shrink:0;white-space:nowrap">'+m.count+' зап. · '+srcParts.join(' ')+'</div>'+
+        '<div style="color:#8888aa;flex-shrink:0;white-space:nowrap">'+m.count+' зап. · '+srcParts.join(' ')+' 🔎</div>'+
       '</div>';
     }).join('')+
     '<button type="button" onclick="applyRetroArticleAudit()" style="width:100%;margin-top:10px;padding:10px;background:#c8f060;border:none;border-radius:10px;color:#0f0f13;font-size:13px;font-weight:700;cursor:pointer">✅ Применить '+totalRecords+' изменени'+(totalRecords===1?'е':(totalRecords<5?'я':'й'))+'</button>';
+}
+function _retroArtShowDetail(article){
+  var data = window._retroArtPending; if(!data) return;
+  var m = data.matchStats[article]; if(!m) return;
+  var overlay = document.getElementById('naDetailOverlay');
+  if(!overlay){
+    overlay = document.createElement('div');
+    overlay.id = 'naDetailOverlay';
+    overlay.className = 'mo';
+    overlay.onclick = function(e){ if(e.target===overlay) overlay.classList.remove('open'); };
+    document.body.appendChild(overlay);
+  }
+  var srcIcon = {receive:'📥', sale:'💰', writeoff:'🗑️'};
+  var srcLabel = {receive:'Приёмка', sale:'Продажа', writeoff:'Списание'};
+  var refs = (m.refs||[]).slice().sort(function(a,b){ return String(b.date||'').localeCompare(String(a.date||'')); });
+  var word = refs.length===1?'запись':(refs.length>=2&&refs.length<=4?'записи':'записей');
+  var rows = refs.map(function(r){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #22222e;font-size:12px">'+
+      '<div><span>'+(srcIcon[r.source]||'')+' '+(srcLabel[r.source]||r.source)+'</span>'+
+        '<div class="u-fs10-gray">'+(r.shop||'—')+' · '+(r.date||'—')+(r.invNum?' · накл. '+r.invNum:'')+'</div></div>'+
+      '<div style="color:#c8f060;font-weight:700;flex-shrink:0">'+r.qty+' шт.</div>'+
+    '</div>';
+  }).join('');
+  overlay.innerHTML = '<div class="md">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+      '<div style="font-size:14px;font-weight:700">№'+article+'<div style="font-size:12px;color:#8888aa;font-weight:400">'+(m.name||'')+(m.species?' · '+m.species:'')+' · '+Math.round(m.price||0).toLocaleString('ru-RU')+'₽</div></div>'+
+      '<button onclick="document.getElementById(\'naDetailOverlay\').classList.remove(\'open\')" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer;flex-shrink:0">✕</button>'+
+    '</div>'+
+    '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">'+refs.length+' '+word+' · '+m.qty+' шт. всего — все получат артикул №'+article+'</div>'+
+    '<div style="max-height:60vh;overflow-y:auto">'+(rows||'<div style="font-size:12px;color:#8888aa">Нет записей</div>')+'</div>'+
+  '</div>';
+  overlay.classList.add('open');
 }
 function applyRetroArticleAudit(){
   var data = window._retroArtPending;
