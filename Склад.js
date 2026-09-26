@@ -2416,6 +2416,7 @@ function purgeStaleReceives(){
 var _adminRcvPeriod = 'today';
 var _adminRcvShop = '';
 var _adminRcvType = 'receive';
+var _adminRcvGt = ''; // '' — все, 'derevo' — только Дерево, 'dr' — только ДР Товар
 function findAndCleanDuplicateReceives(){
   var shifts = getShifts();
   var groups = {};
@@ -2675,6 +2676,15 @@ function adminRcvCustomRangeChanged(){
 function adminRcvSetShop(shop, el){
   _adminRcvShop = shop;
   var chips = document.getElementById('adminRcvShopChips');
+  if(chips) chips.querySelectorAll('div').forEach(function(d){
+    d.style.borderColor='#2e2e3e'; d.style.background='#22222e'; d.style.color='#8888aa'; d.style.borderWidth='1px';
+  });
+  if(el){ el.style.borderColor='#c8f060'; el.style.background='#1e2a14'; el.style.color='#c8f060'; el.style.borderWidth='2px'; }
+  renderAdminRcvWo();
+}
+function adminRcvSetGt(gt, el){
+  _adminRcvGt = gt;
+  var chips = document.getElementById('adminRcvGtChips');
   if(chips) chips.querySelectorAll('div').forEach(function(d){
     d.style.borderColor='#2e2e3e'; d.style.background='#22222e'; d.style.color='#8888aa'; d.style.borderWidth='1px';
   });
@@ -2963,6 +2973,9 @@ function renderAdminRcvWo(){
       (sh.drGoodsWriteoffs||[]).forEach(function(r){ rows.push({shop:sn,date:shDate,ts:shDate,label:'Списание ДР',sub:r.name||'',amount:r.amt||(r.price*r.qty)||0,goodsType:'dr',items:[],reason:r.reason||'',isRevaluation:!!r.isRevaluation}); });
     }
   });
+  // Фильтр по виду товара — чтобы можно было быстро посмотреть отдельно приходы/списания только
+  // Дерева или только ДР Товара, а не искать их вперемешку в общем списке.
+  if(_adminRcvGt) rows = rows.filter(function(r){ return r.goodsType===_adminRcvGt; });
   rows.sort(function(a,b){ return (b.ts||b.date).localeCompare(a.ts||a.date); });
   window._adminRcvRowsByInv = {};
   rows.forEach(function(r){ if(r.invId) window._adminRcvRowsByInv[r.invId] = r; });
