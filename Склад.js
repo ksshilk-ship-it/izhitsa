@@ -3834,33 +3834,65 @@ function _naToggle(name){
   window._naOpen[name] = !window._naOpen[name];
   _naRenderResults();
 }
+function _naPorodaWord(n){
+  var n10=n%10, n100=n%100;
+  if(n10===1 && n100!==11) return 'порода';
+  if(n10>=2 && n10<=4 && (n100<10||n100>=20)) return 'породы';
+  return 'пород';
+}
 function _naRenderResults(){
   var host = document.getElementById('naResults'); if(!host) return;
   var byName = window._naData || {};
   var names = Object.keys(byName);
   if(!names.length){ host.innerHTML = '<div class="empty"><div class="ei">🪵</div>Нажмите «Собрать сводку»</div>'; return; }
   names.sort(function(a,b){ return byName[b].total-byName[a].total; });
-  host.innerHTML = '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">'+names.length+' наименований без артикула — нажмите на название, чтобы развернуть варианты породы/цены</div>'+
+  host.innerHTML = '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">'+names.length+' наименований без артикула — нажмите на название, чтобы развернуть по породам</div>'+
     names.map(function(nm){
       var g = byName[nm];
-      var variants = Object.keys(g.variants).map(function(k){ return g.variants[k]; }).sort(function(a,b){ return b.qty-a.qty; });
+      var variants = Object.keys(g.variants).map(function(k){ return g.variants[k]; });
+      // Сначала группируем по породе (это и есть «вариация дерева»), а цены — уже списком
+      // внутри неё: иначе цена и порода вперемешку в одной строке не читаются вообще, особенно
+      // когда цена со временем менялась (инфляция), а порода часто вообще не записывалась.
+      var bySpecies = {}, order = [];
+      variants.forEach(function(v){
+        var sp = (v.species && v.species!=='—') ? v.species : '—';
+        if(!bySpecies[sp]){ bySpecies[sp] = {species:sp, qty:0, prices:[]}; order.push(sp); }
+        bySpecies[sp].qty += v.qty;
+        bySpecies[sp].prices.push(v);
+      });
+      var speciesGroups = order.map(function(sp){ return bySpecies[sp]; });
+      // «Без породы» — это недостающие данные, а не реальная вариация дерева, поэтому её всегда
+      // показываем последней и отдельным блоком, чтобы не мешала видеть настоящие породы.
+      speciesGroups.sort(function(a,b){
+        if(a.species==='—') return 1; if(b.species==='—') return -1;
+        return b.qty-a.qty;
+      });
+      var speciesCount = speciesGroups.filter(function(s){ return s.species!=='—'; }).length;
+      var noSpeciesQty = (bySpecies['—']||{qty:0}).qty;
       var open = !!(window._naOpen||{})[nm];
       var esc = nm.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+      var summaryBits = speciesCount+' '+_naPorodaWord(speciesCount)+(noSpeciesQty?' + без породы '+noSpeciesQty+' шт.':'');
       var head = '<div onclick="_naToggle(\''+esc+'\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:9px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:'+(open?'10px 10px 0 0':'10px')+';margin-bottom:'+(open?'0':'6px')+'">'+
         '<div style="font-size:12px;font-weight:700">🌳 '+nm+'</div>'+
-        '<div style="font-size:10.5px;color:#8888aa;display:flex;gap:6px;align-items:center"><span>'+variants.length+' вариант'+(variants.length===1?'':(variants.length<5?'а':'ов'))+' · '+g.total+' шт.</span><span style="color:#555568">'+(open?'▾':'▸')+'</span></div>'+
+        '<div style="font-size:10.5px;color:#8888aa;display:flex;gap:6px;align-items:center;text-align:right"><span>'+summaryBits+' · '+g.total+' шт. всего</span><span style="color:#555568">'+(open?'▾':'▸')+'</span></div>'+
       '</div>';
       if(!open) return head;
       var body = '<div style="padding:2px 0 4px;margin-bottom:6px;border:1px solid #2e2e3e;border-top:none;border-radius:0 0 10px 10px;background:#13131a">'+
-        variants.map(function(v){
-          var srcParts = [];
-          if(v.receive) srcParts.push('📥×'+v.receive);
-          if(v.sale) srcParts.push('💰×'+v.sale);
-          if(v.inventory) srcParts.push('📋×'+v.inventory);
-          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-bottom:1px solid #22222e;font-size:11.5px">'+
-            '<div style="color:#f0f0f8">'+v.species+'</div>'+
-            '<div style="display:flex;gap:8px;align-items:center;color:#8888aa;flex-shrink:0"><span style="color:#c8f060;font-weight:700">'+Math.round(v.price).toLocaleString('ru-RU')+'₽</span><span>'+v.qty+' шт.</span><span style="font-size:10px">'+srcParts.join(' ')+'</span></div>'+
-          '</div>';
+        speciesGroups.map(function(sg){
+          var isNone = sg.species==='—';
+          var prices = sg.prices.slice().sort(function(a,b){ return b.qty-a.qty; });
+          var speciesHead = '<div style="padding:7px 10px 3px;font-size:11px;font-weight:700;color:'+(isNone?'#8888aa':'#f0c060')+'">'+(isNone?'❓ Без указанной породы':'🪵 '+sg.species)+' — '+sg.qty+' шт.'+(isNone?' (нельзя привязать к дереву)':'')+'</div>';
+          var priceRows = prices.map(function(v){
+            var srcParts = [];
+            if(v.receive) srcParts.push('📥×'+v.receive);
+            if(v.sale) srcParts.push('💰×'+v.sale);
+            if(v.inventory) srcParts.push('📋×'+v.inventory);
+            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px 5px 20px;border-bottom:1px solid #22222e;font-size:11.5px">'+
+              '<span style="color:#c8f060;font-weight:700">'+Math.round(v.price).toLocaleString('ru-RU')+'₽</span>'+
+              '<span style="display:flex;gap:8px;align-items:center;color:#8888aa;flex-shrink:0"><span>'+v.qty+' шт.</span><span style="font-size:10px">'+srcParts.join(' ')+'</span></span>'+
+            '</div>';
+          }).join('');
+          return speciesHead + priceRows;
         }).join('')+
       '</div>';
       return head + body;
