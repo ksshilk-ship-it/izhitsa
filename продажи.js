@@ -308,6 +308,14 @@ function siPickSpeciesM(val){ var el=document.getElementById('siSpeciesM'); if(e
 function siAddToGoods(inputId){
   var el=document.getElementById(inputId); var val=(el&&el.value||'').trim();
   if(!val){ showToast('Введите наименование'); return; }
+  // Раньше эта кнопка добавляла в базу что угодно без единой проверки — продавец мог набрать
+  // отсебятину в «Наименование» и тут же легализовать её одним нажатием, обходя проверку в
+  // addSaleItem(). Заводить новые наименования — решение администратора (порода/цена/категория
+  // назначаются осознанно), поэтому с точки продажи это может сделать только он.
+  if(!(session && session.role==='shopadmin')){
+    showToast('⛔ Новые наименования заводит администратор — попросите добавить «'+val+'» в базу товаров (Настройки)');
+    return;
+  }
   var key = _siItemGoodsType==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
   var goods = getRefBook(key);
   var exists = goods.some(function(g){ return ((g&&g.name)||g)===val; });
