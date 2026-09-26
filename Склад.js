@@ -3756,14 +3756,15 @@ function renderDupArticleAudit(){
 // накладные (iz_manual_invoices/iz_invoices — как в _buildUsedArticleIndex), продажи из журналов
 // всех смен (iz_shifts), и подсчёты всех инвентаризаций (iz_inventory_sessions/iz_inventory_counts).
 function _naArticleOf(it){ return String((it&&(it.num||it.article))||'').trim(); }
-function _naAddRow(byName, name, species, price, qty, source){
+function _naAddRow(byName, name, species, price, qty, source, ref){
   name = String(name||'').trim(); if(!name) return;
   var g = byName[name] || (byName[name] = {total:0, variants:{}});
   g.total += qty||0;
   var vk = (species||'—')+'|'+(price||0);
-  var v = g.variants[vk] || (g.variants[vk] = {species:species||'—', price:price||0, qty:0, count:0, receive:0, sale:0, inventory:0});
+  var v = g.variants[vk] || (g.variants[vk] = {vk:vk, species:species||'—', price:price||0, qty:0, count:0, receive:0, sale:0, inventory:0, refs:[]});
   v.qty += qty||0; v.count++;
   v[source] = (v[source]||0) + 1;
+  if(ref){ ref.source = source; ref.qty = qty||0; v.refs.push(ref); }
 }
 function loadNoArticleAudit(){
   var status = document.getElementById('naStatus');
@@ -3777,10 +3778,13 @@ function loadNoArticleAudit(){
       if(inv.isRevaluation) return; // переоценка возвращает те же вещи — не новое наблюдение
       if((inv.goodsType||'derevo')==='dr') return;
       var items = inv.acceptedItems || inv.items || [];
+      var invId = inv.id!=null ? inv.id : (inv._id!=null ? inv._id : doc.id);
       items.forEach(function(it){
         if((it.goodsType||inv.goodsType||'derevo')==='dr') return;
         if(_naArticleOf(it)) return;
-        _naAddRow(byName, it.name, it.species, it.price, it.qty||1, 'receive');
+        _naAddRow(byName, it.name, it.species, it.price, it.qty||1, 'receive', {
+          shop: inv.destName||inv.shopName||'—', date: inv.date||inv.acceptedDate||'—', invId: invId, invNum: inv.num||''
+        });
       });
     });
   }
@@ -3795,7 +3799,9 @@ function loadNoArticleAudit(){
           (e.items||[]).forEach(function(it){
             if((it.goodsType||'derevo')==='dr') return;
             if(_naArticleOf(it)) return;
-            _naAddRow(byName, it.name, it.species, it.price, it.qty||1, 'sale');
+            _naAddRow(byName, it.name, it.species, it.price, it.qty||1, 'sale', {
+              shop: sh.shopName||'—', date: sh.date||'—', shiftId: sh.id||doc.id, entryId: e.id
+            });
           });
         });
       });
@@ -3808,7 +3814,9 @@ function loadNoArticleAudit(){
           csnap.forEach(function(cd){
             var c = cd.data();
             if(_naArticleOf(c)) return;
-            _naAddRow(byName, c.name, c.species, c.price, c.countedQty||0, 'inventory');
+            _naAddRow(byName, c.name, c.species, c.price, c.countedQty||0, 'inventory', {
+              shop: sx.shopName||'—', date: _iaSessDate(sx), sessionId: sx.id
+            });
           });
         });
       }));
@@ -3887,9 +3895,10 @@ function _naRenderResults(){
             if(v.receive) srcParts.push('📥×'+v.receive);
             if(v.sale) srcParts.push('💰×'+v.sale);
             if(v.inventory) srcParts.push('📋×'+v.inventory);
-            return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px 5px 20px;border-bottom:1px solid #22222e;font-size:11.5px">'+
+            var vkEsc = v.vk.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+            return '<div onclick="_naShowDetail(\''+esc+'\',\''+vkEsc+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px 5px 20px;border-bottom:1px solid #22222e;font-size:11.5px;cursor:pointer">'+
               '<span style="color:#c8f060;font-weight:700">'+Math.round(v.price).toLocaleString('ru-RU')+'₽</span>'+
-              '<span style="display:flex;gap:8px;align-items:center;color:#8888aa;flex-shrink:0"><span>'+v.qty+' шт.</span><span style="font-size:10px">'+srcParts.join(' ')+'</span></span>'+
+              '<span style="display:flex;gap:8px;align-items:center;color:#8888aa;flex-shrink:0"><span>'+v.qty+' шт.</span><span style="font-size:10px">'+srcParts.join(' ')+'</span><span style="color:#60c8f0">🔎</span></span>'+
             '</div>';
           }).join('');
           return speciesHead + priceRows;
@@ -3897,6 +3906,38 @@ function _naRenderResults(){
       '</div>';
       return head + body;
     }).join('');
+}
+function _naShowDetail(name, vk){
+  var g = (window._naData||{})[name]; if(!g) return;
+  var v = g.variants[vk]; if(!v) return;
+  var overlay = document.getElementById('naDetailOverlay');
+  if(!overlay){
+    overlay = document.createElement('div');
+    overlay.id = 'naDetailOverlay';
+    overlay.className = 'mo';
+    overlay.onclick = function(e){ if(e.target===overlay) overlay.classList.remove('open'); };
+    document.body.appendChild(overlay);
+  }
+  var srcIcon = {receive:'📥', sale:'💰', inventory:'📋'};
+  var srcLabel = {receive:'Приёмка', sale:'Продажа', inventory:'Инвентаризация'};
+  var refs = (v.refs||[]).slice().sort(function(a,b){ return String(b.date||'').localeCompare(String(a.date||'')); });
+  var word = refs.length===1?'запись':(refs.length>=2&&refs.length<=4?'записи':'записей');
+  var rows = refs.map(function(r){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #22222e;font-size:12px">'+
+      '<div><span>'+(srcIcon[r.source]||'')+' '+(srcLabel[r.source]||r.source)+'</span>'+
+        '<div class="u-fs10-gray">'+(r.shop||'—')+' · '+(r.date||'—')+(r.invNum?' · накл. '+r.invNum:'')+'</div></div>'+
+      '<div style="color:#c8f060;font-weight:700;flex-shrink:0">'+r.qty+' шт.</div>'+
+    '</div>';
+  }).join('');
+  overlay.innerHTML = '<div class="md">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+      '<div style="font-size:14px;font-weight:700">'+name+(v.species!=='—'?' · '+v.species:'')+'<div style="font-size:12px;color:#c8f060">'+Math.round(v.price).toLocaleString('ru-RU')+'₽</div></div>'+
+      '<button onclick="document.getElementById(\'naDetailOverlay\').classList.remove(\'open\')" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer;flex-shrink:0">✕</button>'+
+    '</div>'+
+    '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">'+refs.length+' '+word+' · '+v.qty+' шт. всего</div>'+
+    '<div style="max-height:60vh;overflow-y:auto">'+(rows||'<div style="font-size:12px;color:#8888aa">Нет записей</div>')+'</div>'+
+  '</div>';
+  overlay.classList.add('open');
 }
 // Запрет повторного использования номера изделия при приёмке — та же проверка вызывается из
 // всех форм, где продавец может вписать/поправить номер (новая накладная вручную, исправление
