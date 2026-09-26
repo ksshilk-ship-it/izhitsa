@@ -1155,7 +1155,8 @@ function _invAdmRender(){
   if(live.length){
     html += '<div style="margin-bottom:12px">'+live.map(function(x){ return '<button type="button" onclick="invAdmItemReport(\''+x.id+'\')" style="padding:8px 12px;margin:0 6px 6px 0;background:#1a1f2e;border:1px solid #60c8f0;border-radius:8px;color:#60c8f0;font-size:11px;font-weight:700;cursor:pointer">📑 Отчёт по изделиям — '+(x.goodsType==='dr'?'ДР':'Дерево')+'</button>'; }).join('')+'</div>';
   } else {
-    html += '<div style="font-size:10.5px;color:#555568;margin-bottom:12px">Сравнение по отдельным изделиям для инвентаризации задним числом не строится (остатки по количеству на прошлую дату не хранятся) — только по суммам выше.</div>';
+    html += '<div style="font-size:10.5px;color:#555568;margin-bottom:6px">Сравнение по отдельным изделиям на САМУ ДАТУ инвентаризации не строится (остатки по количеству на прошлую дату не хранятся).</div>';
+    html += '<button type="button" onclick="invAdmShowItemDiscrepancies()" style="padding:8px 12px;margin-bottom:12px;background:#1a1f2e;border:1px solid #f0c060;border-radius:8px;color:#f0c060;font-size:11px;font-weight:700;cursor:pointer">📊 Расхождения по товарам — с текущим остатком</button>';
   }
   html += '<div style="display:flex;gap:6px;margin-bottom:8px"><input class="fi" id="invAdmFilter" placeholder="🔍 Поиск по списку внесённого..." oninput="invAdmSetFilter(this.value)" style="margin:0;padding:8px;flex:1" value="'+_iaEsc(cur.filter)+'">'+
     '<button type="button" onclick="invAdmToggleSummary()" title="Сводка по наименованиям — где могут быть задвоения" style="padding:8px 10px;background:'+(_invAdmSummaryMode?'#60c8f0':'none')+';border:1px solid #60c8f0;border-radius:8px;color:'+(_invAdmSummaryMode?'#0f0f13':'#60c8f0')+';font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">📊 Сводка</button>'+
@@ -1423,6 +1424,55 @@ function invAdmItemReport(sessionId){
   var cur = _invAdmCur; var sx = cur.sessions.find(function(x){ return x.id===sessionId; }); if(!sx) return;
   _invSession = sx; _invCounts = cur.counts[sx.id] || {};
   openMo('invStockMo'); _invRenderReport();
+}
+// Подробное расхождение по каждому товару — для инвентаризации задним числом, где остаток НА САМУ
+// ДАТУ инвентаризации не хранится (только суммы через журнал смен). Сравниваем с ТЕКУЩИМ остатком
+// магазина (getStock()) — это не то же самое, что остаток на дату инвентаризации: за время между датой
+// пересчёта и сегодня остаток мог законно измениться (продажи, приходы) — расхождение тут не значит
+// автоматически ошибку, но показывает, по каким конкретно товарам вообще есть разница, чтобы было
+// с чего начать проверку.
+function invAdmShowItemDiscrepancies(){
+  var cur = _invAdmCur; var body = document.getElementById('invAdmBody'); if(!cur||!body) return;
+  var allRows = _invAdmAllRows();
+  var byArt = {};
+  allRows.forEach(function(r){
+    var c = r.rec;
+    var k = c.num ? (r.gt+'|'+c.num) : (r.gt+'|noart|'+(c.name||'').trim().toLowerCase()+'|'+(c.species||'').trim().toLowerCase());
+    var it = byArt[k] || (byArt[k] = {num:c.num||'', name:c.name||'—', species:c.species||'', gt:r.gt, countedQty:0, price:c.price||0});
+    it.countedQty += c.countedQty||0;
+  });
+  var stock = (typeof getStock==='function') ? (getStock()[cur.shopName]||{}) : {};
+  var rows = Object.keys(byArt).map(function(k){
+    var it = byArt[k];
+    var stockIt = it.num ? stock[it.num] : null;
+    var sysQty = stockIt ? (stockIt.qty||0) : null; // null — такого артикула сейчас в остатке магазина нет вовсе
+    return {it:it, sysQty:sysQty, diff: sysQty==null ? null : (it.countedQty - sysQty)};
+  });
+  // Плюс то, что сейчас есть в остатке магазина, но ни разу не встретилось при пересчёте — тоже расхождение (−qty целиком).
+  Object.keys(stock).forEach(function(num){
+    var si = stock[num]||{}, gt = si.goodsType||'derevo', k = gt+'|'+num;
+    if(byArt[k]) return;
+    rows.push({it:{num:num, name:si.name||'—', species:si.species||'', gt:gt, countedQty:0, price:si.price||0}, sysQty:si.qty||0, diff:0-(si.qty||0)});
+  });
+  var mismatches = rows.filter(function(r){ return r.diff!==null && r.diff!==0; }).sort(function(a,b){ return Math.abs(b.diff)-Math.abs(a.diff); });
+  var noSys = rows.filter(function(r){ return r.diff===null; });
+  if(!mismatches.length && !noSys.length){ body.innerHTML = '<button class="btn sec" style="margin-bottom:10px" onclick="_invAdmRender()">← Назад к инвентаризации</button><div class="empty">По текущему остатку расхождений не найдено</div>'; return; }
+  function diffTxt(d){ return (d>0?'+':'')+d+' шт.'; }
+  var rowsHtml = mismatches.map(function(r){
+    var pos = r.diff>0;
+    return '<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #22222e;font-size:11.5px;align-items:center">'+
+      '<div style="flex:1;min-width:0"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(r.it.gt==='dr'?'🛍':'🌳')+' '+(r.it.num?'№'+_iaEsc(r.it.num)+' ':'')+_iaEsc(r.it.name)+(r.it.species?' <span style="color:#f0c060">· '+_iaEsc(r.it.species)+'</span>':'')+'</div><div style="font-size:10px;color:#8888aa">найдено '+r.it.countedQty+' · сейчас в остатке '+r.sysQty+'</div></div>'+
+      '<span style="color:'+(pos?'#60f090':'#f06060')+';font-size:12px;font-weight:700;flex-shrink:0">'+diffTxt(r.diff)+'</span>'+
+    '</div>';
+  }).join('');
+  var noSysHtml = noSys.length ? ('<div style="font-size:11px;font-weight:700;color:#8888aa;margin:14px 0 4px">Занесено при пересчёте, но такого артикула сейчас в остатке магазина нет вовсе</div>'+
+    noSys.map(function(r){
+      return '<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid #22222e;font-size:11.5px"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(r.it.gt==='dr'?'🛍':'🌳')+' '+(r.it.num?'№'+_iaEsc(r.it.num)+' ':'')+_iaEsc(r.it.name)+(r.it.species?' <span style="color:#f0c060">· '+_iaEsc(r.it.species)+'</span>':'')+'</div><span style="color:#8888aa;flex-shrink:0">найдено '+r.it.countedQty+'</span></div>';
+    }).join('')) : '';
+  body.innerHTML = '<button class="btn sec" style="margin-bottom:10px" onclick="_invAdmRender()">← Назад к инвентаризации</button>'+
+    '<div style="font-size:12.5px;font-weight:700;margin-bottom:4px">📊 Расхождения по товарам — '+_iaEsc(cur.shopName)+'</div>'+
+    '<div style="font-size:10.5px;color:#8888aa;margin-bottom:10px;line-height:1.4">Сравнение с ТЕКУЩИМ остатком магазина (не с остатком на '+_iaDateRu(cur.date)+' — его в системе не хранится). За время между датой инвентаризации и сегодня остаток мог законно измениться из-за продаж и приходов — расхождение само по себе не значит ошибку, но показывает, с чего начать проверку. Всего расхождений: '+mismatches.length+'.</div>'+
+    rowsHtml + noSysHtml;
 }
 // Список всех продаж за день инвентаризации с пометкой, найдена ли эта же позиция среди занесённого
 // при пересчёте — специально для сравнения с УТРОМ (см. allBackdated в _invAdmRender): то, что продано,
