@@ -64,7 +64,7 @@ function siAddToSpecies(inputId){
 }
 function setSiItemType(type, preserveName){
   _siItemGoodsType = type;
-  if(!preserveName){ _siSelectedArticleM=''; var vp=document.getElementById('siVariantPicker'); if(vp) vp.style.display='none'; _siSetArticleHint(''); }
+  if(!preserveName){ _siSelectedArticleM=''; var vp=document.getElementById('siVariantPicker'); if(vp) vp.style.display='none'; _siSetArticleHint(''); if(typeof _siResetSpeciesMulti==='function') _siResetSpeciesMulti(); }
   var lbl = document.getElementById('siSpeciesLabel');
   var inp = document.getElementById('siSpecies');
   var inpM = document.getElementById('siSpeciesM');
@@ -155,6 +155,7 @@ function siPickVariantNameM(inputId, name, price, article, species){
     var priceEl = document.getElementById('siPriceM'); if(priceEl){ priceEl.value = price; siCalcAmtM(); }
   }
   if(species){
+    if(_siSpeciesMultiMode) siToggleMultiSpecies(false);
     var spEl = document.getElementById('siSpeciesM'); if(spEl) spEl.value = species;
   }
   _siSelectedArticleM = article || '';
@@ -183,7 +184,7 @@ function _siUpdateArticleHintM(){
     var m = variants.find(function(v){ return Math.round(v.price)===Math.round(price); });
     _siSetArticleHint(m?m.article:'');
   } else {
-    var species = ((document.getElementById('siSpeciesM')||{}).value||'').toLowerCase().trim();
+    var species = _siGetCombinedSpeciesM().toLowerCase().trim();
     var m2 = species ? variants.find(function(v){ return (v.species||'').toLowerCase().trim()===species; }) : null;
     _siSetArticleHint(m2?m2.article:'');
   }
@@ -298,7 +299,7 @@ function _scpPick(name, price, article, species){
   else { nameEl=document.getElementById('siNameM'); priceEl=document.getElementById('siPriceM'); mb.style.display='block'; document.getElementById('siLookupResult').style.display='none'; }
   if(nameEl) nameEl.value = name;
   if(priceEl && price){ priceEl.value = price; siCalcAmtM(); }
-  if(species){ var spEl=document.getElementById('siSpeciesM'); if(spEl) spEl.value = species; }
+  if(species){ if(_siSpeciesMultiMode) siToggleMultiSpecies(false); var spEl=document.getElementById('siSpeciesM'); if(spEl) spEl.value = species; }
   _siSelectedArticleM = article || '';
   document.getElementById('saleCatalogOverlay').classList.remove('open');
   _siUpdateArticleHintM();
@@ -334,7 +335,88 @@ function sendNameRequest(){
   _nameReqPending = null;
 }
 function siPickSpecies(val){ var el=document.getElementById('siSpecies'); if(el) el.value=val; var box=document.getElementById('siSpecies_sugg'); if(box) box.style.display='none'; }
-function siPickSpeciesM(val){ var el=document.getElementById('siSpeciesM'); if(el) el.value=val; var box=document.getElementById('siSpeciesM_sugg'); if(box) box.style.display='none'; }
+function siPickSpeciesM(val){ if(_siSpeciesMultiMode) siToggleMultiSpecies(false); var el=document.getElementById('siSpeciesM'); if(el) el.value=val; var box=document.getElementById('siSpeciesM_sugg'); if(box) box.style.display='none'; }
+// Браслеты/бусы/чётки часто сделаны не из одной породы — раньше это приходилось впихивать одной
+// строкой («Орех американский яшма»), не разберёшь потом, где дерево, а где камень. Галочка
+// «неск. материалов» превращает одно поле в список — каждая строка своя, с тем же автодополнением
+// по общему списку материалов (getSpecies() и так уже смешивает породы дерева и камни). На выходе
+// всё равно одна строка через « + » — species остаётся обычным текстовым полем везде в системе.
+var _siSpeciesMultiMode = false;
+var _siSpeciesParts = [''];
+function siToggleMultiSpecies(checked){
+  _siSpeciesMultiMode = checked;
+  var singleWrap = document.getElementById('siSpeciesSingleWrap');
+  var multiWrap = document.getElementById('siSpeciesMultiWrap');
+  var toggle = document.getElementById('siSpeciesMultiToggle');
+  if(toggle) toggle.checked = checked;
+  if(checked){
+    if(singleWrap) singleWrap.style.display='none';
+    if(multiWrap) multiWrap.style.display='flex';
+    var existing = (document.getElementById('siSpeciesM')||{}).value||'';
+    if(!_siSpeciesParts.length) _siSpeciesParts = [''];
+    if(existing && !_siSpeciesParts[0]) _siSpeciesParts[0] = existing;
+    _siRenderSpeciesMulti();
+  } else {
+    if(singleWrap) singleWrap.style.display='flex';
+    if(multiWrap) multiWrap.style.display='none';
+    var combined = _siSpeciesParts.filter(function(p){return p&&p.trim();}).join(' + ');
+    var el = document.getElementById('siSpeciesM'); if(el) el.value = combined;
+    _siUpdateArticleHintM();
+  }
+}
+function _siRenderSpeciesMulti(){
+  var wrap = document.getElementById('siSpeciesMultiWrap'); if(!wrap) return;
+  wrap.innerHTML = _siSpeciesParts.map(function(val, idx){
+    var esc = (val||'').replace(/"/g,'&quot;');
+    return '<div style="display:flex;gap:6px;position:relative">'+
+      '<input class="fi" id="siSpeciesPart_'+idx+'" value="'+esc+'" placeholder="Материал '+(idx+1)+'" autocomplete="off" style="margin:0;flex:1" '+
+        'oninput="siSpeciesPartInput('+idx+',this.value);psjSuggest(\'siSpeciesPart_'+idx+'\',getSiSpeciesList(),\'siPickSpeciesPart_'+idx+'\')" '+
+        'onfocus="psjSuggest(\'siSpeciesPart_'+idx+'\',getSiSpeciesList(),\'siPickSpeciesPart_'+idx+'\')" '+
+        'onblur="psjHideSugg(\'siSpeciesPart_'+idx+'\')">'+
+      (_siSpeciesParts.length>1 ? '<button type="button" onpointerdown="event.preventDefault();siRemoveSpeciesPart('+idx+')" style="background:none;border:1px solid #3e2e2e;border-radius:8px;padding:0 10px;color:#f06060;cursor:pointer;flex-shrink:0">✕</button>' : '')+
+      '<div id="siSpeciesPart_'+idx+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:36px;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>'+
+    '</div>';
+  }).join('')+
+  '<button type="button" onpointerdown="event.preventDefault();siAddSpeciesPart()" style="align-self:flex-start;background:#22222e;border:1px solid #f0c060;border-radius:8px;padding:6px 12px;color:#f0c060;font-size:11px;font-weight:700;cursor:pointer">＋ Добавить материал</button>';
+}
+function siSpeciesPartInput(idx, val){ _siSpeciesParts[idx] = val; _siUpdateArticleHintM(); }
+function siAddSpeciesPart(){
+  _siSpeciesParts.push('');
+  _siRenderSpeciesMulti();
+  var last = _siSpeciesParts.length-1;
+  setTimeout(function(){ var el=document.getElementById('siSpeciesPart_'+last); if(el) el.focus(); }, 0);
+}
+function siRemoveSpeciesPart(idx){
+  _siSpeciesParts.splice(idx,1);
+  if(!_siSpeciesParts.length) _siSpeciesParts=[''];
+  _siRenderSpeciesMulti();
+}
+function _siResetSpeciesMulti(){
+  _siSpeciesMultiMode = false;
+  _siSpeciesParts = [''];
+  var singleWrap = document.getElementById('siSpeciesSingleWrap');
+  var multiWrap = document.getElementById('siSpeciesMultiWrap');
+  var toggle = document.getElementById('siSpeciesMultiToggle');
+  if(singleWrap) singleWrap.style.display='flex';
+  if(multiWrap){ multiWrap.style.display='none'; multiWrap.innerHTML=''; }
+  if(toggle) toggle.checked = false;
+}
+function _siGetCombinedSpeciesM(){
+  if(_siSpeciesMultiMode) return _siSpeciesParts.filter(function(p){return p&&p.trim();}).join(' + ');
+  return (document.getElementById('siSpeciesM')||{}).value||'';
+}
+(function(){
+  for(var _sp=0;_sp<30;_sp++){
+    (function(idx){
+      window['siPickSpeciesPart_'+idx] = function(val){
+        _siSpeciesParts[idx] = val;
+        var el = document.getElementById('siSpeciesPart_'+idx); if(el) el.value = val;
+        var box = document.getElementById('siSpeciesPart_'+idx+'_sugg'); if(box) box.style.display='none';
+        _siUpdateArticleHintM();
+      };
+    })(_sp);
+  }
+})();
 function siAddToGoods(inputId){
   var el=document.getElementById(inputId); var val=(el&&el.value||'').trim();
   if(!val){ showToast('Введите наименование'); return; }
@@ -495,7 +577,7 @@ function addSaleItem(){
     if(!name){showToast('Введите наименование');return;} if(!price){showToast('Введите цену');return;}
     if(currentLookupItem){ const nd=name!==(currentLookupItem.name||''),pd=price!==(currentLookupItem.price||0); if(nd||pd){hasDiff=true;let m=[];if(nd)m.push('название');if(pd)m.push('цена (база: '+fmt(currentLookupItem.price)+')');diffNote='⚠️ '+m.join(', ');} }
   } else if(mb&&mb.style.display!=='none'){
-    name=(gv('siNameM')||'').trim(); price=parseFloat(gv('siPriceM'))||0; species=(gv('siSpeciesM')||'').trim(); qty=parseFloat(gv('siQtyM'))||1;
+    name=(gv('siNameM')||'').trim(); price=parseFloat(gv('siPriceM'))||0; species=_siGetCombinedSpeciesM().trim(); qty=parseFloat(gv('siQtyM'))||1;
     if(!name){showToast('Введите наименование');return;}
     // Продавцы вписывали в «Наименование» отсебятину, а реальное название клали во «Вкус/Состав» —
     // список/подсказки/📋 были только рекомендацией, ничего физически не мешало. Раз название не
@@ -568,6 +650,7 @@ function _finalizeAddSaleItem(num, name, price, species, qty, hasDiff, diffNote)
   setSiItemType('derevo');
   _siNoArticleMode = false;
   _siSelectedArticleM = '';
+  _siResetSpeciesMulti();
   var vp = document.getElementById('siVariantPicker'); if(vp) vp.style.display='none';
   renderSaleItems(); calcSaleTotal();
 }

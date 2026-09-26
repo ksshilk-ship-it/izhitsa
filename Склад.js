@@ -1576,7 +1576,13 @@ function renderManInvItems() {
         '</div>'+
       '</div>'+
       '<div class="fg" style="margin-bottom:6px;position:relative">'+
-        '<div class="u-fs10-gray-mb3">ПОРОДА ДЕРЕВА</div>'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">'+
+          '<div class="u-fs10-gray-mb3" style="margin:0">ПОРОДА ДЕРЕВА</div>'+
+          '<label style="display:flex;align-items:center;gap:4px;font-size:10px;color:#8888aa;cursor:pointer">'+
+            '<input type="checkbox" '+(item._multiSpecies?'checked':'')+' onchange="_manInvToggleMultiSpecies('+i+',this.checked)"> неск. материалов'+
+          '</label>'+
+        '</div>'+
+        (item._multiSpecies ? _manInvRenderSpeciesMulti(i, item) : (
         '<div class="u-flex-g6">'+
           '<input class="fi" id="manInvSpecies_'+i+'" value="'+(item.species||'')+'" placeholder="Порода" autocomplete="off" '+
             'oninput="_manInvSpeciesActive='+i+';_manInvSpecies('+i+',this.value);psjSuggest(\'manInvSpecies_'+i+'\',getSpecies(),\'_manInvPickSpeciesIdx\')" '+
@@ -1584,7 +1590,7 @@ function renderManInvItems() {
             'onblur="psjHideSugg(\'manInvSpecies_'+i+'\');_manInvAutoFillFromCatalog('+i+')" style="margin:0;padding:8px;flex:1">'+
           '<button type="button" onclick="_manInvAddSpecies('+i+')" style="background:#22222e;border:1px solid #f0c060;border-radius:10px;padding:0 14px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>'+
         '</div>'+
-        '<div id="manInvSpecies_'+i+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'+
+        '<div id="manInvSpecies_'+i+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'))+
       '</div>'+
       '<div style="display:flex;gap:6px;align-items:center">'+
         '<div style="flex:1">'+
@@ -1826,6 +1832,82 @@ function _manInvAddSpecies(i){
   saveSpecies(val);
   showToast('✅ Добавлено в породы дерева: '+val);
 }
+// Браслеты/бусы/чётки часто сделаны не из одной породы (дерево+камень, две породы дерева) —
+// раньше это приходилось впихивать одной строкой в «Порода», не разобрать потом что где.
+// Галочка «неск. материалов» превращает поле в список строк; служебные _multiSpecies/_speciesParts
+// живут только на элементе черновика (._manInvItems[i]) и не попадают в сохранённую накладную —
+// saveManualInvoice() собирает items только из настоящих полей (name/article/species/qty/price).
+// Итоговая item.species всегда остаётся обычной строкой через « + », как и везде в системе.
+function _manInvToggleMultiSpecies(i, checked){
+  var item = _manInvItems[i]; if(!item) return;
+  item._multiSpecies = checked;
+  if(checked){
+    if(!item._speciesParts || !item._speciesParts.length) item._speciesParts = [item.species||''];
+  } else {
+    _manInvRecombineSpecies(i);
+  }
+  renderManInvItems();
+  saveManInvDraft();
+}
+function _manInvRenderSpeciesMulti(i, item){
+  var parts = item._speciesParts && item._speciesParts.length ? item._speciesParts : [''];
+  return '<div style="display:flex;flex-direction:column;gap:6px">'+
+    parts.map(function(val, pIdx){
+      var esc = (val||'').replace(/"/g,'&quot;');
+      return '<div style="display:flex;gap:6px;position:relative">'+
+        '<input class="fi" id="manInvSpeciesPart_'+i+'_'+pIdx+'" value="'+esc+'" placeholder="Материал '+(pIdx+1)+'" autocomplete="off" style="margin:0;padding:8px;flex:1" '+
+          'oninput="_manInvSpeciesPartActive={row:'+i+',part:'+pIdx+'};_manInvSpeciesPartInput('+i+','+pIdx+',this.value);psjSuggest(\'manInvSpeciesPart_'+i+'_'+pIdx+'\',getSpecies(),\'_manInvPickSpeciesPartIdx\')" '+
+          'onfocus="_manInvSpeciesPartActive={row:'+i+',part:'+pIdx+'};psjSuggest(\'manInvSpeciesPart_'+i+'_'+pIdx+'\',getSpecies(),\'_manInvPickSpeciesPartIdx\')" '+
+          'onblur="psjHideSugg(\'manInvSpeciesPart_'+i+'_'+pIdx+'\');_manInvAutoFillFromCatalog('+i+')">'+
+        (parts.length>1 ? '<button type="button" onpointerdown="event.preventDefault();_manInvRemoveSpeciesPart('+i+','+pIdx+')" style="background:none;border:1px solid #3e2e2e;border-radius:8px;padding:0 10px;color:#f06060;cursor:pointer;flex-shrink:0">✕</button>' : '')+
+        '<div id="manInvSpeciesPart_'+i+'_'+pIdx+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:36px;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;margin-top:2px"></div>'+
+      '</div>';
+    }).join('')+
+    '<button type="button" onpointerdown="event.preventDefault();_manInvAddSpeciesPart('+i+')" style="align-self:flex-start;background:#22222e;border:1px solid #f0c060;border-radius:8px;padding:6px 12px;color:#f0c060;font-size:11px;font-weight:700;cursor:pointer">＋ Добавить материал</button>'+
+  '</div>';
+}
+function _manInvRecombineSpecies(i){
+  var item = _manInvItems[i]; if(!item) return;
+  var parts = item._speciesParts || [];
+  item.species = parts.filter(function(p){ return p && p.trim(); }).join(' + ');
+}
+function _manInvSpeciesPartInput(i, pIdx, val){
+  var item = _manInvItems[i]; if(!item) return;
+  if(!item._speciesParts) item._speciesParts = [''];
+  item._speciesParts[pIdx] = val;
+  _manInvRecombineSpecies(i);
+  saveManInvDraft();
+}
+function _manInvAddSpeciesPart(i){
+  var item = _manInvItems[i]; if(!item) return;
+  if(!item._speciesParts) item._speciesParts = [''];
+  item._speciesParts.push('');
+  renderManInvItems();
+  saveManInvDraft();
+  var last = item._speciesParts.length-1;
+  setTimeout(function(){ var el=document.getElementById('manInvSpeciesPart_'+i+'_'+last); if(el) el.focus(); }, 0);
+}
+function _manInvRemoveSpeciesPart(i, pIdx){
+  var item = _manInvItems[i]; if(!item) return;
+  item._speciesParts.splice(pIdx,1);
+  if(!item._speciesParts.length) item._speciesParts=[''];
+  _manInvRecombineSpecies(i);
+  renderManInvItems();
+  saveManInvDraft();
+}
+var _manInvSpeciesPartActive = {row:-1, part:-1};
+function _manInvPickSpeciesPartIdx(val){
+  var row = _manInvSpeciesPartActive.row, part = _manInvSpeciesPartActive.part;
+  if(row<0 || part<0) return;
+  var item = _manInvItems[row]; if(!item) return;
+  if(!item._speciesParts) item._speciesParts = [''];
+  item._speciesParts[part] = val;
+  var el = document.getElementById('manInvSpeciesPart_'+row+'_'+part); if(el) el.value = val;
+  _manInvRecombineSpecies(row);
+  var box = document.getElementById('manInvSpeciesPart_'+row+'_'+part+'_sugg'); if(box) box.style.display='none';
+  saveManInvDraft();
+  _manInvAutoFillFromCatalog(row);
+}
 function _manInvQty(i, val) { _manInvItems[i].qty = parseFloat(val)||1; updateManInvTotal(); saveManInvDraft(); }
 function _manInvPrice(i, val) { _manInvItems[i].price = parseFloat(val)||0; updateManInvTotal(); saveManInvDraft(); }
 function _manInvDel(i) { _manInvItems.splice(i,1); renderManInvItems(); saveManInvDraft(); }
@@ -1903,7 +1985,7 @@ function saveManualInvoice() {
     id: uid(), num: num, date: acceptedDateStr, docDate: docDate, from: from,
     destName: session.shopName,
     goodsType: _manInvGoodsType,
-    items: _manInvItems.map(function(it){ return Object.assign({},it); }),
+    items: _manInvItems.map(function(it){ return {name:it.name, article:it.article, species:it.species, qty:it.qty, price:it.price}; }),
     totalAmt: totalAmt,
     status: 'accepted',
     acceptedAt: now.toISOString(),
