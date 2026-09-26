@@ -1356,18 +1356,32 @@ function renderAlertsPage(){
   var knownTypes = {}; order.forEach(function(t){ knownTypes[t]=true; });
   Object.keys(byType).forEach(function(t){ if(!knownTypes[t]) order.push(t); });
   var defByType = {}; ALERT_TYPE_DEFS.forEach(function(d){ defByType[d.type]=d; });
+  // Свёрнуто по умолчанию — иначе, скажем, 30 расхождений нала выводят гору строк на экран
+  // раньше, чем до чего-то другого долистаешь. Заявки на наименования — исключение: их обычно
+  // немного, и на них нужно реагировать быстро, поэтому этот блок открыт сразу.
+  window._alertsSectionOpen = window._alertsSectionOpen || {};
   c.innerHTML = order.filter(function(t){ return byType[t] && byType[t].length; }).map(function(t){
     var def = defByType[t] || {icon:'⚠️', title:t, hint:''};
     var items = byType[t].slice().sort(function(a,b){ return (b.createdAt||b.date||'').localeCompare(a.createdAt||a.date||''); });
+    var open = window._alertsSectionOpen[t]!==undefined ? window._alertsSectionOpen[t] : (t==='name_request');
     return '<div style="margin-bottom:16px">'+
-      '<div style="display:flex;align-items:center;gap:7px;margin-bottom:2px">'+
-        '<span style="font-size:12px;font-weight:700;color:#f0f0f8;text-transform:uppercase;letter-spacing:.5px">'+def.icon+' '+def.title+'</span>'+
-        '<span style="background:#f06060;color:#fff;border-radius:10px;padding:1px 8px;font-size:10px;font-weight:700">'+items.length+'</span>'+
+      '<div onpointerdown="event.preventDefault();_toggleAlertSection(\''+t+'\')" style="display:flex;align-items:center;justify-content:space-between;gap:7px;margin-bottom:2px;cursor:pointer">'+
+        '<div style="display:flex;align-items:center;gap:7px">'+
+          '<span style="font-size:12px;font-weight:700;color:#f0f0f8;text-transform:uppercase;letter-spacing:.5px">'+def.icon+' '+def.title+'</span>'+
+          '<span style="background:#f06060;color:#fff;border-radius:10px;padding:1px 8px;font-size:10px;font-weight:700">'+items.length+'</span>'+
+        '</div>'+
+        '<span style="color:#8888aa;font-size:12px">'+(open?'▾':'▸')+'</span>'+
       '</div>'+
-      (def.hint ? '<div style="font-size:10.5px;color:#8888aa;margin-bottom:6px">'+def.hint+'</div>' : '')+
-      '<div style="background:#1a0f0f;border:1px solid #3e1e1e;border-radius:10px;padding:0 10px">'+items.map(alertCard).join('')+'</div>'+
+      (open && def.hint ? '<div style="font-size:10.5px;color:#8888aa;margin-bottom:6px">'+def.hint+'</div>' : '')+
+      (open ? '<div style="background:#1a0f0f;border:1px solid #3e1e1e;border-radius:10px;padding:0 10px">'+items.map(alertCard).join('')+'</div>' : '')+
     '</div>';
   }).join('');
+}
+function _toggleAlertSection(t){
+  window._alertsSectionOpen = window._alertsSectionOpen || {};
+  var cur = window._alertsSectionOpen[t]!==undefined ? window._alertsSectionOpen[t] : (t==='name_request');
+  window._alertsSectionOpen[t] = !cur;
+  renderAlertsPage();
 }
 function markAlertRead(id){
   try{db.collection('iz_admin_alerts').doc(id).update({read:true});}catch(e){}
