@@ -1232,6 +1232,19 @@ function startAdminAlertsListener(){
     },function(e){console.log('alerts err',e&&e.code);});
 }
 function alertCard(a){
+  if(a.type==='name_request'){
+    var gtLabel = a.goodsType==='dr' ? 'ДР Товар' : 'Дерево';
+    var extra = (a.species?' · '+a.species:'')+(a.price?' · '+fmt(a.price):'');
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #3e2e2e;gap:8px">'+
+      '<div style="min-width:0"><div style="font-size:12px;font-weight:700;color:#60c8f0">📨 Заявка на новое наименование — '+(a.shopName||'')+'</div>'+
+      '<div class="u-fs11-gray">'+(a.sellerName||'—')+' хочет продать «'+(a.name||'')+'»'+extra+' · '+gtLabel+'</div>'+
+      '<div class="u-fs10-gray">'+(a.date||'')+'</div></div>'+
+      '<div style="display:flex;gap:6px;flex-shrink:0">'+
+        '<button onclick="approveNameRequest(\''+a.id+'\')" style="background:#1a2a1e;border:1px solid #60f090;border-radius:6px;padding:5px 9px;color:#60f090;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">✅ Одобрить</button>'+
+        '<button onclick="rejectNameRequest(\''+a.id+'\')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:5px 9px;color:#8888aa;font-size:10px;cursor:pointer">✕</button>'+
+      '</div>'+
+    '</div>';
+  }
   if(a.type==='zp_no_travel'){
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #3e2e2e">'+
       '<div><div style="font-size:12px;font-weight:700;color:#f0a060">⚠️ ЗП без отдельного «Проезда» — '+(a.shopName||'')+'</div>'+
@@ -1354,6 +1367,25 @@ function markAlertRead(id){
   var badge=document.getElementById('alertsBadge');
   if(badge) badge.textContent=_adminAlerts.length>0?_adminAlerts.length:'';
   renderAlertsPage();
+}
+function approveNameRequest(id){
+  var a = _adminAlerts.find(function(x){ return x.id===id; });
+  if(!a){ showToast('Заявка не найдена'); return; }
+  var key = a.goodsType==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
+  var goods = getRefBook(key);
+  var norm = (a.name||'').toLowerCase().trim();
+  var exists = goods.some(function(g){ return ((g&&g.name)||g).toLowerCase().trim()===norm; });
+  if(!exists){
+    goods.push({id:uid(), name:a.name});
+    saveRefBookShop(key, goods);
+    if(typeof _clearRefbookTombstone==='function') _clearRefbookTombstone(key, a.name);
+  }
+  markAlertRead(id);
+  showToast('✅ «'+a.name+'» добавлено в базу товаров — продавец сможет продать после обновления списка');
+}
+function rejectNameRequest(id){
+  markAlertRead(id);
+  showToast('Заявка отклонена');
 }
 function markAllAlertsRead(){
   if(!_adminAlerts.length) return;

@@ -303,6 +303,36 @@ function _scpPick(name, price, article, species){
   document.getElementById('saleCatalogOverlay').classList.remove('open');
   _siUpdateArticleHintM();
 }
+// Продавец не может ни продать по имени, которого нет в базе, ни завести его сам (см.
+// siAddToGoods — теперь только администратор). Вместо тупика — заявка: администратор получает
+// её в 🔔 Тревогах (тот же механизм, что и расхождения кассы/конфликты смен, см. смены.js
+// saveAdminAlert/alertCard/approveNameRequest) и решает, добавлять ли позицию в базу.
+var _nameReqPending = null;
+function showNameRequestBanner(name, species, price, goodsType){
+  _nameReqPending = {name:name, species:species, price:price, goodsType:goodsType};
+  var banner = document.getElementById('nameReqBanner');
+  var entEl = document.getElementById('nameReqEntered');
+  if(entEl) entEl.textContent = name+(species?' · '+species:'')+(price?' · '+Math.round(price).toLocaleString('ru-RU')+'₽':'');
+  if(banner) banner.style.display='flex';
+}
+function closeNameRequestBanner(){
+  var banner = document.getElementById('nameReqBanner'); if(banner) banner.style.display='none';
+  _nameReqPending = null;
+}
+function sendNameRequest(){
+  if(!_nameReqPending || typeof saveAdminAlert!=='function') return;
+  saveAdminAlert({
+    type:'name_request',
+    date: new Date().toLocaleDateString('ru-RU'),
+    name: _nameReqPending.name, species: _nameReqPending.species, price: _nameReqPending.price,
+    goodsType: _nameReqPending.goodsType,
+    shopName: (typeof session!=='undefined' && session && session.shopName) || '',
+    sellerName: (typeof session!=='undefined' && session && (session.sellerName||session.name)) || ''
+  });
+  var banner = document.getElementById('nameReqBanner'); if(banner) banner.style.display='none';
+  showToast('📨 Заявка отправлена администратору — продать можно будет после одобрения');
+  _nameReqPending = null;
+}
 function siPickSpecies(val){ var el=document.getElementById('siSpecies'); if(el) el.value=val; var box=document.getElementById('siSpecies_sugg'); if(box) box.style.display='none'; }
 function siPickSpeciesM(val){ var el=document.getElementById('siSpeciesM'); if(el) el.value=val; var box=document.getElementById('siSpeciesM_sugg'); if(box) box.style.display='none'; }
 function siAddToGoods(inputId){
@@ -475,7 +505,7 @@ function addSaleItem(){
     var _siMbNorm = name.toLowerCase().trim();
     var _siMbInCatalog = getRefBook(_siMbKey).some(function(g){ return (g.name||g).toLowerCase().trim()===_siMbNorm; });
     if(!_siMbInCatalog){
-      showToast('⛔ «'+name+'» нет в базе наименований — выберите из списка (📋) или добавьте через ＋, если это новая позиция');
+      showNameRequestBanner(name, species, price, _siItemGoodsType);
       return;
     }
     if(!num && _siNoArticleMode){
