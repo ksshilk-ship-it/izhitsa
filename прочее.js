@@ -490,16 +490,12 @@ function _rbRichWoodGroup(rich, allItems, bookId, key){
       var spHead = '<div style="padding:7px 10px 4px;font-size:10.5px;font-weight:700;color:'+(sp==='—'?'#8888aa':'#f0c060')+'">'+(sp==='—'?'❓ Без породы':'🪵 '+sp)+' ('+rows.length+')</div>';
       var rowsHtml = rows.map(function(item){
         var realIdx = allItems.indexOf(item);
-        return '<div style="padding:6px 10px 6px 18px;margin-bottom:4px">'+
-          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">'+
-            '<input type="text" value="'+(item.name||'').replace(/"/g,'&quot;')+'" placeholder="Наименование" onchange="setRefbookItemName(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="flex:1;min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:12px;padding:6px 7px">'+
-            '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+realIdx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer;padding:4px;flex-shrink:0">✕</button>'+
-          '</div>'+
-          '<div style="display:flex;gap:6px">'+
-            '<input type="text" value="'+(item.species||'').replace(/"/g,'&quot;')+'" placeholder="Порода" onchange="setRefbookItemSpecies(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="flex:1;min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px">'+
-            '<input type="number" value="'+(item.price!=null?item.price:'')+'" placeholder="Цена" onchange="setRefbookItemPrice(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:70px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px;flex-shrink:0">'+
-            '<input type="text" value="'+(item.article||'').replace(/"/g,'&quot;')+'" placeholder="Артикул" onchange="setRefbookItemArticle(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:80px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px;flex-shrink:0">'+
-          '</div>'+
+        return '<div style="display:flex;align-items:center;gap:4px;padding:4px 10px 4px 18px">'+
+          '<input type="text" value="'+(item.article||'').replace(/"/g,'&quot;')+'" placeholder="№" onchange="setRefbookItemArticle(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:58px;flex-shrink:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 5px">'+
+          '<input type="text" value="'+(item.name||'').replace(/"/g,'&quot;')+'" placeholder="Наименование" onchange="setRefbookItemName(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="flex:1;min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 6px">'+
+          '<input type="number" value="'+(item.price!=null?item.price:'')+'" placeholder="Цена" onchange="setRefbookItemPrice(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:52px;flex-shrink:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 5px">'+
+          '<input type="text" value="'+(item.species||'').replace(/"/g,'&quot;')+'" placeholder="Порода" onchange="setRefbookItemSpecies(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:72px;flex-shrink:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 5px">'+
+          '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+realIdx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:13px;cursor:pointer;padding:2px;flex-shrink:0">✕</button>'+
         '</div>';
       }).join('');
       return spHead + rowsHtml;
