@@ -1567,7 +1567,7 @@ function renderManInvItems() {
             '<input class="fi" id="manInvName_'+i+'" value="'+item.name+'" placeholder="Название" autocomplete="off" '+
               'oninput="_manInvName('+i+',this.value);siAutoDetectAndSetType(this.value);psjSuggest(\'manInvName_'+i+'\',_manInvNameOptions(),\'_manInvPickName_'+i+'\')" '+
               'onfocus="psjSuggest(\'manInvName_'+i+'\',_manInvNameOptions(),\'_manInvPickName_'+i+'\')" '+
-              'onblur="psjHideSugg(\'manInvName_'+i+'\');_manInvCheckNameDup('+i+')" style="margin:0;padding:8px;flex:1">'+
+              'onblur="psjHideSugg(\'manInvName_'+i+'\');_manInvCheckNameDup('+i+');_manInvAutoFillFromCatalog('+i+')" style="margin:0;padding:8px;flex:1">'+
             '<div id="manInvName_'+i+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:25;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:180px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'+
             '<button type="button" onclick="openManInvCatalogPicker('+i+')" title="Список из справочника" '+
               'style="background:#60c8f0;border:none;border-radius:8px;padding:6px 9px;font-weight:700;color:#0f0f13;cursor:pointer;font-size:13px;flex-shrink:0">📚</button>'+
@@ -1581,7 +1581,7 @@ function renderManInvItems() {
           '<input class="fi" id="manInvSpecies_'+i+'" value="'+(item.species||'')+'" placeholder="Порода" autocomplete="off" '+
             'oninput="_manInvSpeciesActive='+i+';_manInvSpecies('+i+',this.value);psjSuggest(\'manInvSpecies_'+i+'\',getSpecies(),\'_manInvPickSpeciesIdx\')" '+
             'onfocus="_manInvSpeciesActive='+i+';psjSuggest(\'manInvSpecies_'+i+'\',getSpecies(),\'_manInvPickSpeciesIdx\')" '+
-            'onblur="psjHideSugg(\'manInvSpecies_'+i+'\')" style="margin:0;padding:8px;flex:1">'+
+            'onblur="psjHideSugg(\'manInvSpecies_'+i+'\');_manInvAutoFillFromCatalog('+i+')" style="margin:0;padding:8px;flex:1">'+
           '<button type="button" onclick="_manInvAddSpecies('+i+')" style="background:#22222e;border:1px solid #f0c060;border-radius:10px;padding:0 14px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>'+
         '</div>'+
         '<div id="manInvSpecies_'+i+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'+
@@ -1696,7 +1696,7 @@ function _renderManInvCatalogPicker(){
         }
         var na=(a.name||'').toLowerCase(), nb=(b.name||'').toLowerCase();
         if(na!==nb) return na.localeCompare(nb,'ru');
-        return (a.price||0)-(b.price||0);
+        return (a.species||'').toLowerCase().localeCompare((b.species||'').toLowerCase(),'ru');
       });
       var open = !!q || window._micCatOpen[cat]===true;
       var header = '<div onclick="_micToggleCat(\''+cat.replace(/'/g,"\\'")+'\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:9px 10px;margin:8px 0 4px;background:#1a1a22;border-radius:8px">'+
@@ -1705,10 +1705,11 @@ function _renderManInvCatalogPicker(){
       '</div>';
       if(!open) return header;
       return header + list.map(function(it){
-          var priceStr = isDr ? (' · '+Math.round(it.price||0).toLocaleString('ru-RU')+'₽'+(it.article?' · №'+it.article:'')) : '';
-          return '<div onclick="_micPick('+targetIdx+',\''+(it.name||'').replace(/'/g,"\\'")+'\','+(it.price||0)+',\''+(it.article||'').replace(/'/g,"\\'")+'\')" '+
+          var priceStr = (isDr || it.article) ? (' · '+Math.round(it.price||0).toLocaleString('ru-RU')+'₽'+(it.article?' · №'+it.article:'')) : '';
+          var speciesStr = (!isDr && it.species) ? ' · '+it.species : '';
+          return '<div onclick="_micPick('+targetIdx+',\''+(it.name||'').replace(/'/g,"\\'")+'\','+(it.price||0)+',\''+(it.article||'').replace(/'/g,"\\'")+'\',\''+(it.species||'').replace(/'/g,"\\'")+'\')" '+
             'style="padding:9px 10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:5px;cursor:pointer;font-size:13px">'+
-            (it.name||'')+'<span style="color:#8888aa;font-size:12px">'+priceStr+'</span>'+
+            (it.name||'')+'<span style="color:#8888aa;font-size:12px">'+speciesStr+priceStr+'</span>'+
           '</div>';
         }).join('');
     }).join('');
@@ -1721,11 +1722,12 @@ function _renderManInvCatalogPicker(){
     '<div style="max-height:60vh;overflow-y:auto">'+body+'</div>'+
   '</div>';
 }
-function _micPick(i, name, price, article){
+function _micPick(i, name, price, article, species){
   if(_manInvItems[i]==null) return;
   _manInvItems[i].name = name;
   if(price) _manInvItems[i].price = price;
   if(article) _manInvItems[i].article = article;
+  if(species) _manInvItems[i].species = species;
   var overlay = document.getElementById('manInvCatalogOverlay'); if(overlay) overlay.classList.remove('open');
   updateManInvTotal(); saveManInvDraft();
   renderManInvItems();
@@ -1754,6 +1756,26 @@ function _manInvPickSpeciesIdx(val){
   var box = document.getElementById('manInvSpecies_'+i+'_sugg');
   if(box) box.style.display = 'none';
   saveManInvDraft();
+  _manInvAutoFillFromCatalog(i);
+}
+function _manInvAutoFillFromCatalog(i){
+  if(_manInvGoodsType==='dr') return;
+  var item = _manInvItems[i]; if(!item) return;
+  if(item.article) return; // артикул уже указан вручную или из списка — не перезаписываем
+  var name = (item.name||'').trim(), species = (item.species||'').trim();
+  if(!name || !species) return;
+  var norm = name.toLowerCase(), normSp = species.toLowerCase();
+  var match = (getRefBook('iz_goods_derevo')||[]).find(function(c){
+    return c.article && (c.name||'').toLowerCase().trim()===norm && (c.species||'').toLowerCase().trim()===normSp;
+  });
+  if(!match) return;
+  item.price = match.price;
+  item.article = match.article;
+  saveManInvDraft();
+  setTimeout(function(){
+    renderManInvItems();
+    showToast('✅ Подтянуто из каталога: '+match.price+'₽ · арт. '+match.article);
+  }, 0);
 }
 function _manInvAddSpecies(i){
   var el = document.getElementById('manInvSpecies_'+i);
@@ -1815,6 +1837,16 @@ function setManInvType(type){
 }
 function saveManualInvoice() {
   if(!_manInvItems.length) { showToast('Добавьте позиции'); return; }
+  if(_manInvGoodsType!=='dr'){
+    for(var _vi=0; _vi<_manInvItems.length; _vi++){
+      var _vit = _manInvItems[_vi];
+      if(!_vit || !(_vit.name||'').trim()) continue;
+      if(!_vit.article && !(_vit.species||'').trim()){
+        showToast('⛔ Укажите породу для «'+_vit.name+'» (поз. '+(_vi+1)+') — без артикула порода обязательна');
+        return;
+      }
+    }
+  }
   // Переоценка: те же изделия (те же номера) возвращаются на баланс по новой цене — проверки на
   // «номер уже занят» и «похожая накладная» к ней не применяются.
   var isReval = !!(document.getElementById('manInvReval')||{}).checked;
