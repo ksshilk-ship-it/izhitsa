@@ -3236,13 +3236,11 @@ function _applyRevalToEntry(entry, on){
 }
 function editItemForm(id, color, opts){
   opts = opts || {};
-  var items = getItemsBase();
   var species = getSpecies();
   var p = opts.prefill || {};
-  var dlItems = 'dl_eitems_'+id, dlSpecies = 'dl_especies_'+id;
+  var dlSpecies = 'dl_especies_'+id;
   var html = '<div style="background:#13131a;border:2px solid '+color+';border-radius:10px;padding:10px;margin-top:6px">';
   html += '<div style="font-size:10px;color:'+color+';font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">✏️ Исправление записи</div>';
-  html += '<datalist id="'+dlItems+'">'+items.slice(0,80).map(function(it){ return '<option value="'+(it.name||'')+'">'; }).join('')+'</datalist>';
   html += '<datalist id="'+dlSpecies+'">'+species.slice(0,80).map(function(sp){ return '<option value="'+sp+'">'; }).join('')+'</datalist>';
   if(opts.who){
     html += '<div style="margin-bottom:6px"><div class="u-fs10-gray-mb3">Сотрудник</div>'+
@@ -3251,8 +3249,11 @@ function editItemForm(id, color, opts){
   html += '<div style="display:flex;gap:5px;margin-bottom:6px">'+
     '<div style="flex:0 0 64px"><div class="u-fs10-gray-mb3">Артикул</div>'+
       '<input class="fi u-inp-compact" id="svEdit_'+id+'_art" value="'+(p.art||'')+'" placeholder="№"></div>'+
-    '<div style="flex:1"><div class="u-fs10-gray-mb3">Наименование</div>'+
-      '<input class="fi u-inp-compact" id="svEdit_'+id+'_name" value="'+(p.name||'')+'" list="'+dlItems+'" placeholder="Товар"></div>'+
+    '<div style="flex:1;position:relative"><div class="u-fs10-gray-mb3">Наименование</div>'+
+      '<input class="fi u-inp-compact" id="svEdit_'+id+'_name" value="'+(p.name||'')+'" placeholder="Товар" autocomplete="off" '+
+        'oninput="svEditSuggestName(\''+id+'\')" onfocus="svEditSuggestName(\''+id+'\')" onblur="psjHideSugg(\'svEdit_'+id+'_name\')">'+
+      '<div id="svEdit_'+id+'_name_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:180px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'+
+    '</div>'+
     '<div style="flex:0 0 90px"><div class="u-fs10-gray-mb3">Порода</div>'+
       '<input class="fi u-inp-compact" id="svEdit_'+id+'_species" value="'+(p.species||'')+'" list="'+dlSpecies+'" placeholder="Порода"></div>'+
   '</div>';
@@ -3286,6 +3287,56 @@ function editItemForm(id, color, opts){
 function svEditItemCalc(id){
   var price=_svNum('svEdit_'+id+'_price'), qty=_svNum('svEdit_'+id+'_qty')||1;
   var amtEl=document.getElementById('svEdit_'+id+'_amt'); if(amtEl) amtEl.value = price*qty;
+}
+// Правка исторической записи (приход/списание/продажа задним числом) раньше подсказывала только
+// голые названия через нативный <datalist> — цену и артикул приходилось помнить или искать
+// отдельно. Эта форма используется для обоих типов товара сразу (goodsType самой записи заранее
+// не всегда известен здесь), поэтому смотрим совпадения сразу в обоих каталогах — ДР Товар и
+// Дерево — и показываем всё, что нашлось, как в подсказках формы продажи (см. siSuggestNameM).
+function svEditSuggestName(id){
+  var box = document.getElementById('svEdit_'+id+'_name_sugg');
+  var input = document.getElementById('svEdit_'+id+'_name');
+  if(!box || !input) return;
+  var val = (input.value||'').trim().toLowerCase();
+  if(!val){ box.style.display='none'; box.innerHTML=''; return; }
+  var names = getItemsBase().map(function(it){ return it.name; }).filter(Boolean)
+    .filter(function(n, idx, arr){ return arr.indexOf(n)===idx; })
+    .filter(function(n){ return n.toLowerCase().indexOf(val)>=0; });
+  names.sort(function(a,b){
+    var ai=a.toLowerCase().indexOf(val), bi=b.toLowerCase().indexOf(val);
+    if(ai!==bi) return ai-bi;
+    return a.length-b.length;
+  });
+  names = names.slice(0,8);
+  if(!names.length){ box.style.display='none'; box.innerHTML=''; return; }
+  var drCat = getRefBook('iz_goods_dr'), woodCat = getRefBook('iz_goods_derevo');
+  var rows = [];
+  names.forEach(function(nm){
+    var norm = nm.toLowerCase().trim();
+    var variants = drCat.filter(function(g){ return (g.name||'').toLowerCase().trim()===norm && g.article; })
+      .concat(woodCat.filter(function(g){ return (g.name||'').toLowerCase().trim()===norm && g.article; }));
+    if(!variants.length){ rows.push({name:nm, price:null, article:null, species:null}); return; }
+    variants.forEach(function(v){ rows.push({name:nm, price:v.price, article:v.article, species:v.species||null}); });
+  });
+  box.innerHTML = rows.map(function(r){
+    var infoStr = r.price!=null
+      ? ' · '+Math.round(r.price).toLocaleString('ru-RU')+'₽'+(r.article?' · №'+r.article:'')+(r.species?' · '+r.species:'')
+      : '';
+    var priceArg = r.price!=null ? r.price : 'null';
+    var artArg = r.article ? "'"+r.article.replace(/'/g,"\\'")+"'" : 'null';
+    var spArg = r.species ? "'"+r.species.replace(/'/g,"\\'")+"'" : 'null';
+    return '<div onpointerdown="event.preventDefault();svEditPickName(\''+id+'\',\''+r.name.replace(/'/g,"\\'")+'\','+priceArg+','+artArg+','+spArg+')" '+
+      'style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px">'+
+      '<span>'+r.name+'</span><span style="color:#8888aa;font-size:11px;white-space:nowrap;flex-shrink:0">'+infoStr+'</span></div>';
+  }).join('');
+  box.style.display='block';
+}
+function svEditPickName(id, name, price, article, species){
+  var nameEl = document.getElementById('svEdit_'+id+'_name'); if(nameEl) nameEl.value = name;
+  if(price!=null){ var priceEl=document.getElementById('svEdit_'+id+'_price'); if(priceEl){ priceEl.value=price; svEditItemCalc(id); } }
+  if(article){ var artEl=document.getElementById('svEdit_'+id+'_art'); if(artEl) artEl.value = article; }
+  if(species){ var spEl=document.getElementById('svEdit_'+id+'_species'); if(spEl) spEl.value = species; }
+  var box = document.getElementById('svEdit_'+id+'_name_sugg'); if(box) box.style.display='none';
 }
 function _svEditItemRow(id, extraKey){
   return {
