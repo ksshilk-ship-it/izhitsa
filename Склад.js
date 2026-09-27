@@ -4074,13 +4074,13 @@ function _naShowDetail(name, vk){
 // смены (открытые не трогаем — их может редактировать продавец прямо сейчас), находит позиции
 // БЕЗ артикула, чьё имя+порода(+цена) точно совпадает с каталогом, и только заполняет пустое
 // поле — никогда не перезаписывает то, что уже есть. Предпросмотр обязателен перед применением.
-function _retroArtBuildLookup(){
+function _retroArtBuildLookup(freshDerevo, freshDr){
   var lookup = {};
-  (getRefBook('iz_goods_derevo')||[]).filter(function(c){ return c.article; }).forEach(function(c){
+  (freshDerevo || getRefBook('iz_goods_derevo') || []).filter(function(c){ return c.article; }).forEach(function(c){
     var k = 'wood|'+(c.name||'').toLowerCase().trim()+'|'+(c.species||'').toLowerCase().trim()+'|'+(c.price||0);
     lookup[k] = c.article;
   });
-  (getRefBook('iz_goods_dr')||[]).filter(function(c){ return c.article; }).forEach(function(c){
+  (freshDr || getRefBook('iz_goods_dr') || []).filter(function(c){ return c.article; }).forEach(function(c){
     var k = 'dr|'+(c.name||'').toLowerCase().trim()+'|'+(c.price||0);
     lookup[k] = c.article;
   });
@@ -4094,7 +4094,21 @@ function loadRetroArticleAudit(){
   var status = document.getElementById('raStatus');
   var results = document.getElementById('raResults');
   if(results) results.innerHTML='';
-  var lookup = _retroArtBuildLookup();
+  if(status){ status.style.display='block'; status.textContent='⏳ Обновляю каталог с сервера...'; }
+  // Раньше каталог для сравнения читался из локального кэша устройства (getRefBook) — если он
+  // отстал от облака (например, только что добавили позиции с другого устройства), совпадения
+  // молча не находились, хотя каталог на сервере их уже содержит. Сканы накладных/смен и так шли
+  // прямо с сервера — подтягиваем оттуда же и сам каталог, прежде чем строить таблицу поиска.
+  Promise.all([
+    db.collection('iz_settings').doc('goods_derevo').get({source:'server'}).then(function(snap){ return (snap.exists && snap.data().data) || null; }).catch(function(){ return null; }),
+    db.collection('iz_settings').doc('goods_dr').get({source:'server'}).then(function(snap){ return (snap.exists && snap.data().data) || null; }).catch(function(){ return null; })
+  ]).then(function(res){
+    if(res[0]) localStorage.setItem('iz_goods_derevo', JSON.stringify(res[0]));
+    if(res[1]) localStorage.setItem('iz_goods_dr', JSON.stringify(res[1]));
+    _retroArtScan(_retroArtBuildLookup(res[0], res[1]), status);
+  });
+}
+function _retroArtScan(lookup, status){
   if(!Object.keys(lookup).length){
     if(status){ status.style.display='block'; status.textContent='⚠️ В каталоге «С артикулом вручную» пока пусто — сначала занесите туда позиции'; }
     return;
@@ -4182,7 +4196,7 @@ function _renderRetroArtPreview(){
   }
   var totalRecords = articles.reduce(function(s,a){ return s+data.matchStats[a].count; },0);
   articles.sort(function(a,b){ return data.matchStats[b].count - data.matchStats[a].count; });
-  host.innerHTML = '<div style="font-size:12px;color:#f0c060;font-weight:700;margin-bottom:8px">Найдено: '+totalRecords+' запис'+(totalRecords===1?'ь':(totalRecords<5?'и':'ей'))+' по '+articles.length+' артикул'+(articles.length===1?'у':(articles.length<5?'ам':'ам'))+' — нажмите на строку, чтобы увидеть сами записи</div>'+
+  host.innerHTML = '<div style="font-size:12px;color:#f0c060;font-weight:700;margin-bottom:8px">Найдено: '+totalRecords+' запис'+(totalRecords===1?'ь':(totalRecords<5?'и':'ей'))+' по '+articles.length+' артикул'+(articles.length===1?'у':(articles.length<5?'ам':'ам'))+' — нажмите на строку, чтобы увидеть сами записи, или сразу «Применить» по этому артикулу</div>'+
     articles.map(function(art){
       var m = data.matchStats[art];
       var srcParts = [];
@@ -4190,12 +4204,14 @@ function _renderRetroArtPreview(){
       if(m.sale) srcParts.push('💰×'+m.sale);
       if(m.writeoff) srcParts.push('🗑️×'+m.writeoff);
       var artEsc = art.replace(/'/g,"\\'");
-      return '<div onclick="_retroArtShowDetail(\''+artEsc+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:5px;font-size:11.5px;gap:8px;cursor:pointer">'+
-        '<div><b>№'+art+'</b> — '+(m.name||'')+(m.species?' · '+m.species:'')+' · '+Math.round(m.price||0).toLocaleString('ru-RU')+'₽</div>'+
-        '<div style="color:#8888aa;flex-shrink:0;white-space:nowrap">'+m.count+' зап. · '+srcParts.join(' ')+' 🔎</div>'+
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:5px;font-size:11.5px;gap:8px">'+
+        '<div onclick="_retroArtShowDetail(\''+artEsc+'\')" style="cursor:pointer;flex:1;min-width:0">'+
+          '<div><b>№'+art+'</b> — '+(m.name||'')+(m.species?' · '+m.species:'')+' · '+Math.round(m.price||0).toLocaleString('ru-RU')+'₽</div>'+
+          '<div style="color:#8888aa">'+m.count+' зап. · '+srcParts.join(' ')+' 🔎</div>'+
+        '</div>'+
+        '<button type="button" onclick="event.stopPropagation();applyRetroArticleAudit(\''+artEsc+'\')" style="flex-shrink:0;padding:7px 11px;background:#c8f060;border:none;border-radius:8px;color:#0f0f13;font-size:11px;font-weight:700;cursor:pointer">✅ Применить</button>'+
       '</div>';
-    }).join('')+
-    '<button type="button" onclick="applyRetroArticleAudit()" style="width:100%;margin-top:10px;padding:10px;background:#c8f060;border:none;border-radius:10px;color:#0f0f13;font-size:13px;font-weight:700;cursor:pointer">✅ Применить '+totalRecords+' изменени'+(totalRecords===1?'е':(totalRecords<5?'я':'й'))+'</button>';
+    }).join('');
 }
 // Переход к настоящей смене вместо текстового описания записи: если смена ещё не в локальном
 // кэше (обычное дело — этот аудит сканирует всё облако, а не только то, что открывали на этом
@@ -4248,17 +4264,30 @@ function _retroArtShowDetail(article){
   '</div>';
   overlay.classList.add('open');
 }
-function applyRetroArticleAudit(){
+// articleFilter не задан — применить все найденные совпадения разом (оставлено для отладки/на
+// всякий случай); задан — применить только этот артикул, не трогая остальные строки предпросмотра
+// (по одной строке за раз, как и просили — чтобы не давить одну общую кнопку на всё сразу).
+function applyRetroArticleAudit(articleFilter){
   var data = window._retroArtPending;
-  var docKeys = data ? Object.keys(data.docUpdates) : [];
-  if(!docKeys.length){ showToast('Нечего применять'); return; }
-  var totalRecords = Object.keys(data.matchStats).reduce(function(s,a){ return s+data.matchStats[a].count; },0);
-  if(!confirm('Проставить артикулы в '+totalRecords+' позициях ('+docKeys.length+' документов — накладные/смены)? Меняются только записи, где артикула ещё нет — существующие данные не трогаются.')) return;
+  if(!data){ showToast('Нечего применять'); return; }
+  var relevantDocs = [];
+  var totalRecords = 0;
+  Object.keys(data.docUpdates).forEach(function(dk){
+    var u = data.docUpdates[dk];
+    var changes = articleFilter ? u.changes.filter(function(ch){ return ch.article===articleFilter; }) : u.changes;
+    if(!changes.length) return;
+    relevantDocs.push({kind:u.kind, id:u.id, changes:changes});
+    totalRecords += changes.length;
+  });
+  if(!relevantDocs.length){ showToast('Нечего применять'); return; }
+  var confirmMsg = articleFilter
+    ? 'Проставить артикул №'+articleFilter+' в '+totalRecords+' позициях ('+relevantDocs.length+' документов)? Меняются только записи, где артикула ещё нет.'
+    : 'Проставить артикулы в '+totalRecords+' позициях ('+relevantDocs.length+' документов — накладные/смены)? Меняются только записи, где артикула ещё нет — существующие данные не трогаются.';
+  if(!confirm(confirmMsg)) return;
   var status = document.getElementById('raStatus');
   if(status){ status.style.display='block'; status.textContent='⏳ Применяю...'; }
   var applied = 0, failedDocs = 0;
-  var tasks = docKeys.map(function(dk){
-    var u = data.docUpdates[dk];
+  var tasks = relevantDocs.map(function(u){
     if(u.kind==='shift'){
       var ref = db.collection('iz_shifts').doc(u.id);
       return ref.get({source:'server'}).then(function(snap){
@@ -4294,10 +4323,20 @@ function applyRetroArticleAudit(){
   });
   Promise.all(tasks).then(function(){
     if(status) status.style.display='none';
-    try{ logAction('RETRO_ARTICLE_APPLY', {appliedCount:applied, failedDocs:failedDocs, articles:Object.keys(data.matchStats)}); }catch(e){}
-    window._retroArtPending = null;
-    var host = document.getElementById('raResults');
-    if(host) host.innerHTML = '<div class="empty"><div class="ei">✅</div>Готово: проставлено артикулов — '+applied+(failedDocs?' · документов с ошибкой: '+failedDocs:'')+'</div>';
+    try{ logAction('RETRO_ARTICLE_APPLY', {appliedCount:applied, failedDocs:failedDocs, article:articleFilter||'all'}); }catch(e){}
+    if(articleFilter){
+      delete data.matchStats[articleFilter];
+      Object.keys(data.docUpdates).forEach(function(dk){
+        var u = data.docUpdates[dk];
+        u.changes = u.changes.filter(function(ch){ return ch.article!==articleFilter; });
+        if(!u.changes.length) delete data.docUpdates[dk];
+      });
+      _renderRetroArtPreview();
+    } else {
+      window._retroArtPending = null;
+      var host = document.getElementById('raResults');
+      if(host) host.innerHTML = '<div class="empty"><div class="ei">✅</div>Готово: проставлено артикулов — '+applied+(failedDocs?' · документов с ошибкой: '+failedDocs:'')+'</div>';
+    }
     showToast('✅ Применено: '+applied+' позиций');
   });
 }
