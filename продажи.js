@@ -813,12 +813,20 @@ function updateDiscCategoryVisibility(){
   var hasWood = saleItems.some(function(it){ return it.goodsType!=='dr'; });
   var hasDr = saleItems.some(function(it){ return it.goodsType==='dr'; });
   var ambiguous = hasWood && hasDr;
-  var wasVisible = block.style.display==='block';
   block.style.display = ambiguous ? 'block' : 'none';
+  // Раньше «была ли видна категория» читалось из display стиля прямо перед этим вызовом — а
+  // siEditItem(✏️) на момент правки ВРЕМЕННО вынимает редактируемую позицию из корзины (splice,
+  // потом добавляет обратно через «＋»). Если это была единственная позиция своей категории,
+  // корзина на миг становится однокатегорийной — ambiguous=false — и код ниже принудительно
+  // подставлял категорию скидки под то, что осталось, помечая её как «явный выбор продавца».
+  // Когда позицию добавляли обратно, реальный выбор продавца уже был молча затёрт и не
+  // восстанавливался — скидка застревала не в той категории, что попадало в итоговый расчёт
+  // смены (несходящийся нал по Дереву/ДР на ровно ту же сумму, что скидка). Теперь автоматическая
+  // подстановка категории никогда не трогает и не перетирает УЖЕ сделанный явный выбор
+  // (_discCategoryChosen) — только заполняет её, пока продавец сам ничего не выбрал.
   if(!ambiguous){
-    setDiscCategory(hasDr?'dr':'derevo', true);
-  } else if(!wasVisible){
-    _discCategoryChosen = false;
+    if(!_discCategoryChosen) setDiscCategory(hasDr?'dr':'derevo');
+  } else if(!_discCategoryChosen){
     setDiscCategory(null);
   }
   _siDiscMismatchCheck();
@@ -848,7 +856,12 @@ function setDiscType(type){
   const pb=document.getElementById('discTypePct'),sb=document.getElementById('discTypeSum'),u=document.getElementById('discUnit');
   if(type==='pct'){ pb.style.cssText='flex:1;padding:8px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-family:Golos Text,sans-serif;font-size:12px;font-weight:700;cursor:pointer'; sb.style.cssText='flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-family:Golos Text,sans-serif;font-size:12px;font-weight:600;cursor:pointer'; if(u)u.textContent='%'; }
   else { sb.style.cssText='flex:1;padding:8px;border-radius:10px;border:2px solid #c8f060;background:#1e2a14;color:#c8f060;font-family:Golos Text,sans-serif;font-size:12px;font-weight:700;cursor:pointer'; pb.style.cssText='flex:1;padding:8px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-family:Golos Text,sans-serif;font-size:12px;font-weight:600;cursor:pointer'; if(u)u.textContent='₽'; }
-  document.getElementById('discInput').value=''; document.getElementById('saleDiscount').value=''; calcSaleTotal();
+  document.getElementById('discInput').value=''; document.getElementById('saleDiscount').value='';
+  // discHint раньше не сбрасывался при переключении режима — «34% от 6 950₽ = ...», введённое
+  // в режиме %, так и висело поверх уже переключённого режима «₽ Сумма», где эти же цифры значат
+  // совсем другое (рубли, не проценты) — выглядело как будто скидка считается неправильно.
+  var h=document.getElementById('discHint'); if(h) h.textContent = type==='pct' ? 'Введите % → посчитается сумма' : '';
+  calcSaleTotal();
 }
 function calcDiscountFromInput(){
   const total=saleItems.reduce((s,it)=>s+(it.amt!=null?it.amt:it.price*(it.qty||1)),0), inp=parseFloat(gv('discInput'))||0;
