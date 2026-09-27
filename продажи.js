@@ -136,27 +136,62 @@ function siSuggestNameM(inputId){
   names = names.slice(0,8);
   if(!names.length){ box.style.display='none'; box.innerHTML=''; return; }
   var isWood = _siItemGoodsType!=='dr';
-  var rows = [];
+  // Порода уже вписана продавцом (и не режим «неск. материалов») — сразу фильтруем варианты по
+  // ней, список короткий и плоский. Иначе, у дерева, группируем по породе и сворачиваем — иначе
+  // список превращается в полотно из полусотни строк, которое приходится долго листать.
+  var speciesVal = (isWood && !_siSpeciesMultiMode) ? ((document.getElementById('siSpeciesM')||{}).value||'').trim() : '';
+  var html = '';
   names.forEach(function(nm){
     var variants = _siGetGoodsVariants(nm, _siItemGoodsType);
-    variants.forEach(function(v){ rows.push({name:nm, price:v.price, article:v.article, species:v.species||null}); });
+    if(isWood && speciesVal){
+      var norm = speciesVal.toLowerCase();
+      variants.filter(function(v){ return (v.species||'').trim().toLowerCase()===norm; })
+        .forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species, 0); });
+    } else if(isWood && variants.length){
+      var bySpecies = {}, order = [];
+      variants.forEach(function(v){
+        var sp = v.species || '—';
+        if(!bySpecies[sp]){ bySpecies[sp]=[]; order.push(sp); }
+        bySpecies[sp].push(v);
+      });
+      order.forEach(function(sp){
+        var groupKey = nm+'|'+sp;
+        var open = !!window._siSuggSpeciesOpen[groupKey];
+        var list = bySpecies[sp];
+        var ge = groupKey.replace(/'/g,"\\'");
+        html += '<div onpointerdown="event.preventDefault();_siSuggToggleSpecies(\''+inputId+'\',\''+ge+'\')" '+
+          'style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px;background:#1a1a22">'+
+          '<span>'+(open?'▾':'▸')+' '+nm+' · '+sp+'</span><span style="color:#8888aa;font-size:11px;white-space:nowrap;flex-shrink:0">'+list.length+' вариант'+(list.length===1?'':(list.length<5?'а':'ов'))+'</span></div>';
+        if(open){ list.forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species, 1); }); }
+      });
+    } else {
+      variants.forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species||null, 0); });
+    }
     // Даже когда у названия уже есть варианты с артикулом, простое «без артикула» должно
     // оставаться выбираемым — например, для непредвиденных случаев, когда ни одна порода/цена
     // из каталога не подходит, продавец всё равно может занести просто наименование.
-    rows.push({name:nm, price:null, article:null, species:null});
+    html += _siSuggRow(inputId, nm, null, null, null, 0);
   });
-  box.innerHTML = rows.map(function(r){
-    var infoStr = r.price!=null
-      ? ' · '+Math.round(r.price).toLocaleString('ru-RU')+'₽'+(r.article?' · №'+r.article:'')+(isWood&&r.species?' · '+r.species:'')
-      : '';
-    var priceArg = r.price!=null ? r.price : 'null';
-    var artArg = r.article ? "'"+r.article.replace(/'/g,"\\'")+"'" : 'null';
-    var spArg = r.species ? "'"+r.species.replace(/'/g,"\\'")+"'" : 'null';
-    return '<div onpointerdown="event.preventDefault();siPickVariantNameM(\''+inputId+'\',\''+r.name.replace(/'/g,"\\'")+'\','+priceArg+','+artArg+','+spArg+')" '+
-      'style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px">'+
-      '<span>'+r.name+'</span><span style="color:#8888aa;font-size:11px;white-space:nowrap;flex-shrink:0">'+infoStr+'</span></div>';
-  }).join('');
+  box.innerHTML = html;
   box.style.display='block';
+}
+window._siSuggSpeciesOpen = window._siSuggSpeciesOpen || {};
+function _siSuggRow(inputId, name, price, article, species, level){
+  var isWood = _siItemGoodsType!=='dr';
+  var infoStr = price!=null
+    ? ' · '+Math.round(price).toLocaleString('ru-RU')+'₽'+(article?' · №'+article:'')+(isWood&&species?' · '+species:'')
+    : '';
+  var priceArg = price!=null ? price : 'null';
+  var artArg = article ? "'"+article.replace(/'/g,"\\'")+"'" : 'null';
+  var spArg = species ? "'"+species.replace(/'/g,"\\'")+"'" : 'null';
+  var pad = level ? '8px 10px 8px 22px' : '8px 10px';
+  return '<div onpointerdown="event.preventDefault();siPickVariantNameM(\''+inputId+'\',\''+name.replace(/'/g,"\\'")+'\','+priceArg+','+artArg+','+spArg+')" '+
+    'style="padding:'+pad+';font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px">'+
+    '<span>'+name+'</span><span style="color:#8888aa;font-size:11px;white-space:nowrap;flex-shrink:0">'+infoStr+'</span></div>';
+}
+function _siSuggToggleSpecies(inputId, groupKey){
+  window._siSuggSpeciesOpen[groupKey] = !window._siSuggSpeciesOpen[groupKey];
+  siSuggestNameM(inputId);
 }
 function siPickVariantNameM(inputId, name, price, article, species){
   var el = document.getElementById(inputId); if(el) el.value = name;
