@@ -4164,12 +4164,12 @@ function _retroArtScan(lookup, status){
   var docUpdates = {};
   var matchStats = {};
   function articleOf(it){ return String((it&&(it.num||it.article))||'').trim(); }
-  function noteMatch(article, name, species, price, qty, source, ref){
-    if(!matchStats[article]) matchStats[article]={name:name, species:species, price:price, count:0, qty:0, receive:0, sale:0, writeoff:0, refs:[]};
+  function noteMatch(article, name, species, price, qty, source, ref, goodsType){
+    if(!matchStats[article]) matchStats[article]={name:name, species:species, price:price, goodsType:goodsType||'derevo', count:0, qty:0, receive:0, sale:0, writeoff:0, refs:[], shops:{}};
     matchStats[article].count++;
     matchStats[article].qty += (qty||0);
     matchStats[article][source] = (matchStats[article][source]||0)+1;
-    if(ref){ ref.source = source; ref.qty = qty||0; matchStats[article].refs.push(ref); }
+    if(ref){ ref.source = source; ref.qty = qty||0; matchStats[article].refs.push(ref); if(ref.shop) matchStats[article].shops[ref.shop]=true; }
   }
   function scanInvoiceDoc(doc, kind){
     var inv = doc.data();
@@ -4187,7 +4187,7 @@ function _retroArtScan(lookup, status){
       changes.push({idx:idx, article:art, field:field});
       noteMatch(art, it.name, it.species, it.price, it.qty, 'receive', {
         shop:shop, date:date, invNum:invNum, invId:doc.id, isManual: kind==='manual_invoice'
-      });
+      }, gt);
     });
     if(changes.length) docUpdates[kind+'_'+doc.id] = {kind:kind, id:doc.id, changes:changes};
   }
@@ -4208,7 +4208,7 @@ function _retroArtScan(lookup, status){
         changes.push({entryIdx:eIdx, itemIdx:iIdx, article:art});
         noteMatch(art, it.name, it.species, it.price, it.qty, e.type==='sale'?'sale':'writeoff', {
           shop:shop, date:date, who:sh.sellerName||'', shiftId:doc.id
-        });
+        }, gt);
       });
     });
     if(changes.length) docUpdates['shift_'+doc.id] = {kind:'shift', id:doc.id, changes:changes};
@@ -4345,17 +4345,55 @@ function _retroArtRemoveApplied(data, u){
     if(!stillDoc.changes.length) delete data.docUpdates[dk];
   }
 }
+// До этого артикул на такой товар не заводился — он лежал в остатке под синтетическим ключом
+// «название+цена+порода» (_noArticleStockKey, см. stockApplySale/stockApplyReceive). Простановка
+// артикула в исторические записи (выше) НЕ трогает остаток — он как лежал под старым синтетическим
+// ключом, так и остаётся там. Если это не перенести, дальнейший поиск «сколько в наличии» по
+// НОВОМУ артикулу будет видеть пустоту, хотя физически товар на месте — просто остаток застрял
+// под старым ключом. Переносим qty с синтетического ключа на реальный артикул в остатке каждого
+// магазина, где этот товар встречался.
+function _retroArtMigrateStock(article, name, species, price, goodsType, shopNames){
+  var syntheticKey = _noArticleStockKey(name, price, species, goodsType);
+  if(!syntheticKey || syntheticKey===article) return Promise.resolve();
+  var tasks = (shopNames||[]).map(function(shopName){
+    var docId = 'stock_'+shopName.replace(/\s+/g,'_');
+    return db.collection('iz_settings').doc(docId).get({source:'server'}).then(function(snap){
+      var items = (snap.exists && snap.data().items) || {};
+      var synth = items[syntheticKey];
+      if(!synth || !((synth.qty||0)>0)) return;
+      var target = items[article] || {num:article, name:name, price:price||0, species:species||'', goodsType:goodsType||'derevo', size:'', qty:0, lastReceived:'', lastSold:''};
+      target.name = name; target.price = price||target.price; target.species = species||target.species;
+      target.qty = (target.qty||0) + (synth.qty||0);
+      if(synth.lastReceived && synth.lastReceived>(target.lastReceived||'')) target.lastReceived = synth.lastReceived;
+      items[article] = target;
+      delete items[syntheticKey];
+      return db.collection('iz_settings').doc(docId).set({items:items, updatedAt:new Date().toISOString()}).then(function(){
+        try{
+          var local = getStock(); local[shopName] = items;
+          (typeof _safeLocalSet==='function'?_safeLocalSet:localStorage.setItem)('iz_stock', JSON.stringify(local));
+        }catch(e){}
+      });
+    }).catch(function(){});
+  });
+  return Promise.all(tasks);
+}
 function applyRetroArticleAudit(articleFilter){
   var data = window._retroArtPending;
   if(!data){ showToast('Нечего применять'); return; }
   var relevantDocs = [];
   var totalRecords = 0;
+  var articleMeta = {};
   Object.keys(data.docUpdates).forEach(function(dk){
     var u = data.docUpdates[dk];
     var changes = articleFilter ? u.changes.filter(function(ch){ return ch.article===articleFilter; }) : u.changes;
     if(!changes.length) return;
     relevantDocs.push({kind:u.kind, id:u.id, changes:changes});
     totalRecords += changes.length;
+    changes.forEach(function(ch){
+      if(articleMeta[ch.article]) return;
+      var st = data.matchStats[ch.article]; if(!st) return;
+      articleMeta[ch.article] = {name:st.name, species:st.species, price:st.price, goodsType:st.goodsType, shops:Object.keys(st.shops||{})};
+    });
   });
   if(!relevantDocs.length){ showToast('Нечего применять'); return; }
   var confirmMsg = articleFilter
@@ -4412,6 +4450,13 @@ function applyRetroArticleAudit(articleFilter){
     }).catch(function(err){ errors.push({kind:'накладная', id:u.id, message:(err&&err.message)||String(err)}); });
   });
   Promise.all(tasks).then(function(){
+    var succeededArticles = {};
+    succeededDocs.forEach(function(u){ u.changes.forEach(function(ch){ succeededArticles[ch.article]=true; }); });
+    return Promise.all(Object.keys(succeededArticles).map(function(art){
+      var m = articleMeta[art]; if(!m) return null;
+      return _retroArtMigrateStock(art, m.name, m.species, m.price, m.goodsType, m.shops);
+    }));
+  }).then(function(){
     if(status) status.style.display='none';
     try{ logAction('RETRO_ARTICLE_APPLY', {appliedCount:applied, failedDocs:errors.length, article:articleFilter||'all'}); }catch(e){}
     succeededDocs.forEach(function(u){ _retroArtRemoveApplied(data, u); });
