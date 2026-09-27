@@ -114,7 +114,13 @@ function _siGetGoodsVariants(name, goodsType){
 // при вводе имени, а не только когда у товара 2+ варианта (см. _siCheckVariantsM ниже). Тут
 // для каждого совпавшего названия подтягиваются реальные варианты из каталога (цена+артикул,
 // у дерева ещё порода), и по клику подставляются сразу — как в 📋-списке (openSaleCatalogPicker).
-function siSuggestNameM(inputId){
+function siSuggestNameM(inputId){ _siBuildSuggest(inputId, 'siSpeciesM', 'siPickVariantNameM', 'siSuggestNameM'); }
+// Тот же список подсказок (с ценой/артикулом/породой), но для поля «Наименование» в блоке
+// «ИЗ БАЗЫ — можно исправить» (siName/siPrice/siSpecies) — там продавец правит название и цену
+// у товара, УЖЕ найденного по артикулу (siNum), и раньше это поле показывало голые названия без
+// единой цифры: приходилось угадывать цену вслепую, хотя рядом с siNameM это давно подсказывалось.
+function siSuggestName(inputId){ _siBuildSuggest(inputId, 'siSpecies', 'siPickVariantName', 'siSuggestName'); }
+function _siBuildSuggest(inputId, speciesFieldId, pickFn, suggestFn){
   var box = document.getElementById(inputId+'_sugg');
   if(!box) return;
   var val = (document.getElementById(inputId)||{}).value||'';
@@ -139,14 +145,14 @@ function siSuggestNameM(inputId){
   // Порода уже вписана продавцом (и не режим «неск. материалов») — сразу фильтруем варианты по
   // ней, список короткий и плоский. Иначе, у дерева, группируем по породе и сворачиваем — иначе
   // список превращается в полотно из полусотни строк, которое приходится долго листать.
-  var speciesVal = (isWood && !_siSpeciesMultiMode) ? ((document.getElementById('siSpeciesM')||{}).value||'').trim() : '';
+  var speciesVal = (isWood && !_siSpeciesMultiMode) ? ((document.getElementById(speciesFieldId)||{}).value||'').trim() : '';
   var html = '';
   names.forEach(function(nm){
     var variants = _siGetGoodsVariants(nm, _siItemGoodsType);
     if(isWood && speciesVal){
       var norm = speciesVal.toLowerCase();
       variants.filter(function(v){ return (v.species||'').trim().toLowerCase()===norm; })
-        .forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species, 0); });
+        .forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species, 0, pickFn); });
     } else if(isWood && variants.length){
       var bySpecies = {}, order = [];
       variants.forEach(function(v){
@@ -155,28 +161,29 @@ function siSuggestNameM(inputId){
         bySpecies[sp].push(v);
       });
       order.forEach(function(sp){
-        var groupKey = nm+'|'+sp;
+        var groupKey = suggestFn+'|'+nm+'|'+sp;
         var open = !!window._siSuggSpeciesOpen[groupKey];
         var list = bySpecies[sp];
         var ge = groupKey.replace(/'/g,"\\'");
-        html += '<div onpointerdown="event.preventDefault();_siSuggToggleSpecies(\''+inputId+'\',\''+ge+'\')" '+
+        html += '<div onpointerdown="event.preventDefault();_siSuggToggleSpecies(\''+inputId+'\',\''+ge+'\',\''+suggestFn+'\')" '+
           'style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px;background:#1a1a22">'+
           '<span>'+(open?'▾':'▸')+' '+nm+' · '+sp+'</span><span style="color:#8888aa;font-size:11px;white-space:nowrap;flex-shrink:0">'+list.length+' вариант'+(list.length===1?'':(list.length<5?'а':'ов'))+'</span></div>';
-        if(open){ list.forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species, 1); }); }
+        if(open){ list.forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species, 1, pickFn); }); }
       });
     } else {
-      variants.forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species||null, 0); });
+      variants.forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species||null, 0, pickFn); });
     }
     // Даже когда у названия уже есть варианты с артикулом, простое «без артикула» должно
     // оставаться выбираемым — например, для непредвиденных случаев, когда ни одна порода/цена
     // из каталога не подходит, продавец всё равно может занести просто наименование.
-    html += _siSuggRow(inputId, nm, null, null, null, 0);
+    html += _siSuggRow(inputId, nm, null, null, null, 0, pickFn);
   });
   box.innerHTML = html;
   box.style.display='block';
 }
 window._siSuggSpeciesOpen = window._siSuggSpeciesOpen || {};
-function _siSuggRow(inputId, name, price, article, species, level){
+function _siSuggRow(inputId, name, price, article, species, level, pickFn){
+  pickFn = pickFn || 'siPickVariantNameM';
   var isWood = _siItemGoodsType!=='dr';
   var infoStr = price!=null
     ? ' · '+Math.round(price).toLocaleString('ru-RU')+'₽'+(article?' · №'+article:'')+(isWood&&species?' · '+species:'')
@@ -185,13 +192,13 @@ function _siSuggRow(inputId, name, price, article, species, level){
   var artArg = article ? "'"+article.replace(/'/g,"\\'")+"'" : 'null';
   var spArg = species ? "'"+species.replace(/'/g,"\\'")+"'" : 'null';
   var pad = level ? '8px 10px 8px 22px' : '8px 10px';
-  return '<div onpointerdown="event.preventDefault();siPickVariantNameM(\''+inputId+'\',\''+name.replace(/'/g,"\\'")+'\','+priceArg+','+artArg+','+spArg+')" '+
+  return '<div onpointerdown="event.preventDefault();'+pickFn+'(\''+inputId+'\',\''+name.replace(/'/g,"\\'")+'\','+priceArg+','+artArg+','+spArg+')" '+
     'style="padding:'+pad+';font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px">'+
     '<span>'+name+'</span><span style="color:#8888aa;font-size:11px;white-space:nowrap;flex-shrink:0">'+infoStr+'</span></div>';
 }
-function _siSuggToggleSpecies(inputId, groupKey){
+function _siSuggToggleSpecies(inputId, groupKey, suggestFn){
   window._siSuggSpeciesOpen[groupKey] = !window._siSuggSpeciesOpen[groupKey];
-  siSuggestNameM(inputId);
+  (suggestFn==='siSuggestName' ? siSuggestName : siSuggestNameM)(inputId);
 }
 function siPickVariantNameM(inputId, name, price, article, species){
   var el = document.getElementById(inputId); if(el) el.value = name;
@@ -207,6 +214,18 @@ function siPickVariantNameM(inputId, name, price, article, species){
   var vp = document.getElementById('siVariantPicker'); if(vp) vp.style.display='none';
   siAutoDetectAndSetType(name);
   _siUpdateArticleHintM();
+}
+// Сестра siPickVariantNameM для блока «ИЗ БАЗЫ — можно исправить» (siName/siPrice/siSpecies).
+// Артикул (siNum) здесь НЕ трогаем: этот блок специально показывает то, что реально написано
+// на изделии под уже найденным артикулом, а выбор из подсказки — это правка названия/цены,
+// а не смена физического номера изделия (расхождение с исходным продолжает отслеживаться
+// через checkItemDiff/currentLookupItem как и раньше).
+function siPickVariantName(inputId, name, price, article, species){
+  var el = document.getElementById(inputId); if(el) el.value = name;
+  var box = document.getElementById(inputId+'_sugg'); if(box) box.style.display='none';
+  var priceEl = document.getElementById('siPrice'); if(priceEl){ priceEl.value = price!=null ? price : ''; siCalcAmt(); }
+  if(species){ var spEl = document.getElementById('siSpecies'); if(spEl) spEl.value = species; }
+  checkItemDiff();
 }
 // Продавец выбирает наименование (подсказка при вводе, список 📋 или подбор варианта) — но сам
 // артикул при этом нигде не виден до нажатия «Добавить в чек», поэтому непонятно, подтянулся ли
