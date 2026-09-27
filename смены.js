@@ -4019,6 +4019,26 @@ function _auditFmtTime(iso){
   var d = new Date(iso);
   return d.toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+d.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
+function _auditDiffItems(before, after){
+  var b = before||[], a = after||[];
+  var diffs = [];
+  var n = Math.max(b.length, a.length);
+  for(var i=0;i<n;i++){
+    var bi = b[i], ai = a[i];
+    if(!bi && ai){ diffs.push('Добавлена позиция: '+(ai.name||'—')+(ai.price!=null?' · '+_auditFmtAmt(ai.price):'')); continue; }
+    if(bi && !ai){ diffs.push('Удалена позиция: '+(bi.name||'—')); continue; }
+    if(!bi || !ai) continue;
+    var itemDiffs = [];
+    if((bi.name||'')!==(ai.name||'')) itemDiffs.push('название «'+(bi.name||'—')+'» → «'+(ai.name||'—')+'»');
+    var bArt = bi.num||bi.article||'', aArt = ai.num||ai.article||'';
+    if(bArt!==aArt) itemDiffs.push('артикул «'+(bArt||'—')+'» → «'+(aArt||'—')+'»');
+    if((bi.species||'')!==(ai.species||'')) itemDiffs.push('порода «'+(bi.species||'—')+'» → «'+(ai.species||'—')+'»');
+    if((bi.price||0)!==(ai.price||0)) itemDiffs.push('цена '+_auditFmtAmt(bi.price)+' → '+_auditFmtAmt(ai.price));
+    if((bi.qty||0)!==(ai.qty||0)) itemDiffs.push('кол-во '+(bi.qty||0)+' → '+(ai.qty||0));
+    if(itemDiffs.length) diffs.push((ai.name||bi.name||'Позиция '+(i+1))+': '+itemDiffs.join(', '));
+  }
+  return diffs;
+}
 function _renderAuditEntry(e){
   var label = _AUDIT_ACTION_LABELS[e.action] || (typeof _AL_LABELS!=='undefined' && _AL_LABELS[e.action]) || ('📄 '+(e.action||'Событие'));
   var details = e.details||{};
@@ -4028,8 +4048,17 @@ function _renderAuditEntry(e){
     var diffs=[];
     if((b.amount||0)!==(a.amount||0)) diffs.push('Сумма: '+_auditFmtAmt(b.amount)+' → '+_auditFmtAmt(a.amount));
     if((b.label||'')!==(a.label||'')) diffs.push('Название: «'+(b.label||'—')+'» → «'+(a.label||'—')+'»');
+    if((b.sub||'')!==(a.sub||'')) diffs.push('Подпись: «'+(b.sub||'—')+'» → «'+(a.sub||'—')+'»');
     if((b.discount||0)!==(a.discount||0)) diffs.push('Скидка: '+_auditFmtAmt(b.discount)+' → '+_auditFmtAmt(a.discount));
     if((b.payMethod||'')!==(a.payMethod||'')) diffs.push('Оплата: '+(b.payMethod||'—')+' → '+(a.payMethod||'—'));
+    if((b.cashPart||0)!==(a.cashPart||0)) diffs.push('Нал: '+_auditFmtAmt(b.cashPart)+' → '+_auditFmtAmt(a.cashPart));
+    if((b.cardPart||0)!==(a.cardPart||0)) diffs.push('Карта: '+_auditFmtAmt(b.cardPart)+' → '+_auditFmtAmt(a.cardPart));
+    if((b.comment||'')!==(a.comment||'')) diffs.push('Комментарий: «'+(b.comment||'—')+'» → «'+(a.comment||'—')+'»');
+    // Раньше сюда попадали только сумма/название/скидка/оплата — а правка артикула, породы, цены
+    // или количества внутри items (например, массовая простановка артикулов задним числом или
+    // ручное исправление позиции) не давала вообще никакой разницы в списке выше, и в аудите
+    // висело загадочное «изменение без разницы».
+    diffs = diffs.concat(_auditDiffItems(b.items, a.items));
     extra = diffs.length ? diffs.map(function(d){return '<div style="font-size:11px;color:#f0c060">'+d+'</div>';}).join('') : '<div style="font-size:11px;color:#8888aa">Изменение без разницы в сумме/названии</div>';
   } else if(e.action==='JOURNAL_ENTRY_DELETE'){
     var s=details.snapshot||{};
