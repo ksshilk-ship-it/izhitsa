@@ -4310,6 +4310,34 @@ function _retroArtShowDetail(article){
 // articleFilter не задан — применить все найденные совпадения разом (оставлено для отладки/на
 // всякий случай); задан — применить только этот артикул, не трогая остальные строки предпросмотра
 // (по одной строке за раз, как и просили — чтобы не давить одну общую кнопку на всё сразу).
+// Удаляет из предпросмотра (matchStats + docUpdates) только те записи, которые реально были
+// записаны на сервер — по конкретному документу u (kind+id), а не по артикулу вообще. Документ,
+// который упал с ошибкой, в предпросмотре ОСТАЁТСЯ — иначе после «неудачного успеха» повторный
+// скан снова покажет те же записи без единого объяснения, что случилось на самом деле.
+function _retroArtRemoveApplied(data, u){
+  var byArticle = {};
+  u.changes.forEach(function(ch){ byArticle[ch.article] = (byArticle[ch.article]||0)+1; });
+  Object.keys(byArticle).forEach(function(article){
+    var st = data.matchStats[article]; if(!st) return;
+    var toRemove = byArticle[article];
+    st.refs = (st.refs||[]).filter(function(r){
+      if(toRemove<=0) return true;
+      var matches = u.kind==='shift' ? (r.shiftId===u.id) : (r.invId===u.id);
+      if(!matches) return true;
+      toRemove--;
+      st.count--; st.qty -= (r.qty||0);
+      if(r.source && st[r.source]!=null) st[r.source]--;
+      return false;
+    });
+    if(st.count<=0) delete data.matchStats[article];
+  });
+  var dk = u.kind+'_'+u.id;
+  var stillDoc = data.docUpdates[dk];
+  if(stillDoc){
+    stillDoc.changes = stillDoc.changes.filter(function(ch){ return u.changes.indexOf(ch)<0; });
+    if(!stillDoc.changes.length) delete data.docUpdates[dk];
+  }
+}
 function applyRetroArticleAudit(articleFilter){
   var data = window._retroArtPending;
   if(!data){ showToast('Нечего применять'); return; }
@@ -4329,7 +4357,15 @@ function applyRetroArticleAudit(articleFilter){
   if(!confirm(confirmMsg)) return;
   var status = document.getElementById('raStatus');
   if(status){ status.style.display='block'; status.textContent='⏳ Применяю...'; }
-  var applied = 0, failedDocs = 0;
+  var applied = 0;
+  var errors = [];
+  var succeededDocs = [];
+  // Раньше applied++ считался ДО завершения записи (ref.set), так что при ошибке записи (например,
+  // документ смены разросся за пределы лимита Firestore на размер документа — эта смена НЕ
+  // закрывалась много дней) тост «Применено: N» всё равно показывал успех, хотя на сервере
+  // ничего не менялось — и повторный скан снова находил те же самые записи без артикула.
+  // Теперь applied увеличивается только внутри .then() ПОСЛЕ реального подтверждения записи,
+  // а причина ошибки (err.message) сохраняется и показывается — а не просто считается в failedDocs.
   var tasks = relevantDocs.map(function(u){
     if(u.kind==='shift'){
       var ref = db.collection('iz_shifts').doc(u.id);
@@ -4337,50 +4373,56 @@ function applyRetroArticleAudit(articleFilter){
         if(!snap.exists) return;
         var sh = snap.data();
         var journal = sh.journal||[];
+        var count = 0;
         u.changes.forEach(function(ch){
           var e = journal[ch.entryIdx];
           if(!e || !e.items || !e.items[ch.itemIdx]) return;
           var it = e.items[ch.itemIdx];
           if(it.num || it.article) return;
           it.num = ch.article; it.article = ch.article;
-          applied++;
+          count++;
         });
-        return ref.set(sh);
-      }).catch(function(){ failedDocs++; });
+        if(!count) return;
+        return ref.set(_shiftForCloud(sh)).then(function(){ applied += count; succeededDocs.push(u); });
+      }).catch(function(err){ errors.push({kind:'смена', id:u.id, message:(err&&err.message)||String(err)}); });
     }
     var col = u.kind==='manual_invoice' ? 'iz_manual_invoices' : 'iz_invoices';
     var ref2 = db.collection(col).doc(u.id);
     return ref2.get({source:'server'}).then(function(snap){
       if(!snap.exists) return;
       var inv = snap.data();
+      var count = 0;
       u.changes.forEach(function(ch){
         var arr = inv[ch.field];
         if(!arr || !arr[ch.idx]) return;
         var it = arr[ch.idx];
         if(it.num || it.article) return;
         it.num = ch.article; it.article = ch.article;
-        applied++;
+        count++;
       });
-      return ref2.set(inv);
-    }).catch(function(){ failedDocs++; });
+      if(!count) return;
+      return ref2.set(inv).then(function(){ applied += count; succeededDocs.push(u); });
+    }).catch(function(err){ errors.push({kind:'накладная', id:u.id, message:(err&&err.message)||String(err)}); });
   });
   Promise.all(tasks).then(function(){
     if(status) status.style.display='none';
-    try{ logAction('RETRO_ARTICLE_APPLY', {appliedCount:applied, failedDocs:failedDocs, article:articleFilter||'all'}); }catch(e){}
-    if(articleFilter){
-      delete data.matchStats[articleFilter];
-      Object.keys(data.docUpdates).forEach(function(dk){
-        var u = data.docUpdates[dk];
-        u.changes = u.changes.filter(function(ch){ return ch.article!==articleFilter; });
-        if(!u.changes.length) delete data.docUpdates[dk];
-      });
+    try{ logAction('RETRO_ARTICLE_APPLY', {appliedCount:applied, failedDocs:errors.length, article:articleFilter||'all'}); }catch(e){}
+    succeededDocs.forEach(function(u){ _retroArtRemoveApplied(data, u); });
+    var errorBlock = errors.length
+      ? '<div style="margin-top:8px;padding:8px 10px;background:#2a1414;border:1px solid #5a2020;border-radius:8px">'+
+        '<div style="font-size:11px;font-weight:700;color:#f06060;margin-bottom:4px">❌ Не удалось записать ('+errors.length+' документ'+(errors.length===1?'':(errors.length<5?'а':'ов'))+') — данные НЕ изменены:</div>'+
+        errors.map(function(er){ return '<div style="font-size:10.5px;color:#c88;margin-bottom:2px">'+er.kind+' '+er.id+': '+er.message+'</div>'; }).join('')+
+      '</div>' : '';
+    var articlesLeft = Object.keys(data.matchStats).length;
+    var host = document.getElementById('raResults');
+    if(articlesLeft){
       _renderRetroArtPreview();
+      if(host && errorBlock) host.insertAdjacentHTML('afterbegin', errorBlock);
     } else {
       window._retroArtPending = null;
-      var host = document.getElementById('raResults');
-      if(host) host.innerHTML = '<div class="empty"><div class="ei">✅</div>Готово: проставлено артикулов — '+applied+(failedDocs?' · документов с ошибкой: '+failedDocs:'')+'</div>';
+      if(host) host.innerHTML = '<div class="empty"><div class="ei">✅</div>Готово: проставлено артикулов — '+applied+'</div>'+errorBlock;
     }
-    showToast('✅ Применено: '+applied+' позиций');
+    showToast(errors.length ? '⚠️ Применено: '+applied+' · ошибок: '+errors.length : '✅ Применено: '+applied+' позиций');
   });
 }
 // Запрет повторного использования номера изделия при приёмке — та же проверка вызывается из
