@@ -337,6 +337,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
         <div class="pc" data-sub="income" onclick="setFinanceSub('income',this)">📈 Доходы</div>
         <div class="pc" data-sub="expenses" onclick="setFinanceSub('expenses',this)">📉 Расходы</div>
         <div class="pc" data-sub="debt" onclick="setFinanceSub('debt',this)">💰 Долги</div>
+        <div class="pc" data-sub="reconcile" onclick="setFinanceSub('reconcile',this)">🤝 Акт сверки</div>
         <div class="pc" data-sub="movement" onclick="setFinanceSub('movement',this)">⇄ Движение денег</div>
         <div class="pc" data-sub="import" onclick="setFinanceSub('import',this)">📥 Импорт выписки</div>
         <div class="pc" data-sub="calendar" onclick="setFinanceSub('calendar',this)">📅 Календарь баланса</div>
@@ -371,6 +372,8 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
             <option value="Мастерская">Мастерская</option>
             <option value="Прочее">Прочее</option>
           </select></div>
+        <div class="fg"><label class="fl">Контрагент (если услуга оказана поставщику)</label>
+          <select class="fs" id="incCounterparty"><option value="">— не указан —</option></select></div>
         <div class="fg"><label class="fl">Описание</label>
           <input class="fi" id="incDesc" placeholder="Заметка (опционально)"></div>
         <div class="fg"><label class="fl">Дата</label>
@@ -421,6 +424,9 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
         <div class="fg"><label class="fl">Счёт / карта оплаты</label>
           <select class="fs" id="expAccount"></select></div>
+
+        <div class="fg"><label class="fl">Контрагент (если услуга/товар от поставщика)</label>
+          <select class="fs" id="expCounterparty"><option value="">— не указан —</option></select></div>
 
         <div class="fg"><label class="fl">Описание</label>
           <input class="fi" id="expDesc" placeholder="Заметка"></div>
@@ -500,6 +506,26 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- ═══ АКТ СВЕРКИ ═══ -->
+    <div class="fsub" id="fsub-reconcile" style="display:none">
+      <div class="card">
+        <div class="fg"><label class="fl">Контрагент</label>
+          <select class="fs" id="rcCounterparty" onchange="renderReconcileAct()">
+            <option value="">— выберите контрагента —</option>
+          </select></div>
+        <div class="row2">
+          <div><label class="fl">С даты</label><input class="fi" type="date" id="rcFrom" onchange="renderReconcileAct()"></div>
+          <div><label class="fl">По дату</label><input class="fi" type="date" id="rcTo" onchange="renderReconcileAct()"></div>
+        </div>
+        <div class="fg" style="margin-top:12px">
+          <label class="fl">Сальдо на начало периода (₽)</label>
+          <input class="fi" type="number" id="rcOpening" placeholder="0" inputmode="numeric" onchange="renderReconcileAct()">
+          <div style="font-size:11px;color:var(--t2);margin-top:5px;line-height:1.4">Положительное — контрагент должен нам, отрицательное — мы должны контрагенту</div>
+        </div>
+      </div>
+      <div id="rcActBlock"></div>
     </div>
 
     <!-- ═══ ДВИЖЕНИЕ ДЕНЕГ ═══ -->
@@ -603,6 +629,7 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
         <input type="file" id="bankImportFile" accept=".xlsx,.xls,.csv" style="width:100%;padding:10px;background:var(--s2);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:13px;margin-bottom:10px">
 
         <div id="bankImportPreview"></div>
+        <div id="bankImportManage"></div>
       </div>
     </div>
 
@@ -2207,9 +2234,10 @@ function setFinanceSub(sub, btn) {
 
   // Инициализация содержимого под-вкладки
   if(sub === 'fdash') renderFinanceDash();
-  else if(sub === 'income') { populateIncomeSource(); setIncomeMode(_incomeMode); }
-  else if(sub === 'expenses') { populateExpGroups(); setExpMode(_expMode); }
+  else if(sub === 'income') { populateIncomeSource(); populateCounterpartySelects(); setIncomeMode(_incomeMode); }
+  else if(sub === 'expenses') { populateExpGroups(); populateCounterpartySelects(); setExpMode(_expMode); }
   else if(sub === 'debt') renderDebts();
+  else if(sub === 'reconcile') { populateCounterpartySelects(); initReconcileDates(); renderReconcileAct(); }
   else if(sub === 'movement') { populateCategorySelects(); setTxType(currentTxType||'transfer'); }
   else if(sub === 'import') initBankImport();
   else if(sub === 'calendar') initBalanceCalendar();
@@ -2229,9 +2257,14 @@ function renderFinanceDash() {
     accs.forEach(function(a){ var name = typeof a==='string'?a:(a.name||''); if(name) balances[name]=0; });
 
     allTxs.forEach(function(tx){
-      if(tx.type === 'income' && tx.source) {
-        if(balances[tx.source] === undefined) balances[tx.source] = 0;
-        balances[tx.source] += (tx.amount||0);
+      // account — реальный счёт/касса (так проставляет импорт выписки и
+      // расходы); source — канал продаж у обычного дохода (Инстаграм и т.п.),
+      // который сам по себе счётом не является, но исторически тоже
+      // использовался как ключ баланса, поэтому оставляем как запасной вариант.
+      if(tx.type === 'income' && (tx.account || tx.source)) {
+        var incKey = tx.account || tx.source;
+        if(balances[incKey] === undefined) balances[incKey] = 0;
+        balances[incKey] += (tx.amount||0);
       } else if(tx.type === 'expense' && tx.account) {
         if(balances[tx.account] === undefined) balances[tx.account] = 0;
         balances[tx.account] -= (tx.amount||0);
@@ -2299,14 +2332,48 @@ function initBankImport() {
     fileInput._bound = true;
     fileInput.addEventListener('change', onBankFileSelected);
   }
+  renderBankImportManage();
+}
+
+// Показывает, сколько операций сейчас в системе пришло из импорта выписки,
+// и даёт удалить их все разом — иначе после неудачного импорта (не тот
+// счёт, не тот тип операции) пришлось бы чистить архив вручную по одной.
+function renderBankImportManage() {
+  var el = document.getElementById('bankImportManage');
+  if(!el) return;
+  var imported = getTransactions().filter(function(tx){ return tx.isBankImport; });
+  if(!imported.length) { el.innerHTML = ''; return; }
+  var total = imported.reduce(function(s,tx){ return s+(tx.amount||0); }, 0);
+  el.innerHTML = '<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">'+
+    '<div style="font-size:11px;color:var(--t2);margin-bottom:8px">Уже загружено из выписок: <b>'+imported.length+'</b> операций на сумму <b>'+Math.round(total).toLocaleString('ru-RU')+' ₽</b></div>'+
+    '<button class="btn red" onclick="deleteAllBankImports()">🗑 Удалить все операции из импорта</button>'+
+  '</div>';
+}
+
+function deleteAllBankImports() {
+  var imported = getTransactions().filter(function(tx){ return tx.isBankImport; });
+  if(!imported.length) return;
+  var total = imported.reduce(function(s,tx){ return s+(tx.amount||0); }, 0);
+  if(!confirm('Удалить '+imported.length+' операций на сумму '+Math.round(total).toLocaleString('ru-RU')+' ₽, загруженных из выписок банка?\n\nЭто не затронет операции, внесённые вручную. После удаления файл можно будет загрузить заново.')) return;
+  var remaining = getTransactions().filter(function(tx){ return !tx.isBankImport; });
+  saveTransactions(remaining);
+  showToast('🗑 Удалено '+imported.length+' операций из импорта');
+  renderBankImportManage();
+  if(typeof renderFinanceDash === 'function') { try { renderFinanceDash(); } catch(e){} }
+  if(typeof renderDashboard === 'function') { try { renderDashboard(); } catch(e){} }
 }
 
 // Ищет нужную колонку по нескольким возможным вариантам заголовка
 // (выписки разных банков и разных версий выгрузки называют колонки чуть по-разному).
+// Перебор идёт по вариантам снаружи (а не по колонкам) — так самый точный
+// вариант побеждает первым, даже если менее точное совпадение стоит раньше
+// по таблице. Например, в выписке Т-Банка колонка «Счет плательщика» тоже
+// содержит подстроку «плательщик» и раньше перехватывала поиск контрагента,
+// хотя дальше в таблице есть куда более точная «Наименование контрагента».
 function _findCol(headers, variants) {
-  for(var i=0; i<headers.length; i++) {
-    var h = String(headers[i]||'').toLowerCase().trim();
-    for(var j=0; j<variants.length; j++) {
+  for(var j=0; j<variants.length; j++) {
+    for(var i=0; i<headers.length; i++) {
+      var h = String(headers[i]||'').toLowerCase().trim();
       if(h.indexOf(variants[j]) >= 0) return i;
     }
   }
@@ -2379,11 +2446,18 @@ function _processStatementRows(rows) {
   }
 
   var dateCol = _findCol(headers, ['дата операции', 'дата платежа', 'дата']);
+  // Многие банки (в т.ч. Т-Банк) не дают отдельных числовых колонок «Дебет»/
+  // «Кредит» — вместо этого есть текстовая колонка «Тип операции» со
+  // значениями «Дебет»/«Кредит» и ОДНА колонка суммы, всегда положительная.
+  // Без этой колонки такой файл раньше считался целиком доходом (сумма
+  // никогда не бывает отрицательной, а раз debit/creditCol не находились —
+  // всё уходило в ветку «raw >= 0 ? доход»).
+  var typeCol = _findCol(headers, ['тип операции', 'вид операции']);
   var debitCol = _findCol(headers, ['дебет', 'расход', 'списание']);
   var creditCol = _findCol(headers, ['кредит', 'приход', 'зачисление', 'поступление']);
   var singleAmountCol = _findCol(headers, ['сумма операции', 'сумма']);
   var purposeCol = _findCol(headers, ['назначение платежа', 'назначение', 'описание', 'комментарий']);
-  var counterpartyCol = _findCol(headers, ['контрагент', 'плательщик', 'получатель', 'наименование']);
+  var counterpartyCol = _findCol(headers, ['наименование контрагента', 'контрагент', 'плательщик', 'получатель', 'наименование']);
 
   if(dateCol === -1) {
     box.innerHTML = '<div style="color:var(--exp);padding:12px;font-size:12px">❌ Не найдена колонка с датой.</div>';
@@ -2391,6 +2465,7 @@ function _processStatementRows(rows) {
   }
 
   var parsed = [];
+  var internalTransferCount = 0, internalTransferTotal = 0;
   for(var r=headerRowIdx+1; r<rows.length; r++) {
     var row = rows[r];
     if(!row || row.every(function(c){ return String(c||'').trim()===''; })) continue;
@@ -2399,7 +2474,12 @@ function _processStatementRows(rows) {
     if(!dateStr) continue;
 
     var amount = 0, type = null;
-    if(debitCol >= 0 && creditCol >= 0) {
+    var typeText = typeCol >= 0 ? String(row[typeCol]||'').toLowerCase().trim() : '';
+    if(singleAmountCol >= 0 && (typeText.indexOf('кредит') >= 0 || typeText.indexOf('дебет') >= 0)) {
+      var typedAmt = parseFloat(String(row[singleAmountCol]||'').replace(/\s/g,'').replace(',','.')) || 0;
+      amount = Math.abs(typedAmt);
+      type = typeText.indexOf('кредит') >= 0 ? 'income' : 'expense';
+    } else if(debitCol >= 0 && creditCol >= 0) {
       var debitVal = parseFloat(String(row[debitCol]||'').replace(/\s/g,'').replace(',','.')) || 0;
       var creditVal = parseFloat(String(row[creditCol]||'').replace(/\s/g,'').replace(',','.')) || 0;
       if(debitVal > 0) { amount = debitVal; type = 'expense'; }
@@ -2413,6 +2493,16 @@ function _processStatementRows(rows) {
 
     var purpose = purposeCol >= 0 ? String(row[purposeCol]||'').trim() : '';
     var counterparty = counterpartyCol >= 0 ? String(row[counterpartyCol]||'').trim() : '';
+
+    // «Перевод собственных средств» — так банк помечает переводы между
+    // своими же счетами ИП/ООО. Это не доход и не расход бизнеса, а просто
+    // перекладывание денег из одного своего кармана в другой — если считать
+    // это оборотом, доход и расход задвоятся на одну и ту же сумму.
+    if(purpose.toLowerCase().indexOf('перевод собственных средств') >= 0) {
+      internalTransferCount++;
+      internalTransferTotal += amount;
+      continue;
+    }
 
     parsed.push({
       date: dateStr,
@@ -2446,6 +2536,7 @@ function _processStatementRows(rows) {
 
   var html = '<div class="card" style="background:var(--bg);border:1px solid var(--border);margin-top:12px">'+
     '<div class="ctitle">📋 Предпросмотр (' + newRows.length + ' новых операций' + (dupCount ? ', ' + dupCount + ' уже загружено ранее — пропущено' : '') + ')</div>'+
+    (internalTransferCount ? '<div style="font-size:11px;color:var(--t2);margin-bottom:10px;line-height:1.4">🔁 '+internalTransferCount+' операций на '+fmt(internalTransferTotal)+' ₽ — переводы между своими же счетами («Перевод собственных средств»). Не доход и не расход, в загрузку не включены.</div>' : '')+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'+
       '<div style="background:var(--s2);border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--t2)">Приходы</div><div style="font-size:15px;font-weight:700;color:var(--inc)">'+fmt(totalIncome)+' ₽</div></div>'+
       '<div style="background:var(--s2);border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--t2)">Расходы</div><div style="font-size:15px;font-weight:700;color:var(--exp)">'+fmt(totalExpense)+' ₽</div></div>'+
@@ -2483,8 +2574,12 @@ function confirmBankImport() {
       bankFingerprint: p.fingerprint,
       isBankImport: true
     };
-    if(p.type === 'income') tx.source = account;
-    else { tx.account = account; tx.category = 'Импорт из банка'; }
+    // Счёт пишем в account (как у обычного расхода), а не в source —
+    // source это канал продаж («Роза Хутор», «Инстаграм» и т.д.), и раньше
+    // из-за этого весь импорт банка попадал в «Продажи по источникам» под
+    // именем счёта, задваивая и искажая разбивку по каналам продаж.
+    tx.account = account;
+    tx.category = 'Импорт из банка';
     txs.push(tx);
   });
 
@@ -2493,6 +2588,7 @@ function confirmBankImport() {
   _pendingStatementRows = [];
   document.getElementById('bankImportFile').value = '';
   document.getElementById('bankImportPreview').innerHTML = '<div style="padding:12px;text-align:center;color:var(--inc);font-size:12px">✅ Импорт завершён</div>';
+  renderBankImportManage();
   renderFinanceDash();
 }
 
@@ -2541,7 +2637,7 @@ function _accountDayFlow(accountName, dateStr) {
   getTransactions().forEach(function(tx){
     var txDate = (tx.date||'').substring(0,10);
     if(txDate !== dateStr) return;
-    if(tx.type === 'income' && tx.source === accountName) flow += (tx.amount||0);
+    if(tx.type === 'income' && (tx.account || tx.source) === accountName) flow += (tx.amount||0);
     else if(tx.type === 'expense' && tx.account === accountName) flow -= (tx.amount||0);
     else if(tx.type === 'transfer') {
       if(tx.fromAccount === accountName) flow -= (tx.amount||0);
@@ -2557,7 +2653,7 @@ function _accountFlowRange(accountName, from, to) {
   getTransactions().forEach(function(tx){
     var txDate = (tx.date||'').substring(0,10);
     if(txDate < from || txDate > to) return;
-    if(tx.type === 'income' && tx.source === accountName) flow += (tx.amount||0);
+    if(tx.type === 'income' && (tx.account || tx.source) === accountName) flow += (tx.amount||0);
     else if(tx.type === 'expense' && tx.account === accountName) flow -= (tx.amount||0);
     else if(tx.type === 'transfer') {
       if(tx.fromAccount === accountName) flow -= (tx.amount||0);
@@ -2660,7 +2756,7 @@ function showCalDayDetail(dateStr) {
   var dayTxs = getTransactions().filter(function(tx){
     var txDate = (tx.date||'').substring(0,10);
     if(txDate !== dateStr) return false;
-    return (tx.type==='income' && tx.source===_calAccountId) ||
+    return (tx.type==='income' && (tx.account||tx.source)===_calAccountId) ||
            (tx.type==='expense' && tx.account===_calAccountId) ||
            (tx.type==='transfer' && (tx.fromAccount===_calAccountId || tx.toAccount===_calAccountId));
   });
@@ -2954,9 +3050,10 @@ function renderTransferArchive(allTxs, monthFilter, el) {
   accs.forEach(function(a){ var name = typeof a==='string'?a:(a.name||''); if(name) balances[name]=0; });
 
   allTxs.forEach(function(tx){
-    if(tx.type === 'income' && tx.source) {
-      if(balances[tx.source] === undefined) balances[tx.source] = 0;
-      balances[tx.source] += (tx.amount||0);
+    if(tx.type === 'income' && (tx.account || tx.source)) {
+      var incKey2 = tx.account || tx.source;
+      if(balances[incKey2] === undefined) balances[incKey2] = 0;
+      balances[incKey2] += (tx.amount||0);
     } else if(tx.type === 'expense' && tx.account) {
       if(balances[tx.account] === undefined) balances[tx.account] = 0;
       balances[tx.account] -= (tx.amount||0);
@@ -3608,7 +3705,7 @@ function renderRefBooks() {
     {id: 'goods',      icon: '📦', name: 'База товаров (общая)',          key: 'iz_goods'},
     {id: 'goods_derevo', icon: '🌳', name: 'База товаров — Дерево',      key: 'iz_goods_derevo'},
     {id: 'goods_dr',   icon: '🛍', name: 'База товаров — ДР Товар',      key: 'iz_goods_dr'},
-    {id: 'suppliers',  icon: '🚚', name: 'База поставщиков',             key: 'iz_suppliers'},
+    {id: 'suppliers',  icon: '🚚', name: 'Контрагенты (поставщики услуг)',key: 'iz_suppliers'},
     {id: 'expenses',   icon: '📊', name: 'Статьи расходов',              key: 'iz_expense_items'},
     {id: 'works',      icon: '🛠️', name: 'Доп. работы',                  key: 'iz_additional_works'},
     {id: 'sizes',      icon: '📏', name: 'Размеры изделий',              key: 'iz_sizes'},
@@ -5433,7 +5530,7 @@ function uploadAdminToGitHub(){
 // Вкладки и блоки настроек фильтруются по роли при логине
 
 // Финансовые справочники — видны всем ролям
-var FINANCE_REFBOOKS = ['sources','accounts','payments','salary','expenses'];
+var FINANCE_REFBOOKS = ['sources','accounts','payments','salary','expenses','suppliers'];
 // Все справочники — только для admin
 var ALL_REFBOOKS = ['sources','accounts','payments','salary','goods','goods_derevo','goods_dr',
   'suppliers','expenses','works','sizes','materials','species','dr_species','statuses','schedules'];
@@ -5529,7 +5626,7 @@ function _ownerAccountBalances() {
   var balances = {};
   accs.forEach(function(a){ var name = typeof a==='string'?a:(a.name||''); if(name) balances[name]=0; });
   allTxs.forEach(function(tx){
-    if(tx.type==='income' && tx.source){ if(balances[tx.source]===undefined) balances[tx.source]=0; balances[tx.source]+=(tx.amount||0); }
+    if(tx.type==='income' && (tx.account||tx.source)){ var ik=tx.account||tx.source; if(balances[ik]===undefined) balances[ik]=0; balances[ik]+=(tx.amount||0); }
     else if(tx.type==='expense' && tx.account){ if(balances[tx.account]===undefined) balances[tx.account]=0; balances[tx.account]-=(tx.amount||0); }
     else if(tx.type==='transfer'){
       if(tx.fromAccount){ if(balances[tx.fromAccount]===undefined) balances[tx.fromAccount]=0; balances[tx.fromAccount]-=(tx.amount||0); }
@@ -5989,16 +6086,18 @@ function saveIncomeTx() {
   var amt = parseFloat(document.getElementById('incAmt').value||'0');
   var source = (document.getElementById('incSource')||{}).value||'';
   var cat = (document.getElementById('incCategory')||{}).value||'';
+  var counterparty = (document.getElementById('incCounterparty')||{}).value||'';
   var desc = (document.getElementById('incDesc')||{}).value||'';
   var date = (document.getElementById('incDate')||{}).value||'';
   if(!amt||amt<=0){ showToast('❌ Введите сумму'); return; }
   if(!date){ showToast('❌ Выберите дату'); return; }
   var txs = getTransactions();
-  txs.push({id:uid(), type:'income', amount:amt, source:source, category:cat, desc:desc,
+  txs.push({id:uid(), type:'income', amount:amt, source:source, category:cat, counterparty:counterparty, desc:desc,
     date:date+'T00:00:00', createdAt:now(), createdBy:session?session.name:''});
   saveTransactions(txs);
   document.getElementById('incAmt').value='';
   document.getElementById('incDesc').value='';
+  if(document.getElementById('incCounterparty')) document.getElementById('incCounterparty').value='';
   showToast('✅ Доход '+amt.toLocaleString('ru-RU')+' ₽ сохранён');
 }
 
@@ -6020,7 +6119,9 @@ function renderIncomeArchive() {
     txs.map(function(tx){
       return '<div style="background:var(--s2);border-radius:8px;padding:10px;margin-bottom:6px;display:flex;justify-content:space-between">'+
         '<div><div style="font-weight:600;color:var(--inc)">'+(tx.amount||0).toLocaleString('ru-RU')+' ₽</div>'+
-        '<div style="font-size:11px;color:var(--t2)">'+(tx.category||tx.source||'—')+(tx.desc?' · '+tx.desc:'')+'</div></div>'+
+        '<div style="font-size:11px;color:var(--t2)">'+(tx.category||tx.source||'—')+(tx.desc?' · '+tx.desc:'')+'</div>'+
+        (tx.account?'<div style="font-size:10px;color:var(--t3)">💳 '+tx.account+'</div>':'')+
+        (tx.counterparty?'<div style="font-size:10px;color:var(--a2)">🤝 '+tx.counterparty+'</div>':'')+'</div>'+
         '<div style="text-align:right"><div style="font-size:11px;color:var(--t2)">'+(tx.date||'').substring(0,10)+'</div>'+
         '<button onclick="deleteTx(\''+tx.id+'\')" style="margin-top:4px;background:none;border:1px solid #f0606060;border-radius:5px;color:var(--exp);font-size:10px;padding:2px 6px;cursor:pointer">✕</button></div>'+
       '</div>';
@@ -6135,6 +6236,7 @@ function saveExpenseTx() {
   var amt = parseFloat((document.getElementById('expAmt')||{}).value||'0');
   var cat = _getExpenseCategoryLabel();
   var account = (document.getElementById('expAccount')||{}).value||'';
+  var counterparty = (document.getElementById('expCounterparty')||{}).value||'';
   var desc = (document.getElementById('expDesc')||{}).value||'';
   var date = (document.getElementById('expDate')||{}).value||'';
   var isRecurring = document.getElementById('expIsRecurring') && document.getElementById('expIsRecurring').checked;
@@ -6147,7 +6249,7 @@ function saveExpenseTx() {
   if(!date){ showToast('❌ Выберите дату'); return; }
 
   var tx = {id:uid(), type:'expense', amount:amt, category:cat, account:account,
-    desc:desc, date:date+'T00:00:00', createdAt:now(), createdBy:session?session.name:''};
+    counterparty:counterparty, desc:desc, date:date+'T00:00:00', createdAt:now(), createdBy:session?session.name:''};
   if(isRecurring) { tx.isRecurring=true; tx.recurFreq=freq; tx.nextDate=nextDate; }
   if(isWorkshop) { tx.isWorkshop=true; }
 
@@ -6166,6 +6268,7 @@ function saveExpenseTx() {
 
   document.getElementById('expAmt').value='';
   document.getElementById('expDesc').value='';
+  if(document.getElementById('expCounterparty')) document.getElementById('expCounterparty').value='';
   if(document.getElementById('expIsRecurring')) document.getElementById('expIsRecurring').checked=false;
   if(document.getElementById('expIsWorkshop')) document.getElementById('expIsWorkshop').checked=false;
   toggleExpRecurring();
@@ -6399,6 +6502,7 @@ function renderExpArchive() {
         '<div><div style="font-weight:600;color:var(--exp)">'+(tx.amount||0).toLocaleString('ru-RU')+' ₽</div>'+
         '<div style="font-size:11px;color:var(--t2);margin-top:2px">'+(tx.category||'—')+'</div>'+
         (tx.account?'<div style="font-size:10px;color:var(--t3)">💳 '+tx.account+'</div>':'')+
+        (tx.counterparty?'<div style="font-size:10px;color:var(--a2)">🤝 '+tx.counterparty+'</div>':'')+
         (tx.desc?'<div style="font-size:10px;color:var(--t2)">'+tx.desc+'</div>':'')+
         (tx.isRecurring?'<div style="font-size:10px;color:var(--a2)">🔁 '+({monthly:'Ежемесячно',weekly:'Еженедельно',quarterly:'Ежеквартально',once:'Разово'}[tx.recurFreq]||tx.recurFreq)+'</div>':'')+
         (tx.isWorkshop?'<div style="font-size:10px;color:#c8a060">🏭 Мастерская</div>':'')+
@@ -6408,6 +6512,149 @@ function renderExpArchive() {
         '<button onclick="deleteTx(\''+tx.id+'\')" style="margin-top:4px;background:none;border:1px solid #f0606060;border-radius:5px;color:var(--exp);font-size:10px;padding:2px 6px;cursor:pointer">✕</button></div>'+
         '</div></div>';
     }).join('');
+}
+
+// ════ АКТ СВЕРКИ ВЗАИМОРАСЧЁТОВ ════
+// Для контрагентов, которые одновременно поставщик услуг нам (наши расходы
+// с этим контрагентом) и получатель услуг от нас (наши доходы с ним) —
+// сводит обе стороны в один документ взаимозачёта. Ничего не хранит
+// отдельно: считает прямо из iz_transactions по полю counterparty.
+// Дебет = контрагент должен нам (мы оказали услугу/продали товар ему).
+// Кредит = мы должны контрагенту (он оказал услугу/поставил товар нам).
+function populateCounterpartySelects() {
+  var sup = [];
+  try { sup = JSON.parse(localStorage.getItem('iz_suppliers')||'[]'); } catch(e){}
+  var opts = sup.map(function(s){ var n=typeof s==='string'?s:(s.name||''); return '<option value="'+n+'">'+n+'</option>'; }).join('');
+
+  var exp = document.getElementById('expCounterparty');
+  if(exp) { var expVal=exp.value; exp.innerHTML = '<option value="">— не указан —</option>' + opts; exp.value = expVal; }
+  var inc = document.getElementById('incCounterparty');
+  if(inc) { var incVal=inc.value; inc.innerHTML = '<option value="">— не указан —</option>' + opts; inc.value = incVal; }
+  var rc = document.getElementById('rcCounterparty');
+  if(rc) { var rcVal=rc.value; rc.innerHTML = '<option value="">— выберите контрагента —</option>' + opts; rc.value = rcVal; }
+}
+
+function initReconcileDates() {
+  var fromEl = document.getElementById('rcFrom');
+  var toEl = document.getElementById('rcTo');
+  if(fromEl && !fromEl.value) {
+    var n = new Date();
+    fromEl.value = n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-01';
+  }
+  if(toEl && !toEl.value) {
+    toEl.value = new Date().toISOString().substring(0,10);
+  }
+}
+
+function _reconcileRows() {
+  var cp = (document.getElementById('rcCounterparty')||{}).value||'';
+  if(!cp) return null;
+  var from = (document.getElementById('rcFrom')||{}).value||'';
+  var to = (document.getElementById('rcTo')||{}).value||'';
+  var txs = getTransactions().filter(function(tx){
+    if(tx.counterparty !== cp) return false;
+    if(tx.type!=='income' && tx.type!=='expense') return false;
+    var d = (tx.date||'').substring(0,10);
+    if(from && d < from) return false;
+    if(to && d > to) return false;
+    return true;
+  }).sort(function(a,b){ return (a.date||'').localeCompare(b.date||''); });
+  return {counterparty:cp, from:from, to:to, txs:txs};
+}
+
+function renderReconcileAct() {
+  var el = document.getElementById('rcActBlock');
+  if(!el) return;
+  function fmt(n){ return Math.round(n||0).toLocaleString('ru-RU'); }
+
+  var data = _reconcileRows();
+  if(!data) { el.innerHTML = '<div class="empty"><div class="ei">🤝</div>Выберите контрагента, чтобы сформировать акт сверки</div>'; return; }
+
+  var opening = parseFloat((document.getElementById('rcOpening')||{}).value||'0') || 0;
+  var running = opening;
+  var totalDebit = 0, totalCredit = 0;
+
+  var rowsHtml = data.txs.map(function(tx){
+    var isDebit = tx.type === 'income';
+    var amt = tx.amount||0;
+    if(isDebit) { running += amt; totalDebit += amt; } else { running -= amt; totalCredit += amt; }
+    var label = tx.type==='income' ? (tx.category||tx.source||'Доход') : (tx.category||'Расход');
+    return '<tr style="border-top:1px solid var(--border)">'+
+      '<td style="padding:6px 4px;font-size:10px;color:var(--t2);white-space:nowrap">'+(tx.date||'').substring(0,10)+'</td>'+
+      '<td style="padding:6px 4px">'+label+(tx.desc?'<div style="font-size:10px;color:var(--t2)">'+tx.desc+'</div>':'')+'</td>'+
+      '<td style="padding:6px 4px;text-align:right;color:var(--inc);white-space:nowrap">'+(isDebit?fmt(amt):'')+'</td>'+
+      '<td style="padding:6px 4px;text-align:right;color:var(--exp);white-space:nowrap">'+(isDebit?'':fmt(amt))+'</td>'+
+    '</tr>';
+  }).join('');
+
+  var finalSaldo = running;
+  var saldoLabel = finalSaldo > 0 ? 'Контрагент должен нам' : finalSaldo < 0 ? 'Мы должны контрагенту' : 'Взаиморасчёты закрыты';
+  var saldoColor = finalSaldo > 0 ? 'var(--inc)' : finalSaldo < 0 ? 'var(--exp)' : 'var(--text)';
+  var legend = '<div style="font-size:11px;color:var(--t2);line-height:1.5;margin-bottom:10px">Дебет — контрагент должен нам (мы оказали услугу/продали товар). Кредит — мы должны контрагенту (он оказал услугу/поставил товар нам).</div>';
+
+  if(!data.txs.length) {
+    el.innerHTML = '<div class="card">'+legend+'<div class="empty"><div class="ei">📭</div>Нет операций с этим контрагентом за период</div></div>';
+  } else {
+    el.innerHTML = '<div class="card">'+legend+
+      '<div style="overflow-x:auto">'+
+      '<table style="width:100%;border-collapse:collapse;font-size:11px">'+
+      '<thead><tr style="text-align:left;color:var(--t2)">'+
+      '<th style="padding:6px 4px">Дата</th><th style="padding:6px 4px">Операция</th>'+
+      '<th style="padding:6px 4px;text-align:right;color:var(--inc)">Дебет</th>'+
+      '<th style="padding:6px 4px;text-align:right;color:var(--exp)">Кредит</th>'+
+      '</tr></thead><tbody>'+rowsHtml+'</tbody></table></div></div>'+
+      '<div class="card">'+
+      _row('Сальдо на начало периода', fmt(opening)+' ₽')+
+      _row('Обороты — Дебет', '<span style="color:var(--inc)">'+fmt(totalDebit)+' ₽</span>')+
+      _row('Обороты — Кредит', '<span style="color:var(--exp)">'+fmt(totalCredit)+' ₽</span>')+
+      '</div>'+
+      '<div style="background:var(--s1);border:1px solid '+saldoColor+';border-radius:12px;padding:16px;text-align:center;margin-bottom:10px">'+
+      '<div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.5px">Сальдо на конец периода</div>'+
+      '<div style="font-size:22px;font-weight:700;color:'+saldoColor+';margin-top:4px">'+fmt(Math.abs(finalSaldo))+' ₽</div>'+
+      '<div style="font-size:12px;color:var(--t2);margin-top:2px">'+saldoLabel+'</div>'+
+      '</div>';
+  }
+
+  el.innerHTML += '<button class="btn" onclick="exportReconcileAct()">📥 Скачать акт (текст)</button>';
+}
+
+function exportReconcileAct() {
+  var data = _reconcileRows();
+  if(!data) { showToast('❌ Выберите контрагента'); return; }
+  function fmt(n){ return Math.round(n||0).toLocaleString('ru-RU'); }
+  function fmtDate(s){ if(!s) return '—'; var p=s.substring(0,10).split('-'); return p.length===3 ? p[2]+'.'+p[1]+'.'+p[0] : s; }
+
+  var opening = parseFloat((document.getElementById('rcOpening')||{}).value||'0') || 0;
+  var running = opening;
+  var totalDebit = 0, totalCredit = 0;
+  var lines = [];
+  lines.push('АКТ СВЕРКИ ВЗАИМОРАСЧЁТОВ');
+  lines.push('Контрагент: ' + data.counterparty);
+  lines.push('Период: с ' + fmtDate(data.from) + ' по ' + fmtDate(data.to));
+  lines.push('');
+  lines.push('Сальдо на начало периода: ' + fmt(opening) + ' ₽');
+  lines.push('');
+  lines.push('Дата       | Операция                                    | Дебет      | Кредит');
+  lines.push('-----------|---------------------------------------------|------------|-----------');
+  data.txs.forEach(function(tx){
+    var isDebit = tx.type === 'income';
+    var amt = tx.amount||0;
+    if(isDebit) { running += amt; totalDebit += amt; } else { running -= amt; totalCredit += amt; }
+    var label = (tx.type==='income' ? (tx.category||tx.source||'Доход') : (tx.category||'Расход')) + (tx.desc?' — '+tx.desc:'');
+    lines.push(fmtDate(tx.date).padEnd(11) + '| ' + label.substring(0,45).padEnd(46) + '| ' + (isDebit?fmt(amt):'').padEnd(11) + '| ' + (isDebit?'':fmt(amt)));
+  });
+  lines.push('');
+  lines.push('Обороты за период — Дебет: ' + fmt(totalDebit) + ' ₽, Кредит: ' + fmt(totalCredit) + ' ₽');
+  var finalSaldo = running;
+  var saldoLabel = finalSaldo > 0 ? 'Контрагент должен нам' : finalSaldo < 0 ? 'Мы должны контрагенту' : 'Взаиморасчёты закрыты';
+  lines.push('Сальдо на конец периода: ' + fmt(Math.abs(finalSaldo)) + ' ₽ (' + saldoLabel + ')');
+
+  var blob = new Blob([lines.join('\n')], {type:'text/plain;charset=utf-8'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'akt_sverki_' + data.counterparty.replace(/[^a-zA-Zа-яА-Я0-9]+/g,'_') + '_' + (data.from||'') + '_' + (data.to||'') + '.txt';
+  a.click();
+  showToast('📥 Акт сверки сохранён');
 }
 
 // ════ ПЛАНИРОВАНИЕ ════
