@@ -2541,6 +2541,20 @@ function saveSpecies(name) {
     try{ renderRefbookItemsShop('materials','iz_materials'); updateRefbookCountShop('materials','iz_materials'); }catch(e){}
   }
 }
+// Продавцы годами вписывали породу от руки — сокращения и опечатки («Орех», «Оех», «Сейквоя»,
+// «Дуб») дробят одну и ту же породу на разные группы и в «Сводке без артикула», и при поиске
+// совпадений для «Применить артикулы задним числом». Приводим известные варианты к тому
+// каноническому названию, под которым порода реально заведена в каталоге «С артикулом вручную».
+var _woodSpeciesAliases = {
+  'орех':'Орех грецкий', 'оех':'Орех грецкий',
+  'сейквоя':'Секвойя',
+  'дуб':'Дуб скальный'
+};
+function _woodSpeciesNormalize(raw){
+  var s = String(raw||'').trim();
+  if(!s) return s;
+  return _woodSpeciesAliases[s.toLowerCase()] || s;
+}
 function getSuppliers() {
   var base = ['Мастерская Ижица'];
   var saved = JSON.parse(localStorage.getItem('iz_suppliers')||'[]');
@@ -3891,6 +3905,7 @@ function renderDupArticleAudit(){
 function _naArticleOf(it){ return String((it&&(it.num||it.article))||'').trim(); }
 function _naAddRow(byName, name, species, price, qty, source, ref){
   name = String(name||'').trim(); if(!name) return;
+  species = _woodSpeciesNormalize(species);
   var g = byName[name] || (byName[name] = {total:0, variants:{}});
   g.total += qty||0;
   var vk = (species||'—')+'|'+(price||0);
@@ -4082,7 +4097,7 @@ function _naShowDetail(name, vk){
 function _retroArtBuildLookup(freshDerevo, freshDr){
   var lookup = {};
   (freshDerevo || getRefBook('iz_goods_derevo') || []).filter(function(c){ return c.article; }).forEach(function(c){
-    var k = 'wood|'+(c.name||'').toLowerCase().trim()+'|'+(c.species||'').toLowerCase().trim()+'|'+(c.price||0);
+    var k = 'wood|'+(c.name||'').toLowerCase().trim()+'|'+_woodSpeciesNormalize(c.species).toLowerCase().trim()+'|'+(c.price||0);
     lookup[k] = c.article;
   });
   (freshDr || getRefBook('iz_goods_dr') || []).filter(function(c){ return c.article; }).forEach(function(c){
@@ -4093,7 +4108,7 @@ function _retroArtBuildLookup(freshDerevo, freshDr){
 }
 function _retroArtKeyFor(name, species, price, goodsType){
   if(goodsType==='dr') return 'dr|'+String(name||'').toLowerCase().trim()+'|'+(price||0);
-  return 'wood|'+String(name||'').toLowerCase().trim()+'|'+String(species||'').toLowerCase().trim()+'|'+(price||0);
+  return 'wood|'+String(name||'').toLowerCase().trim()+'|'+_woodSpeciesNormalize(species).toLowerCase().trim()+'|'+(price||0);
 }
 function loadRetroArticleAudit(){
   var status = document.getElementById('raStatus');
