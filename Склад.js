@@ -2138,8 +2138,8 @@ function renderManInvEditItems(id){
         '<input class="fi" value="'+artNum+'" placeholder="Арт." style="flex:0 0 70px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_manInvEditArt(\''+id+'\','+i+',this.value)">'+
         '<div style="flex:2;position:relative">'+
           '<input class="fi" id="'+nameId+'" value="'+(item.name||'')+'" placeholder="Наименование" autocomplete="off" style="margin:0;padding:6px;font-size:12px" '+
-            'oninput="_manInvEditActive={id:\''+id+'\',i:'+i+'};_manInvEditName(\''+id+'\','+i+',this.value);psjSuggest(\''+nameId+'\',_manInvNameOptions(\''+(data.goodsType||'derevo')+'\'),\'_manInvEditPickNameIdx\')" '+
-            'onfocus="_manInvEditActive={id:\''+id+'\',i:'+i+'};psjSuggest(\''+nameId+'\',_manInvNameOptions(\''+(data.goodsType||'derevo')+'\'),\'_manInvEditPickNameIdx\')" '+
+            'oninput="_manInvEditName(\''+id+'\','+i+',this.value);_manInvEditSuggestName(\''+id+'\','+i+')" '+
+            'onfocus="_manInvEditSuggestName(\''+id+'\','+i+')" '+
             'onblur="psjHideSugg(\''+nameId+'\')">'+
           '<div id="'+nameId+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'+
         '</div>'+
@@ -2194,14 +2194,60 @@ function _manInvEditArt(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[i
 function _manInvEditSpecies(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]) window._manInvEdit[id].items[i].species=v; }
 function _manInvEditQty(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]){ window._manInvEdit[id].items[i].qty=parseFloat(v)||1; updateManInvEditTotal(id); } }
 function _manInvEditPrice(id,i,v){ if(window._manInvEdit[id]&&window._manInvEdit[id].items[i]){ window._manInvEdit[id].items[i].price=parseFloat(v)||0; updateManInvEditTotal(id); } }
-function _manInvEditPickNameIdx(val){
-  var id=_manInvEditActive.id, i=_manInvEditActive.i;
-  if(id==null||i==null) return;
-  var el = document.getElementById('maninv_name_'+id+'_'+i);
-  if(el) el.value = val;
-  if(window._manInvEdit[id] && window._manInvEdit[id].items[i]) window._manInvEdit[id].items[i].name = val;
-  var box = document.getElementById('maninv_name_'+id+'_'+i+'_sugg');
-  if(box) box.style.display='none';
+// Правка накладной админом (архив) показывала только голые названия без цены/артикула — продавцу
+// приходилось выбирать вслепую, а артикул не подтягивался вовсе. Та же обогащённая подсказка,
+// что уже есть в форме продажи (см. siSuggestNameM) и в форме исправления записи (editItemForm):
+// показывает реальные варианты из каталога (цена+артикул, у дерева ещё порода) прямо в списке.
+function _manInvEditSuggestName(id, i){
+  var nameId = 'maninv_name_'+id+'_'+i;
+  var box = document.getElementById(nameId+'_sugg');
+  var input = document.getElementById(nameId);
+  if(!box || !input) return;
+  var val = (input.value||'').trim().toLowerCase();
+  if(!val){ box.style.display='none'; box.innerHTML=''; return; }
+  var data = window._manInvEdit[id]; if(!data) return;
+  var gt = data.goodsType || 'derevo';
+  var words = val.split(/\s+/).filter(Boolean);
+  var names = _manInvNameOptions(gt).filter(function(s){
+    var low = s.toLowerCase();
+    return words.every(function(w){ return low.indexOf(w)>=0; });
+  });
+  names.sort(function(a,b){
+    var la=a.toLowerCase(), lb=b.toLowerCase();
+    var ai=la.indexOf(words[0]||''), bi=lb.indexOf(words[0]||'');
+    if(ai!==bi) return ai-bi;
+    return a.length-b.length;
+  });
+  names = names.slice(0,8);
+  if(!names.length){ box.style.display='none'; box.innerHTML=''; return; }
+  var isWood = gt!=='dr';
+  var rows = [];
+  names.forEach(function(nm){
+    var variants = _siGetGoodsVariants(nm, gt);
+    if(!variants.length){ rows.push({name:nm, price:null, article:null, species:null}); return; }
+    variants.forEach(function(v){ rows.push({name:nm, price:v.price, article:v.article, species:v.species||null}); });
+  });
+  box.innerHTML = rows.map(function(r){
+    var infoStr = r.price!=null
+      ? ' · '+Math.round(r.price).toLocaleString('ru-RU')+'₽'+(r.article?' · №'+r.article:'')+(isWood&&r.species?' · '+r.species:'')
+      : '';
+    var priceArg = r.price!=null ? r.price : 'null';
+    var artArg = r.article ? "'"+r.article.replace(/'/g,"\\'")+"'" : 'null';
+    var spArg = r.species ? "'"+r.species.replace(/'/g,"\\'")+"'" : 'null';
+    return '<div onpointerdown="event.preventDefault();_manInvEditPickVariant(\''+id+'\','+i+',\''+r.name.replace(/'/g,"\\'")+'\','+priceArg+','+artArg+','+spArg+')" '+
+      'style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px">'+
+      '<span>'+r.name+'</span><span style="color:#8888aa;font-size:11px;white-space:nowrap;flex-shrink:0">'+infoStr+'</span></div>';
+  }).join('');
+  box.style.display='block';
+}
+function _manInvEditPickVariant(id, i, name, price, article, species){
+  var data = window._manInvEdit[id]; if(!data || !data.items[i]) return;
+  data.items[i].name = name;
+  if(price!=null) data.items[i].price = price;
+  if(article) data.items[i].article = article;
+  if(species) data.items[i].species = species;
+  var box = document.getElementById('maninv_name_'+id+'_'+i+'_sugg'); if(box) box.style.display='none';
+  renderManInvEditItems(id);
 }
 function _manInvEditPickSpeciesIdx(val){
   var id=_manInvEditActive.id, i=_manInvEditActive.i;
