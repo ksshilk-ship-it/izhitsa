@@ -3903,6 +3903,13 @@ function renderDupArticleAudit(){
 // накладные (iz_manual_invoices/iz_invoices — как в _buildUsedArticleIndex), продажи из журналов
 // всех смен (iz_shifts), и подсчёты всех инвентаризаций (iz_inventory_sessions/iz_inventory_counts).
 function _naArticleOf(it){ return String((it&&(it.num||it.article))||'').trim(); }
+// Единственная надёжная проверка «смена ещё открыта», как в смены.js:4376 (_shiftStillOpen) —
+// НЕ sh.status!=='closed'. У части старых/архивных смен status вообще не 'closed' буквально
+// (пустой, другое значение), хотя у них есть closedAt и в интерфейсе они показываются закрытыми
+// («🔐 Закрыта: ...»). Проверка по status!=='closed' считала такие смены «ещё открытыми» —
+// и в «Сводке без артикула» на них навешивался неверный ярлык «⏳ смена ещё открыта», и
+// «Применить артикулы задним числом» пропускал их совсем, хотя на самом деле трогать их можно.
+function _shIsShiftOpen(sh){ return sh.status==='open' || !sh.closedAt; }
 // pendingReason — почему запись пока недостижима для «Применить артикулы задним числом»
 // (тот инструмент нарочно трогает только закрытые смены и принятые накладные, а инвентаризации
 // не сканирует вообще): 'open_shift' — смена ещё открыта, 'pending_invoice' — накладная ещё не
@@ -3956,7 +3963,7 @@ function loadNoArticleAudit(){
     db.collection('iz_shifts').get({source:'server'}).then(function(snap){
       snap.forEach(function(doc){
         var sh = doc.data();
-        var pendingReason = sh.status!=='closed' ? 'open_shift' : null;
+        var pendingReason = _shIsShiftOpen(sh) ? 'open_shift' : null;
         (sh.journal||[]).forEach(function(e){
           if(e.type!=='sale') return;
           (e.items||[]).forEach(function(it){
@@ -4186,7 +4193,7 @@ function _retroArtScan(lookup, status){
   }
   function scanShiftDoc(doc){
     var sh = doc.data();
-    if(sh.status!=='closed') return;
+    if(_shIsShiftOpen(sh)) return;
     var journal = sh.journal||[];
     var changes = [];
     var shop = sh.shopName||'—', date = sh.date||'—';
