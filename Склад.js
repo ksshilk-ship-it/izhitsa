@@ -3903,16 +3903,29 @@ function renderDupArticleAudit(){
 // накладные (iz_manual_invoices/iz_invoices — как в _buildUsedArticleIndex), продажи из журналов
 // всех смен (iz_shifts), и подсчёты всех инвентаризаций (iz_inventory_sessions/iz_inventory_counts).
 function _naArticleOf(it){ return String((it&&(it.num||it.article))||'').trim(); }
-function _naAddRow(byName, name, species, price, qty, source, ref){
+// pendingReason — почему запись пока недостижима для «Применить артикулы задним числом»
+// (тот инструмент нарочно трогает только закрытые смены и принятые накладные, а инвентаризации
+// не сканирует вообще): 'open_shift' — смена ещё открыта, 'pending_invoice' — накладная ещё не
+// принята, 'inventory' — это инвентаризация, туда автоподстановка артикулов не добирается никогда.
+var NA_PENDING_LABELS = {open_shift:'смена ещё открыта', pending_invoice:'накладная не принята', inventory:'инвентаризация — переносится только вручную'};
+function _naPendingBadge(pending){
+  var reasons = Object.keys(pending||{});
+  var total = reasons.reduce(function(s,k){ return s+pending[k]; },0);
+  if(!total) return '';
+  var label = reasons.length===1 ? NA_PENDING_LABELS[reasons[0]] : 'ждут: '+reasons.map(function(r){ return NA_PENDING_LABELS[r]; }).join(', ');
+  return '<span style="color:#f0a060;font-size:10px">⏳ '+total+' — '+label+'</span>';
+}
+function _naAddRow(byName, name, species, price, qty, source, ref, pendingReason){
   name = String(name||'').trim(); if(!name) return;
   species = _woodSpeciesNormalize(species);
   var g = byName[name] || (byName[name] = {total:0, variants:{}});
   g.total += qty||0;
   var vk = (species||'—')+'|'+(price||0);
-  var v = g.variants[vk] || (g.variants[vk] = {vk:vk, species:species||'—', price:price||0, qty:0, count:0, receive:0, sale:0, inventory:0, refs:[]});
+  var v = g.variants[vk] || (g.variants[vk] = {vk:vk, species:species||'—', price:price||0, qty:0, count:0, receive:0, sale:0, inventory:0, refs:[], pending:{}});
   v.qty += qty||0; v.count++;
   v[source] = (v[source]||0) + 1;
-  if(ref){ ref.source = source; ref.qty = qty||0; v.refs.push(ref); }
+  if(pendingReason){ v.pending[pendingReason] = (v.pending[pendingReason]||0)+1; }
+  if(ref){ ref.source = source; ref.qty = qty||0; ref.pendingReason = pendingReason||null; v.refs.push(ref); }
 }
 function loadNoArticleAudit(){
   var status = document.getElementById('naStatus');
@@ -3927,12 +3940,13 @@ function loadNoArticleAudit(){
       if((inv.goodsType||'derevo')==='dr') return;
       var items = inv.acceptedItems || inv.items || [];
       var invId = inv.id!=null ? inv.id : (inv._id!=null ? inv._id : doc.id);
+      var pendingReason = inv.status!=='accepted' ? 'pending_invoice' : null;
       items.forEach(function(it){
         if((it.goodsType||inv.goodsType||'derevo')==='dr') return;
         if(_naArticleOf(it)) return;
         _naAddRow(byName, it.name, it.species, it.price, it.qty||1, 'receive', {
           shop: inv.destName||inv.shopName||'—', date: inv.date||inv.acceptedDate||'—', invId: invId, invNum: inv.num||''
-        });
+        }, pendingReason);
       });
     });
   }
@@ -3942,6 +3956,7 @@ function loadNoArticleAudit(){
     db.collection('iz_shifts').get({source:'server'}).then(function(snap){
       snap.forEach(function(doc){
         var sh = doc.data();
+        var pendingReason = sh.status!=='closed' ? 'open_shift' : null;
         (sh.journal||[]).forEach(function(e){
           if(e.type!=='sale') return;
           (e.items||[]).forEach(function(it){
@@ -3949,7 +3964,7 @@ function loadNoArticleAudit(){
             if(_naArticleOf(it)) return;
             _naAddRow(byName, it.name, it.species, it.price, it.qty||1, 'sale', {
               shop: sh.shopName||'—', date: sh.date||'—', shiftId: sh.id||doc.id, entryId: e.id
-            });
+            }, pendingReason);
           });
         });
       });
@@ -3964,7 +3979,7 @@ function loadNoArticleAudit(){
             if(_naArticleOf(c)) return;
             _naAddRow(byName, c.name, c.species, c.price, c.countedQty||0, 'inventory', {
               shop: sx.shopName||'—', date: _iaSessDate(sx), sessionId: sx.id
-            });
+            }, 'inventory');
           });
         });
       }));
@@ -4044,9 +4059,13 @@ function _naRenderResults(){
             if(v.sale) srcParts.push('💰×'+v.sale);
             if(v.inventory) srcParts.push('📋×'+v.inventory);
             var vkEsc = v.vk.replace(/'/g,"\\'").replace(/"/g,'&quot;');
-            return '<div onclick="_naShowDetail(\''+esc+'\',\''+vkEsc+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px 5px 20px;border-bottom:1px solid #22222e;font-size:11.5px;cursor:pointer">'+
-              '<span style="color:#c8f060;font-weight:700">'+Math.round(v.price).toLocaleString('ru-RU')+'₽</span>'+
-              '<span style="display:flex;gap:8px;align-items:center;color:#8888aa;flex-shrink:0"><span>'+v.qty+' шт.</span><span style="font-size:10px">'+srcParts.join(' ')+'</span><span style="color:#60c8f0">🔎</span></span>'+
+            var pendingBadge = _naPendingBadge(v.pending);
+            return '<div onclick="_naShowDetail(\''+esc+'\',\''+vkEsc+'\')" style="padding:5px 10px 5px 20px;border-bottom:1px solid #22222e;font-size:11.5px;cursor:pointer">'+
+              '<div style="display:flex;justify-content:space-between;align-items:center">'+
+                '<span style="color:#c8f060;font-weight:700">'+Math.round(v.price).toLocaleString('ru-RU')+'₽</span>'+
+                '<span style="display:flex;gap:8px;align-items:center;color:#8888aa;flex-shrink:0"><span>'+v.qty+' шт.</span><span style="font-size:10px">'+srcParts.join(' ')+'</span><span style="color:#60c8f0">🔎</span></span>'+
+              '</div>'+
+              (pendingBadge ? '<div style="text-align:right;margin-top:2px">'+pendingBadge+'</div>' : '')+
             '</div>';
           }).join('');
           return speciesHead + priceRows;
@@ -4071,9 +4090,10 @@ function _naShowDetail(name, vk){
   var refs = (v.refs||[]).slice().sort(function(a,b){ return String(b.date||'').localeCompare(String(a.date||'')); });
   var word = refs.length===1?'запись':(refs.length>=2&&refs.length<=4?'записи':'записей');
   var rows = refs.map(function(r){
+    var pendingTag = r.pendingReason ? '<div style="color:#f0a060;font-size:10px;margin-top:1px">⏳ '+NA_PENDING_LABELS[r.pendingReason]+'</div>' : '';
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #22222e;font-size:12px">'+
       '<div><span>'+(srcIcon[r.source]||'')+' '+(srcLabel[r.source]||r.source)+'</span>'+
-        '<div class="u-fs10-gray">'+(r.shop||'—')+' · '+(r.date||'—')+(r.invNum?' · накл. '+r.invNum:'')+'</div></div>'+
+        '<div class="u-fs10-gray">'+(r.shop||'—')+' · '+(r.date||'—')+(r.invNum?' · накл. '+r.invNum:'')+'</div>'+pendingTag+'</div>'+
       '<div style="color:#c8f060;font-weight:700;flex-shrink:0">'+r.qty+' шт.</div>'+
     '</div>';
   }).join('');
