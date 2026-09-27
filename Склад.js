@@ -4071,6 +4071,7 @@ function loadRetroArticleAudit(){
     var items = inv[field] || [];
     var changes = [];
     var shop = inv.destName||inv.shopName||'—', date = inv.date||inv.acceptedDate||'—', invNum = inv.num||'';
+    var itemsSummary = items.map(function(it){ return (it.name||'—')+(it.species?' · '+it.species:'')+' × '+(it.qty||1)+' · '+Math.round(it.price||0)+'₽'; }).join(', ');
     items.forEach(function(it, idx){
       if(articleOf(it)) return;
       var gt = it.goodsType || inv.goodsType || 'derevo';
@@ -4078,7 +4079,10 @@ function loadRetroArticleAudit(){
       var art = lookup[key];
       if(!art) return;
       changes.push({idx:idx, article:art, field:field});
-      noteMatch(art, it.name, it.species, it.price, it.qty, 'receive', {shop:shop, date:date, invNum:invNum});
+      noteMatch(art, it.name, it.species, it.price, it.qty, 'receive', {
+        shop:shop, date:date, invNum:invNum, from:inv.from||'', itemsSummary:itemsSummary,
+        invId:doc.id, isManual: kind==='manual_invoice'
+      });
     });
     if(changes.length) docUpdates[kind+'_'+doc.id] = {kind:kind, id:doc.id, changes:changes};
   }
@@ -4097,7 +4101,9 @@ function loadRetroArticleAudit(){
         var art = lookup[key];
         if(!art) return;
         changes.push({entryIdx:eIdx, itemIdx:iIdx, article:art});
-        noteMatch(art, it.name, it.species, it.price, it.qty, e.type==='sale'?'sale':'writeoff', {shop:shop, date:date});
+        noteMatch(art, it.name, it.species, it.price, it.qty, e.type==='sale'?'sale':'writeoff', {
+          shop:shop, date:date, entrySub:e.sub||'', reason:e.reason||'', who:sh.sellerName||''
+        });
       });
     });
     if(changes.length) docUpdates['shift_'+doc.id] = {kind:'shift', id:doc.id, changes:changes};
@@ -4163,10 +4169,18 @@ function _retroArtShowDetail(article){
   var refs = (m.refs||[]).slice().sort(function(a,b){ return String(b.date||'').localeCompare(String(a.date||'')); });
   var word = refs.length===1?'запись':(refs.length>=2&&refs.length<=4?'записи':'записей');
   var rows = refs.map(function(r){
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #22222e;font-size:12px">'+
-      '<div><span>'+(srcIcon[r.source]||'')+' '+(srcLabel[r.source]||r.source)+'</span>'+
-        '<div class="u-fs10-gray">'+(r.shop||'—')+' · '+(r.date||'—')+(r.invNum?' · накл. '+r.invNum:'')+'</div></div>'+
-      '<div style="color:#c8f060;font-weight:700;flex-shrink:0">'+r.qty+' шт.</div>'+
+    var detailLine = r.source==='receive'
+      ? (r.itemsSummary ? '<div class="u-fs10-gray" style="margin-top:2px;white-space:normal">'+r.itemsSummary+(r.from?' · от '+r.from:'')+'</div>' : '')
+      : (r.entrySub ? '<div class="u-fs10-gray" style="margin-top:2px;white-space:normal">'+r.entrySub+(r.reason?' · причина: '+r.reason:'')+'</div>' : '');
+    var openBtn = (r.source==='receive' && r.invId)
+      ? '<button onclick="showNfInvoiceDetail(\''+r.invId+'\','+(r.isManual?'true':'false')+')" style="font-size:10px;padding:3px 8px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#60c8f0;cursor:pointer;flex-shrink:0;margin-top:4px">📋 Открыть накладную</button>'
+      : '';
+    return '<div style="padding:7px 0;border-bottom:1px solid #22222e;font-size:12px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<div><span>'+(srcIcon[r.source]||'')+' '+(srcLabel[r.source]||r.source)+(r.who?' · '+r.who:'')+'</span>'+
+          '<div class="u-fs10-gray">'+(r.shop||'—')+' · '+(r.date||'—')+(r.invNum?' · накл. '+r.invNum:'')+'</div></div>'+
+        '<div style="color:#c8f060;font-weight:700;flex-shrink:0">'+r.qty+' шт.</div>'+
+      '</div>'+detailLine+openBtn+
     '</div>';
   }).join('');
   overlay.innerHTML = '<div class="md">'+

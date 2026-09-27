@@ -941,18 +941,43 @@ function closeNfSellerOverlay(){
   var overlay = document.getElementById('nfSellerOverlay');
   if(overlay) overlay.classList.remove('open');
 }
-function showNfInvoiceDetail(invId, isManual){
+function showNfInvoiceDetail(invId, isManual, preloaded){
   var key = isManual ? 'iz_manual_invoices' : 'iz_invoices';
-  var list = JSON.parse(localStorage.getItem(key)||'[]');
-  var inv = list.find(function(i){ return (i.id||i._id)===invId; });
-  var overlay = document.getElementById('nfSellerOverlay');
-  if(!overlay) return;
+  var inv = preloaded;
   if(!inv){
-    overlay.innerHTML = '<div class="md"><div style="display:flex;justify-content:space-between;align-items:center">'+
-      '<div style="font-size:15px;font-weight:700">Накладная не найдена</div>'+
-      '<button onclick="document.getElementById(\'nfSellerOverlay\').classList.remove(\'open\')" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer">✕</button>'+
-    '</div></div>';
+    var list = JSON.parse(localStorage.getItem(key)||'[]');
+    inv = list.find(function(i){ return (i.id||i._id)===invId; });
+  }
+  var overlay = document.getElementById('nfSellerOverlay');
+  // Раньше этот оверлей заводила только showNameSellerBreakdown — вызов отсюда напрямую (без
+  // захода через неё в этой сессии) тихо ничего не показывал. Заводим сами, если его ещё нет.
+  if(!overlay){
+    overlay = document.createElement('div');
+    overlay.id = 'nfSellerOverlay';
+    overlay.className = 'mo';
+    overlay.onclick = function(e){ if(e.target===overlay) overlay.classList.remove('open'); };
+    document.body.appendChild(overlay);
+  }
+  if(!inv){
+    // Локально не нашлось (например, эту накладную ни разу не открывали на этом устройстве) —
+    // прежде чем сдаться, спрашиваем сервер напрямую: без этого кнопка «Открыть» из инструментов,
+    // которые сканируют облако целиком (аудит задвоений, применение артикулов задним числом),
+    // молча ничего бы не показывала для чужих накладных.
+    overlay.innerHTML = '<div class="md"><div style="text-align:center;padding:20px;color:#8888aa">⏳ Ищу на сервере...</div></div>';
     overlay.classList.add('open');
+    try{
+      db.collection(key).doc(invId).get({source:'server'}).then(function(snap){
+        if(snap.exists) showNfInvoiceDetail.call(null, invId, isManual, snap.data());
+        else {
+          overlay.innerHTML = '<div class="md"><div style="display:flex;justify-content:space-between;align-items:center">'+
+            '<div style="font-size:15px;font-weight:700">Накладная не найдена</div>'+
+            '<button onclick="document.getElementById(\'nfSellerOverlay\').classList.remove(\'open\')" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer">✕</button>'+
+          '</div></div>';
+        }
+      }).catch(function(){
+        overlay.innerHTML = '<div class="md"><div style="text-align:center;padding:20px;color:#f06060">❌ Не удалось загрузить</div></div>';
+      });
+    }catch(e){}
     return;
   }
   var f2 = function(n){ return Math.round(n||0).toLocaleString('ru-RU')+'₽'; };
