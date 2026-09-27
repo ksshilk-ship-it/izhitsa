@@ -4201,7 +4201,10 @@ function _renderRetroArtPreview(){
   }
   var totalRecords = articles.reduce(function(s,a){ return s+data.matchStats[a].count; },0);
   articles.sort(function(a,b){ return data.matchStats[b].count - data.matchStats[a].count; });
-  host.innerHTML = '<div style="font-size:12px;color:#f0c060;font-weight:700;margin-bottom:8px">Найдено: '+totalRecords+' запис'+(totalRecords===1?'ь':(totalRecords<5?'и':'ей'))+' по '+articles.length+' артикул'+(articles.length===1?'у':(articles.length<5?'ам':'ам'))+' — нажмите на строку, чтобы увидеть сами записи, или сразу «Применить» по этому артикулу</div>'+
+  host.innerHTML = '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">'+
+      '<div style="font-size:12px;color:#f0c060;font-weight:700">Найдено: '+totalRecords+' запис'+(totalRecords===1?'ь':(totalRecords<5?'и':'ей'))+' по '+articles.length+' артикул'+(articles.length===1?'у':(articles.length<5?'ам':'ам'))+' — нажмите на строку, чтобы увидеть сами записи, или «Применить» по одному артикулу</div>'+
+      '<button type="button" onclick="applyRetroArticleAudit()" style="flex-shrink:0;padding:7px 11px;background:#c8f060;border:none;border-radius:8px;color:#0f0f13;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">✅ Применить всё</button>'+
+    '</div>'+
     articles.map(function(art){
       var m = data.matchStats[art];
       var srcParts = [];
