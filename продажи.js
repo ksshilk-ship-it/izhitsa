@@ -139,8 +139,11 @@ function siSuggestNameM(inputId){
   var rows = [];
   names.forEach(function(nm){
     var variants = _siGetGoodsVariants(nm, _siItemGoodsType);
-    if(!variants.length){ rows.push({name:nm, price:null, article:null, species:null}); return; }
     variants.forEach(function(v){ rows.push({name:nm, price:v.price, article:v.article, species:v.species||null}); });
+    // Даже когда у названия уже есть варианты с артикулом, простое «без артикула» должно
+    // оставаться выбираемым — например, для непредвиденных случаев, когда ни одна порода/цена
+    // из каталога не подходит, продавец всё равно может занести просто наименование.
+    rows.push({name:nm, price:null, article:null, species:null});
   });
   box.innerHTML = rows.map(function(r){
     var infoStr = r.price!=null
@@ -158,9 +161,9 @@ function siSuggestNameM(inputId){
 function siPickVariantNameM(inputId, name, price, article, species){
   var el = document.getElementById(inputId); if(el) el.value = name;
   var box = document.getElementById(inputId+'_sugg'); if(box) box.style.display='none';
-  if(price!=null){
-    var priceEl = document.getElementById('siPriceM'); if(priceEl){ priceEl.value = price; siCalcAmtM(); }
-  }
+  // price===null — выбрали «просто название» намеренно (см. siSuggestNameM); если до этого уже
+  // стояла цена от другого варианта, её нужно сбросить, а не оставить как случайный остаток.
+  var priceEl = document.getElementById('siPriceM'); if(priceEl){ priceEl.value = price!=null ? price : ''; siCalcAmtM(); }
   if(species){
     if(_siSpeciesMultiMode) siToggleMultiSpecies(false);
     var spEl = document.getElementById('siSpeciesM'); if(spEl) spEl.value = species;

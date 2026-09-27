@@ -3331,8 +3331,10 @@ function svEditSuggestName(id){
     var norm = nm.toLowerCase().trim();
     var variants = drCat.filter(function(g){ return (g.name||'').toLowerCase().trim()===norm && g.article; })
       .concat(woodCat.filter(function(g){ return (g.name||'').toLowerCase().trim()===norm && g.article; }));
-    if(!variants.length){ rows.push({name:nm, price:null, article:null, species:null}); return; }
     variants.forEach(function(v){ rows.push({name:nm, price:v.price, article:v.article, species:v.species||null}); });
+    // Простое «без артикула» остаётся выбираемым, даже когда у названия уже есть варианты —
+    // на случай, когда ни одна порода/цена из каталога не подходит к тому, что правится.
+    rows.push({name:nm, price:null, article:null, species:null});
   });
   box.innerHTML = rows.map(function(r){
     var infoStr = r.price!=null
@@ -3349,8 +3351,11 @@ function svEditSuggestName(id){
 }
 function svEditPickName(id, name, price, article, species){
   var nameEl = document.getElementById('svEdit_'+id+'_name'); if(nameEl) nameEl.value = name;
-  if(price!=null){ var priceEl=document.getElementById('svEdit_'+id+'_price'); if(priceEl){ priceEl.value=price; svEditItemCalc(id); } }
-  if(article){ var artEl=document.getElementById('svEdit_'+id+'_art'); if(artEl) artEl.value = article; }
+  // price/article===null — выбрали «просто название» намеренно (см. svEditSuggestName); если до
+  // этого уже стояли цена/артикул от другого варианта, их нужно сбросить, а не оставить как
+  // случайный остаток, рассинхронизированный с новым выбором.
+  var priceEl=document.getElementById('svEdit_'+id+'_price'); if(priceEl){ priceEl.value = price!=null ? price : ''; svEditItemCalc(id); }
+  var artEl=document.getElementById('svEdit_'+id+'_art'); if(artEl) artEl.value = article || '';
   if(species){ var spEl=document.getElementById('svEdit_'+id+'_species'); if(spEl) spEl.value = species; }
   var box = document.getElementById('svEdit_'+id+'_name_sugg'); if(box) box.style.display='none';
 }

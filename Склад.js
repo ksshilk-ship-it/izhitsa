@@ -2224,8 +2224,10 @@ function _manInvEditSuggestName(id, i){
   var rows = [];
   names.forEach(function(nm){
     var variants = _siGetGoodsVariants(nm, gt);
-    if(!variants.length){ rows.push({name:nm, price:null, article:null, species:null}); return; }
     variants.forEach(function(v){ rows.push({name:nm, price:v.price, article:v.article, species:v.species||null}); });
+    // Простое «без артикула» остаётся выбираемым, даже когда у названия уже есть варианты —
+    // на случай, когда ни одна порода/цена из каталога не подходит к тому, что принимают.
+    rows.push({name:nm, price:null, article:null, species:null});
   });
   box.innerHTML = rows.map(function(r){
     var infoStr = r.price!=null
@@ -2243,8 +2245,11 @@ function _manInvEditSuggestName(id, i){
 function _manInvEditPickVariant(id, i, name, price, article, species){
   var data = window._manInvEdit[id]; if(!data || !data.items[i]) return;
   data.items[i].name = name;
-  if(price!=null) data.items[i].price = price;
-  if(article) data.items[i].article = article;
+  // price/article===null — выбрали «просто название» намеренно (см. _manInvEditSuggestName);
+  // если до этого уже стояли цена/артикул от другого варианта, их нужно сбросить, а не оставить
+  // как случайный остаток, рассинхронизированный с новым выбором.
+  data.items[i].price = price!=null ? price : 0;
+  data.items[i].article = article || '';
   if(species) data.items[i].species = species;
   var box = document.getElementById('maninv_name_'+id+'_'+i+'_sugg'); if(box) box.style.display='none';
   renderManInvEditItems(id);
