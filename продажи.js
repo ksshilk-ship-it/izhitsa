@@ -794,9 +794,10 @@ function siEditItem(i){
   showToast('✏️ Исправьте поля и нажмите ＋');
 }
 function setDiscCategory(cat, explicit){
+  var enteringSplit = cat==='split' && discCategory!=='split';
   discCategory = cat;
   if(explicit) _discCategoryChosen = true;
-  ['derevo','dr'].forEach(function(c){
+  ['derevo','dr','split'].forEach(function(c){
     var btn = document.getElementById('discCat_'+c);
     if(!btn) return;
     var active = c===cat;
@@ -806,7 +807,33 @@ function setDiscCategory(cat, explicit){
     btn.style.borderColor = active ? '#c8f060' : '#2e2e3e';
     btn.style.fontWeight = active ? '700' : '600';
   });
+  var splitBlock = document.getElementById('discSplitBlock');
+  if(splitBlock) splitBlock.style.display = cat==='split' ? 'block' : 'none';
+  // Продавец в реальности иногда «на глаз» относит часть скидки на Дерево, часть на ДР Товар
+  // (а не всю целиком на одну категорию) — при первом переключении на «Разделить» подставляем
+  // ровный 50/50 разрез как отправную точку, дальше можно поправить вручную под нужную сумму.
+  if(enteringSplit){
+    var disc = parseFloat(gv('saleDiscount'))||0;
+    var half = Math.round(disc/2);
+    var wEl=document.getElementById('discSplitWood'), dEl=document.getElementById('discSplitDr');
+    if(wEl) wEl.value = half||'';
+    if(dEl) dEl.value = (disc-half)||'';
+  }
   _siDiscMismatchCheck();
+}
+// Два поля разреза скидки связаны как качели: правка одного пересчитывает второе остатком от
+// общей суммы скидки — так сумма всегда сходится с введённой скидкой без отдельной проверки.
+function _siDiscSplitEdited(which){
+  var disc = parseFloat(gv('saleDiscount'))||0;
+  var wEl=document.getElementById('discSplitWood'), dEl=document.getElementById('discSplitDr');
+  if(!wEl||!dEl) return;
+  if(which==='wood'){
+    var w = Math.min(Math.max(parseFloat(wEl.value)||0,0), disc);
+    dEl.value = (disc-w)||'';
+  } else {
+    var d = Math.min(Math.max(parseFloat(dEl.value)||0,0), disc);
+    wEl.value = (disc-d)||'';
+  }
 }
 function updateDiscCategoryVisibility(){
   var block = document.getElementById('discCategoryBlock'); if(!block) return;
@@ -837,7 +864,7 @@ function _siDiscMismatchCheck(){
   var block = document.getElementById('discCategoryBlock');
   if(!block || block.style.display==='none'){ hintEl.style.display='none'; return; }
   var disc = parseFloat(gv('saleDiscount'))||0;
-  if(!disc){ hintEl.style.display='none'; return; }
+  if(!disc || discCategory==='split'){ hintEl.style.display='none'; return; }
   var otherCat = discCategory==='dr' ? 'derevo' : 'dr';
   var match = saleItems.find(function(it){
     var amt = it.amt!=null?it.amt:it.price*(it.qty||1);
@@ -947,7 +974,13 @@ function _saveSaleInner(){
   var totalWood = saleItems.reduce(function(s,it){ var a=it.amt!=null?it.amt:it.price*(it.qty||1); return it.goodsType==='dr' ? s : s+a; },0);
   var totalDr = total - totalWood;
   var discWood, discDr;
-  if(discCategory==='derevo'){
+  if(discCategory==='split'){
+    // Продавец в реальности разнесла скидку по обеим категориям на глаз, а не всю в одну —
+    // берём ровно то, что вписал администратор в оба поля разреза (там же сходится с disc,
+    // поля связаны как качели), а не считаем заново.
+    discWood = Math.min(Math.max(parseFloat(gv('discSplitWood'))||0,0), disc);
+    discDr = disc - discWood;
+  } else if(discCategory==='derevo'){
     discWood = Math.min(disc, totalWood);
     discDr = disc - discWood;
   } else if(discCategory==='dr'){
@@ -1003,7 +1036,7 @@ function _saveSaleInner(){
   var newEntryData = {ts:_workingNowISO(),icon:'💰',
     label:'Продажа',
     sub:saleItems.map(i=>'№'+(i.num||'—')+' '+i.name+(i.goodsType==='dr'?' · ДР':'')+(i.hasDiff?' ⚠️':'')).join(', ')+(disc?' · Скидка '+fmt(disc):'')+' · '+payL,
-    items:[...saleItems],totalPrice:total,discount:disc,discCategory:discCategory,totalPaid:paid,payMethod,cashPart,cardPart,goodsType:overallGoodsType,
+    items:[...saleItems],totalPrice:total,discount:disc,discCategory:discCategory,discWoodAmt:discCategory==='split'?discWood:null,totalPaid:paid,payMethod,cashPart,cardPart,goodsType:overallGoodsType,
     hasDiff,comment:gv('saleComment'),amount:paid,amtCls:'inc',amtSign:'+',
     cashEffect:cashPartWood,cardEffect:cardPartWood,staffEffect:0,goodsEffect:-totalWood,
     cashDrEffect:cashPartDr,cardDrEffect:cardPartDr,goodsDrEffect:-totalDr,

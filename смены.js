@@ -27,6 +27,12 @@ function editJournalSale(id){
     var sd=document.getElementById('saleDiscount'); if(sd) sd.value=entry.discount;
   }
   setDiscCategory(entry.discCategory||'derevo', true);
+  // setDiscCategory('split',...) сама подставляет 50/50 при первом входе в режим — перетираем
+  // сохранённым в записи реальным разрезом, если он там есть (discWoodAmt).
+  if(entry.discCategory==='split' && entry.discWoodAmt!=null){
+    var swE=document.getElementById('discSplitWood'); if(swE) swE.value=entry.discWoodAmt||'';
+    var sdE=document.getElementById('discSplitDr'); if(sdE) sdE.value=((entry.discount||0)-entry.discWoodAmt)||'';
+  }
   var pmEl = document.querySelector('#saleMo .pc[onclick*="\''+(entry.payMethod||'cash')+'\'"]');
   setPayM(entry.payMethod||'cash', pmEl||document.querySelector('#saleMo .pc'));
   if(entry.payMethod==='mixed'){
@@ -73,6 +79,10 @@ function svEditSale(idx){
     var sd=document.getElementById('saleDiscount'); if(sd) sd.value=entry.discount;
   }
   setDiscCategory(entry.discCategory||'derevo', true);
+  if(entry.discCategory==='split' && entry.discWoodAmt!=null){
+    var swE=document.getElementById('discSplitWood'); if(swE) swE.value=entry.discWoodAmt||'';
+    var sdE=document.getElementById('discSplitDr'); if(sdE) sdE.value=((entry.discount||0)-entry.discWoodAmt)||'';
+  }
   var pmEl = document.querySelector('#saleMo .pc[onclick*="\''+(entry.payMethod||'cash')+'\'"]');
   setPayM(entry.payMethod||'cash', pmEl||document.querySelector('#saleMo .pc'));
   if(entry.payMethod==='mixed'){
@@ -3484,7 +3494,9 @@ function migrateLegacyShiftRevenue(){
         var totalAllM = s.items.reduce(function(a,it){ return a+(it.amt!=null?it.amt:it.price*(it.qty||1)); },0);
         var totalDrM = totalAllM - totalWoodM;
         var dWood;
-        if(s.discCategory==='derevo'){
+        if(s.discCategory==='split' && s.discWoodAmt!=null){
+          dWood = s.discWoodAmt;
+        } else if(s.discCategory==='derevo'){
           dWood = Math.min(s.discount||0, totalWoodM);
         } else if(s.discCategory==='dr'){
           dWood = (s.discount||0) - Math.min(s.discount||0, totalDrM);
@@ -4244,7 +4256,9 @@ function _renderShiftView(){
       var totalAll = s.items.reduce(function(a,it){ return a+(it.amt!=null?it.amt:it.price*(it.qty||1)); },0);
       var totalDrItm = totalAll - totalWood;
       var dWood;
-      if(s.discCategory==='derevo'){
+      if(s.discCategory==='split' && s.discWoodAmt!=null){
+        dWood = s.discWoodAmt;
+      } else if(s.discCategory==='derevo'){
         dWood = Math.min(s.discount||0, totalWood);
       } else if(s.discCategory==='dr'){
         dWood = (s.discount||0) - Math.min(s.discount||0, totalDrItm);

@@ -38,7 +38,11 @@ function calcSellerSummary(){
       var groupTotal = groupItems.reduce(function(s,it){ return s+itemAmt(it); },0);
       var saleTotal = e.totalPrice || items.reduce(function(s,it){ return s+itemAmt(it); },0) || 1;
       listPrice += groupTotal;
-      if(e.discCategory==='derevo'){
+      if(e.discCategory==='split' && e.discWoodAmt!=null){
+        // Реальный разрез, введённый вручную (продавец физически разнесла скидку по обеим
+        // категориям) — берём как есть, а не пересчитываем пропорцией по стоимости позиций.
+        discount += isDr ? (e.discount||0)-e.discWoodAmt : e.discWoodAmt;
+      } else if(e.discCategory==='derevo'){
         var woodTotalForSale = items.reduce(function(s,it){ return it.goodsType==='dr'?s:s+itemAmt(it); },0);
         var discWoodForSale = Math.min(e.discount||0, woodTotalForSale);
         discount += isDr ? (e.discount||0)-discWoodForSale : discWoodForSale;
