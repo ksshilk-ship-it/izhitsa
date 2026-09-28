@@ -590,6 +590,16 @@ function checkItemDiff(){
   else warn.style.display='none';
 }
 function resetSaleForm(){
+  // Подсказки по названию (siSuggestNameM/siSuggestName) подставляют цену/артикул по
+  // локальному кэшу iz_goods_derevo/iz_goods_dr — если на этом устройстве он отстал от сервера
+  // (только что добавили варианты с другого устройства, а живой листенер ещё не успел/не смог
+  // достучаться), продавец наберёт название+порода и не увидит ни одного варианта с ценой,
+  // хотя они уже есть в каталоге. Подтягиваем оба каталога свежими с сервера при каждом
+  // открытии формы продажи — тот же приём, что уже используется в накладной и в Настройках.
+  if(typeof _refreshGoodsCatalogFromServer==='function'){
+    _refreshGoodsCatalogFromServer('iz_goods_derevo');
+    _refreshGoodsCatalogFromServer('iz_goods_dr');
+  }
   var accs = JSON.parse(localStorage.getItem('iz_admin_accounts')||'[]');
   var transferSel = document.getElementById('transferCardSelect');
   var rsSel = document.getElementById('rsAccountSelect');
