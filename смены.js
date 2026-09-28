@@ -2106,22 +2106,44 @@ function svRepairExpenses(shiftId){
     _currentShiftView=sh;_renderShiftView();
   }
 }
+// Способ оплаты, коротко — для подписи рядом с суммой в журнале (не для расчётов).
+var JI_PAY_LABELS = {cash:'💵 Нал', terminal:'💳 Терминал', sbp:'📱 СБП', transfer:'🏦 Перевод', qr:'🔲 QR', mixed:'➗ Смешанный', rs:'🏦 РС'};
+// Раньше строка позиций продажи склеивалась в одну сплошную фразу «№Арт1 Название1, №Арт2
+// Название2, ...» — с длинными артикулами (№ЛопаткаОрех01 и т.п.) её было тяжело читать,
+// название и артикул визуально не отличить друг от друга. Раскладываем по строкам —
+// название слева, артикул справа приглушённым цветом, как в табличке.
+function _jiSaleItemsRows(items){
+  if(!items || !items.length) return '';
+  return items.map(function(it){
+    var artNum = it.num || it.article || '—';
+    var name = (it.name||'')+(it.goodsType==='dr'?' · ДР':'')+(it.hasDiff?' ⚠️':'');
+    return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:11.5px;color:'+(it.hasDiff?'#f06060':'#b8b8c8')+';padding:1px 0">'+
+      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+name+'</span>'+
+      '<span style="color:#70707e;font-size:10.5px;flex-shrink:0;white-space:nowrap">№'+artNum+'</span>'+
+    '</div>';
+  }).join('');
+}
 function renderJournal(){
   const c=document.getElementById('journalList');
   if(!journal.length){ c.innerHTML='<div class="empty"><div class="ei">📋</div>Начните фиксировать операции</div>'; return; }
   c.innerHTML=[...journal].reverse().map(e=>{
     var icon = (e.type==='sale') ? '💰' : (e.icon||'📌');
     var label = (e.label||'').replace(/\s*⚠️\s*$/,'');
+    var itemsRows = e.type==='sale' ? _jiSaleItemsRows(e.items) : '';
+    var subHtml = itemsRows ? `<div class="ji-sub">${itemsRows}</div>` : (e.sub?`<div class="ji-sub">${e.sub}</div>`:'');
+    var discHtml = (itemsRows && e.discount) ? `<div style="font-size:10.5px;color:#a060f0;padding:1px 0">Скидка: ${fmt(e.discount)}</div>` : '';
+    var payLabel = (e.type==='sale' && e.payMethod) ? (JI_PAY_LABELS[e.payMethod]||e.payMethod) : '';
     return `
     <div class="ji">
       <div class="ji-ic ${e.type}">${icon}</div>
       <div class="ji-body">
         <div class="ji-title" style="color:${e.hasDiff?'#f06060':'inherit'}">${label}</div>
-        ${e.sub?`<div class="ji-sub">${e.sub}</div>`:''}
+        ${subHtml}${discHtml}
         <div class="ji-time">${new Date(e.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;margin-left:6px">
         ${e.amount?`<div class="ji-amt ${e.amtCls||'neu'}">${e.amtSign||''}${fmt(e.amount)}</div>`:''}
+        ${payLabel?`<div style="font-size:10px;color:#8888aa;white-space:nowrap">${payLabel}</div>`:''}
         ${e.type!=='open'?`<div style="display:flex;gap:4px">
           ${e.type==='sale'?`<button onclick="editJournalSale('${e.id}')" style="background:none;border:1px solid #3e3e4e;border-radius:6px;padding:3px 6px;color:#c8f060;font-size:11px;cursor:pointer">✏️</button>`:''}
           <button onclick="deleteJournalEntryShop('${e.id}')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 6px;color:#f06060;font-size:11px;cursor:pointer">✕</button>
