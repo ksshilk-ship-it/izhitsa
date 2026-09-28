@@ -763,8 +763,14 @@ function psjSuggest(inputId, list, onPick){
   });
   matches = matches.slice(0,8);
   if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
+  // onclick, не onpointerdown: список подсказок часто длиннее видимой области (max-height+scroll),
+  // а pointerdown срабатывает мгновенно при касании — на телефоне попытка пролистать список пальцем
+  // читалась как выбор той строки, где палец коснулся экрана, и не давала прокрутить вообще. Клик
+  // браузер сам не генерирует при явном свайпе/скролле, так что pick срабатывает только на настоящий
+  // тап — а onblur у поля ввода уже скрывает список с задержкой (psjHideSugg, 150мс), этого достаточно,
+  // чтобы клик успел сработать раньше скрытия.
   box.innerHTML = matches.map(function(m){
-    return '<div onpointerdown="event.preventDefault();'+onPick+'(\''+m.replace(/'/g,"\\'")+'\')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m+'</div>';
+    return '<div onclick="'+onPick+'(\''+m.replace(/'/g,"\\'")+'\')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m+'</div>';
   }).join('');
   box.style.display='block';
 }

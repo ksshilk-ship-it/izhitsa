@@ -165,7 +165,7 @@ function _siBuildSuggest(inputId, speciesFieldId, pickFn, suggestFn){
         var open = !!window._siSuggSpeciesOpen[groupKey];
         var list = bySpecies[sp];
         var ge = groupKey.replace(/'/g,"\\'");
-        html += '<div onpointerdown="event.preventDefault();_siSuggToggleSpecies(\''+inputId+'\',\''+ge+'\',\''+suggestFn+'\')" '+
+        html += '<div onclick="_siSuggToggleSpecies(\''+inputId+'\',\''+ge+'\',\''+suggestFn+'\')" '+
           'style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px;background:#1a1a22">'+
           '<span>'+(open?'▾':'▸')+' '+nm+' · '+sp+'</span><span style="color:#8888aa;font-size:11px;white-space:nowrap;flex-shrink:0">'+list.length+' вариант'+(list.length===1?'':(list.length<5?'а':'ов'))+'</span></div>';
         if(open){ list.forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species, 1, pickFn); }); }
@@ -192,7 +192,11 @@ function _siSuggRow(inputId, name, price, article, species, level, pickFn){
   var artArg = article ? "'"+article.replace(/'/g,"\\'")+"'" : 'null';
   var spArg = species ? "'"+species.replace(/'/g,"\\'")+"'" : 'null';
   var pad = level ? '8px 10px 8px 22px' : '8px 10px';
-  return '<div onpointerdown="event.preventDefault();'+pickFn+'(\''+inputId+'\',\''+name.replace(/'/g,"\\'")+'\','+priceArg+','+artArg+','+spArg+')" '+
+  // onclick (не onpointerdown) — список часто длиннее видимой области и его нужно листать пальцем;
+  // pointerdown срабатывает раньше, чем браузер поймёт, что это скролл, а не тап, и подставлял
+  // первую же строку под пальцем вместо прокрутки. onblur поля уже скрывает список с задержкой
+  // (см. главный.html), так что клик успевает сработать раньше скрытия.
+  return '<div onclick="'+pickFn+'(\''+inputId+'\',\''+name.replace(/'/g,"\\'")+'\','+priceArg+','+artArg+','+spArg+')" '+
     'style="padding:'+pad+';font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px">'+
     '<span>'+name+'</span><span style="color:#8888aa;font-size:11px;white-space:nowrap;flex-shrink:0">'+infoStr+'</span></div>';
 }
@@ -262,7 +266,7 @@ function _siCheckVariantsM(name){
   var variants = _siGetDrVariants(name);
   if(variants.length<2){ box.style.display='none'; return; }
   list.innerHTML = variants.map(function(v){
-    return '<button type="button" onpointerdown="event.preventDefault();siPickVariantM('+v.price+',\''+(v.article||'').replace(/'/g,"\\'")+'\')" '+
+    return '<button type="button" onclick="siPickVariantM('+v.price+',\''+(v.article||'').replace(/'/g,"\\'")+'\')" '+
       'style="text-align:left;padding:8px 10px;background:#22222e;border:1px solid #f0c060;border-radius:8px;color:#f0f0f8;font-size:12px;cursor:pointer">'+
       '№'+(v.article||'—')+' · '+Math.round(v.price).toLocaleString('ru-RU')+'₽</button>';
   }).join('');

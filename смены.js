@@ -3365,7 +3365,7 @@ function svEditSuggestName(id){
     var priceArg = r.price!=null ? r.price : 'null';
     var artArg = r.article ? "'"+r.article.replace(/'/g,"\\'")+"'" : 'null';
     var spArg = r.species ? "'"+r.species.replace(/'/g,"\\'")+"'" : 'null';
-    return '<div onpointerdown="event.preventDefault();svEditPickName(\''+id+'\',\''+r.name.replace(/'/g,"\\'")+'\','+priceArg+','+artArg+','+spArg+')" '+
+    return '<div onclick="svEditPickName(\''+id+'\',\''+r.name.replace(/'/g,"\\'")+'\','+priceArg+','+artArg+','+spArg+')" '+
       'style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px">'+
       '<span>'+r.name+'</span><span style="color:#8888aa;font-size:11px;white-space:nowrap;flex-shrink:0">'+infoStr+'</span></div>';
   }).join('');
@@ -5100,7 +5100,7 @@ function svManInvSuggest(kind, idx, val){
   var matches = list.filter(function(nm){ return nm && String(nm).toLowerCase().indexOf(val)===0; }).slice(0,8);
   if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
   box.innerHTML = matches.map(function(m){
-    return '<div onpointerdown="event.preventDefault();svManInvPick(\''+kind+'\','+idx+',\''+String(m).replace(/'/g,"\\'")+'\')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m+'</div>';
+    return '<div onclick="svManInvPick(\''+kind+'\','+idx+',\''+String(m).replace(/'/g,"\\'")+'\')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m+'</div>';
   }).join('');
   box.style.display='block';
 }
@@ -5440,7 +5440,7 @@ function svItemNameSuggest(id, goodsType){
     if(m.article) extra.push('№'+m.article);
     if(m.price) extra.push(Math.round(m.price)+'₽');
     var extraHtml = extra.length ? ' <span style="color:#8888aa">· '+extra.join(' · ')+'</span>' : '';
-    return '<div onpointerdown="event.preventDefault();svItemNamePick(\''+id+'\','+i+')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m.name+extraHtml+'</div>';
+    return '<div onclick="svItemNamePick(\''+id+'\','+i+')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m.name+extraHtml+'</div>';
   }).join('');
   box.style.display='block';
 }
@@ -5476,7 +5476,7 @@ function svSpeciesSuggest(id){
   matches = matches.slice(0,8);
   if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
   box.innerHTML = matches.map(function(m){
-    return '<div onpointerdown="event.preventDefault();svSpeciesPick(\''+id+'\',\''+m.replace(/'/g,"\\'")+'\')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m+'</div>';
+    return '<div onclick="svSpeciesPick(\''+id+'\',\''+m.replace(/'/g,"\\'")+'\')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m+'</div>';
   }).join('');
   box.style.display='block';
 }

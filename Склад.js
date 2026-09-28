@@ -2224,7 +2224,7 @@ function _manInvEditSuggestName(id, i){
     var priceArg = r.price!=null ? r.price : 'null';
     var artArg = r.article ? "'"+r.article.replace(/'/g,"\\'")+"'" : 'null';
     var spArg = r.species ? "'"+r.species.replace(/'/g,"\\'")+"'" : 'null';
-    return '<div onpointerdown="event.preventDefault();_manInvEditPickVariant(\''+id+'\','+i+',\''+r.name.replace(/'/g,"\\'")+'\','+priceArg+','+artArg+','+spArg+')" '+
+    return '<div onclick="_manInvEditPickVariant(\''+id+'\','+i+',\''+r.name.replace(/'/g,"\\'")+'\','+priceArg+','+artArg+','+spArg+')" '+
       'style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px">'+
       '<span>'+r.name+'</span><span style="color:#8888aa;font-size:11px;white-space:nowrap;flex-shrink:0">'+infoStr+'</span></div>';
   }).join('');
