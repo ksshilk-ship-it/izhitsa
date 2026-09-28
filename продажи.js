@@ -562,6 +562,26 @@ function siAddToGoods(inputId){
   }
 }
 var _siNoArticleMode = false;
+// Раньше «№ артикул» и «Без артикула» выглядели совершенно одинаково и до, и после выбора —
+// непонятно было, какой из двух режимов сейчас реально активен. Подсвечиваем тот, что выбран
+// (зелёная рамка/фон — как уже выбранная категория Дерево/ДР), второй — приглушённый.
+function _siUpdateArticleModeUI(){
+  var numEl = document.getElementById('siNum');
+  var btn = document.getElementById('siNoArticleBtn');
+  var numActive = !_siNoArticleMode && !!(numEl && numEl.value && numEl.value.trim());
+  if(numEl){
+    numEl.style.borderWidth = numActive ? '2px' : '1px';
+    numEl.style.borderColor = numActive ? '#c8f060' : '#2e2e3e';
+    numEl.style.color = numActive ? '#c8f060' : '';
+  }
+  if(btn){
+    btn.style.borderWidth = _siNoArticleMode ? '2px' : '1px';
+    btn.style.borderColor = _siNoArticleMode ? '#c8f060' : '#2e2e3e';
+    btn.style.background = _siNoArticleMode ? '#1e2a14' : '#22222e';
+    btn.style.color = _siNoArticleMode ? '#c8f060' : '#8888aa';
+    btn.style.fontWeight = _siNoArticleMode ? '700' : '400';
+  }
+}
 function openManualNoArticle(){
   var numEl=document.getElementById('siNum'); if(numEl) numEl.value='';
   currentLookupItem=null;
@@ -570,6 +590,7 @@ function openManualNoArticle(){
   if(mb) mb.style.display='block';
   var dw=document.getElementById('siDiffWarn'); if(dw) dw.style.display='none';
   _siNoArticleMode = true;
+  _siUpdateArticleModeUI();
   var nameMEl=document.getElementById('siNameM'); if(nameMEl) nameMEl.focus();
 }
 function _lookupItemInInvoices(numStr, shopName){
@@ -596,6 +617,7 @@ function _lookupItemInInvoices(numStr, shopName){
 }
 function lookupItem(num){
   _siNoArticleMode = false;
+  _siUpdateArticleModeUI();
   var lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
   if(!num.trim()){ lr.style.display='none'; mb.style.display='none'; currentLookupItem=null; return; }
   var numStr=num.trim();
@@ -689,6 +711,7 @@ function resetSaleForm(){
   _svArchiveEditId = null;
   _svArchiveAddMode = false;
   _siNoArticleMode = false;
+  _siUpdateArticleModeUI();
   var mt = document.querySelector('#saleMo .mt'); if(mt) mt.textContent = 'Оформить продажу';
   var delBtn = document.querySelector('#saleMo .sale-edit-del-btn'); if(delBtn) delBtn.remove();
 }
@@ -789,6 +812,7 @@ function _finalizeAddSaleItem(num, name, price, species, qty, hasDiff, diffNote)
   document.getElementById('siDiffWarn').style.display='none';
   setSiItemType('derevo');
   _siNoArticleMode = false;
+  _siUpdateArticleModeUI();
   _siSelectedArticleM = '';
   _siResetSpeciesMulti();
   var vp = document.getElementById('siVariantPicker'); if(vp) vp.style.display='none';
@@ -844,6 +868,7 @@ function siEditItem(i){
   } else {
     currentLookupItem=null;
     _siNoArticleMode = !it.hasDiff;
+    _siUpdateArticleModeUI();
   }
   var lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
   if(!it.num){ if(lr) lr.style.display='none'; if(mb) mb.style.display='block'; }
