@@ -1885,7 +1885,10 @@ function wsSyncListen(lsKey) {
 async function wsFetchFreshRef(lsKey){
   const m = WS_SYNC_SETTINGS[lsKey]; if(!m) return;
   try{
-    const snap = await db.collection('iz_settings').doc(m.doc).get();
+    // {source:'server'} — без него .get() мог тихо вернуть локальный кэш SDK Firestore вместо
+    // реально свежих данных с сервера, что для функции с названием "fetch FRESH" сводило на нет
+    // саму её цель.
+    const snap = await db.collection('iz_settings').doc(m.doc).get({source:'server'});
     if(!snap.exists) return;
     const val = snap.data()[m.field];
     if(val !== undefined){
@@ -3107,7 +3110,15 @@ function writeSharedRefbookTombstone(refKey, deletedNames){
 }
 
 function getItemNames(){
-  const arr = JSON.parse(localStorage.getItem('ws_item_names')||'["Столешница","Подоконник","Столешница барная","Полка","Дверь","Фасад","Панель","Тумба","Тумба прикроватная","Комод"]');
+  // ⚠️ Раньше при пустом/недогруженном ws_item_names сюда подставлялся хардкод мебельных
+  // заготовок («Столешница», «Подоконник», «Фасад», «Тумба»…) — общий список из общего шаблона,
+  // никак не связанный с реальными изделиями Ижицы. openAddItemNameMo() и так подтягивает
+  // ws_item_names свежим с сервера перед редактированием (await wsFetchFreshRef) — но если этот
+  // запрос не успел/не смог, getItemNames() всё равно тихо возвращал мебельный хардкод, и
+  // сохранение после одного добавленного слова заливало его целиком в общий документ iz_goods,
+  // затирая реальный каталог названий Ижицы. Пустой список — то же самое, что и в главный.html/
+  // admin.html: реальные данные должны приходить только с сервера, никогда — из локального хардкода.
+  const arr = JSON.parse(localStorage.getItem('ws_item_names')||'[]');
   return arr.slice().sort((a,b)=>a.localeCompare(b,'ru'));
 }
 function saveItemNames(arr){ wsSyncSave('ws_item_names', arr); }
@@ -3205,7 +3216,11 @@ function cancelItemNamesEdit(){
 
 // ════════ СПРАВОЧНИК ПОРОД ДЕРЕВА ════════
 function getWoods(){
-  const arr = JSON.parse(localStorage.getItem('ws_woods')||'["Дуб","Ясень","Орех","Клён","Береза","Сосна","Лиственница","Тик","Венге","Махагон"]');
+  // ⚠️ Тот же риск, что у getItemNames() выше — хардкод общих пород («Дуб», «Орех» без уточнения
+  // и т.п.) вместо реального, точно названного списка Ижицы (см. iz_materials в главный.html —
+  // «Орех грецкий», «Дуб скальный»…). Именно из-за таких общих хардкодов «Орех» без уточнения
+  // уже путался с «Орех грецкий» в продажах. Пустой список вместо мебельного шаблона.
+  const arr = JSON.parse(localStorage.getItem('ws_woods')||'[]');
   return arr.slice().sort((a,b)=>a.localeCompare(b,'ru'));
 }
 function saveWoods(arr){ wsSyncSave('ws_woods', arr); }
