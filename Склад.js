@@ -3922,6 +3922,121 @@ function _naAddRow(byName, name, species, price, qty, source, ref, pendingReason
   if(pendingReason){ v.pending[pendingReason] = (v.pending[pendingReason]||0)+1; }
   if(ref){ ref.source = source; ref.qty = qty||0; ref.pendingReason = pendingReason||null; v.refs.push(ref); }
 }
+// Аудит поля «порода дерева» за всё время: полный список того, что реально когда-либо было
+// вписано туда (приёмки, продажи, списания, инвентаризации — все магазины, весь период, вне
+// зависимости от того, есть ли уже артикул и закрыта ли смена/принята ли накладная — это не
+// инструмент действия, а просто отчёт, поэтому ограничений retro-apply тут нет). Группирует по
+// _woodSpeciesNormalize (та же нормализация опечаток/сокращений, что и в Сводке/ретро-аудите),
+// но показывает и то, как именно порода была написана «как есть» — чтобы видеть реальные опечатки
+// и решать, какие ещё добавить в алиасы или в справочник пород.
+function loadSpeciesAudit(){
+  var status = document.getElementById('spStatus');
+  var results = document.getElementById('spResults');
+  if(status){ status.style.display='block'; status.textContent='⏳ Собираю все значения породы дерева...'; }
+  if(results) results.innerHTML='';
+  var byNorm = {};
+  function note(rawSpecies, itemName, source, qty){
+    var raw = String(rawSpecies||'').trim();
+    var isEmpty = !raw;
+    var label = isEmpty ? '—' : _woodSpeciesNormalize(raw);
+    var key = isEmpty ? '—' : label.toLowerCase();
+    var g = byNorm[key] || (byNorm[key] = {label:label, count:0, qty:0, variants:{}, names:{}, receive:0, sale:0, writeoff:0, inventory:0});
+    g.count++;
+    g.qty += (qty||0);
+    g[source] = (g[source]||0)+1;
+    if(!isEmpty) g.variants[raw] = (g.variants[raw]||0)+1;
+    var nm = (itemName||'').trim();
+    if(nm) g.names[nm] = (g.names[nm]||0)+1;
+  }
+  function scanInvoiceSnap(snap){
+    snap.forEach(function(doc){
+      var inv = doc.data();
+      if(inv.isRevaluation) return;
+      if((inv.goodsType||'derevo')==='dr') return;
+      var items = inv.acceptedItems || inv.items || [];
+      items.forEach(function(it){
+        if((it.goodsType||inv.goodsType||'derevo')==='dr') return;
+        note(it.species, it.name, 'receive', it.qty||1);
+      });
+    });
+  }
+  var tasks = [
+    db.collection('iz_manual_invoices').get({source:'server'}).then(scanInvoiceSnap),
+    db.collection('iz_invoices').get({source:'server'}).then(scanInvoiceSnap),
+    db.collection('iz_shifts').get({source:'server'}).then(function(snap){
+      snap.forEach(function(doc){
+        var sh = doc.data();
+        (sh.journal||[]).forEach(function(e){
+          if(e.type!=='sale' && e.type!=='writeoff') return;
+          (e.items||[]).forEach(function(it){
+            if((it.goodsType||'derevo')==='dr') return;
+            note(it.species, it.name, e.type==='sale'?'sale':'writeoff', it.qty||1);
+          });
+        });
+      });
+    }),
+    db.collection('iz_inventory_sessions').get({source:'server'}).then(function(snap){
+      var sessions = snap.docs.map(function(d){ var x=d.data(); x.id=d.id; return x; })
+        .filter(function(x){ return (x.goodsType||'derevo')!=='dr'; });
+      return Promise.all(sessions.map(function(sx){
+        return db.collection('iz_inventory_counts').where('sessionId','==',sx.id).get({source:'server'}).then(function(csnap){
+          csnap.forEach(function(cd){
+            var c = cd.data();
+            note(c.species, c.name, 'inventory', c.countedQty||0);
+          });
+        });
+      }));
+    })
+  ];
+  var settled = false;
+  var timeoutP = new Promise(function(resolve){ setTimeout(function(){ if(!settled){ settled=true; resolve('timeout'); } }, 25000); });
+  var fetchP = Promise.all(tasks).then(function(){ if(!settled){ settled=true; } return 'ok'; })
+    .catch(function(){ if(!settled){ settled=true; } return 'error'; });
+  Promise.race([fetchP, timeoutP]).then(function(result){
+    if(status){
+      status.style.display = result==='ok' ? 'none' : 'block';
+      if(result==='timeout') status.textContent = '⚠️ Сервер не отвечает — попробуйте ещё раз';
+      else if(result==='error') status.textContent = '❌ Не удалось загрузить данные';
+    }
+    window._spData = byNorm;
+    _renderSpeciesAudit();
+  });
+}
+function _renderSpeciesAudit(){
+  var host = document.getElementById('spResults'); if(!host) return;
+  var byNorm = window._spData || {};
+  var keys = Object.keys(byNorm);
+  if(!keys.length){ host.innerHTML = '<div class="empty"><div class="ei">🌲</div>Нажмите «Собрать список»</div>'; return; }
+  keys.sort(function(a,b){
+    if(a==='—') return 1; if(b==='—') return -1;
+    return byNorm[b].count - byNorm[a].count;
+  });
+  var totalRecords = keys.reduce(function(s,k){ return s+byNorm[k].count; },0);
+  host.innerHTML = '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">'+keys.length+' уникальн'+(keys.length===1?'ое значение':(keys.length<5?'ых значения':'ых значений'))+' · '+totalRecords+' запис'+(totalRecords===1?'ь':(totalRecords<5?'и':'ей'))+' всего</div>'+
+    keys.map(function(k){
+      var g = byNorm[k];
+      var isEmpty = k==='—';
+      var variantKeys = Object.keys(g.variants);
+      var hasVariants = variantKeys.length>1 || (variantKeys.length===1 && variantKeys[0].toLowerCase()!==g.label.toLowerCase());
+      var srcParts = [];
+      if(g.receive) srcParts.push('📥×'+g.receive);
+      if(g.sale) srcParts.push('💰×'+g.sale);
+      if(g.writeoff) srcParts.push('🗑️×'+g.writeoff);
+      if(g.inventory) srcParts.push('📋×'+g.inventory);
+      var variantsHtml = hasVariants ? '<div style="padding:4px 10px 8px 20px;font-size:10.5px;color:#8888aa">как написано: '+
+        variantKeys.sort(function(a,b){ return g.variants[b]-g.variants[a]; }).map(function(v){ return '«'+v+'» ×'+g.variants[v]; }).join(' · ')+
+      '</div>' : '';
+      var nameKeys = Object.keys(g.names).sort(function(a,b){ return g.names[b]-g.names[a]; });
+      var namesHtml = nameKeys.length ? '<div style="padding:0 10px 8px 20px;font-size:10.5px;color:#8888aa">в названиях: '+nameKeys.slice(0,6).map(function(n){ return n+' ('+g.names[n]+')'; }).join(', ')+(nameKeys.length>6?'…':'')+'</div>' : '';
+      return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:6px;overflow:hidden">'+
+        '<div style="padding:8px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px">'+
+          '<div style="font-size:12px;font-weight:700;color:'+(isEmpty?'#8888aa':'#f0c060')+'">'+(isEmpty?'❓ Без породы':'🪵 '+g.label)+'</div>'+
+          '<div style="font-size:10.5px;color:#8888aa;text-align:right;white-space:nowrap">'+g.count+' зап. · '+g.qty+' шт.<div>'+srcParts.join(' ')+'</div></div>'+
+        '</div>'+
+        variantsHtml + namesHtml +
+      '</div>';
+    }).join('');
+}
 function loadNoArticleAudit(){
   var status = document.getElementById('naStatus');
   var results = document.getElementById('naResults');
