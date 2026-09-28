@@ -3983,7 +3983,15 @@ function loadSpeciesAudit(){
     if(!isEmpty) g.variants[raw] = (g.variants[raw]||0)+1;
     var nm = (itemName||'').trim();
     if(nm) g.names[nm] = (g.names[nm]||0)+1;
-    if(!isEmpty && change){ change.oldRaw = raw; g.changes.push(change); }
+    // Раньше запись о местоположении сохранялась только для непустой породы (нужна была лишь
+    // для переименования). Для перехода «к этой записи/смене» нужна и для пустой породы тоже —
+    // иначе группу «❓ Без породы» (актуально для украшений без дерева в составе) было бы видно,
+    // но некуда перейти.
+    if(change){
+      if(!isEmpty) change.oldRaw = raw;
+      change.qty = qty; change.itemName = nm;
+      g.changes.push(change);
+    }
   }
   function scanInvoiceSnap(snap, kind){
     snap.forEach(function(doc){
@@ -3994,7 +4002,7 @@ function loadSpeciesAudit(){
       var items = inv[field] || [];
       items.forEach(function(it, idx){
         if((it.goodsType||inv.goodsType||'derevo')==='dr') return;
-        note(it.species, it.name, 'receive', it.qty||1, {kind:kind, id:doc.id, field:field, idx:idx});
+        note(it.species, it.name, 'receive', it.qty||1, {kind:kind, id:doc.id, field:field, idx:idx, shop:inv.shopName, date:inv.acceptedDate||inv.date});
       });
     });
   }
@@ -4008,7 +4016,7 @@ function loadSpeciesAudit(){
           if(e.type!=='sale' && e.type!=='writeoff') return;
           (e.items||[]).forEach(function(it, iIdx){
             if((it.goodsType||'derevo')==='dr') return;
-            note(it.species, it.name, e.type==='sale'?'sale':'writeoff', it.qty||1, {kind:'shift', id:doc.id, entryIdx:eIdx, itemIdx:iIdx});
+            note(it.species, it.name, e.type==='sale'?'sale':'writeoff', it.qty||1, {kind:'shift', id:doc.id, entryIdx:eIdx, itemIdx:iIdx, shop:sh.shopName, date:sh.date});
           });
         });
       });
@@ -4020,7 +4028,7 @@ function loadSpeciesAudit(){
         return db.collection('iz_inventory_counts').where('sessionId','==',sx.id).get({source:'server'}).then(function(csnap){
           csnap.forEach(function(cd){
             var c = cd.data();
-            note(c.species, c.name, 'inventory', c.countedQty||0, {kind:'inventory', id:cd.id});
+            note(c.species, c.name, 'inventory', c.countedQty||0, {kind:'inventory', id:cd.id, shop:sx.shopName, date:sx.inventoryDate||(sx.startedAt||'').slice(0,10)});
           });
         });
       }));
@@ -4049,6 +4057,36 @@ window._spJewelryNoWoodFilter = false;
 function _spToggleJewelryNoWoodFilter(){
   window._spJewelryNoWoodFilter = !window._spJewelryNoWoodFilter;
   _renderSpeciesAudit();
+}
+window._spRecordsOpen = window._spRecordsOpen || {};
+function _spToggleRecords(idx){
+  window._spRecordsOpen[idx] = !window._spRecordsOpen[idx];
+  _renderSpeciesAudit();
+}
+var _SP_CHANGE_ICON = {shift:'💰', manual_invoice:'📥', invoice:'📥', inventory:'📋'};
+var _SP_CHANGE_LABEL = {shift:'Смена', manual_invoice:'Накладная', invoice:'Накладная', inventory:'Инвентаризация'};
+// Переход к настоящей записи — та же логика, что уже используется в «Применить артикулы задним
+// числом» (_retroArtOpenShift) и в карточке смены (svOpenInvoiceFromReceive): если документ ещё
+// не в локальном кэше (аудит сканирует всё облако, а не только то, что открывали на этом
+// устройстве), сначала подгружаем его.
+function _spOpenChangeRef(kind, id){
+  if(kind==='shift'){ _retroArtOpenShift(id); return; }
+  if(kind==='manual_invoice' || kind==='invoice'){ svOpenInvoiceFromReceive(id); return; }
+  if(kind==='inventory'){ _spOpenInventoryRef(id); return; }
+}
+function _spOpenInventoryRef(countId){
+  showToast('⏳ Загружаю запись...');
+  db.collection('iz_inventory_counts').doc(countId).get({source:'server'}).then(function(snap){
+    if(!snap.exists){ showToast('⚠️ Запись не найдена'); return null; }
+    var c = snap.data();
+    return db.collection('iz_inventory_sessions').doc(c.sessionId).get({source:'server'});
+  }).then(function(ssnap){
+    if(!ssnap || !ssnap.exists) return;
+    var sx = ssnap.data(); sx.id = ssnap.id;
+    var key = (sx.shopName||'')+'|'+(sx.inventoryDate||(sx.startedAt||'').slice(0,10));
+    if(!_invAdmGroups[key]) _invAdmGroups[key] = {key:key, shopName:sx.shopName, date:sx.inventoryDate||(sx.startedAt||'').slice(0,10), sessions:[sx]};
+    if(typeof invAdmOpen==='function') invAdmOpen(key);
+  }).catch(function(){ showToast('❌ Не удалось загрузить сессию инвентаризации'); });
 }
 function _renderSpeciesAudit(){
   var host = document.getElementById('spResults'); if(!host) return;
@@ -4089,12 +4127,27 @@ function _renderSpeciesAudit(){
         '<input type="text" id="spRenameInput_'+idx+'" value="'+g.label.replace(/"/g,'&quot;')+'" style="flex:1;background:#13131a;border:1px solid #2e2e3e;border-radius:8px;padding:6px 8px;color:#f0f0f8;font-size:12px">'+
         '<button type="button" onclick="_speciesRenameApply(\''+kEsc+'\','+idx+')" style="background:#c8f060;border:none;border-radius:8px;padding:6px 10px;color:#0f0f13;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Применить</button>'+
       '</div>' : '';
+      var changes = g.changes || [];
+      var recordsOpen = !!window._spRecordsOpen[idx];
+      var recordsBtn = changes.length ? '<div style="padding:0 10px 8px 20px">'+
+        '<button type="button" onclick="_spToggleRecords('+idx+')" style="background:none;border:none;color:#60c8f0;font-size:10.5px;cursor:pointer;padding:0">'+(recordsOpen?'▲ Скрыть записи':'🔗 Перейти к записям ('+changes.length+')')+'</button>'+
+      '</div>' : '';
+      var recordsHtml = recordsOpen ? '<div style="padding:0 10px 8px 20px">'+
+        changes.slice(0,30).map(function(ch){
+          var icon = _SP_CHANGE_ICON[ch.kind]||'📌', lbl = _SP_CHANGE_LABEL[ch.kind]||ch.kind;
+          var sub = (ch.shop||'—')+(ch.date?' · '+ch.date:'')+(ch.itemName?' · '+ch.itemName:'');
+          return '<div onclick="_spOpenChangeRef(\''+ch.kind+'\',\''+String(ch.id).replace(/'/g,"\\'")+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #22222e;font-size:11px;cursor:pointer">'+
+            '<div><span>'+icon+' '+lbl+'</span><div class="u-fs10-gray">'+sub+'</div></div>'+
+            '<span style="color:#60c8f0;font-size:13px;flex-shrink:0">↗</span>'+
+          '</div>';
+        }).join('')+(changes.length>30?'<div style="font-size:10px;color:#8888aa;padding:4px 0">…и ещё '+(changes.length-30)+'</div>':'')+
+      '</div>' : '';
       return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:6px;overflow:hidden">'+
         '<div style="padding:8px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px">'+
           '<div style="font-size:12px;font-weight:700;color:'+(isEmpty?'#8888aa':'#f0c060')+';display:flex;align-items:center;gap:6px">'+editBtn+'<span>'+(isEmpty?'❓ Без породы':'🪵 '+g.label)+'</span></div>'+
           '<div style="font-size:10.5px;color:#8888aa;text-align:right;white-space:nowrap">'+g.count+' зап. · '+g.qty+' шт.<div>'+srcParts.join(' ')+'</div></div>'+
         '</div>'+
-        renameHtml + variantsHtml + namesHtml +
+        renameHtml + variantsHtml + namesHtml + recordsBtn + recordsHtml +
       '</div>';
     }).join('');
 }
