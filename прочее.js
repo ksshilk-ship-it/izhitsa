@@ -329,8 +329,12 @@ function toggleRefbookShop(id, key){
     _refreshGoodsCatalogFromServer(key, function(){ renderRefbookItemsShop(id, key); });
   }
 }
+// Обобщила с двух жёстко зашитых ключей (goods_derevo/goods_dr) — понадобилось и для iz_materials
+// (проверка породы при продаже читает getSpecies(), который читает как раз iz_materials, и должен
+// быть таким же свежим, как сам каталог товаров).
+var _REFRESH_DOC_BY_KEY = {iz_goods_derevo:'goods_derevo', iz_goods_dr:'goods_dr', iz_materials:'materials'};
 function _refreshGoodsCatalogFromServer(key, cb){
-  var docName = key==='iz_goods_dr' ? 'goods_dr' : 'goods_derevo';
+  var docName = _REFRESH_DOC_BY_KEY[key] || key.replace(/^iz_/,'');
   db.collection('iz_settings').doc(docName).get({source:'server'}).then(function(snap){
     if(snap.exists && snap.data().data!==undefined){
       localStorage.setItem(key, JSON.stringify(snap.data().data));

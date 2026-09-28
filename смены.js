@@ -1245,9 +1245,12 @@ function alertCard(a){
   if(a.type==='name_request'){
     var gtLabel = a.goodsType==='dr' ? 'ДР Товар' : 'Дерево';
     var extra = (a.species?' · '+a.species:'')+(a.price?' · '+fmt(a.price):'');
+    var isSpeciesReq = a.reason==='species';
+    var reqTitle = isSpeciesReq ? '📨 Заявка на новую породу — ' : '📨 Заявка на новое наименование — ';
+    var reqVerb = isSpeciesReq ? ' хочет продать «'+(a.name||'')+'» с породой «'+(a.species||'')+'»' : ' хочет продать «'+(a.name||'')+'»'+extra;
     return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #3e2e2e;gap:8px">'+
-      '<div style="min-width:0"><div style="font-size:12px;font-weight:700;color:#60c8f0">📨 Заявка на новое наименование — '+(a.shopName||'')+'</div>'+
-      '<div class="u-fs11-gray">'+(a.sellerName||'—')+' хочет продать «'+(a.name||'')+'»'+extra+' · '+gtLabel+'</div>'+
+      '<div style="min-width:0"><div style="font-size:12px;font-weight:700;color:#60c8f0">'+reqTitle+(a.shopName||'')+'</div>'+
+      '<div class="u-fs11-gray">'+(a.sellerName||'—')+reqVerb+(isSpeciesReq&&a.price?' · '+fmt(a.price):'')+' · '+gtLabel+'</div>'+
       '<div class="u-fs10-gray">'+(a.date||'')+'</div></div>'+
       '<div style="display:flex;gap:6px;flex-shrink:0">'+
         '<button onclick="approveNameRequest(\''+a.id+'\')" style="background:#1a2a1e;border:1px solid #60f090;border-radius:6px;padding:5px 9px;color:#60f090;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap">✅ Одобрить</button>'+
@@ -1319,7 +1322,7 @@ function alertCard(a){
 }
 var _alertsShopFilter = '';
 var ALERT_TYPE_DEFS = [
-  {type:'name_request', icon:'📨', title:'Заявки на наименования', hint:'Продавец пытался продать товар, которого нет в базе, — одобрите или отклоните'},
+  {type:'name_request', icon:'📨', title:'Заявки на наименования и породы', hint:'Продавец пытался продать товар с наименованием или породой, которых нет в базе, — одобрите или отклоните'},
   {type:'cash_diff', icon:'💵', title:'Расхождения при закрытии смены', hint:'Не сошёлся итог кассы — сверьте с продавцом, отметьте прочитанным, когда разобрались'},
   {type:'morning_diff', icon:'💰', title:'Расхождения нала при открытии', hint:'Продавец ввёл сумму, не совпадающую с вечером прошлой смены'},
   {type:'shift_conflict', icon:'⛔', title:'Конфликты смен', hint:'Кто-то пытался открыть уже открытую смену — доступ не дали, это просто к сведению'},
@@ -1406,6 +1409,15 @@ function markAlertRead(id){
 function approveNameRequest(id){
   var a = _adminAlerts.find(function(x){ return x.id===id; });
   if(!a){ showToast('Заявка не найдена'); return; }
+  // Заявка на породу — название уже есть в базе (иначе заявка была бы на название), не трогаем
+  // товарный справочник, добавляем саму породу в общий список пород/материалов (getSpecies()) —
+  // именно по нему проверяется ввод при продаже.
+  if(a.reason==='species'){
+    if(typeof saveSpecies==='function') saveSpecies(a.species);
+    markAlertRead(id);
+    showToast('✅ Порода «'+a.species+'» добавлена в справочник — продавец сможет продать после обновления списка');
+    return;
+  }
   var key = a.goodsType==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
   var goods = getRefBook(key);
   var norm = (a.name||'').toLowerCase().trim();

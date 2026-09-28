@@ -373,11 +373,30 @@ function _scpPick(name, price, article, species){
 // её в 🔔 Тревогах (тот же механизм, что и расхождения кассы/конфликты смен, см. смены.js
 // saveAdminAlert/alertCard/approveNameRequest) и решает, добавлять ли позицию в базу.
 var _nameReqPending = null;
-function showNameRequestBanner(name, species, price, goodsType){
-  _nameReqPending = {name:name, species:species, price:price, goodsType:goodsType};
+// Порода/материал, введённые продавцом, но не входящие в справочник (getSpecies()) — та же
+// проверка, что и для названия, только по другому списку. В режиме «неск. материалов» проверяем
+// каждую часть по отдельности (комбинированная строка «Орех + Дуб» всё равно не совпадёт ни с
+// чем целиком), возвращаем первую же непризнанную часть.
+function _siFindInvalidSpecies(speciesCombined){
+  if(!speciesCombined) return null;
+  var known = getSpecies().map(function(s){ return (s||'').toLowerCase().trim(); });
+  var parts = (typeof _siSpeciesMultiMode!=='undefined' && _siSpeciesMultiMode) ? _siSpeciesParts : [speciesCombined];
+  for(var i=0;i<parts.length;i++){
+    var p = (parts[i]||'').trim();
+    if(!p) continue;
+    if(known.indexOf(p.toLowerCase())<0) return p;
+  }
+  return null;
+}
+function showNameRequestBanner(name, species, price, goodsType, reason){
+  _nameReqPending = {name:name, species:species, price:price, goodsType:goodsType, reason:reason||'name'};
   var banner = document.getElementById('nameReqBanner');
   var entEl = document.getElementById('nameReqEntered');
   if(entEl) entEl.textContent = name+(species?' · '+species:'')+(price?' · '+Math.round(price).toLocaleString('ru-RU')+'₽':'');
+  var titleEl = document.getElementById('nameReqTitle');
+  if(titleEl) titleEl.textContent = reason==='species' ? 'Такой породы нет в базе' : 'Такого наименования нет в базе';
+  var fixBtn = document.getElementById('nameReqFixBtn');
+  if(fixBtn) fixBtn.textContent = reason==='species' ? 'Исправить породу' : 'Исправить название';
   if(banner) banner.style.display='flex';
 }
 function closeNameRequestBanner(){
@@ -388,6 +407,7 @@ function sendNameRequest(){
   if(!_nameReqPending || typeof saveAdminAlert!=='function') return;
   saveAdminAlert({
     type:'name_request',
+    reason: _nameReqPending.reason||'name',
     date: new Date().toLocaleDateString('ru-RU'),
     name: _nameReqPending.name, species: _nameReqPending.species, price: _nameReqPending.price,
     goodsType: _nameReqPending.goodsType,
@@ -599,6 +619,7 @@ function resetSaleForm(){
   if(typeof _refreshGoodsCatalogFromServer==='function'){
     _refreshGoodsCatalogFromServer('iz_goods_derevo');
     _refreshGoodsCatalogFromServer('iz_goods_dr');
+    _refreshGoodsCatalogFromServer('iz_materials');
   }
   var accs = JSON.parse(localStorage.getItem('iz_admin_accounts')||'[]');
   var transferSel = document.getElementById('transferCardSelect');
@@ -667,6 +688,18 @@ function addSaleItem(){
       if(!_siMbInCatalog){
         showNameRequestBanner(name, species, price, _siItemGoodsType);
         return;
+      }
+      // Та же дыра, что была с названием, только с породой: «Орех грецкий» уже есть в базе,
+      // а продавец вписывает «Орех»/«орех» — ничего физически не мешает, и потом это приходится
+      // разбирать вручную. Порода/материал должны совпадать со справочником (getSpecies(), тем
+      // же списком, что подсказывается при вводе), а не приниматься любым текстом «на глаз».
+      // Проверяем ДР Товар не трогаем — там это поле «Вкус/Состав», отдельная история.
+      if(_siItemGoodsType!=='dr'){
+        var _siBadSpecies = _siFindInvalidSpecies(species);
+        if(_siBadSpecies){
+          showNameRequestBanner(name, _siBadSpecies, price, _siItemGoodsType, 'species');
+          return;
+        }
       }
     }
     if(!num && _siNoArticleMode){
