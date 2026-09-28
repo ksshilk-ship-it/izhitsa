@@ -264,7 +264,7 @@ function renderRefbookSections(){
   c.innerHTML = SHOP_REFBOOKS.map(function(book){
     var items = getRefBook(book.key);
     return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;margin-bottom:8px;overflow:hidden">'+
-      '<div onclick="toggleRefbookShop(\''+book.id+'\')" style="display:flex;align-items:center;justify-content:space-between;padding:11px;cursor:pointer">'+
+      '<div onclick="toggleRefbookShop(\''+book.id+'\',\''+book.key+'\')" style="display:flex;align-items:center;justify-content:space-between;padding:11px;cursor:pointer">'+
         '<div style="display:flex;align-items:center;gap:9px">'+
           '<span style="font-size:18px">'+book.icon+'</span>'+
           '<div><div class="u-fs13-bold">'+book.name+'</div>'+
@@ -313,12 +313,30 @@ function renderRefbookSections(){
   }).join('');
   SHOP_REFBOOKS.forEach(function(book){ renderRefbookItemsShop(book.id, book.key); });
 }
-function toggleRefbookShop(id){
+// Каталог товаров (iz_goods_derevo/iz_goods_dr) в «Настройках» раньше рендерился только из
+// localStorage — на устройстве, которое давно не получало обновлений (слушатель не успел/не
+// смог достучаться, офлайн и т.п.), список молча оставался старым: не показывал только что
+// добавленные позиции с другого устройства. Теперь при раскрытии именно этих двух разделов
+// сначала подтягиваем свежие данные прямо с сервера (как в «Применить артикулы задним числом»),
+// а не полагаемся на то, что локальный кэш когда-нибудь сам досинхронизируется.
+function toggleRefbookShop(id, key){
   var body=document.getElementById('rbBody_'+id), arr=document.getElementById('rbArr_'+id);
   if(!body) return;
   var open = body.style.display!=='none';
   body.style.display = open?'none':'block';
   if(arr) arr.style.transform = open?'':'rotate(90deg)';
+  if(!open && (key==='iz_goods_derevo' || key==='iz_goods_dr')){
+    _refreshGoodsCatalogFromServer(key, function(){ renderRefbookItemsShop(id, key); });
+  }
+}
+function _refreshGoodsCatalogFromServer(key, cb){
+  var docName = key==='iz_goods_dr' ? 'goods_dr' : 'goods_derevo';
+  db.collection('iz_settings').doc(docName).get({source:'server'}).then(function(snap){
+    if(snap.exists && snap.data().data!==undefined){
+      localStorage.setItem(key, JSON.stringify(snap.data().data));
+    }
+    if(cb) cb();
+  }).catch(function(){ if(cb) cb(); });
 }
 var _nfAutoSyncedOnce = false;
 function toggleSettingsSection(id){
