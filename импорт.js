@@ -774,8 +774,18 @@ function psjSuggest(inputId, list, onPick){
   }).join('');
   box.style.display='block';
 }
+var _psjHideTimers = {};
 function psjHideSugg(inputId){
-  setTimeout(function(){ var box=document.getElementById(inputId+'_sugg'); if(box) box.style.display='none'; }, 150);
+  _psjHideTimers[inputId] = setTimeout(function(){ var box=document.getElementById(inputId+'_sugg'); if(box) box.style.display='none'; delete _psjHideTimers[inputId]; }, 150);
+}
+// Тап по строке внутри списка (в т.ч. по заголовку группы породы — см. _siSuggToggleSpecies)
+// сначала снимает фокус с поля ввода — это планирует скрытие списка через 150мс (psjHideSugg
+// выше) — и только потом срабатывает click по самой строке. Для одиночного выбора это не мешает:
+// сама строка явно прячет список. Но раскрытие группы породы — промежуточный шаг внутри того же
+// списка, а не выбор; без отмены запланированного скрытия список успевал спрятаться сам, пока
+// продавец ещё выбирал конкретную породу внутри.
+function _psjCancelHideSugg(inputId){
+  if(_psjHideTimers[inputId]){ clearTimeout(_psjHideTimers[inputId]); delete _psjHideTimers[inputId]; }
 }
 function _psjItemsArr(group){
   return group==='sale'?_psjSaleItems : group==='wo'?_psjWoItems : group==='rcv'?_psjRcvItems : _psjStaffItems;

@@ -201,6 +201,10 @@ function _siSuggRow(inputId, name, price, article, species, level, pickFn){
     '<span>'+name+'</span><span style="color:#8888aa;font-size:11px;white-space:nowrap;flex-shrink:0">'+infoStr+'</span></div>';
 }
 function _siSuggToggleSpecies(inputId, groupKey, suggestFn){
+  // Тап по заголовку группы сначала снимает фокус с поля (планирует скрытие списка через 150мс,
+  // см. psjHideSugg), а только потом раскрывает группу — без отмены этого таймера список успевал
+  // спрятаться сам, пока продавец ещё выбирал породу внутри него.
+  if(typeof _psjCancelHideSugg==='function') _psjCancelHideSugg(inputId);
   window._siSuggSpeciesOpen[groupKey] = !window._siSuggSpeciesOpen[groupKey];
   (suggestFn==='siSuggestName' ? siSuggestName : siSuggestNameM)(inputId);
 }
