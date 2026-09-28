@@ -2522,6 +2522,15 @@ function getSpecies() {
   var names = materials.map(function(m){ return (m && m.name) || (typeof m==='string' ? m : ''); }).filter(Boolean);
   var legacy = JSON.parse(localStorage.getItem('iz_species')||'[]');
   legacy.forEach(function(s){ if(s && names.indexOf(s)<0) names.push(s); });
+  // Каталог «С артикулом вручную» (iz_goods_derevo) редактирует только админ — если порода уже
+  // указана там на карточке товара, она тем самым уже подтверждена и не должна требовать
+  // отдельного дублирующего добавления в «Породы дерева»: иначе продавца блокирует проверка
+  // species на ровном месте («Катальпа» есть на карточке «Лопатка», но продать нельзя, пока
+  // её вручную не продублируют в другой справочник).
+  (getRefBook('iz_goods_derevo')||[]).forEach(function(it){
+    var sp = (it && it.species || '').trim();
+    if(sp && names.indexOf(sp)<0) names.push(sp);
+  });
   names.sort(function(a,b){ return a.toLowerCase().localeCompare(b.toLowerCase(),'ru'); });
   return names;
 }
