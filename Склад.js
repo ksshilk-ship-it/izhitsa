@@ -3935,42 +3935,47 @@ function loadSpeciesAudit(){
   if(status){ status.style.display='block'; status.textContent='⏳ Собираю все значения породы дерева...'; }
   if(results) results.innerHTML='';
   var byNorm = {};
-  function note(rawSpecies, itemName, source, qty){
+  // change — где физически лежит эта запись (для последующего переименования, см.
+  // _speciesRenameApply ниже): без него аудит был бы только витриной, а сам текст остался бы
+  // навсегда неисправимым без ручного перебора записей одну за одной.
+  function note(rawSpecies, itemName, source, qty, change){
     var raw = String(rawSpecies||'').trim();
     var isEmpty = !raw;
     var label = isEmpty ? '—' : _woodSpeciesNormalize(raw);
     var key = isEmpty ? '—' : label.toLowerCase();
-    var g = byNorm[key] || (byNorm[key] = {label:label, count:0, qty:0, variants:{}, names:{}, receive:0, sale:0, writeoff:0, inventory:0});
+    var g = byNorm[key] || (byNorm[key] = {label:label, count:0, qty:0, variants:{}, names:{}, receive:0, sale:0, writeoff:0, inventory:0, changes:[]});
     g.count++;
     g.qty += (qty||0);
     g[source] = (g[source]||0)+1;
     if(!isEmpty) g.variants[raw] = (g.variants[raw]||0)+1;
     var nm = (itemName||'').trim();
     if(nm) g.names[nm] = (g.names[nm]||0)+1;
+    if(!isEmpty && change){ change.oldRaw = raw; g.changes.push(change); }
   }
-  function scanInvoiceSnap(snap){
+  function scanInvoiceSnap(snap, kind){
     snap.forEach(function(doc){
       var inv = doc.data();
       if(inv.isRevaluation) return;
       if((inv.goodsType||'derevo')==='dr') return;
-      var items = inv.acceptedItems || inv.items || [];
-      items.forEach(function(it){
+      var field = inv.acceptedItems ? 'acceptedItems' : 'items';
+      var items = inv[field] || [];
+      items.forEach(function(it, idx){
         if((it.goodsType||inv.goodsType||'derevo')==='dr') return;
-        note(it.species, it.name, 'receive', it.qty||1);
+        note(it.species, it.name, 'receive', it.qty||1, {kind:kind, id:doc.id, field:field, idx:idx});
       });
     });
   }
   var tasks = [
-    db.collection('iz_manual_invoices').get({source:'server'}).then(scanInvoiceSnap),
-    db.collection('iz_invoices').get({source:'server'}).then(scanInvoiceSnap),
+    db.collection('iz_manual_invoices').get({source:'server'}).then(function(snap){ scanInvoiceSnap(snap,'manual_invoice'); }),
+    db.collection('iz_invoices').get({source:'server'}).then(function(snap){ scanInvoiceSnap(snap,'invoice'); }),
     db.collection('iz_shifts').get({source:'server'}).then(function(snap){
       snap.forEach(function(doc){
         var sh = doc.data();
-        (sh.journal||[]).forEach(function(e){
+        (sh.journal||[]).forEach(function(e, eIdx){
           if(e.type!=='sale' && e.type!=='writeoff') return;
-          (e.items||[]).forEach(function(it){
+          (e.items||[]).forEach(function(it, iIdx){
             if((it.goodsType||'derevo')==='dr') return;
-            note(it.species, it.name, e.type==='sale'?'sale':'writeoff', it.qty||1);
+            note(it.species, it.name, e.type==='sale'?'sale':'writeoff', it.qty||1, {kind:'shift', id:doc.id, entryIdx:eIdx, itemIdx:iIdx});
           });
         });
       });
@@ -3982,7 +3987,7 @@ function loadSpeciesAudit(){
         return db.collection('iz_inventory_counts').where('sessionId','==',sx.id).get({source:'server'}).then(function(csnap){
           csnap.forEach(function(cd){
             var c = cd.data();
-            note(c.species, c.name, 'inventory', c.countedQty||0);
+            note(c.species, c.name, 'inventory', c.countedQty||0, {kind:'inventory', id:cd.id});
           });
         });
       }));
@@ -4002,6 +4007,11 @@ function loadSpeciesAudit(){
     _renderSpeciesAudit();
   });
 }
+window._spRenameOpen = window._spRenameOpen || {};
+function _spToggleRename(idx){
+  window._spRenameOpen[idx] = !window._spRenameOpen[idx];
+  _renderSpeciesAudit();
+}
 function _renderSpeciesAudit(){
   var host = document.getElementById('spResults'); if(!host) return;
   var byNorm = window._spData || {};
@@ -4013,7 +4023,7 @@ function _renderSpeciesAudit(){
   });
   var totalRecords = keys.reduce(function(s,k){ return s+byNorm[k].count; },0);
   host.innerHTML = '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">'+keys.length+' уникальн'+(keys.length===1?'ое значение':(keys.length<5?'ых значения':'ых значений'))+' · '+totalRecords+' запис'+(totalRecords===1?'ь':(totalRecords<5?'и':'ей'))+' всего</div>'+
-    keys.map(function(k){
+    keys.map(function(k, idx){
       var g = byNorm[k];
       var isEmpty = k==='—';
       var variantKeys = Object.keys(g.variants);
@@ -4028,14 +4038,109 @@ function _renderSpeciesAudit(){
       '</div>' : '';
       var nameKeys = Object.keys(g.names).sort(function(a,b){ return g.names[b]-g.names[a]; });
       var namesHtml = nameKeys.length ? '<div style="padding:0 10px 8px 20px;font-size:10.5px;color:#8888aa">в названиях: '+nameKeys.slice(0,6).map(function(n){ return n+' ('+g.names[n]+')'; }).join(', ')+(nameKeys.length>6?'…':'')+'</div>' : '';
+      var renameOpen = !!window._spRenameOpen[idx];
+      var kEsc = k.replace(/'/g,"\\'");
+      var editBtn = isEmpty ? '' : '<button type="button" onpointerdown="event.preventDefault();_spToggleRename('+idx+')" style="background:#22222e;border:1px solid #2e2e3e;border-radius:6px;width:24px;height:24px;color:#8888aa;font-size:12px;cursor:pointer;flex-shrink:0">✏️</button>';
+      var renameHtml = renameOpen ? '<div style="padding:6px 10px 10px 20px;display:flex;gap:6px;align-items:center">'+
+        '<input type="text" id="spRenameInput_'+idx+'" value="'+g.label.replace(/"/g,'&quot;')+'" style="flex:1;background:#13131a;border:1px solid #2e2e3e;border-radius:8px;padding:6px 8px;color:#f0f0f8;font-size:12px">'+
+        '<button type="button" onclick="_speciesRenameApply(\''+kEsc+'\','+idx+')" style="background:#c8f060;border:none;border-radius:8px;padding:6px 10px;color:#0f0f13;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Применить</button>'+
+      '</div>' : '';
       return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:6px;overflow:hidden">'+
         '<div style="padding:8px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px">'+
-          '<div style="font-size:12px;font-weight:700;color:'+(isEmpty?'#8888aa':'#f0c060')+'">'+(isEmpty?'❓ Без породы':'🪵 '+g.label)+'</div>'+
+          '<div style="font-size:12px;font-weight:700;color:'+(isEmpty?'#8888aa':'#f0c060')+';display:flex;align-items:center;gap:6px">'+editBtn+'<span>'+(isEmpty?'❓ Без породы':'🪵 '+g.label)+'</span></div>'+
           '<div style="font-size:10.5px;color:#8888aa;text-align:right;white-space:nowrap">'+g.count+' зап. · '+g.qty+' шт.<div>'+srcParts.join(' ')+'</div></div>'+
         '</div>'+
-        variantsHtml + namesHtml +
+        renameHtml + variantsHtml + namesHtml +
       '</div>';
     }).join('');
+}
+// Переименовывает породу во ВСЕХ записях этой группы (все варианты написания, попавшие в неё
+// при сканировании) — то же ограничение по безопасности, что и в «Применить артикулы задним
+// числом»: открытые смены и непринятые накладные не трогаем (продавец может их ещё редактировать),
+// и перед записью перечитываем документ заново — если запись там уже не совпадает с тем, что
+// видели при сканировании (кто-то успел поправить), эту конкретную позицию пропускаем, а не
+// затираем поверх чужой более свежей правки.
+function _speciesRenameApply(key, idx){
+  var data = window._spData; if(!data) return;
+  var g = data[key]; if(!g){ showToast('Группа не найдена — соберите список заново'); return; }
+  var inputEl = document.getElementById('spRenameInput_'+idx);
+  var newName = (inputEl && inputEl.value || '').trim();
+  if(!newName){ showToast('Введите новое название породы'); return; }
+  if(newName.toLowerCase()===key){ showToast('Совпадает с текущим — менять нечего'); return; }
+  var changes = g.changes || [];
+  if(!changes.length){ showToast('Нет записей для переименования'); return; }
+  if(!confirm('Переименовать «'+g.label+'» в «'+newName+'» в '+changes.length+' запис'+(changes.length===1?'и':(changes.length<5?'ях':'ях'))+'? Открытые смены и непринятые накладные не тронутся — переименуются там при следующем запуске после закрытия/приёмки.')) return;
+  var byDoc = {};
+  changes.forEach(function(ch){
+    var dk = ch.kind+'_'+ch.id;
+    if(!byDoc[dk]) byDoc[dk] = {kind:ch.kind, id:ch.id, items:[]};
+    byDoc[dk].items.push(ch);
+  });
+  var status = document.getElementById('spStatus');
+  if(status){ status.style.display='block'; status.textContent='⏳ Переименовываю...'; }
+  var applied = 0, skippedPending = 0, skippedChanged = 0;
+  var errors = [];
+  var tasks = Object.keys(byDoc).map(function(dk){
+    var u = byDoc[dk];
+    if(u.kind==='inventory'){
+      var it0 = u.items[0];
+      return db.collection('iz_inventory_counts').doc(u.id).get({source:'server'}).then(function(snap){
+        if(!snap.exists) return;
+        var c = snap.data();
+        if(String(c.species||'').trim()!==it0.oldRaw){ skippedChanged++; return; }
+        return db.collection('iz_inventory_counts').doc(u.id).update({species:newName}).then(function(){ applied++; });
+      }).catch(function(err){ errors.push({kind:'инвентаризация', id:u.id, message:(err&&err.message)||String(err)}); });
+    }
+    if(u.kind==='shift'){
+      var ref = db.collection('iz_shifts').doc(u.id);
+      return ref.get({source:'server'}).then(function(snap){
+        if(!snap.exists) return;
+        var sh = snap.data();
+        if(_shIsShiftOpen(sh)){ skippedPending += u.items.length; return; }
+        var journal = sh.journal||[];
+        var count = 0;
+        u.items.forEach(function(ch){
+          var e = journal[ch.entryIdx];
+          if(!e || !e.items || !e.items[ch.itemIdx]) return;
+          var it = e.items[ch.itemIdx];
+          if(String(it.species||'').trim()!==ch.oldRaw){ skippedChanged++; return; }
+          it.species = newName;
+          count++;
+        });
+        if(!count) return;
+        return ref.set(_shiftForCloud(sh)).then(function(){ applied += count; });
+      }).catch(function(err){ errors.push({kind:'смена', id:u.id, message:(err&&err.message)||String(err)}); });
+    }
+    var col = u.kind==='manual_invoice' ? 'iz_manual_invoices' : 'iz_invoices';
+    var ref2 = db.collection(col).doc(u.id);
+    return ref2.get({source:'server'}).then(function(snap){
+      if(!snap.exists) return;
+      var inv = snap.data();
+      if(inv.status!=='accepted'){ skippedPending += u.items.length; return; }
+      var count = 0;
+      u.items.forEach(function(ch){
+        var arr = inv[ch.field];
+        if(!arr || !arr[ch.idx]) return;
+        var it = arr[ch.idx];
+        if(String(it.species||'').trim()!==ch.oldRaw){ skippedChanged++; return; }
+        it.species = newName;
+        count++;
+      });
+      if(!count) return;
+      return ref2.set(inv).then(function(){ applied += count; });
+    }).catch(function(err){ errors.push({kind:'накладная', id:u.id, message:(err&&err.message)||String(err)}); });
+  });
+  Promise.all(tasks).then(function(){
+    if(status) status.style.display='none';
+    try{ logAction('SPECIES_RENAME', {from:g.label, to:newName, applied:applied, skippedPending:skippedPending, skippedChanged:skippedChanged, failedDocs:errors.length}); }catch(e){}
+    var msg = '✅ Переименовано: '+applied;
+    if(skippedPending) msg += ' · пропущено (открыто): '+skippedPending;
+    if(skippedChanged) msg += ' · пропущено (изменилось): '+skippedChanged;
+    if(errors.length) msg += ' · ошибок: '+errors.length;
+    showToast(msg);
+    delete window._spRenameOpen[idx];
+    loadSpeciesAudit();
+  });
 }
 function loadNoArticleAudit(){
   var status = document.getElementById('naStatus');
