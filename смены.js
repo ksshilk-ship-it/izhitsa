@@ -4274,6 +4274,26 @@ function _renderShiftView(){
   });
   var totalRev=cashRev+cardRev+disc;
   var drTot=drCashRev+drCardRev+drDisc;
+  // Безнал раньше показывался одной суммой (терминал+перевод+QR+СБП вперемешку) — не видно,
+  // сколько реально прошло через терминал, а сколько переводом, хотя это разные счета и часто
+  // нужно сверять отдельно. У смешанной оплаты (payMethod='mixed') конкретный безналичный метод
+  // не фиксируется (продавец вводит только общую сумму нал/безнал) — такие суммы идут отдельной
+  // строкой «Смешанный», а не приписываются наугад к терминалу или переводу.
+  var _cardByMethod = {};
+  var _cardMethodLabels = {terminal:'· Терминал', sbp:'· СБП', transfer:'· Перевод', qr:'· QR', rs:'· РС', mixed:'· Смешанный (безнал часть)'};
+  var _cardMethodOrder = ['terminal','transfer','sbp','qr','rs','mixed'];
+  sales.forEach(function(s){
+    if(s.payMethod==='cash' || !s.payMethod) return;
+    var m = s.payMethod;
+    if(!_cardByMethod[m]) _cardByMethod[m] = {wood:0, dr:0};
+    _cardByMethod[m].wood += s.cardEffect||0;
+    _cardByMethod[m].dr += s.cardDrEffect||0;
+  });
+  var cardBreakdownRows = _cardMethodOrder.filter(function(m){
+    var v = _cardByMethod[m]; return v && (Math.abs(v.wood)>=1 || Math.abs(v.dr)>=1);
+  }).map(function(m){
+    return tblRow(_cardMethodLabels[m], f(_cardByMethod[m].wood), f(_cardByMethod[m].dr), {color:'#8888aa'});
+  }).join('');
   var zp=sh.zp||0, inkass=sh.inkass||0, otherExp=sh.otherExp||0;
   var drInkass=sh.drInkass||0, drSupplier=sh.drSupplierAmt||0;
   var jRcvWoodTotal = receives.filter(function(r){return r.goodsType!=='dr';}).reduce(function(s,r){return s+(r.goodsEffect!=null?r.goodsEffect:(r.amount||0));},0);
@@ -4369,6 +4389,7 @@ function _renderShiftView(){
     tblRow('', diffChip(cashDiffVal), diffChip(cashDrDiffVal))+
     tblRow('Выручка нал', f(cashRev), f(drCashRev))+
     tblRow('Выручка безнал', f(cardRev), f(drCardRev))+
+    cardBreakdownRows+
     tblRow('Скидка', f(disc), f(drDisc))+
     '<div style="font-size:10px;color:#a060f0;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:8px 0 2px">🛒 ПОКУПКИ СОТРУДНИКОВ (нал)</div>'+
     '<div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:0 8px;padding:4px 0">'+
