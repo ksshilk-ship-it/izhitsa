@@ -3873,70 +3873,13 @@ function initRefBooks() {
   // ювелирного магазина) и синхронизировались в ОБЩИЕ Firestore-документы accounts/
   // payment_methods — те же, что читает главный.html. Тот же класс бага, что вызвал пропажу
   // точек продаж и подмену пород дерева (см. iz_materials ниже) — убрано по тем же причинам.
-  if(!localStorage.getItem('iz_salary_formulas')) {
-    saveRefBook('iz_salary_formulas', [
-      {id: uid(), name: 'Роза Хутор 5%'},
-      {id: uid(), name: 'Горки 4%'}
-    ]);
-  }
-  
   // ⚠️ iz_goods (Кольцо/Кулон/Браслет/Серьги) и iz_suppliers — тот же ювелирный хардкод,
   // синхронизировался в общие документы goods/suppliers. Убрано по той же причине.
-  if(!localStorage.getItem('iz_expense_items')) {
-    saveRefBook('iz_expense_items', [
-      {id: uid(), name: 'Аренда и помещения', children: [
-        {id: uid(), name: 'Аренда торговой точки', children: []},
-        {id: uid(), name: 'Аренда мастерской', children: []},
-        {id: uid(), name: 'Коммунальные услуги', children: []}
-      ]},
-      {id: uid(), name: 'Зарплата и персонал', children: [
-        {id: uid(), name: 'ЗП продавцов', children: []},
-        {id: uid(), name: 'ЗП мастеров', children: []},
-        {id: uid(), name: 'Командировочные', children: []}
-      ]},
-      {id: uid(), name: 'Материалы и сырьё', children: [
-        {id: uid(), name: 'Древесина', children: []},
-        {id: uid(), name: 'Расходные материалы', children: []},
-        {id: uid(), name: 'Инструменты', children: []}
-      ]},
-      {id: uid(), name: 'Маркетинг и реклама', children: [
-        {id: uid(), name: 'Таргетированная реклама', children: []},
-        {id: uid(), name: 'SMM', children: []},
-        {id: uid(), name: 'Фото/видео', children: []}
-      ]},
-      {id: uid(), name: 'Логистика и доставка', children: [
-        {id: uid(), name: 'Доставка товаров', children: []},
-        {id: uid(), name: 'Транспортные расходы', children: []}
-      ]},
-      {id: uid(), name: 'Налоги и банк', children: [
-        {id: uid(), name: 'Налоги', children: []},
-        {id: uid(), name: 'Банковские комиссии', children: []},
-        {id: uid(), name: 'Эквайринг', children: []}
-      ]},
-      {id: uid(), name: 'Прочее', children: [
-        {id: uid(), name: 'Прочие расходы', children: []}
-      ]}
-    ]);
-  }
-  
-  if(!localStorage.getItem('iz_additional_works')) {
-    saveRefBook('iz_additional_works', [
-      {id: uid(), name: 'Переделка'},
-      {id: uid(), name: 'Чистка'},
-      {id: uid(), name: 'Полировка'},
-      {id: uid(), name: 'Пайка'}
-    ]);
-  }
-  
-  if(!localStorage.getItem('iz_sizes')) {
-    saveRefBook('iz_sizes', [
-      {id: uid(), name: '16'},
-      {id: uid(), name: '17'},
-      {id: uid(), name: '18'},
-      {id: uid(), name: '19'}
-    ]);
-  }
-  
+  // ⚠️ iz_salary_formulas/iz_expense_items/iz_additional_works/iz_sizes — четыре ПОСЛЕДНИХ
+  // места с этим же паттерном (реальный инцидент, из-за которого админ увидела «куча данных
+  // удалилось в справочниках» — initRefBooks срабатывает на КАЖДОЙ загрузке страницы, до того
+  // как живой листенер успевает подтянуть настоящие данные). Убраны по той же причине, что и
+  // iz_materials/iz_sales_sources выше — реальный список должен приходить только из Firestore.
   // ⚠️ iz_materials (Золото/Серебро/Платина — реальный инцидент 07.09.2026: подменил
   // породы дерева, продавцам стало нечего выбирать в автоподсказке при продаже),
   // iz_employee_statuses и iz_work_schedules — тот же хардкод из ювелирного шаблона,
@@ -6863,31 +6806,13 @@ document.addEventListener('DOMContentLoaded', function() {
   // Auto-select first role card
   var firstCard = document.querySelector('.role-card');
   if(firstCard) firstCard.click();
-  // Init plan data if not exist
-  if(!localStorage.getItem('iz_plan_data')) {
-    savePlanData({
-      planIncome: 130000,
-      planExpense: 68000
-    });
-  }
-  
-  // Init transactions with test data if not exist
-  if(!localStorage.getItem('iz_transactions')) {
-    const today = new Date();
-    const testTransactions = [
-      {id: uid(), type: 'income', amount: 50000, source: 'Роза Хутор', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'income', amount: 35000, source: 'Горки', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'income', amount: 20000, source: 'ТГ канал', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'income', amount: 15000, source: 'Instagram', category: '', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'expense', amount: 30000, source: '', category: 'Закупки', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'expense', amount: 12000, source: '', category: 'Материалы', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'expense', amount: 15000, source: '', category: 'Аренда', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'expense', amount: 8000, source: '', category: 'Зарплаты', date: today.toISOString(), createdAt: now(), createdBy: 'System'},
-      {id: uid(), type: 'expense', amount: 3000, source: '', category: 'Коммунальные', date: today.toISOString(), createdAt: now(), createdBy: 'System'}
-    ];
-    saveTransactions(testTransactions);
-  }
-  
+  // ⚠️ Раньше здесь стояли ещё два авто-инициализатора того же опасного вида: план (доход
+  // 130000/расход 68000) через savePlanData() — она пишет в ОБЩИЙ документ iz_settings/plan
+  // (см. ADMIN_SYNC_SETTINGS), и фейковые тестовые транзакции (Роза Хутор/Горки/ТГ канал/
+  // Instagram с придуманными суммами) через saveTransactions(). Оба срабатывали на КАЖДОЙ
+  // загрузке страницы, если на устройстве локально ещё пусто — раньше живого листенера успевал
+  // прийти настоящий план/операции. Убраны по той же причине, что и справочники выше.
+
   // ⚠️ Раньше здесь безусловно подставлялся хардкод из 4 фейковых админов с паролем «1»
   // (в том числе один по имени «Ксения» — опасное совпадение с реальным именем владелицы),
   // если локально ещё не было iz_admin_users. Список админов синхронизируется в тот же
