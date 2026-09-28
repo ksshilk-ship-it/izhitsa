@@ -2554,6 +2554,28 @@ function _woodSpeciesNormalize(raw){
   if(!s) return s;
   return _woodSpeciesAliases[s.toLowerCase()] || s;
 }
+// Для фильтра «чётки/браслеты/бусы без породы дерева» (аудит пород) — в поле «порода» у этих
+// изделий часто записана смесь из дерева И камня/металла через запятую («Кап карагача, агат»),
+// а отдельного признака «это порода дерева» или «это камень» в базе нет (getSpecies() читает
+// общий справочник iz_materials, где всё вперемешку). Определяем «есть ли дерево в составе» по
+// списку корней известных пород — эвристика, не 100% точная база: если появится порода, которой
+// здесь нет, список надо будет дополнить.
+var _WOOD_SPECIES_KEYWORDS = [
+  'дуб','орех','ясен','клён','клен','берёз','берез','сосн','листвен','тик','венге','махагон',
+  'бук','вяз','самшит','секвой','каштан','платан','шелковиц','абрикос','вишн','черешн','яблон',
+  'акаци','кари','гикори','ироко','палисандр','эбен','зебран','падук','мербау','ятоба','карагач',
+  'груш','слив','ольх','явор','берест','тополь','ив','лип','кедр','пихт','ель','можжевельник',
+  'граб','зизифус','бархат'
+];
+function _speciesLabelHasWood(label){
+  var s = String(label||'').toLowerCase();
+  if(!s || s==='—') return false;
+  return _WOOD_SPECIES_KEYWORDS.some(function(kw){ return s.indexOf(kw)>=0; });
+}
+function _isJewelryNames(namesObj){
+  var re = /чётк|четк|браслет|бус/i;
+  return Object.keys(namesObj||{}).some(function(n){ return re.test(n); });
+}
 function getSuppliers() {
   var base = ['Мастерская Ижица'];
   var saved = JSON.parse(localStorage.getItem('iz_suppliers')||'[]');
@@ -4023,17 +4045,28 @@ function _spToggleRename(idx){
   window._spRenameOpen[idx] = !window._spRenameOpen[idx];
   _renderSpeciesAudit();
 }
+window._spJewelryNoWoodFilter = false;
+function _spToggleJewelryNoWoodFilter(){
+  window._spJewelryNoWoodFilter = !window._spJewelryNoWoodFilter;
+  _renderSpeciesAudit();
+}
 function _renderSpeciesAudit(){
   var host = document.getElementById('spResults'); if(!host) return;
   var byNorm = window._spData || {};
   var keys = Object.keys(byNorm);
   if(!keys.length){ host.innerHTML = '<div class="empty"><div class="ei">🌲</div>Нажмите «Собрать список»</div>'; return; }
+  var filterOn = !!window._spJewelryNoWoodFilter;
+  var filterBtn = '<button type="button" onclick="_spToggleJewelryNoWoodFilter()" style="width:100%;margin-bottom:8px;padding:8px;background:'+(filterOn?'#c8f060':'#22222e')+';border:1px solid '+(filterOn?'#c8f060':'#2e2e3e')+';border-radius:8px;color:'+(filterOn?'#0f0f13':'#c8c8d8')+';font-size:11.5px;font-weight:700;cursor:pointer">'+(filterOn?'✕ Сбросить фильтр':'💍 Чётки/браслеты/бусы без породы дерева')+'</button>';
+  if(filterOn){
+    keys = keys.filter(function(k){ return _isJewelryNames(byNorm[k].names) && !_speciesLabelHasWood(byNorm[k].label); });
+  }
   keys.sort(function(a,b){
     if(a==='—') return 1; if(b==='—') return -1;
     return byNorm[b].count - byNorm[a].count;
   });
+  if(!keys.length){ host.innerHTML = filterBtn+'<div class="empty"><div class="ei">💍</div>Ничего не найдено — либо порода указана везде, либо это не чётки/браслеты/бусы</div>'; return; }
   var totalRecords = keys.reduce(function(s,k){ return s+byNorm[k].count; },0);
-  host.innerHTML = '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">'+keys.length+' уникальн'+(keys.length===1?'ое значение':(keys.length<5?'ых значения':'ых значений'))+' · '+totalRecords+' запис'+(totalRecords===1?'ь':(totalRecords<5?'и':'ей'))+' всего</div>'+
+  host.innerHTML = filterBtn+'<div style="font-size:11px;color:#8888aa;margin-bottom:8px">'+keys.length+' уникальн'+(keys.length===1?'ое значение':(keys.length<5?'ых значения':'ых значений'))+' · '+totalRecords+' запис'+(totalRecords===1?'ь':(totalRecords<5?'и':'ей'))+' всего</div>'+
     keys.map(function(k, idx){
       var g = byNorm[k];
       var isEmpty = k==='—';
