@@ -182,9 +182,12 @@ function _siBuildSuggest(inputId, speciesFieldId, pickFn, suggestFn){
         var open = !!window._siSuggSpeciesOpen[groupKey];
         var list = bySpecies[sp];
         var ge = groupKey.replace(/'/g,"\\'");
+        // Заголовок группы (порода) выделен цветом/фоном отдельно от строк с конкретными
+        // вариантами внутри неё — иначе на глаз не отличить, где заголовок категории, а где уже
+        // выбираемая позиция с ценой.
         html += '<div onclick="_siSuggToggleSpecies(\''+inputId+'\',\''+ge+'\',\''+suggestFn+'\')" '+
-          'style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px;background:#1a1a22">'+
-          '<span>'+(open?'▾':'▸')+' '+nm+' · '+sp+'</span><span style="color:#8888aa;font-size:11px;white-space:nowrap;flex-shrink:0">'+list.length+' вариант'+(list.length===1?'':(list.length<5?'а':'ов'))+'</span></div>';
+          'style="padding:8px 10px;font-size:12px;color:#f0c060;font-weight:700;border-bottom:1px solid #3a3020;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px;background:#221c10">'+
+          '<span>'+(open?'▾':'▸')+' '+nm+' · '+sp+'</span><span style="color:#c8a868;font-size:11px;font-weight:600;white-space:nowrap;flex-shrink:0">'+list.length+' вариант'+(list.length===1?'':(list.length<5?'а':'ов'))+'</span></div>';
         if(open){ list.forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species, 1, pickFn); }); }
       });
     } else {
