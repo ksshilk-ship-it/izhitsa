@@ -1917,6 +1917,9 @@ function updateManInvTotal() {
 }
 var _manInvGoodsType = 'derevo';
 function setAdminInvType(invId, type){
+  var _existing = window._manInvEdit[invId];
+  if(_existing && _existing.goodsType===type) return;
+  if(_existing && (_existing.items||[]).length && !confirm('Сменить категорию накладной на '+(type==='dr'?'🛍 ДР Товар':'🌳 Дерево')+'? В накладной уже '+_existing.items.length+' позици'+(_existing.items.length===1?'я':(_existing.items.length<5?'и':'й'))+' — проверьте, что не ошиблись.')) return;
   window._manInvEdit[invId] = window._manInvEdit[invId]||{};
   window._manInvEdit[invId].goodsType = type;
   var btnD = document.getElementById('adminInvTypeDerevo_'+invId);
@@ -1924,7 +1927,12 @@ function setAdminInvType(invId, type){
   if(btnD){ btnD.style.borderColor = type==='derevo'?'#c8f060':'#2e2e3e'; btnD.style.background = type==='derevo'?'#1e2a14':'#22222e'; btnD.style.color = type==='derevo'?'#c8f060':'#8888aa'; }
   if(btnDr){ btnDr.style.borderColor = type==='dr'?'#a060f0':'#2e2e3e'; btnDr.style.background = type==='dr'?'#1e1a2e':'#22222e'; btnDr.style.color = type==='dr'?'#a060f0':'#8888aa'; }
 }
+// Смена категории здесь не трогает уже добавленные позиции — они остаются как есть, но
+// дальнейшие подсказки/каталог будут уже по другой категории. Если в накладную уже что-то
+// добавлено, случайный тап не по той кнопке легко остаётся незамеченным — просим подтверждение.
 function setManInvType(type){
+  if(type===_manInvGoodsType) return;
+  if(_manInvItems.length && !confirm('Сменить категорию накладной на '+(type==='dr'?'🛍 ДР Товар':'🌳 Дерево')+'? В накладной уже '+_manInvItems.length+' позици'+(_manInvItems.length===1?'я':(_manInvItems.length<5?'и':'й'))+' — проверьте, что не ошиблись.')) return;
   _manInvGoodsType = type;
   var btnD = document.getElementById('manInvTypeDerevo');
   var btnDr = document.getElementById('manInvTypeDr');
@@ -2069,7 +2077,10 @@ function editManualInvoice(id){
   renderManInvEditItems(id);
 }
 function setSellerInvType(id, type){
-  if(!window._manInvEdit[id]) return;
+  var _data = window._manInvEdit[id];
+  if(!_data) return;
+  if(_data.goodsType===type) return;
+  if((_data.items||[]).length && !confirm('Сменить категорию накладной на '+(type==='dr'?'🛍 ДР Товар':'🌳 Дерево')+'? В накладной уже '+_data.items.length+' позици'+(_data.items.length===1?'я':(_data.items.length<5?'и':'й'))+' — проверьте, что не ошиблись.')) return;
   window._manInvEdit[id].goodsType = type;
   var bD=document.getElementById('maninvTypeDerevo_'+id), bDr=document.getElementById('maninvTypeDr_'+id);
   if(bD) bD.style.cssText = type==='derevo'

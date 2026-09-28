@@ -18,9 +18,26 @@ function siCalcFromAmtM(){
 }
 var _siItemGoodsType = 'derevo';
 var _siTypeManualOverride = false;
+// Продавец иногда случайно попадает не по той кнопке (Дерево/ДР Товар), а название/порода/цена
+// уже введены — при этом сами поля не очищаются (setSiItemType вызывается с preserveName=true),
+// но категория товара молча меняется, и введённое дальше будет проверяться/сохраняться уже под
+// другим каталогом. Спрашиваем подтверждение, только если что-то уже введено — иначе обычный
+// первый выбор категории (форма ещё пустая) не должен требовать лишнего клика.
 function siManualSetType(type){
+  if(type===_siItemGoodsType) return;
+  if(_siHasTypeEntryData() && !confirm('Сменить категорию на '+(type==='dr'?'🛍 ДР Товар':'🌳 Дерево')+'? Уже введённые название/порода/цена относятся к текущей категории — проверьте, что не ошиблись.')) return;
   _siTypeManualOverride = true;
   setSiItemType(type, true);
+}
+function _siHasTypeEntryData(){
+  var lr = document.getElementById('siLookupResult'), mb = document.getElementById('siManualBlock');
+  if(lr && lr.style.display!=='none'){
+    return !!((gv('siName')||'').trim() || (gv('siSpecies')||'').trim() || parseFloat(gv('siPrice')));
+  }
+  if(mb && mb.style.display!=='none'){
+    return !!((gv('siNameM')||'').trim() || (gv('siSpeciesM')||'').trim() || parseFloat(gv('siPriceM')));
+  }
+  return false;
 }
 function autoDetectGoodsTypeByName(name){
   if(!name) return null;

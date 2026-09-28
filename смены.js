@@ -5217,7 +5217,12 @@ function svManInvDateChanged(val){
   _svManInv.num = _suggestNextInvoiceNum(_currentShiftView && _currentShiftView.shopName, val);
   svRenderManualInvForm();
 }
-function svManInvSetType(type){ if(_svManInv){ _svManInv.goodsType=type; svRenderManualInvForm(); } }
+function svManInvSetType(type){
+  if(!_svManInv || _svManInv.goodsType===type) return;
+  var n = (_svManInv.items||[]).length;
+  if(n && !confirm('Сменить категорию накладной на '+(type==='dr'?'🛍 ДР Товар':'🌳 Дерево')+'? В накладной уже '+n+' позици'+(n===1?'я':(n<5?'и':'й'))+' — проверьте, что не ошиблись.')) return;
+  _svManInv.goodsType=type; svRenderManualInvForm();
+}
 function svManInvAddItem(){
   if(!_svManInv) return;
   _svManInv.items.push({article:'', name:'', species:'', price:0, qty:1});
