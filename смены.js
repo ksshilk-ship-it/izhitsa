@@ -4623,6 +4623,21 @@ function _renderShiftView(){
     '<input class="fi" id="sv_cashReason" placeholder="Обязательно укажите причину..." style="margin:0;padding:8px;margin-bottom:8px">'+
     '<button onclick="svSaveCassa()" style="width:100%;padding:9px;background:#c8f060;border:none;border-radius:9px;font-weight:700;font-size:12px;color:#0f0f13;cursor:pointer">💾 Сохранить изменения кассы</button>'+
   '</div>';
+  // Правка кассы задним числом (выше) сдвигает вечер только ЭТОЙ смены — а «утро» каждой
+  // следующей смены уже было внесено отдельно и теперь не сходится с новым вечером, и так по
+  // цепочке до сегодняшнего дня. Вместо правки смена за сменой — пересчёт вперёд одной кнопкой:
+  // идёт по всем следующим сменам этого магазина, у каждой сдвигает утро/вечер на ту же дельту,
+  // что и у предыдущей (сохраняя реальное движение кассы внутри дня нетронутым), и останавливается
+  // на первой смене со своим независимым расхождением — трогать её нельзя, не зная, из-за чего оно.
+  if(sh.closedAt){
+    cassaBody += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #2e2e3e">'+
+      '<div style="font-size:10px;color:#8888aa;margin-bottom:6px;font-weight:700">ПЕРЕСЧИТАТЬ ВПЕРЁД</div>'+
+      '<div style="font-size:10.5px;color:#555568;margin-bottom:8px">Если вечер этой смены только что исправлен задним числом — эта кнопка сама поправит «утро»/«вечер» всех следующих смен этого магазина по цепочке, вместо правки каждой вручную.</div>'+
+      '<button type="button" onclick="cashCascadeScan(\''+(sh.id||sh._id)+'\')" style="width:100%;padding:9px;background:#22222e;border:1px solid #60c8f0;border-radius:9px;font-weight:700;font-size:12px;color:#60c8f0;cursor:pointer">➡️ Пересчитать наличные во всех следующих сменах</button>'+
+      '<div id="ccStatus" style="font-size:11px;color:#8888aa;margin-top:8px;display:none"></div>'+
+      '<div id="ccResults" style="margin-top:8px"></div>'+
+    '</div>';
+  }
   var tovarBody = '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
   tovarBody += row('Товар утро', f(sh.goodsMorning||0), '#f0a060');
   tovarBody += row('Товар вечер', f(sh.goodsEvening||0), '#f0a060');
@@ -5579,6 +5594,126 @@ function svSaveCassa(){
   _currentShiftView.editedAt=new Date().toISOString();
   _currentShiftView.editReason=reason;
   svPersist(); _renderShiftView(); showToast('✅ Касса обновлена');
+}
+function _cashCascadeStreams(){
+  return [
+    {morn:'cashMorning', eve:'cashEvening', label:'🌳 Дерево'},
+    {morn:'cashDrMorning', eve:'drCashEvening', label:'🛍 ДР Товар'},
+    {morn:'cashStaffMorning', eve:'cashStaffEvening', label:'🛒 Покупки сотрудников'}
+  ];
+}
+// Идёт вперёд от rootId по сменам ТОГО ЖЕ магазина в порядке открытия и для каждой сдвигает
+// «утро»/«вечер» на ту же дельту, что и вечер предыдущей (уже исправленной) смены — это сохраняет
+// реальное движение кассы внутри дня нетронутым (Δ(вечер)=Δ(утро)), просто перебазирует всю цепочку
+// на верное значение. Останавливается на первой смене со своим hasCashDiff (закрыта принудительно
+// с расхождением) — дальше её правды не знаем, тащить чужую поправку поверх нельзя.
+function cashCascadeScan(rootId){
+  var status = document.getElementById('ccStatus');
+  var results = document.getElementById('ccResults');
+  if(status){ status.style.display='block'; status.textContent='⏳ Загружаю смены...'; }
+  if(results) results.innerHTML='';
+  db.collection('iz_shifts').get({source:'server'}).then(function(snap){
+    var all = snap.docs.map(function(d){ var x=d.data(); x.id=d.id; return x; });
+    var root = all.find(function(s){ return (s.id||s._id)===rootId; });
+    if(!root){ if(status) status.textContent='❌ Смена не найдена'; return; }
+    var chain = all.filter(function(s){ return s.shopName===root.shopName && !s.isRestoreShift && (s.id||s._id)!==rootId; })
+      .filter(function(s){ return _shiftOpenedKey(s) > _shiftOpenedKey(root); })
+      .sort(function(a,b){ return _shiftOpenedKey(a) < _shiftOpenedKey(b) ? -1 : 1; });
+    var streams = _cashCascadeStreams();
+    var baseline = {}; streams.forEach(function(s){ baseline[s.eve] = root[s.eve]!=null ? root[s.eve] : null; });
+    var rows = [];
+    for(var i=0;i<chain.length;i++){
+      var sh = chain[i];
+      var isOpen = sh.status==='open' || !sh.closedAt;
+      var row = {id:sh.id, date:sh.date, sellerName:sh.sellerName, isOpen:isOpen, changes:[], flagged:!!sh.hasCashDiff, cashDiff:sh.cashDiff};
+      streams.forEach(function(s){
+        var prevEve = baseline[s.eve];
+        if(prevEve==null) return;
+        var curMorn = sh[s.morn]||0;
+        var delta = Math.round((prevEve-curMorn)*100)/100;
+        if(Math.abs(delta)>=1){
+          var ch = {stream:s.label, morn:s.morn, eve:s.eve, oldMorn:curMorn, newMorn:prevEve, delta:delta};
+          if(!isOpen && sh[s.eve]!=null){ ch.oldEve=sh[s.eve]; ch.newEve=Math.round((sh[s.eve]+delta)*100)/100; }
+          row.changes.push(ch);
+        }
+      });
+      rows.push(row);
+      if(row.flagged) break;
+      streams.forEach(function(s){
+        if(isOpen){ baseline[s.eve] = null; return; }
+        var ch = row.changes.find(function(c){ return c.eve===s.eve; });
+        baseline[s.eve] = ch ? ch.newEve : (sh[s.eve]!=null ? sh[s.eve] : baseline[s.eve]);
+      });
+    }
+    window._cashCascadePreview = {rootId:rootId, shopName:root.shopName, rows:rows};
+    if(status) status.style.display='none';
+    _renderCashCascadePreview();
+  }).catch(function(err){ if(status){ status.style.display='block'; status.textContent='❌ '+(err&&err.message||err); } });
+}
+function _renderCashCascadePreview(){
+  var host = document.getElementById('ccResults'); if(!host) return;
+  var data = window._cashCascadePreview; if(!data){ host.innerHTML=''; return; }
+  var f = function(n){ return Math.round(n||0).toLocaleString('ru-RU')+'₽'; };
+  if(!data.rows.length){ host.innerHTML = '<div style="font-size:11px;color:#60f090">✅ Дальше смен не найдено — цепочка пуста, править нечего</div>'; return; }
+  var changedRows = data.rows.filter(function(r){ return r.changes.length && !r.flagged; });
+  var html = '<div style="font-size:11px;color:#8888aa;margin-bottom:6px">'+data.shopName+' · проверено смен: '+data.rows.length+'</div>';
+  html += data.rows.map(function(r){
+    var head = '<div style="font-size:12px;font-weight:700">'+r.date+(r.sellerName?' · '+r.sellerName:'')+(r.isOpen?' · 🔓 открыта':'')+'</div>';
+    if(r.flagged){
+      return '<div style="background:#2e1a1a;border:1px solid #4e2e2e;border-radius:8px;padding:8px;margin-bottom:6px">'+head+
+        '<div style="font-size:11px;color:#f06060;margin-top:4px">⚠️ У этой смены своё расхождение кассы ('+f(r.cashDiff||0)+') — цепочка остановлена здесь. Разберитесь с этой сменой вручную (правка кассы выше), затем запустите пересчёт заново начиная от неё.</div></div>';
+    }
+    if(!r.changes.length){
+      return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;padding:8px;margin-bottom:6px">'+head+'<div style="font-size:11px;color:#60f090;margin-top:2px">✅ уже сходится</div></div>';
+    }
+    var changesHtml = r.changes.map(function(c){
+      return '<div style="font-size:11px;color:#f0c060;padding:2px 0">'+c.stream+': утро '+f(c.oldMorn)+' → '+f(c.newMorn)+(c.newEve!=null?' · вечер '+f(c.oldEve)+' → '+f(c.newEve):'')+' ('+(c.delta>0?'+':'')+f(c.delta)+')</div>';
+    }).join('');
+    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;padding:8px;margin-bottom:6px">'+head+changesHtml+'</div>';
+  }).join('');
+  if(changedRows.length){
+    html += '<button type="button" onclick="cashCascadeApply()" style="width:100%;margin-top:6px;padding:10px;background:#c8f060;border:none;border-radius:10px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">✅ Применить ко всем ('+changedRows.length+')</button>';
+  } else if(!data.rows.some(function(r){ return r.flagged; })){
+    html += '<div style="font-size:11px;color:#60f090;margin-top:4px">✅ Всё уже сходится — править нечего</div>';
+  }
+  host.innerHTML = html;
+}
+function cashCascadeApply(){
+  var data = window._cashCascadePreview; if(!data) return;
+  var changedRows = data.rows.filter(function(r){ return r.changes.length && !r.flagged; });
+  if(!changedRows.length){ showToast('Нечего применять'); return; }
+  if(!confirm('Пересчитать наличные утро/вечер в '+changedRows.length+' смен'+(changedRows.length===1?'е':(changedRows.length<5?'ах':'ах'))+'? Причина будет записана автоматически, каждая смена перечитывается заново перед записью.')) return;
+  var status = document.getElementById('ccStatus');
+  if(status){ status.style.display='block'; status.textContent='⏳ Применяю...'; }
+  var applied=0, skippedChanged=0; var errors=[];
+  var tasks = changedRows.map(function(r){
+    return db.collection('iz_shifts').doc(r.id).get({source:'server'}).then(function(snap){
+      if(!snap.exists) return;
+      var sh = snap.data();
+      var mismatchNow = r.changes.some(function(c){ return Math.round((sh[c.morn]||0)*100)!==Math.round(c.oldMorn*100); });
+      if(mismatchNow){ skippedChanged++; return; }
+      var patch = {};
+      r.changes.forEach(function(c){
+        patch[c.morn] = c.newMorn;
+        if(c.newEve!=null) patch[c.eve] = c.newEve;
+      });
+      patch.editedBy = (session&&(session.name||session.sellerName))||'admin';
+      patch.editedAt = new Date().toISOString();
+      patch.editReason = 'Автопересчёт наличных вперёд по цепочке от смены '+data.rootId;
+      return db.collection('iz_shifts').doc(r.id).update(patch).then(function(){
+        applied++;
+        var localArr = getShifts();
+        var li = localArr.findIndex(function(x){ return (x.id||x._id)===r.id; });
+        if(li>=0){ Object.assign(localArr[li], patch); saveShifts(localArr); }
+      });
+    }).catch(function(err){ errors.push(r.date+': '+(err&&err.message||err)); });
+  });
+  Promise.all(tasks).then(function(){
+    if(status) status.style.display='none';
+    showToast('✅ Применено: '+applied+(skippedChanged?' · пропущено (изменилось): '+skippedChanged:'')+(errors.length?' · ошибок: '+errors.length:''));
+    window._cashCascadePreview = null;
+    var host = document.getElementById('ccResults'); if(host) host.innerHTML='';
+  });
 }
 function svSaveTovar(){
   var reasonEl = document.getElementById('sv_tovarReason');
