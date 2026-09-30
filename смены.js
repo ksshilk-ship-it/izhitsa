@@ -5603,6 +5603,16 @@ function svSaveCassa(){
   _currentShiftView.editedBy=(session&&(session.name||session.sellerName))||'admin';
   _currentShiftView.editedAt=new Date().toISOString();
   _currentShiftView.editReason=reason;
+  // hasCashDiff/cashDiff — флаг «у смены расхождение кассы», который считает статистика продавца
+  // (Продавцы → Расхождения кассы) и который красит баннер несовпадений в _renderShiftView. Раньше
+  // правка кассы здесь меняла сами суммы, но не трогала этот флаг — смена продолжала числиться
+  // «с расхождением» везде даже после того, как её на самом деле поправили и вечер снова сходится
+  // с расчётным. Снимаем флаг, если после правки расхождения больше нет.
+  var _exp = _calcShiftExpectedEvening(_currentShiftView);
+  if(Math.abs((_currentShiftView.cashEvening||0)-_exp.cash) < 1){
+    _currentShiftView.hasCashDiff = false;
+    _currentShiftView.cashDiff = 0;
+  }
   svPersist(); _renderShiftView(); showToast('✅ Касса обновлена');
 }
 function _cashCascadeStreams(){

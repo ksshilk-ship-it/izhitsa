@@ -697,7 +697,7 @@ function renderSellerStats(){
         if((e.cashPart||e.cashEffect||0)>0) sel.discCash+=(e.discount||0);
       }
     });
-    if(s.hasCashDiff){ sel.hasCashDiff++; sel.cashDiffShifts.push({date:s.date,shopName:s.shopName}); }
+    if(s.hasCashDiff){ sel.hasCashDiff++; sel.cashDiffShifts.push({date:s.date,shopName:s.shopName,id:s.id||s._id}); }
     if(s.shopName) sel.shops[s.shopName]=(sel.shops[s.shopName]||0)+1;
   });
   var selArr=Object.values(sellers).sort(function(a,b){return b.revenue-a.revenue;});
@@ -862,7 +862,8 @@ function renderSellerStats(){
       var toggle='event.preventDefault();if(!window._ssDiffOpen)window._ssDiffOpen={};window._ssDiffOpen[\''+key+'\']='+(open?'false':'true')+';renderSellerStats()';
       var list=items.slice().sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}).map(function(it){
         var valStr=isCash?'':(' — '+(it.diff>0?'+':'')+Math.round(it.diff)+'₽ '+(it.diff>0?'долг':'переплата'));
-        return '<div style="display:flex;justify-content:space-between;padding:3px 0 3px 10px;font-size:11px;color:#8888aa"><span>'+(it.date||'')+' · '+(it.shopName||'')+'</span><span>'+valStr+'</span></div>';
+        var clickable = isCash && it.id;
+        return '<div '+(clickable?'onclick="_retroArtOpenShift(\''+String(it.id).replace(/\'/g,"\\'")+'\')"':'')+' style="display:flex;justify-content:space-between;padding:3px 0 3px 10px;font-size:11px;color:'+(clickable?'#60c8f0':'#8888aa')+(clickable?';cursor:pointer':'')+'"><span>'+(it.date||'')+' · '+(it.shopName||'')+(clickable?' ↗':'')+'</span><span>'+valStr+'</span></div>';
       }).join('');
       return '<div onpointerdown="'+toggle+'" style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;cursor:pointer">'+
         '<span style="font-size:11px;color:#60c8f0">📋 Смены с расхождением ('+items.length+')</span>'+
