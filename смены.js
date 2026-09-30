@@ -4387,6 +4387,16 @@ function _renderShiftView(){
   var _goodsIssues = _evalIssuesAll.filter(function(i){ return i.code.indexOf('wood')>=0 || i.code.indexOf('_dr_')>=0; });
   if(_goodsIssues.length) anyDiff = true;
   if(morningGoodsMismatch || morningDrGoodsMismatch) anyDiff = true;
+  // Часть условий выше красит баннер «ЕСТЬ НЕСОВПАДЕНИЯ», но не попадает ни в один видимый
+  // showList/индикатор в таблице ниже (в отличие от cashDiffVal/goodsMismatch и т.п., у которых
+  // есть свой ✅/⚠️ или подсветка строки) — баннер загорался красным без единой объяснимой причины
+  // на экране. Добавляем для них те же явные причины, что уже показываются по остальным условиям.
+  var _silentReasons = [];
+  if(!!sh.hasCashDiff && !(cashDiffVal!=null && Math.abs(cashDiffVal)>=1)) _silentReasons.push('💵 Расхождение кассы, зафиксированное при закрытии смены'+(sh.cashDiffReason?' — '+sh.cashDiffReason:''));
+  if(actCash==null) _silentReasons.push('💵 Нал вечер (Дерево) не введён');
+  if(sh.forceClosedBy && actCashDr==null) _silentReasons.push('💵 Нал вечер (ДР Товар) не введён при принудительном закрытии администратором');
+  if(morningWoodMismatch) _silentReasons.push('💵 Нал утро (Дерево) не сходится с вечером пред. смены');
+  if(morningDrMismatch) _silentReasons.push('💵 Нал утро (ДР Товар) не сходится с вечером пред. смены');
   function enteredVal(val, mismatch){
     var v = val!=null ? f(val) : '—';
     return mismatch ? '<span style="color:#f0a060;text-decoration:underline wavy #f06060">'+v+'</span>' : '<b>'+v+'</b>';
@@ -4441,7 +4451,7 @@ function _renderShiftView(){
     tblRow('Факт (взято)', enteredVal(zpStandalone.zpFact, false), '—')+
     tblRow('Проезд факт', enteredVal(zpStandalone.travelFact, false), '—')+
     tblRow('Разница ЗП+проезд', diffChip(zpDiff), '', {border:true});
-  var _allShiftIssues = evaluateShiftIssues(sh).issues;
+  var _allShiftIssues = evaluateShiftIssues(sh).issues.concat(_silentReasons.map(function(label){ return {label:label}; }));
   var _shiftStillOpen = sh.status==='open' || !sh.closedAt;
   var _hasRealMismatch = _allShiftIssues.some(function(i){ return !(i.code && i.code.indexOf('_missing')>=0); });
   var _isWaitingOnly = _shiftStillOpen && !_hasRealMismatch;
