@@ -688,9 +688,9 @@ function renderSellerStats(){
       }
     });
     var shiftZpDiff=(s.zp||0)-shiftZpPaid;
-    if(Math.abs(shiftZpDiff)>=1) sel.zpDiffShifts.push({date:s.date,shopName:s.shopName,diff:shiftZpDiff});
+    if(Math.abs(shiftZpDiff)>=1) sel.zpDiffShifts.push({date:s.date,shopName:s.shopName,diff:shiftZpDiff,id:s.id||s._id});
     var shiftTravelDiff=(s.travel||0)-shiftTravelPaid;
-    if(Math.abs(shiftTravelDiff)>=1) sel.travelDiffShifts.push({date:s.date,shopName:s.shopName,diff:shiftTravelDiff});
+    if(Math.abs(shiftTravelDiff)>=1) sel.travelDiffShifts.push({date:s.date,shopName:s.shopName,diff:shiftTravelDiff,id:s.id||s._id});
     (s.journal||[]).forEach(function(e){
       if(e.type==='sale'&&(e.discount||0)>0){
         sel.discSales++;
@@ -862,7 +862,7 @@ function renderSellerStats(){
       var toggle='event.preventDefault();if(!window._ssDiffOpen)window._ssDiffOpen={};window._ssDiffOpen[\''+key+'\']='+(open?'false':'true')+';renderSellerStats()';
       var list=items.slice().sort(function(a,b){return (a.date||'').localeCompare(b.date||'');}).map(function(it){
         var valStr=isCash?'':(' — '+(it.diff>0?'+':'')+Math.round(it.diff)+'₽ '+(it.diff>0?'долг':'переплата'));
-        var clickable = isCash && it.id;
+        var clickable = !!it.id;
         return '<div '+(clickable?'onclick="_retroArtOpenShift(\''+String(it.id).replace(/\'/g,"\\'")+'\')"':'')+' style="display:flex;justify-content:space-between;padding:3px 0 3px 10px;font-size:11px;color:'+(clickable?'#60c8f0':'#8888aa')+(clickable?';cursor:pointer':'')+'"><span>'+(it.date||'')+' · '+(it.shopName||'')+(clickable?' ↗':'')+'</span><span>'+valStr+'</span></div>';
       }).join('');
       return '<div onpointerdown="'+toggle+'" style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;cursor:pointer">'+
