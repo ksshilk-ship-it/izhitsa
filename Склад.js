@@ -3926,9 +3926,11 @@ function renderDupArticleAudit(){
   var c = document.getElementById('daResults'); if(!c) return;
   if(!_usedArtIndex){ c.innerHTML = '<div class="empty"><div class="ei">🔢</div>Нажмите «Проверить все приёмки»</div>'; return; }
   var numericOnly = (document.getElementById('daNumericOnly')||{}).checked;
+  var catalogArts = _catalogArticleSet();
   var dupKeys = Object.keys(_usedArtIndex).filter(function(num){
     var occs = _usedArtIndex[num];
     if(occs.length < 2) return false;
+    if(catalogArts[String(num).toLowerCase()]) return false; // артикул модели из каталога — повтор нормален
     // «Числовой артикул» — уникальная бирка на конкретной физической вещи (например 51962).
     // Коды вроде «СвечСот02» — общий шифр партии товара без индивидуальной нумерации, там
     // повтор ожидаем и не является ошибкой. По умолчанию показываем только числовые, чтобы
@@ -4829,12 +4831,24 @@ function _artWrittenOffAt(num, shop, sinceDate){
   var wos = (_woArtIndex||{})[num] || [];
   return wos.some(function(w){ return w.shop===shop && String(w.date||'')>=String(sinceDate||''); });
 }
+// Артикул из каталога «С артикулом вручную» (ЛопаткаКатал01 и т.п.) — это артикул МОДЕЛИ
+// (наименование+порода+цена), под ним принимается сколько угодно одинаковых изделий. Правило
+// «один номер = одна физическая вещь» относится только к биркам изделий из мастерской.
+function _catalogArticleSet(){
+  var set = {};
+  ['iz_goods_derevo','iz_goods_dr'].forEach(function(k){
+    (getRefBook(k)||[]).forEach(function(c){ if(c && c.article) set[String(c.article).trim().toLowerCase()] = true; });
+  });
+  return set;
+}
 function _findArtDupInItems(items, excludeInvId, destShop){
   if(!_usedArtIndex) return null;
   var seenInThisInvoice = {};
+  var catalogArts = _catalogArticleSet();
   for(var i=0;i<(items||[]).length;i++){
     var num = String((items[i].num||items[i].article||'')).trim();
     if(!num) continue;
+    if(catalogArts[num.toLowerCase()]) continue;
     if(seenInThisInvoice[num]) return '№'+num+' указан в этой накладной дважды';
     seenInThisInvoice[num] = true;
     var occs = _checkArtDupSync(num, excludeInvId);
