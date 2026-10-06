@@ -3831,7 +3831,7 @@ var _usedArtIndexAt = 0;
 function _buildUsedArticleIndex(forceRefresh){
   var now = Date.now();
   if(_usedArtIndex && !forceRefresh && (now - _usedArtIndexAt) < 10*60*1000){
-    return Promise.resolve(_usedArtIndex);
+    return _buildWriteoffArtIndex().then(function(){ return _usedArtIndex; }, function(){ return _usedArtIndex; });
   }
   // Состав позиций живёт в самих документах накладной (iz_manual_invoices / iz_invoices) —
   // items у "Приёмки" в журнале смены НЕ хранятся (там только итоговая сумма), поэтому
@@ -3863,6 +3863,31 @@ function _buildUsedArticleIndex(forceRefresh){
     scanInvoiceSnap(res[1]);
     _usedArtIndex = idx;
     _usedArtIndexAt = now;
+    return idx;
+  }).then(function(idx){
+    return _buildWriteoffArtIndex().then(function(){ return idx; }, function(){ return idx; });
+  });
+}
+// Списания по номерам — нужны, чтобы при перемещении между магазинами разрешать повторную
+// приёмку номера только если в старом магазине его уже списали. Берём из iz_journal_backup:
+// туда каждая запись журнала уходит сразу, в т.ч. из ещё открытой смены (сам журнал открытой
+// смены живёт только на телефоне продавца). Без кэша — списание могли сделать минуты назад.
+var _woArtIndex = null; // num -> [{shop,date}]
+function _buildWriteoffArtIndex(){
+  return db.collection('iz_journal_backup').where('kind','==','writeoff').get({source:'server'}).then(function(snap){
+    var idx = {};
+    snap.forEach(function(doc){
+      var e = doc.data();
+      if(e.isRevaluation) return; // переоценка: товар остаётся на месте
+      var date = e.date || String(e.ts||'').split('T')[0];
+      (e.items||[]).forEach(function(it){
+        if(it.isRevaluation) return;
+        var key = String(it.num||it.article||'').trim();
+        if(!key) return;
+        (idx[key] = idx[key]||[]).push({shop:e.shopName||'', date:date});
+      });
+    });
+    _woArtIndex = idx;
     return idx;
   });
 }
@@ -4797,10 +4822,13 @@ function applyRetroArticleAudit(articleFilter){
 // открыли форму) — не блокируем, чтобы не мешать работать оффлайн; индекс предзагружается при
 // открытии этих форм заранее, так что в норме к моменту сохранения он уже готов.
 // Перемещение между магазинами (отдельного механизма нет — списание в одном магазине + приёмка в
-// другом) — та же физическая вещь с той же биркой законно принимается второй раз. Считаем это
-// перемещением, если ПОСЛЕДНИЙ раз номер принимали в другом магазине и под тем же наименованием;
-// в том же магазине или под другим названием — это настоящий дубль бирки, блокируем как раньше.
-function _artNameNorm(s){ return String(s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+// другом) — та же физическая вещь с той же биркой законно принимается второй раз. Разрешаем,
+// только если ПОСЛЕДНИЙ раз номер принимали в другом магазине И там его после этого списали —
+// иначе вещь числилась бы на двух балансах сразу.
+function _artWrittenOffAt(num, shop, sinceDate){
+  var wos = (_woArtIndex||{})[num] || [];
+  return wos.some(function(w){ return w.shop===shop && String(w.date||'')>=String(sinceDate||''); });
+}
 function _findArtDupInItems(items, excludeInvId, destShop){
   if(!_usedArtIndex) return null;
   var seenInThisInvoice = {};
@@ -4812,8 +4840,13 @@ function _findArtDupInItems(items, excludeInvId, destShop){
     var occs = _checkArtDupSync(num, excludeInvId);
     if(occs && occs.length){
       var latest = occs.slice().sort(function(a,b){ return String(b.date||'').localeCompare(String(a.date||'')); })[0];
-      var isTransfer = destShop && latest.shop && latest.shop!==destShop && _artNameNorm(latest.name)===_artNameNorm(items[i].name);
-      if(isTransfer) continue;
+      var otherShop = destShop && latest.shop && latest.shop!==destShop;
+      if(otherShop && _artWrittenOffAt(num, latest.shop, latest.date)) continue;
+      if(otherShop){
+        // списание могли сделать только что — подтягиваем свежий список к следующему нажатию
+        try{ _buildWriteoffArtIndex(); }catch(e){}
+        return '№'+num+' «'+latest.name+'» числится на магазине '+latest.shop+' (принят '+latest.date+') и там не списан — сначала спишите его на '+latest.shop+', потом принимайте здесь';
+      }
       return '№'+num+' уже был использован: «'+latest.name+'» ('+latest.shop+', '+latest.date+')';
     }
   }
