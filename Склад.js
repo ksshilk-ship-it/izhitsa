@@ -1988,7 +1988,9 @@ function saveManualInvoice() {
       var _vit = _manInvItems[_vi];
       if(!_vit || !(_vit.name||'').trim()) continue;
       if(!_vit.article && !(_vit.species||'').trim()){
-        showToast('⛔ Укажите породу для «'+_vit.name+'» (поз. '+(_vi+1)+') — без артикула порода обязательна');
+        // Раньше: «без артикула порода обязательна» — продавцы читали это как «впиши артикул» и
+        // выдумывали его (ЛОПАМИК…), лишь бы не указывать породу. Артикул не нужен, если его нет в базе.
+        showToast('⛔ Выберите породу из списка для «'+_vit.name+'» (поз. '+(_vi+1)+'). Артикул не нужен, если его нет в базе — оставьте поле пустым');
         return;
       }
     }
@@ -2406,6 +2408,16 @@ function saveManualInvoiceEdit(id){
     var o = _origItems[k];
     if(!o || String(o.name||'')!==String(it.name||'') || String(o.article||o.num||'')!==String(it.article||it.num||'') || String(o.species||'')!==String(it.species||'')) _changedIdx[k] = true;
   });
+  if((data.goodsType||'derevo')!=='dr'){
+    for(var _ek=0; _ek<(data.items||[]).length; _ek++){
+      var _eit = data.items[_ek];
+      if(!_changedIdx[_ek] || !_eit || !(_eit.name||'').trim()) continue;
+      if(!(_eit.article||_eit.num) && !(_eit.species||'').trim()){
+        showToast('⛔ Выберите породу из списка для «'+_eit.name+'» (поз. '+(_ek+1)+'). Артикул не нужен, если его нет в базе — оставьте поле пустым');
+        return;
+      }
+    }
+  }
   var _rcvIssE = _rcvCheckItemsAgainstCatalog(data.items, data.goodsType||'derevo', _changedIdx);
   if(_rcvIssE){ _rcvReportCatalogIssue(_rcvIssE, data.goodsType||'derevo'); return; }
   if(typeof _findArtDupInItems==='function'){
