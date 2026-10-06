@@ -443,7 +443,7 @@ function sendNameRequest(){
     sellerName: (typeof session!=='undefined' && session && (session.sellerName||session.name)) || ''
   });
   var banner = document.getElementById('nameReqBanner'); if(banner) banner.style.display='none';
-  showToast('📨 Заявка отправлена администратору — продать можно будет после одобрения');
+  showToast('📨 Заявка отправлена администратору — провести можно будет после одобрения');
   _nameReqPending = null;
 }
 function siPickSpecies(val){ var el=document.getElementById('siSpecies'); if(el) el.value=val; var box=document.getElementById('siSpecies_sugg'); if(box) box.style.display='none'; }

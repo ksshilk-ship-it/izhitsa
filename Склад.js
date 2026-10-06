@@ -1588,7 +1588,7 @@ function renderManInvItems() {
             'oninput="_manInvSpeciesActive='+i+';_manInvSpecies('+i+',this.value);psjSuggest(\'manInvSpecies_'+i+'\',getSpecies(),\'_manInvPickSpeciesIdx\')" '+
             'onfocus="_manInvSpeciesActive='+i+';psjSuggest(\'manInvSpecies_'+i+'\',getSpecies(),\'_manInvPickSpeciesIdx\')" '+
             'onblur="psjHideSugg(\'manInvSpecies_'+i+'\');_manInvAutoFillFromCatalog('+i+')" style="margin:0;padding:8px;flex:1">'+
-          '<button type="button" onclick="_manInvAddSpecies('+i+')" style="background:#22222e;border:1px solid #f0c060;border-radius:10px;padding:0 14px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>'+
+          (_rcvIsAdmin()?'<button type="button" onclick="_manInvAddSpecies('+i+')" style="background:#22222e;border:1px solid #f0c060;border-radius:10px;padding:0 14px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>':'')+
         '</div>'+
         '<div id="manInvSpecies_'+i+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'))+
       '</div>'+
@@ -1798,6 +1798,7 @@ function _manInvAutoFillFromCatalog(i){
   }, 0);
 }
 function _manInvAddSpecies(i){
+  if(!_rcvIsAdmin()){ showToast('Добавлять породы в справочник может только администратор'); return; }
   var el = document.getElementById('manInvSpecies_'+i);
   var val = (el && el.value || '').trim();
   if(!val){ showToast('Введите породу'); return; }
@@ -1939,8 +1940,49 @@ function setManInvType(type){
   if(btnD){ btnD.style.borderColor = type==='derevo'?'#c8f060':'#2e2e3e'; btnD.style.background = type==='derevo'?'#1e2a14':'#22222e'; btnD.style.color = type==='derevo'?'#c8f060':'#8888aa'; }
   if(btnDr){ btnDr.style.borderColor = type==='dr'?'#a060f0':'#2e2e3e'; btnDr.style.background = type==='dr'?'#1e1a2e':'#22222e'; btnDr.style.color = type==='dr'?'#a060f0':'#8888aa'; }
 }
+// Приход вручную раньше принимал любой текст: продавец завёл лопатки с выдуманными артикулами
+// (ЛОПАМИК1…) и несуществующей породой «Микс», которую сам же добавил в справочник кнопкой «＋».
+// Теперь у продавца: артикул — только номер изделия (цифры) или артикул из каталога «С артикулом
+// вручную»; наименование и порода — только из справочников, иначе заявка администратору
+// (тот же баннер, что в продаже). Администратора не проверяем — заявки летят ему же.
+function _rcvIsAdmin(){ return !!(session && session.role==='shopadmin'); }
+function _rcvCheckItemsAgainstCatalog(items, goodsType, onlyIdx){
+  if(_rcvIsAdmin()) return null;
+  var catalog = getRefBook(goodsType==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo') || [];
+  var names = {};
+  catalog.forEach(function(g){ var n = String((g&&g.name)||g||'').toLowerCase().trim(); if(n) names[n] = true; });
+  var catalogArts = _catalogArticleSet();
+  var species = {};
+  getSpecies().forEach(function(sp){ species[String(sp||'').toLowerCase().trim()] = true; });
+  for(var i=0;i<(items||[]).length;i++){
+    if(onlyIdx && !onlyIdx[i]) continue;
+    var it = items[i]; if(!it) continue;
+    var nm = String(it.name||'').trim(); if(!nm) continue;
+    var art = String(it.article||it.num||'').trim();
+    if(art && !/^\d+$/.test(art) && !catalogArts[art.toLowerCase()]) return {type:'article', item:it, idx:i, bad:art};
+    if(!names[nm.toLowerCase()]) return {type:'name', item:it, idx:i};
+    if(goodsType!=='dr'){
+      var parts = String(it.species||'').split(/\s*\+\s*/);
+      for(var p=0;p<parts.length;p++){
+        var part = parts[p].trim();
+        if(part && !species[part.toLowerCase()]) return {type:'species', item:it, idx:i, bad:part};
+      }
+    }
+  }
+  return null;
+}
+function _rcvReportCatalogIssue(iss, goodsType){
+  if(iss.type==='article'){
+    showToast('⛔ Поз. '+(iss.idx+1)+': артикула «'+iss.bad+'» нет в каталоге. Укажите номер изделия (только цифры), артикул из каталога или оставьте поле пустым');
+    return;
+  }
+  if(iss.type==='name'){ showNameRequestBanner(iss.item.name, iss.item.species, iss.item.price, goodsType, 'name'); return; }
+  showNameRequestBanner(iss.item.name, iss.bad, iss.item.price, goodsType, 'species');
+}
 function saveManualInvoice() {
   if(!_manInvItems.length) { showToast('Добавьте позиции'); return; }
+  var _rcvIss = _rcvCheckItemsAgainstCatalog(_manInvItems, _manInvGoodsType);
+  if(_rcvIss){ _rcvReportCatalogIssue(_rcvIss, _manInvGoodsType); return; }
   if(_manInvGoodsType!=='dr'){
     for(var _vi=0; _vi<_manInvItems.length; _vi++){
       var _vit = _manInvItems[_vi];
@@ -2151,7 +2193,7 @@ function renderManInvEditItems(id){
             'oninput="_manInvEditActive={id:\''+id+'\',i:'+i+'};_manInvEditSpecies(\''+id+'\','+i+',this.value);psjSuggest(\''+spId+'\',getSpecies(),\'_manInvEditPickSpeciesIdx\')" '+
             'onfocus="_manInvEditActive={id:\''+id+'\',i:'+i+'};psjSuggest(\''+spId+'\',getSpecies(),\'_manInvEditPickSpeciesIdx\')" '+
             'onblur="psjHideSugg(\''+spId+'\')">'+
-          '<button type="button" onclick="_manInvEditAddSpecies(\''+id+'\','+i+')" style="background:#22222e;border:1px solid #f0c060;border-radius:8px;padding:0 12px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>'+
+          (_rcvIsAdmin()?'<button type="button" onclick="_manInvEditAddSpecies(\''+id+'\','+i+')" style="background:#22222e;border:1px solid #f0c060;border-radius:8px;padding:0 12px;color:#f0c060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>':'')+
         '</div>'+
         '<div id="'+spId+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'+
       '</div>'+
@@ -2263,6 +2305,7 @@ function _manInvEditPickSpeciesIdx(val){
   if(box) box.style.display='none';
 }
 function _manInvEditAddSpecies(id,i){
+  if(!_rcvIsAdmin()){ showToast('Добавлять породы в справочник может только администратор'); return; }
   var el = document.getElementById('maninv_species_'+id+'_'+i);
   var val = (el && el.value || '').trim();
   if(!val){ showToast('Введите породу'); return; }
@@ -2354,6 +2397,17 @@ function _cascadeGoodsForward(target, shifts){
 }
 function saveManualInvoiceEdit(id){
   var data = window._manInvEdit[id]; if(!data) return;
+  // Проверяем только новые/изменённые позиции — иначе старая накладная с историческим названием
+  // не дала бы продавцу поправить даже количество.
+  var _origInv = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]').find(function(x){ return String(x._id!=null?x._id:x.id)===id; });
+  var _origItems = (_origInv && _origInv.items) || [];
+  var _changedIdx = {};
+  (data.items||[]).forEach(function(it, k){
+    var o = _origItems[k];
+    if(!o || String(o.name||'')!==String(it.name||'') || String(o.article||o.num||'')!==String(it.article||it.num||'') || String(o.species||'')!==String(it.species||'')) _changedIdx[k] = true;
+  });
+  var _rcvIssE = _rcvCheckItemsAgainstCatalog(data.items, data.goodsType||'derevo', _changedIdx);
+  if(_rcvIssE){ _rcvReportCatalogIssue(_rcvIssE, data.goodsType||'derevo'); return; }
   if(typeof _findArtDupInItems==='function'){
     var _artDupMsg1 = _findArtDupInItems(data.items, id, data.destName||data.shopName);
     if(_artDupMsg1){ showToast('⛔ '+_artDupMsg1+' — исправьте номер'); return; }
