@@ -5486,9 +5486,15 @@ function trParse(){
   _trSaveDraft(); _trRender();
   showToast('✅ Добавлено '+added+(merged?', объединено с уже внесёнными: '+merged:'')+' — вставьте следующую страницу или отправляйте');
 }
+// Сумма строки: «10 × 100 ₽ = 1 000 ₽» (при 1 шт. — просто сумма).
+function _rowSumTxt(r){
+  var q = r.qty||0, p = r.price||0;
+  return (q>1 ? q+' × '+fmt(p)+' = ' : '')+fmt(q*p);
+}
 function trEdit(i, f, v){
   var r=_trRows[i]; if(!r) return;
   r[f] = (f==='price'||f==='qty') ? (_invImpNum(v)||0) : v;
+  var el = document.getElementById('trRowSum_'+i); if(el) el.textContent = _rowSumTxt(r);
   _trSaveDraft(); _trRenderTotals();
 }
 function trDel(i){ _trRows.splice(i,1); _trSaveDraft(); _trRender(); }
@@ -5535,7 +5541,10 @@ function _trRender(){
         '<button type="button" onclick="trDel('+i+')" style="background:none;border:none;color:#f06060;font-size:13px;cursor:pointer;padding:2px">✕</button>'+
       '</div>'+
       '<div id="trSugg_'+i+'" style="display:none;background:#1a1a22;border:1px solid #60c8f0;border-radius:8px;max-height:220px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:4px"></div>'+
-      (iss.length?'<div style="font-size:10px;color:#f0c060;margin-top:2px">⚠️ '+iss.join(' · ')+'</div>':'')+
+      '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:2px">'+
+        '<div style="font-size:10px;color:#f0c060">'+(iss.length?'⚠️ '+iss.join(' · '):'')+'</div>'+
+        '<div id="trRowSum_'+i+'" style="font-size:11px;font-weight:700;color:#c8f060;flex-shrink:0">'+_rowSumTxt(r)+'</div>'+
+      '</div>'+
     '</div>';
   }).join('');
   host.innerHTML = '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:10px;padding:8px 10px;margin-top:10px">'+
@@ -5770,7 +5779,7 @@ function _woEdRender(){
       '<div class="fg" style="flex:1"><label class="fl">№ накладной</label><input class="fi" id="woEdNum" value="'+esc(st.num)+'" oninput="_woEd.num=this.value"></div>'+
       '<div class="fg" style="flex:1"><label class="fl">Причина</label><input class="fi" id="woEdReason" value="'+esc(st.reason)+'" oninput="_woEd.reason=this.value"></div>'+
     '</div>'+
-    '<div style="font-size:11.5px;font-weight:700;margin:4px 0">'+st.rows.length+' поз. · '+q+' шт. · '+fmt(sum)+'</div>'+
+    '<div id="woEdTotals" style="font-size:11.5px;font-weight:700;margin:4px 0">'+st.rows.length+' поз. · '+q+' шт. · '+fmt(sum)+'</div>'+
     '<div style="font-size:9.5px;color:#555568;margin-bottom:2px">№ · Название · Порода · Цена · Кол-во</div>'+
     st.rows.map(function(r,i){
       return '<div style="padding:5px 0;border-bottom:1px solid #22222e">'+
@@ -5780,6 +5789,7 @@ function _woEdRender(){
           (lock?'':'<button type="button" onclick="_woEd.rows.splice('+i+',1);_woEdRender()" style="background:none;border:none;color:#f06060;font-size:13px;cursor:pointer;padding:2px">✕</button>')+
         '</div>'+
         '<div id="woEdSugg_'+i+'" style="display:none;background:#1a1a22;border:1px solid #60c8f0;border-radius:8px;max-height:220px;overflow-y:auto;margin-top:4px"></div>'+
+        '<div id="woEdRowSum_'+i+'" style="text-align:right;font-size:11px;font-weight:700;color:#c8f060;margin-top:2px">'+_rowSumTxt(r)+'</div>'+
       '</div>';
     }).join('')+
     (lock?'':'<button type="button" onclick="_woEd.rows.push({num:\'\',name:\'\',species:\'\',price:0,qty:1});_woEdRender()" style="width:100%;margin-top:8px;padding:8px;background:none;border:1px dashed #60c8f0;border-radius:8px;color:#60c8f0;font-size:11.5px;font-weight:700;cursor:pointer">➕ Строка</button>')+
@@ -5789,6 +5799,9 @@ function _woEdRender(){
 function _woEdEdit(i, f, v){
   var r = _woEd && _woEd.rows[i]; if(!r) return;
   r[f] = (f==='price'||f==='qty') ? (_invImpNum(v)||0) : v;
+  var el = document.getElementById('woEdRowSum_'+i); if(el) el.textContent = _rowSumTxt(r);
+  var q=0, sum=0; _woEd.rows.forEach(function(x){ q+=x.qty||0; sum+=(x.qty||0)*(x.price||0); });
+  var t = document.getElementById('woEdTotals'); if(t) t.textContent = _woEd.rows.length+' поз. · '+q+' шт. · '+fmt(sum);
 }
 var _woEdMatches = {}, _woEdHideT = {};
 function _woEdSugg(i, field, val){
