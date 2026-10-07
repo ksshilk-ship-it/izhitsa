@@ -5454,11 +5454,17 @@ function _trRenderTotals(){
 }
 function _trRender(){
   var host=document.getElementById('trPreview'); if(!host) return;
-  if(!_trRows.length){ host.innerHTML=''; return; }
+  if(!_trRows.length){ host.innerHTML='<button type="button" onclick="trAddRow()" style="width:100%;margin-top:8px;padding:8px;background:none;border:1px dashed #60c8f0;border-radius:8px;color:#60c8f0;font-size:11.5px;font-weight:700;cursor:pointer">➕ Добавить строку вручную</button>'; return; }
   var gt = gv('trType')||'derevo', from = gv('trFrom'), to = gv('trTo');
   var stockShop = _trStockOf(from);
   var esc = function(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); };
-  var inp = function(i,f,v,w,mode){ return '<input value="'+esc(v)+'" onchange="trEdit('+i+',\''+f+'\',this.value)"'+(mode?' inputmode="'+mode+'"':'')+' style="width:'+w+';min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px">'; };
+  // № / Название / Порода — с подсказками из склада отправителя и каталога (как в продаже)
+  var inp = function(i,f,v,w,mode){
+    var sugg = (f==='num'||f==='name'||f==='species');
+    return '<input value="'+esc(v)+'" onchange="trEdit('+i+',\''+f+'\',this.value)"'+
+      (sugg?' oninput="_trSugg('+i+',\''+f+'\',this.value)" onfocus="_trSugg('+i+',\''+f+'\',this.value)" onblur="_trHideSugg('+i+')" autocomplete="off"':'')+
+      (mode?' inputmode="'+mode+'"':'')+' style="width:'+w+';min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px">';
+  };
   var bad = 0;
   var rows = _trRows.map(function(r,i){
     var iss = _trRowIssues(r, stockShop, gt); if(iss.length) bad++;
@@ -5468,6 +5474,7 @@ function _trRender(){
         inp(i,'price',r.price,'52px','numeric')+inp(i,'qty',r.qty,'36px','numeric')+
         '<button type="button" onclick="trDel('+i+')" style="background:none;border:none;color:#f06060;font-size:13px;cursor:pointer;padding:2px">✕</button>'+
       '</div>'+
+      '<div id="trSugg_'+i+'" style="display:none;background:#1a1a22;border:1px solid #60c8f0;border-radius:8px;max-height:220px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:4px"></div>'+
       (iss.length?'<div style="font-size:10px;color:#f0c060;margin-top:2px">⚠️ '+iss.join(' · ')+'</div>':'')+
     '</div>';
   }).join('');
@@ -5477,8 +5484,83 @@ function _trRender(){
     '<div style="font-size:9.5px;color:#555568;margin-bottom:2px">№ · Название · Порода · Цена · Кол-во</div>'+
     (from===to?'<div style="font-size:11px;color:#f06060;font-weight:700;margin:4px 0">⛔ Откуда и Куда — один и тот же магазин</div>':'')+
     (bad?'<div style="font-size:11px;color:#f0c060;margin:4px 0">⚠️ Строк с замечаниями: '+bad+'</div>':'')+
-    rows+'</div>';
+    rows+
+    '<button type="button" onclick="trAddRow()" style="width:100%;margin-top:8px;padding:8px;background:none;border:1px dashed #60c8f0;border-radius:8px;color:#60c8f0;font-size:11.5px;font-weight:700;cursor:pointer">➕ Строка</button>'+
+    '</div>';
   _trRenderTotals();
+}
+function trAddRow(){
+  _trRows.push({num:'', name:'', species:'', price:0, qty:1});
+  _trSaveDraft(); _trRender();
+  var i = _trRows.length-1;
+  setTimeout(function(){ var el=document.querySelector('#trPreview input[onchange^="trEdit('+i+',\'name\'"]'); if(el) el.focus(); }, 0);
+}
+// Подсказки для строки: склад отправителя (что реально можно отгрузить — с остатком) + каталог
+// «База товаров» по виду товара; для породы — справочник пород. Выбор позиции заполняет строку.
+var _trSuggMatches = {};
+var _trSuggHideT = {};
+function _trSugg(i, field, val){
+  if(_trSuggHideT[i]){ clearTimeout(_trSuggHideT[i]); delete _trSuggHideT[i]; }
+  var box = document.getElementById('trSugg_'+i); if(!box) return;
+  var words = String(val||'').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  var hit = function(text){ var low = String(text||'').toLowerCase(); return words.every(function(w){ return low.indexOf(w)>=0; }); };
+  var esc = function(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
+  var matches = [];
+  if(field==='species'){
+    if(!words.length){ box.style.display='none'; return; }
+    matches = getSpecies().filter(hit).slice(0,12).map(function(sp){ return {species:sp, label:sp}; });
+  } else {
+    if(!words.length){ box.style.display='none'; return; }
+    var gt = gv('trType')||'derevo';
+    var stockShop = _trStockOf(gv('trFrom'));
+    var seen = {};
+    Object.keys(stockShop).forEach(function(k){
+      var it = stockShop[k]||{};
+      if((it.goodsType||'derevo')!==gt || (it.qty||0)<=0) return;
+      var num = /^(DR_|WD_)/.test(k) ? '' : (it.num&&!/^(DR_|WD_)/.test(it.num) ? it.num : k);
+      var text = field==='num' ? num : (num+' '+it.name+' '+(it.species||''));
+      if(!hit(text)) return;
+      var sig = num+'|'+(it.name||'')+'|'+(it.species||'')+'|'+(it.price||0); if(seen[sig]) return; seen[sig]=true;
+      matches.push({src:'stock', num:num, name:it.name||'', species:it.species||'', price:it.price||0, qty:it.qty||0});
+    });
+    (getRefBook(gt==='dr'?'iz_goods_dr':'iz_goods_derevo')||[]).forEach(function(c){
+      if(!c) return;
+      var name = c.name||c; if(!name) return;
+      var num = c.article||'';
+      if(field==='num' && !num) return;
+      var text = field==='num' ? num : (num+' '+name+' '+(c.species||''));
+      if(!hit(text)) return;
+      var sig = num+'|'+name+'|'+(c.species||'')+'|'+(c.price||0); if(seen[sig]) return; seen[sig]=true;
+      matches.push({src:'cat', num:num, name:name, species:c.species||'', price:c.price||0});
+    });
+    matches = matches.slice(0,15);
+  }
+  _trSuggMatches[i] = {field:field, list:matches};
+  if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.innerHTML = matches.map(function(m, k){
+    var label = field==='species' ? esc(m.label) :
+      (m.src==='stock'?'📦 ':'📚 ')+(m.num?'<b>№'+esc(m.num)+'</b> ':'')+esc(m.name)+
+      (m.species?' <span style="color:#f0c060">· '+esc(m.species)+'</span>':'')+
+      (m.price?' · '+fmt(m.price):'')+
+      (m.src==='stock'?' <span style="color:#60f090">· на складе '+m.qty+'</span>':'');
+    return '<div onclick="_trPick('+i+','+k+')" style="padding:8px 10px;font-size:11.5px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+label+'</div>';
+  }).join('');
+  box.style.display='block';
+}
+function _trHideSugg(i){
+  _trSuggHideT[i] = setTimeout(function(){ var b=document.getElementById('trSugg_'+i); if(b) b.style.display='none'; delete _trSuggHideT[i]; }, 200);
+}
+function _trPick(i, k){
+  var r = _trRows[i], sm = _trSuggMatches[i]; if(!r || !sm || !sm.list[k]) return;
+  var m = sm.list[k];
+  if(sm.field==='species'){ r.species = m.species; }
+  else {
+    r.name = m.name;
+    if(m.num) r.num = m.num;
+    if(m.species) r.species = m.species;
+    if(m.price) r.price = m.price;
+  }
+  _trSaveDraft(); _trRender();
 }
 // Смена отправителя за дату: если их несколько — открытая, иначе последняя по времени открытия.
 function _trFindShift(shop, dateIso){
