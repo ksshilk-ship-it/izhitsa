@@ -11,6 +11,7 @@ function deleteJournalEntryShop(id){
   saveJ(); renderAll();
   syncLiveShift();
   showToast('🗑 Перемещено в корзину');
+  if(entry.transferInvId) _svCancelTransfer(entry, session&&session.shopName);
 }
 function editJournalSale(id){
   var entry = journal.find(function(e){ return e.id===id; });
@@ -4771,21 +4772,64 @@ function _renderShiftView(){
       '</div>'+
     '</div>';
   }
+  // Списание из нескольких позиций (накладная: перемещение, списание списком) — одной строкой,
+  // как его и вносили; позиции раскрываются по «▾». Раньше каждая позиция шла отдельной строкой со
+  // своим «✕», хотя «✕» удаляет запись журнала целиком — то есть всю накладную, а не одну позицию.
+  window._svWoOpen = window._svWoOpen || {};
+  function woEntryRows(w, i, emoji, subColor, editColor){
+    var wItems = w.items||[];
+    var reval = (w.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'');
+    var itemsHtml = function(){
+      var out = '';
+      wItems.forEach(function(it, wi){
+        var lbl = ((it.isRevaluation&&!w.isRevaluation)?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'')+(it.article||it.num?'№'+(it.article||it.num)+' ':'')+(it.name||'Списание')+(it.species?' · '+it.species:'')+(it.qty&&it.qty>1?' × '+it.qty:'');
+        var sub = emoji+(it.price?' · '+f(it.price)+'/шт':'')+((it.reason||w.reason)&&wItems.length===1?' · '+(it.reason||w.reason):'');
+        var jwoKey = i+'_'+wi;
+        var amt = (it.amt!=null?it.amt:(it.price||0)*(it.qty||1));
+        if(wItems.length===1){
+          out += woItem(reval+lbl, sub, subColor, amt, 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwoItem\',\''+jwoKey+'\')');
+        } else {
+          out += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0 6px 12px;border-bottom:1px solid #22222e">'+
+            '<div style="flex:1;min-width:0"><div style="font-size:11.5px;font-weight:600">'+lbl+'</div><div style="font-size:10px;color:'+subColor+'">'+sub+'</div></div>'+
+            '<span style="font-size:11.5px;font-weight:700;color:#f06060;flex-shrink:0">'+f(amt)+'</span>'+
+            '<button onclick="svToggleEdit(\'jwoItem\',\''+jwoKey+'\')" style="background:none;border:1px solid #c8f060;border-radius:6px;padding:3px 7px;color:#c8f060;font-size:11px;cursor:pointer;flex-shrink:0">✏️</button>'+
+          '</div>';
+        }
+        if(_svEditTarget && _svEditTarget.kind==='jwoItem' && _svEditTarget.idx===jwoKey){
+          out += editItemForm('eJwo'+jwoKey, editColor, {kind:'jwoItem', revalChecked:!!(it.isRevaluation||w.isRevaluation), idx:jwoKey, extra:{id:'wreason',valueKey:'reason',label:'Причина списания',placeholder:'например: брак, бой, недостача'}, saveFn:'svSaveJwoItemEdit('+i+','+wi+',\'eJwo'+jwoKey+'\')', prefill:{art:it.num||it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, amt:amt, reason:it.reason||w.reason||''}});
+        }
+      });
+      return out;
+    };
+    if(wItems.length<=1) return itemsHtml();
+    var key = w.id || ('i'+i);
+    var open = !!window._svWoOpen[key] || !!(_svEditTarget && _svEditTarget.kind==='jwoItem' && String(_svEditTarget.idx).indexOf(i+'_')===0);
+    var totalQty = wItems.reduce(function(s,it){ return s+(it.qty||1); },0);
+    var total = w.amount!=null ? w.amount : wItems.reduce(function(s,it){ return s+(it.amt!=null?it.amt:(it.price||0)*(it.qty||1)); },0);
+    var title = (w.icon==='🚚'?'🚚 ':'')+(w.label||'Списание').replace(/^🔄 ПЕРЕОЦЕНКА · /,'');
+    var sub = (w.transferInvNum?'накл. '+w.transferInvNum+' · ':'')+wItems.length+' поз. ('+totalQty+' шт.)'+(w.reason&&!w.transferInvNum?' · '+w.reason:'');
+    var delMsg = 'Удалить ВСЮ накладную «'+(w.label||'Списание')+'»'+(w.transferInvNum?' '+w.transferInvNum:'')+' — '+wItems.length+' поз. на '+f(total)+'?';
+    return '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div onclick="window._svWoOpen[\''+key+'\']='+(open?'false':'true')+';_renderShiftView()" style="flex:1;min-width:0;cursor:pointer">'+
+          '<div style="font-size:12px;font-weight:700">'+reval+title+' <span style="color:#8888aa;font-size:11px">'+(open?'▾':'▸')+'</span></div>'+
+          '<div style="font-size:10px;color:'+subColor+'">'+sub+'</div>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px">'+
+          '<span style="font-size:12px;font-weight:700;color:#f06060">'+f(total)+'</span>'+
+          '<button onclick="if(confirm(\''+delMsg.replace(/'/g,'’').replace(/"/g,'”')+'\'))svDeleteJEntry(\'writeoff\','+i+',true)" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:3px 7px;color:#f06060;font-size:11px;cursor:pointer">✕</button>'+
+        '</div>'+
+      '</div>'+
+      (open ? '<div style="margin-top:4px">'+itemsHtml()+'</div>' : '')+
+    '</div>';
+  }
   woBody += '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
   var woodWoCount = 0;
   writeoffs.forEach(function(w, i){
     if(w.goodsType==='dr') return;
     var wItems = w.items||[];
     if(wItems.length > 0){
-      wItems.forEach(function(it, wi){
-        var lbl = ((it.isRevaluation||w.isRevaluation)?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'')+(it.article||it.num?'№'+(it.article||it.num)+' ':'')+(it.name||'Списание')+(it.species?' · '+it.species:'')+(it.qty&&it.qty>1?' × '+it.qty:'');
-        var sub = '🌳'+(it.price?' · '+f(it.price)+'/шт':'')+((it.reason||w.reason)?' · '+(it.reason||w.reason):'');
-        var jwoKey = i+'_'+wi;
-        woBody += woItem(lbl, sub, '#555568', (it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwoItem\',\''+jwoKey+'\')');
-        if(_svEditTarget && _svEditTarget.kind==='jwoItem' && _svEditTarget.idx===jwoKey){
-          woBody += editItemForm('eJwo'+jwoKey, '#f06060', {kind:'jwoItem', revalChecked:!!(it.isRevaluation||w.isRevaluation), idx:jwoKey, extra:{id:'wreason',valueKey:'reason',label:'Причина списания',placeholder:'например: брак, бой, недостача'}, saveFn:'svSaveJwoItemEdit('+i+','+wi+',\'eJwo'+jwoKey+'\')', prefill:{art:it.num||it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, amt:(it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), reason:it.reason||w.reason||''}});
-        }
-      });
+      woBody += woEntryRows(w, i, '🌳', '#555568', '#f06060');
     } else {
       woBody += woItem((w.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'')+(w.sub||w.label||'Списание'), w.reason||'', '#555568', w.amount||0, 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwo\','+i+')');
       if(_svEditTarget && _svEditTarget.kind==='jwo' && _svEditTarget.idx===i){
@@ -4810,15 +4854,7 @@ function _renderShiftView(){
     if(w.goodsType!=='dr') return;
     var wItems = w.items||[];
     if(wItems.length > 0){
-      wItems.forEach(function(it, wi){
-        var lbl = ((it.isRevaluation||w.isRevaluation)?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'')+(it.article||it.num?'№'+(it.article||it.num)+' ':'')+(it.name||'Списание')+(it.species?' · '+it.species:'')+(it.qty&&it.qty>1?' × '+it.qty:'');
-        var sub = '🛍'+(it.price?' · '+f(it.price)+'/шт':'')+((it.reason||w.reason)?' · '+(it.reason||w.reason):'');
-        var jwoKey = i+'_'+wi;
-        woBody += woItem(lbl, sub, '#a060f0', (it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwoItem\',\''+jwoKey+'\')');
-        if(_svEditTarget && _svEditTarget.kind==='jwoItem' && _svEditTarget.idx===jwoKey){
-          woBody += editItemForm('eJwo'+jwoKey, '#a060f0', {kind:'jwoItem', revalChecked:!!(it.isRevaluation||w.isRevaluation), idx:jwoKey, extra:{id:'wreason',valueKey:'reason',label:'Причина списания',placeholder:'например: брак, бой, недостача'}, saveFn:'svSaveJwoItemEdit('+i+','+wi+',\'eJwo'+jwoKey+'\')', prefill:{art:it.num||it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, amt:(it.amt!=null?it.amt:(it.price||0)*(it.qty||1)), reason:it.reason||w.reason||''}});
-        }
-      });
+      woBody += woEntryRows(w, i, '🛍', '#a060f0', '#a060f0');
     } else {
       woBody += woItem((w.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'')+(w.sub||w.label||'Списание'), w.reason||'', '#a060f0', w.amount||0, 'svDeleteJEntry(\'writeoff\','+i+')', 'svToggleEdit(\'jwo\','+i+')');
       if(_svEditTarget && _svEditTarget.kind==='jwo' && _svEditTarget.idx===i){
@@ -6267,15 +6303,35 @@ function svSaveInvoiceFromArchive(id, isManual){
   svPersist(); _renderShiftView();
   showToast('✅ Накладная исправлена');
 }
-function svDeleteJEntry(type, idx){
+function svDeleteJEntry(type, idx, skipConfirm){
   try{ if(_currentShiftView && _currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
-  if(!confirm('Удалить эту запись? Она будет перемещена в корзину на 7 дней.')) return;
+  if(!skipConfirm && !confirm('Удалить эту запись? Она будет перемещена в корзину на 7 дней.')) return;
   var jnl=_currentShiftView.journal||[];
   var ofType=jnl.filter(function(e){return e.type===type;});
   var target=ofType[idx]; if(!target) return;
   _currentShiftView.journal=jnl.filter(function(e){return e!==target;});
   addToTrash(target, {shopName:_currentShiftView.shopName, shiftId:_currentShiftView.id, deletedByOverride:(session&&session.sellerName)||'Администратор'});
   svPersist(); _renderShiftView(); showToast('🗑 Перемещено в корзину');
+  if(target.transferInvId) _svCancelTransfer(target, _currentShiftView.shopName);
+}
+// Удалили перемещение — его накладная у получателя не должна остаться «ждёт приёмки» (иначе
+// товар примут, хотя у отправителя списание отменено), а товар возвращается на склад отправителя.
+// Если получатель уже принял — ничего не трогаем, только предупреждаем.
+function _svCancelTransfer(entry, fromShop){
+  var ref = db.collection('iz_invoices').doc(entry.transferInvId);
+  ref.get({source:'server'}).then(function(snap){
+    var inv = snap.exists ? snap.data() : null;
+    if(inv && inv.status==='accepted'){
+      showToast('⚠️ Накладная '+(entry.transferInvNum||'')+' уже принята в «'+(inv.destName||'')+'» — там товар остаётся на балансе, разберитесь вручную');
+      return;
+    }
+    var who = (session&&(session.name||session.sellerName))||'admin';
+    return ref.set({status:'cancelled', cancelledAt:new Date().toISOString(), cancelledBy:who}, {merge:true}).then(function(){
+      try{ stockApplyReceive(fromShop, entry.items||[], new Date().toISOString().split('T')[0], entry.goodsType, false); }catch(e){}
+      try{ logAction('TRANSFER_CANCELLED', {invId:entry.transferInvId, invNum:entry.transferInvNum, from:fromShop, to:entry.transferTo}); }catch(e){}
+      showToast('↩️ Накладная '+(entry.transferInvNum||'')+' отменена, товар возвращён на склад «'+fromShop+'»');
+    });
+  }).catch(function(err){ showToast('⚠️ Не удалось отменить накладную '+(entry.transferInvNum||'')+': '+(err&&err.message||err)); });
 }
 function svDeleteWoodRcv(idx){
   try{ if(_currentShiftView && _currentShiftView.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(_currentShiftView); }catch(e){}
