@@ -917,6 +917,10 @@ function _invApplyRowReal(row){
     }
     if(entry.type==='receive'){
       try{ stockApplyReceive(_invSession.shopName, [{num:item.num, name:item.name, price:item.price, qty:item.qty, species:item.species, goodsType:_invSession.goodsType}], ts.split('T')[0], _invSession.goodsType, false); }catch(e){}
+    } else {
+      // Раньше недостача создавала списание в смене, но склад не уменьшала — остаток так и висел.
+      // row.key — ключ позиции в снимке остатка, т.е. тот же ключ, что и на складе.
+      try{ stockUpdateQty(_invSession.shopName, row.isNew ? (item.num||_noArticleStockKey(item.name,item.price,item.species,_invSession.goodsType)) : row.key, item.name, item.price, item.species, _invSession.goodsType, '', -item.qty, ts.split('T')[0]); }catch(e){}
     }
     var mergedJournal = (shift.journal||[]).concat([entry]);
     db.collection('iz_shifts').doc(shift.id).set({journal:mergedJournal, _pendingSync:false}, {merge:true}).then(function(){
@@ -1158,6 +1162,7 @@ function _invAdmRender(){
     html += '<div style="font-size:10.5px;color:#555568;margin-bottom:6px">Сравнение по отдельным изделиям на САМУ ДАТУ инвентаризации не строится (остатки по количеству на прошлую дату не хранятся).</div>';
     html += '<button type="button" onclick="invAdmShowItemDiscrepancies()" style="padding:8px 12px;margin-bottom:12px;background:#1a1f2e;border:1px solid #f0c060;border-radius:8px;color:#f0c060;font-size:11px;font-weight:700;cursor:pointer">📊 Расхождения по товарам — с текущим остатком</button>';
   }
+  html += '<button type="button" onclick="invAdmStockPreview()" style="width:100%;padding:10px;margin-bottom:12px;background:#1a2e1e;border:1px solid #60f090;border-radius:10px;color:#60f090;font-size:12px;font-weight:700;cursor:pointer">📦 Поставить остатки на склад по инвентаризации'+(cur.sessions.some(function(x){ return x.stockAppliedAt; })?' (уже ставили)':'')+'</button>';
   html += '<div style="display:flex;gap:6px;margin-bottom:8px"><input class="fi" id="invAdmFilter" placeholder="🔍 Поиск по списку внесённого..." oninput="invAdmSetFilter(this.value)" style="margin:0;padding:8px;flex:1" value="'+_iaEsc(cur.filter)+'">'+
     '<button type="button" onclick="invAdmToggleSummary()" title="Сводка по наименованиям — где могут быть задвоения" style="padding:8px 10px;background:'+(_invAdmSummaryMode?'#60c8f0':'none')+';border:1px solid #60c8f0;border-radius:8px;color:'+(_invAdmSummaryMode?'#0f0f13':'#60c8f0')+';font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">📊 Сводка</button>'+
     '<button type="button" onclick="invAdmAddItem()" style="padding:8px 12px;background:#f0c060;border:none;border-radius:8px;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">➕ Позиция</button></div>';
@@ -1492,6 +1497,180 @@ function invAdmShowItemDiscrepancies(){
     '<div style="font-size:12.5px;font-weight:700;margin-bottom:4px">📊 Расхождения по товарам — '+_iaEsc(cur.shopName)+'</div>'+
     '<div style="font-size:10.5px;color:#8888aa;margin-bottom:10px;line-height:1.4">Сравнение с ТЕКУЩИМ остатком магазина (не с остатком на '+_iaDateRu(cur.date)+' — его в системе не хранится). За время между датой инвентаризации и сегодня остаток мог законно измениться из-за продаж и приходов — расхождение само по себе не значит ошибку, но показывает, с чего начать проверку. Всего расхождений: '+mismatches.length+'.</div>'+
     rowsHtml + noSysHtml;
+}
+// ════ Поставить остатки склада по инвентаризации ════
+// Склад хранит только ТЕКУЩЕЕ количество, без истории по датам, поэтому считаем от утра дня
+// инвентаризации вперёд до сегодня:
+//   утро  = найдено + продано в тот день − «продано во время пересчёта» (оно уже внутри найденного)
+//   сейчас = утро − продано/списано с того дня + принято/возвращено с того дня
+// Трогаем только виды товара (Дерево/ДР), по которым есть инвентаризация. Позиция на складе, которую
+// не нашли и не продали в тот день, на утро = 0. Пишем только склад — журналы смен не меняем.
+function _invStockCanon(num, name, species, price, gt){
+  var n = String(num||'').trim();
+  if(n && _invLooksLikeRealArt(n)) return gt+'|'+n.toLowerCase();
+  return gt+'|noart|'+String(name||'').trim().toLowerCase()+'|'+(gt==='dr'?'':String(species||'').trim().toLowerCase())+'|'+Math.round(parseFloat(price)||0);
+}
+function _invIsoDate(v){
+  v = String(v||'');
+  if(/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0,10);
+  var m = v.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+  return m ? m[3]+'-'+m[2]+'-'+m[1] : '';
+}
+function _invStockBuildPlan(){
+  var cur = _invAdmCur;
+  var gts = {}, ownSids = {};
+  cur.sessions.forEach(function(x){ gts[x.goodsType||'derevo'] = true; ownSids[x.id] = true; });
+  var R = {};
+  function row(canon, m){
+    var r = R[canon] || (R[canon] = {canon:canon, num:'', name:'', species:'', price:0, gt:m.gt, counted:0, soldDuring:0, soldDay:0, soldAfter:0, woAfter:0, rcvAfter:0, rcvDay:0, stockKeys:[], stockQty:0});
+    if(!r.num && m.num && _invLooksLikeRealArt(m.num)) r.num = String(m.num).trim();
+    if(!r.name && m.name) r.name = m.name;
+    if(!r.species && m.species) r.species = m.species;
+    if(!r.price && m.price) r.price = m.price;
+    return r;
+  }
+  function mv(gt, num, name, species, price, qty, field, isDay, dayField){
+    gt = gt||'derevo'; if(!gts[gt]) return;
+    var r = row(_invStockCanon(num, name, species, price, gt), {gt:gt, num:num, name:name, species:species, price:price});
+    r[field] += qty;
+    if(isDay && dayField) r[dayField] += qty;
+  }
+  _invAdmAllRows().forEach(function(x){
+    var c = x.rec;
+    var r = row(_invStockCanon(c.num, c.name, c.species, c.price, x.gt), {gt:x.gt, num:c.num, name:c.name, species:c.species, price:c.price});
+    r.counted += c.countedQty||0;
+    r.soldDuring += c.soldQty||0;
+  });
+  var stockDocId = 'stock_'+cur.shopName.replace(/\s+/g,'_');
+  return Promise.all([
+    db.collection('iz_settings').doc(stockDocId).get({source:'server'}),
+    db.collection('iz_shifts').where('shopName','==',cur.shopName).get({source:'server'}),
+    db.collection('iz_manual_invoices').get({source:'server'}),
+    db.collection('iz_invoices').get({source:'server'})
+  ]).then(function(res){
+    var stockItems = (res[0].exists && res[0].data().items) || {};
+    Object.keys(stockItems).forEach(function(k){
+      var si = stockItems[k]||{}, gt = si.goodsType||'derevo';
+      if(!gts[gt]) return;
+      var art = _invRealArtOf(si, k);
+      var r = row(_invStockCanon(art, si.name, si.species, si.price, gt), {gt:gt, num:art, name:si.name, species:si.species, price:si.price});
+      r.stockKeys.push(k); r.stockQty += si.qty||0;
+    });
+    var tombs = (typeof getShiftTombstones==='function') ? getShiftTombstones() : [];
+    res[1].forEach(function(doc){
+      var sh = doc.data();
+      if(sh._deleted || sh.isRestoreShift || tombs.indexOf(doc.id)!==-1) return;
+      (sh.journal||[]).forEach(function(e){
+        var d = sh.date || String(e.ts||'').slice(0,10);
+        if(d < cur.date) return;
+        if(e.inventorySessionId && ownSids[e.inventorySessionId]) return; // уже применённое по этой же инвентаризации
+        var day = d===cur.date;
+        if(e.type==='sale'){
+          (e.items||[]).forEach(function(it){ mv(it.goodsType, it.num||it.article, it.name, it.species, it.price, it.qty||1, 'soldAfter', day, 'soldDay'); });
+        } else if(e.type==='staff'){
+          if(e.article) mv(e.goodsType, e.article, '', e.species, e.price, e.qty||1, 'soldAfter', day, 'soldDay');
+        } else if(e.type==='writeoff' && !e.isRevaluation){
+          (e.items||[]).forEach(function(it){ if(!it.isRevaluation) mv(it.goodsType||e.goodsType, it.num||it.article, it.name, it.species, it.price, it.qty||1, 'woAfter'); });
+        } else if(e.type==='return'){
+          (e.items||[]).forEach(function(it){ mv(it.goodsType, it.num||it.article, it.name, it.species, it.price, it.qty||1, 'rcvAfter', day, 'rcvDay'); });
+        } else if(e.type==='receive' && !e.invId && !e.isRevaluation){
+          // приход с позициями прямо в журнале (без накладной) — накладные считаем ниже из самих документов
+          (e.items||[]).forEach(function(it){ mv(it.goodsType||e.goodsType, it.num||it.article, it.name, it.species, it.price, it.qty||1, 'rcvAfter', day, 'rcvDay'); });
+        }
+      });
+    });
+    function scanInv(snap){
+      snap.forEach(function(doc){
+        var inv = doc.data();
+        if(inv.isRevaluation || (inv.destName||inv.shopName)!==cur.shopName || inv.status!=='accepted') return;
+        var d = _invIsoDate(inv.acceptedDate) || _invIsoDate(inv.date);
+        if(!d || d < cur.date) return;
+        (inv.acceptedItems||inv.items||[]).forEach(function(it){
+          mv(it.goodsType||inv.goodsType, it.article||it.num, it.name, it.species, (it.factPrice!=null?it.factPrice:it.price), it.qty||1, 'rcvAfter', d===cur.date, 'rcvDay');
+        });
+      });
+    }
+    scanInv(res[2]); scanInv(res[3]);
+    var rows = Object.keys(R).map(function(k){
+      var r = R[k];
+      r.morning = Math.max(0, r.counted + r.soldDay - r.soldDuring);
+      r.target = Math.max(0, r.morning - r.soldAfter - r.woAfter + r.rcvAfter);
+      r.flags = [];
+      if(r.rcvDay>0) r.flags.push('в день инвентаризации был приход/возврат '+r.rcvDay+' шт. — если его уже посчитали, остаток завышен');
+      if(r.counted>0 && r.soldDay>0 && !r.soldDuring) r.flags.push('найдено и продано в тот же день — если продали уже после пересчёта, остаток завышен');
+      return r;
+    });
+    return {shopName:cur.shopName, date:cur.date, stockDocId:stockDocId, gts:Object.keys(gts), stockItems:stockItems,
+      changes: rows.filter(function(r){ return r.target!==r.stockQty; }), total: rows.length};
+  });
+}
+function invAdmStockPreview(){
+  var cur = _invAdmCur; var body = document.getElementById('invAdmBody'); if(!cur||!body) return;
+  body.innerHTML = '<div style="padding:20px;text-align:center;color:#8888aa;font-size:12px">⏳ Считаю утро '+_iaDateRu(cur.date)+' и движения товара после него...</div>';
+  _invStockBuildPlan().then(function(plan){
+    var back = '<button class="btn sec" style="margin-bottom:10px" onclick="_invAdmRender()">← Назад к инвентаризации</button>';
+    var unfinished = cur.sessions.filter(function(x){ return x.status!=='completed'; }).length;
+    var applied = cur.sessions.filter(function(x){ return x.stockAppliedAt; });
+    var head = '<div style="font-size:12.5px;font-weight:700;margin-bottom:4px">📦 Остатки склада по инвентаризации — '+_iaEsc(cur.shopName)+'</div>'+
+      '<div style="font-size:10.5px;color:#8888aa;margin-bottom:8px;line-height:1.45">Утро '+_iaDateRu(cur.date)+' = найдено + продано в тот день. Дальше до сегодня: − продано и списано, + принято и возвращено. Затрагивается только '+plan.gts.map(function(g){ return g==='dr'?'🛍 ДР':'🌳 Дерево'; }).join(' и ')+' и только склад — журналы смен не меняются.</div>'+
+      (unfinished ? '<div style="font-size:11px;color:#f0c060;background:#2e2414;border:1px solid #f0c06055;border-radius:8px;padding:8px;margin-bottom:8px">⚠️ Не завершено сессий: '+unfinished+' — если пересчёт ещё идёт, остатки поставятся по неполным данным</div>' : '')+
+      (applied.length ? '<div style="font-size:11px;color:#f0c060;background:#2e2414;border:1px solid #f0c06055;border-radius:8px;padding:8px;margin-bottom:8px">ℹ️ Остатки по этой инвентаризации уже ставили '+applied.map(function(x){ return new Date(x.stockAppliedAt).toLocaleString('ru-RU'); }).join(', ')+'. Повторно — безопасно: пересчитается заново от утра.</div>' : '');
+    if(!plan.changes.length){ body.innerHTML = back+head+'<div class="empty"><div class="ei">✅</div>Склад уже совпадает с расчётом — менять нечего</div>'; return; }
+    var flagged = plan.changes.filter(function(r){ return r.flags.length; });
+    var sorted = flagged.concat(plan.changes.filter(function(r){ return !r.flags.length; }));
+    var plus = 0, minus = 0;
+    plan.changes.forEach(function(r){ var d = r.target-r.stockQty; if(d>0) plus += d*(r.price||0); else minus += -d*(r.price||0); });
+    var list = sorted.map(function(r){
+      var d = r.target-r.stockQty;
+      var parts = ['найдено '+r.counted];
+      if(r.soldDay) parts.push('+ продано в тот день '+r.soldDay);
+      if(r.soldDuring) parts.push('− продано во время пересчёта '+r.soldDuring);
+      parts.push('= утро '+r.morning);
+      var after = [];
+      if(r.soldAfter) after.push('− продано '+r.soldAfter);
+      if(r.woAfter) after.push('− списано '+r.woAfter);
+      if(r.rcvAfter) after.push('+ принято '+r.rcvAfter);
+      return '<div style="padding:7px 0;border-bottom:1px solid #22222e;font-size:11.5px">'+
+        '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(r.gt==='dr'?'🛍':'🌳')+' '+(r.num?'№'+_iaEsc(r.num)+' ':'')+_iaEsc(r.name||'—')+(r.species?' <span style="color:#f0c060">· '+_iaEsc(r.species)+'</span>':'')+'</div>'+
+          '<div style="flex-shrink:0;font-weight:700">'+r.stockQty+' → <span style="color:'+(d>0?'#60f090':'#f06060')+'">'+r.target+'</span></div></div>'+
+        '<div style="font-size:10px;color:#8888aa">'+parts.join(' ')+(after.length?' · после: '+after.join(' '):'')+'</div>'+
+        r.flags.map(function(f){ return '<div style="font-size:10px;color:#f0c060">⚠️ '+f+'</div>'; }).join('')+
+      '</div>';
+    }).join('');
+    body.innerHTML = back+head+
+      '<div style="font-size:11.5px;margin-bottom:6px">Изменится позиций: <b>'+plan.changes.length+'</b>'+(flagged.length?' · ⚠️ проверить: <b>'+flagged.length+'</b> (вверху списка)':'')+'<br>Прибавится на '+_iaMoney(plus)+' · убавится на '+_iaMoney(minus)+'</div>'+
+      '<button type="button" onclick="invAdmStockApply()" style="width:100%;padding:10px;margin-bottom:10px;background:#60f090;border:none;border-radius:10px;color:#0f0f13;font-size:12.5px;font-weight:700;cursor:pointer">✅ Поставить эти остатки на склад</button>'+
+      list;
+  }).catch(function(err){ body.innerHTML = '<button class="btn sec" style="margin-bottom:10px" onclick="_invAdmRender()">← Назад</button><div class="empty">❌ '+_iaEsc(err&&err.message||err)+'</div>'; });
+}
+function invAdmStockApply(){
+  var cur = _invAdmCur; if(!cur) return;
+  if(!confirm('Поставить на склад «'+cur.shopName+'» остатки по инвентаризации от '+_iaDateRu(cur.date)+'?\n\nПеред записью всё пересчитается заново (на случай продаж за последние минуты).')) return;
+  showToast('⏳ Пересчитываю и записываю...');
+  _invStockBuildPlan().then(function(plan){
+    var items = plan.stockItems;
+    var today = new Date().toISOString().split('T')[0];
+    plan.changes.forEach(function(r){
+      if(r.stockKeys.length){
+        r.stockKeys.forEach(function(k, i){ if(items[k]){ items[k].qty = i===0 ? r.target : 0; if(r.target===0 && i===0) items[k].lastSold = items[k].lastSold || today; } });
+      } else if(r.target>0){
+        var key = r.num || _noArticleStockKey(r.name, r.price, r.species, r.gt);
+        if(!key) return;
+        items[key] = {num:key, name:r.name||'', price:r.price||0, species:r.species||'', goodsType:r.gt, size:'', qty:r.target, lastReceived:today, lastSold:''};
+      }
+    });
+    return db.collection('iz_settings').doc(plan.stockDocId).set({items:items, updatedAt:new Date().toISOString()}).then(function(){
+      try{ var st = getStock(); st[plan.shopName] = items; localStorage.setItem('iz_stock', JSON.stringify(st)); }catch(e){}
+      var who = (session&&(session.name||session.sellerName))||'admin', at = new Date().toISOString();
+      cur.sessions.forEach(function(x){
+        x.stockAppliedAt = at; x.stockAppliedBy = who;
+        db.collection('iz_inventory_sessions').doc(x.id).set({stockAppliedAt:at, stockAppliedBy:who}, {merge:true}).catch(function(){});
+      });
+      try{ logAction('INVENTORY_STOCK_SET', {shop:plan.shopName, inventoryDate:plan.date, changed:plan.changes.length, goodsTypes:plan.gts.join(',')}); }catch(e){}
+      showToast('✅ Остатки поставлены: изменено позиций — '+plan.changes.length);
+      _invAdmRender();
+    });
+  }).catch(function(err){ showToast('❌ Не удалось: '+(err&&err.message||err)); });
 }
 // Список всех продаж за день инвентаризации с пометкой, найдена ли эта же позиция среди занесённого
 // при пересчёте — специально для сравнения с УТРОМ (см. allBackdated в _invAdmRender): то, что продано,
