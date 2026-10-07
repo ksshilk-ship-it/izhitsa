@@ -245,6 +245,15 @@ function woPickName(val){ var el=document.getElementById('woName'); if(el) el.va
 function woPickSpecies(val){ var el=document.getElementById('woSpecies'); if(el) el.value=val; var box=document.getElementById('woSpecies_sugg'); if(box) box.style.display='none'; }
 function lookupWoItem(num){
   if(!num.trim()) return;
+  // Сначала — наличие на складе своего магазина: списывают то, что лежит на полке.
+  var st = (typeof stockGetByNum==='function') ? stockGetByNum(session&&session.shopName, num.trim()) : null;
+  if(st && (st.qty||0)>0){
+    var nEl=document.getElementById('woName'), pEl=document.getElementById('woPrice'), sEl=document.getElementById('woSpecies');
+    if(nEl) nEl.value = st.name||''; if(pEl) pEl.value = st.price||''; if(sEl) sEl.value = st.species||'';
+    setWoItemType(st.goodsType==='dr'?'dr':'derevo');
+    woCalcAmt();
+    return;
+  }
   var items = JSON.parse(localStorage.getItem('iz_items')||'[]');
   var found = items.find(function(i){ return String(i.num)===num.trim(); });
   if(found){
@@ -255,6 +264,30 @@ function lookupWoItem(num){
     if(found.category==='dr') setWoItemType('dr'); else setWoItemType('derevo');
     woCalcAmt();
   }
+}
+// Подсказки «из наличия» в списании продавца: склад своего магазина (📦) + каталог (📚).
+var _woSuggMatches = [];
+function woStockSugg(field, val){
+  var inputId = field==='num' ? 'woNum' : 'woName';
+  var box = document.getElementById(inputId+'_sugg'); if(!box) return;
+  if(typeof _psjCancelHideSugg==='function') _psjCancelHideSugg(inputId);
+  _woSuggMatches = _stockCatalogMatches(session&&session.shopName, null, field, val);
+  if(!_woSuggMatches.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.innerHTML = _woSuggMatches.map(function(m,k){
+    return '<div onclick="woStockPick('+k+',\''+inputId+'\')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+_stockMatchLabel(m)+'</div>';
+  }).join('');
+  box.style.display='block';
+}
+function woStockPick(k, inputId){
+  var m = _woSuggMatches[k]; if(!m) return;
+  var set = function(id, v){ var el=document.getElementById(id); if(el) el.value = v; };
+  if(m.num) set('woNum', m.num);
+  set('woName', m.name);
+  if(m.species) set('woSpecies', m.species);
+  if(m.price) set('woPrice', m.price);
+  setWoItemType(m.gt==='dr'?'dr':'derevo');
+  woCalcAmt();
+  var box = document.getElementById(inputId+'_sugg'); if(box) box.style.display='none';
 }
 function woCalcAmt(){
   var price=parseFloat(gv('woPrice'))||0, qty=parseFloat(gv('woQty'))||1;
@@ -5362,24 +5395,50 @@ function startStockSync(){
 // уже принятые раньше в магазине-отправителе (см. _findArtDupInItems).
 var _trRows = [];
 var _TR_DRAFT_KEY = 'iz_transfer_draft';
+// Продавец на смене: «Откуда» — только свой магазин, дата — сегодня, списание пишется в его живой
+// журнал. Админ: любые магазины и дата, списание — в смену за эту дату (см. trSave).
+function _trIsAdmin(){ return !!(session && session.role==='shopadmin'); }
+function _trDraftKey(){ return _trIsAdmin() ? _TR_DRAFT_KEY : _TR_DRAFT_KEY+'_'+((session&&session.shopName)||''); }
+// Мастерская — одно из мест назначения наравне с магазинами (её склад принимает накладную в
+// приложении мастерской). Если точка с таким названием уже заведена в списке магазинов — берём её.
+function _trWorkshopName(){
+  var w = getShopNames().find(function(sn){ return /мастерск/i.test(sn); });
+  return w || 'Мастерская';
+}
 function _trSaveDraft(){
   try{
-    localStorage.setItem(_TR_DRAFT_KEY, JSON.stringify({rows:_trRows,
+    localStorage.setItem(_trDraftKey(), JSON.stringify({rows:_trRows,
       from:gv('trFrom'), to:gv('trTo'), date:gv('trDate'), type:gv('trType'), num:gv('trNum')}));
   }catch(e){}
 }
 function _trTodayIso(){ var n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
-function _trSuggestNum(dateIso){ return 'ОТГ-'+String(dateIso||_trTodayIso()).replace(/-/g,'').slice(2)+'-'+uid().slice(0,3).toUpperCase(); }
+function _trSuggestNum(dateIso){ return 'ПЕР-'+String(dateIso||_trTodayIso()).replace(/-/g,'').slice(2)+'-'+uid().slice(0,3).toUpperCase(); }
 function openTransferMo(){
+  var isAdmin = _trIsAdmin();
+  if(!isAdmin && !(session && session.shopName && !session.isPreview)){ showToast('Перемещение доступно на открытой смене'); return; }
+  var esc = function(v){ return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); };
   var shops = getShopNames();
-  var opts = shops.map(function(sn){ return '<option>'+String(sn).replace(/</g,'&lt;')+'</option>'; }).join('');
-  var f=document.getElementById('trFrom'), t=document.getElementById('trTo');
-  if(f) f.innerHTML = opts; if(t) t.innerHTML = opts;
-  var draft = null; try{ draft = JSON.parse(localStorage.getItem(_TR_DRAFT_KEY)||'null'); }catch(e){}
+  var ws = _trWorkshopName();
+  var f=document.getElementById('trFrom'), t=document.getElementById('trTo'), d=document.getElementById('trDate');
+  if(f){
+    var fromList = isAdmin ? shops : [session.shopName];
+    f.innerHTML = fromList.map(function(sn){ return '<option value="'+esc(sn)+'">'+esc(sn)+'</option>'; }).join('');
+    f.disabled = !isAdmin;
+  }
+  if(t){
+    var toList = shops.filter(function(sn){ return sn!==ws && (isAdmin || sn!==session.shopName); });
+    t.innerHTML = toList.map(function(sn){ return '<option value="'+esc(sn)+'">'+esc(sn)+'</option>'; }).join('')+
+      '<option value="'+esc(ws)+'">🏭 '+esc(ws)+' (склад)</option>';
+  }
+  var title = document.getElementById('trTitle'); if(title) title.textContent = isAdmin ? '🚚 Отгрузка в другой магазин' : '🚚 Перемещение товара';
+  var draft = null; try{ draft = JSON.parse(localStorage.getItem(_trDraftKey())||'null'); }catch(e){}
   _trRows = (draft && draft.rows) || [];
-  var d=document.getElementById('trDate'); if(d){ d.max=_trTodayIso(); d.value=(draft&&draft.date)||_trTodayIso(); }
-  if(f && draft && draft.from) f.value = draft.from;
-  if(t){ t.value = (draft && draft.to) || (shops.find(function(sn){ return sn!==(f&&f.value); })||''); }
+  if(d){ d.max=_trTodayIso(); d.value = isAdmin ? ((draft&&draft.date)||_trTodayIso()) : _trTodayIso(); d.disabled = !isAdmin; }
+  if(f && isAdmin && draft && draft.from) f.value = draft.from;
+  if(t){
+    var fromNow = f ? f.value : '';
+    t.value = (draft && draft.to && draft.to!==fromNow) ? draft.to : (shops.find(function(sn){ return sn!==fromNow && sn!==ws; })||ws);
+  }
   var ty=document.getElementById('trType'); if(ty) ty.value=(draft&&draft.type)||'derevo';
   var nm=document.getElementById('trNum'); if(nm) nm.value=(draft&&draft.num)||_trSuggestNum(d&&d.value);
   _trRender();
@@ -5499,50 +5558,57 @@ function trAddRow(){
 // «База товаров» по виду товара; для породы — справочник пород. Выбор позиции заполняет строку.
 var _trSuggMatches = {};
 var _trSuggHideT = {};
-function _trSugg(i, field, val){
-  if(_trSuggHideT[i]){ clearTimeout(_trSuggHideT[i]); delete _trSuggHideT[i]; }
-  var box = document.getElementById('trSugg_'+i); if(!box) return;
+// Подбор вариантов «что это за товар» по введённому тексту: сначала наличие на складе магазина
+// (📦, с остатком), потом каталог «База товаров» (📚). gt=null — оба вида товара (форма списания
+// продавца сама переключает Дерево/ДР по выбранной позиции). field: 'num' — ищем только по номеру.
+function _stockCatalogMatches(shop, gt, field, val){
   var words = String(val||'').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if(!words.length) return [];
   var hit = function(text){ var low = String(text||'').toLowerCase(); return words.every(function(w){ return low.indexOf(w)>=0; }); };
-  var esc = function(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
-  var matches = [];
-  if(field==='species'){
-    if(!words.length){ box.style.display='none'; return; }
-    matches = getSpecies().filter(hit).slice(0,12).map(function(sp){ return {species:sp, label:sp}; });
-  } else {
-    if(!words.length){ box.style.display='none'; return; }
-    var gt = gv('trType')||'derevo';
-    var stockShop = _trStockOf(gv('trFrom'));
-    var seen = {};
-    Object.keys(stockShop).forEach(function(k){
-      var it = stockShop[k]||{};
-      if((it.goodsType||'derevo')!==gt || (it.qty||0)<=0) return;
-      var num = /^(DR_|WD_)/.test(k) ? '' : (it.num&&!/^(DR_|WD_)/.test(it.num) ? it.num : k);
-      var text = field==='num' ? num : (num+' '+it.name+' '+(it.species||''));
-      if(!hit(text)) return;
-      var sig = num+'|'+(it.name||'')+'|'+(it.species||'')+'|'+(it.price||0); if(seen[sig]) return; seen[sig]=true;
-      matches.push({src:'stock', num:num, name:it.name||'', species:it.species||'', price:it.price||0, qty:it.qty||0});
-    });
-    (getRefBook(gt==='dr'?'iz_goods_dr':'iz_goods_derevo')||[]).forEach(function(c){
+  var out = [], seen = {};
+  var stockShop = _trStockOf(shop);
+  Object.keys(stockShop).forEach(function(k){
+    var it = stockShop[k]||{}, g = it.goodsType||'derevo';
+    if((gt && g!==gt) || (it.qty||0)<=0) return;
+    var num = /^(DR_|WD_)/.test(k) ? '' : (it.num&&!/^(DR_|WD_)/.test(it.num) ? it.num : k);
+    if(!hit(field==='num' ? num : (num+' '+it.name+' '+(it.species||'')))) return;
+    var sig = g+'|'+num+'|'+(it.name||'')+'|'+(it.species||'')+'|'+(it.price||0); if(seen[sig]) return; seen[sig]=true;
+    out.push({src:'stock', gt:g, num:num, name:it.name||'', species:it.species||'', price:it.price||0, qty:it.qty||0});
+  });
+  (gt ? [gt] : ['derevo','dr']).forEach(function(g){
+    (getRefBook(g==='dr'?'iz_goods_dr':'iz_goods_derevo')||[]).forEach(function(c){
       if(!c) return;
       var name = c.name||c; if(!name) return;
       var num = c.article||'';
       if(field==='num' && !num) return;
-      var text = field==='num' ? num : (num+' '+name+' '+(c.species||''));
-      if(!hit(text)) return;
-      var sig = num+'|'+name+'|'+(c.species||'')+'|'+(c.price||0); if(seen[sig]) return; seen[sig]=true;
-      matches.push({src:'cat', num:num, name:name, species:c.species||'', price:c.price||0});
+      if(!hit(field==='num' ? num : (num+' '+name+' '+(c.species||'')))) return;
+      var sig = g+'|'+num+'|'+name+'|'+(c.species||'')+'|'+(c.price||0); if(seen[sig]) return; seen[sig]=true;
+      out.push({src:'cat', gt:g, num:num, name:name, species:c.species||'', price:c.price||0});
     });
-    matches = matches.slice(0,15);
+  });
+  return out.slice(0,15);
+}
+function _stockMatchLabel(m){
+  var esc = function(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
+  return (m.src==='stock'?'📦 ':'📚 ')+(m.num?'<b>№'+esc(m.num)+'</b> ':'')+esc(m.name)+
+    (m.species?' <span style="color:#f0c060">· '+esc(m.species)+'</span>':'')+
+    (m.price?' · '+fmt(m.price):'')+
+    (m.src==='stock'?' <span style="color:#60f090">· в наличии '+m.qty+'</span>':'');
+}
+function _trSugg(i, field, val){
+  if(_trSuggHideT[i]){ clearTimeout(_trSuggHideT[i]); delete _trSuggHideT[i]; }
+  var box = document.getElementById('trSugg_'+i); if(!box) return;
+  var matches;
+  if(field==='species'){
+    var words = String(val||'').trim().toLowerCase().split(/\s+/).filter(Boolean);
+    matches = !words.length ? [] : getSpecies().filter(function(sp){ var low=String(sp).toLowerCase(); return words.every(function(w){ return low.indexOf(w)>=0; }); }).slice(0,12).map(function(sp){ return {species:sp, label:sp}; });
+  } else {
+    matches = _stockCatalogMatches(gv('trFrom'), gv('trType')||'derevo', field, val);
   }
   _trSuggMatches[i] = {field:field, list:matches};
   if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
   box.innerHTML = matches.map(function(m, k){
-    var label = field==='species' ? esc(m.label) :
-      (m.src==='stock'?'📦 ':'📚 ')+(m.num?'<b>№'+esc(m.num)+'</b> ':'')+esc(m.name)+
-      (m.species?' <span style="color:#f0c060">· '+esc(m.species)+'</span>':'')+
-      (m.price?' · '+fmt(m.price):'')+
-      (m.src==='stock'?' <span style="color:#60f090">· на складе '+m.qty+'</span>':'');
+    var label = field==='species' ? String(m.label).replace(/</g,'&lt;') : _stockMatchLabel(m);
     return '<div onclick="_trPick('+i+','+k+')" style="padding:8px 10px;font-size:11.5px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+label+'</div>';
   }).join('');
   box.style.display='block';
@@ -5577,45 +5643,67 @@ function _trFindShift(shop, dateIso){
   });
 }
 function trSave(){
+  var isAdmin = _trIsAdmin();
   var from=gv('trFrom'), to=gv('trTo'), dateIso=gv('trDate'), gt=gv('trType')||'derevo', num=(gv('trNum')||'').trim();
-  if(!from || !to){ showToast('Выберите магазины'); return; }
-  if(from===to){ showToast('⛔ Откуда и Куда — один и тот же магазин'); return; }
-  if(!dateIso){ showToast('Укажите дату отгрузки'); return; }
+  if(!isAdmin){ from = session && session.shopName; dateIso = _trTodayIso(); }
+  if(!from || !to){ showToast('Выберите, куда перемещаете'); return; }
+  if(from===to){ showToast('⛔ Откуда и Куда — одно и то же место'); return; }
+  if(!dateIso){ showToast('Укажите дату'); return; }
   if(!num){ showToast('Укажите № накладной'); return; }
-  if(!_trRows.length){ showToast('Список пуст — вставьте позиции и нажмите «Разобрать»'); return; }
+  if(!_trRows.length){ showToast('Список пуст — добавьте позиции'); return; }
   var noName = _trRows.findIndex(function(r){ return !String(r.name||'').trim() || !(r.qty>0); });
   if(noName>=0){ showToast('⛔ Строка '+(noName+1)+': нужно название и кол-во'); return; }
   var stockShop = _trStockOf(from);
   var bad = _trRows.filter(function(r){ return _trRowIssues(r, stockShop, gt).length; }).length;
+  var totalQty = _trRows.reduce(function(s,r){ return s+(r.qty||0); },0);
+  var totalAmt = _trRows.reduce(function(s,r){ return s+(r.qty||0)*(r.price||0); },0);
+  var head = 'Перемещение '+num+': '+from+' → '+to+'\n'+_trRows.length+' поз. · '+totalQty+' шт. · '+fmt(totalAmt)+'\n\n';
+  var badTxt = bad ? '\n\n⚠️ Строк с замечаниями по складу «'+from+'»: '+bad+' — всё равно отправить?' : '';
+  if(!isAdmin){
+    // Продавец: списание — в свою открытую смену (живой журнал на этом устройстве).
+    if(!session || session.isPreview || !Array.isArray(journal)){ showToast('Перемещение доступно на открытой смене'); return; }
+    if(!confirm(head+'Списание попадёт в вашу текущую смену, в «'+to+'» уйдёт накладная на приёмку.'+badTxt)) return;
+    _trCommit({from:from, to:to, dateIso:dateIso, gt:gt, num:num, totalQty:totalQty, totalAmt:totalAmt, shift:null});
+    return;
+  }
   showToast('⏳ Ищу смену «'+from+'» за '+dateIso.split('-').reverse().join('.')+'...');
   _trFindShift(from, dateIso).then(function(sh){
     if(!sh){ showToast('⛔ У магазина «'+from+'» нет смены за '+dateIso.split('-').reverse().join('.')+' — списывать некуда. Выберите дату, когда магазин работал.'); return; }
-    var totalQty = _trRows.reduce(function(s,r){ return s+(r.qty||0); },0);
-    var totalAmt = _trRows.reduce(function(s,r){ return s+(r.qty||0)*(r.price||0); },0);
-    if(!confirm('Отгрузка '+num+': '+from+' → '+to+'\n'+_trRows.length+' поз. · '+totalQty+' шт. · '+fmt(totalAmt)+'\n\n'+
-      'Списание попадёт в смену «'+from+' · '+dateIso.split('-').reverse().join('.')+'» ('+(sh.sellerName||'—')+(sh.status==='open'||!sh.closedAt?', открыта':', закрыта')+'), '+
-      'в «'+to+'» уйдёт накладная на приёмку.'+(bad?'\n\n⚠️ Строк с замечаниями по складу отправителя: '+bad+' — всё равно отправить?':''))) return;
-    var reason = 'Отгрузка на «'+to+'» · накл. '+num;
-    var invId = uid();
-    var items = _trRows.map(function(r){
-      var n = String(r.num||'').trim();
-      return {num:n, article:n, name:String(r.name).trim(), species:String(r.species||'').trim(), price:r.price||0, qty:r.qty, amt:(r.price||0)*r.qty, goodsType:gt, reason:reason};
-    });
-    var who = (session&&(session.name||session.sellerName))||'admin';
-    var inv = {id:invId, num:num, date:dateIso, sourceName:from, destName:to, status:'pending', goodsType:gt,
-      items:items.map(function(it){ return {num:it.num, article:it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, goodsType:gt}; }),
-      total:totalAmt, isTransfer:true, transferFrom:from, createdBy:who, createdAt:new Date().toISOString()};
-    db.collection('iz_invoices').doc(invId).set(inv).then(function(){
-      var ts = dateIso===_trTodayIso() ? _workingNowISO() : new Date(dateIso+'T12:00:00').toISOString();
-      var isDr = gt==='dr';
-      var entry = {id:uid(), type:'writeoff', ts:ts, icon:'🚚', label:'Отгрузка → '+to,
-        sub:items.length+' поз. ('+totalQty+' шт.) · накл. '+num, goodsType:gt, items:items, reason:reason,
-        amount:totalAmt, amtCls:'exp', amtSign:'−', cashEffect:0, cardEffect:0, staffEffect:0,
-        goodsEffect:isDr?0:-totalAmt, goodsDrEffect:isDr?-totalAmt:0,
-        transferTo:to, transferInvId:invId, transferInvNum:num, addedByAdmin:who, addedAt:new Date().toISOString()};
-      // Пишем через тот же путь, что правка архивной смены, — временно подменяем открытую в
-      // интерфейсе смену и сразу возвращаем (асинхронная часть svPersist держит свою копию).
-      var prevView = _currentShiftView;
+    if(!confirm(head+'Списание попадёт в смену «'+from+' · '+dateIso.split('-').reverse().join('.')+'» ('+(sh.sellerName||'—')+(sh.status==='open'||!sh.closedAt?', открыта':', закрыта')+'), '+
+      'в «'+to+'» уйдёт накладная на приёмку.'+badTxt)) return;
+    _trCommit({from:from, to:to, dateIso:dateIso, gt:gt, num:num, totalQty:totalQty, totalAmt:totalAmt, shift:sh});
+  }).catch(function(err){ showToast('❌ Не удалось найти смену: '+(err&&err.message||err)); });
+}
+// Накладная пишется первой: если она не ушла — ничего не списываем.
+function _trCommit(o){
+  var reason = 'Перемещение в «'+o.to+'» · накл. '+o.num;
+  var invId = uid();
+  var items = _trRows.map(function(r){
+    var n = String(r.num||'').trim();
+    return {num:n, article:n, name:String(r.name).trim(), species:String(r.species||'').trim(), price:r.price||0, qty:r.qty, amt:(r.price||0)*r.qty, goodsType:o.gt, reason:reason};
+  });
+  var who = (session&&(session.name||session.sellerName))||'admin';
+  var toWorkshop = o.to===_trWorkshopName();
+  var inv = {id:invId, num:o.num, date:o.dateIso, sourceName:o.from, destName:o.to, status:'pending', goodsType:o.gt,
+    items:items.map(function(it){ return {num:it.num, article:it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, goodsType:o.gt}; }),
+    total:o.totalAmt, isTransfer:true, transferFrom:o.from, toWorkshop:toWorkshop, createdBy:who, createdAt:new Date().toISOString()};
+  db.collection('iz_invoices').doc(invId).set(inv).then(function(){
+    var ts = (o.shift===null || o.dateIso===_trTodayIso()) ? _workingNowISO() : new Date(o.dateIso+'T12:00:00').toISOString();
+    var isDr = o.gt==='dr';
+    var entry = {id:uid(), type:'writeoff', ts:ts, icon:'🚚', label:'Перемещение → '+o.to,
+      sub:items.length+' поз. ('+o.totalQty+' шт.) · накл. '+o.num, goodsType:o.gt, items:items, reason:reason,
+      amount:o.totalAmt, amtCls:'exp', amtSign:'−', cashEffect:0, cardEffect:0, staffEffect:0,
+      goodsEffect:isDr?0:-o.totalAmt, goodsDrEffect:isDr?-o.totalAmt:0,
+      transferTo:o.to, transferInvId:invId, transferInvNum:o.num, addedBy:who, addedAt:new Date().toISOString()};
+    if(o.shift===null){
+      journal.push(entry);
+      saveJ();
+      _backupCheckPassed = false;
+      try{ syncLiveShift(); }catch(e){}
+    } else {
+      // Админ: тот же путь, что правка архивной смены, — временно подменяем открытую в интерфейсе
+      // смену и сразу возвращаем (асинхронная часть svPersist держит свою копию).
+      var sh = o.shift, prevView = _currentShiftView;
       try{
         if(sh.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(sh);
         sh.journal = (sh.journal||[]).concat([entry]).sort(function(a,b){ return String(a.ts||'').localeCompare(String(b.ts||'')); });
@@ -5623,13 +5711,13 @@ function trSave(){
         // у открытой смены вечернего остатка ещё нет — пересчитывать нечего, его посчитают при закрытии
         svPersist(sh.status==='open' || !sh.closedAt);
       } finally { _currentShiftView = prevView; }
-      try{ _recordJournalEntryIndependently(entry, from, 'writeoff'); }catch(e){}
-      try{ stockApplyWriteoff(from, items); }catch(e){}
-      try{ logAction('TRANSFER_OUT', {from:from, to:to, invNum:num, invId:invId, shiftId:sh.id, date:dateIso, itemCount:items.length, qty:totalQty, amount:totalAmt}); }catch(e){}
-      _trRows = []; try{ localStorage.removeItem(_TR_DRAFT_KEY); }catch(e){}
-      closeMo('transferMo');
-      try{ renderStockPage(); }catch(e){}
-      showToast('✅ Списано из «'+from+'» и отправлено в «'+to+'»: '+items.length+' поз. — ждёт приёмки');
-    }).catch(function(err){ showToast('❌ Накладная не отправилась — ничего не списано: '+(err&&err.message||err)); });
-  }).catch(function(err){ showToast('❌ Не удалось найти смену: '+(err&&err.message||err)); });
+    }
+    try{ _recordJournalEntryIndependently(entry, o.from, 'writeoff'); }catch(e){}
+    try{ stockApplyWriteoff(o.from, items); }catch(e){}
+    try{ logAction('TRANSFER_OUT', {from:o.from, to:o.to, invNum:o.num, invId:invId, shiftId:o.shift?o.shift.id:(session&&session.shiftId), date:o.dateIso, itemCount:items.length, qty:o.totalQty, amount:o.totalAmt, bySeller:o.shift===null}); }catch(e){}
+    _trRows = []; try{ localStorage.removeItem(_trDraftKey()); }catch(e){}
+    closeMo('transferMo');
+    try{ if(o.shift===null) renderAll(); else renderStockPage(); }catch(e){}
+    showToast('✅ Списано из «'+o.from+'» и отправлено в «'+o.to+'»: '+items.length+' поз. — ждёт приёмки');
+  }).catch(function(err){ showToast('❌ Накладная не отправилась — ничего не списано: '+(err&&err.message||err)); });
 }

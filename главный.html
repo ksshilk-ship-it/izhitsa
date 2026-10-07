@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><title>Ижица — Магазин</title>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="стили.css?v=10.07.04">
+<link rel="stylesheet" href="стили.css?v=10.07.05">
   <link rel="manifest" href="manifest-shop.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1596,6 +1596,7 @@
 </div>
 <div class="mo" id="woMo">
   <div class="md"><div class="mh"></div><div class="mt">Списание</div>
+    <button type="button" onclick="closeMo('woMo');openTransferMo()" style="width:100%;margin-bottom:10px;padding:10px;border-radius:10px;border:1px solid #60c8f0;background:#1a1f2e;color:#60c8f0;font-size:12.5px;font-weight:700;cursor:pointer">🚚 Перемещение — в другой магазин или в мастерскую</button>
     <div id="woDraftBanner" style="display:none;align-items:center;justify-content:space-between;gap:8px;background:#2e1a1a;border:1px solid #f06060;border-radius:10px;padding:10px 12px;margin-bottom:10px">
       <div style="font-size:12px;color:#f06060">📋 Восстановлен незавершённый черновик списания</div>
     <div id="woDraftStatus" style="display:none;font-size:12px;padding:4px 8px;background:#1a2a1e;border-radius:8px;margin-top:4px"></div>
@@ -1606,17 +1607,18 @@
     <div class="ctitle">Добавить позиции</div>
     <div id="woItemsDisplay" style="margin-bottom:10px"></div>
     <div style="background:#0f0f13;border-radius:12px;padding:10px;margin-bottom:12px">
-      <div class="fg"><label class="fl">Артикул</label><input class="fi" id="woNum" placeholder="001" oninput="lookupWoItem(this.value)"></div>
+      <div class="fg" style="position:relative"><label class="fl">Артикул</label><input class="fi" id="woNum" placeholder="001" autocomplete="off" oninput="lookupWoItem(this.value);woStockSugg('num',this.value)" onblur="psjHideSugg('woNum')">
+        <div id="woNum_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #60c8f0;border-radius:8px;max-height:220px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div></div>
       <div class="fg" style="margin-bottom:8px;position:relative">
         <label class="fl">Наименование</label>
         <div class="u-flex-g6">
           <input class="fi" id="woName" placeholder="Изделие..." autocomplete="off"
-            oninput="psjSuggest('woName',getItemNames(),'woPickName')"
-            onfocus="psjSuggest('woName',getItemNames(),'woPickName')"
+            oninput="woStockSugg('name',this.value)"
+            onfocus="woStockSugg('name',this.value)"
             onblur="psjHideSugg('woName')">
           <button type="button" onclick="siAddToGoods('woName')" style="background:#22222e;border:1px solid #c8f060;border-radius:10px;padding:0 14px;color:#c8f060;font-weight:700;cursor:pointer;flex-shrink:0">＋</button>
         </div>
-        <div id="woName_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>
+        <div id="woName_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #60c8f0;border-radius:8px;max-height:220px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>
       </div>
       <div class="fg" style="margin-bottom:8px;position:relative">
         <label class="fl">Порода дерева</label>
@@ -1819,16 +1821,16 @@
 <div class="mo" id="transferMo">
   <div class="md"><div class="mh"></div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-      <div class="mt" style="margin:0">🚚 Отгрузка в другой магазин</div>
+      <div class="mt" id="trTitle" style="margin:0">🚚 Отгрузка в другой магазин</div>
       <button onclick="closeMo('transferMo')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:5px 10px;color:#8888aa;cursor:pointer;font-size:12px;flex-shrink:0">✕</button>
     </div>
-    <div style="font-size:11px;color:#8888aa;margin-bottom:10px;line-height:1.45">Товар списывается в смене магазина-отправителя за выбранную дату и уходит входящей накладной в магазин-получатель — там продавец сверяет и нажимает «Принять». Одна строка — одна позиция, поля через «;» или табуляцию:<br><b style="color:#f0f0f8">№ ; Название ; Порода ; Цена ; Кол-во</b> (можно только № — название, породу и цену подставлю со склада отправителя). Страниц несколько — вставляйте по одной и жмите «Разобрать», список копится.</div>
+    <div style="font-size:11px;color:#8888aa;margin-bottom:10px;line-height:1.45">Товар списывается со склада отправителя и уходит входящей накладной туда, куда перемещаете (магазин или мастерская) — там его сверяют и принимают. Одна строка — одна позиция, поля через «;» или табуляцию:<br><b style="color:#f0f0f8">№ ; Название ; Порода ; Цена ; Кол-во</b> (можно только № — название, породу и цену подставлю со склада отправителя). Страниц несколько — вставляйте по одной и жмите «Разобрать», список копится.</div>
     <div class="row2">
       <div class="fg" style="flex:1"><label class="fl">Откуда</label><select class="fi" id="trFrom" onchange="trFieldChanged()"></select></div>
       <div class="fg" style="flex:1"><label class="fl">Куда</label><select class="fi" id="trTo" onchange="trFieldChanged()"></select></div>
     </div>
     <div class="row2">
-      <div class="fg" style="flex:1"><label class="fl">Дата отгрузки</label><input class="fi" type="date" id="trDate" onchange="trFieldChanged()" style="-webkit-appearance:none;color-scheme:dark"></div>
+      <div class="fg" style="flex:1"><label class="fl">Дата</label><input class="fi" type="date" id="trDate" onchange="trFieldChanged()" style="-webkit-appearance:none;color-scheme:dark"></div>
       <div class="fg" style="flex:1"><label class="fl">Вид товара</label><select class="fi" id="trType" onchange="trFieldChanged()"><option value="derevo">🌳 Дерево</option><option value="dr">🛍 ДР Товар</option></select></div>
     </div>
     <div class="fg"><label class="fl">№ накладной</label><input class="fi" id="trNum" oninput="trFieldChanged()"></div>
@@ -2385,14 +2387,14 @@
 </div>
 <div class="toast" id="toast"></div>
 <!-- Firebase SDK загружается асинхронно через _loadFirebaseSDK() -->
-<script src="синхронизация.js?v=10.07.04"></script>
-<script src="смены.js?v=10.07.04"></script>
-<script src="отчеты.js?v=10.07.04"></script>
-<script src="продажи.js?v=10.07.04"></script>
-<script src="Склад.js?v=10.07.04"></script>
-<script src="прочее.js?v=10.07.04"></script>
-<script src="импорт.js?v=10.07.04"></script>
-<script src="инвентаризация.js?v=10.07.04"></script>
+<script src="синхронизация.js?v=10.07.05"></script>
+<script src="смены.js?v=10.07.05"></script>
+<script src="отчеты.js?v=10.07.05"></script>
+<script src="продажи.js?v=10.07.05"></script>
+<script src="Склад.js?v=10.07.05"></script>
+<script src="прочее.js?v=10.07.05"></script>
+<script src="импорт.js?v=10.07.05"></script>
+<script src="инвентаризация.js?v=10.07.05"></script>
 <script>
 _initFirebase(); // Firebase загружается асинхронно, не блокируя UI
 init();
