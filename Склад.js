@@ -5463,6 +5463,8 @@ function openTransferMo(){
   var rs=document.getElementById('trReason'); if(rs) rs.value=(draft&&draft.reason)||'';
   trSetKind((draft&&draft.kind)||'move');
   openMo('transferMo');
+  // приёмки и списания по номерам — для пояснений «где сейчас этот номер» в строках
+  try{ _buildUsedArticleIndex().then(function(){ _trRender(); }, function(){}); }catch(e){}
   if(_trRows.length) showToast('📝 Продолжаем начатый список: '+_trRows.length+' поз.');
 }
 function trFieldChanged(){ _trSaveDraft(); _trRender(); }
@@ -5523,13 +5525,35 @@ function trClearAll(){
   _trRows=[]; _trSaveDraft(); _trRender();
 }
 // Проблемы строки: нет названия / кол-во больше, чем на складе отправителя / нет на складе вовсе.
-function _trRowIssues(r, stockShop, gt){
+// Почему позиции нет на складе отправителя — конкретно, а не общим «нет на складе»: номер был, но
+// ушёл (списан/продан, с датой), числится в другом магазине или где его принимали последний раз.
+function _trDateRu(d){ return String(d||'').slice(0,10).split('-').reverse().join('.'); }
+function _trRowIssues(r, stockShop, gt, fromShop){
   var iss = [];
   if(!String(r.name||'').trim()) iss.push('нет названия');
   if(!(r.qty>0)) iss.push('нет кол-ва');
   var f = _trStockFind(stockShop, r, gt);
-  if(!f || (f.it.qty||0)<=0) iss.push('нет на складе отправителя');
-  else if((f.it.qty||0) < r.qty) iss.push('на складе отправителя только '+f.it.qty+' шт.');
+  if(f && (f.it.qty||0)>0){
+    if((f.it.qty||0) < r.qty) iss.push('на складе «'+(fromShop||'отправителя')+'» только '+f.it.qty+' шт.');
+    return iss;
+  }
+  var num = String(r.num||'').trim();
+  if(f){
+    var wo = num && _woArtIndex && (_woArtIndex[num]||[]).filter(function(w){ return w.shop===fromShop; }).sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); })[0];
+    iss.push('на складе «'+(fromShop||'отправителя')+'» 0 шт.'+(wo?' — списан '+_trDateRu(wo.date):(f.it.lastSold?' — продан/списан '+_trDateRu(f.it.lastSold):'')));
+    return iss;
+  }
+  if(num){
+    var all = getStock(), elsewhere = [];
+    Object.keys(all).forEach(function(sn){ if(sn!==fromShop && all[sn] && all[sn][num] && (all[sn][num].qty||0)>0) elsewhere.push('«'+sn+'» ('+all[sn][num].qty+' шт.)'); });
+    if(elsewhere.length){ iss.push('нет на «'+(fromShop||'отправителе')+'» — числится на '+elsewhere.join(', ')); return iss; }
+    var occ = (typeof _usedArtIndex!=='undefined' && _usedArtIndex && _usedArtIndex[num]) || [];
+    var last = occ.slice().sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); })[0];
+    if(last){ iss.push('нет на складе «'+(fromShop||'отправителя')+'» — последняя приёмка: «'+last.shop+'», '+_trDateRu(last.date)); return iss; }
+    iss.push('номера нет ни на одном складе и ни в одной приёмке');
+    return iss;
+  }
+  iss.push('нет на складе «'+(fromShop||'отправителя')+'»');
   return iss;
 }
 function _trRenderTotals(){
@@ -5552,7 +5576,7 @@ function _trRender(){
   };
   var bad = 0;
   var rows = _trRows.map(function(r,i){
-    var iss = _trRowIssues(r, stockShop, gt); if(iss.length) bad++;
+    var iss = _trRowIssues(r, stockShop, gt, from); if(iss.length) bad++;
     return '<div style="padding:6px 0;border-bottom:1px solid #22222e">'+
       '<div style="display:flex;gap:4px;align-items:center">'+
         inp(i,'num',r.num,'70px')+inp(i,'name',r.name,'auto;flex:1')+inp(i,'species',r.species,'70px')+
@@ -5686,7 +5710,7 @@ function trSave(){
   var noName = _trRows.findIndex(function(r){ return !String(r.name||'').trim() || !(r.qty>0); });
   if(noName>=0){ showToast('⛔ Строка '+(noName+1)+': нужно название и кол-во'); return; }
   var stockShop = _trStockOf(from);
-  var bad = _trRows.filter(function(r){ return _trRowIssues(r, stockShop, gt).length; }).length;
+  var bad = _trRows.filter(function(r){ return _trRowIssues(r, stockShop, gt, from).length; }).length;
   var totalQty = _trRows.reduce(function(s,r){ return s+(r.qty||0); },0);
   var totalAmt = _trRows.reduce(function(s,r){ return s+(r.qty||0)*(r.price||0); },0);
   var head = (isWo ? 'Списание '+num+' («'+woReason+'»): '+from : 'Перемещение '+num+': '+from+' → '+to)+'\n'+_trRows.length+' поз. · '+totalQty+' шт. · '+fmt(totalAmt)+'\n\n';
