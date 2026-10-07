@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><title>Ижица — Магазин</title>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Golos+Text:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="стили.css?v=10.07.02">
+<link rel="stylesheet" href="стили.css?v=10.07.03">
   <link rel="manifest" href="manifest-shop.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -470,6 +470,7 @@
       <button type="button" id="stockModeProduct" onpointerdown="event.preventDefault();setStockMode('byproduct')" style="flex:1 1 45%;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">📦 По изделиям</button>
       <button type="button" id="stockModeInvoice" onpointerdown="event.preventDefault();setStockMode('byinvoice')" style="flex:1 1 45%;padding:9px;border-radius:10px;border:1px solid #2e2e3e;background:#22222e;color:#8888aa;font-size:12px;font-weight:700;cursor:pointer">📥 По накладным</button>
     </div>
+    <button type="button" id="stockTransferBtn" onclick="openTransferMo()" style="display:none;width:100%;margin-bottom:8px;padding:10px;border-radius:10px;border:1px solid #60c8f0;background:#1a1f2e;color:#60c8f0;font-size:12.5px;font-weight:700;cursor:pointer">🚚 Отгрузка в другой магазин (списание списком)</button>
     <div id="stockShopRow" style="display:none;margin-bottom:8px">
       <select class="fs" id="stockFilterShop" onchange="renderStockPage()" style="margin:0">
         <option value="">Все магазины</option>
@@ -1815,6 +1816,29 @@
     <button class="btn sec" style="margin-top:8px" onclick="closeMo('invAdmMo')">Закрыть</button>
   </div>
 </div>
+<div class="mo" id="transferMo">
+  <div class="md"><div class="mh"></div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+      <div class="mt" style="margin:0">🚚 Отгрузка в другой магазин</div>
+      <button onclick="closeMo('transferMo')" style="background:none;border:1px solid #2e2e3e;border-radius:8px;padding:5px 10px;color:#8888aa;cursor:pointer;font-size:12px;flex-shrink:0">✕</button>
+    </div>
+    <div style="font-size:11px;color:#8888aa;margin-bottom:10px;line-height:1.45">Товар списывается в смене магазина-отправителя за выбранную дату и уходит входящей накладной в магазин-получатель — там продавец сверяет и нажимает «Принять». Одна строка — одна позиция, поля через «;» или табуляцию:<br><b style="color:#f0f0f8">№ ; Название ; Порода ; Цена ; Кол-во</b> (можно только № — название, породу и цену подставлю со склада отправителя). Страниц несколько — вставляйте по одной и жмите «Разобрать», список копится.</div>
+    <div class="row2">
+      <div class="fg" style="flex:1"><label class="fl">Откуда</label><select class="fi" id="trFrom" onchange="trFieldChanged()"></select></div>
+      <div class="fg" style="flex:1"><label class="fl">Куда</label><select class="fi" id="trTo" onchange="trFieldChanged()"></select></div>
+    </div>
+    <div class="row2">
+      <div class="fg" style="flex:1"><label class="fl">Дата отгрузки</label><input class="fi" type="date" id="trDate" onchange="trFieldChanged()" style="-webkit-appearance:none;color-scheme:dark"></div>
+      <div class="fg" style="flex:1"><label class="fl">Вид товара</label><select class="fi" id="trType" onchange="trFieldChanged()"><option value="derevo">🌳 Дерево</option><option value="dr">🛍 ДР Товар</option></select></div>
+    </div>
+    <div class="fg"><label class="fl">№ накладной</label><input class="fi" id="trNum" oninput="trFieldChanged()"></div>
+    <textarea class="fi" id="trText" rows="7" placeholder="52482;Доска д/разделки;Черешня;1300;1&#10;;Ложка;Орех грецкий;500;10" style="font-size:12px;font-family:monospace"></textarea>
+    <button class="btn blue" style="margin-top:8px" onclick="trParse()">🔎 Разобрать список</button>
+    <div id="trPreview"></div>
+    <button class="btn" style="margin-top:8px" onclick="trSave()">🚚 Списать и отправить накладную</button>
+    <button class="btn sec" style="margin-top:8px" onclick="closeMo('transferMo')">Закрыть (список сохранится)</button>
+  </div>
+</div>
 <div class="mo" id="invImportMo">
   <div class="md"><div class="mh"></div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
@@ -2361,14 +2385,14 @@
 </div>
 <div class="toast" id="toast"></div>
 <!-- Firebase SDK загружается асинхронно через _loadFirebaseSDK() -->
-<script src="синхронизация.js?v=10.07.02"></script>
-<script src="смены.js?v=10.07.02"></script>
-<script src="отчеты.js?v=10.07.02"></script>
-<script src="продажи.js?v=10.07.02"></script>
-<script src="Склад.js?v=10.07.02"></script>
-<script src="прочее.js?v=10.07.02"></script>
-<script src="импорт.js?v=10.07.02"></script>
-<script src="инвентаризация.js?v=10.07.02"></script>
+<script src="синхронизация.js?v=10.07.03"></script>
+<script src="смены.js?v=10.07.03"></script>
+<script src="отчеты.js?v=10.07.03"></script>
+<script src="продажи.js?v=10.07.03"></script>
+<script src="Склад.js?v=10.07.03"></script>
+<script src="прочее.js?v=10.07.03"></script>
+<script src="импорт.js?v=10.07.03"></script>
+<script src="инвентаризация.js?v=10.07.03"></script>
 <script>
 _initFirebase(); // Firebase загружается асинхронно, не блокируя UI
 init();

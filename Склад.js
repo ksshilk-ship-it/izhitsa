@@ -1089,7 +1089,7 @@ function updateInvMoTotal(){
     allQty += q;
     if(invCheckState[i] && invCheckState[i].ok){
       totalQty += q;
-      totalAmt += (invCheckState[i].factPrice!=null?invCheckState[i].factPrice:it.price);
+      totalAmt += (invCheckState[i].factPrice!=null?invCheckState[i].factPrice:it.price)*q;
     }
   });
   var qtyEl=document.getElementById('invMoTotalQty'); if(qtyEl) qtyEl.textContent=totalQty;
@@ -1135,9 +1135,14 @@ function _acceptInvoiceProceed(inv, who){
   const accepted=inv2.items.map((it,i)=>({...it,factPrice:(invCheckState[i]&&invCheckState[i].factPrice!=null?invCheckState[i].factPrice:it.price),ok:(invCheckState[i]&&invCheckState[i].ok)||false}));
   inv2.status='accepted'; inv2.acceptedBy=who; inv2.acceptedDate=new Date().toISOString().split('T')[0]; inv2.acceptedItems=accepted;
   const idx=invs.findIndex(i=>(i.id||i._id)===currentInvId); invs[idx]=inv2; saveInvoices(invs);
-  const goodsTotal=accepted.reduce((s,a)=>s+a.factPrice,0);
-  var _rcvEntry = {id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',label:'Приёмка '+inv2.num,
-    sub:inv2.items.length+' изд. · принял: '+who,amount:goodsTotal,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:goodsTotal,
+  // Цена в строке — за штуку: раньше количество не учитывалось (накладные мастерской идут по
+  // одной вещи на строку), а отгрузка из другого магазина приходит строками «Ложка × 10».
+  // ДР-позиции идут в остаток ДР, а не Дерева.
+  var _isDrLine = function(a){ return (a.goodsType||inv2.goodsType)==='dr'; };
+  const goodsTotal=accepted.reduce((s,a)=>s+a.factPrice*(a.qty||1),0);
+  const _goodsDrTotal=accepted.reduce((s,a)=>s+(_isDrLine(a)?a.factPrice*(a.qty||1):0),0);
+  var _rcvEntry = {id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',label:'Приёмка '+inv2.num+(inv2.isTransfer?' (из «'+inv2.sourceName+'»)':''),
+    sub:inv2.items.length+' поз. · принял: '+who,amount:goodsTotal,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:goodsTotal-_goodsDrTotal,goodsDrEffect:_goodsDrTotal,
     invId:inv2.id||inv2._id, acceptedBy:who};
   journal.push(_rcvEntry);
   _recordJournalEntryIndependently(_rcvEntry, session&&session.shopName, 'receive');
@@ -5109,6 +5114,7 @@ function initStockPage(){
     try{ rebuildStock(false); if(_stockMode==='byinvoice') renderStockByInvoice(); else if(_stockMode==='avail') renderStockPage(); }catch(e){}
   });
   var isAdmin=session&&session.role==='shopadmin';
+  var _trBtn=document.getElementById('stockTransferBtn'); if(_trBtn) _trBtn.style.display=isAdmin?'block':'none';
   var shopRow=document.getElementById('stockShopRow');
   var shopSel=document.getElementById('stockFilterShop');
   var titleEl=document.getElementById('stockPageTitle');
@@ -5344,3 +5350,204 @@ function startStockSync(){
     tabs[nextIdx].click();
   }, {passive:true});
 })();
+
+// ════ Отгрузка в другой магазин (массовое списание) ════
+// Админ вставляет список «№;Название;Порода;Цена;Кол-во». На сохранении: 1) в магазин-получатель
+// уходит входящая накладная (status:'pending', как от мастерской) — там её принимают обычной
+// «Принять накладную»; 2) в смену магазина-отправителя за выбранную дату пишется одно списание
+// «Отгрузка → <магазин>» со всеми позициями (через svPersist — тот же путь, что правка архивной
+// смены: пересчёт остатков дальше по цепочке, слияние с облаком, повтор при сбое); 3) склад
+// отправителя уменьшается. Накладная пишется первой: если она не ушла — ничего не меняем.
+// Списание попадает и в iz_journal_backup — по нему приёмка у получателя пропускает номера,
+// уже принятые раньше в магазине-отправителе (см. _findArtDupInItems).
+var _trRows = [];
+var _TR_DRAFT_KEY = 'iz_transfer_draft';
+function _trSaveDraft(){
+  try{
+    localStorage.setItem(_TR_DRAFT_KEY, JSON.stringify({rows:_trRows,
+      from:gv('trFrom'), to:gv('trTo'), date:gv('trDate'), type:gv('trType'), num:gv('trNum')}));
+  }catch(e){}
+}
+function _trTodayIso(){ var n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
+function _trSuggestNum(dateIso){ return 'ОТГ-'+String(dateIso||_trTodayIso()).replace(/-/g,'').slice(2)+'-'+uid().slice(0,3).toUpperCase(); }
+function openTransferMo(){
+  var shops = getShopNames();
+  var opts = shops.map(function(sn){ return '<option>'+String(sn).replace(/</g,'&lt;')+'</option>'; }).join('');
+  var f=document.getElementById('trFrom'), t=document.getElementById('trTo');
+  if(f) f.innerHTML = opts; if(t) t.innerHTML = opts;
+  var draft = null; try{ draft = JSON.parse(localStorage.getItem(_TR_DRAFT_KEY)||'null'); }catch(e){}
+  _trRows = (draft && draft.rows) || [];
+  var d=document.getElementById('trDate'); if(d){ d.max=_trTodayIso(); d.value=(draft&&draft.date)||_trTodayIso(); }
+  if(f && draft && draft.from) f.value = draft.from;
+  if(t){ t.value = (draft && draft.to) || (shops.find(function(sn){ return sn!==(f&&f.value); })||''); }
+  var ty=document.getElementById('trType'); if(ty) ty.value=(draft&&draft.type)||'derevo';
+  var nm=document.getElementById('trNum'); if(nm) nm.value=(draft&&draft.num)||_trSuggestNum(d&&d.value);
+  _trRender();
+  openMo('transferMo');
+  if(_trRows.length) showToast('📝 Продолжаем начатый список: '+_trRows.length+' поз.');
+}
+function trFieldChanged(){ _trSaveDraft(); _trRender(); }
+function _trStockOf(shop){ return (getStock()[shop]) || {}; }
+// Где эта позиция лежит на складе отправителя: по номеру, а без номера — по названию+цене(+порода).
+function _trStockFind(stockShop, r, gt){
+  var num = String(r.num||'').trim();
+  if(num) return stockShop[num] ? {key:num, it:stockShop[num]} : null;
+  var key = _noArticleStockKey(r.name, r.price, r.species, gt);
+  if(key && stockShop[key]) return {key:key, it:stockShop[key]};
+  var alt = _findStockKeyByNamePrice(stockShop, r.name, r.price, gt, key);
+  return alt ? {key:alt, it:stockShop[alt]} : null;
+}
+function _trKey(r){
+  var n = String(r.num||'').trim();
+  return n ? 'n:'+n : 's:'+String(r.name||'').trim().toLowerCase()+'|'+(r.price||0)+'|'+String(r.species||'').trim().toLowerCase();
+}
+function trParse(){
+  var raw = gv('trText')||'';
+  var gt = gv('trType')||'derevo';
+  var stockShop = _trStockOf(gv('trFrom'));
+  var added=0, merged=0;
+  raw.split(/\r?\n/).forEach(function(line){
+    line = line.trim(); if(!line) return;
+    var delim = line.indexOf('\t')>=0 ? '\t' : (line.indexOf(';')>=0 ? ';' : (line.indexOf('|')>=0 ? '|' : null));
+    var cells = delim ? line.split(delim).map(function(c){ return c.trim(); }) : [line];
+    if(/^(№|номер|арт)/i.test(cells[0]) && /назв/i.test(cells[1]||'')) return; // строка-заголовок
+    var r = {num:cells[0]||'', name:cells[1]||'', species:cells[2]||'', price:_invImpNum(cells[3]), qty:_invImpNum(cells[4])};
+    if(cells.length===1){ r.num = /^\d+$/.test(cells[0]) ? cells[0] : ''; if(!r.num) r.name = cells[0]; }
+    var st = r.num ? stockShop[String(r.num).trim()] : null;
+    if(st){ if(!r.name) r.name = st.name||''; if(!r.species) r.species = st.species||''; if(r.price==null) r.price = st.price||0; }
+    if(r.price==null) r.price = 0;
+    if(r.qty==null || r.qty<=0) r.qty = 1;
+    var k = _trKey(r);
+    var ex = _trRows.find(function(x){ return _trKey(x)===k; });
+    if(ex){ ex.qty = (ex.qty||0)+r.qty; merged++; } else { _trRows.push(r); added++; }
+  });
+  if(!added && !merged){ showToast('Строк не найдено во вставленном тексте'); return; }
+  var ta=document.getElementById('trText'); if(ta) ta.value='';
+  _trSaveDraft(); _trRender();
+  showToast('✅ Добавлено '+added+(merged?', объединено с уже внесёнными: '+merged:'')+' — вставьте следующую страницу или отправляйте');
+}
+function trEdit(i, f, v){
+  var r=_trRows[i]; if(!r) return;
+  r[f] = (f==='price'||f==='qty') ? (_invImpNum(v)||0) : v;
+  _trSaveDraft(); _trRenderTotals();
+}
+function trDel(i){ _trRows.splice(i,1); _trSaveDraft(); _trRender(); }
+function trClearAll(){
+  if(!_trRows.length) return;
+  if(!confirm('Очистить весь список ('+_trRows.length+' поз.)?')) return;
+  _trRows=[]; _trSaveDraft(); _trRender();
+}
+// Проблемы строки: нет названия / кол-во больше, чем на складе отправителя / нет на складе вовсе.
+function _trRowIssues(r, stockShop, gt){
+  var iss = [];
+  if(!String(r.name||'').trim()) iss.push('нет названия');
+  if(!(r.qty>0)) iss.push('нет кол-ва');
+  var f = _trStockFind(stockShop, r, gt);
+  if(!f || (f.it.qty||0)<=0) iss.push('нет на складе отправителя');
+  else if((f.it.qty||0) < r.qty) iss.push('на складе отправителя только '+f.it.qty+' шт.');
+  return iss;
+}
+function _trRenderTotals(){
+  var el=document.getElementById('trTotals'); if(!el) return;
+  var q=0, s=0; _trRows.forEach(function(r){ q+=r.qty||0; s+=(r.qty||0)*(r.price||0); });
+  el.textContent = _trRows.length+' поз. · '+q+' шт. · '+fmt(s);
+}
+function _trRender(){
+  var host=document.getElementById('trPreview'); if(!host) return;
+  if(!_trRows.length){ host.innerHTML=''; return; }
+  var gt = gv('trType')||'derevo', from = gv('trFrom'), to = gv('trTo');
+  var stockShop = _trStockOf(from);
+  var esc = function(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); };
+  var inp = function(i,f,v,w,mode){ return '<input value="'+esc(v)+'" onchange="trEdit('+i+',\''+f+'\',this.value)"'+(mode?' inputmode="'+mode+'"':'')+' style="width:'+w+';min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px">'; };
+  var bad = 0;
+  var rows = _trRows.map(function(r,i){
+    var iss = _trRowIssues(r, stockShop, gt); if(iss.length) bad++;
+    return '<div style="padding:6px 0;border-bottom:1px solid #22222e">'+
+      '<div style="display:flex;gap:4px;align-items:center">'+
+        inp(i,'num',r.num,'70px')+inp(i,'name',r.name,'auto;flex:1')+inp(i,'species',r.species,'70px')+
+        inp(i,'price',r.price,'52px','numeric')+inp(i,'qty',r.qty,'36px','numeric')+
+        '<button type="button" onclick="trDel('+i+')" style="background:none;border:none;color:#f06060;font-size:13px;cursor:pointer;padding:2px">✕</button>'+
+      '</div>'+
+      (iss.length?'<div style="font-size:10px;color:#f0c060;margin-top:2px">⚠️ '+iss.join(' · ')+'</div>':'')+
+    '</div>';
+  }).join('');
+  host.innerHTML = '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:10px;padding:8px 10px;margin-top:10px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div style="font-size:12px;font-weight:700">'+esc(from)+' → '+esc(to)+' · <span id="trTotals"></span></div>'+
+      '<button type="button" onclick="trClearAll()" style="background:none;border:1px solid #f0606055;border-radius:6px;color:#f06060;font-size:10px;padding:3px 7px;cursor:pointer">Очистить</button></div>'+
+    '<div style="font-size:9.5px;color:#555568;margin-bottom:2px">№ · Название · Порода · Цена · Кол-во</div>'+
+    (from===to?'<div style="font-size:11px;color:#f06060;font-weight:700;margin:4px 0">⛔ Откуда и Куда — один и тот же магазин</div>':'')+
+    (bad?'<div style="font-size:11px;color:#f0c060;margin:4px 0">⚠️ Строк с замечаниями: '+bad+'</div>':'')+
+    rows+'</div>';
+  _trRenderTotals();
+}
+// Смена отправителя за дату: если их несколько — открытая, иначе последняя по времени открытия.
+function _trFindShift(shop, dateIso){
+  var tombs = (typeof getShiftTombstones==='function') ? getShiftTombstones() : [];
+  return db.collection('iz_shifts').where('shopName','==',shop).get({source:'server'}).then(function(snap){
+    var list = snap.docs.map(function(d){ var x=d.data(); x.id=d.id; return x; }).filter(function(x){
+      return x.date===dateIso && !x._deleted && !x.isRestoreShift && tombs.indexOf(x.id)===-1;
+    });
+    if(!list.length) return null;
+    var open = list.find(function(x){ return x.status==='open' || !x.closedAt; });
+    if(open) return open;
+    list.sort(function(a,b){ return String(b.openedAt||'').localeCompare(String(a.openedAt||'')); });
+    return list[0];
+  });
+}
+function trSave(){
+  var from=gv('trFrom'), to=gv('trTo'), dateIso=gv('trDate'), gt=gv('trType')||'derevo', num=(gv('trNum')||'').trim();
+  if(!from || !to){ showToast('Выберите магазины'); return; }
+  if(from===to){ showToast('⛔ Откуда и Куда — один и тот же магазин'); return; }
+  if(!dateIso){ showToast('Укажите дату отгрузки'); return; }
+  if(!num){ showToast('Укажите № накладной'); return; }
+  if(!_trRows.length){ showToast('Список пуст — вставьте позиции и нажмите «Разобрать»'); return; }
+  var noName = _trRows.findIndex(function(r){ return !String(r.name||'').trim() || !(r.qty>0); });
+  if(noName>=0){ showToast('⛔ Строка '+(noName+1)+': нужно название и кол-во'); return; }
+  var stockShop = _trStockOf(from);
+  var bad = _trRows.filter(function(r){ return _trRowIssues(r, stockShop, gt).length; }).length;
+  showToast('⏳ Ищу смену «'+from+'» за '+dateIso.split('-').reverse().join('.')+'...');
+  _trFindShift(from, dateIso).then(function(sh){
+    if(!sh){ showToast('⛔ У магазина «'+from+'» нет смены за '+dateIso.split('-').reverse().join('.')+' — списывать некуда. Выберите дату, когда магазин работал.'); return; }
+    var totalQty = _trRows.reduce(function(s,r){ return s+(r.qty||0); },0);
+    var totalAmt = _trRows.reduce(function(s,r){ return s+(r.qty||0)*(r.price||0); },0);
+    if(!confirm('Отгрузка '+num+': '+from+' → '+to+'\n'+_trRows.length+' поз. · '+totalQty+' шт. · '+fmt(totalAmt)+'\n\n'+
+      'Списание попадёт в смену «'+from+' · '+dateIso.split('-').reverse().join('.')+'» ('+(sh.sellerName||'—')+(sh.status==='open'||!sh.closedAt?', открыта':', закрыта')+'), '+
+      'в «'+to+'» уйдёт накладная на приёмку.'+(bad?'\n\n⚠️ Строк с замечаниями по складу отправителя: '+bad+' — всё равно отправить?':''))) return;
+    var reason = 'Отгрузка на «'+to+'» · накл. '+num;
+    var invId = uid();
+    var items = _trRows.map(function(r){
+      var n = String(r.num||'').trim();
+      return {num:n, article:n, name:String(r.name).trim(), species:String(r.species||'').trim(), price:r.price||0, qty:r.qty, amt:(r.price||0)*r.qty, goodsType:gt, reason:reason};
+    });
+    var who = (session&&(session.name||session.sellerName))||'admin';
+    var inv = {id:invId, num:num, date:dateIso, sourceName:from, destName:to, status:'pending', goodsType:gt,
+      items:items.map(function(it){ return {num:it.num, article:it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, goodsType:gt}; }),
+      total:totalAmt, isTransfer:true, transferFrom:from, createdBy:who, createdAt:new Date().toISOString()};
+    db.collection('iz_invoices').doc(invId).set(inv).then(function(){
+      var ts = dateIso===_trTodayIso() ? _workingNowISO() : new Date(dateIso+'T12:00:00').toISOString();
+      var isDr = gt==='dr';
+      var entry = {id:uid(), type:'writeoff', ts:ts, icon:'🚚', label:'Отгрузка → '+to,
+        sub:items.length+' поз. ('+totalQty+' шт.) · накл. '+num, goodsType:gt, items:items, reason:reason,
+        amount:totalAmt, amtCls:'exp', amtSign:'−', cashEffect:0, cardEffect:0, staffEffect:0,
+        goodsEffect:isDr?0:-totalAmt, goodsDrEffect:isDr?-totalAmt:0,
+        transferTo:to, transferInvId:invId, transferInvNum:num, addedByAdmin:who, addedAt:new Date().toISOString()};
+      // Пишем через тот же путь, что правка архивной смены, — временно подменяем открытую в
+      // интерфейсе смену и сразу возвращаем (асинхронная часть svPersist держит свою копию).
+      var prevView = _currentShiftView;
+      try{
+        if(sh.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(sh);
+        sh.journal = (sh.journal||[]).concat([entry]).sort(function(a,b){ return String(a.ts||'').localeCompare(String(b.ts||'')); });
+        _currentShiftView = sh;
+        // у открытой смены вечернего остатка ещё нет — пересчитывать нечего, его посчитают при закрытии
+        svPersist(sh.status==='open' || !sh.closedAt);
+      } finally { _currentShiftView = prevView; }
+      try{ _recordJournalEntryIndependently(entry, from, 'writeoff'); }catch(e){}
+      try{ stockApplyWriteoff(from, items); }catch(e){}
+      try{ logAction('TRANSFER_OUT', {from:from, to:to, invNum:num, invId:invId, shiftId:sh.id, date:dateIso, itemCount:items.length, qty:totalQty, amount:totalAmt}); }catch(e){}
+      _trRows = []; try{ localStorage.removeItem(_TR_DRAFT_KEY); }catch(e){}
+      closeMo('transferMo');
+      try{ renderStockPage(); }catch(e){}
+      showToast('✅ Списано из «'+from+'» и отправлено в «'+to+'»: '+items.length+' поз. — ждёт приёмки');
+    }).catch(function(err){ showToast('❌ Накладная не отправилась — ничего не списано: '+(err&&err.message||err)); });
+  }).catch(function(err){ showToast('❌ Не удалось найти смену: '+(err&&err.message||err)); });
+}
