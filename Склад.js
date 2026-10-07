@@ -424,7 +424,7 @@ function saveWriteoff(){
   var count = woItems.length;
   // Переоценка — тот же физический товар с новой ценой: количество на складе не меняем
   // (как у прихода-переоценки, у которого qty тоже 0), иначе изделие «пропадало» со склада.
-  try{ var _woSh=session&&session.shopName; if(!isReval) woItems.forEach(function(it){ if(it.num&&_woSh) stockUpdateQty(_woSh,it.num,it.name,it.price,it.species,it.goodsType,it.size,-(it.qty||1),null); }); }catch(e){}
+  try{ if(!isReval) stockApplyWriteoff(session&&session.shopName, woItems); }catch(e){}
   saveJ(); clearWoDraft(); resetWoForm();
   closeMo('woMo'); renderAll();
   showToast((isReval?'🔄 Переоценка: списано ':'🗑️ Списано ')+count+(count===1?' позиция':' позиций')+' на '+fmt(total));
@@ -3463,6 +3463,13 @@ function stockUpdateQty(shopName,num,name,price,species,goodsType,size,qtyDelta,
     entry.lastSold=date||new Date().toISOString().split('T')[0];
   }
   saveStock(stock);
+}
+// Списание уменьшает склад так же, как продажа: по артикулу, а у безартикульной позиции — по
+// ключу название+цена(+порода), с тем же поиском похожей записи остатка, что и в продаже.
+// Раньше списание продавца уменьшало склад только для позиций с номером, а списание админом из
+// карточки смены — не уменьшало вовсе.
+function stockApplyWriteoff(shopName,items){
+  stockApplySale(shopName, (items||[]).filter(function(it){ return !it.isRevaluation; }));
 }
 function stockApplySale(shopName,items){
   if(!shopName) return;

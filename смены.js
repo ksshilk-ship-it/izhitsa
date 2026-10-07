@@ -6516,7 +6516,7 @@ function svAddWo(type){
     items.push({num:row.art, name:row.name, species:row.species, price:row.price, qty:row.qty, amt:(row.amt||(row.price*row.qty)||0)});
   }
   if(!items.length){ showToast('Добавьте хотя бы одну позицию'); return; }
-  items.forEach(function(it){ it.reason=reason; it.isRevaluation=isReval; });
+  items.forEach(function(it){ it.reason=reason; it.isRevaluation=isReval; it.goodsType = isWood?'derevo':'dr'; });
   var totalAmt = items.reduce(function(s,it){ return s+(it.amt||0); },0);
   var totalQty = items.reduce(function(s,it){ return s+(it.qty||1); },0);
   var namesPreview = items.map(function(it){ return it.name; }).join(', ');
@@ -6536,6 +6536,7 @@ function svAddWo(type){
   _currentShiftView.journal = jnl;
   try{ _recordJournalEntryIndependently(entry, _currentShiftView.shopName, 'writeoff'); }catch(e){}
   items.forEach(function(it){ logWriteoff(it.reason, it.amt, _currentShiftView.shopName); });
+  if(!isReval){ try{ stockApplyWriteoff(_currentShiftView.shopName, items); }catch(e){} }
   if(isReval){
     logAction('REVALUATION', {direction:'writeoff', goodsType:isWood?'derevo':'dr', itemCount:items.length,
       names:namesPreview, amount:totalAmt, reason:reason,
