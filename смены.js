@@ -4816,8 +4816,9 @@ function _renderShiftView(){
     var open = !!window._svWoOpen[key] || !!(_svEditTarget && _svEditTarget.kind==='jwoItem' && String(_svEditTarget.idx).indexOf(i+'_')===0);
     var totalQty = wItems.reduce(function(s,it){ return s+(it.qty||1); },0);
     var total = w.amount!=null ? w.amount : wItems.reduce(function(s,it){ return s+(it.amt!=null?it.amt:(it.price||0)*(it.qty||1)); },0);
-    var title = (w.icon==='🚚'?'🚚 ':'')+(w.label||'Списание').replace(/^🔄 ПЕРЕОЦЕНКА · /,'');
-    var sub = (w.transferInvNum?'накл. '+w.transferInvNum+' · ':'')+wItems.length+' поз. ('+totalQty+' шт.)'+(w.reason&&!w.transferInvNum?' · '+w.reason:'');
+    var title = (w.icon==='🚚'?'🚚 ':'')+(w.label||'Списание').replace(/^🔄 ПЕРЕОЦЕНКА · /,'').replace(/^Отгрузка →/,'Перемещение →');
+    var docNum = w.transferInvNum || w.woInvNum;
+    var sub = (docNum?'накл. '+docNum+' · ':'')+wItems.length+' поз. ('+totalQty+' шт.)'+(w.reason&&!w.transferInvNum?' · '+w.reason:'');
     var delMsg = 'Удалить ВСЮ накладную «'+(w.label||'Списание')+'»'+(w.transferInvNum?' '+w.transferInvNum:'')+' — '+wItems.length+' поз. на '+f(total)+'?';
     return '<div style="border-bottom:1px solid #2e2e3e;padding:8px 0">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+

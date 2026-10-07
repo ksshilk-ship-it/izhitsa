@@ -3306,7 +3306,7 @@ function renderAdminRcvWo(){
         if(found) invAcceptedByFallback = found.acceptedBy||found.createdBy||'';
       }
       var rowItems = (e.items&&e.items.length) ? e.items : (invItemsFallback||[]);
-      rows.push({shop:sn, date:shDate, ts:e.ts||shDate, label:invNum?'Приёмка '+invNum:(e.label||e.sub||''), sub:e.sub||'', amount:amt, goodsType:e.goodsType||'derevo', invId:e.invId||null, entryId:e.id||null, shiftId:sh.id||sh._id||null, items:rowItems, reason:e.reason||'', isRevaluation:!!e.isRevaluation, acceptedBy:e.acceptedBy||invAcceptedByFallback||''});
+      rows.push({shop:sn, date:shDate, ts:e.ts||shDate, label:invNum?'Приёмка '+invNum:String(e.label||e.sub||'').replace(/^Отгрузка →/,'Перемещение →'), sub:e.sub||'', amount:amt, goodsType:e.goodsType||'derevo', invId:e.invId||null, entryId:e.id||null, shiftId:sh.id||sh._id||null, items:rowItems, reason:e.reason||'', isRevaluation:!!e.isRevaluation, acceptedBy:e.acceptedBy||invAcceptedByFallback||''});
     });
     if(type==='receive'){
       (sh.goodsReceives||[]).forEach(function(r){ rows.push({shop:sn,date:shDate,ts:shDate,label:'Приход Дерево',sub:r.name||'',amount:r.amt||r.amount||0,goodsType:'derevo',items:[],isRevaluation:!!r.isRevaluation}); });
@@ -5408,9 +5408,28 @@ function _trWorkshopName(){
 }
 function _trSaveDraft(){
   try{
-    localStorage.setItem(_trDraftKey(), JSON.stringify({rows:_trRows,
-      from:gv('trFrom'), to:gv('trTo'), date:gv('trDate'), type:gv('trType'), num:gv('trNum')}));
+    localStorage.setItem(_trDraftKey(), JSON.stringify({rows:_trRows, kind:_trKind,
+      from:gv('trFrom'), to:gv('trTo'), date:gv('trDate'), type:gv('trType'), num:gv('trNum'), reason:gv('trReason')}));
   }catch(e){}
+}
+// Вид накладной: «Перемещение» — в свой магазин/мастерскую, там принимают по накладной;
+// «Списание» — брак, бой и т.п., без получателя и без накладной на приёмку.
+var _trKind = 'move';
+function trSetKind(kind){
+  _trKind = kind==='wo' ? 'wo' : 'move';
+  var isWo = _trKind==='wo';
+  var style = function(id, on, color){ var b=document.getElementById(id); if(!b) return;
+    b.style.border = on ? '2px solid '+color : '1px solid #2e2e3e'; b.style.background = on ? '#22222e' : 'none'; b.style.color = on ? color : '#8888aa'; };
+  style('trKindMove', !isWo, '#60c8f0'); style('trKindWo', isWo, '#f06060');
+  var show = function(id, on){ var el=document.getElementById(id); if(el) el.style.display = on ? '' : 'none'; };
+  show('trToWrap', !isWo); show('trReasonWrap', isWo);
+  var lbl = document.getElementById('trFromLbl'); if(lbl) lbl.textContent = isWo ? 'Магазин' : 'Откуда';
+  var hint = document.getElementById('trKindHint');
+  if(hint) hint.textContent = isWo ? 'Товар списывается со склада магазина без получателя (брак, бой, недостача). Причина обязательна.'
+    : 'Товар списывается со склада отправителя и уходит входящей накладной туда, куда перемещаете (магазин или мастерская) — там его сверяют и принимают.';
+  var t = document.getElementById('trTitle'); if(t) t.textContent = isWo ? '🗑 Списание списком' : '🚚 Перемещение товара';
+  var sb = document.getElementById('trSaveBtn'); if(sb) sb.textContent = isWo ? '🗑 Списать' : '🚚 Списать и отправить накладную';
+  _trSaveDraft(); _trRender();
 }
 function _trTodayIso(){ var n=new Date(); return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
 function _trSuggestNum(dateIso){ return 'ПЕР-'+String(dateIso||_trTodayIso()).replace(/-/g,'').slice(2)+'-'+uid().slice(0,3).toUpperCase(); }
@@ -5431,7 +5450,6 @@ function openTransferMo(){
     t.innerHTML = toList.map(function(sn){ return '<option value="'+esc(sn)+'">'+esc(sn)+'</option>'; }).join('')+
       '<option value="'+esc(ws)+'">🏭 '+esc(ws)+' (склад)</option>';
   }
-  var title = document.getElementById('trTitle'); if(title) title.textContent = isAdmin ? '🚚 Отгрузка в другой магазин' : '🚚 Перемещение товара';
   var draft = null; try{ draft = JSON.parse(localStorage.getItem(_trDraftKey())||'null'); }catch(e){}
   _trRows = (draft && draft.rows) || [];
   if(d){ d.max=_trTodayIso(); d.value = isAdmin ? ((draft&&draft.date)||_trTodayIso()) : _trTodayIso(); d.disabled = !isAdmin; }
@@ -5442,7 +5460,8 @@ function openTransferMo(){
   }
   var ty=document.getElementById('trType'); if(ty) ty.value=(draft&&draft.type)||'derevo';
   var nm=document.getElementById('trNum'); if(nm) nm.value=(draft&&draft.num)||_trSuggestNum(d&&d.value);
-  _trRender();
+  var rs=document.getElementById('trReason'); if(rs) rs.value=(draft&&draft.reason)||'';
+  trSetKind((draft&&draft.kind)||'move');
   openMo('transferMo');
   if(_trRows.length) showToast('📝 Продолжаем начатый список: '+_trRows.length+' поз.');
 }
@@ -5548,10 +5567,10 @@ function _trRender(){
     '</div>';
   }).join('');
   host.innerHTML = '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:10px;padding:8px 10px;margin-top:10px">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div style="font-size:12px;font-weight:700">'+esc(from)+' → '+esc(to)+' · <span id="trTotals"></span></div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div style="font-size:12px;font-weight:700">'+esc(from)+(_trKind==='wo'?' · списание':' → '+esc(to))+' · <span id="trTotals"></span></div>'+
       '<button type="button" onclick="trClearAll()" style="background:none;border:1px solid #f0606055;border-radius:6px;color:#f06060;font-size:10px;padding:3px 7px;cursor:pointer">Очистить</button></div>'+
     '<div style="font-size:9.5px;color:#555568;margin-bottom:2px">№ · Название · Порода · Цена · Кол-во</div>'+
-    (from===to?'<div style="font-size:11px;color:#f06060;font-weight:700;margin:4px 0">⛔ Откуда и Куда — один и тот же магазин</div>':'')+
+    (_trKind!=='wo'&&from===to?'<div style="font-size:11px;color:#f06060;font-weight:700;margin:4px 0">⛔ Откуда и Куда — один и тот же магазин</div>':'')+
     (bad?'<div style="font-size:11px;color:#f0c060;margin:4px 0">⚠️ Строк с замечаниями: '+bad+'</div>':'')+
     rows+
     '<button type="button" onclick="trAddRow()" style="width:100%;margin-top:8px;padding:8px;background:none;border:1px dashed #60c8f0;border-radius:8px;color:#60c8f0;font-size:11.5px;font-weight:700;cursor:pointer">➕ Строка</button>'+
@@ -5656,8 +5675,11 @@ function trSave(){
   var isAdmin = _trIsAdmin();
   var from=gv('trFrom'), to=gv('trTo'), dateIso=gv('trDate'), gt=gv('trType')||'derevo', num=(gv('trNum')||'').trim();
   if(!isAdmin){ from = session && session.shopName; dateIso = _trTodayIso(); }
-  if(!from || !to){ showToast('Выберите, куда перемещаете'); return; }
-  if(from===to){ showToast('⛔ Откуда и Куда — одно и то же место'); return; }
+  var isWo = _trKind==='wo';
+  var woReason = (gv('trReason')||'').trim();
+  if(isWo){ to = ''; if(!woReason){ showToast('Укажите причину списания'); return; } }
+  if(!from || (!isWo && !to)){ showToast('Выберите, куда перемещаете'); return; }
+  if(!isWo && from===to){ showToast('⛔ Откуда и Куда — одно и то же место'); return; }
   if(!dateIso){ showToast('Укажите дату'); return; }
   if(!num){ showToast('Укажите № накладной'); return; }
   if(!_trRows.length){ showToast('Список пуст — добавьте позиции'); return; }
@@ -5667,27 +5689,28 @@ function trSave(){
   var bad = _trRows.filter(function(r){ return _trRowIssues(r, stockShop, gt).length; }).length;
   var totalQty = _trRows.reduce(function(s,r){ return s+(r.qty||0); },0);
   var totalAmt = _trRows.reduce(function(s,r){ return s+(r.qty||0)*(r.price||0); },0);
-  var head = 'Перемещение '+num+': '+from+' → '+to+'\n'+_trRows.length+' поз. · '+totalQty+' шт. · '+fmt(totalAmt)+'\n\n';
+  var head = (isWo ? 'Списание '+num+' («'+woReason+'»): '+from : 'Перемещение '+num+': '+from+' → '+to)+'\n'+_trRows.length+' поз. · '+totalQty+' шт. · '+fmt(totalAmt)+'\n\n';
+  var tail = isWo ? '.' : ', в «'+to+'» уйдёт накладная на приёмку.';
   var badTxt = bad ? '\n\n⚠️ Строк с замечаниями по складу «'+from+'»: '+bad+' — всё равно отправить?' : '';
   if(!isAdmin){
     // Продавец: списание — в свою открытую смену (живой журнал на этом устройстве).
     if(!session || session.isPreview || !Array.isArray(journal)){ showToast('Перемещение доступно на открытой смене'); return; }
-    if(!confirm(head+'Списание попадёт в вашу текущую смену, в «'+to+'» уйдёт накладная на приёмку.'+badTxt)) return;
-    _trCommit({from:from, to:to, dateIso:dateIso, gt:gt, num:num, totalQty:totalQty, totalAmt:totalAmt, shift:null});
+    if(!confirm(head+'Списание попадёт в вашу текущую смену'+tail+badTxt)) return;
+    _trCommit({kind:_trKind, reason:woReason, from:from, to:to, dateIso:dateIso, gt:gt, num:num, totalQty:totalQty, totalAmt:totalAmt, shift:null});
     return;
   }
   showToast('⏳ Ищу смену «'+from+'» за '+dateIso.split('-').reverse().join('.')+'...');
   _trFindShift(from, dateIso).then(function(sh){
     if(!sh){ showToast('⛔ У магазина «'+from+'» нет смены за '+dateIso.split('-').reverse().join('.')+' — списывать некуда. Выберите дату, когда магазин работал.'); return; }
-    if(!confirm(head+'Списание попадёт в смену «'+from+' · '+dateIso.split('-').reverse().join('.')+'» ('+(sh.sellerName||'—')+(sh.status==='open'||!sh.closedAt?', открыта':', закрыта')+'), '+
-      'в «'+to+'» уйдёт накладная на приёмку.'+badTxt)) return;
-    _trCommit({from:from, to:to, dateIso:dateIso, gt:gt, num:num, totalQty:totalQty, totalAmt:totalAmt, shift:sh});
+    if(!confirm(head+'Списание попадёт в смену «'+from+' · '+dateIso.split('-').reverse().join('.')+'» ('+(sh.sellerName||'—')+(sh.status==='open'||!sh.closedAt?', открыта':', закрыта')+')'+tail+badTxt)) return;
+    _trCommit({kind:_trKind, reason:woReason, from:from, to:to, dateIso:dateIso, gt:gt, num:num, totalQty:totalQty, totalAmt:totalAmt, shift:sh});
   }).catch(function(err){ showToast('❌ Не удалось найти смену: '+(err&&err.message||err)); });
 }
 // Накладная пишется первой: если она не ушла — ничего не списываем.
 function _trCommit(o){
-  var reason = 'Перемещение в «'+o.to+'» · накл. '+o.num;
-  var invId = uid();
+  var isWo = o.kind==='wo';
+  var reason = isWo ? o.reason : 'Перемещение в «'+o.to+'» · накл. '+o.num;
+  var invId = isWo ? null : uid();
   var items = _trRows.map(function(r){
     var n = String(r.num||'').trim();
     return {num:n, article:n, name:String(r.name).trim(), species:String(r.species||'').trim(), price:r.price||0, qty:r.qty, amt:(r.price||0)*r.qty, goodsType:o.gt, reason:reason};
@@ -5697,14 +5720,16 @@ function _trCommit(o){
   var inv = {id:invId, num:o.num, date:o.dateIso, sourceName:o.from, destName:o.to, status:'pending', goodsType:o.gt,
     items:items.map(function(it){ return {num:it.num, article:it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, goodsType:o.gt}; }),
     total:o.totalAmt, isTransfer:true, transferFrom:o.from, toWorkshop:toWorkshop, createdBy:who, createdAt:new Date().toISOString()};
-  db.collection('iz_invoices').doc(invId).set(inv).then(function(){
+  (isWo ? Promise.resolve() : db.collection('iz_invoices').doc(invId).set(inv)).then(function(){
     var ts = (o.shift===null || o.dateIso===_trTodayIso()) ? _workingNowISO() : new Date(o.dateIso+'T12:00:00').toISOString();
     var isDr = o.gt==='dr';
-    var entry = {id:uid(), type:'writeoff', ts:ts, icon:'🚚', label:'Перемещение → '+o.to,
-      sub:items.length+' поз. ('+o.totalQty+' шт.) · накл. '+o.num, goodsType:o.gt, items:items, reason:reason,
+    var entry = {id:uid(), type:'writeoff', ts:ts, icon:isWo?'🗑️':'🚚', label:isWo?'Списание':'Перемещение → '+o.to,
+      sub:items.length+' поз. ('+o.totalQty+' шт.) · накл. '+o.num+(isWo?' · '+reason:''), goodsType:o.gt, items:items, reason:reason,
       amount:o.totalAmt, amtCls:'exp', amtSign:'−', cashEffect:0, cardEffect:0, staffEffect:0,
       goodsEffect:isDr?0:-o.totalAmt, goodsDrEffect:isDr?-o.totalAmt:0,
-      transferTo:o.to, transferInvId:invId, transferInvNum:o.num, addedBy:who, addedAt:new Date().toISOString()};
+      addedBy:who, addedAt:new Date().toISOString()};
+    if(isWo){ entry.woInvNum = o.num; }
+    else { entry.transferTo = o.to; entry.transferInvId = invId; entry.transferInvNum = o.num; }
     if(o.shift===null){
       journal.push(entry);
       saveJ();
@@ -5724,11 +5749,11 @@ function _trCommit(o){
     }
     try{ _recordJournalEntryIndependently(entry, o.from, 'writeoff'); }catch(e){}
     try{ stockApplyWriteoff(o.from, items); }catch(e){}
-    try{ logAction('TRANSFER_OUT', {from:o.from, to:o.to, invNum:o.num, invId:invId, shiftId:o.shift?o.shift.id:(session&&session.shiftId), date:o.dateIso, itemCount:items.length, qty:o.totalQty, amount:o.totalAmt, bySeller:o.shift===null}); }catch(e){}
+    try{ logAction(isWo?'WRITEOFF_LIST':'TRANSFER_OUT', {reason:reason, from:o.from, to:o.to, invNum:o.num, invId:invId, shiftId:o.shift?o.shift.id:(session&&session.shiftId), date:o.dateIso, itemCount:items.length, qty:o.totalQty, amount:o.totalAmt, bySeller:o.shift===null}); }catch(e){}
     _trRows = []; try{ localStorage.removeItem(_trDraftKey()); }catch(e){}
     closeMo('transferMo');
     try{ if(o.shift===null) renderAll(); else renderStockPage(); }catch(e){}
-    showToast('✅ Списано из «'+o.from+'» и отправлено в «'+o.to+'»: '+items.length+' поз. — ждёт приёмки');
+    showToast(isWo ? '✅ Списано из «'+o.from+'»: '+items.length+' поз.' : '✅ Списано из «'+o.from+'» и отправлено в «'+o.to+'»: '+items.length+' поз. — ждёт приёмки');
   }).catch(function(err){ showToast('❌ Накладная не отправилась — ничего не списано: '+(err&&err.message||err)); });
 }
 
@@ -5747,8 +5772,10 @@ function adminEditWo(entryId, shiftId){
     var sh = snap.data(); sh.id = shiftId;
     var entry = (sh.journal||[]).find(function(e){ return e.id===entryId; });
     if(!entry || !(entry.items||[]).length){ showToast('⚠️ У записи нет позиций — правьте её в карточке смены'); return; }
+    var kind = entry.transferInvId ? 'move' : 'wo';
     var st = {sh:sh, entryId:entryId, shop:sh.shopName, gt:entry.goodsType||'derevo',
-      num:entry.transferInvNum||'', reason:entry.reason||((entry.items[0]||{}).reason)||'',
+      kind:kind, origKind:kind, to:entry.transferTo||'', origTo:entry.transferTo||'',
+      num:entry.transferInvNum||entry.woInvNum||'', reason:entry.reason||((entry.items[0]||{}).reason)||'',
       rows:JSON.parse(JSON.stringify(entry.items)).map(function(it){ return {num:it.num||it.article||'', name:it.name||'', species:it.species||'', price:it.price||0, qty:it.qty||1}; }),
       isTransfer:!!entry.transferInvId, invLocked:false};
     var go = function(){ _woEd = st; _woEdRender(); openMo('woEditInvMo'); };
@@ -5772,12 +5799,22 @@ function _woEdRender(){
       (mode?' inputmode="'+mode+'"':'')+' style="width:'+w+';min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px">';
   };
   var q=0, sum=0; st.rows.forEach(function(r){ q+=r.qty||0; sum+=(r.qty||0)*(r.price||0); });
-  var t = document.getElementById('woEdTitle'); if(t) t.textContent = '✏️ '+(st.isTransfer?'Накладная перемещения':'Накладная списания')+' · '+st.shop;
+  var t = document.getElementById('woEdTitle'); if(t) t.textContent = '✏️ Накладная · '+st.shop;
+  var isMove = st.kind==='move';
+  var kbtn = function(k, label, color){ var on = st.kind===k;
+    return '<button type="button"'+(lock?' disabled':'')+' onclick="_woEdSetKind(\''+k+'\')" style="flex:1;padding:8px;border-radius:9px;font-size:12px;font-weight:700;cursor:'+(lock?'default':'pointer')+';border:'+(on?'2px solid '+color:'1px solid #2e2e3e')+';background:'+(on?'#22222e':'none')+';color:'+(on?color:'#8888aa')+'">'+label+'</button>'; };
+  var ws = _trWorkshopName();
+  var dests = getShopNames().filter(function(sn){ return sn!==st.shop && sn!==ws; }).concat([ws]);
   host.innerHTML =
-    (lock?'<div style="font-size:11px;color:#f0c060;background:#2e2414;border:1px solid #f0c06055;border-radius:8px;padding:8px;margin-bottom:8px">⚠️ Получатель уже принял эту накладную — позиции менять нельзя (у него товар на балансе). Можно поправить номер и причину.</div>':'')+
+    '<div style="display:flex;gap:6px;margin-bottom:8px">'+kbtn('move','🚚 Перемещение','#60c8f0')+kbtn('wo','🗑 Списание','#f06060')+'</div>'+
+    (isMove?'<div class="fg"><label class="fl">Куда</label><select class="fi" id="woEdTo"'+(lock?' disabled':'')+' onchange="_woEd.to=this.value">'+
+      '<option value="">— выберите —</option>'+dests.map(function(sn){ return '<option value="'+esc(sn)+'"'+(sn===st.to?' selected':'')+'>'+(sn===ws?'🏭 ':'')+esc(sn)+'</option>'; }).join('')+'</select></div>':'')+
+    (lock?'<div style="font-size:11px;color:#f0c060;background:#2e2414;border:1px solid #f0c06055;border-radius:8px;padding:8px;margin-bottom:8px">⚠️ Получатель уже принял эту накладную — вид, получателя и позиции менять нельзя (у него товар на балансе). Можно поправить номер и причину.</div>':'')+
+    (st.origKind==='move'&&!isMove&&!lock?'<div style="font-size:11px;color:#f0c060;margin-bottom:8px">Накладная у получателя «'+esc(st.origTo)+'» будет отменена, товар останется списанным.</div>':'')+
+    (st.origKind==='wo'&&isMove?'<div style="font-size:11px;color:#60c8f0;margin-bottom:8px">Получателю уйдёт накладная на приёмку.</div>':'')+
     '<div class="row2">'+
       '<div class="fg" style="flex:1"><label class="fl">№ накладной</label><input class="fi" id="woEdNum" value="'+esc(st.num)+'" oninput="_woEd.num=this.value"></div>'+
-      '<div class="fg" style="flex:1"><label class="fl">Причина</label><input class="fi" id="woEdReason" value="'+esc(st.reason)+'" oninput="_woEd.reason=this.value"></div>'+
+      '<div class="fg" style="flex:1'+(isMove?';display:none':'')+'"><label class="fl">Причина списания</label><input class="fi" id="woEdReason" placeholder="брак, бой, недостача" value="'+esc(st.reason)+'" oninput="_woEd.reason=this.value"></div>'+
     '</div>'+
     '<div id="woEdTotals" style="font-size:11.5px;font-weight:700;margin:4px 0">'+st.rows.length+' поз. · '+q+' шт. · '+fmt(sum)+'</div>'+
     '<div style="font-size:9.5px;color:#555568;margin-bottom:2px">№ · Название · Порода · Цена · Кол-во</div>'+
@@ -5795,6 +5832,14 @@ function _woEdRender(){
     (lock?'':'<button type="button" onclick="_woEd.rows.push({num:\'\',name:\'\',species:\'\',price:0,qty:1});_woEdRender()" style="width:100%;margin-top:8px;padding:8px;background:none;border:1px dashed #60c8f0;border-radius:8px;color:#60c8f0;font-size:11.5px;font-weight:700;cursor:pointer">➕ Строка</button>')+
     '<button class="btn" style="margin-top:10px" onclick="_woEdSave()">💾 Сохранить накладную</button>'+
     '<button class="btn sec" style="margin-top:8px" onclick="closeMo(\'woEditInvMo\')">Отмена</button>';
+}
+function _woEdSetKind(k){
+  if(!_woEd || _woEd.invLocked) return;
+  _woEd.num = (gv('woEdNum')||_woEd.num); _woEd.reason = (gv('woEdReason')||_woEd.reason);
+  _woEd.kind = k==='wo' ? 'wo' : 'move';
+  if(_woEd.kind==='wo' && /^(Перемещение в|Отгрузка на) «/.test(_woEd.reason||'')) _woEd.reason = '';
+  if(_woEd.kind==='move' && !_woEd.to) _woEd.to = _woEd.origTo || '';
+  _woEdRender();
 }
 function _woEdEdit(i, f, v){
   var r = _woEd && _woEd.rows[i]; if(!r) return;
@@ -5830,55 +5875,84 @@ function _woEdPick(i, k){
 function _woEdSave(){
   var st = _woEd; if(!st) return;
   st.num = (gv('woEdNum')||'').trim(); st.reason = (gv('woEdReason')||'').trim();
+  if(st.kind==='move'){ st.to = gv('woEdTo') || st.to; }
   if(!st.rows.length){ showToast('⛔ Нет позиций — удалить накладную целиком можно в карточке смены'); return; }
   var bad = st.rows.findIndex(function(r){ return !String(r.name||'').trim() || !(r.qty>0); });
   if(bad>=0){ showToast('⛔ Строка '+(bad+1)+': нужно название и кол-во'); return; }
+  if(st.kind==='move' && !st.to){ showToast('Выберите, куда перемещаете'); return; }
+  if(st.kind==='move' && st.to===st.shop){ showToast('⛔ Получатель — тот же магазин'); return; }
+  if(st.kind==='wo' && (!st.reason || /^(Перемещение в|Отгрузка на) «/.test(st.reason))){ showToast('Укажите причину списания (брак, бой и т.п.)'); return; }
   var sh = st.sh;
   var entry = (sh.journal||[]).find(function(e){ return e.id===st.entryId; }); if(!entry) return;
   var oldItems = entry.items||[];
+  var reasonFor = function(){ return st.kind==='move' ? 'Перемещение в «'+st.to+'» · накл. '+st.num : st.reason; };
   var newItems = st.rows.map(function(r){
     var n = String(r.num||'').trim();
-    return {num:n, article:n, name:String(r.name).trim(), species:String(r.species||'').trim(), price:r.price||0, qty:r.qty, amt:(r.price||0)*r.qty, goodsType:st.gt, reason:st.reason, isRevaluation:!!entry.isRevaluation};
+    return {num:n, article:n, name:String(r.name).trim(), species:String(r.species||'').trim(), price:r.price||0, qty:r.qty, amt:(r.price||0)*r.qty, goodsType:st.gt, reason:reasonFor(), isRevaluation:!!entry.isRevaluation};
   });
   var itemsChanged = JSON.stringify(oldItems.map(function(it){ return [it.num||it.article||'', it.name, it.species||'', it.price||0, it.qty||1]; })) !==
                      JSON.stringify(newItems.map(function(it){ return [it.num, it.name, it.species, it.price, it.qty]; }));
-  if(st.invLocked && itemsChanged){ showToast('⛔ Накладная уже принята получателем — позиции менять нельзя'); return; }
-  if(!confirm('Сохранить изменения накладной'+(st.num?' '+st.num:'')+'?'+(itemsChanged?'\nСклад «'+st.shop+'» пересчитается по новым позициям.':''))) return;
+  var kindChanged = st.kind!==st.origKind;
+  var destChanged = st.kind==='move' && st.origKind==='move' && st.to!==st.origTo;
+  if(st.invLocked && (itemsChanged || kindChanged || destChanged)){ showToast('⛔ Накладная уже принята получателем — менять вид, получателя и позиции нельзя'); return; }
+  var msg = 'Сохранить накладную'+(st.num?' '+st.num:'')+'?';
+  if(itemsChanged) msg += '\nСклад «'+st.shop+'» пересчитается по новым позициям.';
+  if(kindChanged && st.kind==='wo') msg += '\nНакладная у «'+st.origTo+'» будет отменена, товар останется списанным.';
+  if(kindChanged && st.kind==='move') msg += '\nВ «'+st.to+'» уйдёт накладная на приёмку.';
+  if(destChanged) msg += '\nПолучатель: «'+st.origTo+'» → «'+st.to+'».';
+  if(!confirm(msg)) return;
   var total = newItems.reduce(function(s,it){ return s+it.amt; },0);
   var totalQty = newItems.reduce(function(s,it){ return s+it.qty; },0);
   var who = (session&&(session.name||session.sellerName))||'admin';
-  var prevView = _currentShiftView;
-  try{
-    if(sh.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(sh);
-    entry.items = newItems;
-    entry.amount = total;
-    entry.goodsEffect = st.gt==='dr' ? 0 : -total;
-    entry.goodsDrEffect = st.gt==='dr' ? -total : 0;
-    entry.reason = st.reason;
-    if(entry.transferInvId){
-      entry.transferInvNum = st.num;
-      entry.sub = newItems.length+' поз. ('+totalQty+' шт.) · накл. '+st.num;
-    } else {
-      entry.sub = newItems.length===1 ? ((newItems[0].num?'№'+newItems[0].num+' ':'')+newItems[0].name+(newItems[0].species?' · '+newItems[0].species:'')+' · '+st.reason)
-        : (newItems.length+' позиций ('+totalQty+' шт.): '+newItems.map(function(it){ return it.name; }).join(', ')+' · '+st.reason);
+  var invItems = newItems.map(function(it){ return {num:it.num, article:it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, goodsType:st.gt}; });
+  // Перед записью смены — накладная получателя (как при внесении): новая при «списание → перемещение».
+  var newInvId = (kindChanged && st.kind==='move') ? uid() : null;
+  var pre = newInvId ? db.collection('iz_invoices').doc(newInvId).set({id:newInvId, num:st.num, date:sh.date, sourceName:st.shop, destName:st.to,
+      status:'pending', goodsType:st.gt, items:invItems, total:total, isTransfer:true, transferFrom:st.shop, toWorkshop:st.to===_trWorkshopName(),
+      createdBy:who, createdAt:new Date().toISOString()}) : Promise.resolve();
+  pre.then(function(){
+    var oldInvId = entry.transferInvId;
+    var prevView = _currentShiftView;
+    try{
+      if(sh.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(sh);
+      entry.items = newItems;
+      entry.amount = total;
+      entry.goodsEffect = st.gt==='dr' ? 0 : -total;
+      entry.goodsDrEffect = st.gt==='dr' ? -total : 0;
+      entry.reason = reasonFor();
+      if(st.kind==='move'){
+        entry.icon = '🚚'; entry.label = 'Перемещение → '+st.to;
+        entry.transferTo = st.to; entry.transferInvNum = st.num;
+        if(newInvId) entry.transferInvId = newInvId;
+        delete entry.woInvNum;
+        entry.sub = newItems.length+' поз. ('+totalQty+' шт.) · накл. '+st.num;
+      } else {
+        entry.icon = '🗑️'; entry.label = 'Списание'; entry.woInvNum = st.num;
+        if(kindChanged){ entry.cancelledTransferInvId = oldInvId; }
+        delete entry.transferTo; delete entry.transferInvId; delete entry.transferInvNum;
+        entry.sub = newItems.length+' поз. ('+totalQty+' шт.) · накл. '+st.num+' · '+st.reason;
+      }
+      entry.editedAt = new Date().toISOString(); entry.editedBy = who;
+      _currentShiftView = sh;
+      svPersist(sh.status==='open' || !sh.closedAt);
+    } finally { _currentShiftView = prevView; }
+    try{ _recordJournalEntryIndependently(entry, st.shop, 'writeoff'); }catch(e){}
+    if(itemsChanged && !entry.isRevaluation){
+      try{ stockApplyReceive(st.shop, oldItems.filter(function(it){ return !it.isRevaluation; }), null, st.gt, false); }catch(e){}
+      try{ stockApplyWriteoff(st.shop, newItems); }catch(e){}
     }
-    entry.editedAt = new Date().toISOString(); entry.editedBy = who;
-    _currentShiftView = sh;
-    svPersist(sh.status==='open' || !sh.closedAt);
-  } finally { _currentShiftView = prevView; }
-  try{ _recordJournalEntryIndependently(entry, st.shop, 'writeoff'); }catch(e){}
-  if(itemsChanged && !entry.isRevaluation){
-    try{ stockApplyReceive(st.shop, oldItems.filter(function(it){ return !it.isRevaluation; }), null, st.gt, false); }catch(e){}
-    try{ stockApplyWriteoff(st.shop, newItems); }catch(e){}
-  }
-  if(entry.transferInvId){
-    var patch = {num:st.num};
-    if(!st.invLocked){ patch.items = newItems.map(function(it){ return {num:it.num, article:it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, goodsType:st.gt}; }); patch.total = total; }
-    db.collection('iz_invoices').doc(entry.transferInvId).set(patch, {merge:true}).catch(function(err){ showToast('⚠️ Накладная получателя не обновилась: '+(err&&err.message||err)); });
-  }
-  try{ logAction('WRITEOFF_INVOICE_EDIT', {shop:st.shop, shiftId:sh.id, entryId:st.entryId, invNum:st.num, itemsChanged:itemsChanged, itemCount:newItems.length, amount:total}); }catch(e){}
-  _woEd = null;
-  closeMo('woEditInvMo');
-  try{ renderAdminRcvWo(); }catch(e){}
-  showToast('✅ Накладная сохранена');
+    if(oldInvId && kindChanged && st.kind==='wo'){
+      db.collection('iz_invoices').doc(oldInvId).set({status:'cancelled', cancelledAt:new Date().toISOString(), cancelledBy:who, cancelReason:'переделано в списание'}, {merge:true})
+        .catch(function(err){ showToast('⚠️ Накладная у получателя не отменилась: '+(err&&err.message||err)); });
+    } else if(oldInvId && st.kind==='move'){
+      var patch = {num:st.num};
+      if(!st.invLocked){ patch.items = invItems; patch.total = total; patch.destName = st.to; patch.toWorkshop = st.to===_trWorkshopName(); }
+      db.collection('iz_invoices').doc(oldInvId).set(patch, {merge:true}).catch(function(err){ showToast('⚠️ Накладная получателя не обновилась: '+(err&&err.message||err)); });
+    }
+    try{ logAction('WRITEOFF_INVOICE_EDIT', {shop:st.shop, shiftId:sh.id, entryId:st.entryId, invNum:st.num, kind:st.kind, kindChanged:kindChanged, to:st.to, itemsChanged:itemsChanged, itemCount:newItems.length, amount:total}); }catch(e){}
+    _woEd = null;
+    closeMo('woEditInvMo');
+    try{ renderAdminRcvWo(); }catch(e){}
+    showToast('✅ Накладная сохранена');
+  }).catch(function(err){ showToast('❌ Накладная получателя не создалась — ничего не изменено: '+(err&&err.message||err)); });
 }
