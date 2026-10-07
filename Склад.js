@@ -3381,7 +3381,8 @@ function renderAdminRcvWo(){
       '</div>'+
       (r.invId?'<button type="button" onclick="adminOpenInvoiceFromList(\''+r.invId+'\',\''+(r.shiftId||'')+'\')" style="font-size:11px;padding:3px 9px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#60c8f0;cursor:pointer;margin-top:5px;margin-right:6px">📋 Открыть накладную</button>':'')+
       (type==='receive'&&r.entryId&&r.shiftId&&session&&session.role==='shopadmin'?'<button type="button" onclick="adminDeleteReceipt(\''+r.entryId+'\',\''+r.shiftId+'\',\''+(r.invId||'')+'\')" style="font-size:11px;padding:3px 9px;background:#2e1a1a;border:1px solid #f06060;border-radius:6px;color:#f06060;cursor:pointer;margin-top:5px;margin-left:6px">🗑 Удалить накладную</button>':'')+
-      (r.entryId&&r.shiftId?'<button type="button" onclick="adminToggleMoveDate(this,\''+r.entryId+'\',\''+r.shiftId+'\',\''+r.shop.replace(/'/g,"\\'")+'\')" style="font-size:11px;padding:3px 9px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0a060;cursor:pointer;margin-top:5px">📅 Изменить дату прихода</button>':'')+
+      (type==='writeoff'&&r.entryId&&r.shiftId&&(r.items||[]).length&&session&&session.role==='shopadmin'?'<button type="button" onclick="adminEditWo(\''+r.entryId+'\',\''+r.shiftId+'\')" style="font-size:11px;padding:3px 9px;background:#22222e;border:1px solid #c8f060;border-radius:6px;color:#c8f060;cursor:pointer;margin-top:5px;margin-right:6px">✏️ Изменить накладную</button>':'')+
+      (r.entryId&&r.shiftId?'<button type="button" onclick="adminToggleMoveDate(this,\''+r.entryId+'\',\''+r.shiftId+'\',\''+r.shop.replace(/'/g,"\\'")+'\')" style="font-size:11px;padding:3px 9px;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0a060;cursor:pointer;margin-top:5px">📅 Изменить дату '+(type==='writeoff'?'списания':'прихода')+'</button>':'')+
     '</div>';
   }
   function groupHeader(key, label, count, total, isOpen, qtyArt, qtyNoArt){
@@ -5720,4 +5721,151 @@ function _trCommit(o){
     try{ if(o.shift===null) renderAll(); else renderStockPage(); }catch(e){}
     showToast('✅ Списано из «'+o.from+'» и отправлено в «'+o.to+'»: '+items.length+' поз. — ждёт приёмки');
   }).catch(function(err){ showToast('❌ Накладная не отправилась — ничего не списано: '+(err&&err.message||err)); });
+}
+
+
+// ════ Правка накладной списания (админ) ════
+// Номер, причина и позиции списания-накладной (перемещение, списание списком). Склад магазина
+// пересчитывается: старые позиции возвращаются, новые списываются. У перемещения правится и
+// накладная получателя — пока её не приняли; после приёмки менять позиции нельзя (у получателя
+// товар уже на балансе), только номер. Открытая смена продавца подхватит правку по editedAt
+// (см. mergeRemoteJournal).
+var _woEd = null;
+function adminEditWo(entryId, shiftId){
+  showToast('⏳ Загружаю...');
+  db.collection('iz_shifts').doc(shiftId).get({source:'server'}).then(function(snap){
+    if(!snap.exists){ showToast('⚠️ Смена не найдена'); return; }
+    var sh = snap.data(); sh.id = shiftId;
+    var entry = (sh.journal||[]).find(function(e){ return e.id===entryId; });
+    if(!entry || !(entry.items||[]).length){ showToast('⚠️ У записи нет позиций — правьте её в карточке смены'); return; }
+    var st = {sh:sh, entryId:entryId, shop:sh.shopName, gt:entry.goodsType||'derevo',
+      num:entry.transferInvNum||'', reason:entry.reason||((entry.items[0]||{}).reason)||'',
+      rows:JSON.parse(JSON.stringify(entry.items)).map(function(it){ return {num:it.num||it.article||'', name:it.name||'', species:it.species||'', price:it.price||0, qty:it.qty||1}; }),
+      isTransfer:!!entry.transferInvId, invLocked:false};
+    var go = function(){ _woEd = st; _woEdRender(); openMo('woEditInvMo'); };
+    if(!entry.transferInvId) return go();
+    return db.collection('iz_invoices').doc(entry.transferInvId).get({source:'server'}).then(function(isnap){
+      var inv = isnap.exists ? isnap.data() : null;
+      st.invStatus = inv ? inv.status : null;
+      st.invLocked = !!(inv && inv.status==='accepted');
+      go();
+    });
+  }).catch(function(err){ showToast('❌ '+(err&&err.message||err)); });
+}
+function _woEdRender(){
+  var st = _woEd, host = document.getElementById('woEdBody'); if(!st||!host) return;
+  var esc = function(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); };
+  var lock = st.invLocked;
+  var inp = function(i,f,v,w,mode){
+    var sugg = (f==='num'||f==='name'||f==='species');
+    return '<input value="'+esc(v)+'"'+(lock?' disabled':'')+' onchange="_woEdEdit('+i+',\'' +f+'\',this.value)"'+
+      (sugg&&!lock?' oninput="_woEdSugg('+i+',\''+f+'\',this.value)" onblur="_woEdHide('+i+')" autocomplete="off"':'')+
+      (mode?' inputmode="'+mode+'"':'')+' style="width:'+w+';min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px">';
+  };
+  var q=0, sum=0; st.rows.forEach(function(r){ q+=r.qty||0; sum+=(r.qty||0)*(r.price||0); });
+  var t = document.getElementById('woEdTitle'); if(t) t.textContent = '✏️ '+(st.isTransfer?'Накладная перемещения':'Накладная списания')+' · '+st.shop;
+  host.innerHTML =
+    (lock?'<div style="font-size:11px;color:#f0c060;background:#2e2414;border:1px solid #f0c06055;border-radius:8px;padding:8px;margin-bottom:8px">⚠️ Получатель уже принял эту накладную — позиции менять нельзя (у него товар на балансе). Можно поправить номер и причину.</div>':'')+
+    '<div class="row2">'+
+      '<div class="fg" style="flex:1"><label class="fl">№ накладной</label><input class="fi" id="woEdNum" value="'+esc(st.num)+'" oninput="_woEd.num=this.value"></div>'+
+      '<div class="fg" style="flex:1"><label class="fl">Причина</label><input class="fi" id="woEdReason" value="'+esc(st.reason)+'" oninput="_woEd.reason=this.value"></div>'+
+    '</div>'+
+    '<div style="font-size:11.5px;font-weight:700;margin:4px 0">'+st.rows.length+' поз. · '+q+' шт. · '+fmt(sum)+'</div>'+
+    '<div style="font-size:9.5px;color:#555568;margin-bottom:2px">№ · Название · Порода · Цена · Кол-во</div>'+
+    st.rows.map(function(r,i){
+      return '<div style="padding:5px 0;border-bottom:1px solid #22222e">'+
+        '<div style="display:flex;gap:4px;align-items:center">'+
+          inp(i,'num',r.num,'70px')+inp(i,'name',r.name,'auto;flex:1')+inp(i,'species',r.species,'70px')+
+          inp(i,'price',r.price,'52px','numeric')+inp(i,'qty',r.qty,'36px','numeric')+
+          (lock?'':'<button type="button" onclick="_woEd.rows.splice('+i+',1);_woEdRender()" style="background:none;border:none;color:#f06060;font-size:13px;cursor:pointer;padding:2px">✕</button>')+
+        '</div>'+
+        '<div id="woEdSugg_'+i+'" style="display:none;background:#1a1a22;border:1px solid #60c8f0;border-radius:8px;max-height:220px;overflow-y:auto;margin-top:4px"></div>'+
+      '</div>';
+    }).join('')+
+    (lock?'':'<button type="button" onclick="_woEd.rows.push({num:\'\',name:\'\',species:\'\',price:0,qty:1});_woEdRender()" style="width:100%;margin-top:8px;padding:8px;background:none;border:1px dashed #60c8f0;border-radius:8px;color:#60c8f0;font-size:11.5px;font-weight:700;cursor:pointer">➕ Строка</button>')+
+    '<button class="btn" style="margin-top:10px" onclick="_woEdSave()">💾 Сохранить накладную</button>'+
+    '<button class="btn sec" style="margin-top:8px" onclick="closeMo(\'woEditInvMo\')">Отмена</button>';
+}
+function _woEdEdit(i, f, v){
+  var r = _woEd && _woEd.rows[i]; if(!r) return;
+  r[f] = (f==='price'||f==='qty') ? (_invImpNum(v)||0) : v;
+}
+var _woEdMatches = {}, _woEdHideT = {};
+function _woEdSugg(i, field, val){
+  if(_woEdHideT[i]){ clearTimeout(_woEdHideT[i]); delete _woEdHideT[i]; }
+  var box = document.getElementById('woEdSugg_'+i); if(!box||!_woEd) return;
+  var list;
+  if(field==='species'){
+    var words = String(val||'').trim().toLowerCase().split(/\s+/).filter(Boolean);
+    list = !words.length ? [] : getSpecies().filter(function(sp){ var l=String(sp).toLowerCase(); return words.every(function(w){ return l.indexOf(w)>=0; }); }).slice(0,12).map(function(sp){ return {species:sp}; });
+  } else list = _stockCatalogMatches(_woEd.shop, _woEd.gt, field, val);
+  _woEdMatches[i] = {field:field, list:list};
+  if(!list.length){ box.style.display='none'; return; }
+  box.innerHTML = list.map(function(m,k){
+    return '<div onclick="_woEdPick('+i+','+k+')" style="padding:8px 10px;font-size:11.5px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+(field==='species'?String(m.species).replace(/</g,'&lt;'):_stockMatchLabel(m))+'</div>';
+  }).join('');
+  box.style.display='block';
+}
+function _woEdHide(i){ _woEdHideT[i] = setTimeout(function(){ var b=document.getElementById('woEdSugg_'+i); if(b) b.style.display='none'; }, 200); }
+function _woEdPick(i, k){
+  var r = _woEd && _woEd.rows[i], sm = _woEdMatches[i]; if(!r||!sm||!sm.list[k]) return;
+  var m = sm.list[k];
+  if(sm.field==='species') r.species = m.species;
+  else { r.name = m.name; if(m.num) r.num = m.num; if(m.species) r.species = m.species; if(m.price) r.price = m.price; }
+  _woEdRender();
+}
+function _woEdSave(){
+  var st = _woEd; if(!st) return;
+  st.num = (gv('woEdNum')||'').trim(); st.reason = (gv('woEdReason')||'').trim();
+  if(!st.rows.length){ showToast('⛔ Нет позиций — удалить накладную целиком можно в карточке смены'); return; }
+  var bad = st.rows.findIndex(function(r){ return !String(r.name||'').trim() || !(r.qty>0); });
+  if(bad>=0){ showToast('⛔ Строка '+(bad+1)+': нужно название и кол-во'); return; }
+  var sh = st.sh;
+  var entry = (sh.journal||[]).find(function(e){ return e.id===st.entryId; }); if(!entry) return;
+  var oldItems = entry.items||[];
+  var newItems = st.rows.map(function(r){
+    var n = String(r.num||'').trim();
+    return {num:n, article:n, name:String(r.name).trim(), species:String(r.species||'').trim(), price:r.price||0, qty:r.qty, amt:(r.price||0)*r.qty, goodsType:st.gt, reason:st.reason, isRevaluation:!!entry.isRevaluation};
+  });
+  var itemsChanged = JSON.stringify(oldItems.map(function(it){ return [it.num||it.article||'', it.name, it.species||'', it.price||0, it.qty||1]; })) !==
+                     JSON.stringify(newItems.map(function(it){ return [it.num, it.name, it.species, it.price, it.qty]; }));
+  if(st.invLocked && itemsChanged){ showToast('⛔ Накладная уже принята получателем — позиции менять нельзя'); return; }
+  if(!confirm('Сохранить изменения накладной'+(st.num?' '+st.num:'')+'?'+(itemsChanged?'\nСклад «'+st.shop+'» пересчитается по новым позициям.':''))) return;
+  var total = newItems.reduce(function(s,it){ return s+it.amt; },0);
+  var totalQty = newItems.reduce(function(s,it){ return s+it.qty; },0);
+  var who = (session&&(session.name||session.sellerName))||'admin';
+  var prevView = _currentShiftView;
+  try{
+    if(sh.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(sh);
+    entry.items = newItems;
+    entry.amount = total;
+    entry.goodsEffect = st.gt==='dr' ? 0 : -total;
+    entry.goodsDrEffect = st.gt==='dr' ? -total : 0;
+    entry.reason = st.reason;
+    if(entry.transferInvId){
+      entry.transferInvNum = st.num;
+      entry.sub = newItems.length+' поз. ('+totalQty+' шт.) · накл. '+st.num;
+    } else {
+      entry.sub = newItems.length===1 ? ((newItems[0].num?'№'+newItems[0].num+' ':'')+newItems[0].name+(newItems[0].species?' · '+newItems[0].species:'')+' · '+st.reason)
+        : (newItems.length+' позиций ('+totalQty+' шт.): '+newItems.map(function(it){ return it.name; }).join(', ')+' · '+st.reason);
+    }
+    entry.editedAt = new Date().toISOString(); entry.editedBy = who;
+    _currentShiftView = sh;
+    svPersist(sh.status==='open' || !sh.closedAt);
+  } finally { _currentShiftView = prevView; }
+  try{ _recordJournalEntryIndependently(entry, st.shop, 'writeoff'); }catch(e){}
+  if(itemsChanged && !entry.isRevaluation){
+    try{ stockApplyReceive(st.shop, oldItems.filter(function(it){ return !it.isRevaluation; }), null, st.gt, false); }catch(e){}
+    try{ stockApplyWriteoff(st.shop, newItems); }catch(e){}
+  }
+  if(entry.transferInvId){
+    var patch = {num:st.num};
+    if(!st.invLocked){ patch.items = newItems.map(function(it){ return {num:it.num, article:it.article, name:it.name, species:it.species, price:it.price, qty:it.qty, goodsType:st.gt}; }); patch.total = total; }
+    db.collection('iz_invoices').doc(entry.transferInvId).set(patch, {merge:true}).catch(function(err){ showToast('⚠️ Накладная получателя не обновилась: '+(err&&err.message||err)); });
+  }
+  try{ logAction('WRITEOFF_INVOICE_EDIT', {shop:st.shop, shiftId:sh.id, entryId:st.entryId, invNum:st.num, itemsChanged:itemsChanged, itemCount:newItems.length, amount:total}); }catch(e){}
+  _woEd = null;
+  closeMo('woEditInvMo');
+  try{ renderAdminRcvWo(); }catch(e){}
+  showToast('✅ Накладная сохранена');
 }

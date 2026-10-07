@@ -605,6 +605,16 @@ function mergeRemoteJournal(remote){
   journal.forEach(function(e){ if(e.type==='receive' && e.invId) localReceiveInvIds[e.invId]=true; });
   var added = 0;
   var shiftOpenedAt = session && session.openedAt ? session.openedAt : null;
+  // Запись, которую администратор поправил в облаке (перемещение, позиции списания) — раньше
+  // открытая смена брала из облака только НОВЫЕ записи, а свою старую версию отправляла обратно
+  // и затирала правку. Теперь более поздняя правка (editedAt) из облака заменяет локальную.
+  var adopted = 0;
+  remote.journal.forEach(function(e){
+    if(!e.id || !localIds[e.id] || !e.editedAt || tombstoned[e.id]) return;
+    var li = journal.findIndex(function(x){ return x.id===e.id; });
+    if(li<0) return;
+    if(!journal[li].editedAt || String(e.editedAt) > String(journal[li].editedAt)){ journal[li] = e; adopted++; }
+  });
   remote.journal.forEach(function(e){
     if(!e.id || localIds[e.id]) return;
     if(tombstoned[e.id]) return; // was deliberately deleted on this or another device — never resurrect
@@ -619,7 +629,7 @@ function mergeRemoteJournal(remote){
     journal.push(e); added++;
     if(e.type==='receive' && e.invId) localReceiveInvIds[e.invId]=true;
   });
-  if(added>0 || purged>0){
+  if(added>0 || purged>0 || adopted>0){
     journal.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
     if(session && session.openedAt){
       var shiftDate = session.openedAt.split('T')[0];
@@ -630,7 +640,7 @@ function mergeRemoteJournal(remote){
     }
     saveJ();
   }
-  return added;
+  return added + adopted;
 }
 var _lastTrashPullAt = 0;
 // mergeRemoteJournal only prunes tombstoned entries it already knows about (local trash +
