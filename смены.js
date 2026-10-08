@@ -1242,6 +1242,7 @@ function startAdminAuditListener(){
 }
 function startAdminAlertsListener(){
   if(_adminAlertUnsub){try{_adminAlertUnsub();}catch(e){}}
+  startPendingInvoicesListener();
   _adminAlertUnsub=db.collection('iz_admin_alerts').where('read','==',false)
     .onSnapshot(function(snap){
       _adminAlerts=[];
@@ -1357,11 +1358,24 @@ var ALERT_TYPE_DEFS = [
 // только из уведомлений: уведомление может потеряться (так пропала заявка Колеса по /3), а
 // накладная с заявкой — единственный источник правды. Для таких накладных без живого
 // уведомления — карточка-заменитель (id «inv:<invId>»).
+// Ожидающие приёмки накладные — живьём прямо из облака, а не из локальной копии iz_invoices:
+// та на устройстве админа может не обновляться (переполнение памяти браузера — запись молча
+// падает), и заявка Колеса по /3 так и не появилась даже с карточкой-заменителем.
+var _pendingInvsLive = null, _pendingInvsUnsub = null;
+function startPendingInvoicesListener(){
+  if(_pendingInvsUnsub) return;
+  try{
+    _pendingInvsUnsub = db.collection('iz_invoices').where('status','==','pending').onSnapshot(function(snap){
+      _pendingInvsLive = snap.docs.map(function(d){ return Object.assign({_id:d.id}, d.data()); });
+      try{ renderAlertsPage(); }catch(e){}
+    }, function(e){ console.log('pending inv listener err', e&&e.code); });
+  }catch(e){}
+}
 function _pendingInvoiceEditCards(){
   var have = {};
   _adminAlerts.forEach(function(a){ if(a.type==='invoice_edit' && a.invId) have[a.invId] = true; });
   var out = [];
-  (typeof getInvoices==='function' ? getInvoices() : []).forEach(function(inv){
+  (_pendingInvsLive || (typeof getInvoices==='function' ? getInvoices() : [])).forEach(function(inv){
     var invId = String(inv._id!=null?inv._id:inv.id);
     var req = inv.editRequest;
     if(!req || inv.status==='accepted' || inv.status==='cancelled' || have[invId]) return;
@@ -1385,6 +1399,7 @@ function _closeInvoiceEditAlerts(a){
   setTimeout(function(){ try{ renderAlertsPage(); }catch(e){} }, 300);
 }
 function renderAlertsPage(){
+  if(session && session.role==='shopadmin') startPendingInvoicesListener();
   var c=document.getElementById('alertsPageContent'); if(!c) return;
   var fc=document.getElementById('alertsShopFilter');
   var _allA = _alertsAll();
