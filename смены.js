@@ -1253,6 +1253,18 @@ function startAdminAlertsListener(){
     },function(e){console.log('alerts err',e&&e.code);});
 }
 function alertCard(a){
+  if(a.type==='invoice_edit'){
+    var ch = (a.changes||[]).map(function(c){ return '<div style="font-size:11px;color:#f0f0f8;padding:1px 0">• '+String(c).replace(/</g,'&lt;')+'</div>'; }).join('');
+    return '<div style="padding:10px 0;border-bottom:1px solid #3e2e2e">'+
+      '<div style="font-size:12px;font-weight:700;color:#c8f060">✏️ Исправление накладной '+(a.invNum||'')+' — '+(a.shopName||'')+'</div>'+
+      '<div class="u-fs11-gray">'+(a.sellerName||'—')+' просит исправить'+(a.isTransfer?' (перемещение из «'+(a.sourceName||'')+'» — списание у отправителя поправится тоже)':'')+' · '+(a.date||'')+'</div>'+
+      '<div style="margin:6px 0 8px">'+ch+'</div>'+
+      '<div style="display:flex;gap:6px">'+
+        '<button onclick="approveInvoiceEdit(\''+a.id+'\')" style="background:#1a2a1e;border:1px solid #60f090;border-radius:6px;padding:5px 10px;color:#60f090;font-size:11px;font-weight:700;cursor:pointer">✅ Одобрить</button>'+
+        '<button onclick="rejectInvoiceEdit(\''+a.id+'\')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:5px 10px;color:#8888aa;font-size:11px;cursor:pointer">✕ Отклонить</button>'+
+      '</div>'+
+    '</div>';
+  }
   if(a.type==='name_request'){
     var gtLabel = a.goodsType==='dr' ? 'ДР Товар' : 'Дерево';
     var extra = (a.species?' · '+a.species:'')+(a.price?' · '+fmt(a.price):'');
@@ -1333,6 +1345,7 @@ function alertCard(a){
 }
 var _alertsShopFilter = '';
 var ALERT_TYPE_DEFS = [
+  {type:'invoice_edit', icon:'✏️', title:'Заявки на исправление накладных', hint:'Продавец сверил входящую накладную и просит поправить позиции — одобрите (накладная обновится, у перемещения — и списание отправителя) или отклоните'},
   {type:'name_request', icon:'📨', title:'Заявки на наименования и породы', hint:'Продавец пытался продать товар с наименованием или породой, которых нет в базе, — одобрите или отклоните'},
   {type:'cash_diff', icon:'💵', title:'Расхождения при закрытии смены', hint:'Не сошёлся итог кассы — сверьте с продавцом, отметьте прочитанным, когда разобрались'},
   {type:'morning_diff', icon:'💰', title:'Расхождения нала при открытии', hint:'Продавец ввёл сумму, не совпадающую с вечером прошлой смены'},
@@ -1387,7 +1400,7 @@ function renderAlertsPage(){
   c.innerHTML = order.filter(function(t){ return byType[t] && byType[t].length; }).map(function(t){
     var def = defByType[t] || {icon:'⚠️', title:t, hint:''};
     var items = byType[t].slice().sort(function(a,b){ return (b.createdAt||b.date||'').localeCompare(a.createdAt||a.date||''); });
-    var open = window._alertsSectionOpen[t]!==undefined ? window._alertsSectionOpen[t] : (t==='name_request');
+    var open = window._alertsSectionOpen[t]!==undefined ? window._alertsSectionOpen[t] : (t==='name_request'||t==='invoice_edit');
     return '<div style="margin-bottom:16px">'+
       '<div onpointerdown="event.preventDefault();_toggleAlertSection(\''+t+'\')" style="display:flex;align-items:center;justify-content:space-between;gap:7px;margin-bottom:2px;cursor:pointer">'+
         '<div style="display:flex;align-items:center;gap:7px">'+
@@ -1403,7 +1416,7 @@ function renderAlertsPage(){
 }
 function _toggleAlertSection(t){
   window._alertsSectionOpen = window._alertsSectionOpen || {};
-  var cur = window._alertsSectionOpen[t]!==undefined ? window._alertsSectionOpen[t] : (t==='name_request');
+  var cur = window._alertsSectionOpen[t]!==undefined ? window._alertsSectionOpen[t] : (t==='name_request'||t==='invoice_edit');
   window._alertsSectionOpen[t] = !cur;
   renderAlertsPage();
 }
@@ -1440,6 +1453,23 @@ function approveNameRequest(id){
   }
   markAlertRead(id);
   showToast('✅ «'+a.name+'» добавлено в базу товаров — продавец сможет продать после обновления списка');
+}
+function approveInvoiceEdit(id){
+  var a = _adminAlerts.find(function(x){ return x.id===id; });
+  if(!a){ showToast('Заявка не найдена'); return; }
+  if(!confirm('Применить исправления к накладной '+(a.invNum||'')+'?'+(a.isTransfer?'\nСписание у «'+(a.sourceName||'')+'» поправится так же, склад отправителя пересчитается.':''))) return;
+  _applyInvoiceEditRequest(a.invId).then(function(){
+    markAlertRead(id);
+    showToast('✅ Накладная '+(a.invNum||'')+' исправлена — продавец может принимать');
+  }).catch(function(err){ showToast('⚠️ '+(err&&err.message||err)); });
+}
+function rejectInvoiceEdit(id){
+  var a = _adminAlerts.find(function(x){ return x.id===id; });
+  if(!a){ showToast('Заявка не найдена'); return; }
+  if(!confirm('Отклонить заявку? Накладная останется как была, продавец сможет её принять.')) return;
+  db.collection('iz_invoices').doc(a.invId).update({editRequest:null, editRejectedAt:new Date().toISOString(), editRejectedBy:(session&&(session.name||session.sellerName))||'admin'})
+    .then(function(){ markAlertRead(id); showToast('Заявка отклонена'); })
+    .catch(function(err){ showToast('⚠️ '+(err&&err.message||err)); });
 }
 function rejectNameRequest(id){
   markAlertRead(id);

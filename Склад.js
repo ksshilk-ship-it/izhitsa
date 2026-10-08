@@ -928,12 +928,14 @@ function renderInvoices(){
       return `<div class="card" style="border-color:#f0a060" id="shinv_${iid}">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
           <div><div style="font-family:Unbounded,sans-serif;font-size:13px;font-weight:700;color:#f0a060">${inv.num}</div><div class="u-fs11-gray">📅 ${inv.date} · ${inv.items.length} изд.</div>
-          ${progress?`<div style="font-size:11px;color:#c8f060;margin-top:2px">⏸ Приёмка начата: отмечено ${checkedCount}/${inv.items.length}</div>`:''}</div>
+          ${progress?`<div style="font-size:11px;color:#c8f060;margin-top:2px">⏸ Приёмка начата: отмечено ${checkedCount}/${inv.items.length}</div>`:''}
+          ${inv.isTransfer?`<div style="font-size:11px;color:#60c8f0;margin-top:2px">🚚 Перемещение из «${inv.sourceName||''}»</div>`:''}
+          ${inv.editRequest?`<div style="font-size:11px;color:#f0c060;margin-top:2px">⏳ Заявка на исправление у администратора — ждём решения</div>`:''}</div>
         </div>
-        <button class="btn" style="margin:0;margin-bottom:6px" onclick="openInvoice('${iid}')">📋 ${progress?'Продолжить приёмку':'Открыть и принять'}</button>
+        <button class="btn" style="margin:0;margin-bottom:6px${inv.editRequest&&!_rcvIsAdmin()?';opacity:.5':''}" onclick="openInvoice('${iid}')">📋 ${progress?'Продолжить приёмку':'Открыть и принять'}</button>
         <div class="u-flex-g6">
-          <button onclick="editShopInvoice('${iid}')" style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#c8f060;font-size:11px;cursor:pointer">✏️ Исправить</button>
-          <button onclick="deleteShopInvoice('${iid}')" style="padding:7px 12px;border-radius:8px;border:1px solid #3e2020;background:#2a1010;color:#f06060;font-size:11px;cursor:pointer">🗑 Удалить</button>
+          <button onclick="editShopInvoice('${iid}')" style="flex:1;padding:7px;border-radius:8px;border:1px solid #2e2e3e;background:#22222e;color:#c8f060;font-size:11px;cursor:pointer">✏️ ${_rcvIsAdmin()?'Исправить':'Заявка на исправление'}</button>
+          ${_rcvIsAdmin()?`<button onclick="deleteShopInvoice('${iid}')" style="padding:7px 12px;border-radius:8px;border:1px solid #3e2020;background:#2a1010;color:#f06060;font-size:11px;cursor:pointer">🗑 Удалить</button>`:''}
         </div>
       </div>`;
     }).join('');
@@ -973,6 +975,13 @@ function renderShInvItems(id, contextId){
         '<input class="fi" value="'+artNum+'" placeholder="Арт." style="flex:0 0 70px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvNum(\''+id+'\','+i+',this.value)">'+
         '<input class="fi" value="'+(item.name||'')+'" placeholder="Наименование" style="flex:2;margin:0;padding:6px;font-size:12px" oninput="_shInvName(\''+id+'\','+i+',this.value)">'+
       '</div>'+
+      '<div style="position:relative;margin-bottom:5px">'+
+        '<input class="fi" id="shinv_sp_'+id+'_'+i+'" value="'+(item.species||'').replace(/"/g,'&quot;')+'" placeholder="Порода дерева" autocomplete="off" style="margin:0;padding:6px;font-size:12px" '+
+          'oninput="_shInvSpActive={id:\''+id+'\',i:'+i+'};_shInvSpecies(\''+id+'\','+i+',this.value);psjSuggest(\'shinv_sp_'+id+'_'+i+'\',getSpecies(),\'_shInvPickSpecies\')" '+
+          'onfocus="_shInvSpActive={id:\''+id+'\',i:'+i+'};psjSuggest(\'shinv_sp_'+id+'_'+i+'\',getSpecies(),\'_shInvPickSpecies\')" '+
+          'onblur="psjHideSugg(\'shinv_sp_'+id+'_'+i+'\')">'+
+        '<div id="shinv_sp_'+id+'_'+i+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'+
+      '</div>'+
       '<div style="display:flex;gap:5px;align-items:center">'+
         '<input class="fi" type="text" value="'+(item.qty!=null?item.qty:1)+'" inputmode="numeric" placeholder="Кол" style="flex:0 0 60px;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvQty(\''+id+'\','+i+',this.value)">'+
         '<input class="fi" type="text" value="'+(item.price||0)+'" inputmode="numeric" placeholder="Цена" style="flex:1;margin:0;padding:6px;font-size:12px;text-align:center" oninput="_shInvPrice(\''+id+'\','+i+',this.value)">'+
@@ -996,12 +1005,13 @@ function editShopInvoice(id){
   window._shInvExpandedMap[id] = -1; // all collapsed by default
   card.innerHTML =
     '<div style="font-size:11px;font-weight:700;color:#c8f060;margin-bottom:8px">✏️ Исправление: '+(inv.num||'')+'</div>'+
+    (_rcvIsAdmin()?'':'<div style="font-size:10.5px;color:#f0c060;margin-bottom:8px;line-height:1.4">Правки уйдут администратору на одобрение. До решения накладную принять нельзя — после одобрения она обновится и её можно будет принять.</div>')+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Номер</label><input class="fi" id="shinv_num_'+id+'" value="'+(inv.num||'')+'" style="margin:0;padding:7px"></div>'+
     '<div class="fg" style="margin-bottom:6px"><label class="fl">Дата</label><input class="fi" type="date" id="shinv_date_'+id+'" value="'+(inv.date||'')+'" style="margin:0;padding:7px;-webkit-appearance:none;color-scheme:dark"></div>'+
-    '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (арт. · наим. · кол-во · цена)</div>'+
+    '<div style="font-size:10px;color:#8888aa;margin-bottom:4px">ПОЗИЦИИ (арт. · наим. · порода · кол-во · цена)</div>'+
     '<div id="shinv_items_'+id+'"></div>'+
     '<div style="display:flex;gap:6px;margin-top:8px">'+
-      '<button onclick="saveShopInvoice(\''+id+'\')" style="flex:1;padding:8px;border-radius:8px;border:none;background:#c8f060;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">💾 Сохранить</button>'+
+      '<button onclick="saveShopInvoice(\''+id+'\')" style="flex:1;padding:8px;border-radius:8px;border:none;background:#c8f060;color:#0f0f13;font-size:12px;font-weight:700;cursor:pointer">'+(_rcvIsAdmin()?'💾 Сохранить':'📨 Отправить заявку на исправление')+'</button>'+
       (inv.status==='accepted'
         ? '<button onclick="openRcvArchiveDate(\''+(inv.acceptedDate||inv.date||'—')+'\')" style="padding:8px 12px;border-radius:8px;border:1px solid #2e2e3e;background:none;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>'
         : '<button onclick="renderInvoices()" style="padding:8px 12px;border-radius:8px;border:1px solid #2e2e3e;background:none;color:#8888aa;font-size:12px;cursor:pointer">Отмена</button>')+
@@ -1011,9 +1021,58 @@ function editShopInvoice(id){
 function _shInvNum(id,i,v){ if(window._shInvEdit[id]&&window._shInvEdit[id].items[i]) window._shInvEdit[id].items[i].num=v; }
 function _shInvName(id,i,v){ if(window._shInvEdit[id]&&window._shInvEdit[id].items[i]) window._shInvEdit[id].items[i].name=v; }
 function _shInvQty(id,i,v){ if(window._shInvEdit[id]&&window._shInvEdit[id].items[i]) window._shInvEdit[id].items[i].qty=parseFloat(v)||1; }
+var _shInvSpActive = null;
+function _shInvSpecies(id,i,v){ if(window._shInvEdit[id]&&window._shInvEdit[id].items[i]) window._shInvEdit[id].items[i].species=v; }
+function _shInvPickSpecies(val){
+  var a=_shInvSpActive; if(!a) return;
+  _shInvSpecies(a.id, a.i, val);
+  var el=document.getElementById('shinv_sp_'+a.id+'_'+a.i); if(el) el.value=val;
+  var box=document.getElementById('shinv_sp_'+a.id+'_'+a.i+'_sugg'); if(box) box.style.display='none';
+}
 function _shInvPrice(id,i,v){ if(window._shInvEdit[id]&&window._shInvEdit[id].items[i]) window._shInvEdit[id].items[i].price=parseFloat(v)||0; }
+// Что изменилось в накладной — строками для заявки администратору.
+function _invEditDiff(oldInv, nw){
+  var out = [];
+  if(String(oldInv.num||'')!==String(nw.num||'')) out.push('№: «'+(oldInv.num||'—')+'» → «'+(nw.num||'—')+'»');
+  if(String(oldInv.date||'')!==String(nw.date||'')) out.push('дата: '+(oldInv.date||'—')+' → '+(nw.date||'—'));
+  var oi = oldInv.items||[], ni = nw.items||[];
+  var lbl = function(it){ return ((it.num||it.article)?'№'+(it.num||it.article)+' ':'')+(it.name||'—'); };
+  for(var k=0;k<Math.max(oi.length,ni.length);k++){
+    var a = oi[k], b = ni[k];
+    if(!a){ out.push('поз.'+(k+1)+' добавлена: '+lbl(b)+(b.species?' · '+b.species:'')+' ×'+(b.qty||1)+' · '+fmt(b.price||0)); continue; }
+    if(!b){ out.push('поз.'+(k+1)+' удалена: '+lbl(a)); continue; }
+    var ch = [];
+    if(String(a.num||a.article||'')!==String(b.num||b.article||'')) ch.push('№ '+(a.num||a.article||'—')+' → '+(b.num||b.article||'—'));
+    if(String(a.name||'')!==String(b.name||'')) ch.push('название «'+(a.name||'—')+'» → «'+(b.name||'—')+'»');
+    if(String(a.species||'')!==String(b.species||'')) ch.push('порода «'+(a.species||'—')+'» → «'+(b.species||'—')+'»');
+    if((a.qty||1)!==(b.qty||1)) ch.push('кол-во '+(a.qty||1)+' → '+(b.qty||1));
+    if((a.price||0)!==(b.price||0)) ch.push('цена '+fmt(a.price||0)+' → '+fmt(b.price||0));
+    if(ch.length) out.push('поз.'+(k+1)+' ('+lbl(a)+'): '+ch.join(', '));
+  }
+  return out;
+}
 function saveShopInvoice(id){
   var data = window._shInvEdit[id]; if(!data) return;
+  if(!_rcvIsAdmin()){
+    // Продавец не правит накладную сам — отправляет заявку; накладная остаётся как была.
+    var orig = getInvoices().find(function(i){ return String(i._id!=null?i._id:i.id)===id; }) || {};
+    var req = {num:(gv('shinv_num_'+id)||data.num||'').trim(), date:gv('shinv_date_'+id)||data.date||'',
+      items:(data.items||[]).map(function(it){ return {num:it.num||it.article||'', article:it.num||it.article||'', name:it.name||'', species:it.species||'', price:it.price||0, qty:it.qty||1, goodsType:it.goodsType||data.goodsType||'derevo'}; }),
+      by:(session&&(session.sellerName||session.name))||'', at:new Date().toISOString()};
+    var diff = _invEditDiff(orig, req);
+    if(!diff.length){ showToast('Изменений нет'); return; }
+    if(!confirm('Отправить администратору заявку на исправление накладной '+(orig.num||'')+'?\n\n'+diff.join('\n'))) return;
+    db.collection('iz_invoices').doc(id).set({editRequest:req}, {merge:true}).then(function(){
+      saveAdminAlert({type:'invoice_edit', invId:id, invNum:orig.num||'', shopName:orig.destName||(session&&session.shopName)||'',
+        sellerName:req.by, date:new Date().toLocaleDateString('ru-RU'), isTransfer:!!orig.isTransfer, sourceName:orig.sourceName||'', changes:diff});
+      var invs = getInvoices(); var ix = invs.findIndex(function(i){ return String(i._id!=null?i._id:i.id)===id; });
+      if(ix>=0){ invs[ix].editRequest = req; saveInvoices(invs); }
+      delete window._shInvEdit[id];
+      renderInvoices();
+      showToast('📨 Заявка отправлена администратору — накладную можно будет принять после решения');
+    }).catch(function(err){ showToast('❌ Заявка не отправилась: '+(err&&err.message||err)); });
+    return;
+  }
   if(typeof _findArtDupInItems==='function'){
     var _artDupMsg2 = _findArtDupInItems(data.items, id, data.destName||data.shopName);
     if(_artDupMsg2){ showToast('⛔ '+_artDupMsg2+' — исправьте номер'); return; }
@@ -1047,6 +1106,7 @@ function saveShopInvoice(id){
   showToast('✅ Накладная исправлена');
 }
 function deleteShopInvoice(id){
+  if(!_rcvIsAdmin()){ showToast('Удалить накладную может только администратор — отправьте заявку на исправление'); return; }
   if(!confirm('Удалить накладную? Это действие нельзя отменить.')) return;
   var inv = getInvoices().find(function(i){ return String(i._id!=null?i._id:i.id)===id; });
   if(!inv) return;
@@ -1088,6 +1148,7 @@ var _currentInvItems = [];
 function openInvoice(invId){
   try{ if(typeof _buildUsedArticleIndex==='function') _buildUsedArticleIndex(); }catch(e){}
   currentInvId=invId; const inv=getInvoices().find(i=>(i.id||i._id)===invId); if(!inv)return;
+  if(inv.editRequest && !_rcvIsAdmin()){ showToast('⏳ По этой накладной заявка на исправление у администратора — принять можно после его решения'); return; }
   _currentInvItems = inv.items;
   var saved = loadInvProgress(invId);
   invCheckState=inv.items.map(function(it,i){
@@ -5979,4 +6040,58 @@ function _woEdSave(){
     try{ renderAdminRcvWo(); }catch(e){}
     showToast('✅ Накладная сохранена');
   }).catch(function(err){ showToast('❌ Накладная получателя не создалась — ничего не изменено: '+(err&&err.message||err)); });
+}
+
+
+// ════ Одобрение заявки продавца на исправление входящей накладной ════
+// Применяет предложенные номер/дату/позиции к накладной. У перемещения то же исправление
+// уходит в списание у отправителя (позиции, сумма, № накладной) и пересчитывает его склад —
+// иначе у отправителя списано одно, а у получателя принято другое.
+function _applyInvoiceEditRequest(invId){
+  var ref = db.collection('iz_invoices').doc(invId);
+  return ref.get({source:'server'}).then(function(snap){
+    if(!snap.exists) throw new Error('накладная не найдена');
+    var inv = snap.data();
+    var req = inv.editRequest;
+    if(!req) throw new Error('заявка уже рассмотрена');
+    if(inv.status==='accepted') throw new Error('накладная уже принята — правьте её через «✏️ Исправить»');
+    var items = (req.items||[]).map(function(it){ return Object.assign({}, it, {goodsType:it.goodsType||inv.goodsType||'derevo'}); });
+    var total = items.reduce(function(s,it){ return s+(it.price||0)*(it.qty||1); },0);
+    var who = (session&&(session.name||session.sellerName))||'admin';
+    return ref.update({num:req.num||inv.num, date:req.date||inv.date, items:items, total:total, editRequest:null,
+      editApprovedAt:new Date().toISOString(), editApprovedBy:who, editRequestedBy:req.by||''}).then(function(){
+      if(inv.isTransfer && inv.sourceName) return _syncTransferWriteoff(invId, inv.sourceName, items, req.num||inv.num);
+    });
+  });
+}
+function _syncTransferWriteoff(invId, fromShop, items, num){
+  return db.collection('iz_shifts').where('shopName','==',fromShop).get({source:'server'}).then(function(snap){
+    var sh = null, entry = null;
+    snap.forEach(function(d){
+      if(entry) return;
+      var x = d.data(); var e = (x.journal||[]).find(function(j){ return j.transferInvId===invId; });
+      if(e){ sh = x; sh.id = d.id; entry = e; }
+    });
+    if(!entry){ showToast('⚠️ Списание у «'+fromShop+'» по этой накладной не найдено — проверьте отправителя вручную'); return; }
+    var oldItems = entry.items||[];
+    var gt = entry.goodsType||'derevo';
+    var newItems = items.map(function(it){ var n=String(it.num||it.article||'').trim();
+      return {num:n, article:n, name:it.name, species:it.species||'', price:it.price||0, qty:it.qty||1, amt:(it.price||0)*(it.qty||1), goodsType:gt, reason:entry.reason||''}; });
+    var total = newItems.reduce(function(s,it){ return s+it.amt; },0);
+    var totalQty = newItems.reduce(function(s,it){ return s+it.qty; },0);
+    var prevView = _currentShiftView;
+    try{
+      if(sh.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(sh);
+      entry.items = newItems; entry.amount = total;
+      entry.goodsEffect = gt==='dr' ? 0 : -total; entry.goodsDrEffect = gt==='dr' ? -total : 0;
+      entry.transferInvNum = num;
+      entry.sub = newItems.length+' поз. ('+totalQty+' шт.) · накл. '+num;
+      entry.editedAt = new Date().toISOString(); entry.editedBy = (session&&(session.name||session.sellerName))||'admin';
+      _currentShiftView = sh;
+      svPersist(sh.status==='open' || !sh.closedAt);
+    } finally { _currentShiftView = prevView; }
+    try{ _recordJournalEntryIndependently(entry, fromShop, 'writeoff'); }catch(e){}
+    try{ stockApplyReceive(fromShop, oldItems, null, gt, false); }catch(e){}
+    try{ stockApplyWriteoff(fromShop, newItems); }catch(e){}
+  });
 }
