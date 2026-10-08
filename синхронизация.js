@@ -325,7 +325,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '10.08.10';
+var APP_BUILD_VERSION = '10.08.11';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -1032,6 +1032,7 @@ function startInvoiceLiveSync(){
   db.collection('iz_invoices').onSnapshot(snap=>{
     localStorage.setItem('iz_invoices',JSON.stringify(snap.docs.map(x=>({_id:x.id,...x.data()}))));
     updateInvBadge(); renderPendingAlert();
+    try{ if(session && session.role==='shopadmin' && typeof renderAlertsPage==='function') renderAlertsPage(); }catch(e){}
     migrateLegacyManualInvoices();
   },()=>{});
   db.collection('iz_manual_invoices').onSnapshot(snap=>{

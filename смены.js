@@ -1353,16 +1353,49 @@ var ALERT_TYPE_DEFS = [
   {type:'stale_shift_warning', icon:'⏳', title:'Зависшие смены', hint:'Смена за прошлый день осталась открытой в облаке — стоит проверить, не потерялось ли закрытие'},
   {type:'zp_no_travel', icon:'🚕', title:'ЗП без отдельного проезда', hint:'Продавец закрыл смену, не выделив проезд отдельной строкой'}
 ];
+// Заявки на исправление накладных берём из самих накладных (у которых висит editRequest), а не
+// только из уведомлений: уведомление может потеряться (так пропала заявка Колеса по /3), а
+// накладная с заявкой — единственный источник правды. Для таких накладных без живого
+// уведомления — карточка-заменитель (id «inv:<invId>»).
+function _pendingInvoiceEditCards(){
+  var have = {};
+  _adminAlerts.forEach(function(a){ if(a.type==='invoice_edit' && a.invId) have[a.invId] = true; });
+  var out = [];
+  (typeof getInvoices==='function' ? getInvoices() : []).forEach(function(inv){
+    var invId = String(inv._id!=null?inv._id:inv.id);
+    var req = inv.editRequest;
+    if(!req || inv.status==='accepted' || inv.status==='cancelled' || have[invId]) return;
+    out.push({id:'inv:'+invId, type:'invoice_edit', invId:invId, invNum:inv.num||'', shopName:inv.destName||'',
+      sellerName:req.by||'', date:req.at?new Date(req.at).toLocaleDateString('ru-RU'):'', isTransfer:!!inv.isTransfer, sourceName:inv.sourceName||'',
+      changes:(typeof _invEditDiff==='function') ? _invEditDiff(inv, req) : [], synthetic:true});
+  });
+  return out;
+}
+function _alertsAll(){ return _adminAlerts.concat(_pendingInvoiceEditCards()); }
+function _findAlertAny(id){ return _alertsAll().find(function(x){ return x.id===id; }); }
+// Решение по заявке снимает все непрочитанные уведомления этой накладной (их могло быть несколько).
+function _closeInvoiceEditAlerts(a){
+  if(!a) return;
+  if(!a.synthetic) markAlertRead(a.id);
+  try{
+    db.collection('iz_admin_alerts').where('invId','==',a.invId).get().then(function(as){
+      as.forEach(function(d){ var x=d.data(); if(x.type==='invoice_edit' && !x.read) d.ref.update({read:true}).catch(function(){}); });
+    }).catch(function(){});
+  }catch(e){}
+  setTimeout(function(){ try{ renderAlertsPage(); }catch(e){} }, 300);
+}
 function renderAlertsPage(){
   var c=document.getElementById('alertsPageContent'); if(!c) return;
   var fc=document.getElementById('alertsShopFilter');
-  if(!_adminAlerts.length){
+  var _allA = _alertsAll();
+  var _badge=document.getElementById('alertsBadge'); if(_badge) _badge.textContent=_allA.length>0?_allA.length:'';
+  if(!_allA.length){
     if(fc) fc.innerHTML='';
     c.innerHTML='<div style="text-align:center;padding:30px;color:#8888aa"><div style="font-size:36px;margin-bottom:8px">✅</div>Нет непрочитанных уведомлений</div>';
     return;
   }
   var shops={};
-  _adminAlerts.forEach(function(a){ var s=a.shopName||''; if(s) shops[s]=true; });
+  _allA.forEach(function(a){ var s=a.shopName||''; if(s) shops[s]=true; });
   var shopList=Object.keys(shops).sort();
   if(fc && shopList.length>1){
     fc.innerHTML='<div onpointerdown="event.preventDefault();_alertsShopFilter=\'\';renderAlertsPage()" '+
@@ -1375,7 +1408,7 @@ function renderAlertsPage(){
           (active?'border:2px solid #c8f060;background:#1e2a14;color:#c8f060':'border:1px solid #2e2e3e;background:#22222e;color:#8888aa')+'">'+s+'</div>';
       }).join('');
   } else if(fc){ fc.innerHTML=''; }
-  var alerts=_adminAlerts.filter(function(a){
+  var alerts=_allA.filter(function(a){
     return !_alertsShopFilter || (a.shopName||'')=== _alertsShopFilter;
   });
   if(!alerts.length){
@@ -1455,26 +1488,26 @@ function approveNameRequest(id){
   showToast('✅ «'+a.name+'» добавлено в базу товаров — продавец сможет продать после обновления списка');
 }
 function approveInvoiceEdit(id){
-  var a = _adminAlerts.find(function(x){ return x.id===id; });
+  var a = _findAlertAny(id);
   if(!a){ showToast('Заявка не найдена'); return; }
   if(!confirm('Применить исправления к накладной '+(a.invNum||'')+'?'+(a.isTransfer?'\nСписание у «'+(a.sourceName||'')+'» поправится так же, склад отправителя пересчитается.':''))) return;
   _applyInvoiceEditRequest(a.invId).then(function(){
-    markAlertRead(id);
+    _closeInvoiceEditAlerts(a);
     showToast('✅ Накладная '+(a.invNum||'')+' исправлена — продавец может принимать');
   }).catch(function(err){
-    if(err && err.alreadyResolved){ markAlertRead(id); showToast('Заявка уже была рассмотрена — уведомление убрано'); return; }
+    if(err && err.alreadyResolved){ _closeInvoiceEditAlerts(a); showToast('Заявка уже была рассмотрена — уведомление убрано'); return; }
     showToast('⚠️ '+(err&&err.message||err));
   });
 }
 function rejectInvoiceEdit(id){
-  var a = _adminAlerts.find(function(x){ return x.id===id; });
+  var a = _findAlertAny(id);
   if(!a){ showToast('Заявка не найдена'); return; }
   if(!confirm('Отклонить заявку? Накладная останется как была, продавец сможет её принять.')) return;
   var ref = db.collection('iz_invoices').doc(a.invId);
   ref.get({source:'server'}).then(function(snap){
-    if(!snap.exists || !snap.data().editRequest){ markAlertRead(id); showToast('Заявка уже была рассмотрена — уведомление убрано'); return; }
+    if(!snap.exists || !snap.data().editRequest){ _closeInvoiceEditAlerts(a); showToast('Заявка уже была рассмотрена — уведомление убрано'); return; }
     return ref.update({editRequest:null, editRejectedAt:new Date().toISOString(), editRejectedBy:(session&&(session.name||session.sellerName))||'admin'})
-      .then(function(){ markAlertRead(id); showToast('Заявка отклонена'); });
+      .then(function(){ _closeInvoiceEditAlerts(a); showToast('Заявка отклонена'); });
   }).catch(function(err){ showToast('⚠️ '+(err&&err.message||err)); });
 }
 function rejectNameRequest(id){

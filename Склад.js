@@ -1063,14 +1063,20 @@ function saveShopInvoice(id){
     if(!diff.length){ showToast('Изменений нет'); return; }
     if(!confirm('Отправить администратору заявку на исправление накладной '+(orig.num||'')+'?\n\n'+diff.join('\n'))) return;
     db.collection('iz_invoices').doc(id).set({editRequest:req}, {merge:true}).then(function(){
-      // повторная заявка по той же накладной заменяет прежнюю — старые уведомления снимаем
+      // Повторная заявка по той же накладной заменяет прежнюю: сначала снимаем старые уведомления,
+      // и только потом создаём новое — раньше запрос мог захватить уже созданное новое уведомление
+      // и тоже пометить его прочитанным, и заявка у админа пропадала.
+      var newAlert = function(){
+        saveAdminAlert({type:'invoice_edit', invId:id, invNum:orig.num||'', shopName:orig.destName||(session&&session.shopName)||'',
+          sellerName:req.by, date:new Date().toLocaleDateString('ru-RU'), isTransfer:!!orig.isTransfer, sourceName:orig.sourceName||'', changes:diff});
+      };
       try{
-        db.collection('iz_admin_alerts').where('invId','==',id).get().then(function(as){
-          as.forEach(function(d){ var x=d.data(); if(x.type==='invoice_edit' && !x.read) d.ref.update({read:true}).catch(function(){}); });
-        }).catch(function(){});
-      }catch(e){}
-      saveAdminAlert({type:'invoice_edit', invId:id, invNum:orig.num||'', shopName:orig.destName||(session&&session.shopName)||'',
-        sellerName:req.by, date:new Date().toLocaleDateString('ru-RU'), isTransfer:!!orig.isTransfer, sourceName:orig.sourceName||'', changes:diff});
+        db.collection('iz_admin_alerts').where('invId','==',id).get({source:'server'}).then(function(as){
+          var ups = [];
+          as.forEach(function(d){ var x=d.data(); if(x.type==='invoice_edit' && !x.read) ups.push(d.ref.update({read:true}).catch(function(){})); });
+          return Promise.all(ups);
+        }).then(newAlert, newAlert);
+      }catch(e){ newAlert(); }
       var invs = getInvoices(); var ix = invs.findIndex(function(i){ return String(i._id!=null?i._id:i.id)===id; });
       if(ix>=0){ invs[ix].editRequest = req; saveInvoices(invs); }
       delete window._shInvEdit[id];
