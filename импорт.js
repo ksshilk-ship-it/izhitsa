@@ -761,7 +761,6 @@ function psjSuggest(inputId, list, onPick){
     if(ai!==bi) return ai-bi;
     return a.length-b.length;
   });
-  matches = matches.slice(0,8);
   if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
   // onclick, не onpointerdown: список подсказок часто длиннее видимой области (max-height+scroll),
   // а pointerdown срабатывает мгновенно при касании — на телефоне попытка пролистать список пальцем

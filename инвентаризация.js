@@ -261,7 +261,7 @@ function invManualNameInput(v){
   var q = (v||'').trim().toLowerCase();
   var el = document.getElementById('invNewName_sugg'); if(!el) return;
   if(!q){ _invManualMatches=[]; el.style.display='none'; el.innerHTML=''; return; }
-  _invManualMatches = _invManualCatalog.filter(function(it){ return it.name.toLowerCase().indexOf(q)>=0; }).slice(0,15);
+  _invManualMatches = _invManualCatalog.filter(function(it){ return it.name.toLowerCase().indexOf(q)>=0; });
   if(!_invManualMatches.length){ el.style.display='none'; el.innerHTML=''; return; }
   el.style.display='block';
   el.innerHTML = _invManualMatches.map(function(it,i){
@@ -384,7 +384,7 @@ function _invFfSearchInput(v){
     var it = snap[k];
     return (it.name||'').toLowerCase().indexOf(q)>=0 || String(it.num||k).toLowerCase().indexOf(q)>=0 || (it.species||'').toLowerCase().indexOf(q)>=0;
   });
-  _invFfMatches = exact.concat(partial).slice(0,8);
+  _invFfMatches = exact.concat(partial);
   _invRenderFfSuggestions(q);
 }
 function _invRenderFfSuggestions(q){
@@ -531,7 +531,7 @@ function invSoldSearchInput(v){
   _invSoldMatches = Object.keys(_invCounts).filter(function(k){
     var it = _invCounts[k];
     return (it.name||'').toLowerCase().indexOf(q)>=0 || String(it.num||k).toLowerCase().indexOf(q)>=0 || (it.species||'').toLowerCase().indexOf(q)>=0;
-  }).slice(0,8);
+  });
   _invRenderSoldSuggestions();
 }
 function _invRenderSoldSuggestions(){

@@ -3408,7 +3408,6 @@ function svEditSuggestName(id){
     if(ai!==bi) return ai-bi;
     return a.length-b.length;
   });
-  names = names.slice(0,8);
   if(!names.length){ box.style.display='none'; box.innerHTML=''; return; }
   var drCat = getRefBook('iz_goods_dr'), woodCat = getRefBook('iz_goods_derevo');
   var rows = [];
@@ -5221,7 +5220,7 @@ function svManInvSuggest(kind, idx, val){
   } else {
     list = (_svManInv && _svManInv.goodsType==='dr') ? getRefBook('iz_dr_species').map(function(g){return g.name||g;}) : getSpecies();
   }
-  var matches = list.filter(function(nm){ return nm && String(nm).toLowerCase().indexOf(val)===0; }).slice(0,8);
+  var matches = list.filter(function(nm){ return nm && String(nm).toLowerCase().indexOf(val)===0; });
   if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
   box.innerHTML = matches.map(function(m){
     return '<div onclick="svManInvPick(\''+kind+'\','+idx+',\''+String(m).replace(/'/g,"\\'")+'\')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m+'</div>';
@@ -5561,7 +5560,6 @@ function svItemNameSuggest(id, goodsType){
     if(a.name.length!==b.name.length) return a.name.length-b.name.length;
     return (a.price||0)-(b.price||0);
   });
-  matches = matches.slice(0,8);
   _svItemSuggMatches[id] = matches;
   if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
   box.innerHTML = matches.map(function(m, i){
@@ -5602,7 +5600,6 @@ function svSpeciesSuggest(id){
     if(ai!==bi) return ai-bi;
     return a.length-b.length;
   });
-  matches = matches.slice(0,8);
   if(!matches.length){ box.style.display='none'; box.innerHTML=''; return; }
   box.innerHTML = matches.map(function(m){
     return '<div onclick="svSpeciesPick(\''+id+'\',\''+m.replace(/'/g,"\\'")+'\')" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+m+'</div>';

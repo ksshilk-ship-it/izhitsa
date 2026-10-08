@@ -2360,7 +2360,6 @@ function _manInvEditSuggestName(id, i){
     if(ai!==bi) return ai-bi;
     return a.length-b.length;
   });
-  names = names.slice(0,8);
   if(!names.length){ box.style.display='none'; box.innerHTML=''; return; }
   var isWood = gt!=='dr';
   var rows = [];
@@ -5690,9 +5689,9 @@ function _stockCatalogMatches(shop, gt, field, val){
   var words = String(val||'').trim().toLowerCase().split(/\s+/).filter(Boolean);
   if(!words.length) return [];
   var hit = function(text){ var low = String(text||'').toLowerCase(); return words.every(function(w){ return low.indexOf(w)>=0; }); };
-  // Три группы, каждая со своим лимитом: раньше общий лимит 15 съедали товары со склада (по слову
-  // «доска» их десятки с разными номерами), и простые названия из базы («Доска д/разделки») в
-  // список вообще не попадали. Названия из базы показываем все и первыми.
+  // Без лимитов — список прокручивается. Раньше общий лимит 15 съедали товары со склада (по слову
+  // «доска» их десятки с разными номерами), и простые названия из базы («Доска д/подачи») в список
+  // не попадали. Порядок: названия из базы, наличие на складе, позиции каталога с артикулом.
   var stockM = [], namesM = [], catArtM = [], seen = {}, seenName = {};
   var stockShop = _trStockOf(shop);
   Object.keys(stockShop).forEach(function(k){
@@ -5720,7 +5719,7 @@ function _stockCatalogMatches(shop, gt, field, val){
     });
   });
   namesM.sort(function(a,b){ return a.name.localeCompare(b.name,'ru'); });
-  return namesM.concat(stockM.slice(0,12)).concat(catArtM.slice(0,12));
+  return namesM.concat(stockM).concat(catArtM);
 }
 function _stockMatchLabel(m){
   var esc = function(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
@@ -5735,7 +5734,7 @@ function _trSugg(i, field, val){
   var matches;
   if(field==='species'){
     var words = String(val||'').trim().toLowerCase().split(/\s+/).filter(Boolean);
-    matches = !words.length ? [] : getSpecies().filter(function(sp){ var low=String(sp).toLowerCase(); return words.every(function(w){ return low.indexOf(w)>=0; }); }).slice(0,12).map(function(sp){ return {species:sp, label:sp}; });
+    matches = !words.length ? [] : getSpecies().filter(function(sp){ var low=String(sp).toLowerCase(); return words.every(function(w){ return low.indexOf(w)>=0; }); }).map(function(sp){ return {species:sp, label:sp}; });
   } else {
     matches = _stockCatalogMatches(gv('trFrom'), gv('trType')||'derevo', field, val);
   }
@@ -5960,7 +5959,7 @@ function _woEdSugg(i, field, val){
   var list;
   if(field==='species'){
     var words = String(val||'').trim().toLowerCase().split(/\s+/).filter(Boolean);
-    list = !words.length ? [] : getSpecies().filter(function(sp){ var l=String(sp).toLowerCase(); return words.every(function(w){ return l.indexOf(w)>=0; }); }).slice(0,12).map(function(sp){ return {species:sp}; });
+    list = !words.length ? [] : getSpecies().filter(function(sp){ var l=String(sp).toLowerCase(); return words.every(function(w){ return l.indexOf(w)>=0; }); }).map(function(sp){ return {species:sp}; });
   } else list = _stockCatalogMatches(_woEd.shop, _woEd.gt, field, val);
   _woEdMatches[i] = {field:field, list:list};
   if(!list.length){ box.style.display='none'; return; }

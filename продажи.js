@@ -156,7 +156,6 @@ function _siBuildSuggest(inputId, speciesFieldId, pickFn, suggestFn){
     if(ai!==bi) return ai-bi;
     return a.length-b.length;
   });
-  names = names.slice(0,8);
   if(!names.length){ box.style.display='none'; box.innerHTML=''; return; }
   var isWood = _siItemGoodsType!=='dr';
   // Порода уже вписана продавцом (и не режим «неск. материалов») — сразу фильтруем варианты по
