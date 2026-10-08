@@ -5022,6 +5022,12 @@ function _findArtDupInItems(items, excludeInvId, destShop){
     var num = String((items[i].num||items[i].article||'')).trim();
     if(!num) continue;
     if(catalogArts[num.toLowerCase()]) continue;
+    // Уникальная бирка одной физической вещи — только номер из цифр (52275). Буквенные коды
+    // (Свеч04, СвечСот02, Макраме01) — шифр партии: под ним десятки одинаковых изделий, и одна
+    // партия законно приходит в несколько магазинов — повтор тут не ошибка (как и в аудите
+    // «Задвоение номеров»). Раньше Колесо не могло принять свечи с Горок, потому что ту же
+    // партию «Свеч04» уже приняла Роза Хутор.
+    if(!/^\d+$/.test(num)) continue;
     if(seenInThisInvoice[num]) return '№'+num+' указан в этой накладной дважды';
     seenInThisInvoice[num] = true;
     var occs = _checkArtDupSync(num, excludeInvId);
