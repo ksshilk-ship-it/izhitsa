@@ -5690,7 +5690,10 @@ function _stockCatalogMatches(shop, gt, field, val){
   var words = String(val||'').trim().toLowerCase().split(/\s+/).filter(Boolean);
   if(!words.length) return [];
   var hit = function(text){ var low = String(text||'').toLowerCase(); return words.every(function(w){ return low.indexOf(w)>=0; }); };
-  var out = [], seen = {};
+  // Три группы, каждая со своим лимитом: раньше общий лимит 15 съедали товары со склада (по слову
+  // «доска» их десятки с разными номерами), и простые названия из базы («Доска д/разделки») в
+  // список вообще не попадали. Названия из базы показываем все и первыми.
+  var stockM = [], namesM = [], catArtM = [], seen = {}, seenName = {};
   var stockShop = _trStockOf(shop);
   Object.keys(stockShop).forEach(function(k){
     var it = stockShop[k]||{}, g = it.goodsType||'derevo';
@@ -5698,20 +5701,26 @@ function _stockCatalogMatches(shop, gt, field, val){
     var num = /^(DR_|WD_)/.test(k) ? '' : (it.num&&!/^(DR_|WD_)/.test(it.num) ? it.num : k);
     if(!hit(field==='num' ? num : (num+' '+it.name+' '+(it.species||'')))) return;
     var sig = g+'|'+num+'|'+(it.name||'')+'|'+(it.species||'')+'|'+(it.price||0); if(seen[sig]) return; seen[sig]=true;
-    out.push({src:'stock', gt:g, num:num, name:it.name||'', species:it.species||'', price:it.price||0, qty:it.qty||0});
+    stockM.push({src:'stock', gt:g, num:num, name:it.name||'', species:it.species||'', price:it.price||0, qty:it.qty||0});
   });
   (gt ? [gt] : ['derevo','dr']).forEach(function(g){
     (getRefBook(g==='dr'?'iz_goods_dr':'iz_goods_derevo')||[]).forEach(function(c){
       if(!c) return;
-      var name = c.name||c; if(!name) return;
+      var name = (c.name||c); if(!name || typeof name!=='string') return;
       var num = c.article||'';
-      if(field==='num' && !num) return;
+      if(!num){
+        if(field==='num' || !hit(name)) return;
+        var nk = g+'|'+name.trim().toLowerCase(); if(seenName[nk]) return; seenName[nk]=true;
+        namesM.push({src:'cat', gt:g, num:'', name:name, species:c.species||'', price:c.price||0});
+        return;
+      }
       if(!hit(field==='num' ? num : (num+' '+name+' '+(c.species||'')))) return;
       var sig = g+'|'+num+'|'+name+'|'+(c.species||'')+'|'+(c.price||0); if(seen[sig]) return; seen[sig]=true;
-      out.push({src:'cat', gt:g, num:num, name:name, species:c.species||'', price:c.price||0});
+      catArtM.push({src:'cat', gt:g, num:num, name:name, species:c.species||'', price:c.price||0});
     });
   });
-  return out.slice(0,15);
+  namesM.sort(function(a,b){ return a.name.localeCompare(b.name,'ru'); });
+  return namesM.concat(stockM.slice(0,12)).concat(catArtM.slice(0,12));
 }
 function _stockMatchLabel(m){
   var esc = function(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
