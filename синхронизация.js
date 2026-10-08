@@ -325,7 +325,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '10.08.08';
+var APP_BUILD_VERSION = '10.08.09';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -710,8 +710,12 @@ function _syncApplyRemoteValue(lsKey, val){
   var lastSave = _syncSaveGuard[lsKey]||0;
   var justSaved = (Date.now() - lastSave) < 300000; // 5 min guard
   if(!justSaved){
-    var shopRefbookKeys2 = ['iz_payment_methods','iz_suppliers','iz_goods','iz_goods_derevo','iz_goods_dr','iz_materials','iz_dr_species','iz_work_schedules'];
+    var shopRefbookKeys2 = ['iz_payment_methods','iz_suppliers','iz_goods','iz_materials','iz_dr_species','iz_work_schedules'];
     var valToWrite = val;
+    // База товаров Дерево/ДР — то, что в облаке, без фильтра по списку удалённых: её правит
+    // только админ, и он видит в «Настройках» именно облачную версию (_refreshGoodsCatalogFromServer
+    // фильтр не применяет). Раньше наименование, оказавшееся и в базе, и в списке удалённых
+    // («Доска д/подачи»), у админа было, а у продавцов и в формах подсказок — нет.
     if(shopRefbookKeys2.indexOf(lsKey)>=0 && Array.isArray(val)){
       var tombKey2 = lsKey+'_deleted';
       var tombs2 = JSON.parse(localStorage.getItem(tombKey2)||'[]');

@@ -326,8 +326,25 @@ function toggleRefbookShop(id, key){
   body.style.display = open?'none':'block';
   if(arr) arr.style.transform = open?'':'rotate(90deg)';
   if(!open && (key==='iz_goods_derevo' || key==='iz_goods_dr')){
-    _refreshGoodsCatalogFromServer(key, function(){ renderRefbookItemsShop(id, key); });
+    _refreshGoodsCatalogFromServer(key, function(){ renderRefbookItemsShop(id, key); _reconcileRefbookTombstones(key); });
   }
+}
+// Наименование, которое есть в базе, но числится и в списке удалённых, — живое: админ видит его
+// в базе. Убираем такие имена из облачного списка удалённых (только админ), чтобы список не
+// противоречил базе — по нему, например, не даётся заново автоматически завести «удалённое» имя.
+function _reconcileRefbookTombstones(key){
+  if(!(session && session.role==='shopadmin')) return;
+  var tombKey = key+'_deleted';
+  var tombs = JSON.parse(localStorage.getItem(tombKey)||'[]');
+  if(!tombs.length) return;
+  var alive = {};
+  getRefBook(key).forEach(function(c){ var n = String((c&&c.name)||c||'').toLowerCase().trim(); if(n) alive[n]=true; });
+  var cleaned = tombs.filter(function(n){ return !alive[n]; });
+  if(cleaned.length===tombs.length) return;
+  localStorage.setItem(tombKey, JSON.stringify(cleaned));
+  var tombDocKey = key==='iz_goods_derevo'?'goods_derevo_deleted':(key==='iz_goods_dr'?'goods_dr_deleted':'refbook_deleted_'+key);
+  try{ db.collection('iz_settings').doc(tombDocKey).set({deleted:cleaned, updatedAt:new Date().toISOString()}, {merge:true}); }catch(e){}
+  try{ logAction('REFBOOK_TOMBSTONES_CLEANED', {key:key, restored:tombs.filter(function(n){ return alive[n]; })}); }catch(e){}
 }
 // Обобщила с двух жёстко зашитых ключей (goods_derevo/goods_dr) — понадобилось и для iz_materials
 // (проверка породы при продаже читает getSpecies(), который читает как раз iz_materials, и должен
