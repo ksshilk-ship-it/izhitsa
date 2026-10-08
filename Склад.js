@@ -1063,6 +1063,12 @@ function saveShopInvoice(id){
     if(!diff.length){ showToast('Изменений нет'); return; }
     if(!confirm('Отправить администратору заявку на исправление накладной '+(orig.num||'')+'?\n\n'+diff.join('\n'))) return;
     db.collection('iz_invoices').doc(id).set({editRequest:req}, {merge:true}).then(function(){
+      // повторная заявка по той же накладной заменяет прежнюю — старые уведомления снимаем
+      try{
+        db.collection('iz_admin_alerts').where('invId','==',id).get().then(function(as){
+          as.forEach(function(d){ var x=d.data(); if(x.type==='invoice_edit' && !x.read) d.ref.update({read:true}).catch(function(){}); });
+        }).catch(function(){});
+      }catch(e){}
       saveAdminAlert({type:'invoice_edit', invId:id, invNum:orig.num||'', shopName:orig.destName||(session&&session.shopName)||'',
         sellerName:req.by, date:new Date().toLocaleDateString('ru-RU'), isTransfer:!!orig.isTransfer, sourceName:orig.sourceName||'', changes:diff});
       var invs = getInvoices(); var ix = invs.findIndex(function(i){ return String(i._id!=null?i._id:i.id)===id; });
@@ -6072,14 +6078,21 @@ function _applyInvoiceEditRequest(invId){
     if(!snap.exists) throw new Error('накладная не найдена');
     var inv = snap.data();
     var req = inv.editRequest;
-    if(!req) throw new Error('заявка уже рассмотрена');
+    if(!req){ var e1 = new Error('заявка уже рассмотрена'); e1.alreadyResolved = true; throw e1; }
     if(inv.status==='accepted') throw new Error('накладная уже принята — правьте её через «✏️ Исправить»');
     var items = (req.items||[]).map(function(it){ return Object.assign({}, it, {goodsType:it.goodsType||inv.goodsType||'derevo'}); });
     var total = items.reduce(function(s,it){ return s+(it.price||0)*(it.qty||1); },0);
     var who = (session&&(session.name||session.sellerName))||'admin';
     return ref.update({num:req.num||inv.num, date:req.date||inv.date, items:items, total:total, editRequest:null,
       editApprovedAt:new Date().toISOString(), editApprovedBy:who, editRequestedBy:req.by||''}).then(function(){
-      if(inv.isTransfer && inv.sourceName) return _syncTransferWriteoff(invId, inv.sourceName, items, req.num||inv.num);
+      // Накладная уже исправлена — сбой при правке списания у отправителя не должен оставлять
+      // заявку «висеть»: о нём отдельное сообщение, а результат одобрения — успех.
+      if(inv.isTransfer && inv.sourceName){
+        try{
+          var p = _syncTransferWriteoff(invId, inv.sourceName, items, req.num||inv.num);
+          if(p && p.catch) p.catch(function(err){ showToast('⚠️ Накладная исправлена, но списание у «'+inv.sourceName+'» не обновилось: '+(err&&err.message||err)); });
+        }catch(err){ showToast('⚠️ Накладная исправлена, но списание у «'+inv.sourceName+'» не обновилось: '+(err&&err.message||err)); }
+      }
     });
   });
 }

@@ -1461,15 +1461,21 @@ function approveInvoiceEdit(id){
   _applyInvoiceEditRequest(a.invId).then(function(){
     markAlertRead(id);
     showToast('✅ Накладная '+(a.invNum||'')+' исправлена — продавец может принимать');
-  }).catch(function(err){ showToast('⚠️ '+(err&&err.message||err)); });
+  }).catch(function(err){
+    if(err && err.alreadyResolved){ markAlertRead(id); showToast('Заявка уже была рассмотрена — уведомление убрано'); return; }
+    showToast('⚠️ '+(err&&err.message||err));
+  });
 }
 function rejectInvoiceEdit(id){
   var a = _adminAlerts.find(function(x){ return x.id===id; });
   if(!a){ showToast('Заявка не найдена'); return; }
   if(!confirm('Отклонить заявку? Накладная останется как была, продавец сможет её принять.')) return;
-  db.collection('iz_invoices').doc(a.invId).update({editRequest:null, editRejectedAt:new Date().toISOString(), editRejectedBy:(session&&(session.name||session.sellerName))||'admin'})
-    .then(function(){ markAlertRead(id); showToast('Заявка отклонена'); })
-    .catch(function(err){ showToast('⚠️ '+(err&&err.message||err)); });
+  var ref = db.collection('iz_invoices').doc(a.invId);
+  ref.get({source:'server'}).then(function(snap){
+    if(!snap.exists || !snap.data().editRequest){ markAlertRead(id); showToast('Заявка уже была рассмотрена — уведомление убрано'); return; }
+    return ref.update({editRequest:null, editRejectedAt:new Date().toISOString(), editRejectedBy:(session&&(session.name||session.sellerName))||'admin'})
+      .then(function(){ markAlertRead(id); showToast('Заявка отклонена'); });
+  }).catch(function(err){ showToast('⚠️ '+(err&&err.message||err)); });
 }
 function rejectNameRequest(id){
   markAlertRead(id);
