@@ -325,7 +325,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '10.08.06';
+var APP_BUILD_VERSION = '10.08.07';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -928,16 +928,28 @@ function startSyncListeners() {
                   key==='iz_species'?'species_deleted':
                   key==='iz_dr_species'?'dr_species_deleted':
                   'refbook_deleted_'+key; // iz_goods → refbook_deleted_iz_goods, iz_materials → refbook_deleted_iz_materials
-    db.collection('iz_settings').doc(docName).get().then(function(snap){
-      if(snap.exists && snap.data().deleted){
+    // Список удалённых наименований — тот, что в облаке, а не объединение с локальным: раньше
+    // устройство только добавляло к своему списку, и когда админ заново добавлял удалённое когда-то
+    // наименование (_clearRefbookTombstone убирает его из облачного списка), на телефоне продавца
+    // оно оставалось «удалённым» навсегда — _syncApplyRemoteValue выкидывал его из базы при каждом
+    // обновлении («Декор» добавлен с ПК, а продавцу в базе не виден). Слушаем живьём и после смены
+    // списка перечитываем саму базу, чтобы вернувшееся наименование появилось сразу.
+    try{
+      db.collection('iz_settings').doc(docName).onSnapshot(function(snap){
         var tombKey = key+'_deleted';
-        var local = JSON.parse(localStorage.getItem(tombKey)||'[]');
-        var remote = snap.data().deleted||[];
-        var merged = local.slice();
-        remote.forEach(function(n){ if(merged.indexOf(n)<0) merged.push(n); });
-        localStorage.setItem(tombKey, JSON.stringify(merged));
-      }
-    }).catch(function(){});
+        var remote = (snap.exists && snap.data().deleted) || [];
+        var before = localStorage.getItem(tombKey)||'[]';
+        var after = JSON.stringify(remote);
+        if(before===after) return;
+        localStorage.setItem(tombKey, after);
+        var m = SYNC_SETTINGS[key];
+        if(m){
+          db.collection('iz_settings').doc(m.doc).get({source:'server'}).then(function(cs){
+            if(cs.exists) _syncApplyRemoteValue(key, cs.data()[m.field]);
+          }).catch(function(){});
+        }
+      }, function(){});
+    }catch(e){}
   });
   Object.keys(SYNC_SETTINGS).forEach(syncListen);
   try{ pullShiftTombstonesFromCloud(); }catch(e){}
