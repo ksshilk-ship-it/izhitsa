@@ -1074,7 +1074,7 @@ function saveShopInvoice(id){
     return;
   }
   if(typeof _findArtDupInItems==='function'){
-    var _artDupMsg2 = _findArtDupInItems(data.items, id, data.destName||data.shopName);
+    var _artDupMsg2 = _findArtDupInItems(data.items, id, data.destName||data.shopName, data.isTransfer?data.sourceName:null);
     if(_artDupMsg2){ showToast('⛔ '+_artDupMsg2+' — исправьте номер'); return; }
   }
   var wasAccepted = data.status==='accepted';
@@ -1201,7 +1201,7 @@ function acceptInvoice(){
   const who=gv('invWho'); if(!who){showToast('Укажите кто принял');return;}
   const invs=getInvoices(); const inv=invs.find(i=>(i.id||i._id)===currentInvId); if(!inv)return;
   if(typeof _findArtDupInItems==='function'){
-    var _artDupMsg3 = _findArtDupInItems(inv.items, inv.id||inv._id, inv.destName||inv.shopName);
+    var _artDupMsg3 = _findArtDupInItems(inv.items, inv.id||inv._id, inv.destName||inv.shopName, inv.isTransfer?inv.sourceName:null);
     if(_artDupMsg3){ showToast('⛔ '+_artDupMsg3+' — исправьте номер через «✏️ Исправить» перед приёмкой'); return; }
   }
   var todayStr = _workingNowISO().split('T')[0];
@@ -5014,7 +5014,7 @@ function _catalogArticleSet(){
   });
   return set;
 }
-function _findArtDupInItems(items, excludeInvId, destShop){
+function _findArtDupInItems(items, excludeInvId, destShop, transferFrom){
   if(!_usedArtIndex) return null;
   var seenInThisInvoice = {};
   var catalogArts = _catalogArticleSet();
@@ -5035,6 +5035,11 @@ function _findArtDupInItems(items, excludeInvId, destShop){
       var latest = occs.slice().sort(function(a,b){ return String(b.date||'').localeCompare(String(a.date||'')); })[0];
       var otherShop = destShop && latest.shop && latest.shop!==destShop;
       if(otherShop && _artWrittenOffAt(num, latest.shop, latest.date)) continue;
+      // Накладная перемещения: отправитель сам списал эту вещь этой же накладной — она физически
+      // приехала оттуда. Если номер при этом «висит» ещё и на третьем магазине — это старая путаница
+      // с биркой (две разные вещи под одним номером, напр. №51919 «Капа» на Ривьере и «Доска» с
+      // Горок), к перемещению отношения не имеет и разбирается в аудите «Задвоение номеров».
+      if(otherShop && transferFrom) continue;
       if(otherShop){
         // списание могли сделать только что — подтягиваем свежий список к следующему нажатию
         try{ _buildWriteoffArtIndex(); }catch(e){}
