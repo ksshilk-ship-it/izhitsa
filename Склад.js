@@ -1367,12 +1367,14 @@ function invSaveEdit(){
     var el = document.getElementById('inved_row_'+i); if(el) try{ el.scrollIntoView({block:'center', behavior:'smooth'}); }catch(e){}
     showToast('⛔ Позиция '+(i+1)+(_invEd.items[i].name?' «'+_invEd.items[i].name+'»':'')+': '+msg);
   };
+  var _catSet = _catalogArticleSet();
   for(var k=0;k<_invEd.items.length;k++){
     var r = _invEd.items[k]; if(isEmpty(r)) continue;
     var n = String(r.num||'').trim(), sp = String(r.species||'').trim();
     if(!String(r.name||'').trim()) return fail(k, 'нужно наименование');
     if(!(r.qty>0)) return fail(k, 'нужно количество');
-    if(n && n!==(r._n0||'') && !/^\d+$/.test(n)) return fail(k, 'в номере «'+n+'» должны быть только цифры');
+    // Артикул из справочника (у лопаток они буквенные: «ЛопаткаДуб03») — законный, его подставляет подсказка.
+    if(n && n!==(r._n0||'') && !/^\d+$/.test(n) && !_catSet[n.toLowerCase()]) return fail(k, 'номера «'+n+'» нет в справочнике — номер бирки только из цифр, или выберите позицию из подсказки');
     if(_invEd.gt!=='dr' && sp && sp!==(r._sp0||'') && spList.indexOf(sp.toLowerCase())<0 && !_rcvIsAdmin()) return fail(k, 'породы «'+sp+'» нет в списке — выберите из подсказки');
   }
   if(_invEd.errIdx!=null){ _invEd.errIdx = null; _invEdRender(); }
