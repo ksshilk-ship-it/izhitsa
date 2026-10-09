@@ -1204,7 +1204,7 @@ function openInvoice(invId, editMode){
 // «✏️ ПРАВИТЬ» в окне приёмки: вся накладная переходит в режим исправления — любое поле любой
 // строки, удаление и новые строки. У продавца сохранение — это заявка администратору (накладная
 // остаётся прежней, принять её можно после одобрения уже в новом виде), у админа — сразу.
-var _invEd = null, _invEdActive = null;
+var _invEd = null;
 function _invShowMode(mode){
   var a = document.getElementById('invAcceptPart'), e = document.getElementById('invEditPart');
   if(a) a.style.display = mode==='edit' ? 'none' : '';
@@ -1229,8 +1229,8 @@ function _invEdRender(){
   var esc = function(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); };
   var inp = function(i,f,v,ph,w,mode,sugg){
     return '<div style="position:relative;'+(w?'flex:0 0 '+w:'flex:1')+';min-width:0"><input id="inved_'+f+'_'+i+'" value="'+esc(v)+'" placeholder="'+ph+'" autocomplete="off"'+
-      (mode?' inputmode="'+mode+'"':'')+' oninput="_invEdEdit('+i+',\''+f+'\',this.value)'+(sugg?';_invEdActive={i:'+i+',f:\''+f+'\'};psjSuggest(\'inved_'+f+'_'+i+'\','+sugg+',\'_invEdPick\')':'')+'"'+
-      (sugg?' onfocus="_invEdActive={i:'+i+',f:\''+f+'\'};psjSuggest(\'inved_'+f+'_'+i+'\','+sugg+',\'_invEdPick\')" onblur="psjHideSugg(\'inved_'+f+'_'+i+'\')"':'')+
+      (mode?' inputmode="'+mode+'"':'')+' oninput="_invEdEdit('+i+',\''+f+'\',this.value)'+(sugg?';_invEdSugg('+i+',\''+f+'\')':'')+'"'+
+      (sugg?' onfocus="_invEdSugg('+i+',\''+f+'\')" onblur="_invEdHideSugg('+i+',\''+f+'\')"':'')+
       ' style="width:100%;box-sizing:border-box;padding:6px 8px;background:#0f0f13;border:1px solid #2e2e3e;border-radius:8px;color:#f0f0f8;font-size:12px;outline:none">'+
       (sugg?'<div id="inved_'+f+'_'+i+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px;min-width:180px"></div>':'')+
     '</div>';
@@ -1242,8 +1242,8 @@ function _invEdRender(){
     return '<div style="background:'+(r.isNew?'#1a2a1e':'#1a1a22')+';border:1px '+(r.isNew?'dashed #60f090':'solid #2e2e3e')+';border-radius:10px;padding:8px;margin-bottom:6px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:'+(r.isNew?'#60f090':'#8888aa')+'">'+(r.isNew?'🆕 Новая позиция':'Позиция '+(i+1))+'</span>'+
         '<button type="button" onclick="_invEd.items.splice('+i+',1);_invEdRender()" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer" title="Убрать строку">✕</button></div>'+
-      '<div style="display:flex;gap:5px;margin-bottom:5px">'+inp(i,'num',r.num,'Артикул','42%','numeric')+inp(i,'name',r.name,'Наименование',null,null,'getItemNames(_invEd.gt)')+'</div>'+
-      '<div style="display:flex;gap:5px;align-items:center">'+(isDr?'':inp(i,'species',r.species,'Порода',null,null,'getSpecies()'))+
+      '<div style="display:flex;gap:5px;margin-bottom:5px">'+inp(i,'num',r.num,'Артикул','42%','numeric',1)+inp(i,'name',r.name,'Наименование',null,null,1)+'</div>'+
+      '<div style="display:flex;gap:5px;align-items:center">'+(isDr?'':inp(i,'species',r.species,'Порода',null,null,1))+
         inp(i,'price',r.price||'','Цена','70px','numeric')+inp(i,'qty',r.qty||1,'Кол','50px','numeric')+
         '<span id="inved_sum_'+i+'" style="flex-shrink:0;min-width:54px;text-align:right;font-size:11px;font-weight:700;color:#c8f060">'+(sum?fmt(sum):'')+'</span></div>'+
     '</div>';
@@ -1265,11 +1265,69 @@ function _invEdEdit(i, f, v){
     var t = document.getElementById('invEdTotal'); if(t) t.textContent = _invEd.items.length+' поз. · '+fmt(total);
   }
 }
-function _invEdPick(val){
-  var a = _invEdActive; if(!a) return;
-  var el = document.getElementById('inved_'+a.f+'_'+a.i); if(el) el.value = val;
-  _invEdEdit(a.i, a.f, val);
-  var box = document.getElementById('inved_'+a.f+'_'+a.i+'_sugg'); if(box) box.style.display='none';
+// Подсказки как при продаже: позиции справочника с артикулом и ценой по введённому наименованию
+// (и породе, если она уже указана), а в самом конце — просто наименование без артикула, на случай,
+// если нужной позиции в справочнике нет. В поле породы — сначала позиции справочника этого
+// наименования с подходящей породой, затем породы из списка.
+var _invEdSuggList = {}, _invEdSuggT = {};
+function _invEdMatches(i, field){
+  var r = _invEd && _invEd.items[i]; if(!r) return [];
+  var words = function(v){ return String(v||'').trim().toLowerCase().split(/\s+/).filter(Boolean); };
+  var has = function(text, ws){ var low = String(text||'').toLowerCase(); return ws.every(function(w){ return low.indexOf(w)>=0; }); };
+  var gt = _invEd.gt, isDr = gt==='dr';
+  var nameW = words(r.name), spW = isDr ? [] : words(r.species), numV = String(r.num||'').trim();
+  var arts = [], names = [], seen = {}, seenName = {};
+  (getRefBook(isDr?'iz_goods_dr':'iz_goods_derevo')||[]).forEach(function(c){
+    if(!c) return;
+    var name = c.name||c; if(!name || typeof name!=='string') return;
+    var num = String(c.article||'').trim();
+    if(field==='num'){
+      if(!numV || !num || num.indexOf(numV)!==0) return;
+    } else if(num){
+      if(!nameW.length || !has(name, nameW) || !has(c.species, spW)) return;
+    } else {
+      if(field!=='name' || !nameW.length || !has(name, nameW)) return;
+      var nk = name.trim().toLowerCase(); if(seenName[nk]) return; seenName[nk] = true;
+      names.push({kind:'name', name:name}); return;
+    }
+    var sig = num+'|'+name+'|'+(c.species||'')+'|'+(c.price||0); if(seen[sig]) return; seen[sig] = true;
+    arts.push({kind:'cat', num:num, name:name, species:c.species||'', price:c.price||0});
+  });
+  arts.sort(function(a,b){ return a.name.localeCompare(b.name,'ru') || String(a.species).localeCompare(String(b.species),'ru') || (a.num.length-b.num.length) || a.num.localeCompare(b.num); });
+  if(field==='name') arts.forEach(function(m){ var nk = m.name.trim().toLowerCase(); if(!seenName[nk]){ seenName[nk] = true; names.push({kind:'name', name:m.name}); } });
+  names.sort(function(a,b){ return a.name.localeCompare(b.name,'ru'); });
+  if(field==='species'){
+    var sps = !spW.length ? [] : getSpecies().filter(function(sp){ return has(sp, spW); }).map(function(sp){ return {kind:'species', species:sp}; });
+    return arts.concat(sps);
+  }
+  return arts.concat(names);
+}
+function _invEdSugg(i, field){
+  var key = field+'_'+i;
+  if(_invEdSuggT[key]){ clearTimeout(_invEdSuggT[key]); delete _invEdSuggT[key]; }
+  var box = document.getElementById('inved_'+key+'_sugg'); if(!box) return;
+  var list = _invEdMatches(i, field);
+  _invEdSuggList[key] = list;
+  if(!list.length){ box.style.display='none'; box.innerHTML=''; return; }
+  var esc = function(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
+  box.innerHTML = list.map(function(m, k){
+    var label = m.kind==='cat' ? '📚 <b>№'+esc(m.num)+'</b> '+esc(m.name)+(m.species?' <span style="color:#f0c060">· '+esc(m.species)+'</span>':'')+(m.price?' · '+fmt(m.price):'')
+      : m.kind==='name' ? '✏️ '+esc(m.name)+' <span style="color:#8888aa">— без артикула</span>'
+      : esc(m.species);
+    return '<div onclick="_invEdPick('+i+',\''+field+'\','+k+')" style="padding:8px 10px;font-size:11.5px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+label+'</div>';
+  }).join('');
+  box.style.display = 'block';
+}
+function _invEdHideSugg(i, field){
+  var key = field+'_'+i;
+  _invEdSuggT[key] = setTimeout(function(){ var b = document.getElementById('inved_'+key+'_sugg'); if(b) b.style.display='none'; delete _invEdSuggT[key]; }, 200);
+}
+function _invEdPick(i, field, k){
+  var r = _invEd && _invEd.items[i], m = (_invEdSuggList[field+'_'+i]||[])[k]; if(!r || !m) return;
+  if(m.kind==='cat'){ r.num = m.num; r.name = m.name; if(m.species) r.species = m.species; if(m.price) r.price = m.price; }
+  else if(m.kind==='name'){ r.name = m.name; r.num = ''; }
+  else r.species = m.species;
+  _invEdRender();
 }
 function invSaveEdit(){
   if(!_invEd) return;
