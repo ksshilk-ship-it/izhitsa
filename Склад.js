@@ -2165,12 +2165,20 @@ function _rcvCheckItemsAgainstCatalog(items, goodsType, onlyIdx){
   var catalogArts = _catalogArticleSet();
   var species = {};
   getSpecies().forEach(function(sp){ species[String(sp||'').toLowerCase().trim()] = true; });
+  // Несуществующие артикулы — все сразу, а не по одному: раньше продавец исправлял поз. 5,
+  // жал «Принять» и получал ту же ошибку про поз. 7, и так по кругу.
+  var badArts = [];
+  for(var j=0;j<(items||[]).length;j++){
+    if(onlyIdx && !onlyIdx[j]) continue;
+    var itj = items[j]; if(!itj || !String(itj.name||'').trim()) continue;
+    var artj = String(itj.article||itj.num||'').trim();
+    if(artj && !/^\d+$/.test(artj) && !catalogArts[artj.toLowerCase()]) badArts.push({idx:j, bad:artj});
+  }
+  if(badArts.length) return {type:'article', list:badArts};
   for(var i=0;i<(items||[]).length;i++){
     if(onlyIdx && !onlyIdx[i]) continue;
     var it = items[i]; if(!it) continue;
     var nm = String(it.name||'').trim(); if(!nm) continue;
-    var art = String(it.article||it.num||'').trim();
-    if(art && !/^\d+$/.test(art) && !catalogArts[art.toLowerCase()]) return {type:'article', item:it, idx:i, bad:art};
     if(!names[nm.toLowerCase()]) return {type:'name', item:it, idx:i};
     if(goodsType!=='dr'){
       var parts = String(it.species||'').split(/\s*\+\s*/);
@@ -2182,9 +2190,15 @@ function _rcvCheckItemsAgainstCatalog(items, goodsType, onlyIdx){
   }
   return null;
 }
-function _rcvReportCatalogIssue(iss, goodsType){
+function _rcvReportCatalogIssue(iss, goodsType, items, rerender){
   if(iss.type==='article'){
-    showToast('⛔ Поз. '+(iss.idx+1)+': артикула «'+iss.bad+'» нет в каталоге. Укажите номер изделия (только цифры), артикул из каталога или оставьте поле пустым');
+    var lst = iss.list.map(function(x){ return 'поз. '+(x.idx+1)+' «'+x.bad+'»'; }).join(', ');
+    var msg = 'Таких артикулов нет в каталоге: '+lst+'.\n\nАртикул может быть только номером изделия (цифры), артикулом из каталога или пустым — тогда обязательна порода.';
+    if(items && confirm(msg+'\n\nОчистить поле «Артикул» у этих позиций?')){
+      iss.list.forEach(function(x){ if(items[x.idx]){ items[x.idx].article=''; items[x.idx].num=''; } });
+      if(rerender) rerender();
+      showToast('Артикулы очищены у '+iss.list.length+' поз. — проверьте, что у них указана порода, и сохраните снова');
+    } else if(!items){ showToast('⛔ '+msg); }
     return;
   }
   if(iss.type==='name'){ showNameRequestBanner(iss.item.name, iss.item.species, iss.item.price, goodsType, 'name'); return; }
@@ -2193,7 +2207,7 @@ function _rcvReportCatalogIssue(iss, goodsType){
 function saveManualInvoice() {
   if(!_manInvItems.length) { showToast('Добавьте позиции'); return; }
   var _rcvIss = _rcvCheckItemsAgainstCatalog(_manInvItems, _manInvGoodsType);
-  if(_rcvIss){ _rcvReportCatalogIssue(_rcvIss, _manInvGoodsType); return; }
+  if(_rcvIss){ _rcvReportCatalogIssue(_rcvIss, _manInvGoodsType, _manInvItems, function(){ renderManInvItems(); saveManInvDraft(); }); return; }
   if(_manInvGoodsType!=='dr'){
     for(var _vi=0; _vi<_manInvItems.length; _vi++){
       var _vit = _manInvItems[_vi];
@@ -2629,7 +2643,7 @@ function saveManualInvoiceEdit(id){
     }
   }
   var _rcvIssE = _rcvCheckItemsAgainstCatalog(data.items, data.goodsType||'derevo', _changedIdx);
-  if(_rcvIssE){ _rcvReportCatalogIssue(_rcvIssE, data.goodsType||'derevo'); return; }
+  if(_rcvIssE){ _rcvReportCatalogIssue(_rcvIssE, data.goodsType||'derevo', data.items, function(){ renderManInvEditItems(id); }); return; }
   if(typeof _findArtDupInItems==='function'){
     var _artDupMsg1 = _findArtDupInItems(data.items, id, data.destName||data.shopName);
     if(_artDupMsg1){ showToast('⛔ '+_artDupMsg1+' — исправьте номер'); return; }
