@@ -265,18 +265,24 @@ function _siSetArticleHint(article){
   if(article){ hint.style.display='block'; hint.textContent='✅ Артикул из базы: №'+article; }
   else { hint.style.display='none'; hint.textContent=''; }
 }
+function _siWoodCatalogMatch(name, species, price){
+  var sp = String(species||'').toLowerCase().trim();
+  if(!sp) return null;
+  return _siGetGoodsVariants(name, 'derevo').find(function(v){
+    return (v.species||'').toLowerCase().trim()===sp && Math.round(v.price||0)===Math.round(price||0);
+  }) || null;
+}
 function _siUpdateArticleHintM(){
   var name = (document.getElementById('siNameM')||{}).value||'';
   var price = parseFloat((document.getElementById('siPriceM')||{}).value)||0;
   var variants = _siGetGoodsVariants(name, _siItemGoodsType);
   if(!variants.length){ _siSetArticleHint(''); return; }
-  if(variants.length===1){ _siSetArticleHint(variants[0].article); return; }
   if(_siItemGoodsType==='dr'){
+    if(variants.length===1){ _siSetArticleHint(variants[0].article); return; }
     var m = variants.find(function(v){ return Math.round(v.price)===Math.round(price); });
     _siSetArticleHint(m?m.article:'');
   } else {
-    var species = _siGetCombinedSpeciesM().toLowerCase().trim();
-    var m2 = species ? variants.find(function(v){ return (v.species||'').toLowerCase().trim()===species; }) : null;
+    var m2 = _siWoodCatalogMatch(name, _siGetCombinedSpeciesM(), price);
     _siSetArticleHint(m2?m2.article:'');
   }
 }
@@ -752,8 +758,9 @@ function addSaleItem(){
         }
       }
     }
-    if(!num && _siNoArticleMode){
-    } else {
+    // «Артикул не найден» — только если номер действительно ввели, а его нет в базе. Продажа без
+    // номера (наименование выбрано из базы) — обычная продажа без артикула, не расхождение.
+    if(num){
       hasDiff=true; diffNote='⚠️ артикул не найден в базе';
     }
   } else { showToast('Введите артикул'); return; }
@@ -771,16 +778,12 @@ function addSaleItem(){
       num = drVariants[0].article; hasDiff=false; diffNote='';
     }
   } else if(_siItemGoodsType!=='dr' && mb && mb.style.display!=='none' && !num){
-    // Дерево различают по породе, не по цене (у ДР катaлога породы нет вовсе) — при однозначном
-    // совпадении подставляем артикул так же, как ДР выше; неоднозначность не блокирует продажу,
-    // просто оставляем без артикула, как было раньше.
-    var woodVariants = _siGetGoodsVariants(name, 'derevo');
-    if(woodVariants.length===1){
-      num = woodVariants[0].article; hasDiff=false; diffNote='';
-    } else if(woodVariants.length>=2 && species){
-      var matchedW = woodVariants.find(function(v){ return (v.species||'').toLowerCase().trim()===species.toLowerCase().trim(); });
-      if(matchedW){ num = matchedW.article; hasDiff=false; diffNote=''; }
-    }
+    // Артикул из каталога «С артикулом вручную» ставим только при точном совпадении наименования,
+    // породы И цены: у одной породы бывает много ценовых ступеней, у каждой свой артикул
+    // (ЛопаткаКатал01…13). Раньше единственный вариант подставлялся без сверки породы, а из
+    // нескольких брался первый по породе без сверки цены — в продажу попадал чужой номер.
+    var matchedW = _siWoodCatalogMatch(name, species, price);
+    if(matchedW){ num = matchedW.article; hasDiff=false; diffNote=''; }
   }
   if(qty<=0) qty=1;
   var key = _siItemGoodsType==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo';
