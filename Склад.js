@@ -1088,8 +1088,10 @@ function saveShopInvoice(id){
     return;
   }
   if(typeof _findArtDupInItems==='function'){
-    var _artDupMsg2 = _findArtDupInItems(data.items, id, data.destName||data.shopName, data.isTransfer?data.sourceName:null);
+    var _col2 = [];
+    var _artDupMsg2 = _findArtDupInItems(data.items, id, data.destName||data.shopName, data.isTransfer?data.sourceName:null, _col2);
     if(_artDupMsg2){ showToast('⛔ '+_artDupMsg2+' — исправьте номер'); return; }
+    if(!_confirmTagCollisions(_col2, data.destName||data.shopName)) return;
   }
   var wasAccepted = data.status==='accepted';
   var oldNum = (getInvoices().find(function(i){ return String(i._id!=null?i._id:i.id)===id; })||{}).num;
@@ -1313,8 +1315,10 @@ function acceptInvoice(){
     inv.items = _newItems; // админ — порода и новые позиции применяются сразу
   }
   if(typeof _findArtDupInItems==='function'){
-    var _artDupMsg3 = _findArtDupInItems(inv.items, inv.id||inv._id, inv.destName||inv.shopName, inv.isTransfer?inv.sourceName:null);
+    var _col3 = [];
+    var _artDupMsg3 = _findArtDupInItems(inv.items, inv.id||inv._id, inv.destName||inv.shopName, inv.isTransfer?inv.sourceName:null, _col3);
     if(_artDupMsg3){ showToast('⛔ '+_artDupMsg3+' — исправьте номер через «✏️ Исправить» перед приёмкой'); return; }
+    if(!_confirmTagCollisions(_col3, inv.destName||inv.shopName)) return;
   }
   var todayStr = _workingNowISO().split('T')[0];
   var invDate = inv.date||'';
@@ -2216,8 +2220,10 @@ function saveManualInvoice() {
   // «номер уже занят» и «похожая накладная» к ней не применяются.
   var isReval = !!(document.getElementById('manInvReval')||{}).checked;
   if(!isReval && typeof _findArtDupInItems==='function'){
-    var _artDupMsg0 = _findArtDupInItems(_manInvItems, null, session&&session.shopName);
+    var _col0 = [];
+    var _artDupMsg0 = _findArtDupInItems(_manInvItems, null, session&&session.shopName, null, _col0);
     if(_artDupMsg0){ showToast('⛔ '+_artDupMsg0+' — исправьте номер'); return; }
+    if(!_confirmTagCollisions(_col0, session&&session.shopName)) return;
   }
   var num = (document.getElementById('manInvNum')||{}).value || 'НАК-???';
   var docDate = (document.getElementById('manInvDate')||{}).value || new Date().toISOString().split('T')[0];
@@ -2637,8 +2643,10 @@ function saveManualInvoiceEdit(id){
   var _rcvIssE = _rcvCheckItemsAgainstCatalog(data.items, data.goodsType||'derevo', _changedIdx);
   if(_rcvIssE){ _rcvReportCatalogIssue(_rcvIssE, data.goodsType||'derevo', data.items, function(){ renderManInvEditItems(id); }); return; }
   if(typeof _findArtDupInItems==='function'){
-    var _artDupMsg1 = _findArtDupInItems(data.items, id, data.destName||data.shopName);
+    var _col1 = [];
+    var _artDupMsg1 = _findArtDupInItems(data.items, id, data.destName||data.shopName, null, _col1);
     if(_artDupMsg1){ showToast('⛔ '+_artDupMsg1+' — исправьте номер'); return; }
+    if(!_confirmTagCollisions(_col1, data.destName||data.shopName)) return;
   }
   var all = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   var idx = all.findIndex(function(i){ return String(i._id!=null?i._id:i.id)===id; });
@@ -5131,7 +5139,16 @@ function _catalogArticleSet(){
   });
   return set;
 }
-function _findArtDupInItems(items, excludeInvId, destShop, transferFrom){
+function _confirmTagCollisions(cols, shop){
+  if(!cols || !cols.length) return true;
+  var lines = cols.map(function(c){ return '№'+c.num+': у вас «'+c.name+'», а этот номер уже числится за «'+c.prevName+'» ('+c.prevShop+', '+c.prevDate+')'; });
+  if(!confirm('Под одним номером — разные изделия:\n'+lines.join('\n')+'\n\nОдна из бирок записана с ошибкой. Принять всё равно? Администратор получит уведомление, чтобы разобраться с номером.')) return false;
+  try{
+    saveAdminAlert({type:'tag_collision', shopName:shop||'', sellerName:(session&&(session.sellerName||session.name))||'', date:new Date().toLocaleDateString('ru-RU'), items:cols});
+  }catch(e){}
+  return true;
+}
+function _findArtDupInItems(items, excludeInvId, destShop, transferFrom, collisions){
   if(!_usedArtIndex) return null;
   var seenInThisInvoice = {};
   var catalogArts = _catalogArticleSet();
@@ -5150,6 +5167,14 @@ function _findArtDupInItems(items, excludeInvId, destShop, transferFrom){
     var occs = _checkArtDupSync(num, excludeInvId);
     if(occs && occs.length){
       var latest = occs.slice().sort(function(a,b){ return String(b.date||'').localeCompare(String(a.date||'')); })[0];
+      // Тот же номер, но ДРУГОЕ изделие (№49802: «Доска д/разделки» на Колесе и «Толкушка» сейчас)
+      // — это путаница с биркой, а не одна вещь на двух балансах. Приход не блокируем: вызывающий
+      // спросит подтверждение и сообщит админу (см. _confirmTagCollisions).
+      var _nn = function(x){ return String(x||'').toLowerCase().replace(/\s+/g,' ').trim(); };
+      if(collisions && _nn(latest.name) && _nn(items[i].name) && _nn(latest.name)!==_nn(items[i].name)){
+        collisions.push({num:num, name:items[i].name||'', prevName:latest.name||'', prevShop:latest.shop||'', prevDate:latest.date||''});
+        continue;
+      }
       var otherShop = destShop && latest.shop && latest.shop!==destShop;
       if(otherShop && _artWrittenOffAt(num, latest.shop, latest.date)) continue;
       // Накладная перемещения: отправитель сам списал эту вещь этой же накладной — она физически

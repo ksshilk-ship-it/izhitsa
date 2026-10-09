@@ -1254,6 +1254,16 @@ function startAdminAlertsListener(){
     },function(e){console.log('alerts err',e&&e.code);});
 }
 function alertCard(a){
+  if(a.type==='tag_collision'){
+    var rows = (a.items||[]).map(function(c){ return '<div style="font-size:11px;color:#f0f0f8;padding:1px 0">• №'+c.num+': «'+c.name+'» ('+(a.shopName||'')+') и «'+c.prevName+'» ('+c.prevShop+', '+c.prevDate+')</div>'; }).join('');
+    return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px solid #3e2e2e;gap:8px">'+
+      '<div style="min-width:0"><div style="font-size:12px;font-weight:700;color:#f0c060">🔢 Один номер — разные изделия — '+(a.shopName||'')+'</div>'+
+      '<div class="u-fs11-gray">'+(a.sellerName||'—')+' принял(а) товар, номер которого уже числится за другим изделием · '+(a.date||'')+'</div>'+
+      '<div style="margin-top:4px">'+rows+'</div>'+
+      '<div style="font-size:10px;color:#8888aa;margin-top:4px">Проверьте бирки и исправьте номер у ошибочной записи (накладная → ✏️). Все такие номера — в аудите «Задвоение номеров».</div></div>'+
+      '<button onclick="markAlertRead(\''+a.id+'\')" style="background:none;border:1px solid #3e2e2e;border-radius:6px;padding:4px 8px;color:#8888aa;font-size:10px;cursor:pointer;flex-shrink:0">✓ Прочитано</button>'+
+    '</div>';
+  }
   if(a.type==='invoice_edit'){
     var ch = (a.changes||[]).map(function(c){ return '<div style="font-size:11px;color:#f0f0f8;padding:1px 0">• '+String(c).replace(/</g,'&lt;')+'</div>'; }).join('');
     return '<div style="padding:10px 0;border-bottom:1px solid #3e2e2e">'+
@@ -1346,6 +1356,7 @@ function alertCard(a){
 }
 var _alertsShopFilter = '';
 var ALERT_TYPE_DEFS = [
+  {type:'tag_collision', icon:'🔢', title:'Один номер — разные изделия', hint:'Продавец принял товар под номером, который уже числится за другим изделием, — проверьте бирки и исправьте номер у ошибочной записи'},
   {type:'invoice_edit', icon:'✏️', title:'Заявки на исправление накладных', hint:'Продавец сверил входящую накладную и просит поправить позиции — одобрите (накладная обновится, у перемещения — и списание отправителя) или отклоните'},
   {type:'name_request', icon:'📨', title:'Заявки на наименования и породы', hint:'Продавец пытался продать товар с наименованием или породой, которых нет в базе, — одобрите или отклоните'},
   {type:'cash_diff', icon:'💵', title:'Расхождения при закрытии смены', hint:'Не сошёлся итог кассы — сверьте с продавцом, отметьте прочитанным, когда разобрались'},
