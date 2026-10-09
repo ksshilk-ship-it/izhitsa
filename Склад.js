@@ -4223,10 +4223,20 @@ function _buildUsedArticleIndex(forceRefresh){
   // items у "Приёмки" в журнале смены НЕ хранятся (там только итоговая сумма), поэтому
   // раньше сканирование по журналу пропускало все накладные, внесённые вручную (именно там
   // и нашлось реальное задвоение №51962 — Менажница/Подсвечник).
-  return Promise.all([
+  // Обе коллекции накладных и так живут на устройстве: их держат в localStorage живые листенеры
+  // (startInvoiceLiveSync). Раньше здесь при каждом открытии накладной/перемещения/прихода заново
+  // читались с сервера ВСЕ накладные — это съедало суточный лимит чтений Firestore, после чего у
+  // продавцов переставали подгружаться остатки. С сервера — только если локально пусто.
+  var _localSnap = function(key){
+    var arr = []; try{ arr = JSON.parse(localStorage.getItem(key)||'[]')||[]; }catch(e){}
+    return {size:arr.length, forEach:function(fn){ arr.forEach(function(x){ fn({id:String(x._id!=null?x._id:x.id), data:function(){ return x; }}); }); }};
+  };
+  var _lm = _localSnap('iz_manual_invoices'), _la = _localSnap('iz_invoices');
+  var _src = (_lm.size || _la.size) ? Promise.resolve([_lm, _la]) : Promise.all([
     db.collection('iz_manual_invoices').get({source:'server'}),
     db.collection('iz_invoices').get({source:'server'})
-  ]).then(function(res){
+  ]);
+  return _src.then(function(res){
     var idx = {};
     function addOcc(num, occ){
       var key = String(num||'').trim();
@@ -4259,7 +4269,13 @@ function _buildUsedArticleIndex(forceRefresh){
 // туда каждая запись журнала уходит сразу, в т.ч. из ещё открытой смены (сам журнал открытой
 // смены живёт только на телефоне продавца). Без кэша — списание могли сделать минуты назад.
 var _woArtIndex = null; // num -> [{shop,date}]
-function _buildWriteoffArtIndex(){
+var _woArtIndexAt = 0;
+// Кэш на 10 минут: запрос читает все списания за всё время, и без кэша он шёл при каждом открытии
+// накладной — главный расход суточного лимита чтений. force (после «не списан») — не чаще раза в 2 мин.
+function _buildWriteoffArtIndex(force){
+  var age = Date.now() - _woArtIndexAt;
+  if(_woArtIndex && age < (force ? 2 : 10)*60*1000) return Promise.resolve(_woArtIndex);
+  _woArtIndexAt = Date.now();
   return db.collection('iz_journal_backup').where('kind','==','writeoff').get({source:'server'}).then(function(snap){
     var idx = {};
     snap.forEach(function(doc){
@@ -5272,7 +5288,7 @@ function _findArtDupInItems(items, excludeInvId, destShop, transferFrom, collisi
       if(otherShop && transferFrom) continue;
       if(otherShop){
         // списание могли сделать только что — подтягиваем свежий список к следующему нажатию
-        try{ _buildWriteoffArtIndex(); }catch(e){}
+        try{ _buildWriteoffArtIndex(true); }catch(e){}
         return '№'+num+' «'+latest.name+'» числится на магазине '+latest.shop+' (принят '+latest.date+') и там не списан — сначала спишите его на '+latest.shop+', потом принимайте здесь';
       }
       return '№'+num+' уже был использован: «'+latest.name+'» ('+latest.shop+', '+latest.date+')';
