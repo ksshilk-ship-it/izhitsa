@@ -1242,7 +1242,7 @@ function _invEdRender(){
     return '<div style="background:'+(r.isNew?'#1a2a1e':'#1a1a22')+';border:1px '+(r.isNew?'dashed #60f090':'solid #2e2e3e')+';border-radius:10px;padding:8px;margin-bottom:6px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:'+(r.isNew?'#60f090':'#8888aa')+'">'+(r.isNew?'🆕 Новая позиция':'Позиция '+(i+1))+'</span>'+
         '<button type="button" onclick="_invEd.items.splice('+i+',1);_invEdRender()" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer" title="Убрать строку">✕</button></div>'+
-      '<div style="display:flex;gap:5px;margin-bottom:5px">'+inp(i,'num',r.num,'№','70px','numeric')+inp(i,'name',r.name,'Наименование',null,null,'getItemNames(_invEd.gt)')+'</div>'+
+      '<div style="display:flex;gap:5px;margin-bottom:5px">'+inp(i,'num',r.num,'Артикул','42%','numeric')+inp(i,'name',r.name,'Наименование',null,null,'getItemNames(_invEd.gt)')+'</div>'+
       '<div style="display:flex;gap:5px;align-items:center">'+(isDr?'':inp(i,'species',r.species,'Порода',null,null,'getSpecies()'))+
         inp(i,'price',r.price||'','Цена','70px','numeric')+inp(i,'qty',r.qty||1,'Кол','50px','numeric')+
         '<span id="inved_sum_'+i+'" style="flex-shrink:0;min-width:54px;text-align:right;font-size:11px;font-weight:700;color:#c8f060">'+(sum?fmt(sum):'')+'</span></div>'+
