@@ -1147,7 +1147,7 @@ function saveInvProgress(){
   if(!currentInvId) return;
   try{
     localStorage.setItem(_invProgressKey(currentInvId), JSON.stringify({
-      invCheckState: invCheckState, who: gv('invWho')||''
+      invCheckState: invCheckState, who: gv('invWho')||'', newRows: _invNewRows
     }));
   }catch(e){}
 }
@@ -1196,8 +1196,51 @@ function openInvoice(invId){
         <div id="invsp${i}_sugg" style="display:none;position:absolute;top:100%;left:52px;right:0;z-index:30;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>
       </div>`}
     </div>`).join('');
+  _invNewRows = (saved && saved.newRows) || [];
+  _invNewGt = inv.goodsType || 'derevo';
+  _invRenderNewRows();
   updateInvMoTotal();
   openMo('invMo');
+}
+// Позиции, которых нет в накладной (пришли сверх неё). У продавца уходят администратору заявкой
+// вместе с остальными правками (см. acceptInvoice), у админа добавляются в накладную сразу.
+var _invNewRows = [], _invNewGt = 'derevo', _invNewActive = null;
+function _invRenderNewRows(){
+  var box = document.getElementById('invNewRowsBox'); if(!box) return;
+  var esc = function(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); };
+  var isDr = _invNewGt==='dr';
+  var inp = function(i,f,v,ph,w,mode,sugg){
+    return '<div style="position:relative;'+(w?'flex:0 0 '+w:'flex:1')+';min-width:0"><input id="invnew_'+f+'_'+i+'" value="'+esc(v)+'" placeholder="'+ph+'" autocomplete="off"'+
+      (mode?' inputmode="'+mode+'"':'')+' oninput="_invNewEdit('+i+',\''+f+'\',this.value)'+(sugg?';_invNewActive={i:'+i+',f:\''+f+'\'};psjSuggest(\'invnew_'+f+'_'+i+'\','+sugg+',\'_invNewPick\')':'')+'"'+
+      (sugg?' onblur="psjHideSugg(\'invnew_'+f+'_'+i+'\')"':'')+
+      ' style="width:100%;box-sizing:border-box;padding:6px 8px;background:#0f0f13;border:1px solid #2e2e3e;border-radius:8px;color:#f0f0f8;font-size:12px;outline:none">'+
+      (sugg?'<div id="invnew_'+f+'_'+i+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:30;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px;min-width:180px"></div>':'')+
+    '</div>';
+  };
+  var rows = _invNewRows.map(function(r,i){
+    var sum = (r.price||0)*(r.qty||1);
+    return '<div style="background:#1a2a1e;border:1px dashed #60f090;border-radius:10px;padding:8px;margin-top:8px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:#60f090">🆕 Новая позиция'+(_rcvIsAdmin()?'':' — добавится после согласования админом')+'</span>'+
+        '<button type="button" onclick="_invNewRows.splice('+i+',1);saveInvProgress();_invRenderNewRows()" style="background:none;border:none;color:#f06060;font-size:14px;cursor:pointer">✕</button></div>'+
+      '<div style="display:flex;gap:5px;margin-bottom:5px">'+inp(i,'num',r.num,'№','70px')+inp(i,'name',r.name,'Наименование',null,null,'getItemNames(_invNewGt)')+'</div>'+
+      '<div style="display:flex;gap:5px;align-items:center">'+(isDr?'':inp(i,'species',r.species,'Порода',null,null,'getSpecies()'))+
+        inp(i,'price',r.price||'','Цена','70px','numeric')+inp(i,'qty',r.qty||1,'Кол','50px','numeric')+
+        '<span id="invnew_sum_'+i+'" style="flex-shrink:0;font-size:11px;font-weight:700;color:#c8f060">'+(sum?fmt(sum):'')+'</span></div>'+
+    '</div>';
+  }).join('');
+  box.innerHTML = rows+'<button type="button" onclick="_invNewRows.push({num:\'\',name:\'\',species:\'\',price:0,qty:1});saveInvProgress();_invRenderNewRows()" style="width:100%;margin-top:8px;padding:8px;background:none;border:1px dashed #60f090;border-radius:9px;color:#60f090;font-size:12px;font-weight:700;cursor:pointer">➕ Добавить позицию, которой нет в накладной</button>';
+}
+function _invNewEdit(i, f, v){
+  var r = _invNewRows[i]; if(!r) return;
+  r[f] = (f==='price'||f==='qty') ? (parseFloat(String(v).replace(',','.'))||0) : v;
+  var el = document.getElementById('invnew_sum_'+i); if(el){ var sm=(r.price||0)*(r.qty||1); el.textContent = sm?fmt(sm):''; }
+  saveInvProgress();
+}
+function _invNewPick(val){
+  var a = _invNewActive; if(!a) return;
+  var el = document.getElementById('invnew_'+a.f+'_'+a.i); if(el) el.value = val;
+  _invNewEdit(a.i, a.f, val);
+  var box = document.getElementById('invnew_'+a.f+'_'+a.i+'_sugg'); if(box) box.style.display='none';
 }
 function updateInvMoTotal(){
   var totalAmt=0, totalQty=0, allQty=0;
@@ -1242,21 +1285,32 @@ function acceptInvoice(){
   var _spChanged = (inv.items||[]).map(function(it,i){ return i; }).filter(function(i){
     var st = invCheckState[i]; return st && st.species!=null && String(st.species).trim()!==String(inv.items[i].species||'').trim();
   });
-  if(_spChanged.length){
-    var _newItems = inv.items.map(function(it,i){ return _spChanged.indexOf(i)>=0 ? Object.assign({}, it, {species:String(invCheckState[i].species||'').trim()}) : it; });
+  var _addRows = (_invNewRows||[]).filter(function(r){ return String(r.name||'').trim(); });
+  var _badAdd = (_invNewRows||[]).findIndex(function(r){ return !String(r.name||'').trim() || !(r.qty>0); });
+  if(_badAdd>=0 && (_invNewRows[_badAdd].name||_invNewRows[_badAdd].num||_invNewRows[_badAdd].price)){ showToast('⛔ Новая позиция '+(_badAdd+1)+': нужно наименование и кол-во'); return; }
+  if(_spChanged.length || _addRows.length){
+    var _newItems = inv.items.map(function(it,i){ return _spChanged.indexOf(i)>=0 ? Object.assign({}, it, {species:String(invCheckState[i].species||'').trim()}) : it; })
+      .concat(_addRows.map(function(r){ var n=String(r.num||'').trim(); return {num:n, article:n, name:String(r.name).trim(), species:String(r.species||'').trim(), price:r.price||0, qty:r.qty||1, goodsType:inv.goodsType||'derevo', addedOnAccept:true}; }));
     if(!_rcvIsAdmin()){
-      // Продавец поменял породу — правка накладной идёт через админа: заявка вместо приёмки.
+      // Продавец поменял породу или добавил позиции — правка накладной идёт через админа:
+      // заявка вместо приёмки.
       var _iid = String(inv._id!=null?inv._id:inv.id);
       var _req = {num:inv.num||'', date:inv.date||'',
         items:_newItems.map(function(it){ return {num:it.num||it.article||'', article:it.num||it.article||'', name:it.name||'', species:it.species||'', price:it.price||0, qty:it.qty||1, goodsType:it.goodsType||inv.goodsType||'derevo'}; }),
         by:(session&&(session.sellerName||session.name))||'', at:new Date().toISOString()};
       var _diff = _invEditDiff(inv, _req);
-      if(!confirm('Порода изменена в '+_spChanged.length+' поз. Отправить администратору заявку на исправление?\nОтметки и цены приёмки сохранятся — принять накладную можно будет после одобрения.\n\n'+_diff.join('\n'))) return;
+      var _what = [];
+      if(_spChanged.length) _what.push('порода изменена в '+_spChanged.length+' поз.');
+      if(_addRows.length) _what.push('добавлено новых позиций: '+_addRows.length);
+      if(!confirm('В накладной: '+_what.join(', ')+'. Отправить администратору заявку на исправление?\nОтметки и цены приёмки сохранятся — принять накладную можно будет после одобрения.\n\n'+_diff.join('\n'))) return;
+      // Отправленное уходит в заявку: после одобрения оно уже в накладной, после отказа — как было.
+      _spChanged.forEach(function(i){ invCheckState[i].species = null; });
+      _invNewRows = [];
       saveInvProgress();
       _submitInvoiceEditRequest(_iid, inv, _req, _diff, function(){ closeMo('invMo'); });
       return;
     }
-    inv.items = _newItems; // админ — порода применяется сразу
+    inv.items = _newItems; // админ — порода и новые позиции применяются сразу
   }
   if(typeof _findArtDupInItems==='function'){
     var _artDupMsg3 = _findArtDupInItems(inv.items, inv.id||inv._id, inv.destName||inv.shopName, inv.isTransfer?inv.sourceName:null);
