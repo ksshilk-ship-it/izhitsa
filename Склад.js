@@ -1353,6 +1353,7 @@ function _acceptInvoiceProceed(inv, who){
   const _goodsDrTotal=accepted.reduce((s,a)=>s+(_isDrLine(a)?a.factPrice*(a.qty||1):0),0);
   var _rcvEntry = {id:uid(),type:'receive',ts:_workingNowISO(),icon:'📥',label:'Приёмка '+inv2.num+(inv2.isTransfer?' (из «'+inv2.sourceName+'»)':''),
     sub:inv2.items.length+' поз. · принял: '+who,amount:goodsTotal,amtCls:'neu',cashEffect:0,cardEffect:0,staffEffect:0,goodsEffect:goodsTotal-_goodsDrTotal,goodsDrEffect:_goodsDrTotal,
+    goodsType:(_goodsDrTotal>0 && _goodsDrTotal===goodsTotal) ? 'dr' : (inv2.goodsType==='dr'?'derevo':(inv2.goodsType||'derevo')),
     invId:inv2.id||inv2._id, acceptedBy:who};
   journal.push(_rcvEntry);
   _recordJournalEntryIndependently(_rcvEntry, session&&session.shopName, 'receive');
@@ -3363,7 +3364,7 @@ function adminDeleteReceipt(entryId, shiftId, invId){
       if((invId && e.invId===invId) || (sh===srcShift && e.id===entryId)) targets.push({sh:sh, entry:e});
     });
   });
-  var total = targets.reduce(function(a,t){ return a+((t.entry.goodsType==='dr'?(t.entry.goodsDrEffect||0):(t.entry.goodsEffect||0))||t.entry.amount||0); },0);
+  var total = targets.reduce(function(a,t){ return a+((_rcvWoodAmt(t.entry)+_rcvDrAmt(t.entry))||t.entry.amount||0); },0);
   var label = (inv&&inv.num) ? ('накладную '+inv.num) : ('приход «'+(srcEntry.label||srcEntry.sub||'')+'»');
   if(!confirm('Удалить '+label+' ('+Math.round(total).toLocaleString('ru-RU')+'₽) из магазина «'+srcShift.shopName+'»?\n\n'+
     '• запись исчезнет из смены ('+srcShift.date+') и из «Приходов»\n'+
@@ -3481,7 +3482,7 @@ function renderAdminRcvWo(){
     if(shDate < range.from || shDate > range.to) return;
     (sh.journal||[]).forEach(function(e){
       if(e.type !== type) return;
-      var amt = type==='receive' ? (e.goodsDrEffect && e.goodsType==='dr' ? e.goodsDrEffect : (e.goodsEffect||e.amount||0)) : (e.amount||0);
+      var amt = type==='receive' ? ((_rcvWoodAmt(e)+_rcvDrAmt(e))||e.amount||0) : (e.amount||0);
       var invNum = '';
       var invItemsFallback = null;
       var invAcceptedByFallback = '';
@@ -3492,7 +3493,7 @@ function renderAdminRcvWo(){
         if(found) invAcceptedByFallback = found.acceptedBy||found.createdBy||'';
       }
       var rowItems = (e.items&&e.items.length) ? e.items : (invItemsFallback||[]);
-      rows.push({shop:sn, date:shDate, ts:e.ts||shDate, label:invNum?'Приёмка '+invNum:String(e.label||e.sub||'').replace(/^Отгрузка →/,'Перемещение →'), sub:e.sub||'', amount:amt, goodsType:e.goodsType||'derevo', invId:e.invId||null, entryId:e.id||null, shiftId:sh.id||sh._id||null, items:rowItems, reason:e.reason||'', isRevaluation:!!e.isRevaluation, acceptedBy:e.acceptedBy||invAcceptedByFallback||''});
+      rows.push({shop:sn, date:shDate, ts:e.ts||shDate, label:invNum?'Приёмка '+invNum:String(e.label||e.sub||'').replace(/^Отгрузка →/,'Перемещение →'), sub:e.sub||'', amount:amt, goodsType:(type==='receive'&&_rcvIsDrOnly(e))?'dr':(e.goodsType||'derevo'), invId:e.invId||null, entryId:e.id||null, shiftId:sh.id||sh._id||null, items:rowItems, reason:e.reason||'', isRevaluation:!!e.isRevaluation, acceptedBy:e.acceptedBy||invAcceptedByFallback||''});
     });
     if(type==='receive'){
       (sh.goodsReceives||[]).forEach(function(r){ rows.push({shop:sn,date:shDate,ts:shDate,label:'Приход Дерево',sub:r.name||'',amount:r.amt||r.amount||0,goodsType:'derevo',items:[],isRevaluation:!!r.isRevaluation}); });

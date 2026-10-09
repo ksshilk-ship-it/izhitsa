@@ -2389,7 +2389,7 @@ function renderClose(){
   var drNalMorn = document.getElementById('closeDrNalMorn');
   if(drNalMorn && isShopType2) drNalMorn.textContent = fmt(session.cashDrMorning||0);
   var drWo = writeoffs.filter(function(e){ return e.goodsType==='dr'; });
-  var drRcv = receives.filter(function(e){ return e.goodsType==='dr'; });
+  var drRcv = receives.filter(function(e){ return _rcvDrAmt(e)>0 || e.goodsType==='dr'; });
   var sd = document.getElementById('closeSalesDetail');
   if(sd){
     var wPay = _sellerSummary.wood.pay;
@@ -2430,9 +2430,10 @@ function renderClose(){
   }
   var rd = document.getElementById('closeRcvDetail');
   if(rd){
-    var rcvTotal = receives.reduce(function(s,r){return s+(r.goodsEffect||0);},0);
-    rd.innerHTML = receives.length
-      ? receives.map(function(r){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">'+(r.sub||r.label)+'</span><span style="color:#60f090">+'+fmt(r.goodsEffect||0)+'</span></div>'; }).join('')
+    var woodRcvJ = receives.filter(function(r){ return !_rcvIsDrOnly(r); });
+    var rcvTotal = woodRcvJ.reduce(function(s,r){return s+_rcvWoodAmt(r);},0);
+    rd.innerHTML = woodRcvJ.length
+      ? woodRcvJ.map(function(r){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">'+(r.sub||r.label)+'</span><span style="color:#60f090">+'+fmt(_rcvWoodAmt(r))+'</span></div>'; }).join('')
         + '<div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;font-weight:700"><span>Итого</span><span style="color:#60f090">+'+fmt(rcvTotal)+'</span></div>'
       : '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Приходов за смену</span><span style="color:#60f090">0₽</span></div>';
   }
@@ -2469,9 +2470,9 @@ function renderClose(){
   }
   var drRd = document.getElementById('closeDrRcvDetail');
   if(drRd){
-    var drRcvTotal = drRcv.reduce(function(s,r){return s+(r.goodsEffect||0);},0);
+    var drRcvTotal = drRcv.reduce(function(s,r){return s+_rcvDrAmt(r);},0);
     drRd.innerHTML = drRcv.length
-      ? drRcv.map(function(r){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">'+(r.sub||r.label||'Приход')+'</span><span style="color:#60f090">+'+fmt(r.goodsEffect||0)+'</span></div>'; }).join('')
+      ? drRcv.map(function(r){ return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid #2e2e3e"><span style="color:#8888aa">'+(r.sub||r.label||'Приход')+'</span><span style="color:#60f090">+'+fmt(_rcvDrAmt(r))+'</span></div>'; }).join('')
         + '<div style="display:flex;justify-content:space-between;font-size:14px;padding:6px 0;font-weight:700"><span>Итого</span><span style="color:#60f090">+'+fmt(drRcvTotal)+'</span></div>'
       : '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span style="color:#8888aa">Приходов за смену</span><span style="color:#60f090">0₽</span></div>';
   }
@@ -2506,8 +2507,8 @@ function renderClose(){
     var totalExpDr = expenses.filter(function(e){return e.goodsType==='dr';}).reduce(function(a,e){return a+e.amount;},0);
     var woWood = writeoffs.filter(function(e){return !e.goodsType||e.goodsType==='derevo';}).reduce(function(a,e){return a+(e.amount||0);},0);
     var woDr = writeoffs.filter(function(e){return e.goodsType==='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
-    var rcvWood = receives.filter(function(e){return !e.goodsType||e.goodsType==='derevo';}).reduce(function(a,e){return a+(e.goodsEffect!=null?e.goodsEffect:0);},0);
-    var rcvDr = receives.filter(function(e){return e.goodsType==='dr';}).reduce(function(a,e){return a+(e.goodsDrEffect!=null?e.goodsDrEffect:(e.goodsEffect||0));},0);
+    var rcvWood = receives.filter(function(e){return !e.goodsType||e.goodsType==='derevo'||e.goodsDrEffect>0;}).reduce(function(a,e){return a+_rcvWoodAmt(e);},0);
+    var rcvDr = receives.reduce(function(a,e){return a+_rcvDrAmt(e);},0);
     var cashEveEntered = parseFloat((document.getElementById('cashEveInput')||{}).value)||0;
     var drGoodsEve = (session.goodsDrMorning||0)+rcvDr-_sellerSummary.dr.listPrice-woDr;
     var drCashMorn = session.cashDrMorning||0;
@@ -3692,6 +3693,19 @@ var _histInited = false;
 // смены (см. синхронизация.js), чтобы у автозакрытой смены были расчётные цифры вечера, а не
 // пустые поля, из-за которых «Проверка дат» пишет «не введён» на смене, которую продавец
 // физически не мог закрыть — её закрыла система.
+// Суммы прихода по категориям. Приёмка накладной пишет ДР-часть в goodsDrEffect, а Дерево — в
+// goodsEffect; старые записи помечены только goodsType. Запись без пометки, у которой есть только
+// ДР-сумма, — это приход ДР (раньше такая показывалась в «Дереве» с нулём).
+function _rcvDrAmt(e){
+  if(e.goodsType==='dr') return e.goodsDrEffect!=null ? e.goodsDrEffect : (e.goodsEffect||e.amount||0);
+  return e.goodsDrEffect||0;
+}
+function _rcvWoodAmt(e){
+  if(e.goodsType==='dr') return 0;
+  if(e.goodsDrEffect>0) return e.goodsEffect||0;
+  return e.goodsEffect!=null ? e.goodsEffect : (e.amount||0);
+}
+function _rcvIsDrOnly(e){ return e.goodsType==='dr' || (e.goodsDrEffect>0 && !e.goodsEffect); }
 function _calcShiftExpectedEvening(sh){
   var jnl = sh.journal||[];
   var sales = jnl.filter(function(e){ return e.type==='sale'; });
@@ -3715,8 +3729,8 @@ function _calcShiftExpectedEvening(sh){
   var _legacyDrRcv = (sh.drGoodsReceives||[]).reduce(function(s,w){return s+(w.amount!=null?w.amount:(w.amt||0));},0);
   var _jnlHasWoodWo = jnl.some(function(e){ return e.type==='writeoff' && e.goodsType!=='dr'; });
   var _jnlHasDrWo = jnl.some(function(e){ return e.type==='writeoff' && e.goodsType==='dr'; });
-  var _jnlHasWoodRcv = jnl.some(function(e){ return e.type==='receive' && e.goodsType!=='dr'; });
-  var _jnlHasDrRcv = jnl.some(function(e){ return e.type==='receive' && e.goodsType==='dr'; });
+  var _jnlHasWoodRcv = jnl.some(function(e){ return e.type==='receive' && !_rcvIsDrOnly(e); });
+  var _jnlHasDrRcv = jnl.some(function(e){ return e.type==='receive' && (e.goodsType==='dr' || e.goodsDrEffect>0); });
   var goodsWood = (sh.goodsMorning||0) + jnl.reduce(function(s,e){ return s+_resolveGoodsEffect(e,false); },0)
     - (_jnlHasWoodWo?0:_legacyWoodWo) + (_jnlHasWoodRcv?0:_legacyWoodRcv);
   var goodsDr = (sh.goodsDrMorning||0) + jnl.reduce(function(s,e){ return s+_resolveGoodsEffect(e,true); },0)
@@ -4435,8 +4449,8 @@ function _renderShiftView(){
   }).join('');
   var zp=sh.zp||0, inkass=sh.inkass||0, otherExp=sh.otherExp||0;
   var drInkass=sh.drInkass||0, drSupplier=sh.drSupplierAmt||0;
-  var jRcvWoodTotal = receives.filter(function(r){return r.goodsType!=='dr';}).reduce(function(s,r){return s+(r.goodsEffect!=null?r.goodsEffect:(r.amount||0));},0);
-  var jRcvDrTotal = receives.filter(function(r){return r.goodsType==='dr';}).reduce(function(s,r){return s+(r.goodsDrEffect!=null?r.goodsDrEffect:(r.goodsEffect||r.amount||0));},0);
+  var jRcvWoodTotal = receives.reduce(function(s,r){return s+_rcvWoodAmt(r);},0);
+  var jRcvDrTotal = receives.reduce(function(s,r){return s+_rcvDrAmt(r);},0);
   var jRcvTotal = jRcvWoodTotal + jRcvDrTotal;
   var jWoWoodTotal = writeoffs.filter(function(w){return w.goodsType!=='dr';}).reduce(function(s,w){return s+(w.amount||0);},0);
   var jWoDrTotal = writeoffs.filter(function(w){return w.goodsType==='dr';}).reduce(function(s,w){return s+(w.amount||0);},0);
@@ -4808,9 +4822,9 @@ function _renderShiftView(){
   rcvBody += '<div style="font-size:10px;color:#c8f060;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🌳 ДЕРЕВО</div>';
   var woodRcvCount = 0;
   receives.forEach(function(r, i){
-    if(r.goodsType === 'dr') return; // will show in ДР section
+    if(_rcvIsDrOnly(r)) return; // will show in ДР section
     var invFn = r.invId ? 'svOpenInvoiceFromReceive(\''+r.invId+'\')' : null;
-    var amt = r.goodsEffect!=null ? r.goodsEffect : (r.amount||0);
+    var amt = _rcvWoodAmt(r);
     var revBadge = r.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'';
     rcvBody += rcvItem(revBadge+(r.sub||r.label||'Приход'), r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#555568', amt, '#60f090', 'svDeleteJEntry(\'receive\','+i+')', 'svToggleEdit(\''+(r.items&&r.items.length===1?'jrcvItem':'jrcv')+'\','+i+')', invFn);
     if(r.items && r.items.length===1){
@@ -4835,9 +4849,9 @@ function _renderShiftView(){
   rcvBody += '<div style="font-size:10px;color:#a060f0;margin:10px 0 6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">🛍 ДР ТОВАР</div>';
   var drRcvCount = 0;
   receives.forEach(function(r, i){
-    if(r.goodsType !== 'dr') return;
+    if(!_rcvIsDrOnly(r) && !(r.goodsDrEffect>0)) return;
     var invFn = r.invId ? 'svOpenInvoiceFromReceive(\''+r.invId+'\')' : null;
-    var amt = r.goodsDrEffect!=null ? r.goodsDrEffect : (r.goodsEffect||r.amount||0);
+    var amt = _rcvDrAmt(r);
     var revBadgeDr = r.isRevaluation?'<span style="font-size:9px;font-weight:700;color:#f0a060;background:#2a1e10;border-radius:5px;padding:1px 5px;margin-right:5px">🔄 ПЕРЕОЦЕНКА</span>':'';
     rcvBody += rcvItem(revBadgeDr+(r.sub||r.label||'Приход ДР'), r.ts?new Date(r.ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'', '#a060f0', amt, '#a060f0', 'svDeleteJEntry(\'receive\','+i+')', 'svToggleEdit(\''+(r.items&&r.items.length===1?'jrcvItem':'jrcv')+'\','+i+')', invFn);
     if(r.items && r.items.length===1){
@@ -6898,10 +6912,10 @@ function psSyncFromJournal(){
     .map(function(e){ return {name:e.label||'Списание', qty:'', reason:e.sub||'', amt:e.amount||0}; });
   psDrWriteoffs = entries.filter(function(e){ return e.type==='writeoff' && e.goodsType==='dr'; })
     .map(function(e){ return {name:e.label||'Списание', qty:'', reason:e.sub||'', amt:e.amount||0}; });
-  psReceives = entries.filter(function(e){ return e.type==='receive' && (!e.goodsType||e.goodsType==='derevo'); })
-    .map(function(e){ return {name:e.label||'Приход', num:'', qty:'', price:'', from:e.sub||'', amt:e.amount||0}; });
-  psDrReceives = entries.filter(function(e){ return e.type==='receive' && e.goodsType==='dr'; })
-    .map(function(e){ return {name:e.label||'Приход', num:'', qty:'', price:'', from:e.sub||'', amt:e.amount||0}; });
+  psReceives = entries.filter(function(e){ return e.type==='receive' && (!e.goodsType||e.goodsType==='derevo') && !_rcvIsDrOnly(e); })
+    .map(function(e){ return {name:e.label||'Приход', num:'', qty:'', price:'', from:e.sub||'', amt:e.goodsDrEffect>0?_rcvWoodAmt(e):(e.amount||0)}; });
+  psDrReceives = entries.filter(function(e){ return e.type==='receive' && (e.goodsType==='dr' || e.goodsDrEffect>0); })
+    .map(function(e){ return {name:e.label||'Приход', num:'', qty:'', price:'', from:e.sub||'', amt:e.goodsType==='dr'?(e.amount||0):_rcvDrAmt(e)}; });
   renderPsJournalLists();
   psCalcGoods();
 }

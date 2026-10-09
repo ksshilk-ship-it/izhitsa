@@ -1411,8 +1411,9 @@ function _prDailyValue(s, field){
   // Приходы/Списания — не из «expense», а отдельные типы записей журнала (движение товара,
   // не расход и не выручка).
   if(field==='receive') return (s.journal||[]).filter(function(e){return e.type==='receive';}).reduce(function(a,e){return a+(e.amount||0);},0);
-  if(field==='receiveWood') return (s.journal||[]).filter(function(e){return e.type==='receive'&&e.goodsType!=='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
-  if(field==='receiveDr') return (s.journal||[]).filter(function(e){return e.type==='receive'&&e.goodsType==='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
+  // Приёмка накладной хранит ДР-часть в goodsDrEffect, даже без пометки goodsType.
+  if(field==='receiveWood') return (s.journal||[]).filter(function(e){return e.type==='receive'&&e.goodsType!=='dr';}).reduce(function(a,e){return a+(e.goodsDrEffect>0?(e.goodsEffect||0):(e.amount||0));},0);
+  if(field==='receiveDr') return (s.journal||[]).filter(function(e){return e.type==='receive'&&(e.goodsType==='dr'||e.goodsDrEffect>0);}).reduce(function(a,e){return a+(e.goodsType==='dr'?(e.amount||0):e.goodsDrEffect);},0);
   if(field==='writeoff') return (s.journal||[]).filter(function(e){return e.type==='writeoff';}).reduce(function(a,e){return a+(e.amount||0);},0);
   if(field==='writeoffWood') return (s.journal||[]).filter(function(e){return e.type==='writeoff'&&e.goodsType!=='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
   if(field==='writeoffDr') return (s.journal||[]).filter(function(e){return e.type==='writeoff'&&e.goodsType==='dr';}).reduce(function(a,e){return a+(e.amount||0);},0);
