@@ -601,7 +601,12 @@ function openManualNoArticle(){
 function _lookupItemInInvoices(numStr, shopName){
   var manual = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   var auto = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-  var all = manual.concat(auto).filter(function(inv){ return !shopName || inv.shopName===shopName; });
+  // Магазин у накладных лежит в destName (ручной приход, перемещение, накладная мастерской) —
+  // раньше сверялось только поле shopName, и этот поиск почти никогда ничего не находил.
+  var all = manual.concat(auto).filter(function(inv){
+    if(inv.status==='cancelled' || inv.isRevaluation) return false;
+    return !shopName || (inv.destName||inv.shopName)===shopName;
+  });
   all.sort(function(a,b){ return (b.acceptedDate||b.date||'').localeCompare(a.acceptedDate||a.date||''); });
   for(var i=0;i<all.length;i++){
     var inv = all[i];
@@ -613,14 +618,17 @@ function _lookupItemInInvoices(numStr, shopName){
         return {
           num:numStr, name:it.name||'', price:(it.factPrice!=null?it.factPrice:it.price)||0,
           species:it.species||'', goodsType:it.goodsType||inv.goodsType||'derevo',
-          qty:null, fromStock:false, fromInvoiceOnly:true
+          qty:null, fromStock:false, fromInvoiceOnly:true,
+          invPending:(!inv.manual && inv.status==='pending'), invNum:inv.num||''
         };
       }
     }
   }
   return null;
 }
+var _siWhereT = null;
 function lookupItem(num){
+  if(_siWhereT){ clearTimeout(_siWhereT); _siWhereT = null; }
   _siNoArticleMode = false;
   _siUpdateArticleModeUI();
   var lr=document.getElementById('siLookupResult'), mb=document.getElementById('siManualBlock');
@@ -647,14 +655,33 @@ function lookupItem(num){
     } else if(found.fromInvoiceOnly){
       var hint2=lr.querySelector('.stock-qty-hint');
       if(!hint2){ hint2=document.createElement('div'); hint2.className='stock-qty-hint'; hint2.style.cssText='font-size:11px;color:#f0c060;margin-top:3px'; lr.appendChild(hint2); }
-      hint2.textContent='⚠️ Найден в накладной (не в локальном остатке этого устройства) — проверьте цену и породу';
+      hint2.textContent = found.invPending
+        ? '⚠️ Найден в накладной '+(found.invNum||'')+', которую ещё не приняли — сначала примите её во вкладке «Приход»'
+        : '⚠️ Найден в накладной (не в локальном остатке этого устройства) — проверьте цену и породу';
     }
     siCalcAmt();
   } else {
     currentLookupItem=null; lr.style.display='none'; mb.style.display='block';
     var spM=document.getElementById('siSpeciesM'); if(spM) spM.value='';
     var qMEl=document.getElementById('siQtyM'); if(qMEl) qMEl.value=qMEl.value||'1';
+    // Номера нет в этом магазине — подсказываем, где он числится, вместо пустой формы. Поиск
+    // идёт на каждую цифру, поэтому подсказка — только когда продавец перестал печатать.
+    if(numStr.length>=3) _siWhereT = setTimeout(function(){ _siWhereIsNum(numStr, shopNm); }, 1000);
   }
+}
+function _siWhereIsNum(numStr, shopNm){
+  try{
+    var all = (typeof getStock==='function') ? getStock() : {};
+    var where = [];
+    Object.keys(all).forEach(function(sn){
+      var it = all[sn] && all[sn][numStr];
+      if(sn!==shopNm && it && (it.qty||0)>0) where.push('«'+sn+'» ('+(it.name||'')+(it.qty>1?', '+it.qty+' шт.':'')+')');
+    });
+    if(where.length){ showToast('№'+numStr+' на «'+shopNm+'» не поступал — числится на '+where.join(', ')); return; }
+    var inv = _lookupItemInInvoices(numStr, null);
+    if(inv){ showToast('№'+numStr+' «'+inv.name+'» на «'+shopNm+'» не поступал — проверьте номер или приход'); return; }
+    showToast('№'+numStr+' нет ни на одном складе — проверьте номер или вносите «Без артикула»');
+  }catch(e){}
 }
 function checkItemDiff(){
   const warn=document.getElementById('siDiffWarn'); if(!warn||!currentLookupItem) return;
