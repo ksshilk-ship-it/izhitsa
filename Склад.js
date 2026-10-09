@@ -1051,6 +1051,28 @@ function _invEditDiff(oldInv, nw){
   }
   return out;
 }
+function _submitInvoiceEditRequest(id, orig, req, diff, onDone){
+  db.collection('iz_invoices').doc(id).set({editRequest:req}, {merge:true}).then(function(){
+    // Повторная заявка по той же накладной заменяет прежнюю: сначала снимаем старые уведомления,
+    // и только потом создаём новое — иначе запрос мог захватить и новое.
+    var newAlert = function(){
+      saveAdminAlert({type:'invoice_edit', invId:id, invNum:orig.num||'', shopName:orig.destName||(session&&session.shopName)||'',
+        sellerName:req.by, date:new Date().toLocaleDateString('ru-RU'), isTransfer:!!orig.isTransfer, sourceName:orig.sourceName||'', changes:diff});
+    };
+    try{
+      db.collection('iz_admin_alerts').where('invId','==',id).get({source:'server'}).then(function(as){
+        var ups = [];
+        as.forEach(function(d){ var x=d.data(); if(x.type==='invoice_edit' && !x.read) ups.push(d.ref.update({read:true}).catch(function(){})); });
+        return Promise.all(ups);
+      }).then(newAlert, newAlert);
+    }catch(e){ newAlert(); }
+    var invs = getInvoices(); var ix = invs.findIndex(function(i){ return String(i._id!=null?i._id:i.id)===id; });
+    if(ix>=0){ invs[ix].editRequest = req; saveInvoices(invs); }
+    if(onDone) onDone();
+    renderInvoices();
+    showToast('📨 Заявка отправлена администратору — накладную можно будет принять после решения');
+  }).catch(function(err){ showToast('❌ Заявка не отправилась: '+(err&&err.message||err)); });
+}
 function saveShopInvoice(id){
   var data = window._shInvEdit[id]; if(!data) return;
   if(!_rcvIsAdmin()){
@@ -1062,27 +1084,7 @@ function saveShopInvoice(id){
     var diff = _invEditDiff(orig, req);
     if(!diff.length){ showToast('Изменений нет'); return; }
     if(!confirm('Отправить администратору заявку на исправление накладной '+(orig.num||'')+'?\n\n'+diff.join('\n'))) return;
-    db.collection('iz_invoices').doc(id).set({editRequest:req}, {merge:true}).then(function(){
-      // Повторная заявка по той же накладной заменяет прежнюю: сначала снимаем старые уведомления,
-      // и только потом создаём новое — раньше запрос мог захватить уже созданное новое уведомление
-      // и тоже пометить его прочитанным, и заявка у админа пропадала.
-      var newAlert = function(){
-        saveAdminAlert({type:'invoice_edit', invId:id, invNum:orig.num||'', shopName:orig.destName||(session&&session.shopName)||'',
-          sellerName:req.by, date:new Date().toLocaleDateString('ru-RU'), isTransfer:!!orig.isTransfer, sourceName:orig.sourceName||'', changes:diff});
-      };
-      try{
-        db.collection('iz_admin_alerts').where('invId','==',id).get({source:'server'}).then(function(as){
-          var ups = [];
-          as.forEach(function(d){ var x=d.data(); if(x.type==='invoice_edit' && !x.read) ups.push(d.ref.update({read:true}).catch(function(){})); });
-          return Promise.all(ups);
-        }).then(newAlert, newAlert);
-      }catch(e){ newAlert(); }
-      var invs = getInvoices(); var ix = invs.findIndex(function(i){ return String(i._id!=null?i._id:i.id)===id; });
-      if(ix>=0){ invs[ix].editRequest = req; saveInvoices(invs); }
-      delete window._shInvEdit[id];
-      renderInvoices();
-      showToast('📨 Заявка отправлена администратору — накладную можно будет принять после решения');
-    }).catch(function(err){ showToast('❌ Заявка не отправилась: '+(err&&err.message||err)); });
+    _submitInvoiceEditRequest(id, orig, req, diff, function(){ delete window._shInvEdit[id]; });
     return;
   }
   if(typeof _findArtDupInItems==='function'){
@@ -1165,9 +1167,10 @@ function openInvoice(invId){
   var saved = loadInvProgress(invId);
   invCheckState=inv.items.map(function(it,i){
     if(saved && saved.invCheckState && saved.invCheckState[i]){
-      return {ok: !!saved.invCheckState[i].ok, factPrice: saved.invCheckState[i].factPrice!=null?saved.invCheckState[i].factPrice:it.price};
+      var sv = saved.invCheckState[i];
+      return {ok: !!sv.ok, factPrice: sv.factPrice!=null?sv.factPrice:it.price, species: sv.species!=null?sv.species:(it.species||'')};
     }
-    return {ok:false, factPrice:it.price};
+    return {ok:false, factPrice:it.price, species:it.species||''};
   });
   document.getElementById('invMoTitle').textContent=inv.num;
   document.getElementById('invMoSub').textContent='Отгружено '+inv.date+' · '+inv.items.length+' изд.'+(saved?' · ⏸ продолжение приёмки':'');
@@ -1176,7 +1179,7 @@ function openInvoice(invId){
     <div class="inv-row" id="invrow${i}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
         <div style="flex:1"><div class="u-fs13-bold">№${item.num||'—'} ${item.name}${item.qty&&item.qty!==1?' × '+item.qty:''}</div>
-        <div class="u-fs11-gray">По накладной: ${fmt(item.price)}</div></div>
+        <div class="u-fs11-gray">По накладной: ${fmt(item.price)}${item.species?' · '+item.species:''}</div></div>
         <div class="check-circle${invCheckState[i].ok?' checked':''}" id="invok${i}" onclick="toggleInvItem(${i})">${invCheckState[i].ok?'✓':''}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
@@ -1184,6 +1187,14 @@ function openInvoice(invId){
         <input id="invfact${i}" type="text" value="${invCheckState[i].factPrice}" inputmode="numeric" oninput="checkInvDiff(${i},${item.price})"
           style="flex:1;padding:7px 10px;background:#0f0f13;border:1px solid ${Math.abs(invCheckState[i].factPrice-item.price)>0?'#f06060':'#2e2e3e'};border-radius:8px;color:${Math.abs(invCheckState[i].factPrice-item.price)>0?'#f06060':'#f0f0f8'};font-size:13px;outline:none;text-align:right"> ₽
       </div>
+      ${(inv.goodsType||item.goodsType)==='dr'?'':`<div style="display:flex;align-items:center;gap:8px;margin-top:6px;position:relative">
+        <span class="u-fs11-gray">Порода:</span>
+        <input id="invsp${i}" type="text" value="${String(invCheckState[i].species||'').replace(/"/g,'&quot;')}" placeholder="не указана" autocomplete="off"
+          oninput="_invSpActive=${i};invSetSpecies(${i},this.value);psjSuggest('invsp${i}',getSpecies(),'_invPickSpecies')"
+          onfocus="_invSpActive=${i};psjSuggest('invsp${i}',getSpecies(),'_invPickSpecies')" onblur="psjHideSugg('invsp${i}')"
+          style="flex:1;padding:7px 10px;background:#0f0f13;border:1px solid ${(invCheckState[i].species||'')!==(item.species||'')?'#f0c060':'#2e2e3e'};border-radius:8px;color:#f0f0f8;font-size:13px;outline:none">
+        <div id="invsp${i}_sugg" style="display:none;position:absolute;top:100%;left:52px;right:0;z-index:30;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>
+      </div>`}
     </div>`).join('');
   updateInvMoTotal();
   openMo('invMo');
@@ -1202,6 +1213,22 @@ function updateInvMoTotal(){
   var qtyAllEl=document.getElementById('invMoTotalQtyAll'); if(qtyAllEl) qtyAllEl.textContent=allQty;
   var amtEl=document.getElementById('invMoTotalAmt'); if(amtEl) amtEl.textContent=fmt(totalAmt);
 }
+// Порода в окне приёмки: у продавца изменение уходит админу заявкой (см. acceptInvoice), у админа
+// применяется сразу. Поле подсвечено жёлтым, если отличается от накладной.
+var _invSpActive = null;
+function invSetSpecies(i, v){
+  if(!invCheckState[i]) return;
+  invCheckState[i].species = v;
+  var el = document.getElementById('invsp'+i), it = (_currentInvItems||[])[i]||{};
+  if(el) el.style.borderColor = (String(v||'').trim()!==String(it.species||'').trim()) ? '#f0c060' : '#2e2e3e';
+  saveInvProgress();
+}
+function _invPickSpecies(val){
+  if(_invSpActive==null) return;
+  var el = document.getElementById('invsp'+_invSpActive); if(el) el.value = val;
+  invSetSpecies(_invSpActive, val);
+  var box = document.getElementById('invsp'+_invSpActive+'_sugg'); if(box) box.style.display='none';
+}
 function toggleInvItem(i){ invCheckState[i].ok=!invCheckState[i].ok; const ok=invCheckState[i].ok; const el=document.getElementById('invok'+i); if(el){el.textContent=ok?'✓':'';el.classList.toggle('checked',ok);} saveInvProgress(); updateInvMoTotal(); }
 function checkInvDiff(i,orig){ const fEl=document.getElementById('invfact'+i),row=document.getElementById('invrow'+i); if(!fEl)return; const f=parseFloat(fEl.value)||0,diff=Math.abs(f-orig)>0; invCheckState[i].factPrice=f; if(fEl){fEl.style.borderColor=diff?'#f06060':'#2e2e3e';fEl.style.color=diff?'#f06060':'#f0f0f8';} saveInvProgress(); updateInvMoTotal(); }
 function pauseInvoice(){
@@ -1212,6 +1239,25 @@ function pauseInvoice(){
 function acceptInvoice(){
   const who=gv('invWho'); if(!who){showToast('Укажите кто принял');return;}
   const invs=getInvoices(); const inv=invs.find(i=>(i.id||i._id)===currentInvId); if(!inv)return;
+  var _spChanged = (inv.items||[]).map(function(it,i){ return i; }).filter(function(i){
+    var st = invCheckState[i]; return st && st.species!=null && String(st.species).trim()!==String(inv.items[i].species||'').trim();
+  });
+  if(_spChanged.length){
+    var _newItems = inv.items.map(function(it,i){ return _spChanged.indexOf(i)>=0 ? Object.assign({}, it, {species:String(invCheckState[i].species||'').trim()}) : it; });
+    if(!_rcvIsAdmin()){
+      // Продавец поменял породу — правка накладной идёт через админа: заявка вместо приёмки.
+      var _iid = String(inv._id!=null?inv._id:inv.id);
+      var _req = {num:inv.num||'', date:inv.date||'',
+        items:_newItems.map(function(it){ return {num:it.num||it.article||'', article:it.num||it.article||'', name:it.name||'', species:it.species||'', price:it.price||0, qty:it.qty||1, goodsType:it.goodsType||inv.goodsType||'derevo'}; }),
+        by:(session&&(session.sellerName||session.name))||'', at:new Date().toISOString()};
+      var _diff = _invEditDiff(inv, _req);
+      if(!confirm('Порода изменена в '+_spChanged.length+' поз. Отправить администратору заявку на исправление?\nОтметки и цены приёмки сохранятся — принять накладную можно будет после одобрения.\n\n'+_diff.join('\n'))) return;
+      saveInvProgress();
+      _submitInvoiceEditRequest(_iid, inv, _req, _diff, function(){ closeMo('invMo'); });
+      return;
+    }
+    inv.items = _newItems; // админ — порода применяется сразу
+  }
   if(typeof _findArtDupInItems==='function'){
     var _artDupMsg3 = _findArtDupInItems(inv.items, inv.id||inv._id, inv.destName||inv.shopName, inv.isTransfer?inv.sourceName:null);
     if(_artDupMsg3){ showToast('⛔ '+_artDupMsg3+' — исправьте номер через «✏️ Исправить» перед приёмкой'); return; }
