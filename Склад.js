@@ -918,6 +918,7 @@ function renderInvoices(){
   }
   const sh=getInvoices().filter(i=>i.destName===(session&&session.shopName));
   const pending=sh.filter(i=>i.status==='pending');
+  try{ pending.forEach(function(inv){ _healAcceptedPendingInvoice(inv); }); }catch(e){}
   let html='';
   if(!pending.length) html='<div class="empty"><div class="ei">📦</div>Нет накладных, ожидающих приёмки</div>';
   else {
@@ -941,6 +942,47 @@ function renderInvoices(){
     }).join('');
   }
   c.innerHTML=html;
+}
+// Накладная «ожидает», а приёмка по ней в смене уже есть (статус не дошёл до облака — см. 09.10.2026,
+// горки-колесо/7.10.26/3): ищем запись приёмки в iz_journal_backup и проверяем, что она по-прежнему
+// есть в журнале своей смены (не удалена). Если так — ставим накладной «принята», а на склад
+// доносим только те позиции, которых там нет или которые последний раз приходили раньше этой приёмки.
+var _healInvChecked = {};
+function _healAcceptedPendingInvoice(inv){
+  var id = String(inv._id!=null?inv._id:inv.id);
+  if(!id || _healInvChecked[id] || typeof db==='undefined') return;
+  _healInvChecked[id] = true;
+  db.collection('iz_journal_backup').where('invId','==',id).get().then(function(snap){
+    var e = null;
+    snap.forEach(function(d){ var x = d.data(); if(!e && x.type==='receive' && !x.isRevaluation) e = x; });
+    if(!e || !e.shiftId) return;
+    return db.collection('iz_shifts').doc(e.shiftId).get().then(function(sd){
+      var sx = sd.exists ? sd.data() : null;
+      if(!sx || sx._deleted || !(sx.journal||[]).some(function(j){ return j.id===e.id; })) return;
+      var accDate = String(e.ts||'').split('T')[0] || new Date().toISOString().split('T')[0];
+      var accItems = (inv.items||[]).map(function(it){ return Object.assign({}, it, {factPrice:it.price, ok:true}); });
+      var upd = {status:'accepted', acceptedBy:e.acceptedBy||e.sellerName||'', acceptedDate:accDate, acceptedItems:accItems, healedAt:new Date().toISOString()};
+      return db.collection('iz_invoices').doc(id).set(upd, {merge:true}).then(function(){
+        var invs = getInvoices(); var ix = invs.findIndex(function(i){ return String(i._id!=null?i._id:i.id)===id; });
+        if(ix>=0){ Object.assign(invs[ix], upd); saveInvoices(invs); }
+        clearInvProgress(id);
+        var shop = inv.destName||inv.shopName;
+        if(session && session.shopName===shop){
+          var st = (getStock()[shop])||{};
+          var missing = accItems.filter(function(it){
+            var gt = it.goodsType||inv.goodsType||'derevo';
+            var key = it.article||it.num||_noArticleStockKey(it.name, it.price, it.species, gt);
+            var cur = key && st[key];
+            return key && (!cur || String(cur.lastReceived||'') < accDate);
+          });
+          if(missing.length) stockApplyReceive(shop, missing, accDate, inv.goodsType);
+          try{ logAction('INVOICE_STATUS_HEALED', {invId:id, invNum:inv.num||'', shop:shop, stockItems:missing.length}); }catch(err){}
+        }
+        try{ renderInvoices(); renderAll(); }catch(err){}
+        showToast('ℹ️ Накладная '+(inv.num||'')+' уже была принята ('+(upd.acceptedBy||'—')+', '+accDate+') — убрана из ожидающих');
+      });
+    });
+  }).catch(function(){ delete _healInvChecked[id]; });
 }
 window._shInvEdit = window._shInvEdit || {};
 window._shInvExpandedMap = window._shInvExpandedMap || {}; // id -> expanded index
@@ -1479,7 +1521,15 @@ function _acceptInvoiceProceed(inv, who){
   _recordJournalEntryIndependently(_rcvEntry, session&&session.shopName, 'receive');
   _backupCheckPassed = false;
   try{ stockApplyReceive(session&&session.shopName, accepted, inv2.acceptedDate, inv2.goodsType); }catch(e){}
-  saveJ(); try{ db.collection('iz_invoices').doc(currentInvId).set(inv2); }catch(e){}
+  saveJ();
+  // Статус «принята» — с очередью досылки: раньше запись шла один раз, и если она не проходила (лимит
+  // Firestore, нет сети, закрыли приложение), накладная навсегда оставалась «ожидает» у всех остальных.
+  try{
+    var _accId = String(currentInvId);
+    _clearPendingInvoice('iz_invoices', _accId);
+    _queuePendingInvoice('iz_invoices', Object.assign({}, inv2, {id:_accId}));
+    db.collection('iz_invoices').doc(_accId).set(inv2).then(function(){ _clearPendingInvoice('iz_invoices', _accId); }).catch(function(){});
+  }catch(e){}
   clearInvProgress(currentInvId);
   closeMo('invMo'); renderAll(); renderInvoices(); renderReceiveArchive(); showToast('✅ Накладная принята');
 }
@@ -3759,6 +3809,7 @@ function getStock(){
   try{ return JSON.parse(localStorage.getItem('iz_stock')||'{}'); }catch(e){ return {}; }
 }
 function saveStock(stock){
+  var _prevStock = {}; try{ _prevStock = JSON.parse(localStorage.getItem('iz_stock')||'{}')||{}; }catch(e){}
   // Раньше localStorage.setItem здесь падал синхронно при переполнении памяти телефона и
   // обрывал функцию ДО цикла отправки в Firestore ниже — значит, при переполнении остаток
   // не обновлялся вообще нигде (ни локально, ни в облаке), и товар оставался «не в наличии»
@@ -3767,10 +3818,45 @@ function saveStock(stock){
   // место и не бросает исключение, так что цикл ниже теперь выполняется всегда.
   if(typeof _safeLocalSet==='function') _safeLocalSet('iz_stock', JSON.stringify(stock));
   else localStorage.setItem('iz_stock', JSON.stringify(stock));
-  var shops=Object.keys(stock);
-  shops.forEach(function(sn){
-    try{ db.collection('iz_settings').doc('stock_'+sn.replace(/\s+/g,'_')).set({items:stock[sn],updatedAt:new Date().toISOString()}); }catch(e){}
+  // В облако — только изменённые позиции и только тех магазинов, где что-то поменялось. Раньше каждое
+  // сохранение перезаписывало ЦЕЛИКОМ склады всех магазинов копией с этого телефона: устаревшая копия
+  // (не дошли обновления — например, 09.10.2026 при исчерпанном лимите Firestore) затирала чужие
+  // свежие приходы и продажи. Изменения копятся в очереди и досылаются, если запись не прошла.
+  Object.keys(stock).forEach(function(sn){
+    var a = _prevStock[sn]||{}, b = stock[sn]||{}, patch = {}, n = 0;
+    Object.keys(b).forEach(function(k){ if(JSON.stringify(a[k])!==JSON.stringify(b[k])){ patch[k] = b[k]; n++; } });
+    Object.keys(a).forEach(function(k){ if(!(k in b)){ patch[k] = null; n++; } });
+    if(n) _queueStockPatch(sn, patch);
   });
+  _flushStockPatches();
+}
+function _queueStockPatch(sn, patch){
+  try{
+    var q = JSON.parse(localStorage.getItem('iz_pending_stock')||'{}')||{};
+    q[sn] = Object.assign(q[sn]||{}, patch);
+    localStorage.setItem('iz_pending_stock', JSON.stringify(q));
+  }catch(e){}
+}
+function _flushStockPatches(){
+  try{
+    if(typeof db==='undefined' || !db) return;
+    var q = JSON.parse(localStorage.getItem('iz_pending_stock')||'{}')||{};
+    Object.keys(q).forEach(function(sn){
+      var sent = q[sn], items = {}, keys = Object.keys(sent);
+      if(!keys.length) return;
+      keys.forEach(function(k){ items[k] = sent[k]===null ? firebase.firestore.FieldValue.delete() : sent[k]; });
+      db.collection('iz_settings').doc('stock_'+sn.replace(/\s+/g,'_')).set({items:items, updatedAt:new Date().toISOString()}, {merge:true}).then(function(){
+        // убираем из очереди только то, что не успело поменяться ещё раз, пока шла запись
+        try{
+          var cur = JSON.parse(localStorage.getItem('iz_pending_stock')||'{}')||{};
+          var c = cur[sn]||{};
+          keys.forEach(function(k){ if(JSON.stringify(c[k])===JSON.stringify(sent[k])) delete c[k]; });
+          if(Object.keys(c).length) cur[sn] = c; else delete cur[sn];
+          localStorage.setItem('iz_pending_stock', JSON.stringify(cur));
+        }catch(e){}
+      }).catch(function(){});
+    });
+  }catch(e){}
 }
 function stockGetByNum(shopName,num){
   if(!shopName||!num) return null;

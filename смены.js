@@ -396,7 +396,7 @@ function _checkPendingCloseBanner(){
   }catch(e){}
 }
 setInterval(_checkPendingCloseBanner, 30000);
-document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ _checkPendingCloseBanner(); _retryPendingSales(); _retryPendingJournalEntries(); _retryPendingRefbookSaves(); _retryPendingInvoices(); } });
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ _checkPendingCloseBanner(); _retryPendingSales(); _retryPendingJournalEntries(); _retryPendingRefbookSaves(); _retryPendingInvoices(); try{ _flushStockPatches(); }catch(e){} } });
 function _pushShiftWithRetry(shiftId, data){
   if(!shiftId || !data) return;
   try{
@@ -497,6 +497,7 @@ _retryPendingSales();
 _retryPendingJournalEntries();
 _retryPendingRefbookSaves();
 _retryPendingInvoices();
+try{ _flushStockPatches(); }catch(e){}
 _retryPendingShiftBackups();
 _retryPendingInvoiceBackups();
 _checkPendingCloseBanner();
