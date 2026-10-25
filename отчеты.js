@@ -29,7 +29,7 @@ function calcSellerSummary(){
         discount += (e.discount||0);
         count += 1;
         var cash0=e.cashEffect||0, card0=e.cardEffect||0;
-        if(e.payMethod==='mixed'){ pay.cash+=cash0; pay.terminal+=card0; }
+        if(e.payMethod==='mixed'){ pay.cash+=cash0; pay[e.mixCardMethod==='transfer'?'transfer':'terminal']+=card0; }
         else { var k0=pay.hasOwnProperty(e.payMethod)?e.payMethod:'terminal'; pay[k0]+=cash0+card0; }
         return;
       }
@@ -57,7 +57,7 @@ function calcSellerSummary(){
       count += groupItems.reduce(function(s,it){ return s+(it.qty||1); },0);
       var cash = isDr ? (e.cashDrEffect||0) : (e.cashEffect||0);
       var card = isDr ? (e.cardDrEffect||0) : (e.cardEffect||0);
-      if(e.payMethod==='mixed'){ pay.cash+=cash; pay.terminal+=card; }
+      if(e.payMethod==='mixed'){ pay.cash+=cash; pay[e.mixCardMethod==='transfer'?'transfer':'terminal']+=card; }
       else { var k=pay.hasOwnProperty(e.payMethod)?e.payMethod:'terminal'; pay[k]+=cash+card; }
     });
     return {listPrice:listPrice, discount:discount, pay:pay, count:count};

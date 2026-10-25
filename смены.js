@@ -37,6 +37,7 @@ function editJournalSale(id){
   var pmEl = document.querySelector('#saleMo .pc[onclick*="\''+(entry.payMethod||'cash')+'\'"]');
   setPayM(entry.payMethod||'cash', pmEl||document.querySelector('#saleMo .pc'));
   if(entry.payMethod==='mixed'){
+    setMixCardMethod(entry.mixCardMethod||'terminal');
     var mc=document.getElementById('mixCash'); if(mc) mc.value=entry.cashPart||'';
     var mcr=document.getElementById('mixCard'); if(mcr) mcr.value=entry.cardPart||'';
   }
@@ -87,6 +88,7 @@ function svEditSale(idx){
   var pmEl = document.querySelector('#saleMo .pc[onclick*="\''+(entry.payMethod||'cash')+'\'"]');
   setPayM(entry.payMethod||'cash', pmEl||document.querySelector('#saleMo .pc'));
   if(entry.payMethod==='mixed'){
+    setMixCardMethod(entry.mixCardMethod||'terminal');
     var mc=document.getElementById('mixCash'); if(mc) mc.value=entry.cashPart||'';
     var mcr=document.getElementById('mixCard'); if(mcr) mcr.value=entry.cardPart||'';
   }
@@ -1665,7 +1667,7 @@ function renderShiftDetail(shift){
         discount += (e.discount||0);
         if(e.payMethod==='mixed'){
           payTotals.cash += e.cashEffect||0;
-          payTotals.terminal += e.cardEffect||0;
+          payTotals[e.mixCardMethod==='transfer'?'transfer':'terminal'] += e.cardEffect||0;
         } else {
           var key0 = payTotals.hasOwnProperty(e.payMethod) ? e.payMethod : 'terminal';
           payTotals[key0] += (e.cashEffect||0)+(e.cardEffect||0);
@@ -1684,7 +1686,7 @@ function renderShiftDetail(shift){
       var card = isDr ? (e.cardDrEffect||0) : (e.cardEffect||0);
       if(e.payMethod==='mixed'){
         payTotals.cash += cash;
-        payTotals.terminal += card;
+        payTotals[e.mixCardMethod==='transfer'?'transfer':'terminal'] += card;
       } else {
         var key = payTotals.hasOwnProperty(e.payMethod) ? e.payMethod : 'terminal';
         payTotals[key] += cash+card;
@@ -4438,7 +4440,8 @@ function _renderShiftView(){
   var _cardMethodOrder = ['terminal','transfer','sbp','qr','rs','mixed'];
   sales.forEach(function(s){
     if(s.payMethod==='cash' || !s.payMethod) return;
-    var m = s.payMethod;
+    // смешанная с указанным безналом (нал + терминал / нал + перевод) — безнал к своему способу
+    var m = (s.payMethod==='mixed' && s.mixCardMethod) ? s.mixCardMethod : s.payMethod;
     if(!_cardByMethod[m]) _cardByMethod[m] = {wood:0, dr:0};
     _cardByMethod[m].wood += s.cardEffect||0;
     _cardByMethod[m].dr += s.cardDrEffect||0;

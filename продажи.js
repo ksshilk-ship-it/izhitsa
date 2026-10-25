@@ -736,6 +736,7 @@ function resetSaleForm(){
   document.querySelectorAll('#saleMo .pc').forEach(p=>p.classList.remove('active'));
   document.querySelector('#saleMo .pc').classList.add('active'); payMethod='cash';
   document.getElementById('mixedBlock').style.display='none';
+  var _cmb=document.getElementById('mixCardMethodBlock'); if(_cmb) _cmb.style.display='none';
   var _shopType = (session && session.shopType) || getShopType(session && session.shopName);
   var rsChip = document.getElementById('pcRS');
   if(rsChip) rsChip.style.display = (_shopType === 'shop') ? 'none' : '';
@@ -744,6 +745,7 @@ function resetSaleForm(){
   _svArchiveAddMode = false;
   _siNoArticleMode = false;
   _siUpdateArticleModeUI();
+  setMixCardMethod('terminal');
   var mt = document.querySelector('#saleMo .mt'); if(mt) mt.textContent = 'Оформить продажу';
   var delBtn = document.querySelector('#saleMo .sale-edit-del-btn'); if(delBtn) delBtn.remove();
 }
@@ -1033,11 +1035,27 @@ function setPayM(m,el){
   document.querySelectorAll('#saleMo .pc').forEach(p=>p.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('mixedBlock').style.display=m==='mixed'?'grid':'none';
+  var cmb=document.getElementById('mixCardMethodBlock'); if(cmb) cmb.style.display=m==='mixed'?'block':'none';
   var transferSel=document.getElementById('transferCardBlock');
   var rsSel=document.getElementById('rsAccountBlock');
-  if(transferSel) transferSel.style.display=m==='transfer'?'block':'none';
+  if(transferSel) transferSel.style.display=(m==='transfer'||(m==='mixed'&&mixCardMethod==='transfer'))?'block':'none';
   if(rsSel) rsSel.style.display=m==='rs'?'block':'none';
   if(m==='mixed') renderMixPerItemBlock(); else { var b=document.getElementById('mixPerItemBlock'); if(b) b.style.display='none'; }
+}
+// Смешанная оплата: чем прошла безналичная часть. В одних магазинах это нал + терминал, в других —
+// нал + перевод на карту; раньше безнал смешанной оплаты всегда считался терминалом.
+var mixCardMethod = 'terminal';
+function setMixCardMethod(m){
+  mixCardMethod = m==='transfer' ? 'transfer' : 'terminal';
+  var on = 'border:2px solid #60c8f0;background:#0c1a20;color:#60c8f0', off = 'border:1px solid #2e2e3e;background:#22222e;color:#8888aa';
+  var t=document.getElementById('mixCmTerminal'), tr=document.getElementById('mixCmTransfer');
+  var base = 'flex:1;padding:8px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;';
+  if(t) t.style.cssText = base+(mixCardMethod==='terminal'?on:off);
+  if(tr) tr.style.cssText = base+(mixCardMethod==='transfer'?on:off);
+  var lbl=document.getElementById('mixCardLbl'); if(lbl) lbl.textContent = mixCardMethod==='transfer' ? 'Перевод (₽)' : 'Терминал (₽)';
+  var tb=document.getElementById('transferCardBlock');
+  if(tb && payMethod==='mixed') tb.style.display = mixCardMethod==='transfer' ? 'block' : 'none';
+  renderMixPerItemBlock();
 }
 function renderMixPerItemBlock(){
   var wrap = document.getElementById('mixPerItemBlock');
@@ -1051,7 +1069,7 @@ function renderMixPerItemBlock(){
     return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #2e2e3e">'+
       '<div style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(it.name||'')+' · '+fmt(amt)+'</div>'+
       '<button type="button" onpointerdown="event.preventDefault();setMixItemPay('+idx+',\'cash\')" style="padding:5px 9px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:'+(isCash?'2px solid #c8f060':'1px solid #2e2e3e')+';background:'+(isCash?'#1e2a14':'#22222e')+';color:'+(isCash?'#c8f060':'#8888aa')+'">💵 Нал</button>'+
-      '<button type="button" onpointerdown="event.preventDefault();setMixItemPay('+idx+',\'card\')" style="padding:5px 9px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:'+(isCard?'2px solid #60c8f0':'1px solid #2e2e3e')+';background:'+(isCard?'#0c1a20':'#22222e')+';color:'+(isCard?'#60c8f0':'#8888aa')+'">💳 Безнал</button>'+
+      '<button type="button" onpointerdown="event.preventDefault();setMixItemPay('+idx+',\'card\')" style="padding:5px 9px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;border:'+(isCard?'2px solid #60c8f0':'1px solid #2e2e3e')+';background:'+(isCard?'#0c1a20':'#22222e')+';color:'+(isCard?'#60c8f0':'#8888aa')+'">'+(mixCardMethod==='transfer'?'🏦 Перевод':'💳 Терминал')+'</button>'+
     '</div>';
   }).join('');
 }
@@ -1093,7 +1111,8 @@ function _saveSaleInner(){
   let cashPart=0,cardPart=0;
   if(payMethod==='cash')cashPart=paid; else if(payMethod==='mixed'){cashPart=parseFloat(gv('mixCash'))||0;cardPart=parseFloat(gv('mixCard'))||0;} else cardPart=paid;
   var transferDest=gv('transferCardSelect'), rsDest=gv('rsAccountSelect');
-  var payLabels={cash:'💵 Нал',terminal:'💳 Терминал',sbp:'📱 СБП',transfer:'🏦 Перевод'+(transferDest?' → '+transferDest:''),qr:'🔲 QR',mixed:'➗ Смешанный',rs:'🏦 РС'+(rsDest?' → '+rsDest:'')};
+  var payLabels={cash:'💵 Нал',terminal:'💳 Терминал',sbp:'📱 СБП',transfer:'🏦 Перевод'+(transferDest?' → '+transferDest:''),qr:'🔲 QR',
+    mixed:'➗ Нал + '+(mixCardMethod==='transfer'?'Перевод'+(transferDest?' → '+transferDest:''):'Терминал'),rs:'🏦 РС'+(rsDest?' → '+rsDest:'')};
   const payL=payLabels[payMethod]||payMethod;
   const hasDiff=saleItems.some(i=>i.hasDiff);
   var totalWood = saleItems.reduce(function(s,it){ var a=it.amt!=null?it.amt:it.price*(it.qty||1); return it.goodsType==='dr' ? s : s+a; },0);
@@ -1162,6 +1181,7 @@ function _saveSaleInner(){
     label:'Продажа',
     sub:saleItems.map(i=>'№'+(i.num||'—')+' '+i.name+(i.goodsType==='dr'?' · ДР':'')+(i.hasDiff?' ⚠️':'')).join(', ')+(disc?' · Скидка '+fmt(disc):'')+' · '+payL,
     items:[...saleItems],totalPrice:total,discount:disc,discCategory:discCategory,discWoodAmt:discCategory==='split'?discWood:null,totalPaid:paid,payMethod,cashPart,cardPart,goodsType:overallGoodsType,
+    mixCardMethod:payMethod==='mixed'?mixCardMethod:null, transferTo:(payMethod==='transfer'||(payMethod==='mixed'&&mixCardMethod==='transfer'))?(transferDest||''):'',
     hasDiff,comment:gv('saleComment'),amount:paid,amtCls:'inc',amtSign:'+',
     cashEffect:cashPartWood,cardEffect:cardPartWood,staffEffect:0,goodsEffect:-totalWood,
     cashDrEffect:cashPartDr,cardDrEffect:cardPartDr,goodsDrEffect:-totalDr,
