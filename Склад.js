@@ -6103,6 +6103,25 @@ function _trRender(){
     '</div>';
   _trRenderTotals();
 }
+// Закрытие магазина/вывоз всего товара: весь остаток отправителя (выбранного вида товара) — в список
+// одной кнопкой; дальше лишнее удаляется ✕ (то, что уехало в другое место, — отдельной накладной).
+function trLoadAllStock(){
+  var from = gv('trFrom'), gt = gv('trType')||'derevo';
+  if(!from){ showToast('Выберите, откуда'); return; }
+  var st = _trStockOf(from), added = 0, skipped = 0;
+  Object.keys(st).sort().forEach(function(k){
+    var it = st[k]||{};
+    if((it.goodsType||'derevo')!==gt || !((it.qty||0)>0)) return;
+    var num = /^(DR_|WD_)/.test(k) ? '' : (it.num && !/^(DR_|WD_)/.test(it.num) ? it.num : k);
+    var r = {num:num, name:it.name||'', species:it.species||'', price:it.price||0, qty:it.qty||1};
+    var key = _trKey(r);
+    if(_trRows.some(function(x){ return _trKey(x)===key; })){ skipped++; return; }
+    _trRows.push(r); added++;
+  });
+  if(!added){ showToast(skipped ? 'Весь остаток «'+from+'» уже в списке' : 'На складе «'+from+'» нет '+(gt==='dr'?'ДР Товара':'Дерева')+' в наличии'); return; }
+  _trSaveDraft(); _trRender();
+  showToast('✅ В список добавлен остаток «'+from+'»: '+added+' поз.'+(skipped?' (ещё '+skipped+' уже были)':'')+' — уберите ✕ то, что едет в другое место');
+}
 function trAddRow(){
   _trRows.push({num:'', name:'', species:'', price:0, qty:1});
   _trSaveDraft(); _trRender();
