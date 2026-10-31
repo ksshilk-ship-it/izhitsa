@@ -1999,7 +1999,7 @@ function renderManInvItems() {
   }).join('');
   updateManInvTotal();
 }
-function _manInvName(i, val) { _manInvItems[i].name = val; updateManInvTotal(); saveManInvDraft(); }
+function _manInvName(i, val) { _manInvItems[i].name = val; _manInvItems[i]._varNone = false; updateManInvTotal(); saveManInvDraft(); }
 function _manInvCheckNameDup(i){
   var warnEl = document.getElementById('manInvNameWarn_'+i);
   if(!warnEl || _manInvItems[i]==null) return;
@@ -2139,7 +2139,7 @@ function _manInvPickNameAt(i,val){
   }
 })();
 function _manInvArt(i, val) { _manInvItems[i].article = val; saveManInvDraft(); }
-function _manInvSpecies(i, val) { if(_manInvItems[i]) _manInvItems[i].species = val; saveManInvDraft(); }
+function _manInvSpecies(i, val) { if(_manInvItems[i]){ _manInvItems[i].species = val; _manInvItems[i]._varNone = false; } saveManInvDraft(); }
 var _manInvSpeciesActive = 0;
 function _manInvPickSpeciesIdx(val){
   var i = _manInvSpeciesActive;
@@ -2174,6 +2174,13 @@ function _manInvVariantsHtml(i){
   if(!list.length || (hasSp && list.length===1 && item.article===list[0].article)) return '';
   var esc = function(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
   var cur = String(item.article||'');
+  // Вариант выбран (или выбрано «без артикула») — список свёрнут в одну строку с кнопкой «Сменить».
+  var chosen = cur ? list.filter(function(c){ return String(c.article)===cur; })[0] : null;
+  if(!item._varOpen && (chosen || (!cur && item._varNone))){
+    return '<div style="margin:0 0 8px;display:flex;align-items:center;gap:8px;background:#1e2a14;border:1px solid #c8f06066;border-radius:9px;padding:7px 9px;font-size:12px">'+
+      '<span style="flex:1;min-width:0;color:#c8f060">✓ '+(chosen ? '<b>№'+esc(chosen.article)+'</b>'+(chosen.species?' · '+esc(chosen.species):'')+' · '+fmt(chosen.price||0) : 'без артикула')+'</span>'+
+      '<button type="button" onclick="_manInvItems['+i+']._varOpen=true;_manInvRefreshVar('+i+')" style="flex-shrink:0;background:#22222e;border:1px solid #60c8f0;border-radius:7px;padding:4px 9px;color:#60c8f0;font-size:11px;cursor:pointer">📚 Сменить ('+list.length+')</button></div>';
+  }
   return '<div style="margin:0 0 8px;background:#14141c;border:1px solid #60c8f055;border-radius:9px;padding:6px">'+
     '<div style="font-size:10.5px;color:#60c8f0;font-weight:700;margin:2px 4px 5px">📚 Варианты из справочника ('+list.length+')'+(hasSp?'':' — все породы')+': выберите нужный</div>'+
     '<div style="max-height:190px;overflow-y:auto;-webkit-overflow-scrolling:touch">'+
@@ -2187,8 +2194,10 @@ function _manInvVariantsHtml(i){
     '<div onclick="_manInvPickVariant('+i+',-1)" style="padding:7px 8px;border-radius:7px;cursor:pointer;font-size:12px;border:1px dashed #3e3e4e;color:'+(cur?'#8888aa':'#c8f060')+'">✏️ '+esc(item.name)+' — без артикула (нужного варианта нет)'+(cur?'':' ✓')+'</div>'+
     '</div></div>';
 }
+function _manInvRefreshVar(i){ var vb = document.getElementById('manInvVar_'+i); if(vb) vb.innerHTML = _manInvVariantsHtml(i); }
 function _manInvPickVariant(i, k){
   var item = _manInvItems[i]; if(!item) return;
+  item._varOpen = false; item._varNone = k<0;
   if(k<0){ item.article = ''; }
   else {
     var c = (window._manInvVarCache[i]||[])[k]; if(!c) return;
