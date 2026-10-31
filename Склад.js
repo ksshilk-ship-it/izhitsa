@@ -6611,8 +6611,8 @@ function openShopCloseMo(){
   openMo('shopCloseMo');
 }
 function _scRenderNew(){
-  var body = document.getElementById('scBody'); if(!body || !_sc) return;
-  var t = document.getElementById('scTitle'); if(t) t.textContent = '🏁 Закрытие магазина';
+  var body = document.getElementById('shopCloseBody'); if(!body || !_sc) return;
+  var t = document.getElementById('shopCloseTitle'); if(t) t.textContent = '🏁 Закрытие магазина';
   var shops = (typeof getShopNames==='function' ? getShopNames() : []).filter(function(n){ return n!==_trWorkshopName(); });
   var items = _sc.shop ? _scItemsFromStock(_sc.shop) : [];
   var tt = _scTotals(items);
@@ -6725,9 +6725,9 @@ function openShopClosure(id){
   }).catch(function(err){ showToast('❌ '+(err&&err.message||err)); });
 }
 function _scRenderEdit(){
-  var body = document.getElementById('scBody'); if(!body || !_sc || _sc.mode!=='edit') return;
+  var body = document.getElementById('shopCloseBody'); if(!body || !_sc || _sc.mode!=='edit') return;
   var c = _sc.c;
-  var t = document.getElementById('scTitle'); if(t) t.textContent = '🏁 '+c.num;
+  var t = document.getElementById('shopCloseTitle'); if(t) t.textContent = '🏁 '+c.num;
   var tt = _scTotals(_sc.rows);
   var q = String(_sc.q||'').toLowerCase().trim();
   var rowsHtml = _sc.rows.map(function(r,i){
