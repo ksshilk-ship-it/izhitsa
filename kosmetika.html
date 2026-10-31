@@ -62,6 +62,10 @@
   .bar-val{width:70px; text-align:right; font-family:'IBM Plex Mono',monospace; font-size:0.75rem; flex:0 0 auto;}
   details summary{cursor:pointer; font-size:0.82rem; color:var(--brick-dark); font-weight:600; padding:4px 0; list-style:none;}
   details summary::-webkit-details-marker{display:none;}
+  .card-details>summary.card-summary{font-family:'PT Serif',serif; font-size:1.05rem; font-weight:700; color:var(--ink); padding:0; display:flex; justify-content:space-between; align-items:center; gap:8px;}
+  .card-details>summary.card-summary::after{content:'▾'; color:var(--ink-soft); font-size:0.9rem; transition:transform .15s;}
+  .card-details:not([open])>summary.card-summary::after{transform:rotate(-90deg);}
+  .card-details[open]>summary.card-summary{padding-bottom:8px; border-bottom:1px solid var(--line); margin-bottom:12px;}
   .del-x{background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:0.9rem; padding:0 4px;}
   .del-x:hover{color:var(--brick);}
   .icon-btn{background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:0.9rem; padding:0 4px;}
@@ -978,7 +982,8 @@ function renderExpenses(main){
 
   main.innerHTML = `
     <div class="card">
-      <h2>${editing ? 'Редактировать расход' : isCopy ? 'Копия расхода — проверьте дату' : 'Новый расход / платёж'}</h2>
+      <details class="card-details" data-key="exp-form" ${(prefill || isSectionOpen('exp-form',false))?'open':''}>
+      <summary class="card-summary">${editing ? 'Редактировать расход' : isCopy ? 'Копия расхода — проверьте дату' : 'Новый расход / платёж'}</summary>
       <label class="field">Категория</label>
       <select id="e-cat">${state.expenseCategories.map(c=>`<option ${prefill && prefill.category===c ? 'selected':''}>${c}</option>`).join('')}</select>
       ${state.suppliers.length>0 ? `
@@ -1016,10 +1021,12 @@ function renderExpenses(main){
       <button class="btn" id="e-add">${editing ? 'Сохранить изменения' : 'Добавить'}</button>
       ${prefill ? '<button class="btn secondary" id="e-cancel">Отмена</button>' : ''}
       ${isCopy ? '<div class="note">Все поля скопированы из исходного расхода — при необходимости поменяйте только дату (и статус, если он ещё не оплачен).</div>' : ''}
+      </details>
     </div>
 
     <div class="card">
-      <h2>Инкассация / перенос денег между счетами</h2>
+      <details class="card-details" data-key="transfer-form" ${isSectionOpen('transfer-form',false)?'open':''}>
+      <summary class="card-summary">Инкассация / перенос денег между счетами</summary>
       <div class="note" style="margin-top:0;margin-bottom:6px;">Например: забрали наличные из кассы и положили в конверт или внесли на расчётный счёт. Это не расход — деньги просто переходят с одного счёта на другой.</div>
       <div style="margin:8px 0;">
         ${state.accounts.map(a=>`<div class="row" style="margin-bottom:4px;"><span class="label">${a.name}</span><span class="num">${fmt(getAccountBalance(a.id, todayISO()))}</span></div>`).join('')}
@@ -1058,6 +1065,7 @@ function renderExpenses(main){
           }).join('')}
         </tbody></table>
       </details>`}
+      </details>
     </div>
 
     <div class="card">
@@ -1262,6 +1270,7 @@ function renderExpenses(main){
     let paidDate = document.getElementById('e-paiddate').value;
     if(!amount) return;
     if(status==='paid' && !paidDate) paidDate = dueDate;
+    if(editExpenseId || copyDraft) sectionOpenState['exp-form'] = false;
 
     if(editExpenseId){
       const existing = state.expenses.find(e=>e.id===editExpenseId);
@@ -1282,7 +1291,7 @@ function renderExpenses(main){
   };
 
   const cancelBtn = document.getElementById('e-cancel');
-  if(cancelBtn) cancelBtn.onclick = ()=>{ editExpenseId=null; copyDraft=null; render(); };
+  if(cancelBtn) cancelBtn.onclick = ()=>{ editExpenseId=null; copyDraft=null; sectionOpenState['exp-form']=false; render(); };
 
   main.querySelectorAll('[data-edit-exp]').forEach(btn=>{
     btn.onclick = ()=>{ editExpenseId = btn.dataset.editExp; copyDraft=null; render(); window.scrollTo(0,0); };
