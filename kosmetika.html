@@ -150,6 +150,7 @@ let state = {
   sellers:[],
   suppliers:[],
   employeePurchases:[],
+  transfers:[],
   balances:{cash:0,bank:0,updatedAt:null}
 };
 let currentTab = 'overview';
@@ -239,6 +240,12 @@ function accountFlow(account, from, to){
   }
   flow -= state.expenses.filter(e=>e.paidFrom===account.id && e.status==='paid' && e.paidDate && e.paidDate>=from && e.paidDate<=to)
     .reduce((a,e)=>a+Number(e.amount||0),0);
+  // переносы между счетами (инкассация из кассы, в конверт, на РС и т.п.)
+  (state.transfers||[]).forEach(t=>{
+    if(!t.date || t.date<from || t.date>to) return;
+    if(t.to===account.id) flow += Number(t.amount||0);
+    if(t.from===account.id) flow -= Number(t.amount||0);
+  });
   return flow;
 }
 function sortedCheckpoints(account){
@@ -411,6 +418,7 @@ async function loadState(){
   if(!state.sellers) state.sellers = [];
   if(!state.suppliers) state.suppliers = [];
   if(!state.employeePurchases) state.employeePurchases = [];
+  if(!state.transfers) state.transfers = [];
   if(!state.commissionTiers) state.commissionTiers = [];
   if(!state.salaryBase) state.salaryBase = {amount:2000, threshold:5000};
   if(!state.salaryRates || state.salaryRates.length===0){
@@ -1002,6 +1010,44 @@ function renderExpenses(main){
     </div>
 
     <div class="card">
+      <h2>Инкассация / перенос денег между счетами</h2>
+      <div class="note" style="margin-top:0;margin-bottom:6px;">Например: забрали наличные из кассы и положили в конверт или внесли на расчётный счёт. Это не расход — деньги просто переходят с одного счёта на другой.</div>
+      <div class="two-col">
+        <div>
+          <label class="field">Откуда</label>
+          <select id="t-from">${state.accounts.map(a=>`<option value="${a.id}" ${a.role==='cash'?'selected':''}>${a.name}</option>`).join('')}</select>
+        </div>
+        <div>
+          <label class="field">Куда</label>
+          <select id="t-to">${state.accounts.map(a=>`<option value="${a.id}" ${a.role!=='cash' && a===state.accounts.find(x=>x.role!=='cash')?'selected':''}>${a.name}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="two-col">
+        <div><label class="field">Сумма</label><input type="number" id="t-amount" placeholder="0"></div>
+        <div><label class="field">Дата</label><input type="date" id="t-date" value="${todayISO()}"></div>
+      </div>
+      <label class="field">Комментарий (необязательно)</label>
+      <input type="text" id="t-note" placeholder="напр. Инкассация за неделю">
+      <button class="btn" id="t-add">Перенести</button>
+      <div id="t-result"></div>
+      ${(state.transfers||[]).length===0 ? '' : `
+      <details data-key="transfers-list" ${isSectionOpen('transfers-list',true)?'open':''} style="margin-top:12px;">
+        <summary>История переносов (${state.transfers.length})</summary>
+        <table><thead><tr><th>Дата</th><th>Откуда → Куда</th><th>Сумма</th><th></th></tr></thead><tbody>
+          ${[...state.transfers].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(t=>{
+            const fa = getAccount(t.from), ta = getAccount(t.to);
+            return `<tr>
+              <td>${t.date ? t.date.slice(8,10)+'.'+t.date.slice(5,7) : '—'}</td>
+              <td class="txt">${fa?fa.name:'?'} → ${ta?ta.name:'?'}${t.note?`<br><span style="color:var(--ink-soft);font-size:0.7rem;">${t.note}</span>`:''}</td>
+              <td>${fmt(t.amount)}</td>
+              <td><button class="del-x" data-del-transfer="${t.id}">✕</button></td>
+            </tr>`;
+          }).join('')}
+        </tbody></table>
+      </details>`}
+    </div>
+
+    <div class="card">
       <details data-key="exp-bulk" ${isSectionOpen('exp-bulk',false)?'open':''}>
         <summary>Массово: одни и те же данные на несколько дат</summary>
         <div class="note">Для повторяющегося расхода (проезд, оклад, аренда и т.п.) — заполняете один раз всё, кроме дат, и одной кнопкой создаёте отдельную запись на каждую выбранную дату. Удобно для «задним числом» — забранных денег за проезд/оклад за несколько дней сразу.</div>
@@ -1100,6 +1146,26 @@ function renderExpenses(main){
         </div>`;
       }).join('')}
   `;
+
+  document.getElementById('t-add').onclick = ()=>{
+    const from = document.getElementById('t-from').value;
+    const to = document.getElementById('t-to').value;
+    const amount = Number(document.getElementById('t-amount').value||0);
+    const date = document.getElementById('t-date').value || todayISO();
+    const note = document.getElementById('t-note').value.trim();
+    const box = document.getElementById('t-result');
+    if(!amount || amount<=0){ box.innerHTML = '<div class="note">Укажите сумму.</div>'; return; }
+    if(from===to){ box.innerHTML = '<div class="note">Выберите разные счета «Откуда» и «Куда».</div>'; return; }
+    state.transfers.push({id:uid(), date, from, to, amount, note});
+    saveState(); render();
+  };
+  main.querySelectorAll('[data-del-transfer]').forEach(btn=>{
+    btn.onclick = ()=>{
+      if(!confirm('Удалить этот перенос? Остатки счетов пересчитаются.')) return;
+      state.transfers = state.transfers.filter(t=>t.id!==btn.dataset.delTransfer);
+      saveState(); render();
+    };
+  });
 
   main.querySelectorAll('[data-preset]').forEach(btn=>{
     btn.onclick = ()=>{ document.getElementById('e-desc').value = btn.dataset.preset; };
