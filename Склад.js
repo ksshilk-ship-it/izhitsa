@@ -3932,9 +3932,11 @@ function _noArticleStockKey(name,price,species,goodsType){
   var sp=(species||'').trim().toLowerCase().replace(/\s+/g,'_').slice(0,20);
   return 'WD_'+nm+'_'+pr+(sp?'_'+sp:'');
 }
-function stockUpdateQty(shopName,num,name,price,species,goodsType,size,qtyDelta,date){
+// stockObj — пакетный режим: правим переданный объект склада и не сохраняем (сохранит вызывающий
+// один раз). Раньше накладная на 600 позиций сохраняла весь склад 600 раз подряд.
+function stockUpdateQty(shopName,num,name,price,species,goodsType,size,qtyDelta,date,stockObj){
   if(!shopName||!num) return;
-  var stock=getStock();
+  var stock=stockObj||getStock();
   if(!stock[shopName]) stock[shopName]={};
   var key=String(num);
   if(!stock[shopName][key]){
@@ -3952,7 +3954,7 @@ function stockUpdateQty(shopName,num,name,price,species,goodsType,size,qtyDelta,
   if(qtyDelta<0 && entry.qty===0){
     entry.lastSold=date||new Date().toISOString().split('T')[0];
   }
-  saveStock(stock);
+  if(!stockObj) saveStock(stock);
 }
 // Списание уменьшает склад так же, как продажа: по артикулу, а у безартикульной позиции — по
 // ключу название+цена(+порода), с тем же поиском похожей записи остатка, что и в продаже.
@@ -3964,7 +3966,8 @@ function stockApplyWriteoff(shopName,items){
 function stockApplySale(shopName,items){
   if(!shopName) return;
   var stock=getStock();
-  var shopStock=stock[shopName]||{};
+  if(!stock[shopName]) stock[shopName]={};
+  var shopStock=stock[shopName];
   items.forEach(function(it){
     var hasRealArticle = !!(it.article||it.num||it.artNum);
     var artNum=it.article||it.num||it.artNum;
@@ -3975,8 +3978,9 @@ function stockApplySale(shopName,items){
       var found = _findStockKeyByNamePrice(shopStock, it.name, it.price, it.goodsType, artNum);
       if(found) useKey = found;
     }
-    stockUpdateQty(shopName,useKey,it.name,it.price,it.species,it.goodsType,it.size,-(it.qty||1),null);
+    stockUpdateQty(shopName,useKey,it.name,it.price,it.species,it.goodsType,it.size,-(it.qty||1),null,stock);
   });
+  saveStock(stock);
 }
 function _findStockKeyByNamePrice(shopStock, name, price, goodsType, excludeKey){
   var nm=(name||'').trim().toLowerCase();
@@ -3997,6 +4001,7 @@ function _findStockKeyByNamePrice(shopStock, name, price, goodsType, excludeKey)
 }
 function stockApplyReceive(shopName,items,date,invGoodsType,isRevaluation){
   if(!shopName) return;
+  var stock=getStock();
   items.forEach(function(it){
     var gt=it.goodsType||(it.category==='dr'?'dr':(invGoodsType||'derevo'));
     var artNum=it.article||it.num||it.artNum;
@@ -4005,8 +4010,9 @@ function stockApplyReceive(shopName,items,date,invGoodsType,isRevaluation){
     if(!artNum) return;
     // Переоценка правит цену уже существующего изделия, а не добавляет новую единицу — раньше
     // это не учитывалось, и переоценка одного товара молча плюсовала ему фантомную штуку в остаток.
-    stockUpdateQty(shopName,artNum,it.name,pr,it.species,gt,it.size||'',(isRevaluation?0:(it.qty||1)),date);
+    stockUpdateQty(shopName,artNum,it.name,pr,it.species,gt,it.size||'',(isRevaluation?0:(it.qty||1)),date,stock);
   });
+  saveStock(stock);
 }
 function rebuildStock(showMsg){
   var stock={};
@@ -5644,6 +5650,7 @@ function initStockPage(){
   });
   var isAdmin=session&&session.role==='shopadmin';
   var _trBtn=document.getElementById('stockTransferBtn'); if(_trBtn) _trBtn.style.display=isAdmin?'block':'none';
+  var _scBtn=document.getElementById('stockCloseShopBtn'); if(_scBtn) _scBtn.style.display=isAdmin?'block':'none';
   var shopRow=document.getElementById('stockShopRow');
   var shopSel=document.getElementById('stockFilterShop');
   var titleEl=document.getElementById('stockPageTitle');
@@ -6325,6 +6332,7 @@ function adminEditWo(entryId, shiftId){
     if(!snap.exists){ showToast('⚠️ Смена не найдена'); return; }
     var sh = snap.data(); sh.id = shiftId;
     var entry = (sh.journal||[]).find(function(e){ return e.id===entryId; });
+    if(entry && entry.closureId){ openShopClosure(entry.closureId); return; } // итоговая накладная закрытия — свой редактор, склад не трогает
     if(!entry || !(entry.items||[]).length){ showToast('⚠️ У записи нет позиций — правьте её в карточке смены'); return; }
     var kind = entry.transferInvId ? 'move' : 'wo';
     var st = {sh:sh, entryId:entryId, shop:sh.shopName, gt:entry.goodsType||'derevo',
@@ -6570,4 +6578,236 @@ function _syncTransferWriteoff(invId, fromShop, items, num){
     try{ stockApplyReceive(fromShop, oldItems, null, gt, false); }catch(e){}
     try{ stockApplyWriteoff(fromShop, newItems); }catch(e){}
   });
+}
+
+
+// ════ Закрытие магазина: итоговая накладная остатка ════
+// Магазин закрыли, товар вывезли, а на складе он так и числится — в других магазинах его нельзя
+// принять («числится на … и там не списан»). Инструмент фиксирует весь остаток магазина (Дерево и ДР)
+// в итоговую накладную (iz_shop_closures), списывает его записями в последней смене магазина и
+// обнуляет склад. Накладную потом можно исправлять (например, после правки безартикульных продаж):
+// меняются сама накладная и суммы списаний в смене (баланс магазина), склад закрытого магазина — нет.
+var _sc = null;
+function _scEsc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function _scDateRu(d){ return String(d||'').slice(0,10).split('-').reverse().join('.'); }
+function _scItemsFromStock(shop){
+  var st = (getStock()[shop])||{}, items = [];
+  Object.keys(st).sort().forEach(function(k){
+    var it = st[k]||{};
+    if(!((it.qty||0)>0)) return;
+    var num = /^(DR_|WD_)/.test(k) ? '' : (it.num && !/^(DR_|WD_)/.test(it.num) ? it.num : k);
+    items.push({key:k, num:num, article:num, name:it.name||'', species:it.species||'', price:it.price||0, qty:it.qty||0, goodsType:it.goodsType||'derevo'});
+  });
+  return items;
+}
+function _scTotals(items){
+  var t = {wood:0, dr:0, woodQty:0, drQty:0};
+  (items||[]).forEach(function(it){ var a=(it.price||0)*(it.qty||0); if(it.goodsType==='dr'){ t.dr+=a; t.drQty+=it.qty||0; } else { t.wood+=a; t.woodQty+=it.qty||0; } });
+  return t;
+}
+function openShopCloseMo(){
+  _sc = {mode:'new', shop:'', date:'', lastShift:null, closures:[]};
+  _scRenderNew();
+  openMo('shopCloseMo');
+}
+function _scRenderNew(){
+  var body = document.getElementById('scBody'); if(!body || !_sc) return;
+  var t = document.getElementById('scTitle'); if(t) t.textContent = '🏁 Закрытие магазина';
+  var shops = (typeof getShopNames==='function' ? getShopNames() : []).filter(function(n){ return n!==_trWorkshopName(); });
+  var items = _sc.shop ? _scItemsFromStock(_sc.shop) : [];
+  var tt = _scTotals(items);
+  var html = '<div style="font-size:11.5px;color:#8888aa;line-height:1.5;margin-bottom:10px">Весь остаток магазина (Дерево и ДР) фиксируется в итоговую накладную и списывается в его смене за выбранную дату — склад магазина обнуляется, и товар можно принимать в других магазинах. Накладную потом можно открыть и исправить (количество, цены, строки) — склад закрытого магазина при этом не меняется.</div>'+
+    '<div class="fg"><label class="fl">Магазин</label><select class="fi" id="scShop" onchange="_scPickShop(this.value)"><option value="">— выберите —</option>'+
+      shops.map(function(n){ return '<option'+(n===_sc.shop?' selected':'')+'>'+_scEsc(n)+'</option>'; }).join('')+'</select></div>';
+  if(_sc.shop){
+    html += '<div class="fg"><label class="fl">Дата закрытия (смена магазина за эту дату)</label><input class="fi" type="date" id="scDate" value="'+_scEsc(_sc.date)+'" onchange="_sc.date=this.value" style="-webkit-appearance:none;color-scheme:dark"></div>'+
+      '<div style="font-size:11px;color:#8888aa;margin:-6px 0 10px">'+(_sc.lastShift ? 'Последняя смена: '+_scDateRu(_sc.lastShift.date)+(_sc.lastShift.sellerName?' · '+_scEsc(_sc.lastShift.sellerName):'')+(_sc.lastShift.status==='open'?' · открыта':'') : '⏳ ищу последнюю смену...')+'</div>';
+    if(_sc.closures.length){
+      html += '<div style="background:#2a1e14;border:1px solid #f0a06066;border-radius:10px;padding:8px 10px;margin-bottom:10px;font-size:12px">'+
+        '<div style="color:#f0a060;font-weight:700;margin-bottom:4px">Уже есть итоговая накладная:</div>'+
+        _sc.closures.map(function(c){ return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0"><span>'+_scEsc(c.num)+' · '+_scDateRu(c.date)+'</span><button type="button" onclick="openShopClosure(\''+c.id+'\')" style="background:#22222e;border:1px solid #f0a060;border-radius:7px;padding:4px 9px;color:#f0a060;font-size:11px;cursor:pointer">📋 Открыть</button></div>'; }).join('')+'</div>';
+    }
+    html += '<div style="display:flex;gap:6px;margin-bottom:10px">'+
+      '<div style="flex:1;background:#1e2a14;border-radius:10px;padding:8px 10px"><div style="font-size:11px;color:#8888aa">🌳 Дерево</div><div style="font-size:15px;font-weight:700;color:#c8f060">'+tt.woodQty+' шт. · '+fmt(tt.wood)+'</div></div>'+
+      '<div style="flex:1;background:#1e1a2e;border-radius:10px;padding:8px 10px"><div style="font-size:11px;color:#8888aa">🛍 ДР</div><div style="font-size:15px;font-weight:700;color:#a060f0">'+tt.drQty+' шт. · '+fmt(tt.dr)+'</div></div></div>';
+    if(!items.length) html += '<div class="empty">На складе «'+_scEsc(_sc.shop)+'» ничего не числится</div>';
+    else {
+      html += '<div style="font-size:11px;color:#8888aa;margin-bottom:4px">Позиций: '+items.length+'</div>'+
+        '<div style="max-height:34dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid #2e2e3e;border-radius:10px;padding:4px 8px;margin-bottom:10px">'+
+        items.map(function(it){ return '<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid #22222e;font-size:12px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(it.goodsType==='dr'?'🛍 ':'🌳 ')+(it.num?'<b>№'+_scEsc(it.num)+'</b> ':'')+_scEsc(it.name)+(it.species?' <span style="color:#f0c060">· '+_scEsc(it.species)+'</span>':'')+'</span><span style="flex-shrink:0">'+it.qty+' × '+fmt(it.price)+'</span></div>'; }).join('')+'</div>'+
+        '<button class="btn" style="background:#f0a060" onclick="scCommit()">🏁 Зафиксировать остаток и списать с «'+_scEsc(_sc.shop)+'»</button>';
+    }
+  }
+  body.innerHTML = html;
+}
+function _scPickShop(shop){
+  _sc.shop = shop; _sc.lastShift = null; _sc.closures = []; _sc.date = '';
+  _scRenderNew();
+  if(!shop) return;
+  var tombs = (typeof getShiftTombstones==='function') ? getShiftTombstones() : [];
+  db.collection('iz_shifts').where('shopName','==',shop).get({source:'server'}).then(function(snap){
+    if(!_sc || _sc.shop!==shop) return;
+    var list = snap.docs.map(function(d){ var x=d.data(); x.id=d.id; return x; }).filter(function(x){ return x.date && !x._deleted && !x.isRestoreShift && tombs.indexOf(x.id)===-1; });
+    list.sort(function(a,b){ return String(b.date).localeCompare(String(a.date)) || String(b.openedAt||'').localeCompare(String(a.openedAt||'')); });
+    _sc.lastShift = list[0] || {date:''};
+    if(!_sc.date) _sc.date = _sc.lastShift.date || '';
+    _scRenderNew();
+  }).catch(function(){});
+  db.collection('iz_shop_closures').where('shopName','==',shop).get().then(function(snap){
+    if(!_sc || _sc.shop!==shop) return;
+    _sc.closures = snap.docs.map(function(d){ var x=d.data(); x.id=d.id; return x; });
+    _scRenderNew();
+  }).catch(function(){});
+}
+function _scWoEntry(o, items, gt){
+  var total = items.reduce(function(s,it){ return s+(it.price||0)*(it.qty||0); },0);
+  var qty = items.reduce(function(s,it){ return s+(it.qty||0); },0);
+  var isDr = gt==='dr';
+  return {id:o.entryIds && o.entryIds[gt] || uid(), type:'writeoff', ts:new Date(o.date+'T21:00:00').toISOString(), icon:'🏁', label:'Закрытие магазина',
+    sub:items.length+' поз. ('+qty+' шт.) · накл. '+o.num+' · остаток при закрытии', goodsType:gt, reason:o.reason,
+    items:items.map(function(it){ return {num:it.num, article:it.num, name:it.name, species:it.species, price:it.price||0, qty:it.qty, amt:(it.price||0)*it.qty, goodsType:gt, reason:o.reason}; }),
+    amount:total, amtCls:'exp', amtSign:'−', cashEffect:0, cardEffect:0, staffEffect:0,
+    goodsEffect:isDr?0:-total, goodsDrEffect:isDr?-total:0, woInvNum:o.num, closureId:o.id, addedBy:o.by, addedAt:new Date().toISOString()};
+}
+function scCommit(){
+  if(!_sc || !_sc.shop) return;
+  var shop = _sc.shop, date = gv('scDate') || _sc.date;
+  if(!date){ showToast('Укажите дату закрытия'); return; }
+  var items = _scItemsFromStock(shop);
+  if(!items.length){ showToast('Списывать нечего'); return; }
+  var tt = _scTotals(items);
+  if(!confirm('Зафиксировать остаток «'+shop+'» на '+_scDateRu(date)+' и списать его?\n\n🌳 Дерево: '+tt.woodQty+' шт. на '+fmt(tt.wood)+'\n🛍 ДР: '+tt.drQty+' шт. на '+fmt(tt.dr)+'\n\nСклад магазина обнулится, товар можно будет принимать в других магазинах.')) return;
+  showToast('⏳ Ищу смену и записываю...');
+  _trFindShift(shop, date).then(function(sh){
+    if(!sh){ showToast('⛔ У «'+shop+'» нет смены за '+_scDateRu(date)+' — выберите дату последней смены'); return; }
+    var who = (session&&(session.name||session.sellerName))||'admin';
+    var o = {id:uid(), shop:shop, date:date, num:'ЗАКР-'+shop.replace(/\s+/g,'')+'-'+_scDateRu(date), by:who,
+      reason:'Закрытие магазина — остаток вывезен', entryIds:{}};
+    var entries = [];
+    ['derevo','dr'].forEach(function(gt){
+      var part = items.filter(function(it){ return (it.goodsType||'derevo')===gt; });
+      if(!part.length) return;
+      var e = _scWoEntry(o, part, gt); o.entryIds[gt] = e.id; entries.push(e);
+    });
+    var doc = {id:o.id, shopName:shop, date:date, num:o.num, shiftId:sh.id, entryIds:o.entryIds,
+      items:items.map(function(it){ return {num:it.num, name:it.name, species:it.species, price:it.price, qty:it.qty, goodsType:it.goodsType}; }),
+      totals:tt, createdAt:new Date().toISOString(), createdBy:who, history:[]};
+    return db.collection('iz_shop_closures').doc(o.id).set(doc).then(function(){
+      var prevView = _currentShiftView;
+      try{
+        if(sh.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(sh);
+        sh.journal = (sh.journal||[]).concat(entries).sort(function(a,b){ return String(a.ts||'').localeCompare(String(b.ts||'')); });
+        _currentShiftView = sh;
+        svPersist(sh.status==='open' || !sh.closedAt);
+      } finally { _currentShiftView = prevView; }
+      entries.forEach(function(e){ try{ _recordJournalEntryIndependently(e, shop, 'writeoff'); }catch(err){} });
+      // склад — одним сохранением: все позиции этого остатка в ноль
+      var stock = getStock(); var ss = stock[shop]||{};
+      items.forEach(function(it){ if(ss[it.key]){ ss[it.key].qty = 0; ss[it.key].lastSold = date; } });
+      stock[shop] = ss; saveStock(stock);
+      try{ _woArtIndex = null; _buildWriteoffArtIndex(true); }catch(err){}
+      try{ logAction('SHOP_CLOSED_STOCK', {shop:shop, date:date, closureId:o.id, num:o.num, items:items.length, wood:tt.wood, dr:tt.dr, shiftId:sh.id}); }catch(err){}
+      try{ renderStockPage(); }catch(err){}
+      showToast('✅ Остаток «'+shop+'» зафиксирован в накладной '+o.num+' и списан');
+      openShopClosure(o.id);
+    });
+  }).catch(function(err){ showToast('❌ Не получилось: '+(err&&err.message||err)); });
+}
+// ── Итоговая накладная: просмотр и исправление ──
+function openShopClosure(id){
+  showToast('⏳ Загружаю накладную...');
+  db.collection('iz_shop_closures').doc(id).get({source:'server'}).then(function(snap){
+    if(!snap.exists){ showToast('⚠️ Накладная не найдена'); return; }
+    var c = snap.data(); c.id = id;
+    _sc = {mode:'edit', c:c, rows:JSON.parse(JSON.stringify(c.items||[])), q:''};
+    _scRenderEdit();
+    var mo = document.getElementById('shopCloseMo'); if(mo && !mo.classList.contains('open')) openMo('shopCloseMo');
+  }).catch(function(err){ showToast('❌ '+(err&&err.message||err)); });
+}
+function _scRenderEdit(){
+  var body = document.getElementById('scBody'); if(!body || !_sc || _sc.mode!=='edit') return;
+  var c = _sc.c;
+  var t = document.getElementById('scTitle'); if(t) t.textContent = '🏁 '+c.num;
+  var tt = _scTotals(_sc.rows);
+  var q = String(_sc.q||'').toLowerCase().trim();
+  var rowsHtml = _sc.rows.map(function(r,i){
+    if(q && (String(r.num||'')+' '+r.name+' '+(r.species||'')).toLowerCase().indexOf(q)<0) return '';
+    return '<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #22222e;font-size:12px">'+
+      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(r.goodsType==='dr'?'🛍 ':'🌳 ')+(r.num?'<b>№'+_scEsc(r.num)+'</b> ':'')+_scEsc(r.name)+(r.species?' <span style="color:#f0c060">· '+_scEsc(r.species)+'</span>':'')+'</span>'+
+      '<input value="'+(r.qty||0)+'" inputmode="numeric" onchange="_scEdit('+i+',\'qty\',this.value)" style="width:44px;padding:4px;background:#0f0f13;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;text-align:center;font-size:12px">'+
+      '<span style="color:#8888aa">×</span>'+
+      '<input value="'+(r.price||0)+'" inputmode="numeric" onchange="_scEdit('+i+',\'price\',this.value)" style="width:60px;padding:4px;background:#0f0f13;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;text-align:right;font-size:12px">'+
+      '<button type="button" onclick="_sc.rows.splice('+i+',1);_scRenderEdit()" style="background:none;border:none;color:#f06060;cursor:pointer;font-size:13px">✕</button></div>';
+  }).join('');
+  var hist = (c.history||[]).slice().reverse().map(function(h){ return '<div style="padding:4px 0;border-bottom:1px solid #22222e"><div style="color:#8888aa">'+new Date(h.at).toLocaleString('ru-RU')+' · '+_scEsc(h.by||'')+'</div>'+(h.changes||[]).map(function(x){ return '<div>· '+_scEsc(x)+'</div>'; }).join('')+'</div>'; }).join('');
+  body.innerHTML =
+    '<div style="font-size:11.5px;color:#8888aa;margin-bottom:8px">«'+_scEsc(c.shopName)+'» · закрыт '+_scDateRu(c.date)+' · зафиксировал(а) '+_scEsc(c.createdBy||'')+'</div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:8px">'+
+      '<div style="flex:1;background:#1e2a14;border-radius:10px;padding:7px 10px"><div style="font-size:11px;color:#8888aa">🌳 Дерево</div><div style="font-size:14px;font-weight:700;color:#c8f060">'+tt.woodQty+' шт. · '+fmt(tt.wood)+'</div></div>'+
+      '<div style="flex:1;background:#1e1a2e;border-radius:10px;padding:7px 10px"><div style="font-size:11px;color:#8888aa">🛍 ДР</div><div style="font-size:14px;font-weight:700;color:#a060f0">'+tt.drQty+' шт. · '+fmt(tt.dr)+'</div></div></div>'+
+    '<input class="fi" placeholder="🔍 Поиск по номеру, названию, породе" value="'+_scEsc(_sc.q||'')+'" oninput="_sc.q=this.value;_scRenderEdit();var e=document.getElementById(\'scQ\');" id="scQ" style="margin-bottom:6px">'+
+    '<div style="max-height:40dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid #2e2e3e;border-radius:10px;padding:2px 8px;margin-bottom:8px">'+(rowsHtml||'<div style="padding:10px;color:#8888aa;font-size:12px">Ничего не найдено</div>')+'</div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:8px">'+
+      '<button type="button" onclick="_scAddRow(\'derevo\')" style="flex:1;padding:8px;background:none;border:1px dashed #c8f060;border-radius:9px;color:#c8f060;font-size:12px;cursor:pointer">➕ строка 🌳</button>'+
+      '<button type="button" onclick="_scAddRow(\'dr\')" style="flex:1;padding:8px;background:none;border:1px dashed #a060f0;border-radius:9px;color:#a060f0;font-size:12px;cursor:pointer">➕ строка 🛍</button></div>'+
+    '<button class="btn" onclick="scSaveEdit()">💾 Сохранить исправления</button>'+
+    (hist?'<div style="margin-top:12px;font-size:11px"><div style="color:#f0a060;font-weight:700;margin-bottom:4px">История исправлений</div>'+hist+'</div>':'');
+  var qi = document.getElementById('scQ'); if(qi && q){ try{ qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }catch(e){} }
+}
+function _scEdit(i, f, v){ var r = _sc && _sc.rows[i]; if(!r) return; r[f] = parseFloat(String(v).replace(',','.'))||0; _scRenderEdit(); }
+function _scAddRow(gt){
+  var name = prompt('Наименование:'); if(!name || !name.trim()) return;
+  var num = (prompt('Номер (пусто — без артикула):')||'').trim();
+  var species = gt==='dr' ? '' : (prompt('Порода:')||'').trim();
+  var price = parseFloat(String(prompt('Цена за шт.:')||'0').replace(',','.'))||0;
+  var qty = parseFloat(String(prompt('Количество:', '1')||'1').replace(',','.'))||1;
+  _sc.rows.push({num:num, name:name.trim(), species:species, price:price, qty:qty, goodsType:gt});
+  _scRenderEdit();
+}
+function scSaveEdit(){
+  if(!_sc || _sc.mode!=='edit') return;
+  var c = _sc.c, rows = _sc.rows.filter(function(r){ return (r.qty||0)>0; });
+  var lbl = function(r){ return (r.num?'№'+r.num+' ':'')+r.name+(r.species?' · '+r.species:''); };
+  var key = function(r){ return (r.goodsType||'derevo')+'|'+(r.num||'')+'|'+r.name+'|'+(r.species||'')+'|'+(r.price||0); };
+  var oldMap = {}, newMap = {}, changes = [];
+  (c.items||[]).forEach(function(r){ oldMap[key(r)] = (oldMap[key(r)]||0)+(r.qty||0); });
+  rows.forEach(function(r){ newMap[key(r)] = (newMap[key(r)]||0)+(r.qty||0); });
+  var byKey = {}; (c.items||[]).concat(rows).forEach(function(r){ byKey[key(r)] = r; });
+  Object.keys(byKey).forEach(function(k){
+    var a = oldMap[k]||0, b = newMap[k]||0;
+    if(a!==b) changes.push(lbl(byKey[k])+' · '+fmt(byKey[k].price||0)+': '+a+' → '+b+' шт.');
+  });
+  if(!changes.length){ showToast('Изменений нет'); return; }
+  if(!confirm('Сохранить исправления итоговой накладной?\n\n'+changes.slice(0,30).join('\n')+(changes.length>30?'\n… и ещё '+(changes.length-30):'')+'\n\nСуммы списаний в смене магазина пересчитаются, склад закрытого магазина не меняется.')) return;
+  var who = (session&&(session.name||session.sellerName))||'admin';
+  var tt = _scTotals(rows);
+  var items = rows.map(function(r){ return {num:r.num||'', name:r.name, species:r.species||'', price:r.price||0, qty:r.qty, goodsType:r.goodsType||'derevo'}; });
+  db.collection('iz_shifts').doc(c.shiftId).get({source:'server'}).then(function(snap){
+    if(!snap.exists) throw new Error('смена закрытия не найдена');
+    var sh = snap.data(); sh.id = c.shiftId;
+    var o = {id:c.id, date:c.date, num:c.num, by:who, reason:'Закрытие магазина — остаток вывезен', entryIds:Object.assign({}, c.entryIds||{})};
+    var jnl = sh.journal||[];
+    ['derevo','dr'].forEach(function(gt){
+      var part = items.filter(function(it){ return it.goodsType===gt; });
+      var ix = jnl.findIndex(function(e){ return e.id===o.entryIds[gt]; });
+      if(!part.length){ if(ix>=0){ jnl.splice(ix,1); } delete o.entryIds[gt]; return; }
+      var e = _scWoEntry(o, part, gt);
+      if(ix>=0){ e.ts = jnl[ix].ts; e.addedAt = jnl[ix].addedAt; e.editedAt = new Date().toISOString(); jnl[ix] = e; }
+      else { o.entryIds[gt] = e.id; jnl.push(e); }
+      try{ _recordJournalEntryIndependently(e, c.shopName, 'writeoff'); }catch(err){}
+    });
+    sh.journal = jnl.sort(function(a,b){ return String(a.ts||'').localeCompare(String(b.ts||'')); });
+    var prevView = _currentShiftView;
+    try{
+      if(sh.status==='closed' && typeof _ensureGoodsEveningAnchor==='function') _ensureGoodsEveningAnchor(sh);
+      _currentShiftView = sh;
+      svPersist(sh.status==='open' || !sh.closedAt);
+    } finally { _currentShiftView = prevView; }
+    var hist = (c.history||[]).concat([{at:new Date().toISOString(), by:who, changes:changes}]);
+    return db.collection('iz_shop_closures').doc(c.id).set({items:items, totals:tt, entryIds:o.entryIds, history:hist, editedAt:new Date().toISOString(), editedBy:who}, {merge:true});
+  }).then(function(){
+    try{ logAction('SHOP_CLOSURE_EDITED', {closureId:c.id, shop:c.shopName, changes:changes.length}); }catch(err){}
+    showToast('✅ Итоговая накладная исправлена');
+    openShopClosure(c.id);
+  }).catch(function(err){ showToast('❌ Не сохранилось: '+(err&&err.message||err)); });
 }
