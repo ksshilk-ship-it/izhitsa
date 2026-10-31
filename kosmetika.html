@@ -158,6 +158,7 @@ let loaded = false;
 let editSaleId = null;
 let editExpenseId = null;
 let copyDraft = null;
+let transferNotice = null;
 let overviewPeriod = null;
 let forecastMonth = null;
 let salaryFrom = null, salaryTo = null, salarySellerName = '';
@@ -247,6 +248,12 @@ function accountFlow(account, from, to){
     if(t.from===account.id) flow -= Number(t.amount||0);
   });
   return flow;
+}
+// Есть ли у счёта точка отсчёта позже указанной даты (тогда перенос на сегодняшний остаток не влияет)
+function transferBeforeAnchor(account, dateStr){
+  const anchors = sortedCheckpoints(account).filter(c=>c.type==='anchor' && c.date<=todayISO());
+  if(anchors.length===0) return false;
+  return dateStr < anchors[anchors.length-1].date;
 }
 function sortedCheckpoints(account){
   return [...(account.checkpoints||[])].sort((a,b)=>a.date.localeCompare(b.date));
@@ -473,7 +480,7 @@ function renderNav(){
     const b = document.createElement('button');
     b.textContent = t.label;
     if(t.id===currentTab) b.className='active';
-    b.onclick = ()=>{ currentTab=t.id; editSaleId=null; editExpenseId=null; copyDraft=null; render(); };
+    b.onclick = ()=>{ currentTab=t.id; transferNotice=null; editSaleId=null; editExpenseId=null; copyDraft=null; render(); };
     nav.appendChild(b);
   });
 }
@@ -1012,6 +1019,10 @@ function renderExpenses(main){
     <div class="card">
       <h2>Инкассация / перенос денег между счетами</h2>
       <div class="note" style="margin-top:0;margin-bottom:6px;">Например: забрали наличные из кассы и положили в конверт или внесли на расчётный счёт. Это не расход — деньги просто переходят с одного счёта на другой.</div>
+      <div style="margin:8px 0;">
+        ${state.accounts.map(a=>`<div class="row" style="margin-bottom:4px;"><span class="label">${a.name}</span><span class="num">${fmt(getAccountBalance(a.id, todayISO()))}</span></div>`).join('')}
+      </div>
+      ${transferNotice ? `<div class="note" style="color:var(--green);font-weight:600;font-size:0.85rem;">${transferNotice.text}</div>${transferNotice.warn?`<div class="note" style="color:var(--brick);">${transferNotice.warn}</div>`:''}` : ''}
       <div class="two-col">
         <div>
           <label class="field">Откуда</label>
@@ -1157,6 +1168,12 @@ function renderExpenses(main){
     if(!amount || amount<=0){ box.innerHTML = '<div class="note">Укажите сумму.</div>'; return; }
     if(from===to){ box.innerHTML = '<div class="note">Выберите разные счета «Откуда» и «Куда».</div>'; return; }
     state.transfers.push({id:uid(), date, from, to, amount, note});
+    const fa = getAccount(from), ta = getAccount(to);
+    const ignored = [fa,ta].filter(a=>a && transferBeforeAnchor(a, date)).map(a=>a.name);
+    transferNotice = {
+      text: `✓ Перенесено ${fmt(amount)}: ${fa.name} → ${ta.name} (${date.slice(8,10)}.${date.slice(5,7)}.${date.slice(0,4)}). Остатки обновлены выше.`,
+      warn: ignored.length ? `Внимание: дата переноса раньше точки отсчёта счёта «${ignored.join('», «')}» — на сегодняшний остаток этого счёта перенос не повлияет (он учтён только в истории). Чтобы остаток изменился, укажите дату не раньше точки отсчёта.` : ''
+    };
     saveState(); render();
   };
   main.querySelectorAll('[data-del-transfer]').forEach(btn=>{
