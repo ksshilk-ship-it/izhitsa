@@ -1978,6 +1978,7 @@ function renderManInvItems() {
         '</div>'+
         '<div id="manInvSpecies_'+i+'_sugg" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:20;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:2px"></div>'))+
       '</div>'+
+      '<div id="manInvVar_'+i+'">'+_manInvVariantsHtml(i)+'</div>'+
       '<div style="display:flex;gap:6px;align-items:center">'+
         '<div style="flex:1">'+
           '<div class="u-fs10-gray-mb3">КОЛ-ВО</div>'+
@@ -2150,16 +2151,64 @@ function _manInvPickSpeciesIdx(val){
   saveManInvDraft();
   _manInvAutoFillFromCatalog(i);
 }
+// Варианты справочника (с артикулом) для наименования строки — и породы, если она указана. У одного
+// наименования и породы бывает несколько вариантов (лопатка из груши: разные размеры/цены/артикулы).
+function _manInvVariants(i){
+  var item = _manInvItems[i]; if(!item || _manInvGoodsType==='dr') return [];
+  var norm = String(item.name||'').trim().toLowerCase(), normSp = String(item.species||'').trim().toLowerCase();
+  if(!norm) return [];
+  var seen = {};
+  return (getRefBook('iz_goods_derevo')||[]).filter(function(c){
+    if(!c || !c.article || String(c.name||'').toLowerCase().trim()!==norm) return false;
+    if(normSp && String(c.species||'').toLowerCase().trim()!==normSp) return false;
+    var k = c.article+'|'+(c.price||0); if(seen[k]) return false; seen[k] = true; return true;
+  }).sort(function(a,b){ return String(a.species||'').localeCompare(String(b.species||''),'ru') || (a.price||0)-(b.price||0) || String(a.article).localeCompare(String(b.article)); });
+}
+window._manInvVarCache = {};
+function _manInvVariantsHtml(i){
+  var item = _manInvItems[i]; if(!item) return '';
+  var list = _manInvVariants(i);
+  window._manInvVarCache[i] = list;
+  var hasSp = !!String(item.species||'').trim();
+  // Один вариант при указанной породе подставляется сам (_manInvAutoFillFromCatalog) — список не нужен.
+  if(!list.length || (hasSp && list.length===1 && item.article===list[0].article)) return '';
+  var esc = function(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;'); };
+  var cur = String(item.article||'');
+  return '<div style="margin:0 0 8px;background:#14141c;border:1px solid #60c8f055;border-radius:9px;padding:6px">'+
+    '<div style="font-size:10.5px;color:#60c8f0;font-weight:700;margin:2px 4px 5px">📚 Варианты из справочника ('+list.length+')'+(hasSp?'':' — все породы')+': выберите нужный</div>'+
+    '<div style="max-height:190px;overflow-y:auto;-webkit-overflow-scrolling:touch">'+
+    list.map(function(c,k){
+      var on = cur && cur===String(c.article);
+      return '<div onclick="_manInvPickVariant('+i+','+k+')" style="display:flex;justify-content:space-between;gap:8px;padding:7px 8px;margin-bottom:3px;border-radius:7px;cursor:pointer;font-size:12px;'+
+        (on?'background:#1e2a14;border:1px solid #c8f060;color:#c8f060':'background:#1a1a22;border:1px solid #2e2e3e;color:#f0f0f8')+'">'+
+        '<span><b>№'+esc(c.article)+'</b> '+esc(c.name)+(c.species?' <span style="color:#f0c060">· '+esc(c.species)+'</span>':'')+'</span>'+
+        '<span style="flex-shrink:0;font-weight:700">'+fmt(c.price||0)+(on?' ✓':'')+'</span></div>';
+    }).join('')+
+    '<div onclick="_manInvPickVariant('+i+',-1)" style="padding:7px 8px;border-radius:7px;cursor:pointer;font-size:12px;border:1px dashed #3e3e4e;color:'+(cur?'#8888aa':'#c8f060')+'">✏️ '+esc(item.name)+' — без артикула (нужного варианта нет)'+(cur?'':' ✓')+'</div>'+
+    '</div></div>';
+}
+function _manInvPickVariant(i, k){
+  var item = _manInvItems[i]; if(!item) return;
+  if(k<0){ item.article = ''; }
+  else {
+    var c = (window._manInvVarCache[i]||[])[k]; if(!c) return;
+    item.article = c.article; if(c.price) item.price = c.price; if(c.species) item.species = c.species;
+  }
+  saveManInvDraft(); updateManInvTotal();
+  renderManInvItems();
+}
 function _manInvAutoFillFromCatalog(i){
   if(_manInvGoodsType==='dr') return;
   var item = _manInvItems[i]; if(!item) return;
-  if(item.article) return; // артикул уже указан вручную или из списка — не перезаписываем
+  // список вариантов обновляем на месте (без перерисовки — иначе слетает фокус со следующего поля)
+  var _refreshVar = function(){ var vb = document.getElementById('manInvVar_'+i); if(vb) vb.innerHTML = _manInvVariantsHtml(i); };
+  if(item.article){ _refreshVar(); return; } // артикул уже указан вручную или из списка — не перезаписываем
   var name = (item.name||'').trim(), species = (item.species||'').trim();
-  if(!name || !species) return;
-  var norm = name.toLowerCase(), normSp = species.toLowerCase();
-  var match = (getRefBook('iz_goods_derevo')||[]).find(function(c){
-    return c.article && (c.name||'').toLowerCase().trim()===norm && (c.species||'').toLowerCase().trim()===normSp;
-  });
+  if(!name || !species){ _refreshVar(); return; }
+  // Подставляем сами, только если вариант ровно один; если их несколько — продавец выбирает из списка.
+  var _vars = _manInvVariants(i);
+  var match = _vars.length===1 ? _vars[0] : null;
+  if(!match){ _refreshVar(); return; }
   if(match){
     item.price = match.price;
     item.article = match.article;
