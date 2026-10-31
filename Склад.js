@@ -5758,29 +5758,28 @@ function renderStockPage(){
   listEl.innerHTML=filtered.map(function(it){
     var gtColor=it.goodsType==='dr'?'#a060f0':'#c8f060';
     var gtLabel=it.goodsType==='dr'?'ДР':'🌳';
-    var qtyColor=_stockMode==='avail'?(it.qty>5?'#c8f060':it.qty>0?'#f0c060':'#f06060'):'#8888aa';
-    var dateStr=it.lastReceived?'приход: '+it.lastReceived:'';
-    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:12px;padding:11px 12px;margin-bottom:7px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
-        '<div style="flex:1">'+
-          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'+
-            '<span style="font-size:10px;font-weight:700;color:'+gtColor+';background:'+gtColor+'18;padding:2px 6px;border-radius:6px">'+gtLabel+'</span>'+
-            (it.num?'<span style="font-size:11px;font-weight:700;color:#8888aa">№'+it.num+'</span>':'')+
-            (isAdmin?'<span style="font-size:10px;color:#606080">· '+it._shop+'</span>':'')+
-          '</div>'+
-          '<div style="font-size:14px;font-weight:700;margin-bottom:1px">'+it.name+'</div>'+
-          (it.species?'<div class="u-fs11-gray">'+it.species+(it.size?' · '+it.size:'')+'</div>':'')+
-          (dateStr?'<div style="font-size:10px;color:#606080;margin-top:2px">'+dateStr+'</div>':'')+
-        '</div>'+
-        '<div style="text-align:right;flex-shrink:0;padding-left:10px">'+
-          (it.qty===0 && _stockMode==='archive'
-            ? '<div style="font-size:11px;font-weight:700;color:#60f090;background:#1a2e1e;border-radius:8px;padding:4px 8px;margin-bottom:2px">✓ Продано</div>'+
-              (it.lastSold?'<div class="u-fs10-gray">'+it.lastSold+'</div>':'')
-            : '<div style="font-size:22px;font-weight:700;color:'+qtyColor+'">'+it.qty+'</div>'+
-              '<div style="font-size:9px;color:#8888aa">шт.</div>'
-          )+
-          '<div style="font-size:11px;font-weight:600;color:#c8a060;margin-top:3px">'+(it.qty>0?Math.round(it.qty*(it.price||0)).toLocaleString('ru-RU')+'₽':Math.round(it.price||0).toLocaleString('ru-RU')+'₽/шт')+'</div>'+
-        '</div>'+
+    // Компактная карточка: номер и дата прихода — крупно, количество — только если штук больше одной
+    // (единичный экземпляр — норма, огромная «1» справа только мешала).
+    var _d = function(v){ var m = String(v||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3]+'.'+m[2]+'.'+m[1] : String(v||''); };
+    var price = Math.round(it.price||0), qty = it.qty||0;
+    var sold = it.qty===0 && _stockMode==='archive';
+    var qtyBadge = (!sold && qty!==1)
+      ? '<span style="font-size:12px;font-weight:700;color:'+(qty>0?'#f0c060':'#f06060')+';background:'+(qty>0?'#2e2414':'#2e1a1a')+';border-radius:6px;padding:2px 7px">× '+qty+' шт.</span>' : '';
+    var right = sold
+      ? '<span style="font-size:12px;font-weight:700;color:#60f090;background:#1a2e1e;border-radius:6px;padding:2px 7px">✓ Продано'+(it.lastSold?' '+_d(it.lastSold):'')+'</span>'
+      : qtyBadge;
+    return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:10px;padding:8px 11px;margin-bottom:5px">'+
+      '<div style="display:flex;align-items:baseline;gap:7px">'+
+        '<span style="font-size:11px;font-weight:700;color:'+gtColor+'">'+gtLabel+'</span>'+
+        (it.num?'<span style="font-size:15px;font-weight:700;color:#f0f0f8">№'+it.num+'</span>':'')+
+        '<span style="flex:1;min-width:0;font-size:14px;font-weight:600;color:#d8d8e8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+it.name+'</span>'+
+        '<span style="flex-shrink:0;font-size:15px;font-weight:700;color:#c8a060">'+price.toLocaleString('ru-RU')+'₽'+(qty>1?'<span style="font-size:11px;color:#8888aa;font-weight:600"> /шт</span>':'')+'</span>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-top:3px;font-size:12.5px;color:#a0a0b8;flex-wrap:wrap">'+
+        (it.species?'<span style="color:#f0c060">'+it.species+(it.size?' · '+it.size:'')+'</span>':'')+
+        (it.lastReceived?'<span>📥 '+_d(it.lastReceived)+'</span>':'')+
+        (isAdmin?'<span style="color:#7878a0">'+it._shop+'</span>':'')+
+        (right?'<span style="margin-left:auto">'+right+'</span>':'')+
       '</div>'+
     '</div>';
   }).join('');
