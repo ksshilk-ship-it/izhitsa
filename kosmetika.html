@@ -340,6 +340,7 @@ function startCloudListening(){
     if(remoteJSON === lastSyncedJSON){ render(); return; }
     lastSyncedJSON = remoteJSON;
     try{ state = JSON.parse(remoteJSON); }catch(e){ return; }
+    if(!state.transfers) state.transfers = [];
     saveState(true);
     render();
   }, err=>{ console.error('Ошибка синхронизации', err); cloudStatus='error'; render(); });
@@ -371,6 +372,7 @@ function enableCloudSync(){
         if(pull){
           lastSyncedJSON = snap.data().state;
           try{ state = JSON.parse(lastSyncedJSON); }catch(e){}
+          if(!state.transfers) state.transfers = [];
           saveState(true);
         } else {
           lastSyncedJSON = null;
@@ -1167,6 +1169,7 @@ function renderExpenses(main){
     const box = document.getElementById('t-result');
     if(!amount || amount<=0){ box.innerHTML = '<div class="note">Укажите сумму.</div>'; return; }
     if(from===to){ box.innerHTML = '<div class="note">Выберите разные счета «Откуда» и «Куда».</div>'; return; }
+    if(!state.transfers) state.transfers = [];
     state.transfers.push({id:uid(), date, from, to, amount, note});
     const fa = getAccount(from), ta = getAccount(to);
     const ignored = [fa,ta].filter(a=>a && transferBeforeAnchor(a, date)).map(a=>a.name);
