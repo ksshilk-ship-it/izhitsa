@@ -3965,6 +3965,7 @@ function stockApplyWriteoff(shopName,items){
 }
 function stockApplySale(shopName,items){
   if(!shopName) return;
+  if(typeof _scIsClosed==='function' && _scIsClosed(shopName)){ _scAutoAdjust(shopName, 'out', [], items, 'Расход товара после закрытия'); return; }
   var stock=getStock();
   if(!stock[shopName]) stock[shopName]={};
   var shopStock=stock[shopName];
@@ -4001,6 +4002,7 @@ function _findStockKeyByNamePrice(shopStock, name, price, goodsType, excludeKey)
 }
 function stockApplyReceive(shopName,items,date,invGoodsType,isRevaluation){
   if(!shopName) return;
+  if(typeof _scIsClosed==='function' && _scIsClosed(shopName)){ if(!isRevaluation) _scAutoAdjust(shopName, 'in', [], items, 'Возврат/приход товара после закрытия', invGoodsType); return; }
   var stock=getStock();
   items.forEach(function(it){
     var gt=it.goodsType||(it.category==='dr'?'dr':(invGoodsType||'derevo'));
@@ -6705,6 +6707,7 @@ function scCommit(){
       var stock = getStock(); var ss = stock[shop]||{};
       items.forEach(function(it){ if(ss[it.key]){ ss[it.key].qty = 0; ss[it.key].lastSold = date; } });
       stock[shop] = ss; saveStock(stock);
+      try{ var ci = _scClosedIdx(); ci[shop] = {id:o.id, date:date}; localStorage.setItem('iz_closed_shops', JSON.stringify(ci)); }catch(err){}
       try{ _woArtIndex = null; _buildWriteoffArtIndex(true); }catch(err){}
       try{ logAction('SHOP_CLOSED_STOCK', {shop:shop, date:date, closureId:o.id, num:o.num, items:items.length, wood:tt.wood, dr:tt.dr, shiftId:sh.id}); }catch(err){}
       try{ renderStockPage(); }catch(err){}
@@ -6780,11 +6783,23 @@ function scSaveEdit(){
   if(!changes.length){ showToast('Изменений нет'); return; }
   if(!confirm('Сохранить исправления итоговой накладной?\n\n'+changes.slice(0,30).join('\n')+(changes.length>30?'\n… и ещё '+(changes.length-30):'')+'\n\nСуммы списаний в смене магазина пересчитаются, склад закрытого магазина не меняется.')) return;
   var who = (session&&(session.name||session.sellerName))||'admin';
-  var tt = _scTotals(rows);
+  _scWriteClosure(c, rows, changes, who).then(function(){
+    try{ logAction('SHOP_CLOSURE_EDITED', {closureId:c.id, shop:c.shopName, changes:changes.length}); }catch(err){}
+    showToast('✅ Итоговая накладная исправлена');
+    openShopClosure(c.id);
+  }).catch(function(err){ showToast('❌ Не сохранилось: '+(err&&err.message||err)); });
+}
+// Запись исправленной итоговой накладной: строки, суммы списаний в смене закрытия, история.
+function _scWriteClosure(c, rows, changes, who){
   var items = rows.map(function(r){ return {num:r.num||'', name:r.name, species:r.species||'', price:r.price||0, qty:r.qty, goodsType:r.goodsType||'derevo'}; });
-  db.collection('iz_shifts').doc(c.shiftId).get({source:'server'}).then(function(snap){
+  var tt = _scTotals(items);
+  // смена закрытия открыта у админа на экране — правим её же, иначе её следующее сохранение затрёт наше
+  var cur = (_currentShiftView && (_currentShiftView.id||_currentShiftView._id)===c.shiftId) ? _currentShiftView : null;
+  var getSh = cur ? Promise.resolve(cur) : db.collection('iz_shifts').doc(c.shiftId).get({source:'server'}).then(function(snap){
     if(!snap.exists) throw new Error('смена закрытия не найдена');
-    var sh = snap.data(); sh.id = c.shiftId;
+    var x = snap.data(); x.id = c.shiftId; return x;
+  });
+  return getSh.then(function(sh){
     var o = {id:c.id, date:c.date, num:c.num, by:who, reason:'Закрытие магазина — остаток вывезен', entryIds:Object.assign({}, c.entryIds||{})};
     var jnl = sh.journal||[];
     ['derevo','dr'].forEach(function(gt){
@@ -6803,11 +6818,104 @@ function scSaveEdit(){
       _currentShiftView = sh;
       svPersist(sh.status==='open' || !sh.closedAt);
     } finally { _currentShiftView = prevView; }
+    if(cur){ try{ _renderShiftView(); }catch(err){} }
     var hist = (c.history||[]).concat([{at:new Date().toISOString(), by:who, changes:changes}]);
     return db.collection('iz_shop_closures').doc(c.id).set({items:items, totals:tt, entryIds:o.entryIds, history:hist, editedAt:new Date().toISOString(), editedBy:who}, {merge:true});
-  }).then(function(){
-    try{ logAction('SHOP_CLOSURE_EDITED', {closureId:c.id, shop:c.shopName, changes:changes.length}); }catch(err){}
-    showToast('✅ Итоговая накладная исправлена');
-    openShopClosure(c.id);
-  }).catch(function(err){ showToast('❌ Не сохранилось: '+(err&&err.message||err)); });
+  });
+}
+// ── Автопересчёт итоговой накладной ──
+// Склад закрытого магазина обнулён, поэтому любая последующая правка его продаж, приходов и списаний
+// (например, безартикульной продаже проставили номер изделия) — это поправка к остатку на момент
+// закрытия. Разница по товарам сама переносится в итоговую накладную и в суммы списаний смены закрытия,
+// с записью в историю. Поправки копятся в очереди и досылаются, если запись не прошла (нет сети).
+var _scAdjBusy = false;
+function _scClosedIdx(){ try{ return JSON.parse(localStorage.getItem('iz_closed_shops')||'{}')||{}; }catch(e){ return {}; } }
+function _scIsClosed(shop){ return !!(shop && _scClosedIdx()[shop]); }
+function _scLoadClosedIdx(){
+  if(typeof db==='undefined' || !db) return;
+  db.collection('iz_shop_closures').get().then(function(snap){
+    var m = {};
+    snap.docs.forEach(function(d){ var x = d.data(); if(!x.shopName) return; if(!m[x.shopName] || String(x.date)>String(m[x.shopName].date)) m[x.shopName] = {id:d.id, date:x.date}; });
+    localStorage.setItem('iz_closed_shops', JSON.stringify(m));
+    _scFlushAdj();
+  }).catch(function(){});
+}
+function _scIsArt(n){ n = String(n||'').trim(); return !!n && !/^(DR_|WD_)/.test(n); }
+function _scNorm(v){ return String(v||'').trim().toLowerCase(); }
+// kind: 'out' — продажа/списание/перемещение (уменьшает остаток), 'in' — приход
+function _scAutoAdjust(shop, kind, oldItems, newItems, note, defGt){
+  if(!_scIsClosed(shop)) return;
+  var sign = kind==='in' ? 1 : -1, info = {}, d = {};
+  function add(list, mul){
+    (list||[]).forEach(function(it){
+      if(!it || it.isRevaluation) return;
+      var num = String(it.article||it.num||it.artNum||'').trim(); if(!_scIsArt(num)) num = '';
+      var gt = it.goodsType||(it.category==='dr'?'dr':(defGt||'derevo')); if(gt!=='dr') gt = 'derevo';
+      var pr = Math.round(parseFloat(it.price!=null?it.price:it.factPrice)||0);
+      var k = gt+'|'+num+(num ? '' : '|'+_scNorm(it.name)+'|'+pr+'|'+_scNorm(it.species));
+      if(!info[k]) info[k] = {num:num, name:it.name||'', species:it.species||'', price:pr, goodsType:gt};
+      d[k] = (d[k]||0) + mul*sign*(parseFloat(it.qty)||1);
+    });
+  }
+  add(oldItems, -1); add(newItems, 1);
+  var deltas = Object.keys(d).filter(function(k){ return d[k]!==0; }).map(function(k){ return Object.assign({dq:d[k]}, info[k]); })
+    // безартикульная продажа остаток не уменьшала — её правка/удаление остаток и не возвращает
+    .filter(function(x){ return x.num || kind==='in' || x.dq<0; });
+  if(!deltas.length) return;
+  try{
+    var q = JSON.parse(localStorage.getItem('iz_pending_closure_adj')||'[]')||[];
+    q.push({id:uid(), shop:shop, deltas:deltas, note:note, by:(session&&(session.name||session.sellerName))||'admin', at:new Date().toISOString()});
+    localStorage.setItem('iz_pending_closure_adj', JSON.stringify(q));
+  }catch(e){}
+  _scFlushAdj();
+}
+function _scFlushAdj(){
+  if(_scAdjBusy || typeof db==='undefined' || !db) return;
+  var q; try{ q = JSON.parse(localStorage.getItem('iz_pending_closure_adj')||'[]')||[]; }catch(e){ q = []; }
+  if(!q.length) return;
+  var job = q[0], ref = _scClosedIdx()[job.shop];
+  var drop = function(){ try{ var cur = JSON.parse(localStorage.getItem('iz_pending_closure_adj')||'[]')||[]; localStorage.setItem('iz_pending_closure_adj', JSON.stringify(cur.filter(function(x){ return x.id!==job.id; }))); }catch(e){} };
+  if(!ref){ drop(); _scFlushAdj(); return; }
+  _scAdjBusy = true;
+  db.collection('iz_shop_closures').doc(ref.id).get({source:'server'}).then(function(snap){
+    if(!snap.exists) return;
+    var c = snap.data(); c.id = ref.id;
+    var rows = JSON.parse(JSON.stringify(c.items||[])), changes = ['🤖 '+job.note];
+    job.deltas.forEach(function(x){
+      var row = rows.find(function(r){
+        if((r.goodsType||'derevo')!==x.goodsType) return false;
+        if(x.num) return String(r.num||'')===x.num;
+        return !_scIsArt(r.num) && _scNorm(r.name)===_scNorm(x.name) && Math.round(r.price||0)===x.price && (!x.species || !r.species || _scNorm(r.species)===_scNorm(x.species));
+      });
+      var lbl = (x.num?'№'+x.num+' ':'')+x.name+(x.species?' · '+x.species:'');
+      if(!row && x.dq<0){ changes.push(lbl+' · '+fmt(x.price)+': в накладной нет — вычитать нечего ('+x.dq+' шт.)'); return; }
+      if(!row){ row = {num:x.num, name:x.name, species:x.species, price:x.price, qty:0, goodsType:x.goodsType}; rows.push(row); }
+      var a = row.qty||0, b = Math.max(0, a+x.dq);
+      row.qty = b;
+      changes.push(lbl+' · '+fmt(row.price||0)+': '+a+' → '+b+' шт.'+(a+x.dq<0 ? ' (не хватило '+(-(a+x.dq))+' шт.)' : ''));
+    });
+    return _scWriteClosure(c, rows.filter(function(r){ return (r.qty||0)>0; }), changes, job.by).then(function(){
+      try{ logAction('SHOP_CLOSURE_AUTO_ADJ', {closureId:c.id, shop:job.shop, note:job.note, changes:changes.length-1}); }catch(err){}
+      showToast('🏁 Итоговая накладная «'+job.shop+'» пересчитана');
+      if(_sc && _sc.mode==='edit' && _sc.c && _sc.c.id===c.id){ try{ openShopClosure(c.id); }catch(err){} }
+    });
+  }).then(function(){ drop(); _scAdjBusy = false; _scFlushAdj(); })
+    .catch(function(err){ _scAdjBusy = false; showToast('⚠️ Итоговую накладную «'+job.shop+'» пересчитать пока не удалось — повторю позже: '+(err&&err.message||err)); });
+}
+// Правка/удаление/добавление записи смены. Без явного магазина — магазин открытой на экране смены
+// (если это она) или смены продавца.
+function _scHookEntryChange(before, after, shiftId, shop, entry){
+  var e = entry || before || after || {};
+  if(e.closureId) return;
+  var v = _currentShiftView, isView = v && shiftId && (v.id||v._id)===shiftId;
+  if(!shop) shop = isView ? v.shopName : (!shiftId && typeof session!=='undefined' && session ? session.shopName : '');
+  if(!_scIsClosed(shop)) return;
+  var kind = e.type==='receive' ? 'in' : ((e.type==='sale' || e.type==='writeoff') ? 'out' : '');
+  if(!kind || e.isRevaluation) return;
+  var date = (isView && v.date) || String(e.ts||'').slice(0,10);
+  var what = {sale:'продажи', receive:'прихода', writeoff:(e.transferTo?'перемещения':'списания')}[e.type];
+  var note = (before && after ? 'Правка ' : (after ? 'Добавление ' : 'Удаление '))+what+(date?' от '+_scDateRu(date):'')+(e.sub?' — '+String(e.sub).slice(0,80):'');
+  var oldIt = entry ? (before?[before]:[]) : (before?before.items:[]);
+  var newIt = entry ? (after?[after]:[]) : (after?after.items:[]);
+  _scAutoAdjust(shop, kind, oldIt, newIt, note, e.goodsType);
 }

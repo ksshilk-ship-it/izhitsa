@@ -325,7 +325,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '11.01.01';
+var APP_BUILD_VERSION = '11.01.02';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -1192,7 +1192,7 @@ function logWriteoff(reason, amount, shop){ logAction('WRITEOFF', {reason:reason
 function logReceive(type, amount, shop){ logAction('RECEIVE', {type:type, amount:amount, shop:shop}); }
 function logExpense(category, amount, desc){ logAction('EXPENSE', {category:category, amount:amount, desc:desc}); }
 function logShiftOpen(shop, cashAmount){ logAction('SHIFT_OPEN', {shop:shop, cashAmount:cashAmount}); }
-function logEntryEdit(before, after, shiftIdOverride){
+function logEntryEdit(before, after, shiftIdOverride, shopName){
   logAction('JOURNAL_ENTRY_EDIT', {
     entryType: before.type, entryId: before.id,
     before: {label:before.label, sub:before.sub, amount:before.amount, discount:before.discount,
@@ -1200,6 +1200,8 @@ function logEntryEdit(before, after, shiftIdOverride){
     after: {label:after.label, sub:after.sub, amount:after.amount, discount:after.discount,
       payMethod:after.payMethod, cashPart:after.cashPart, cardPart:after.cardPart, items:after.items, comment:after.comment}
   }, shiftIdOverride);
+  // правка записи закрытого магазина — поправка к его итоговой накладной (Склад.js)
+  if(before && before.type){ try{ if(typeof _scHookEntryChange==='function') _scHookEntryChange(before, after, shiftIdOverride, shopName); }catch(e){} }
 }
 function logEntryDelete(entry, shiftIdOverride){
   logAction('JOURNAL_ENTRY_DELETE', {

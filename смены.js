@@ -398,7 +398,7 @@ function _checkPendingCloseBanner(){
   }catch(e){}
 }
 setInterval(_checkPendingCloseBanner, 30000);
-document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ _checkPendingCloseBanner(); _retryPendingSales(); _retryPendingJournalEntries(); _retryPendingRefbookSaves(); _retryPendingInvoices(); try{ _flushStockPatches(); }catch(e){} } });
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ _checkPendingCloseBanner(); _retryPendingSales(); _retryPendingJournalEntries(); _retryPendingRefbookSaves(); _retryPendingInvoices(); try{ _flushStockPatches(); }catch(e){} try{ _scFlushAdj(); }catch(e){} } });
 function _pushShiftWithRetry(shiftId, data){
   if(!shiftId || !data) return;
   try{
@@ -499,7 +499,9 @@ _retryPendingSales();
 _retryPendingJournalEntries();
 _retryPendingRefbookSaves();
 _retryPendingInvoices();
-try{ _flushStockPatches(); }catch(e){}
+// _flushStockPatches и _scLoadClosedIdx живут в Склад.js, который подключается позже этого файла —
+// вызванные прямо здесь, они молча не срабатывали
+window.addEventListener('load', function(){ try{ _flushStockPatches(); }catch(e){} try{ _scLoadClosedIdx(); }catch(e){} });
 _retryPendingShiftBackups();
 _retryPendingInvoiceBackups();
 _checkPendingCloseBanner();
@@ -6129,6 +6131,7 @@ function svSaveJwoItemEdit(entryIdx, itemIdx, formId){
   entry.editReason=d.reason;
   _currentShiftView.journal = jnl;
   try{ logEntryEdit(before, item, (_currentShiftView&&(_currentShiftView.id||_currentShiftView._id))); }catch(e){}
+  try{ _scHookEntryChange(before, item, _currentShiftView.id||_currentShiftView._id, _currentShiftView.shopName, entry); }catch(e){}
   _svEditTarget = null;
   svPersist(); _renderShiftView();
   showToast('✅ Запись обновлена');
@@ -6160,6 +6163,7 @@ function svSaveJrcvItemEdit(entryIdx, formId){
   entry.editReason=d.reason;
   _currentShiftView.journal = jnl;
   try{ logEntryEdit(before, item, (_currentShiftView&&(_currentShiftView.id||_currentShiftView._id))); }catch(e){}
+  try{ _scHookEntryChange(before, item, _currentShiftView.id||_currentShiftView._id, _currentShiftView.shopName, entry); }catch(e){}
   _svEditTarget = null;
   svPersist(); _renderShiftView();
   showToast('✅ Запись обновлена');
@@ -6340,7 +6344,7 @@ function _syncInvoiceEntryToOtherShifts(invId, data, gt, newTotal, skipShiftId, 
         }
         var before = Object.assign({}, e);
         sh.journal[i] = _applyInvoiceToReceiveEntry(e, data, gt, newTotal);
-        try{ logEntryEdit(before, sh.journal[i], sh.id); }catch(err){}
+        try{ logEntryEdit(before, sh.journal[i], sh.id, sh.shopName); }catch(err){}
       });
       if(!touched) return;
       if(sh.status==='closed' && typeof _recalcGoodsEveningPreserveDelta==='function') _recalcGoodsEveningPreserveDelta(sh);
@@ -6432,6 +6436,8 @@ function svDeleteJEntry(type, idx, skipConfirm){
   var target=ofType[idx]; if(!target) return;
   _currentShiftView.journal=jnl.filter(function(e){return e!==target;});
   addToTrash(target, {shopName:_currentShiftView.shopName, shiftId:_currentShiftView.id, deletedByOverride:(session&&session.sellerName)||'Администратор'});
+  // перемещение возвращает товар отправителю через _svCancelTransfer — здесь не дублируем
+  if(!target.transferInvId){ try{ _scHookEntryChange(target, null, _currentShiftView.id||_currentShiftView._id, _currentShiftView.shopName); }catch(e){} }
   svPersist(); _renderShiftView(); showToast('🗑 Перемещено в корзину');
   if(target.transferInvId) _svCancelTransfer(target, _currentShiftView.shopName);
 }

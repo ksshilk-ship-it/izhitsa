@@ -1196,7 +1196,8 @@ function _saveSaleInner(){
     jnlArch2.sort(function(a,b){ return (a.ts||'').localeCompare(b.ts||''); });
     _currentShiftView.journal = jnlArch2;
     _recordSaleIndependently(newArchEntry, _currentShiftView.shopName);
-    try{ stockApplySale(_currentShiftView.shopName, saleItems); }catch(e){}
+    if(typeof _scIsClosed==='function' && _scIsClosed(_currentShiftView.shopName)){ try{ _scHookEntryChange(null, newArchEntry, _currentShiftView.id||_currentShiftView._id, _currentShiftView.shopName); }catch(e){} }
+    else { try{ stockApplySale(_currentShiftView.shopName, saleItems); }catch(e){} }
     try{ logAction('JOURNAL_ENTRY_ADD_MISSED', {entryType:'sale', shopName:_currentShiftView.shopName, snapshot:newArchEntry}, _currentShiftView.id||_currentShiftView._id); }catch(e){}
     svPersist();
     _svArchiveAddMode = false;
