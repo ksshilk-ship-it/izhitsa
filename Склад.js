@@ -3888,7 +3888,14 @@ function saveStock(stock){
   });
   _flushStockPatches();
 }
+// 03.11.2026: очереди на телефонах забиты правками старого автопересчёта (rebuildStock) — они возвращали
+// проданное, а по Розе (2500+ позиций) база их не принимает вовсе («too many index entries»), и вместе с
+// ними застревало всё настоящее. Сбрасываем один раз; склад Розы пересчитан по полной истории в облаке.
+function _stockQueueReset(){
+  try{ if(localStorage.getItem('iz_stock_q_reset')==='1103') return; localStorage.removeItem('iz_pending_stock'); localStorage.setItem('iz_stock_q_reset','1103'); }catch(e){}
+}
 function _queueStockPatch(sn, patch){
+  _stockQueueReset();
   try{
     var q = JSON.parse(localStorage.getItem('iz_pending_stock')||'{}')||{};
     q[sn] = Object.assign(q[sn]||{}, patch);
@@ -3897,6 +3904,7 @@ function _queueStockPatch(sn, patch){
 }
 function _flushStockPatches(){
   if(typeof db==='undefined' || !db) return;
+  _stockQueueReset();
   var q; try{ q = JSON.parse(localStorage.getItem('iz_pending_stock')||'{}')||{}; }catch(e){ return; }
   // каждый магазин отдельно: раньше ошибка на одном обрывала отправку остальных
   Object.keys(q).forEach(function(sn){
