@@ -325,7 +325,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '11.03.13';
+var APP_BUILD_VERSION = '11.03.14';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -704,6 +704,7 @@ var SYNC_SETTINGS = {
   'iz_materials':        {doc:'materials',     field:'data'},
   'iz_work_schedules':   {doc:'work_schedules', field:'data'},
   'iz_employee_statuses': {doc:'employee_statuses', field:'data'},
+  'iz_multi_species':    {doc:'multi_species', field:'data'},
 };
 function _syncApplyRemoteValue(lsKey, val){
   if(val === undefined) return;
@@ -742,7 +743,7 @@ function _syncApplyRemoteValue(lsKey, val){
     try{ renderShopSettings(); }catch(e){}
     try{ if(session && document.getElementById('mainStatusBar')) renderStatusBar(); }catch(e){}
   }
-  var shopRefbookKeys = ['iz_payment_methods','iz_suppliers','iz_goods','iz_goods_derevo','iz_goods_dr','iz_materials','iz_dr_species','iz_work_schedules'];
+  var shopRefbookKeys = ['iz_payment_methods','iz_suppliers','iz_goods','iz_goods_derevo','iz_goods_dr','iz_materials','iz_dr_species','iz_work_schedules','iz_multi_species'];
   if(shopRefbookKeys.indexOf(lsKey)>=0){
     var book = SHOP_REFBOOKS.find(function(b){ return b.key===lsKey; });
     if(book){

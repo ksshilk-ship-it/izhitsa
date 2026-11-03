@@ -246,10 +246,20 @@ var SHOP_REFBOOKS = [
   {id:'goods_dr',    icon:'🛍', name:'База товаров — ДР Товар',  key:'iz_goods_dr'},
   {id:'materials',   icon:'💎', name:'Породы дерева',            key:'iz_materials'},
   {id:'dr_species',  icon:'🍬', name:'Вкус / Состав (ДР Товар)', key:'iz_dr_species'},
-  {id:'schedules',   icon:'⏰', name:'Графики работы',           key:'iz_work_schedules'}
+  {id:'schedules',   icon:'⏰', name:'Графики работы',           key:'iz_work_schedules'},
+  {id:'multi_species', icon:'🧩', name:'Несколько пород в одной позиции', key:'iz_multi_species'}
 ];
+// Справочник, которого ещё нет ни на устройстве, ни в облаке, — начальное содержимое. Правки админа
+// сохраняют уже полный список (getRefBook отдаёт эти значения, пока своего списка нет).
+var REFBOOK_DEFAULTS = {
+  iz_multi_species: ['Бусы','Браслет','Чётки','Брелок','Заколка']
+};
 function getRefBook(key){
-  try{ return JSON.parse(localStorage.getItem(key)||'[]'); } catch(e){ return []; }
+  try{
+    var raw = localStorage.getItem(key);
+    if(raw==null && REFBOOK_DEFAULTS[key]) return REFBOOK_DEFAULTS[key].map(function(n, i){ return {id:'def_'+i, name:n}; });
+    return JSON.parse(raw||'[]');
+  } catch(e){ return []; }
 }
 function saveRefBookShop(key, data){
   localStorage.setItem(key, JSON.stringify(data));
@@ -309,8 +319,9 @@ function renderRefbookSections(){
                 '<button onclick="addWoodGoodsVariant(\''+book.id+'\',\''+book.key+'\')" style="padding:9px;background:#c8f060;border:none;border-radius:8px;color:#0f0f13;font-weight:700;font-size:13px;cursor:pointer">＋ Добавить позицию</button>'+
               '</div>'+
             '</div>'
-          : '<div style="display:flex;gap:8px;margin-top:8px">'+
-              '<input class="fi" id="rbNew_'+book.id+'" placeholder="Новая запись" autocomplete="off" style="flex:1;margin:0">'+
+          : (book.key==='iz_multi_species' ? '<div style="font-size:10.5px;color:#8888aa;margin-top:8px;line-height:1.4">Изделия, у которых продавец может указать несколько пород/материалов в одной позиции (через «неск. материалов»). Совпадение — по началу слова в наименовании: «Браслет» подходит и к «Браслеты детские». Для остальных изделий несколько пород вносит только администратор.</div>' : '')+
+            '<div style="display:flex;gap:8px;margin-top:8px">'+
+              '<input class="fi" id="rbNew_'+book.id+'" placeholder="'+(book.key==='iz_multi_species'?'Наименование изделия':'Новая запись')+'" autocomplete="off" style="flex:1;margin:0">'+
               '<button onclick="addRefbookItemShop(\''+book.id+'\',\''+book.key+'\')" style="flex-shrink:0;padding:0 16px;background:#c8f060;border:none;border-radius:8px;color:#0f0f13;font-weight:700;font-size:16px;cursor:pointer">＋</button>'+
             '</div>')+
       '</div>'+

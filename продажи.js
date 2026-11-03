@@ -466,7 +466,7 @@ var _siSpeciesParts = [''];
 function siToggleMultiSpecies(checked){
   var _nmM = ((document.getElementById('siNameM')||{}).value||'').trim();
   if(checked && _nmM && typeof _multiSpeciesViolation==='function' && _multiSpeciesViolation(_nmM, 'x + y')){
-    showToast('⛔ «'+_nmM+'»: '+MULTI_SPECIES_DENY_MSG);
+    showToast('⛔ «'+_nmM+'»: '+_multiSpeciesDenyMsg());
     var _tg = document.getElementById('siSpeciesMultiToggle'); if(_tg) _tg.checked = false;
     return;
   }
@@ -789,7 +789,7 @@ function addSaleItem(){
       // же списком, что подсказывается при вводе), а не приниматься любым текстом «на глаз».
       // Проверяем ДР Товар не трогаем — там это поле «Вкус/Состав», отдельная история.
       if(typeof _multiSpeciesViolation==='function' && _multiSpeciesViolation(name, species)){
-        showToast('⛔ «'+name+'»: '+MULTI_SPECIES_DENY_MSG); return;
+        showToast('⛔ «'+name+'»: '+_multiSpeciesDenyMsg()); return;
       }
       if(_siItemGoodsType!=='dr'){
         var _siBadSpecies = _siFindInvalidSpecies(species);
