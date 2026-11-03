@@ -2720,13 +2720,19 @@ function _manInvEditSuggestName(id, i){
   });
   if(!names.length){ box.style.display='none'; box.innerHTML=''; return; }
   var isWood = gt!=='dr';
+  // Порода в строке уже вписана — показываем варианты только этой породы (вписали «Каштан», набрали
+  // «Ложка» — а список выдавал все ложки подряд, начиная с Ореха грецкого). Несколько пород через «+»
+  // — не фильтруем.
+  var spNorm = isWood ? String((data.items[i]||{}).species||'').trim().toLowerCase() : '';
+  if(spNorm.indexOf('+')>=0) spNorm = '';
   var rows = [];
   names.forEach(function(nm){
     var variants = _siGetGoodsVariants(nm, gt);
+    if(spNorm) variants = variants.filter(function(v){ return String(v.species||'').trim().toLowerCase()===spNorm; });
     variants.forEach(function(v){ rows.push({name:nm, price:v.price, article:v.article, species:v.species||null}); });
-    // Простое «без артикула» остаётся выбираемым, даже когда у названия уже есть варианты —
-    // на случай, когда ни одна порода/цена из каталога не подходит к тому, что принимают.
-    rows.push({name:nm, price:null, article:null, species:null});
+    // «Просто название» без цены — только когда подходящих вариантов нет (как в продаже): рядом с
+    // вариантами оно давало принять изделие мимо справочника.
+    if(!variants.length) rows.push({name:nm, price:null, article:null, species:null});
   });
   box.innerHTML = rows.map(function(r){
     var infoStr = r.price!=null
