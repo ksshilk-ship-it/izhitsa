@@ -165,6 +165,7 @@ function _siBuildSuggest(inputId, speciesFieldId, pickFn, suggestFn){
   var html = '';
   names.forEach(function(nm){
     var variants = _siGetGoodsVariants(nm, _siItemGoodsType);
+    var _htmlBefore = html.length;
     if(isWood && speciesVal){
       var norm = speciesVal.toLowerCase();
       variants.filter(function(v){ return (v.species||'').trim().toLowerCase()===norm; })
@@ -192,10 +193,12 @@ function _siBuildSuggest(inputId, speciesFieldId, pickFn, suggestFn){
     } else {
       variants.forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species||null, 0, pickFn); });
     }
-    // Даже когда у названия уже есть варианты с артикулом, простое «без артикула» должно
-    // оставаться выбираемым — например, для непредвиденных случаев, когда ни одна порода/цена
-    // из каталога не подходит, продавец всё равно может занести просто наименование.
-    html += _siSuggRow(inputId, nm, null, null, null, 0, pickFn);
+    // Строка «просто название, без цены» — только если у названия в справочнике нет вариантов с ценой
+    // (или ни один не подошёл по вписанной породе). Раньше она добавлялась всегда, рядом с вариантами
+    // («Свеча травы - L · 450₽ · №СвечТр03» и тут же «Свеча травы - L» без цены), и через неё продавали
+    // мимо справочника по любой цене. Нужной цены нет — её заводит администратор в справочнике.
+    // В блоке «ИЗ БАЗЫ» (товар уже найден по номеру, siSuggestName) поправить название по-прежнему можно.
+    if(pickFn!=='siPickVariantNameM' || html.length===_htmlBefore) html += _siSuggRow(inputId, nm, null, null, null, 0, pickFn);
   });
   box.innerHTML = html;
   box.style.display='block';
@@ -804,6 +807,13 @@ function addSaleItem(){
         return;
       }
     } else if(drVariants.length===1){
+      // Один вариант — цена тоже должна с ним совпадать: раньше подставлялся его артикул при любой
+      // вписанной цене (свеча за 450₽ уходила по 350₽ под справочным №СвечТр03).
+      // Администратору не мешаем: он правит старые продажи, где цена с тех пор могла поменяться.
+      if(drVariants[0].price && Math.round(drVariants[0].price)!==Math.round(price) && !(session && session.role==='shopadmin')){
+        showToast('⚠️ «'+name+'» в справочнике стоит '+fmt(drVariants[0].price)+' — выберите вариант из списка; скидку дайте в блоке «Скидка»');
+        return;
+      }
       num = drVariants[0].article; hasDiff=false; diffNote='';
     }
   } else if(_siItemGoodsType!=='dr' && mb && mb.style.display!=='none' && !num){
