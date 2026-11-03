@@ -708,9 +708,12 @@ function addWoodGoodsVariant(bookId, key){
   var article = (artEl&&artEl.value||'').trim();
   var price = parseFloat(priceEl&&priceEl.value);
   if(!name){ showToast('Введите наименование'); return; }
-  if(!species){ showToast('Укажите породу'); return; }
   if(!article){ showToast('Введите артикул'); return; }
   if(!price || price<=0){ showToast('Введите цену'); return; }
+  // Без породы — переходный артикул для старых приёмок/продаж, где порода не указана (аудит
+  // «Применить артикулы задним числом» сопоставляет такие записи по наименованию+цене). Явно спрашиваем:
+  // раньше порода была обязательной, и привязать к артикулу 1291 шт. «без породы» было нечем.
+  if(!species && !confirm('Добавить «'+name+' · '+price+'₽» БЕЗ породы (артикул '+article+')?\n\nТакой артикул привяжется к старым приёмкам и продажам «'+name+'» по '+price+'₽, где порода не указана.')) return;
   var taken = _drArticleTaken(key, article, -1);
   if(taken){ showToast('⚠️ Артикул «'+article+'» уже занят: «'+taken.name+'» ('+(taken.price||0)+'₽)'); return; }
   // Одно и то же название+порода — это не обязательно одна и та же вещь: разные физические
@@ -720,7 +723,7 @@ function addWoodGoodsVariant(bookId, key){
   var existing = getRefBook(key);
   var norm = name.toLowerCase().trim(), normSp = species.toLowerCase().trim();
   var exactDup = existing.find(function(c){ return (c.name||'').toLowerCase().trim()===norm && (c.species||'').toLowerCase().trim()===normSp && (c.price||0)===price; });
-  if(exactDup){ showToast('Уже есть «'+name+' · '+species+'» по цене '+price+'₽ — артикул '+(exactDup.article||'—')); return; }
+  if(exactDup){ showToast('Уже есть «'+name+' · '+(species||'без породы')+'» по цене '+price+'₽ — артикул '+(exactDup.article||'—')); return; }
   var items2 = getRefBook(key);
   items2.push({id:uid(), name:name, species:species, price:price, article:article});
   items2.sort(function(a,b){ return (a.name||'').toLowerCase().localeCompare((b.name||'').toLowerCase(),'ru'); });
@@ -730,7 +733,7 @@ function addWoodGoodsVariant(bookId, key){
   if(priceEl){ priceEl.value=''; priceEl.focus(); }
   renderRefbookItemsShop(bookId,key);
   updateRefbookCountShop(bookId,key);
-  showToast('✅ Добавлено: '+name+' · '+species+' · '+price+'₽ · арт. '+article);
+  showToast('✅ Добавлено: '+name+' · '+(species||'без породы')+' · '+price+'₽ · арт. '+article);
 }
 function addDrGoodsVariant(bookId, key){
   var nameEl = document.getElementById('rbDrName_'+bookId);
