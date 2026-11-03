@@ -835,6 +835,16 @@ function nfSyncFromServer(){
     }catch(e){}
     setTimeout(resolve, 1500);
   }));
+  // Смены старше живого окна (14 дней) лежат в архивном кэше телефона и раньше этой кнопкой не
+  // обновлялись — после замены названия на другом устройстве (или правки продавцом) здесь оставались
+  // старые копии, и «исправленное» название продолжало находиться.
+  tasks.push(db.collection('iz_shifts').where('date','<',_shiftsLiveSyncCutoff()).get({source:'server'}).then(function(snap){
+    var tomb = {}; getShiftTombstones().forEach(function(id){ tomb[id]=true; });
+    var localIds = {}; JSON.parse(localStorage.getItem('iz_shifts')||'[]').forEach(function(s){ localIds[s.id||s._id]=true; });
+    window._extraArchiveShifts = snap.docs.map(function(d){ return Object.assign({_id:d.id, _archiveOnly:true}, d.data()); })
+      .filter(function(s){ return !tomb[s._id] && !localIds[s._id]; });
+    if(typeof _persistExtraArchiveShifts==='function') _persistExtraArchiveShifts();
+  }).catch(function(){}));
   ['iz_invoices','iz_manual_invoices'].forEach(function(col){
     tasks.push(db.collection(col).get({source:'server'}).then(function(snap){
       var arr = snap.docs.map(function(d){ var v=d.data(); v.id=d.id; return v; });
@@ -1159,6 +1169,15 @@ function startRenameItemName(btn){
   if(!confirm(msg+'\n\nИзменения применятся локально и в облаке. Отменить массово будет нельзя.')) return;
   _nfExecuteRename(m.refs, oldName, newName);
 }
+// Замена идёт по свежим копиям из облака, а не по копии в памяти телефона: раньше смена/накладная
+// записывались целиком из локального кэша и могли затереть чужие свежие правки, а «принятые позиции»
+// накладной (acceptedItems) и склад магазинов не трогались — старое название оставалось на складе и
+// при следующей продаже/перемещении по номеру возвращалось в новые записи.
+function _nfRenameItems(list, oldName, newName){
+  var n = 0;
+  (list||[]).forEach(function(it){ if(it && it.name===oldName){ it.name = newName; n++; } });
+  return n;
+}
 function _nfExecuteRename(refs, oldName, newName){
   showToast('⏳ Заменяю...');
   var shiftIds = {}, invIds = {}, manInvIds = {}, catalogKeys = {};
@@ -1168,85 +1187,81 @@ function _nfExecuteRename(refs, oldName, newName){
     else if(r.kind==='manual_invoice') manInvIds[r.invId]=true;
     else if(r.kind==='catalog') catalogKeys[r.bookKey]=true;
   });
-  var shifts = getShifts();
-  var touchedShifts = [];
-  Object.keys(shiftIds).forEach(function(id){
-    var sh = shifts.find(function(s){ return (s.id||s._id)===id; });
-    if(!sh) return;
-    (sh.journal||[]).forEach(function(e){
+  var renamedGt = null, fails = 0;
+  var renameJournal = function(jnl){
+    var n = 0;
+    (jnl||[]).forEach(function(e){
       if(e.type==='sale' || e.type==='writeoff'){
-        (e.items||[]).forEach(function(it){ if(it.name===oldName) it.name=newName; });
-      } else if(e.type==='staff' && e.item===oldName){
-        e.item = newName;
-      }
+        (e.items||[]).forEach(function(it){ if(it.name===oldName){ it.name=newName; n++; if(!renamedGt) renamedGt = it.goodsType||e.goodsType||null; } });
+      } else if(e.type==='staff' && e.item===oldName){ e.item = newName; n++; }
     });
-    touchedShifts.push(sh);
-  });
-  saveShifts(shifts);
-  touchedShifts.forEach(function(sh){
-    var id = sh.id||sh._id;
-    try{ db.collection('iz_shifts').doc(id).set({journal: sh.journal}, {merge:true}); }catch(e){}
-  });
-  var invoices = JSON.parse(localStorage.getItem('iz_invoices')||'[]');
-  var touchedInv = [];
-  Object.keys(invIds).forEach(function(id){
-    var inv = invoices.find(function(i){ return (i.id||i._id)===id; });
-    if(!inv) return;
-    (inv.items||[]).forEach(function(it){ if(it.name===oldName) it.name=newName; });
-    touchedInv.push(inv);
-  });
-  if(touchedInv.length){
-    localStorage.setItem('iz_invoices', JSON.stringify(invoices));
-    touchedInv.forEach(function(inv){
-      var id = inv.id||inv._id;
-      try{ db.collection('iz_invoices').doc(id).set(inv,{merge:true}); }catch(e){}
-    });
-  }
-  var manInvoices = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
-  var touchedManInv = [];
-  Object.keys(manInvIds).forEach(function(id){
-    var inv = manInvoices.find(function(i){ return (i.id||i._id)===id; });
-    if(!inv) return;
-    (inv.items||[]).forEach(function(it){ if(it.name===oldName) it.name=newName; });
-    touchedManInv.push(inv);
-  });
-  if(touchedManInv.length){
-    localStorage.setItem('iz_manual_invoices', JSON.stringify(manInvoices));
-    touchedManInv.forEach(function(inv){
-      var id = inv.id||inv._id;
-      try{ db.collection('iz_manual_invoices').doc(id).set(inv,{merge:true}); }catch(e){}
-    });
-  }
-  var catalogsTouched = 0;
-  var catalogKeyList = Object.keys(catalogKeys);
-  if(!catalogKeyList.length && touchedShifts.length){
-    var gt = null;
-    touchedShifts.some(function(sh){
-      return (sh.journal||[]).some(function(e){
-        if(e.type!=='sale' && e.type!=='writeoff') return false;
-        return (e.items||[]).some(function(it){ if(it.name===newName){ gt=it.goodsType; return true; } return false; });
+    return n;
+  };
+  var shiftJobs = Object.keys(shiftIds).map(function(id){
+    return db.collection('iz_shifts').doc(id).get({source:'server'}).then(function(snap){
+      if(!snap.exists) return 0;
+      var jnl = snap.data().journal||[];
+      if(!renameJournal(jnl)) return 0;
+      return db.collection('iz_shifts').doc(id).set({journal:jnl, updatedAt:new Date().toISOString()}, {merge:true}).then(function(){
+        // локальная копия (живое окно или архив) — та же правка
+        var shifts = getShifts(), sh = shifts.find(function(x){ return (x.id||x._id)===id; });
+        if(sh){ renameJournal(sh.journal); saveShifts(shifts); }
+        if(typeof _currentShiftView!=='undefined' && _currentShiftView && (_currentShiftView.id||_currentShiftView._id)===id) renameJournal(_currentShiftView.journal);
+        return 1;
       });
-    });
-    if(gt) catalogKeyList = [gt==='dr'?'iz_goods_dr':'iz_goods_derevo'];
-  }
-  catalogKeyList.forEach(function(key){
-    var list = getRefBook(key);
-    var changed = false;
-    list.forEach(function(it){ if((it.name||it)===oldName){ it.name=newName; changed=true; } });
-    var normNew = newName.toLowerCase().trim();
-    var hasNew = list.some(function(it){ return (it.name||it).toLowerCase().trim()===normNew; });
-    if(!hasNew){ list.push({id:uid(), name:newName}); changed=true; }
-    if(changed){ saveRefBookShop(key, list); _clearRefbookTombstone(key, newName); catalogsTouched++; }
+    }).catch(function(){ fails++; return 0; });
   });
-  var itemsBase = JSON.parse(localStorage.getItem('iz_items')||'[]');
-  var itemsBaseChanged = false;
-  itemsBase.forEach(function(it){ if(it.name===oldName){ it.name=newName; itemsBaseChanged=true; } });
-  if(itemsBaseChanged){
-    localStorage.setItem('iz_items', JSON.stringify(itemsBase));
-    try{ syncSave('iz_items', itemsBase); }catch(e){}
-  }
-  searchItemNameOccurrences();
-  showToast('✅ Заменено: смен — '+touchedShifts.length+', накладных — '+(touchedInv.length+touchedManInv.length)+(catalogsTouched?', справочник обновлён':''));
+  var invJobs = [['iz_invoices', invIds], ['iz_manual_invoices', manInvIds]].reduce(function(acc, pair){
+    var col = pair[0];
+    return acc.concat(Object.keys(pair[1]).map(function(id){
+      return db.collection(col).doc(id).get({source:'server'}).then(function(snap){
+        if(!snap.exists) return 0;
+        var inv = snap.data(), items = inv.items||[], acc2 = inv.acceptedItems||null;
+        var n = _nfRenameItems(items, oldName, newName) + (acc2 ? _nfRenameItems(acc2, oldName, newName) : 0);
+        if(!n) return 0;
+        if(!renamedGt) renamedGt = inv.goodsType||null;
+        var patch = {items:items}; if(acc2) patch.acceptedItems = acc2;
+        return db.collection(col).doc(id).set(patch, {merge:true}).then(function(){
+          var all = JSON.parse(localStorage.getItem(col)||'[]');
+          var li = all.find(function(i){ return String(i.id||i._id)===String(id); });
+          if(li){ _nfRenameItems(li.items, oldName, newName); _nfRenameItems(li.acceptedItems, oldName, newName); localStorage.setItem(col, JSON.stringify(all)); }
+          return 1;
+        });
+      }).catch(function(){ fails++; return 0; });
+    }));
+  }, []);
+  Promise.all(shiftJobs.concat([Promise.resolve('-')]).concat(invJobs)).then(function(res){
+    var cut = shiftJobs.length;
+    var nSh = res.slice(0, cut).reduce(function(a,b){ return a+(b||0); },0);
+    var nInv = res.slice(cut+1).reduce(function(a,b){ return a+(b||0); },0);
+    // склад всех магазинов: иначе по номеру изделия старое название вернётся в следующую продажу
+    var stockN = 0;
+    try{
+      var stock = getStock();
+      Object.keys(stock).forEach(function(sn){ Object.keys(stock[sn]||{}).forEach(function(k){ var it = stock[sn][k]; if(it && it.name===oldName){ it.name = newName; stockN++; } }); });
+      if(stockN) saveStock(stock);
+    }catch(e){}
+    var catalogsTouched = 0;
+    var catalogKeyList = Object.keys(catalogKeys);
+    if(!catalogKeyList.length && renamedGt) catalogKeyList = [renamedGt==='dr'?'iz_goods_dr':'iz_goods_derevo'];
+    catalogKeyList.forEach(function(key){
+      var list = getRefBook(key);
+      var changed = false;
+      list.forEach(function(it){ if((it.name||it)===oldName){ it.name=newName; changed=true; } });
+      var normNew = newName.toLowerCase().trim();
+      var hasNew = list.some(function(it){ return (it.name||it).toLowerCase().trim()===normNew; });
+      if(!hasNew && key!=='iz_goods'){ list.push({id:uid(), name:newName}); changed=true; }
+      if(changed){ saveRefBookShop(key, list); _clearRefbookTombstone(key, newName); catalogsTouched++; }
+    });
+    var itemsBase = JSON.parse(localStorage.getItem('iz_items')||'[]');
+    if(_nfRenameItems(itemsBase, oldName, newName)){
+      localStorage.setItem('iz_items', JSON.stringify(itemsBase));
+      try{ syncSave('iz_items', itemsBase); }catch(e){}
+    }
+    try{ logAction('ITEM_NAME_RENAME', {from:oldName, to:newName, shifts:nSh, invoices:nInv, stock:stockN, fails:fails}); }catch(e){}
+    searchItemNameOccurrences();
+    showToast((fails?'⚠️ ':'✅ ')+'Заменено: смен — '+nSh+', накладных — '+nInv+(stockN?', на складе — '+stockN:'')+(catalogsTouched?', справочник обновлён':'')+(fails?' · не получилось: '+fails+' (нет сети?) — повторите замену':''));
+  });
 }
 function _artCollectOccurrences(){
   var occ = [];
@@ -1456,7 +1471,7 @@ var _alShop = '';
 var _alRawLog = [];
 var _AL_LABELS = {
   SALE: '🛒 Продажа', WRITEOFF: '🗑 Списание', RECEIVE: '📥 Приход', RETURN: '↩️ Возврат', EXPENSE: '💸 Расход', SHIFT_OPEN: '📋 Открытие смены',
-  JOURNAL_ENTRY_EDIT: '✏️ Правка записи', JOURNAL_ENTRY_DELETE: '❌ Удаление записи', JOURNAL_ENTRY_ADD_MISSED: '➕ Добавлена пропущенная запись',
+  JOURNAL_ENTRY_EDIT: '✏️ Правка записи', JOURNAL_ENTRY_DELETE: '❌ Удаление записи', ITEM_NAME_RENAME: '🔤 Замена наименования', JOURNAL_ENTRY_ADD_MISSED: '➕ Добавлена пропущенная запись',
   RECEIPT_DATE_MOVED: '📅 Перенос даты прихода', MORNING_ENTRY_SELF_FIX: '🔧 Продавец сам исправил остаток утра',
   GOODS_MORNING_EDIT: '📦 Админ поправил остаток товара', GOODS_CASCADE_RECALC: '🔄 Пересчёт остатков вперёд по датам',
   RESTORE_MODE_DUPLICATE_WARNING: '⚠️ Восстановление при уже существующей смене',
