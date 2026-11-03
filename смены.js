@@ -8,6 +8,8 @@ function deleteJournalEntryShop(id){
   logEntryDelete(entry);
   journal = journal.filter(function(e){ return e.id!==id; });
   addToTrash(entry);
+  // удалили продажу/списание/приход — склад на разницу (перемещение возвращает товар через _svCancelTransfer)
+  if(!entry.transferInvId){ try{ _scHookEntryChange(entry, null, null, session&&session.shopName); }catch(e){} }
   saveJ(); renderAll();
   syncLiveShift();
   showToast('🗑 Перемещено в корзину');
@@ -295,6 +297,11 @@ function restoreFromTrash(trashId){
     restored = true;
   } else {
     showToast('Смена сейчас не открыта здесь — запись будет восстановлена при следующей синхронизации этой смены');
+  }
+  // запись вернулась в журнал — склад обратно на её позиции (при удалении он менялся на разницу)
+  if(restored && !item.entry.transferInvId){
+    var _rsShop = (session && session.shiftId===item.shiftId) ? session.shopName : (_currentShiftView&&_currentShiftView.shopName);
+    try{ _scHookEntryChange(null, item.entry, item.shiftId, _rsShop); }catch(e){}
   }
   t.splice(idx,1);
   saveTrash(t);
@@ -6394,6 +6401,7 @@ function svSaveInvoiceFromArchive(id, isManual){
   }
   var _savedGt = (window._manInvEdit&&window._manInvEdit[id]&&window._manInvEdit[id].goodsType) || data.goodsType || all[idx].goodsType || 'derevo';
   data.goodsType = _savedGt;
+  try{ _invEditStock(all[idx], data); }catch(e){}
   all[idx] = data;
   localStorage.setItem(storeKey, JSON.stringify(all));
   try{ db.collection(storeKey).doc(id).set(data,{merge:true}); }catch(e){}

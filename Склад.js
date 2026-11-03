@@ -1143,7 +1143,7 @@ function saveShopInvoice(id){
   data.editedBy = (session&&session.sellerName)||'';
   var invs = getInvoices();
   var idx = invs.findIndex(function(i){ return String(i._id!=null?i._id:i.id)===id; });
-  if(idx>=0) invs[idx]=data;
+  if(idx>=0){ _invEditStock(invs[idx], data); invs[idx]=data; }
   saveInvoices(invs);
   try{ db.collection('iz_invoices').doc(id).set(data,{merge:true}); }catch(e){}
   if(wasAccepted){
@@ -1169,6 +1169,7 @@ function deleteShopInvoice(id){
   var inv = getInvoices().find(function(i){ return String(i._id!=null?i._id:i.id)===id; });
   if(!inv) return;
   var wasAccepted = inv.status==='accepted';
+  _invEditStock(inv, null);
   var invs = getInvoices().filter(function(i){ return String(i._id!=null?i._id:i.id)!==id; });
   saveInvoices(invs);
   try{ db.collection('iz_invoices').doc(id).delete(); }catch(e){}
@@ -2518,6 +2519,10 @@ function saveManualInvoice() {
     // на складе переоценка только обновляет цену изделий с номером (qty не растёт) — см. stockApplyReceive
     try{ stockApplyReceive(session.shopName, _manInvItems.map(function(it){ return {num:it.article||it.num, name:it.name, price:it.price, qty:it.qty, species:it.species, goodsType:_gt4save}; }), acceptedDateStr, _gt4save, true); }catch(e){}
     try{ logAction('REVALUATION', {direction:'receive', goodsType:_gt4save, itemCount:_manInvItems.length, names:_manInvItems.map(function(it){return it.name;}).join(', '), amount:totalAmt, shop:session.shopName, invNum:num}); }catch(e){}
+  } else {
+    // Раньше обычная накладная склад здесь не пополняла — её позиции попадали на склад только при полном
+    // пересчёте остатков (rebuildStock), а его 03.11 отключили.
+    try{ stockApplyReceive(session.shopName, inv.items, acceptedDateStr, _gt4save); }catch(e){}
   }
   var _rvBox=document.getElementById('manInvReval'); if(_rvBox) _rvBox.checked=false;
   _manInvGoodsType = 'derevo'; setManInvType('derevo'); // reset
@@ -2882,6 +2887,7 @@ function saveManualInvoiceEdit(id){
   if(idx<0) return;
   var oldDate = all[idx].date;
   var oldNum = all[idx].num;
+  _invEditStock(all[idx], data);
   data.num = (document.getElementById('maninv_num_'+id)||{}).value || data.num;
   data.date = (document.getElementById('maninv_date_'+id)||{}).value || data.date;
   data.docDate = (document.getElementById('maninv_docdate_'+id)||{}).value || data.docDate;
@@ -2947,6 +2953,7 @@ function deleteManualInvoice(id){
   var all = JSON.parse(localStorage.getItem('iz_manual_invoices')||'[]');
   var inv = all.find(function(i){ return String(i._id!=null?i._id:i.id)===id; });
   if(!inv) return;
+  _invEditStock(inv, null);
   var remaining = all.filter(function(i){ return String(i._id!=null?i._id:i.id)!==id; });
   localStorage.setItem('iz_manual_invoices', JSON.stringify(remaining));
   try{ db.collection('iz_manual_invoices').doc(id).delete(); }catch(e){}
@@ -4045,6 +4052,67 @@ function stockApplyReceive(shopName,items,date,invGoodsType,isRevaluation){
     stockUpdateQty(shopName,artNum,it.name,pr,it.species,gt,it.size||'',(isRevaluation?0:(it.qty||1)),date,stock);
   });
   saveStock(stock);
+}
+// Правка или удаление уже проведённой операции: склад меняется на разницу «было → стало».
+// kind: 'in' — приход, 'out' — продажа/списание. Ключ позиции — как при проведении: номер, у
+// безномерной — название+цена(+порода), с поиском похожей записи остатка, как в stockApplySale.
+// Раньше правки склад не трогали вовсе — расхождение «исправлял» только полный пересчёт (rebuildStock),
+// а его 03.11 отключили: так №52961 на Колесе остался с 2 шт. после исправления накладной.
+function stockApplyEditDelta(shopName, kind, oldItems, newItems, defGt, date){
+  if(!shopName) return;
+  if(typeof _scIsClosed==='function' && _scIsClosed(shopName)){ _scAutoAdjust(shopName, kind, oldItems, newItems, 'Правка '+(kind==='in'?'прихода':'расхода')+' после закрытия', defGt); return; }
+  var sign = kind==='in' ? 1 : -1, d = {}, info = {};
+  function add(list, mul){
+    (list||[]).forEach(function(it){
+      if(!it || it.isRevaluation) return;
+      var gt = it.goodsType||(it.category==='dr'?'dr':defGt); gt = gt==='dr' ? 'dr' : 'derevo';
+      var pr = it.price||it.factPrice||0;
+      var num = String(it.article||it.num||it.artNum||'').trim();
+      var key = num || _noArticleStockKey(it.name, pr, it.species, gt);
+      if(!key) return;
+      if(!info[key] || mul>0) info[key] = {num:num, name:it.name||'', price:pr, species:it.species||'', goodsType:gt, size:it.size||''};
+      d[key] = (d[key]||0) + mul*sign*(parseFloat(it.qty)||1);
+    });
+  }
+  add(oldItems, -1); add(newItems, 1);
+  var stock = getStock(); if(!stock[shopName]) stock[shopName] = {};
+  var ss = stock[shopName], touched = false;
+  Object.keys(d).forEach(function(k){
+    var x = info[k];
+    // Количество то же, но у прихода поправили название/цену/породу изделия с номером — обновляем карточку
+    if(d[k]===0){
+      if(kind==='in' && x.num && ss[k]){ stockUpdateQty(shopName, k, x.name, x.price, x.species, x.goodsType, x.size, 0, null, stock); touched = true; }
+      return;
+    }
+    var useKey = k;
+    // Приход без номера всегда заводится под своим ключом: если его на складе нет — вычитать нечего
+    // (похожая запись тут могла бы оказаться чужой доской с номером).
+    if(kind==='in' && d[k]<0 && !ss[k]) return;
+    if(kind==='out' && !x.num && !(ss[k] && (d[k]>0 || (ss[k].qty||0)>0))){
+      var found = _findStockKeyByNamePrice(ss, x.name, x.price, x.goodsType, k);
+      if(found) useKey = found;
+    }
+    stockUpdateQty(shopName, useKey, x.name, x.price, x.species, x.goodsType, x.size, d[k], date||null, stock);
+    touched = true;
+  });
+  if(touched) saveStock(stock);
+}
+// Исправили или удалили уже принятую накладную — склад на разницу. Принятые позиции накладной мастерской
+// (acceptedItems) переписываем вслед за items: по ним считаются приход и проверка повторных номеров.
+// newInv = null — накладную удалили.
+function _invEditStock(prev, newInv){
+  if(!prev || prev.status!=='accepted') return;
+  var shop = (newInv&&(newInv.destName||newInv.shopName)) || prev.destName || prev.shopName;
+  var gt = (newInv&&newInv.goodsType) || prev.goodsType || 'derevo';
+  var oldItems = prev.isRevaluation ? [] : (prev.acceptedItems||prev.items||[]);
+  var newItems = [];
+  if(newInv){
+    if(prev.acceptedItems) newInv.acceptedItems = (newInv.items||[]).map(function(it){ return Object.assign({}, it, {factPrice:it.price, ok:true}); });
+    newItems = newInv.isRevaluation ? [] : (newInv.items||[]);
+  }
+  var date = String(prev.acceptedAt||'').split('T')[0] || prev.date || null;
+  try{ stockApplyEditDelta(shop, 'in', oldItems, newItems, gt, date); }catch(e){ console.log('[_invEditStock]', e); }
+  if(newInv && newInv.isRevaluation){ try{ stockApplyReceive(shop, newInv.items||[], date, gt, true); }catch(e){} }
 }
 function rebuildStock(showMsg){
   // Автопересчёт (при входе и на странице «Склад») отключён 03.11.2026. Он складывал ВСЕ накладные за
@@ -6983,9 +7051,16 @@ function _scHookEntryChange(before, after, shiftId, shop, entry){
   if(e.closureId) return;
   var v = _currentShiftView, isView = v && shiftId && (v.id||v._id)===shiftId;
   if(!shop) shop = isView ? v.shopName : (!shiftId && typeof session!=='undefined' && session ? session.shopName : '');
-  if(!_scIsClosed(shop)) return;
   var kind = e.type==='receive' ? 'in' : ((e.type==='sale' || e.type==='writeoff') ? 'out' : '');
   if(!kind || e.isRevaluation) return;
+  if(!_scIsClosed(shop)){
+    // Магазин работает — правка/удаление записи меняет склад на разницу (раньше это делал только
+    // полный пересчёт остатков, отключённый 03.11). Приход по накладной ведётся по самой накладной
+    // (_invEditStock), а продажи онлайн/выездных точек списываются со склада другого магазина.
+    if(e.invId || (typeof getShopType==='function' && getShopType(shop)!=='shop')) return;
+    stockApplyEditDelta(shop, kind, before?(entry?[before]:before.items):[], after?(entry?[after]:after.items):[], e.goodsType);
+    return;
+  }
   var date = (isView && v.date) || String(e.ts||'').slice(0,10);
   var what = {sale:'продажи', receive:'прихода', writeoff:(e.transferTo?'перемещения':'списания')}[e.type];
   var note = (before && after ? 'Правка ' : (after ? 'Добавление ' : 'Удаление '))+what+(date?' от '+_scDateRu(date):'')+(e.sub?' — '+String(e.sub).slice(0,80):'');
