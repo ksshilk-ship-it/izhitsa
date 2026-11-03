@@ -4017,6 +4017,12 @@ function stockApplyReceive(shopName,items,date,invGoodsType,isRevaluation){
   saveStock(stock);
 }
 function rebuildStock(showMsg){
+  // Автопересчёт (при входе и на странице «Склад») отключён 03.11.2026. Он складывал ВСЕ накладные за
+  // всю историю, а продажи и списания вычитал только из смен в памяти телефона — это последние 14 дней
+  // (SHIFTS_LIVE_SYNC_DAYS) — и записывал результат в облако. Всё, что продано или списано раньше,
+  // снова оказывалось на складе: так вернулся весь остаток закрытой Ривьеры и сотни проданных изделий
+  // в Горках и Колесе. Склад ведётся по ходу дела (stockApplySale/Receive/Writeoff) и приходит из облака.
+  if(showMsg!=='force') return;
   var stock={};
   var shops=getShopNames();
   shops.forEach(function(sn){ stock[sn]={}; });
