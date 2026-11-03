@@ -3896,12 +3896,14 @@ function _queueStockPatch(sn, patch){
   }catch(e){}
 }
 function _flushStockPatches(){
-  try{
-    if(typeof db==='undefined' || !db) return;
-    var q = JSON.parse(localStorage.getItem('iz_pending_stock')||'{}')||{};
-    Object.keys(q).forEach(function(sn){
-      var sent = q[sn], items = {}, keys = Object.keys(sent);
-      if(!keys.length) return;
+  if(typeof db==='undefined' || !db) return;
+  var q; try{ q = JSON.parse(localStorage.getItem('iz_pending_stock')||'{}')||{}; }catch(e){ return; }
+  // каждый магазин отдельно: раньше ошибка на одном обрывала отправку остальных
+  Object.keys(q).forEach(function(sn){
+    var sent = q[sn]||{}, keys = Object.keys(sent);
+    if(!keys.length) return;
+    try{
+      var items = {};
       keys.forEach(function(k){ items[k] = sent[k]===null ? firebase.firestore.FieldValue.delete() : sent[k]; });
       db.collection('iz_settings').doc('stock_'+sn.replace(/\s+/g,'_')).set({items:items, updatedAt:new Date().toISOString()}, {merge:true}).then(function(){
         // убираем из очереди только то, что не успело поменяться ещё раз, пока шла запись
@@ -3912,8 +3914,28 @@ function _flushStockPatches(){
           if(Object.keys(c).length) cur[sn] = c; else delete cur[sn];
           localStorage.setItem('iz_pending_stock', JSON.stringify(cur));
         }catch(e){}
-      }).catch(function(){});
-    });
+        _stockSyncMark(sn, null, keys.length);
+      }).catch(function(err){ _stockSyncMark(sn, err, keys.length); });
+    }catch(err){ _stockSyncMark(sn, err, keys.length); }
+  });
+}
+// Склад «Роза Хутор» с 31.10.2026 18:42 не обновлялся в облаке, хотя продавцы работали и приняли
+// накладную, — причину с телефона не видно. Ошибку записи пишем в журнал действий (не чаще раза в час
+// на магазин), а когда запись снова прошла — отметку об этом.
+function _stockSyncMark(sn, err, n){
+  try{
+    if(typeof session==='undefined' || !session) return;
+    var m = JSON.parse(localStorage.getItem('iz_stock_sync_err')||'{}')||{}, now = Date.now();
+    var ver = (typeof APP_BUILD_VERSION!=='undefined') ? APP_BUILD_VERSION : '';
+    if(!err){
+      if(!m[sn]) return;
+      delete m[sn]; localStorage.setItem('iz_stock_sync_err', JSON.stringify(m));
+      logAction('STOCK_SYNC_RECOVERED', {shop:sn, keys:n, ver:ver});
+      return;
+    }
+    if(m[sn] && now-m[sn] < 3600000) return;
+    m[sn] = now; localStorage.setItem('iz_stock_sync_err', JSON.stringify(m));
+    logAction('STOCK_SYNC_ERROR', {shop:sn, keys:n, ver:ver, msg:String((err&&err.code?err.code+': ':'')+(err&&err.message||err)).slice(0,400)});
   }catch(e){}
 }
 function stockGetByNum(shopName,num){
