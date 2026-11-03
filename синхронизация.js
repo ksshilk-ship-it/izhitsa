@@ -325,7 +325,7 @@ window.addEventListener('online', function(){
 });
 window.addEventListener('offline', _renderConnStatus);
 document.addEventListener('DOMContentLoaded', _renderConnStatus);
-var APP_BUILD_VERSION = '11.03.03';
+var APP_BUILD_VERSION = '11.03.04';
 try{
   var _lvt = document.getElementById('loginVersionTag'); if(_lvt) _lvt.textContent = 'v'+APP_BUILD_VERSION;
   var _hvt = document.getElementById('hdrVersionTag'); if(_hvt) _hvt.textContent = 'v'+APP_BUILD_VERSION;
@@ -1791,6 +1791,12 @@ function buildAdminTabs(){
     <button class="tab" onclick="showPg('shopsettings',this);renderShopSettings()"><div class="ti">⚙️</div><span>Настройки</span></button>`;
 }
 function migrateGoodsRefbooks(){
+  // Разовый перенос старого «iz_goods» в «Дерево» давно отработал. А «iz_goods» — это ещё и список
+  // «Наименования изделий» приложения мастерской (doc 'goods'), поэтому на каждом новом телефоне или
+  // после очистки памяти перенос заново копировал в «Базу товаров — Дерево» всё, что завела мастерская:
+  // так 03.11.2026 у продавцов появилась «Доска подача» рядом с «Доска д/подачи». Только ставим отметку.
+  localStorage.setItem('iz_goods_migrated_v1','1');
+  return;
   if(localStorage.getItem('iz_goods_migrated_v1')) return;
   var old = getRefBook('iz_goods');
   if(!old.length){ localStorage.setItem('iz_goods_migrated_v1','1'); return; }
