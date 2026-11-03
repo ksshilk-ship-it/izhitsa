@@ -5501,18 +5501,22 @@ function _findArtDupInItems(items, excludeInvId, destShop, transferFrom, collisi
         continue;
       }
       var otherShop = destShop && latest.shop && latest.shop!==destShop;
-      if(otherShop && _artWrittenOffAt(num, latest.shop, latest.date)) continue;
+      // После той приёмки вещь там же списали — значит, сейчас она законно приходит снова: в другой
+      // магазин (перемещение) или в тот же (вернулась из мастерской после ремонта: №52961 списали
+      // на Колесе 06.10 «Трещины», 03.11 привезли обратно — раньше повторная приёмка в тот же магазин
+      // блокировалась всегда).
+      if(_artWrittenOffAt(num, latest.shop, latest.date)) continue;
       // Накладная перемещения: отправитель сам списал эту вещь этой же накладной — она физически
       // приехала оттуда. Если номер при этом «висит» ещё и на третьем магазине — это старая путаница
       // с биркой (две разные вещи под одним номером, напр. №51919 «Капа» на Ривьере и «Доска» с
       // Горок), к перемещению отношения не имеет и разбирается в аудите «Задвоение номеров».
       if(otherShop && transferFrom) continue;
+      // списание могли сделать только что — подтягиваем свежий список к следующему нажатию
+      try{ _buildWriteoffArtIndex(true); }catch(e){}
       if(otherShop){
-        // списание могли сделать только что — подтягиваем свежий список к следующему нажатию
-        try{ _buildWriteoffArtIndex(true); }catch(e){}
         return '№'+num+' «'+latest.name+'» числится на магазине '+latest.shop+' (принят '+latest.date+') и там не списан — сначала спишите его на '+latest.shop+', потом принимайте здесь';
       }
-      return '№'+num+' уже был использован: «'+latest.name+'» ('+latest.shop+', '+latest.date+')';
+      return '№'+num+' уже был использован: «'+latest.name+'» ('+latest.shop+', '+latest.date+') и с тех пор не списан';
     }
   }
   return null;
