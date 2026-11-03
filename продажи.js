@@ -121,6 +121,58 @@ function _siGetDrVariants(name){
   if(!norm) return [];
   return getRefBook('iz_goods_dr').filter(function(g){ return (g.name||'').toLowerCase().trim()===norm && g.article; });
 }
+// Ценовые подгруппы внутри «наименование · порода»: у Лопатки · Орех грецкий 34 варианта цены подряд —
+// список приходилось долго листать. Одна подгруппа (все цены в одном диапазоне) — без заголовка.
+var PRICE_BANDS = [
+  {max:1000,     label:'0 – 1 000 ₽'},
+  {max:2000,     label:'1 100 – 2 000 ₽'},
+  {max:Infinity, label:'свыше 2 000 ₽'}
+];
+function _priceBands(rows, priceOf){
+  var out = PRICE_BANDS.map(function(b, i){ return {idx:i, label:b.label, rows:[]}; });
+  rows.forEach(function(r){
+    var p = parseFloat(priceOf(r))||0;
+    for(var i=0;i<PRICE_BANDS.length;i++){ if(p<=PRICE_BANDS[i].max){ out[i].rows.push(r); break; } }
+  });
+  return out.filter(function(b){ return b.rows.length; });
+}
+// Заголовок ценовой подгруппы в выпадающих подсказках (onclick — как у строк, см. _siSuggRow)
+function _priceBandHead(onclick, label, count, open, indentPx){
+  return '<div onclick="'+onclick+'" style="padding:7px 10px 7px '+(indentPx||10)+'px;font-size:11px;color:#60c8f0;font-weight:700;border-bottom:1px solid #1e2e36;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px;background:#121c22">'+
+    '<span>'+(open?'▾':'▸')+' '+label+'</span><span style="color:#5a9ab0;font-size:10.5px;font-weight:600">'+count+'</span></div>';
+}
+// Окна выбора из справочника Дерева (📋 в продаже и приёмке): позиции с артикулом — свёрнутыми
+// группами «наименование · порода», внутри — ценовые подгруппы. Раньше все ~300 строк «С артикулом
+// вручную» шли одним полотном в «Без категории». state — объект раскрытых групп окна, toggleFn — его
+// функция раскрытия (принимает ключ группы).
+function _catPickerWoodGroups(list, rowFn, state, toggleFn){
+  var out = list.filter(function(it){ return !it.article; }).map(rowFn).join('');
+  var groups = {}, order = [];
+  list.filter(function(it){ return !!it.article; }).forEach(function(it){
+    var k = (it.name||'—')+' · '+((it.species||'').trim()||'без породы');
+    if(!groups[k]){ groups[k] = []; order.push(k); }
+    groups[k].push(it);
+  });
+  order.sort(function(a,b){ return a.toLowerCase().localeCompare(b.toLowerCase(),'ru'); });
+  var head = function(gk, label, count, open, indent, color){
+    return '<div onclick="'+toggleFn+'(\''+gk.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;')+'\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 10px 8px '+indent+'px;margin-bottom:4px;background:#16161e;border-radius:8px">'+
+      '<span style="font-size:12px;font-weight:700;color:'+color+'">'+(open?'▾':'▸')+' '+label+'</span><span style="color:#8888aa;font-size:11px">'+count+'</span></div>';
+  };
+  order.forEach(function(k){
+    var g = groups[k].slice().sort(function(a,b){ return (a.price||0)-(b.price||0); });
+    var gk = 'grp:'+k, open = state[gk]===true;
+    out += head(gk, k, g.length, open, 10, '#f0c060');
+    if(!open) return;
+    var bands = _priceBands(g, function(it){ return it.price; });
+    if(bands.length<=1){ out += g.map(rowFn).join(''); return; }
+    bands.forEach(function(b){
+      var bk = gk+'|band'+b.idx, bOpen = state[bk]===true;
+      out += head(bk, b.label, b.rows.length, bOpen, 24, '#60c8f0');
+      if(bOpen) out += b.rows.map(rowFn).join('');
+    });
+  });
+  return out;
+}
 function _siGetGoodsVariants(name, goodsType){
   var norm = (name||'').toLowerCase().trim();
   if(!norm) return [];
@@ -166,10 +218,19 @@ function _siBuildSuggest(inputId, speciesFieldId, pickFn, suggestFn){
   names.forEach(function(nm){
     var variants = _siGetGoodsVariants(nm, _siItemGoodsType);
     var _htmlBefore = html.length;
+    // Варианты одной породы — по ценовым подгруппам (свёрнуты; раскрываются тем же тапом, что и порода)
+    var bandedRows = function(list, baseKey, level){
+      var bands = _priceBands(list.slice().sort(function(a,b){ return (a.price||0)-(b.price||0); }), function(v){ return v.price; });
+      if(bands.length<=1){ list.slice().sort(function(a,b){ return (a.price||0)-(b.price||0); }).forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species||null, level, pickFn); }); return; }
+      bands.forEach(function(b){
+        var bk = baseKey+'|band'+b.idx, bOpen = !!window._siSuggSpeciesOpen[bk];
+        html += _priceBandHead('_siSuggToggleSpecies(\''+inputId+'\',\''+bk.replace(/'/g,"\\'")+'\',\''+suggestFn+'\')', b.label, b.rows.length, bOpen, 10+level*12);
+        if(bOpen) b.rows.forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species||null, level+1, pickFn); });
+      });
+    };
     if(isWood && speciesVal){
       var norm = speciesVal.toLowerCase();
-      variants.filter(function(v){ return (v.species||'').trim().toLowerCase()===norm; })
-        .forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species, 0, pickFn); });
+      bandedRows(variants.filter(function(v){ return (v.species||'').trim().toLowerCase()===norm; }), suggestFn+'|'+nm+'|sp:'+norm, 0);
     } else if(isWood && variants.length){
       var bySpecies = {}, order = [];
       variants.forEach(function(v){
@@ -188,7 +249,7 @@ function _siBuildSuggest(inputId, speciesFieldId, pickFn, suggestFn){
         html += '<div onclick="_siSuggToggleSpecies(\''+inputId+'\',\''+ge+'\',\''+suggestFn+'\')" '+
           'style="padding:8px 10px;font-size:12px;color:#f0c060;font-weight:700;border-bottom:1px solid #3a3020;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px;background:#221c10">'+
           '<span>'+(open?'▾':'▸')+' '+nm+' · '+sp+'</span><span style="color:#c8a868;font-size:11px;font-weight:600;white-space:nowrap;flex-shrink:0">'+list.length+' вариант'+(list.length===1?'':(list.length<5?'а':'ов'))+'</span></div>';
-        if(open){ list.forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species, 1, pickFn); }); }
+        if(open) bandedRows(list, groupKey, 1);
       });
     } else {
       variants.forEach(function(v){ html += _siSuggRow(inputId, nm, v.price, v.article, v.species||null, 0, pickFn); });
@@ -213,7 +274,7 @@ function _siSuggRow(inputId, name, price, article, species, level, pickFn){
   var priceArg = price!=null ? price : 'null';
   var artArg = article ? "'"+article.replace(/'/g,"\\'")+"'" : 'null';
   var spArg = species ? "'"+species.replace(/'/g,"\\'")+"'" : 'null';
-  var pad = level ? '8px 10px 8px 22px' : '8px 10px';
+  var pad = level ? '8px 10px 8px '+(10+level*12)+'px' : '8px 10px';
   // onclick (не onpointerdown) — список часто длиннее видимой области и его нужно листать пальцем;
   // pointerdown срабатывает раньше, чем браузер поймёт, что это скролл, а не тап, и подставлял
   // первую же строку под пальцем вместо прокрутки. onblur поля уже скрывает список с задержкой
@@ -374,14 +435,15 @@ function _renderSaleCatalogPicker(){
         '<span style="color:#8888aa;font-size:11px">'+(open?'▾':'▸')+'</span>'+
       '</div>';
       if(!open) return header;
-      return header + list.map(function(it){
+      var rowFn = function(it){
           var priceStr = (isDr || it.article) ? (' · '+Math.round(it.price||0).toLocaleString('ru-RU')+'₽'+(it.article?' · №'+it.article:'')) : '';
           var speciesStr = (!isDr && it.species) ? ' · '+it.species : '';
           return '<div onclick="_scpPick(\''+(it.name||'').replace(/'/g,"\\'")+'\','+(it.price||0)+',\''+(it.article||'').replace(/'/g,"\\'")+'\',\''+(it.species||'').replace(/'/g,"\\'")+'\')" '+
             'style="padding:9px 10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:5px;cursor:pointer;font-size:13px">'+
             (it.name||'')+'<span style="color:#8888aa;font-size:12px">'+speciesStr+priceStr+'</span>'+
           '</div>';
-        }).join('');
+        };
+      return header + (isDr ? list.map(rowFn).join('') : _catPickerWoodGroups(list, rowFn, window._scpCatOpen, '_scpToggleCat'));
     }).join('');
   overlay.innerHTML = '<div class="md">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+

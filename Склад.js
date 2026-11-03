@@ -2098,14 +2098,15 @@ function _renderManInvCatalogPicker(){
         '<span style="color:#8888aa;font-size:11px">'+(open?'▾':'▸')+'</span>'+
       '</div>';
       if(!open) return header;
-      return header + list.map(function(it){
+      var rowFn = function(it){
           var priceStr = (isDr || it.article) ? (' · '+Math.round(it.price||0).toLocaleString('ru-RU')+'₽'+(it.article?' · №'+it.article:'')) : '';
           var speciesStr = (!isDr && it.species) ? ' · '+it.species : '';
           return '<div onclick="_micPick('+targetIdx+',\''+(it.name||'').replace(/'/g,"\\'")+'\','+(it.price||0)+',\''+(it.article||'').replace(/'/g,"\\'")+'\',\''+(it.species||'').replace(/'/g,"\\'")+'\')" '+
             'style="padding:9px 10px;background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:5px;cursor:pointer;font-size:13px">'+
             (it.name||'')+'<span style="color:#8888aa;font-size:12px">'+speciesStr+priceStr+'</span>'+
           '</div>';
-        }).join('');
+        };
+      return header + (isDr ? list.map(rowFn).join('') : _catPickerWoodGroups(list, rowFn, window._micCatOpen, '_micToggleCat'));
     }).join('');
   overlay.innerHTML = '<div class="md">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
@@ -2764,12 +2765,23 @@ function _manInvEditSuggestName(id, i){
   names.forEach(function(nm){
     var variants = _siGetGoodsVariants(nm, gt);
     if(spNorm) variants = variants.filter(function(v){ return String(v.species||'').trim().toLowerCase()===spNorm; });
-    variants.forEach(function(v){ rows.push({name:nm, price:v.price, article:v.article, species:v.species||null}); });
+    variants = variants.slice().sort(function(a,b){ return (a.price||0)-(b.price||0); });
+    // Много цен — по ценовым подгруппам, свёрнуты (см. _priceBands)
+    var bands = _priceBands(variants, function(v){ return v.price; });
+    if(bands.length>1){
+      bands.forEach(function(b){
+        var bk = id+'|'+i+'|'+nm+'|'+(spNorm||'')+'|'+b.idx;
+        var bOpen = !!window._manInvEditBandOpen[bk];
+        rows.push({head:_priceBandHead('_manInvEditToggleBand(\''+id+'\','+i+',\''+bk.replace(/'/g,"\\'")+'\')', nm+' · '+b.label, b.rows.length, bOpen)});
+        if(bOpen) b.rows.forEach(function(v){ rows.push({name:nm, price:v.price, article:v.article, species:v.species||null}); });
+      });
+    } else variants.forEach(function(v){ rows.push({name:nm, price:v.price, article:v.article, species:v.species||null}); });
     // «Просто название» без цены — только когда подходящих вариантов нет (как в продаже): рядом с
     // вариантами оно давало принять изделие мимо справочника.
     if(!variants.length) rows.push({name:nm, price:null, article:null, species:null});
   });
   box.innerHTML = rows.map(function(r){
+    if(r.head) return r.head;
     var infoStr = r.price!=null
       ? ' · '+Math.round(r.price).toLocaleString('ru-RU')+'₽'+(r.article?' · №'+r.article:'')+(isWood&&r.species?' · '+r.species:'')
       : '';
@@ -2781,6 +2793,12 @@ function _manInvEditSuggestName(id, i){
       '<span>'+r.name+'</span><span style="color:#8888aa;font-size:11px;white-space:nowrap;flex-shrink:0">'+infoStr+'</span></div>';
   }).join('');
   box.style.display='block';
+}
+window._manInvEditBandOpen = window._manInvEditBandOpen || {};
+function _manInvEditToggleBand(id, i, bk){
+  if(typeof _psjCancelHideSugg==='function') _psjCancelHideSugg('maninv_name_'+id+'_'+i);
+  window._manInvEditBandOpen[bk] = !window._manInvEditBandOpen[bk];
+  _manInvEditSuggestName(id, i);
 }
 function _manInvEditPickVariant(id, i, name, price, article, species){
   var data = window._manInvEdit[id]; if(!data || !data.items[i]) return;

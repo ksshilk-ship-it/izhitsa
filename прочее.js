@@ -551,7 +551,7 @@ function _rbRichWoodGroup(rich, allItems, bookId, key){
         '<span style="color:#8888aa;font-size:10px">'+(spOpen?'▾':'▸')+'</span>'+
       '</div>';
       if(!spOpen) return spHead;
-      var rowsHtml = rows.map(function(item){
+      var rowHtml = function(item){
         var realIdx = allItems.indexOf(item);
         return '<div style="display:flex;align-items:center;gap:4px;padding:4px 10px 4px 18px">'+
           '<input type="text" value="'+(item.article||'').replace(/"/g,'&quot;')+'" placeholder="№" onchange="setRefbookItemArticle(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:100px;flex-shrink:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 5px">'+
@@ -560,8 +560,19 @@ function _rbRichWoodGroup(rich, allItems, bookId, key){
           '<input type="text" value="'+(item.species||'').replace(/"/g,'&quot;')+'" placeholder="Порода" onchange="setRefbookItemSpecies(\''+bookId+'\','+realIdx+',\''+key+'\',this.value)" style="width:56px;flex-shrink:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px 5px">'+
           '<button onclick="deleteRefbookItemShop(\''+bookId+'\','+realIdx+',\''+key+'\')" style="background:none;border:none;color:#f06060;font-size:13px;cursor:pointer;padding:2px;flex-shrink:0">✕</button>'+
         '</div>';
+      };
+      // Внутри породы — ценовые подгруппы (0–1000, 1100–2000, свыше 2000), свёрнуты; одна — без заголовка
+      var bands = _priceBands(rows, function(it){ return it.price; });
+      if(bands.length<=1) return spHead + rows.map(rowHtml).join('');
+      window._rbRichBandOpen = window._rbRichBandOpen || {};
+      return spHead + bands.map(function(b){
+        var bGid = spGid+'__'+b.idx;
+        var bOpen = window._rbRichBandOpen[bGid]===true;
+        return '<div onclick="toggleRichBandGroup(\''+bookId+'\',\''+key+'\',\''+bGid.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:6px 10px 6px 30px">'+
+            '<span style="font-size:10.5px;font-weight:700;color:#60c8f0">💰 '+b.label+' ('+b.rows.length+')</span>'+
+            '<span style="color:#8888aa;font-size:10px">'+(bOpen?'▾':'▸')+'</span>'+
+          '</div>'+(bOpen ? b.rows.map(rowHtml).join('') : '');
       }).join('');
-      return spHead + rowsHtml;
     }).join('');
     return head + '<div style="background:#13131a;border-radius:8px;margin-bottom:6px">'+body+'</div>';
   }).join('');
@@ -570,6 +581,11 @@ function toggleRichNameGroup(bookId, key, name){
   window._rbRichNameOpen = window._rbRichNameOpen || {};
   var gid = bookId+'__richname__'+name;
   window._rbRichNameOpen[gid] = !(window._rbRichNameOpen[gid]===true);
+  renderGoodsCatalogGrouped(bookId, key);
+}
+function toggleRichBandGroup(bookId, key, gid){
+  window._rbRichBandOpen = window._rbRichBandOpen || {};
+  window._rbRichBandOpen[gid] = !(window._rbRichBandOpen[gid]===true);
   renderGoodsCatalogGrouped(bookId, key);
 }
 function toggleRichSpeciesGroup(bookId, key, name, species){
