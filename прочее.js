@@ -295,8 +295,13 @@ function renderRefbookSections(){
               '</div>'+
               '<div style="display:flex;flex-direction:column;gap:6px;padding:8px;background:#13131a;border-radius:8px">'+
                 '<div style="font-size:10px;color:#8888aa">🔢 Позиция с артикулом вручную — для переноса старых записей (аудит наименований)</div>'+
-                '<input class="fi" id="rbWdName_'+book.id+'" placeholder="Наименование" autocomplete="off" style="margin:0">'+
-                '<input class="fi" id="rbWdSpecies_'+book.id+'" placeholder="Порода" autocomplete="off" style="margin:0">'+
+                ['Name','Species'].map(function(f){
+                  var ev = '\''+book.id+'\',\''+book.key+'\',\''+f+'\'';
+                  return '<div>'+
+                    '<input class="fi" id="rbWd'+f+'_'+book.id+'" placeholder="'+(f==='Name'?'Наименование':'Порода')+' — выберите из списка" autocomplete="off" style="margin:0" onfocus="_rbWdSugg('+ev+')" oninput="_rbWdSugg('+ev+')" onblur="_rbWdHideSugg(\''+book.id+'\',\''+f+'\')">'+
+                    '<div id="rbWd'+f+'_'+book.id+'_sugg" style="display:none;max-height:240px;overflow-y:auto;background:#1c1c26;border:1px solid #3a3a4e;border-radius:8px;margin-top:4px"></div>'+
+                  '</div>';
+                }).join('')+
                 '<div style="display:flex;gap:8px">'+
                   '<input class="fi" id="rbWdArticle_'+book.id+'" placeholder="Артикул" autocomplete="off" style="flex:1;margin:0">'+
                   '<input class="fi" id="rbWdPrice_'+book.id+'" type="number" placeholder="Цена" style="flex:1;margin:0">'+
@@ -621,6 +626,50 @@ function _incrementArticle(article){
   var next = String(parseInt(digits,10)+1);
   while(next.length < digits.length) next = '0'+next;
   return prefix + next;
+}
+// Подсказки для «Позиция с артикулом вручную»: наименование — из справочника Дерева, порода — из
+// справочника пород. Список виден сразу при касании поля (выбрать из того, что есть), при вводе —
+// фильтруется по словам. Своё значение вписать по-прежнему можно.
+function _rbWdSugg(bookId, key, f){
+  var input = document.getElementById('rbWd'+f+'_'+bookId), box = document.getElementById('rbWd'+f+'_'+bookId+'_sugg');
+  if(!input || !box) return;
+  var seen = {}, list = [];
+  var src = f==='Name' ? getRefBook(key).map(function(c){ return c && (c.name||(typeof c==='string'?c:'')); }) : getSpecies();
+  src.forEach(function(n){ n = String(n||'').trim(); var k = n.toLowerCase(); if(n && !seen[k]){ seen[k] = true; list.push(n); } });
+  var words = (input.value||'').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  var m = list.filter(function(n){ var l = n.toLowerCase(); return words.every(function(w){ return l.indexOf(w)>=0; }); });
+  m.sort(function(a,b){
+    var ai = words.length ? a.toLowerCase().indexOf(words[0]) : 0, bi = words.length ? b.toLowerCase().indexOf(words[0]) : 0;
+    return ai!==bi ? ai-bi : a.localeCompare(b,'ru');
+  });
+  if(!m.length || (m.length===1 && m[0].toLowerCase()===(input.value||'').trim().toLowerCase())){ box.style.display='none'; box.innerHTML=''; return; }
+  box.innerHTML = m.map(function(n){
+    return '<div onclick="_rbWdPick(\''+bookId+'\',\''+key+'\',\''+f+'\',\''+n.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;')+'\')" style="padding:9px 12px;font-size:13px;color:#f0f0f8;border-bottom:1px solid #2e2e3e;cursor:pointer">'+n.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</div>';
+  }).join('');
+  box.style.display = 'block';
+}
+function _rbWdHideSugg(bookId, f){
+  setTimeout(function(){ var box = document.getElementById('rbWd'+f+'_'+bookId+'_sugg'); if(box) box.style.display='none'; }, 200);
+}
+function _rbWdPick(bookId, key, f, val){
+  var input = document.getElementById('rbWd'+f+'_'+bookId); if(input) input.value = val;
+  var box = document.getElementById('rbWd'+f+'_'+bookId+'_sugg'); if(box) box.style.display='none';
+  // Наименование и порода выбраны, артикул пуст — подставляем следующий после последнего такого же
+  // (Ложка · Каштан: ЛожКаш13 → ЛожКаш14).
+  var nm = ((document.getElementById('rbWdName_'+bookId)||{}).value||'').trim().toLowerCase();
+  var sp = ((document.getElementById('rbWdSpecies_'+bookId)||{}).value||'').trim().toLowerCase();
+  var artEl = document.getElementById('rbWdArticle_'+bookId);
+  if(nm && sp && artEl && !artEl.value.trim()){
+    var last = null, lastN = -1;
+    getRefBook(key).forEach(function(c){
+      if(!c || !c.article || (c.name||'').trim().toLowerCase()!==nm || (c.species||'').trim().toLowerCase()!==sp) return;
+      var mm = String(c.article).match(/(\d+)$/); var n = mm ? parseInt(mm[1],10) : -1;
+      if(n>lastN){ lastN = n; last = c.article; }
+    });
+    if(last) artEl.value = _incrementArticle(last);
+  }
+  var next = f==='Name' ? document.getElementById('rbWdSpecies_'+bookId) : document.getElementById('rbWdPrice_'+bookId);
+  if(next && !next.value) try{ next.focus(); }catch(e){}
 }
 function addWoodGoodsVariant(bookId, key){
   var nameEl = document.getElementById('rbWdName_'+bookId);
