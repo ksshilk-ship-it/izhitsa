@@ -6025,6 +6025,24 @@ function _trStockFind(stockShop, r, gt){
   var alt = _findStockKeyByNamePrice(stockShop, r.name, r.price, gt, key);
   return alt ? {key:alt, it:stockShop[alt]} : null;
 }
+// Название в перемещении должно быть из справочника — и у администратора тоже: 07.10.2026 в накладной
+// Горки → Роза три пистолета ушли как «Вальтер» вместо «Пистолет Вальтер», и эта отсебятина потом
+// числилась за продавцами обоих магазинов. Если по номеру на складе отправителя есть правильное
+// название — предлагаем его.
+function _trCatalogNames(gt){
+  var set = {};
+  getRefBook(gt==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo').forEach(function(g){ var n = String((g&&g.name)||g||'').trim().toLowerCase(); if(n) set[n] = true; });
+  return set;
+}
+function _trNameIssue(r, gt, stockShop, names){
+  var nm = String(r.name||'').trim(); if(!nm) return null;
+  names = names || _trCatalogNames(gt);
+  if(names[nm.toLowerCase()]) return null;
+  var f = _trStockFind(stockShop||{}, r, gt);
+  var good = f && f.it && String(f.it.name||'').trim();
+  return {fix: (good && good!==nm && names[good.toLowerCase()]) ? good : ''};
+}
+function _trFixName(i, name){ var r=_trRows[i]; if(!r) return; r.name = name; _trSaveDraft(); _trRender(); }
 function _trKey(r){
   var n = String(r.num||'').trim();
   return n ? 'n:'+n : 's:'+String(r.name||'').trim().toLowerCase()+'|'+(r.price||0)+'|'+String(r.species||'').trim().toLowerCase();
@@ -6033,6 +6051,7 @@ function trParse(){
   var raw = gv('trText')||'';
   var gt = gv('trType')||'derevo';
   var stockShop = _trStockOf(gv('trFrom'));
+  var _trCatNames = _trCatalogNames(gt);
   var added=0, merged=0;
   raw.split(/\r?\n/).forEach(function(line){
     line = line.trim(); if(!line) return;
@@ -6042,7 +6061,10 @@ function trParse(){
     var r = {num:cells[0]||'', name:cells[1]||'', species:cells[2]||'', price:_invImpNum(cells[3]), qty:_invImpNum(cells[4])};
     if(cells.length===1){ r.num = /^\d+$/.test(cells[0]) ? cells[0] : ''; if(!r.num) r.name = cells[0]; }
     var st = r.num ? stockShop[String(r.num).trim()] : null;
-    if(st){ if(!r.name) r.name = st.name||''; if(!r.species) r.species = st.species||''; if(r.price==null) r.price = st.price||0; }
+    if(st){
+      if(!r.name || (st.name && !_trCatNames[String(r.name).trim().toLowerCase()] && _trCatNames[String(st.name).trim().toLowerCase()])) r.name = st.name||'';
+      if(!r.species) r.species = st.species||''; if(r.price==null) r.price = st.price||0;
+    }
     if(r.price==null) r.price = 0;
     if(r.qty==null || r.qty<=0) r.qty = 1;
     var k = _trKey(r);
@@ -6063,7 +6085,8 @@ function trEdit(i, f, v){
   var r=_trRows[i]; if(!r) return;
   r[f] = (f==='price'||f==='qty') ? (_invImpNum(v)||0) : v;
   var el = document.getElementById('trRowSum_'+i); if(el) el.textContent = _rowSumTxt(r);
-  _trSaveDraft(); _trRenderTotals();
+  _trSaveDraft();
+  if(f==='name' || f==='num') _trRender(); else _trRenderTotals();
 }
 function trDel(i){ _trRows.splice(i,1); _trSaveDraft(); _trRender(); }
 function trClearAll(){
@@ -6121,9 +6144,10 @@ function _trRender(){
       (sugg?' oninput="_trSugg('+i+',\''+f+'\',this.value)" onfocus="_trSugg('+i+',\''+f+'\',this.value)" onblur="_trHideSugg('+i+')" autocomplete="off"':'')+
       (mode?' inputmode="'+mode+'"':'')+' style="width:'+w+';min-width:0;background:#22222e;border:1px solid #2e2e3e;border-radius:6px;color:#f0f0f8;font-size:11px;padding:5px">';
   };
-  var bad = 0;
+  var bad = 0, badNames = 0, catNames = _trCatalogNames(gt);
   var rows = _trRows.map(function(r,i){
     var iss = _trRowIssues(r, stockShop, gt, from); if(iss.length) bad++;
+    var ni = _trNameIssue(r, gt, stockShop, catNames); if(ni) badNames++;
     return '<div style="padding:6px 0;border-bottom:1px solid #22222e">'+
       '<div style="display:flex;gap:4px;align-items:center">'+
         inp(i,'num',r.num,'70px')+inp(i,'name',r.name,'auto;flex:1')+inp(i,'species',r.species,'70px')+
@@ -6135,6 +6159,8 @@ function _trRender(){
         '<div style="font-size:10px;color:#f0c060">'+(iss.length?'⚠️ '+iss.join(' · '):'')+'</div>'+
         '<div id="trRowSum_'+i+'" style="font-size:11px;font-weight:700;color:#c8f060;flex-shrink:0">'+_rowSumTxt(r)+'</div>'+
       '</div>'+
+      (ni ? '<div style="font-size:10px;color:#f06060;margin-top:2px">⛔ «'+esc(r.name)+'» нет в справочнике «'+(gt==='dr'?'ДР Товар':'Дерево')+'»'+
+        (ni.fix ? ' <button type="button" onclick="_trFixName('+i+',\''+esc(ni.fix).replace(/'/g,"\\'")+'\')" style="margin-left:4px;background:#c8f060;border:none;border-radius:6px;padding:2px 7px;color:#0f0f13;font-size:10px;font-weight:700;cursor:pointer">→ «'+esc(ni.fix)+'»</button>' : ' — выберите из подсказок')+'</div>' : '')+
     '</div>';
   }).join('');
   host.innerHTML = '<div style="background:#13131a;border:1px solid #2e2e3e;border-radius:10px;padding:8px 10px;margin-top:10px">'+
@@ -6143,6 +6169,7 @@ function _trRender(){
     '<div style="font-size:9.5px;color:#555568;margin-bottom:2px">№ · Название · Порода · Цена · Кол-во</div>'+
     (_trKind!=='wo'&&from===to?'<div style="font-size:11px;color:#f06060;font-weight:700;margin:4px 0">⛔ Откуда и Куда — один и тот же магазин</div>':'')+
     (bad?'<div style="font-size:11px;color:#f0c060;margin:4px 0">⚠️ Строк с замечаниями: '+bad+'</div>':'')+
+    (badNames?'<div style="font-size:11px;color:#f06060;margin:4px 0">⛔ Названий не из справочника: '+badNames+'</div>':'')+
     rows+
     '<button type="button" onclick="trAddRow()" style="width:100%;margin-top:8px;padding:8px;background:none;border:1px dashed #60c8f0;border-radius:8px;color:#60c8f0;font-size:11.5px;font-weight:700;cursor:pointer">➕ Строка</button>'+
     '</div>';
@@ -6285,6 +6312,13 @@ function trSave(){
   var noName = _trRows.findIndex(function(r){ return !String(r.name||'').trim() || !(r.qty>0); });
   if(noName>=0){ showToast('⛔ Строка '+(noName+1)+': нужно название и кол-во'); return; }
   var stockShop = _trStockOf(from);
+  var catNames = _trCatalogNames(gt);
+  var offNames = [];
+  _trRows.forEach(function(r,i){ if(_trNameIssue(r, gt, stockShop, catNames)) offNames.push((i+1)+'. «'+r.name+'»'); });
+  if(offNames.length){
+    if(!isAdmin){ showToast('⛔ Названий нет в справочнике: '+offNames.slice(0,3).join(', ')+(offNames.length>3?'…':'')+' — выберите из подсказок'); return; }
+    if(!confirm('Этих названий нет в справочнике «'+(gt==='dr'?'ДР Товар':'Дерево')+'»:\n'+offNames.slice(0,15).join('\n')+(offNames.length>15?'\n… и ещё '+(offNames.length-15):'')+'\n\nОни уйдут в накладную и в смены как есть. Всё равно отправить?')) return;
+  }
   var bad = _trRows.filter(function(r){ return _trRowIssues(r, stockShop, gt, from).length; }).length;
   var totalQty = _trRows.reduce(function(s,r){ return s+(r.qty||0); },0);
   var totalAmt = _trRows.reduce(function(s,r){ return s+(r.qty||0)*(r.price||0); },0);

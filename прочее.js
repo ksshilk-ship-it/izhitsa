@@ -1035,11 +1035,19 @@ function showNameSellerBreakdown(btn){
       if(r.kind==='catalog') return;
       if(r.kind==='shift' || r.kind==='shift-staff'){
         var sh = shifts.find(function(s){ return (s.id||s._id)===r.shiftId; });
+        // Запись в смене мог внести не продавец смены, а администратор (перемещение, закрытие магазина,
+        // пропущенная продажа) — раньше её автором всегда показывался продавец смены.
+        var se = sh && (sh.journal||[]).find(function(e){ return e.id===r.entryId; });
+        var shSeller = ((sh&&sh.sellerName)||'').trim();
+        var author = ((se&&(se.addedByAdmin||se.addedBy))||'').trim();
+        var notes = [];
+        if(author && author!==shSeller) notes.push('в смене '+(shSeller||'—'));
+        if(se && se.editedBy && se.editedBy!==(author||shSeller)) notes.push('правил(а) '+se.editedBy);
         records.push({
-          who: ((sh&&sh.sellerName)||'').trim()||'Неизвестно',
+          who: author||shSeller||'Неизвестно',
           date: (sh&&sh.date)||'',
           shop: (sh&&sh.shopName)||'',
-          type: r.kind==='shift-staff' ? 'Покупка сотрудника (смена)' : 'Продажа/списание (смена)',
+          type: (r.kind==='shift-staff' ? 'Покупка сотрудника (смена)' : (se&&se.type==='sale' ? 'Продажа (смена)' : (se&&se.type==='writeoff' ? (se.transferTo?'Перемещение → '+se.transferTo:'Списание')+' (смена)' : 'Продажа/списание (смена)')))+(notes.length?' · '+notes.join(', '):''),
           openFn: sh ? "closeNfSellerOverlay();openShiftView('"+r.shiftId+"')" : null
         });
       } else if(r.kind==='manual_invoice'){
@@ -1047,17 +1055,20 @@ function showNameSellerBreakdown(btn){
         records.push({
           who: ((iv&&(iv.createdBy||iv.acceptedBy))||'').trim()||'Неизвестно',
           date: (iv&&(iv.date||iv.acceptedDate))||'',
-          shop: (iv&&iv.shopName)||'',
+          shop: (iv&&(iv.destName||iv.shopName))||'',
           type: 'Накладная'+(iv&&iv.num?' '+iv.num:''),
           openFn: iv ? "showNfInvoiceDetail('"+r.invId+"',true)" : null
         });
       } else if(r.kind==='invoice'){
         var iv2 = inv.find(function(i){ return (i.id||i._id)===r.invId; });
+        // Названия в накладной пишет тот, кто её составил; принявший только подтверждает приход
+        var ivAuthor = ((iv2&&(iv2.createdBy||iv2.acceptedBy))||'').trim();
+        var ivAcc = ((iv2&&iv2.acceptedBy)||'').trim();
         records.push({
-          who: ((iv2&&(iv2.acceptedBy||iv2.createdBy))||'').trim()||'Неизвестно',
+          who: ivAuthor||'Неизвестно',
           date: (iv2&&(iv2.date||iv2.acceptedDate))||'',
-          shop: (iv2&&iv2.shopName)||'',
-          type: 'Накладная'+(iv2&&iv2.num?' '+iv2.num:''),
+          shop: (iv2&&(iv2.destName||iv2.shopName))||'',
+          type: 'Накладная'+(iv2&&iv2.num?' '+iv2.num:'')+(ivAcc&&ivAcc!==ivAuthor?' · принял(а) '+ivAcc:''),
           openFn: iv2 ? "showNfInvoiceDetail('"+r.invId+"',false)" : null
         });
       }
@@ -1095,7 +1106,7 @@ function showNameSellerBreakdown(btn){
       '<div style="font-size:15px;font-weight:700;word-break:break-word;padding-right:10px">Кто вносил: «'+name+'»</div>'+
       '<button onclick="document.getElementById(\'nfSellerOverlay\').classList.remove(\'open\')" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer;flex-shrink:0">✕</button>'+
     '</div>'+
-    '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">Нажмите на продавца, чтобы увидеть записи и открыть их</div>'+
+    '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">Кто фактически внёс запись (в т.ч. администратор в чужую смену). Нажмите на имя, чтобы увидеть записи и открыть их</div>'+
     (rows || '<div style="font-size:12px;color:#8888aa">Нет данных</div>')+
   '</div>';
   overlay.classList.add('open');
