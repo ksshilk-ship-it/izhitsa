@@ -1151,12 +1151,87 @@ function addNameToCatalog(btn){
   showToast('✅ Добавлено в справочник ('+(gt==='dr'?'ДР Товар':'Дерево')+'): '+name);
   searchItemNameOccurrences();
 }
+// Замена — выбором из справочника, а не свободным текстом в prompt(): иначе при исправлении одной
+// отсебятины легко завести другую. Похожие на исходное название позиции — вверху списка; своё
+// название ввести можно, но с явным предупреждением, что его нет в справочнике.
+var _nfRen = null;
 function startRenameItemName(btn){
   var oldName = btn.getAttribute('data-name');
-  var newName = prompt('Заменить «'+oldName+'» на:', oldName);
-  if(newName==null) return;
-  newName = newName.trim();
-  if(!newName || newName===oldName) return;
+  var gt = (typeof _nfInferGoodsType==='function') ? _nfInferGoodsType(oldName) : 'derevo';
+  var seen = {}, opts = [];
+  [[gt==='dr'?'iz_goods_dr':'iz_goods_derevo', gt==='dr'?'ДР':'Дерево'], [gt==='dr'?'iz_goods_derevo':'iz_goods_dr', gt==='dr'?'Дерево':'ДР']].forEach(function(p){
+    getRefBook(p[0]).forEach(function(g){
+      var n = String((g&&g.name)||g||'').trim(), k = n.toLowerCase();
+      if(!n || seen[k] || n===oldName) return; seen[k] = true;
+      opts.push({name:n, book:p[1], main:p[1]===(gt==='dr'?'ДР':'Дерево'), cat:(g&&g.category)||''});
+    });
+  });
+  var o = oldName.toLowerCase();
+  // + совпадение по словам (первые 4 буквы): «Доска подача» ближе к «Доска д/подачи», чем к «Доска»
+  var toks = function(v){ return v.toLowerCase().split(/[^a-zа-яё0-9]+/i).filter(function(t){ return t.length>=3; }).map(function(t){ return t.slice(0,4); }); };
+  var oT = toks(oldName);
+  opts.forEach(function(x){
+    var xT = toks(x.name), hit = oT.filter(function(t){ return xT.indexOf(t)>=0; }).length;
+    x.score = (typeof nameSimilarity==='function' ? nameSimilarity(o, x.name.toLowerCase()) : 0) + hit*0.3 + (x.main?0.05:0);
+  });
+  opts.sort(function(a,b){ return b.score-a.score || a.name.localeCompare(b.name,'ru'); });
+  _nfRen = {oldName:oldName, opts:opts, pick:''};
+  var ov = document.getElementById('nfRenameOverlay');
+  if(!ov){
+    ov = document.createElement('div'); ov.id = 'nfRenameOverlay'; ov.className = 'mo';
+    ov.onclick = function(e){ if(e.target===ov) ov.classList.remove('open'); };
+    document.body.appendChild(ov);
+  }
+  var esc = function(v){ return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); };
+  ov.innerHTML = '<div class="md">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+      '<div style="font-size:15px;font-weight:700;word-break:break-word;padding-right:10px">Заменить «'+esc(oldName)+'» на:</div>'+
+      '<button onclick="document.getElementById(\'nfRenameOverlay\').classList.remove(\'open\')" style="background:#22222e;border:1px solid #2e2e3e;border-radius:8px;width:30px;height:30px;color:#8888aa;font-size:16px;cursor:pointer;flex-shrink:0">✕</button>'+
+    '</div>'+
+    '<div style="font-size:11px;color:#8888aa;margin-bottom:8px">Выберите название из справочника — похожие вверху</div>'+
+    '<input class="fi" id="nfRenQ" placeholder="🔍 Поиск по справочнику" autocomplete="off" oninput="_nfRenList()" style="margin-bottom:6px">'+
+    '<div id="nfRenList" style="max-height:45dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid #2e2e3e;border-radius:10px;padding:2px 6px;margin-bottom:8px"></div>'+
+    '<div id="nfRenPicked" style="font-size:12px;margin-bottom:8px;min-height:16px"></div>'+
+    '<button class="btn" id="nfRenGo" onclick="_nfRenGo()" disabled style="opacity:.5">Заменить</button>'+
+  '</div>';
+  ov.classList.add('open');
+  _nfRenList();
+}
+function _nfRenList(){
+  if(!_nfRen) return;
+  var q = String((document.getElementById('nfRenQ')||{}).value||'').trim().toLowerCase();
+  var esc = function(v){ return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); };
+  var list = _nfRen.opts.filter(function(x){ return !q || x.name.toLowerCase().indexOf(q)>=0; }).slice(0, 60);
+  var exact = q && _nfRen.opts.some(function(x){ return x.name.toLowerCase()===q; });
+  var html = list.map(function(x, i){
+    var idx = _nfRen.opts.indexOf(x);
+    return '<div onclick="_nfRenPick('+idx+')" style="display:flex;justify-content:space-between;gap:8px;padding:8px 4px;border-bottom:1px solid #22222e;cursor:pointer;font-size:13px'+(_nfRen.pick===x.name?';background:#2a3a14;border-radius:6px':'')+'">'+
+      '<span>'+esc(x.name)+'</span><span style="font-size:10px;color:#8888aa;flex-shrink:0">'+esc(x.book)+(x.cat?' · '+esc(x.cat):'')+'</span></div>';
+  }).join('');
+  if(q && !exact){
+    var raw = String((document.getElementById('nfRenQ')||{}).value||'').trim();
+    html += '<div onclick="_nfRenPickCustom()" style="padding:8px 4px;cursor:pointer;font-size:12px;color:#f0a060">✍️ Своё название «'+esc(raw)+'» — его нет в справочнике</div>';
+  }
+  var el = document.getElementById('nfRenList'); if(el) el.innerHTML = html || '<div style="padding:10px;font-size:12px;color:#8888aa">Ничего не найдено</div>';
+}
+function _nfRenSetPick(name, custom){
+  _nfRen.pick = name; _nfRen.custom = !!custom;
+  var p = document.getElementById('nfRenPicked');
+  if(p) p.innerHTML = custom ? '<span style="color:#f0a060">⚠️ «'+name.replace(/</g,'&lt;')+'» нет в справочнике — оно будет туда добавлено</span>' : '✅ Заменить на <b>«'+name.replace(/</g,'&lt;')+'»</b>';
+  var b = document.getElementById('nfRenGo'); if(b){ b.disabled = false; b.style.opacity = 1; }
+  _nfRenList();
+}
+function _nfRenPick(idx){ var x = _nfRen && _nfRen.opts[idx]; if(x) _nfRenSetPick(x.name, false); }
+function _nfRenPickCustom(){ var v = String((document.getElementById('nfRenQ')||{}).value||'').trim(); if(v) _nfRenSetPick(v, true); }
+function _nfRenGo(){
+  if(!_nfRen || !_nfRen.pick) return;
+  var oldName = _nfRen.oldName, newName = _nfRen.pick;
+  if(newName===oldName) return;
+  if(_nfRen.custom && !confirm('Названия «'+newName+'» нет в справочнике. Заменить на него и добавить его в справочник?')) return;
+  var ov = document.getElementById('nfRenameOverlay'); if(ov) ov.classList.remove('open');
+  _nfRenameConfirmed(oldName, newName);
+}
+function _nfRenameConfirmed(oldName, newName){
   var matches = _nfCollectMatches(function(name){ return name===oldName; });
   var m = matches[oldName];
   if(!m || !m.count){ showToast('Не найдено записей для замены'); return; }
@@ -1247,9 +1322,12 @@ function _nfExecuteRename(refs, oldName, newName){
     catalogKeyList.forEach(function(key){
       var list = getRefBook(key);
       var changed = false;
-      list.forEach(function(it){ if((it.name||it)===oldName){ it.name=newName; changed=true; } });
       var normNew = newName.toLowerCase().trim();
-      var hasNew = list.some(function(it){ return (it.name||it).toLowerCase().trim()===normNew; });
+      var hadNew = list.some(function(it){ return String(it.name||it).toLowerCase().trim()===normNew; });
+      // новое название уже есть в справочнике — старую запись убираем, а не превращаем во второй дубль
+      if(hadNew){ var n0 = list.length; list = list.filter(function(it){ return (it.name||it)!==oldName; }); changed = list.length!==n0; }
+      else list.forEach(function(it){ if((it.name||it)===oldName){ it.name=newName; changed=true; } });
+      var hasNew = list.some(function(it){ return String(it.name||it).toLowerCase().trim()===normNew; });
       if(!hasNew && key!=='iz_goods'){ list.push({id:uid(), name:newName}); changed=true; }
       if(changed){ saveRefBookShop(key, list); _clearRefbookTombstone(key, newName); catalogsTouched++; }
     });
