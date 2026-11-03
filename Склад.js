@@ -2064,7 +2064,7 @@ function _micToggleCat(cat){
 function _renderManInvCatalogPicker(){
   var overlay = document.getElementById('manInvCatalogOverlay'); if(!overlay) return;
   var isDr = _manInvGoodsType==='dr';
-  var items = window._micAllItems||[];
+  var items = (window._micAllItems||[]).filter(function(it){ return isDr || !_hideNoSpeciesVariant(it); });
   var q = window._micQuery||'';
   if(q) items = items.filter(function(it){ return (it.name||'').toLowerCase().indexOf(q)>=0; });
   var groups = {};
@@ -2162,6 +2162,7 @@ function _manInvVariants(i){
   var seen = {};
   return (getRefBook('iz_goods_derevo')||[]).filter(function(c){
     if(!c || !c.article || String(c.name||'').toLowerCase().trim()!==norm) return false;
+    if(_hideNoSpeciesVariant(c)) return false;
     if(normSp && String(c.species||'').toLowerCase().trim()!==normSp) return false;
     var k = c.article+'|'+(c.price||0); if(seen[k]) return false; seen[k] = true; return true;
   }).sort(function(a,b){ return String(a.species||'').localeCompare(String(b.species||''),'ru') || (a.price||0)-(b.price||0) || String(a.article).localeCompare(String(b.article)); });
@@ -2387,6 +2388,22 @@ function setManInvType(type){
 // вручную»; наименование и порода — только из справочников, иначе заявка администратору
 // (тот же баннер, что в продаже). Администратора не проверяем — заявки летят ему же.
 function _rcvIsAdmin(){ return !!(session && session.role==='shopadmin'); }
+// Позиция каталога «С артикулом вручную» БЕЗ породы — переходный артикул только для старых записей
+// без породы (ЛопБП450 и т.п.). Продавцу в приёмке её не показываем и не принимаем: новый товар
+// принимается с породой — иначе «без породы» снова начнёт копиться.
+function _isNoSpeciesCatalogVariant(c){ return !!(c && c.article && !String(c.species||'').trim()); }
+function _hideNoSpeciesVariant(c){ return !_rcvIsAdmin() && _isNoSpeciesCatalogVariant(c); }
+function _rcvNoSpeciesCatalogMsg(items, onlyIdx){
+  if(_rcvIsAdmin()) return null;
+  var cat = {};
+  (getRefBook('iz_goods_derevo')||[]).forEach(function(c){ if(_isNoSpeciesCatalogVariant(c)) cat[String(c.article).trim().toLowerCase()] = true; });
+  for(var k=0;k<(items||[]).length;k++){
+    var it = items[k]; if(!it || (onlyIdx && !onlyIdx[k])) continue;
+    var a = String(it.article||it.num||'').trim().toLowerCase();
+    if(a && cat[a] && !String(it.species||'').trim()) return '⛔ Поз. '+(k+1)+' «'+(it.name||'')+'» (арт. '+(it.article||it.num)+') — это артикул «без породы» для старых записей. Выберите вариант с породой';
+  }
+  return null;
+}
 // Несколько пород/материалов в одной позиции («A + B») — только у изделий, которые и правда собраны
 // из нескольких материалов. Галочку «неск. материалов» продавцы использовали, чтобы записать разные
 // изделия одной строкой: «Ложка · Ясень + Дуб скальный + Дуб скальный + Дуб скальный» ×4 (Роза,
@@ -2477,6 +2494,7 @@ function saveManualInvoice() {
       }
     }
   }
+  if(_manInvGoodsType!=='dr'){ var _nsMsg = _rcvNoSpeciesCatalogMsg(_manInvItems); if(_nsMsg){ showToast(_nsMsg); return; } }
   for(var _mv=0; _mv<_manInvItems.length; _mv++){
     if(_manInvItems[_mv] && _multiSpeciesViolation(_manInvItems[_mv].name, _manInvItems[_mv].species)){
       showToast('⛔ Поз. '+(_mv+1)+' «'+_manInvItems[_mv].name+'»: '+_multiSpeciesDenyMsg()); return;
@@ -2764,6 +2782,7 @@ function _manInvEditSuggestName(id, i){
   var rows = [];
   names.forEach(function(nm){
     var variants = _siGetGoodsVariants(nm, gt);
+    variants = variants.filter(function(v){ return !_hideNoSpeciesVariant(v); });
     if(spNorm) variants = variants.filter(function(v){ return String(v.species||'').trim().toLowerCase()===spNorm; });
     variants = variants.slice().sort(function(a,b){ return (a.price||0)-(b.price||0); });
     // Много цен — по ценовым подгруппам, свёрнуты (см. _priceBands)
@@ -2933,6 +2952,7 @@ function saveManualInvoiceEdit(id){
       }
     }
   }
+  if((data.goodsType||'derevo')!=='dr'){ var _nsMsgE = _rcvNoSpeciesCatalogMsg(data.items, _changedIdx); if(_nsMsgE){ showToast(_nsMsgE); return; } }
   for(var _mvE=0; _mvE<(data.items||[]).length; _mvE++){
     var _mvIt = data.items[_mvE];
     if(_changedIdx[_mvE] && _mvIt && _multiSpeciesViolation(_mvIt.name, _mvIt.species)){
