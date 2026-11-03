@@ -464,6 +464,12 @@ function siPickSpeciesM(val){ if(_siSpeciesMultiMode) siToggleMultiSpecies(false
 var _siSpeciesMultiMode = false;
 var _siSpeciesParts = [''];
 function siToggleMultiSpecies(checked){
+  var _nmM = ((document.getElementById('siNameM')||{}).value||'').trim();
+  if(checked && _nmM && typeof _multiSpeciesViolation==='function' && _multiSpeciesViolation(_nmM, 'x + y')){
+    showToast('⛔ «'+_nmM+'»: '+MULTI_SPECIES_DENY_MSG);
+    var _tg = document.getElementById('siSpeciesMultiToggle'); if(_tg) _tg.checked = false;
+    return;
+  }
   _siSpeciesMultiMode = checked;
   var singleWrap = document.getElementById('siSpeciesSingleWrap');
   var multiWrap = document.getElementById('siSpeciesMultiWrap');
@@ -782,6 +788,9 @@ function addSaleItem(){
       // разбирать вручную. Порода/материал должны совпадать со справочником (getSpecies(), тем
       // же списком, что подсказывается при вводе), а не приниматься любым текстом «на глаз».
       // Проверяем ДР Товар не трогаем — там это поле «Вкус/Состав», отдельная история.
+      if(typeof _multiSpeciesViolation==='function' && _multiSpeciesViolation(name, species)){
+        showToast('⛔ «'+name+'»: '+MULTI_SPECIES_DENY_MSG); return;
+      }
       if(_siItemGoodsType!=='dr'){
         var _siBadSpecies = _siFindInvalidSpecies(species);
         if(_siBadSpecies){

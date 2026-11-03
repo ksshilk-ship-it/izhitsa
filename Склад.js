@@ -2262,6 +2262,9 @@ function _manInvAddSpecies(i){
 // Итоговая item.species всегда остаётся обычной строкой через « + », как и везде в системе.
 function _manInvToggleMultiSpecies(i, checked){
   var item = _manInvItems[i]; if(!item) return;
+  if(checked && (item.name||'').trim() && _multiSpeciesViolation(item.name, 'x + y')){
+    showToast('⛔ «'+item.name+'»: '+MULTI_SPECIES_DENY_MSG); renderManInvItems(); return;
+  }
   item._multiSpecies = checked;
   if(checked){
     if(!item._speciesParts || !item._speciesParts.length) item._speciesParts = [item.species||''];
@@ -2383,6 +2386,26 @@ function setManInvType(type){
 // вручную»; наименование и порода — только из справочников, иначе заявка администратору
 // (тот же баннер, что в продаже). Администратора не проверяем — заявки летят ему же.
 function _rcvIsAdmin(){ return !!(session && session.role==='shopadmin'); }
+// Несколько пород/материалов в одной позиции («A + B») — только у изделий, которые и правда собраны
+// из нескольких материалов. Галочку «неск. материалов» продавцы использовали, чтобы записать разные
+// изделия одной строкой: «Ложка · Ясень + Дуб скальный + Дуб скальный + Дуб скальный» ×4 (Роза,
+// 022/31.10) — склад, продажи по породе и артикулы каталога такую строку не узнают. Для остальных
+// наименований — по согласованию: вносит сам администратор.
+var MULTI_SPECIES_NAMES = ['бусы','браслет','чётки','брелок','заколка'];
+function _multiSpeciesAllowed(name){
+  var words = String(name||'').toLowerCase().replace(/ё/g,'е').split(/[^a-zа-я0-9]+/).filter(Boolean);
+  return MULTI_SPECIES_NAMES.some(function(root){
+    root = root.replace(/ё/g,'е');
+    return words.some(function(w){ return w.indexOf(root)===0; });
+  });
+}
+var MULTI_SPECIES_DENY_MSG = 'Несколько пород в одной позиции — только для бус, браслетов, чёток, брелоков и заколок. Разные изделия внесите отдельными строками (каждая со своей породой), а исключение — по согласованию с администратором';
+// null — можно; иначе — название позиции, у которой несколько пород без права на это
+function _multiSpeciesViolation(name, species){
+  if(_rcvIsAdmin()) return null;
+  if(String(species||'').indexOf('+')<0) return null;
+  return _multiSpeciesAllowed(name) ? null : (name||'позиция');
+}
 function _rcvCheckItemsAgainstCatalog(items, goodsType, onlyIdx){
   if(_rcvIsAdmin()) return null;
   var catalog = getRefBook(goodsType==='dr' ? 'iz_goods_dr' : 'iz_goods_derevo') || [];
@@ -2444,6 +2467,11 @@ function saveManualInvoice() {
         showToast('⛔ Выберите породу из списка для «'+_vit.name+'» (поз. '+(_vi+1)+'). Артикул не нужен, если его нет в базе — оставьте поле пустым');
         return;
       }
+    }
+  }
+  for(var _mv=0; _mv<_manInvItems.length; _mv++){
+    if(_manInvItems[_mv] && _multiSpeciesViolation(_manInvItems[_mv].name, _manInvItems[_mv].species)){
+      showToast('⛔ Поз. '+(_mv+1)+' «'+_manInvItems[_mv].name+'»: '+MULTI_SPECIES_DENY_MSG); return;
     }
   }
   // Переоценка: те же изделия (те же номера) возвращаются на баланс по новой цене — проверки на
@@ -2878,6 +2906,12 @@ function saveManualInvoiceEdit(id){
         showToast('⛔ Выберите породу из списка для «'+_eit.name+'» (поз. '+(_ek+1)+'). Артикул не нужен, если его нет в базе — оставьте поле пустым');
         return;
       }
+    }
+  }
+  for(var _mvE=0; _mvE<(data.items||[]).length; _mvE++){
+    var _mvIt = data.items[_mvE];
+    if(_changedIdx[_mvE] && _mvIt && _multiSpeciesViolation(_mvIt.name, _mvIt.species)){
+      showToast('⛔ Поз. '+(_mvE+1)+' «'+_mvIt.name+'»: '+MULTI_SPECIES_DENY_MSG); return;
     }
   }
   var _rcvIssE = _rcvCheckItemsAgainstCatalog(data.items, data.goodsType||'derevo', _changedIdx);
