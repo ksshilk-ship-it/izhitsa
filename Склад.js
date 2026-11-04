@@ -4909,6 +4909,30 @@ function _spToggleRename(idx){
   window._spRenameOpen[idx] = !window._spRenameOpen[idx];
   _renderSpeciesAudit();
 }
+function _spToggleGroup(g){
+  window._spGroupClosed = window._spGroupClosed || {};
+  window._spGroupClosed[g] = !window._spGroupClosed[g];
+  _renderSpeciesAudit();
+}
+// Подсказки при переименовании породы — из справочника пород (getSpecies). Пока в поле исходное
+// значение — показываем весь список; при вводе — фильтр по словам. Своё значение вписать можно.
+function _spRenameSugg(idx){
+  var input = document.getElementById('spRenameInput_'+idx), box = document.getElementById('spRenameSugg_'+idx);
+  if(!input || !box) return;
+  var val = (input.value||'').trim().toLowerCase();
+  var words = val===String(input.getAttribute('data-orig')||'').trim().toLowerCase() ? [] : val.split(/\s+/).filter(Boolean);
+  var m = getSpecies().filter(function(n){ var l = String(n).toLowerCase(); return words.every(function(w){ return l.indexOf(w)>=0; }); });
+  if(!m.length){ box.style.display='none'; box.innerHTML=''; return; }
+  var esc = function(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); };
+  box.innerHTML = m.map(function(n){
+    return '<div onpointerdown="event.preventDefault();_spRenamePick('+idx+',this.getAttribute(\'data-v\'))" data-v="'+esc(n)+'" style="padding:8px 10px;font-size:12px;color:#f0f0f8;border-bottom:1px solid #22222e;cursor:pointer">'+esc(n)+'</div>';
+  }).join('');
+  box.style.display = 'block';
+}
+function _spRenamePick(idx, v){
+  var input = document.getElementById('spRenameInput_'+idx); if(input) input.value = v;
+  var box = document.getElementById('spRenameSugg_'+idx); if(box){ box.style.display='none'; box.innerHTML=''; }
+}
 window._spJewelryNoWoodFilter = false;
 function _spToggleJewelryNoWoodFilter(){
   window._spJewelryNoWoodFilter = !window._spJewelryNoWoodFilter;
@@ -4954,16 +4978,33 @@ function _renderSpeciesAudit(){
   if(filterOn){
     keys = keys.filter(function(k){ return _isJewelryNames(byNorm[k].names) && !_speciesLabelHasWood(byNorm[k].label); });
   }
+  // Две группы: порода уже есть в справочнике пород (или на карточке каталога — см. getSpecies) /
+  // такой породы в справочнике нет (опечатки, сокращения, камни) — их и надо исправлять.
+  var refSet = {}; getSpecies().forEach(function(n){ refSet[String(n).trim().toLowerCase()] = true; });
+  var inRef = function(k){ return k!=='—' && !!refSet[String(byNorm[k].label||'').trim().toLowerCase()]; };
   keys.sort(function(a,b){
-    if(a==='—') return 1; if(b==='—') return -1;
+    var ga = inRef(a)?0:(a==='—'?2:1), gb = inRef(b)?0:(b==='—'?2:1);
+    if(ga!==gb) return ga-gb;
     return byNorm[b].count - byNorm[a].count;
   });
   if(!keys.length){ host.innerHTML = filterBtn+'<div class="empty"><div class="ei">💍</div>Ничего не найдено — либо порода указана везде, либо это не чётки/браслеты/бусы</div>'; return; }
+  var nIn = keys.filter(inRef).length, nOut = keys.length-nIn;
+  window._spGroupClosed = window._spGroupClosed || {};
+  var groupHead = function(g, title, n, color){
+    var closed = !!window._spGroupClosed[g];
+    return '<div onclick="_spToggleGroup(\''+g+'\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:8px 6px;margin:10px 0 6px;background:#13131a;border-radius:8px;font-size:12px;font-weight:700;color:'+color+'">'+
+      '<span>'+title+' ('+n+')</span><span style="color:#8888aa;font-size:11px">'+(closed?'▸':'▾')+'</span></div>';
+  };
   var totalRecords = keys.reduce(function(s,k){ return s+byNorm[k].count; },0);
   host.innerHTML = filterBtn+'<div style="font-size:11px;color:#8888aa;margin-bottom:8px">'+keys.length+' уникальн'+(keys.length===1?'ое значение':(keys.length<5?'ых значения':'ых значений'))+' · '+totalRecords+' запис'+(totalRecords===1?'ь':(totalRecords<5?'и':'ей'))+' всего</div>'+
     keys.map(function(k, idx){
       var g = byNorm[k];
       var isEmpty = k==='—';
+      var grp = inRef(k) ? 'in' : 'out';
+      var head = '';
+      if(idx===0 && grp==='in') head = groupHead('in', '✅ Есть в справочнике пород', nIn, '#60f090');
+      if(grp==='out' && (idx===0 || inRef(keys[idx-1]))) head = groupHead('out', '⚠️ Нет в справочнике пород', nOut, '#f0a060');
+      if(window._spGroupClosed[grp]) return head;
       var variantKeys = Object.keys(g.variants);
       var hasVariants = variantKeys.length>1 || (variantKeys.length===1 && variantKeys[0].toLowerCase()!==g.label.toLowerCase());
       var srcParts = [];
@@ -4979,9 +5020,12 @@ function _renderSpeciesAudit(){
       var renameOpen = !!window._spRenameOpen[idx];
       var kEsc = k.replace(/'/g,"\\'");
       var editBtn = isEmpty ? '' : '<button type="button" onpointerdown="event.preventDefault();_spToggleRename('+idx+')" style="background:#22222e;border:1px solid #2e2e3e;border-radius:6px;width:24px;height:24px;color:#8888aa;font-size:12px;cursor:pointer;flex-shrink:0">✏️</button>';
-      var renameHtml = renameOpen ? '<div style="padding:6px 10px 10px 20px;display:flex;gap:6px;align-items:center">'+
-        '<input type="text" id="spRenameInput_'+idx+'" value="'+g.label.replace(/"/g,'&quot;')+'" style="flex:1;background:#13131a;border:1px solid #2e2e3e;border-radius:8px;padding:6px 8px;color:#f0f0f8;font-size:12px">'+
-        '<button type="button" onclick="_speciesRenameApply(\''+kEsc+'\','+idx+')" style="background:#c8f060;border:none;border-radius:8px;padding:6px 10px;color:#0f0f13;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Применить</button>'+
+      var renameHtml = renameOpen ? '<div style="padding:6px 10px 10px 20px">'+
+        '<div style="display:flex;gap:6px;align-items:center">'+
+          '<input type="text" id="spRenameInput_'+idx+'" value="'+g.label.replace(/"/g,'&quot;')+'" data-orig="'+g.label.replace(/"/g,'&quot;')+'" autocomplete="off" onfocus="_spRenameSugg('+idx+')" oninput="_spRenameSugg('+idx+')" style="flex:1;background:#13131a;border:1px solid #2e2e3e;border-radius:8px;padding:6px 8px;color:#f0f0f8;font-size:12px">'+
+          '<button type="button" onclick="_speciesRenameApply(\''+kEsc+'\','+idx+')" style="background:#c8f060;border:none;border-radius:8px;padding:6px 10px;color:#0f0f13;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Применить</button>'+
+        '</div>'+
+        '<div id="spRenameSugg_'+idx+'" style="display:none;margin-top:4px;max-height:220px;overflow-y:auto;background:#13131a;border:1px solid #2e2e3e;border-radius:8px"></div>'+
       '</div>' : '';
       var changes = g.changes || [];
       var recordsOpen = !!window._spRecordsOpen[idx];
@@ -4998,7 +5042,7 @@ function _renderSpeciesAudit(){
           '</div>';
         }).join('')+(changes.length>30?'<div style="font-size:10px;color:#8888aa;padding:4px 0">…и ещё '+(changes.length-30)+'</div>':'')+
       '</div>' : '';
-      return '<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:6px;overflow:hidden">'+
+      return head+'<div style="background:#1a1a22;border:1px solid #2e2e3e;border-radius:8px;margin-bottom:6px;overflow:hidden">'+
         '<div style="padding:8px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px">'+
           '<div style="font-size:12px;font-weight:700;color:'+(isEmpty?'#8888aa':'#f0c060')+';display:flex;align-items:center;gap:6px">'+editBtn+'<span>'+(isEmpty?'❓ Без породы':'🪵 '+g.label)+'</span></div>'+
           '<div style="font-size:10.5px;color:#8888aa;text-align:right;white-space:nowrap">'+g.count+' зап. · '+g.qty+' шт.<div>'+srcParts.join(' ')+'</div></div>'+
