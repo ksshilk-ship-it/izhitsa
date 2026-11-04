@@ -4101,9 +4101,44 @@ function stockApplySale(shopName,items){
       var found = _findStockKeyByNamePrice(shopStock, it.name, it.price, it.goodsType, artNum);
       if(found) useKey = found;
     }
-    stockUpdateQty(shopName,useKey,it.name,it.price,it.species,it.goodsType,it.size,-(it.qty||1),null,stock);
+    var need = hasRealArticle ? _stockTakeNoSpecies(shopName, stock, artNum, it.name, it.price, it.goodsType, it.qty||1, null) : (it.qty||1);
+    if(need>0) stockUpdateQty(shopName,useKey,it.name,it.price,it.species,it.goodsType,it.size,-need,null,stock);
   });
   saveStock(stock);
+}
+// Правило «БП»: продали изделие с артикулом каталога породы (ЛопатОрех03 · 450₽), а на складе этого
+// артикула нет — значит, его приняли ещё без породы, и оно лежит на переходной позиции того же
+// наименования и цены: сначала артикул каталога без породы (ЛопБП450), затем безартикульный ключ
+// WD_<название>_<цена>. Раньше такая продажа «уходила» в пустой артикул, а остаток без породы так и висел.
+// Только Дерево и только артикулы каталога «С артикулом вручную» (бирка из цифр — конкретная вещь).
+// null — переходной позиции с остатком нет (тогда продажа списывается как раньше, без ухода в минус).
+function _stockNoSpeciesFallbackKey(shopStock, art, name, price, goodsType){
+  art = String(art||'').trim();
+  if(!art || /^\d+$/.test(art) || (goodsType||'derevo')==='dr') return null;
+  if(shopStock[art] && (shopStock[art].qty||0)>0) return null;
+  var nm = String(name||'').trim().toLowerCase(), pr = Math.round(parseFloat(price)||0);
+  if(!nm || !pr) return null;
+  var catalog = getRefBook('iz_goods_derevo')||[];
+  var isCatalogArt = catalog.some(function(c){ return c && String(c.article||'').trim()===art; });
+  if(!isCatalogArt) return null;
+  var cands = [];
+  catalog.forEach(function(c){
+    if(c && c.article && !String(c.species||'').trim() && String(c.name||'').trim().toLowerCase()===nm && Math.round(parseFloat(c.price)||0)===pr) cands.push(String(c.article).trim());
+  });
+  var wd = _noArticleStockKey(name, pr, '', 'derevo'); if(wd) cands.push(wd);
+  for(var i=0;i<cands.length;i++){ if(cands[i]!==art && shopStock[cands[i]] && (shopStock[cands[i]].qty||0)>0) return cands[i]; }
+  return null;
+}
+// Списывает до need штук с переходных позиций «без породы» (по очереди, сколько на каждой есть),
+// не перетирая их карточки породой/названием продажи. Возвращает, сколько осталось списать с самого артикула.
+function _stockTakeNoSpecies(shopName, stock, art, name, price, goodsType, need, date){
+  var ss = stock[shopName]||{}, bp;
+  while(need>0 && (bp = _stockNoSpeciesFallbackKey(ss, art, name, price, goodsType))){
+    var be = ss[bp], take = Math.min(need, be.qty||0);
+    stockUpdateQty(shopName, bp, be.name, be.price, be.species, be.goodsType, be.size, -take, date, stock);
+    need -= take;
+  }
+  return need;
 }
 function _findStockKeyByNamePrice(shopStock, name, price, goodsType, excludeKey){
   var nm=(name||'').trim().toLowerCase();
@@ -4177,7 +4212,11 @@ function stockApplyEditDelta(shopName, kind, oldItems, newItems, defGt, date){
       var found = _findStockKeyByNamePrice(ss, x.name, x.price, x.goodsType, k);
       if(found) useKey = found;
     }
-    stockUpdateQty(shopName, useKey, x.name, x.price, x.species, x.goodsType, x.size, d[k], date||null, stock);
+    // Продажу/списание по артикулу породы увеличили — добираем по правилу «БП», как в stockApplySale.
+    // (Отмену продажи возвращаем на артикул породы: вещь та же, порода теперь известна.)
+    var dk = d[k];
+    if(kind==='out' && x.num && dk<0) dk = -_stockTakeNoSpecies(shopName, stock, x.num, x.name, x.price, x.goodsType, -dk, date||null);
+    if(dk) stockUpdateQty(shopName, useKey, x.name, x.price, x.species, x.goodsType, x.size, dk, date||null, stock);
     touched = true;
   });
   if(touched) saveStock(stock);
