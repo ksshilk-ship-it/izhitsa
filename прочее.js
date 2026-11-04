@@ -674,105 +674,177 @@ function renumberRichSpecies(bookId, key, name, species){
   if(!plan.some(function(p){ return String(p.it.article||'').trim()!==p.na; })){ showToast('Нумерация уже по порядку'); return; }
   var preview = plan.map(function(p){ var oa = String(p.it.article||'').trim(); return (oa||'(пусто)')+(oa!==p.na?' → '+p.na:' — без изменений')+' · '+(p.it.price||0)+'₽'; }).join('\n');
   if(!confirm('Перенумеровать «'+name+(sp?' · '+sp:'')+'»:\n\n'+preview+'\n\nАртикулы поменяются и во всех приёмках, продажах, списаниях, инвентаризациях и остатках магазинов. Во время замены не правьте справочник и не закрывайте приложение.')) return;
-  showToast('⏳ Перенумеровываю...');
-  _artRenameEverywhere(map).then(function(r){
-    if(!r.ok){ alert('❌ Перенумеровать не удалось: '+r.error+'.\nНичего не изменено — ни справочник, ни записи. Попробуйте ещё раз.'); return; }
+  // Статус на экране не исчезает, пока замена не закончится (тост гаснет через 3 с — и было непонятно, идёт ли что-то).
+  var st = document.createElement('div');
+  st.style.cssText = 'position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);z-index:99999;background:#1a2e1a;border:2px solid #60f090;color:#60f090;border-radius:14px;padding:16px 20px;font-size:14px;font-weight:700;max-width:86vw;text-align:center;box-shadow:0 6px 30px rgba(0,0,0,.6)';
+  document.body.appendChild(st);
+  var stage = function(t){ st.textContent = '⏳ Перенумеровываю «'+name+(sp?' · '+sp:'')+'»… '+t; };
+  stage('');
+  _artRenameEverywhere(map, stage).then(function(r){
+    if(st.parentNode) st.parentNode.removeChild(st);
+    if(!r.ok){
+      try{ logAction('ARTICLE_RENUMBER_FAIL', {name:name, species:sp, map:map, error:r.error}); }catch(e){}
+      alert('❌ Перенумеровать не удалось: '+r.error+'.\nНичего не изменено — ни справочник, ни записи. Попробуйте ещё раз.'); return;
+    }
     var fresh = getRefBook(key);
     plan.forEach(function(p){ var t = fresh.find(function(x){ return x.id && x.id===p.it.id; }) || fresh[items.indexOf(p.it)]; if(t) t.article = p.na; });
     saveRefBookShop(key, fresh);
     try{ logAction('ARTICLE_RENUMBER', {name:name, species:sp, map:map, shifts:r.shifts, invoices:r.invoices, counts:r.counts, stock:r.stock}); }catch(e){}
     renderRefbookItemsShop(bookId, key);
-    showToast('✅ Перенумеровано. Записей: смены — '+r.shifts+', накладные — '+r.invoices+', инвентаризации — '+r.counts+', остатки — '+r.stock);
+    alert('✅ Перенумеровано «'+name+(sp?' · '+sp:'')+'».\nИзменено записей: в сменах — '+r.shifts+', в накладных — '+r.invoices+', в инвентаризациях — '+r.counts+', позиций на складе — '+r.stock+'.');
+  }).catch(function(e){
+    if(st.parentNode) st.parentNode.removeChild(st);
+    alert('⚠️ Ошибка после замены: '+((e&&e.message)||e)+'. Записи могли уже поменяться — сообщите администратору, справочник проверьте вручную.');
   });
 }
 // map {старый артикул: новый} — меняет артикулы во всех записях по свежим копиям из облака.
 // Каждое значение ищется по исходному тексту ровно один раз, поэтому цепочки 01→02, 02→03 не сливаются.
-// Всё пишется одним пакетом Firestore (batch): либо поменялось всё, либо ничего — повтор после
-// обрыва сети безопасен (частично перенумерованные записи при повторе сдвинулись бы ещё раз).
-function _artRenameEverywhere(map){
+// Чтение и запись — напрямую через REST API Firestore, а не через SDK: первое нажатие 04.11 на
+// iPad «молча» зависло на чтении всех смен через SDK (ни ошибки, ни результата). Запись — один
+// documents:commit (всё или ничего) с проверкой «документ не менялся с момента чтения»; повтор безопасен.
+// onStage(text) — что сейчас происходит (для статуса на экране).
+var _FS_REST = 'https://firestore.googleapis.com/v1/projects/izhitsa-6327c/databases/(default)/documents';
+function _fsRestKey(){ try{ return firebase.app().options.apiKey; }catch(e){ return 'AIzaSyD0hKs-O5hmIFNb1cFLp0_73-tiylQx6Jw'; } }
+function _fsRestFetch(url, opts){
+  var ctl = (typeof AbortController!=='undefined') ? new AbortController() : null;
+  var timer = setTimeout(function(){ if(ctl) ctl.abort(); }, 60000);
+  opts = opts||{}; if(ctl) opts.signal = ctl.signal;
+  return fetch(url, opts).then(function(r){
+    clearTimeout(timer);
+    return r.json().then(function(j){
+      if(!r.ok){ var m = (j && j.error && (j.error.status+': '+j.error.message)) || ('HTTP '+r.status); throw new Error(m); }
+      return j;
+    });
+  }, function(e){ clearTimeout(timer); throw new Error(e && e.name==='AbortError' ? 'сервер не ответил за 60 с' : 'нет сети ('+((e&&e.message)||e)+')'); });
+}
+function _fsRestList(col){
+  var out = [];
+  function page(tok){
+    return _fsRestFetch(_FS_REST+'/'+col+'?pageSize=300&key='+_fsRestKey()+(tok?'&pageToken='+encodeURIComponent(tok):'')).then(function(j){
+      out = out.concat(j.documents||[]);
+      return j.nextPageToken ? page(j.nextPageToken) : out;
+    });
+  }
+  return page('');
+}
+function _fsVal(v){
+  if(!v) return null;
+  if('stringValue' in v) return v.stringValue;
+  if('integerValue' in v) return parseInt(v.integerValue,10);
+  if('doubleValue' in v) return v.doubleValue;
+  if('booleanValue' in v) return v.booleanValue;
+  if('nullValue' in v) return null;
+  if('timestampValue' in v) return v.timestampValue;
+  if('mapValue' in v){ var o = {}, f = v.mapValue.fields||{}; Object.keys(f).forEach(function(k){ o[k] = _fsVal(f[k]); }); return o; }
+  if('arrayValue' in v) return (v.arrayValue.values||[]).map(_fsVal);
+  return null;
+}
+function _fsNum(v){ return v ? (parseFloat(v.integerValue!=null?v.integerValue:v.doubleValue)||0) : 0; }
+function _artRenameEverywhere(map, onStage){
   var res = {shifts:0, invoices:0, counts:0, stock:0, ok:false, error:''};
   if(!Object.keys(map).length){ res.ok = true; return Promise.resolve(res); }
+  onStage = onStage || function(){};
   var now = new Date().toISOString(), writes = [], after = [];
+  // поля артикула у позиции (в «сыром» виде REST: {num:{stringValue:…}})
+  function fixRawItem(f){
+    if(!f) return 0; var n = 0;
+    ['num','article','artNum'].forEach(function(k){ var v = f[k] && f[k].stringValue!=null ? String(f[k].stringValue).trim() : ''; if(v && map.hasOwnProperty(v)){ f[k] = {stringValue:map[v]}; n++; } });
+    return n ? 1 : 0;
+  }
+  function rawList(v){ return (v && v.arrayValue && v.arrayValue.values) || []; }
+  function fixRawList(v){ return rawList(v).reduce(function(s,x){ return s+(x.mapValue ? fixRawItem(x.mapValue.fields) : 0); },0); }
   function fixItem(it){
     if(!it) return 0; var n = 0;
     ['num','article','artNum'].forEach(function(f){ var v = String(it[f]==null?'':it[f]).trim(); if(v && map.hasOwnProperty(v)){ it[f] = map[v]; n++; } });
     return n ? 1 : 0;
   }
   function fixList(list){ return (list||[]).reduce(function(s,it){ return s+fixItem(it); },0); }
-  var reads = [];
-  reads.push(db.collection('iz_shifts').get({source:'server'}).then(function(snap){
-    snap.forEach(function(doc){
-      var jnl = doc.data().journal||[];
-      var n = jnl.reduce(function(s,e){ return s+fixList(e.items); },0);
+  function addWrite(doc, mask){
+    var fields = {}; mask.forEach(function(k){ if(doc.fields[k]) fields[k] = doc.fields[k]; });
+    writes.push({update:{name:doc.name, fields:fields}, updateMask:{fieldPaths:Object.keys(fields)}, currentDocument:{updateTime:doc.updateTime}});
+  }
+  function idOf(doc){ return doc.name.split('/').pop(); }
+  onStage('Читаю смены (1 из 5)…');
+  return _fsRestList('iz_shifts').then(function(docs){
+    docs.forEach(function(doc){
+      var f = doc.fields||{};
+      var n = rawList(f.journal).reduce(function(s,e){ return s+(e.mapValue ? fixRawList((e.mapValue.fields||{}).items) : 0); },0);
       if(!n) return;
-      res.shifts += n;
-      writes.push([db.collection('iz_shifts').doc(doc.id), {journal:jnl, updatedAt:now}, true]);
+      res.shifts += n; f.updatedAt = {stringValue:now}; doc.fields = f;
+      addWrite(doc, ['journal','updatedAt']);
+      var id = idOf(doc);
       after.push(function(){
-        var shifts = getShifts(), sh = shifts.find(function(x){ return (x.id||x._id)===doc.id; });
+        var shifts = getShifts(), sh = shifts.find(function(x){ return (x.id||x._id)===id; });
         if(sh){ (sh.journal||[]).forEach(function(e){ fixList(e.items); }); saveShifts(shifts); }
-        if(typeof _currentShiftView!=='undefined' && _currentShiftView && (_currentShiftView.id||_currentShiftView._id)===doc.id) (_currentShiftView.journal||[]).forEach(function(e){ fixList(e.items); });
+        if(typeof _currentShiftView!=='undefined' && _currentShiftView && (_currentShiftView.id||_currentShiftView._id)===id) (_currentShiftView.journal||[]).forEach(function(e){ fixList(e.items); });
       });
     });
-  }));
-  ['iz_manual_invoices','iz_invoices'].forEach(function(col){
-    reads.push(db.collection(col).get({source:'server'}).then(function(snap){
-      snap.forEach(function(doc){
-        var inv = doc.data(), items = inv.items||[], acc = inv.acceptedItems||null;
-        var n = fixList(items) + (acc ? fixList(acc) : 0);
-        if(!n) return;
-        res.invoices += n;
-        var patch = {items:items}; if(acc) patch.acceptedItems = acc;
-        writes.push([db.collection(col).doc(doc.id), patch, true]);
-        after.push(function(){
-          var all = JSON.parse(localStorage.getItem(col)||'[]');
-          var li = all.find(function(i){ return String(i.id||i._id)===String(doc.id); });
-          if(li){ fixList(li.items); fixList(li.acceptedItems); localStorage.setItem(col, JSON.stringify(all)); }
+    onStage('Читаю накладные (2 из 5)…');
+    return Promise.all(['iz_manual_invoices','iz_invoices'].map(function(col){
+      return _fsRestList(col).then(function(docs){
+        docs.forEach(function(doc){
+          var f = doc.fields||{};
+          var n = fixRawList(f.items) + fixRawList(f.acceptedItems);
+          if(!n) return;
+          res.invoices += n;
+          addWrite(doc, ['items','acceptedItems']);
+          var id = idOf(doc);
+          after.push(function(){
+            var all = JSON.parse(localStorage.getItem(col)||'[]');
+            var li = all.find(function(i){ return String(i.id||i._id)===String(id); });
+            if(li){ fixList(li.items); fixList(li.acceptedItems); localStorage.setItem(col, JSON.stringify(all)); }
+          });
         });
       });
     }));
-  });
-  reads.push(db.collection('iz_inventory_counts').get({source:'server'}).then(function(snap){
-    snap.forEach(function(doc){
-      var c = doc.data(), patch = {};
-      ['num','itemKey'].forEach(function(f){ var v = String(c[f]==null?'':c[f]).trim(); if(v && map.hasOwnProperty(v)) patch[f] = map[v]; });
-      if(!Object.keys(patch).length) return;
-      res.counts++;
-      writes.push([db.collection('iz_inventory_counts').doc(doc.id), patch, true]);
-    });
-  }));
-  // Остатки: ключ позиции = артикул. Новый словарь собирается целиком из старого, так что
-  // перестановка номеров внутри породы не сливает позиции; совпадение с «чужим» ключом — складываем.
-  Object.keys(getStock()||{}).forEach(function(shopName){
-    var docId = 'stock_'+shopName.replace(/\s+/g,'_');
-    reads.push(db.collection('iz_settings').doc(docId).get({source:'server'}).then(function(snap){
-      if(!snap.exists) return;
-      var items = snap.data().items||{}, out = {}, n = 0;
-      Object.keys(items).forEach(function(k){
-        var e = items[k], nk = map.hasOwnProperty(k) ? map[k] : k;
-        if(nk!==k){ e = Object.assign({}, e, {num:nk}); n++; }
-        if(out[nk]){
-          var t = out[nk]; t.qty = (t.qty||0)+(e.qty||0);
-          if((e.lastReceived||'')>(t.lastReceived||'')) t.lastReceived = e.lastReceived;
-          if((e.lastSold||'')>(t.lastSold||'')) t.lastSold = e.lastSold;
-        } else out[nk] = e;
+  }).then(function(){
+    onStage('Читаю инвентаризации (3 из 5)…');
+    return _fsRestList('iz_inventory_counts').then(function(docs){
+      docs.forEach(function(doc){
+        var f = doc.fields||{}, mask = [];
+        ['num','itemKey'].forEach(function(k){ var v = f[k] && f[k].stringValue!=null ? String(f[k].stringValue).trim() : ''; if(v && map.hasOwnProperty(v)){ f[k] = {stringValue:map[v]}; mask.push(k); } });
+        if(!mask.length) return;
+        res.counts++; addWrite(doc, mask);
       });
-      if(!n) return;
-      res.stock += n;
-      writes.push([db.collection('iz_settings').doc(docId), {items:out, updatedAt:now}, false]);
-      after.push(function(){ var local = getStock(); local[shopName] = out; (typeof _safeLocalSet==='function'?_safeLocalSet:localStorage.setItem.bind(localStorage))('iz_stock', JSON.stringify(local)); });
+    });
+  }).then(function(){
+    onStage('Читаю остатки магазинов (4 из 5)…');
+    // Остатки: ключ позиции = артикул. Новый словарь собирается целиком из старого, так что
+    // перестановка номеров внутри породы не сливает позиции; совпадение с «чужим» ключом — складываем.
+    return Promise.all(Object.keys(getStock()||{}).map(function(shopName){
+      var docId = 'stock_'+shopName.replace(/\s+/g,'_');
+      return _fsRestFetch(_FS_REST+'/iz_settings/'+encodeURIComponent(docId)+'?key='+_fsRestKey()).then(function(doc){
+        var f = doc.fields||{}, items = (f.items && f.items.mapValue && f.items.mapValue.fields) || {}, out = {}, n = 0;
+        Object.keys(items).forEach(function(k){
+          var e = items[k], nk = map.hasOwnProperty(k) ? map[k] : k;
+          if(nk!==k){ e = JSON.parse(JSON.stringify(e)); e.mapValue = e.mapValue||{fields:{}}; e.mapValue.fields = e.mapValue.fields||{}; e.mapValue.fields.num = {stringValue:nk}; n++; }
+          if(out[nk]){
+            var t = out[nk].mapValue.fields, s2 = (e.mapValue||{}).fields||{};
+            t.qty = {integerValue:String(Math.round(_fsNum(t.qty)+_fsNum(s2.qty)))};
+            ['lastReceived','lastSold'].forEach(function(d){ var a1 = (t[d]&&t[d].stringValue)||'', b1 = (s2[d]&&s2[d].stringValue)||''; if(b1>a1) t[d] = {stringValue:b1}; });
+          } else out[nk] = e;
+        });
+        if(!n) return;
+        res.stock += n;
+        f.items = {mapValue:{fields:out}}; f.updatedAt = {stringValue:now}; doc.fields = f;
+        addWrite(doc, ['items','updatedAt']);
+        after.push(function(){ var local = getStock(); local[shopName] = _fsVal(f.items); (typeof _safeLocalSet==='function'?_safeLocalSet:localStorage.setItem.bind(localStorage))('iz_stock', JSON.stringify(local)); });
+      }).catch(function(e){ if(/NOT_FOUND/.test(e.message)) return; throw e; });
     }));
-  });
-  return Promise.all(reads).then(function(){
-    if(writes.length>450){ res.error = 'слишком много документов ('+writes.length+')'; return res; }
+  }).then(function(){
     if(!writes.length){ res.ok = true; return res; }
-    var batch = db.batch();
-    writes.forEach(function(w){ if(w[2]) batch.set(w[0], w[1], {merge:true}); else batch.set(w[0], w[1]); });
-    return batch.commit().then(function(){
+    if(writes.length>450){ res.error = 'слишком много документов ('+writes.length+')'; return res; }
+    onStage('Записываю '+writes.length+' док. (5 из 5)…');
+    return _fsRestFetch(_FS_REST+':commit?key='+_fsRestKey(), {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({writes:writes})}).then(function(){
       res.ok = true;
       after.forEach(function(f){ try{ f(); }catch(e){} });
       return res;
     });
-  }).catch(function(e){ res.ok = false; res.error = (e && e.message) || 'нет сети?'; return res; });
+  }).catch(function(e){
+    var m = (e && e.message) || String(e);
+    if(/FAILED_PRECONDITION/.test(m)) m = 'пока шло чтение, кто-то изменил смену или склад';
+    res.ok = false; res.error = m; return res;
+  });
 }
 function setRefbookItemSpecies(bookId, idx, key, value){
   var items = getRefBook(key);
