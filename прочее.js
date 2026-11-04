@@ -548,7 +548,10 @@ function _rbRichWoodGroup(rich, allItems, bookId, key){
       var spEsc = sp.replace(/'/g,"\\'");
       var spHead = '<div onclick="toggleRichSpeciesGroup(\''+bookId+'\',\''+key+'\',\''+esc+'\',\''+spEsc+'\')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:7px 10px 7px 18px">'+
         '<span style="font-size:10.5px;font-weight:700;color:'+(sp==='—'?'#8888aa':'#f0c060')+'">'+(sp==='—'?'❓ Без породы':'🪵 '+sp)+' ('+rows.length+')</span>'+
-        '<span style="color:#8888aa;font-size:10px">'+(spOpen?'▾':'▸')+'</span>'+
+        '<span style="display:flex;align-items:center;gap:8px">'+
+          (spOpen?'<button onclick="event.stopPropagation();renumberRichSpecies(\''+bookId+'\',\''+key+'\',\''+esc+'\',\''+spEsc+'\')" style="background:none;border:1px solid #60c8f0;border-radius:6px;padding:2px 6px;font-size:10px;color:#60c8f0;cursor:pointer">🔢 Перенумеровать по цене</button>':'')+
+          '<span style="color:#8888aa;font-size:10px">'+(spOpen?'▾':'▸')+'</span>'+
+        '</span>'+
       '</div>';
       if(!spOpen) return spHead;
       var rowHtml = function(item){
@@ -630,9 +633,146 @@ function setRefbookItemArticle(bookId, idx, key, value){
     var taken = _drArticleTaken(key, value, idx);
     if(taken){ showToast('⚠️ Артикул «'+value+'» уже занят: «'+taken.name+'» ('+(taken.price||0)+'₽)'); renderRefbookItemsShop(bookId,key); return; }
   }
+  var oldArt = String(it.article||'').trim();
+  if(oldArt && oldArt!==value && !confirm('Ручная смена артикула меняет только справочник: приёмки, продажи и остатки останутся с «'+oldArt+'» и будут указывать не на ту позицию.\n\nЧтобы упорядочить номера породы, лучше нажмите «🔢 Перенумеровать по цене» — она меняет и записи.\n\nВсё равно сменить только в справочнике?')){ renderRefbookItemsShop(bookId,key); return; }
   it.article = value;
   saveRefBookShop(key, items);
   showToast(value?'✅ Артикул: '+value:'✅ Артикул снят');
+}
+// «🔢 Перенумеровать по цене» — порода в справочнике «С артикулом вручную» нумеруется заново
+// (ПрефиксNN по возрастанию цены), и одним проходом тот же артикул меняется во всех записях:
+// накладные (items/acceptedItems), журналы смен, подсчёты инвентаризаций и остатки магазинов.
+// Раньше артикул правили руками по одной строке — справочник менялся, а старые записи оставались
+// со старым номером и начинали указывать на соседнюю позицию (НожОльха01 по 400 ₽ после того,
+// как 01 стал 350 ₽). Поштучно так и не сделать: 01→02 при живом 02 слило бы две позиции.
+function _artPrefixOf(rows){
+  var cnt = {};
+  rows.forEach(function(it){ var m = String(it.article||'').trim().match(/^(.*?\D)\d+$/); if(m) cnt[m[1]] = (cnt[m[1]]||0)+1; });
+  return Object.keys(cnt).sort(function(a,b){ return cnt[b]-cnt[a]; })[0] || '';
+}
+function renumberRichSpecies(bookId, key, name, species){
+  var items = getRefBook(key);
+  var sp = species==='—' ? '' : species;
+  var rows = items.filter(function(it){ return (String(it.name||'').trim()||'—')===name && String(it.species||'').trim()===sp && !/^\d+$/.test(String(it.article||'').trim()); });
+  if(!rows.length) return;
+  var prefix = _artPrefixOf(rows);
+  prefix = (prompt('Начало артикула для «'+name+(sp?' · '+sp:' · без породы')+'» (номер допишется 01, 02, … по возрастанию цены):', prefix)||'').trim();
+  if(!prefix) return;
+  rows.sort(function(a,b){ return (parseFloat(a.price)||0)-(parseFloat(b.price)||0) || String(a.article||'').localeCompare(String(b.article||'')); });
+  var width = Math.max(2, String(rows.length).length);
+  var map = {}, plan = [];
+  rows.forEach(function(it, i){
+    var n = String(i+1); while(n.length<width) n = '0'+n;
+    var na = prefix+n, oa = String(it.article||'').trim();
+    plan.push({it:it, na:na});
+    if(oa && oa!==na) map[oa] = na;
+  });
+  // новый артикул не должен совпасть с позицией другой группы
+  var mine = rows.map(function(it){ return it; });
+  var clash = items.filter(function(it){ return mine.indexOf(it)<0 && plan.some(function(p){ return String(it.article||'').trim().toLowerCase()===p.na.toLowerCase(); }); });
+  if(clash.length){ alert('Артикул «'+clash[0].article+'» уже занят другой позицией: «'+clash[0].name+(clash[0].species?' · '+clash[0].species:'')+'». Выберите другое начало артикула.'); return; }
+  if(!plan.some(function(p){ return String(p.it.article||'').trim()!==p.na; })){ showToast('Нумерация уже по порядку'); return; }
+  var preview = plan.map(function(p){ var oa = String(p.it.article||'').trim(); return (oa||'(пусто)')+(oa!==p.na?' → '+p.na:' — без изменений')+' · '+(p.it.price||0)+'₽'; }).join('\n');
+  if(!confirm('Перенумеровать «'+name+(sp?' · '+sp:'')+'»:\n\n'+preview+'\n\nАртикулы поменяются и во всех приёмках, продажах, списаниях, инвентаризациях и остатках магазинов. Во время замены не правьте справочник и не закрывайте приложение.')) return;
+  showToast('⏳ Перенумеровываю...');
+  _artRenameEverywhere(map).then(function(r){
+    if(!r.ok){ alert('❌ Перенумеровать не удалось: '+r.error+'.\nНичего не изменено — ни справочник, ни записи. Попробуйте ещё раз.'); return; }
+    var fresh = getRefBook(key);
+    plan.forEach(function(p){ var t = fresh.find(function(x){ return x.id && x.id===p.it.id; }) || fresh[items.indexOf(p.it)]; if(t) t.article = p.na; });
+    saveRefBookShop(key, fresh);
+    try{ logAction('ARTICLE_RENUMBER', {name:name, species:sp, map:map, shifts:r.shifts, invoices:r.invoices, counts:r.counts, stock:r.stock}); }catch(e){}
+    renderRefbookItemsShop(bookId, key);
+    showToast('✅ Перенумеровано. Записей: смены — '+r.shifts+', накладные — '+r.invoices+', инвентаризации — '+r.counts+', остатки — '+r.stock);
+  });
+}
+// map {старый артикул: новый} — меняет артикулы во всех записях по свежим копиям из облака.
+// Каждое значение ищется по исходному тексту ровно один раз, поэтому цепочки 01→02, 02→03 не сливаются.
+// Всё пишется одним пакетом Firestore (batch): либо поменялось всё, либо ничего — повтор после
+// обрыва сети безопасен (частично перенумерованные записи при повторе сдвинулись бы ещё раз).
+function _artRenameEverywhere(map){
+  var res = {shifts:0, invoices:0, counts:0, stock:0, ok:false, error:''};
+  if(!Object.keys(map).length){ res.ok = true; return Promise.resolve(res); }
+  var now = new Date().toISOString(), writes = [], after = [];
+  function fixItem(it){
+    if(!it) return 0; var n = 0;
+    ['num','article','artNum'].forEach(function(f){ var v = String(it[f]==null?'':it[f]).trim(); if(v && map.hasOwnProperty(v)){ it[f] = map[v]; n++; } });
+    return n ? 1 : 0;
+  }
+  function fixList(list){ return (list||[]).reduce(function(s,it){ return s+fixItem(it); },0); }
+  var reads = [];
+  reads.push(db.collection('iz_shifts').get({source:'server'}).then(function(snap){
+    snap.forEach(function(doc){
+      var jnl = doc.data().journal||[];
+      var n = jnl.reduce(function(s,e){ return s+fixList(e.items); },0);
+      if(!n) return;
+      res.shifts += n;
+      writes.push([db.collection('iz_shifts').doc(doc.id), {journal:jnl, updatedAt:now}, true]);
+      after.push(function(){
+        var shifts = getShifts(), sh = shifts.find(function(x){ return (x.id||x._id)===doc.id; });
+        if(sh){ (sh.journal||[]).forEach(function(e){ fixList(e.items); }); saveShifts(shifts); }
+        if(typeof _currentShiftView!=='undefined' && _currentShiftView && (_currentShiftView.id||_currentShiftView._id)===doc.id) (_currentShiftView.journal||[]).forEach(function(e){ fixList(e.items); });
+      });
+    });
+  }));
+  ['iz_manual_invoices','iz_invoices'].forEach(function(col){
+    reads.push(db.collection(col).get({source:'server'}).then(function(snap){
+      snap.forEach(function(doc){
+        var inv = doc.data(), items = inv.items||[], acc = inv.acceptedItems||null;
+        var n = fixList(items) + (acc ? fixList(acc) : 0);
+        if(!n) return;
+        res.invoices += n;
+        var patch = {items:items}; if(acc) patch.acceptedItems = acc;
+        writes.push([db.collection(col).doc(doc.id), patch, true]);
+        after.push(function(){
+          var all = JSON.parse(localStorage.getItem(col)||'[]');
+          var li = all.find(function(i){ return String(i.id||i._id)===String(doc.id); });
+          if(li){ fixList(li.items); fixList(li.acceptedItems); localStorage.setItem(col, JSON.stringify(all)); }
+        });
+      });
+    }));
+  });
+  reads.push(db.collection('iz_inventory_counts').get({source:'server'}).then(function(snap){
+    snap.forEach(function(doc){
+      var c = doc.data(), patch = {};
+      ['num','itemKey'].forEach(function(f){ var v = String(c[f]==null?'':c[f]).trim(); if(v && map.hasOwnProperty(v)) patch[f] = map[v]; });
+      if(!Object.keys(patch).length) return;
+      res.counts++;
+      writes.push([db.collection('iz_inventory_counts').doc(doc.id), patch, true]);
+    });
+  }));
+  // Остатки: ключ позиции = артикул. Новый словарь собирается целиком из старого, так что
+  // перестановка номеров внутри породы не сливает позиции; совпадение с «чужим» ключом — складываем.
+  Object.keys(getStock()||{}).forEach(function(shopName){
+    var docId = 'stock_'+shopName.replace(/\s+/g,'_');
+    reads.push(db.collection('iz_settings').doc(docId).get({source:'server'}).then(function(snap){
+      if(!snap.exists) return;
+      var items = snap.data().items||{}, out = {}, n = 0;
+      Object.keys(items).forEach(function(k){
+        var e = items[k], nk = map.hasOwnProperty(k) ? map[k] : k;
+        if(nk!==k){ e = Object.assign({}, e, {num:nk}); n++; }
+        if(out[nk]){
+          var t = out[nk]; t.qty = (t.qty||0)+(e.qty||0);
+          if((e.lastReceived||'')>(t.lastReceived||'')) t.lastReceived = e.lastReceived;
+          if((e.lastSold||'')>(t.lastSold||'')) t.lastSold = e.lastSold;
+        } else out[nk] = e;
+      });
+      if(!n) return;
+      res.stock += n;
+      writes.push([db.collection('iz_settings').doc(docId), {items:out, updatedAt:now}, false]);
+      after.push(function(){ var local = getStock(); local[shopName] = out; (typeof _safeLocalSet==='function'?_safeLocalSet:localStorage.setItem.bind(localStorage))('iz_stock', JSON.stringify(local)); });
+    }));
+  });
+  return Promise.all(reads).then(function(){
+    if(writes.length>450){ res.error = 'слишком много документов ('+writes.length+')'; return res; }
+    if(!writes.length){ res.ok = true; return res; }
+    var batch = db.batch();
+    writes.forEach(function(w){ if(w[2]) batch.set(w[0], w[1], {merge:true}); else batch.set(w[0], w[1]); });
+    return batch.commit().then(function(){
+      res.ok = true;
+      after.forEach(function(f){ try{ f(); }catch(e){} });
+      return res;
+    });
+  }).catch(function(e){ res.ok = false; res.error = (e && e.message) || 'нет сети?'; return res; });
 }
 function setRefbookItemSpecies(bookId, idx, key, value){
   var items = getRefBook(key);
